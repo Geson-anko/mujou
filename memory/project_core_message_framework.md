@@ -16,6 +16,6 @@ metadata:
 
 - 設計と実装の優先度は、メッセージプロトコル（何を、どの形式で、いつ送るか）と実行フレーム（スケジューラ・通信・状態の所有）を先にする
 - ブロック内部の実装（PyTorch による PC-ALM ブロックや BP ブロックなど）は、プロトコルの上に載る差し替え可能な部品として扱う
-- 未決定: プロトコルとフレームそのものが特定のテンソルライブラリ（PyTorch など）に依存してよいか（[[project-open-decisions]]）
+- プロトコルとフレームは Rust で実装し、メッセージの値の型は独自に持つ。特定のテンソルライブラリには依存しない。PyTorch テンソル連携は future work（[[project-native-core-rust]]）
 
-関連: [[project-purpose]], [[project-compute-granularity]], [[project-pluggable-update-rule]]
+関連: [[project-purpose]], [[project-compute-granularity]], [[project-pluggable-update-rule]], [[project-native-core-rust]]

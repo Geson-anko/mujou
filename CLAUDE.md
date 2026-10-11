@@ -73,7 +73,7 @@ mujou の存在理由。ブロックは自分の状態と隣接ブロックか�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock ほか
-- テンソル基盤は未決定（[memory/project_open_decisions.md](memory/project_open_decisions.md)）。決まるまで依存に入れない
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin の想定。ツールチェーンは未整備）。メッセージの値の型はコアが独自に持ち、PyTorch テンソル連携は future work（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
 
 ## コマンド
 
