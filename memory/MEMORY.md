@@ -16,6 +16,7 @@
 - [コアはメッセージフレーム](project_core_message_framework.md) — コアはブロック間のメッセージプロトコルと実行フレーム。ブロック内部は PyTorch などを使ってよい
 - [非同期ブロックの実行](project_async_block_execution.md) — queue・pipe を使わず lock 付きの値の読み書きだけで共有。グローバルタイマー上の微分方程式として各ブロックが独自に更新する
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust、Python はインターフェース。ブロックはタスクと専用スレッドの混在で実行。値の型は独自、PyTorch 連携は future work
+- [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [未決定事項](project_open_decisions.md) — 値の型の詳細・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback
