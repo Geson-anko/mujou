@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# Build output
+dist/
+build/
+
+# Experiment artifacts
+runs/
+outputs/
+wandb/
+*.ckpt
+*.pt
+*.pth
+
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
+
+# Environment overrides
+.env
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,40 @@
+name: Type Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**/*.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/type-check.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/*.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/type-check.yml"
+
+jobs:
+  run_type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - uses: extractions/setup-just@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run pyright
+        run: just type
