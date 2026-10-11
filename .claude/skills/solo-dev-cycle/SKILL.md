@@ -96,7 +96,7 @@ skill [pc-alm](../pc-alm/SKILL.md) / [locality-and-async](../locality-and-async/
 2. 段階 1 の計画と突き合わせ、要求からトレースできない行を洗い出す
 3. 観点チェックリストで見る: 仕様準拠／境界値・エラーパス／カプセル化（`_` prefix）／
     テストが公開インターフェースを見ているか／無関係な変更の混入／更新式の符号・係数と
-    層局所性（skill `pc-alm` / `locality-and-async`）
+    ブロック間の局所性（skill `pc-alm` / `locality-and-async`）
 4. 実装中に「後で直す」と思った箇所を記録ファイルから回収し、対応または却下理由を書く
 
 設計上の裁定に迷い、自分の判断に自信が持てない場合に限り、`code-reviewer` への単発委譲を
