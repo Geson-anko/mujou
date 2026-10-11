@@ -1,0 +1,168 @@
+"""Tests for the Claude Code hooks under .claude/hooks/."""
+
+import json
+import os
+import subprocess
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
+
+
+def run_hook(
+    script: str, payload: Mapping[str, object], env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    path = HOOKS_DIR / script
+    command = (
+        [sys.executable, str(path)] if path.suffix == ".py" else ["bash", str(path)]
+    )
+    return subprocess.run(
+        command,
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env={**os.environ, **(env or {})},
+        timeout=30,
+    )
+
+
+class TestPreToolUseGuardBash:
+    @staticmethod
+    def run_command(command: str) -> subprocess.CompletedProcess[str]:
+        return run_hook(
+            "pretooluse-guard-bash.py",
+            {"tool_name": "Bash", "tool_input": {"command": command}},
+        )
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "pip install numpy",
+            "pip3 install -U numpy",
+            "python -m pip install numpy",
+            "uv pip install numpy",
+            "cd src && pip install -e .",
+            "FOO=1 pip install numpy",
+        ],
+    )
+    def test_blocks_pip_install(self, command: str):
+        result = self.run_command(command)
+
+        assert result.returncode == 2
+        assert "uv add" in result.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git commit --no-verify -m 'x'",
+            "git commit -n -m 'x'",
+            "git commit -anm 'x'",
+        ],
+    )
+    def test_blocks_commit_without_verification(self, command: str):
+        result = self.run_command(command)
+
+        assert result.returncode == 2
+        assert "pre-commit" in result.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "uv add numpy",
+            "uv pip list",
+            "pip list",
+            "git commit -m 'feat(core): add -n flag docs'",
+            "git commit -am 'fix: x'",
+            "echo 'pip install numpy'",
+        ],
+    )
+    def test_allows_other_commands(self, command: str):
+        result = self.run_command(command)
+
+        assert result.returncode == 0
+        assert result.stderr == ""
+
+    def test_fails_open_on_malformed_input(self):
+        result = run_hook("pretooluse-guard-bash.py", {"tool_input": {}})
+
+        assert result.returncode == 0
+
+
+class TestPostToolUseLocalityGuard:
+    @staticmethod
+    def run_on(path: Path, project_dir: Path) -> subprocess.CompletedProcess[str]:
+        return run_hook(
+            "posttooluse-locality-guard.py",
+            {"tool_name": "Write", "tool_input": {"file_path": str(path)}},
+            env={"CLAUDE_PROJECT_DIR": str(project_dir)},
+        )
+
+    @staticmethod
+    def write_source(project_dir: Path, relative: str, text: str) -> Path:
+        path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_warns_on_global_backward_in_library(self, tmp_path: Path):
+        path = self.write_source(tmp_path, "src/mujou/train.py", "loss.backward()\n")
+
+        result = self.run_on(path, tmp_path)
+
+        assert result.returncode == 0
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "LOCALITY GUARD" in context
+        assert "L1" in context
+
+    def test_ignores_lines_marked_as_local_autograd(self, tmp_path: Path):
+        path = self.write_source(
+            tmp_path,
+            "src/mujou/layer.py",
+            "energy.backward()  # mujou: local-autograd\n",
+        )
+
+        result = self.run_on(path, tmp_path)
+
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+    def test_ignores_files_outside_library(self, tmp_path: Path):
+        path = self.write_source(tmp_path, "tests/test_bp.py", "loss.backward()\n")
+
+        result = self.run_on(path, tmp_path)
+
+        assert result.returncode == 0
+        assert result.stdout == ""
+
+
+class TestCompactionRecovery:
+    def test_post_compact_marker_triggers_one_shot_recovery(self, tmp_path: Path):
+        env = {"TMPDIR": str(tmp_path)}
+        payload = {"session_id": "sid-123"}
+
+        run_hook("compaction-recovery.sh", payload, env)
+        first = run_hook("userpromptsubmit-compaction-recovery.sh", payload, env)
+        second = run_hook("userpromptsubmit-compaction-recovery.sh", payload, env)
+
+        context = json.loads(first.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "COMPACTION RECOVERY" in context
+        assert second.stdout == ""
+
+    def test_warn_marker_triggers_one_shot_compact_prep_reminder(self, tmp_path: Path):
+        env = {"TMPDIR": str(tmp_path)}
+        payload = {"session_id": "sid-456"}
+        warn_dir = tmp_path / "claude-compact-warn"
+        warn_dir.mkdir()
+        (warn_dir / "sid-456").write_text("63\n")
+
+        first = run_hook("userpromptsubmit-compact-prep-reminder.sh", payload, env)
+        second = run_hook("userpromptsubmit-compact-prep-reminder.sh", payload, env)
+
+        context = json.loads(first.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "63%" in context
+        assert "/compact-prep" in context
+        assert second.stdout == ""
