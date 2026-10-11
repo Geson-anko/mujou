@@ -45,7 +45,7 @@ disallowedTools: Edit, NotebookEdit
 （新規・変更する関数/クラスのシグネチャ）
 
 ## 理論上の対応
-（PC-ALM の式・更新則のどれを実装するか。局所性・非同期性への影響。無関係なら「なし」）
+（どの更新手法のどの式を実装するか（既定は PC-ALM）。ブロックの分け方、ブロック間の局所性・非同期性への影響。無関係なら「なし」）
 
 ## 実装ステップ
 1. ...
@@ -78,10 +78,10 @@ disallowedTools: Edit, NotebookEdit
 - プロジェクトのコード規約と整合するか（`memory/MEMORY.md`、skill `refactor-conventions`）
 - **公開インターフェース案がシグネチャレベル（関数名・引数・戻り値型・テンソル shape）まで固まっているか** — 固まっていれば spec-test-author × plan-implementer を並列起動できる
 - テスト観点が spec-test-author が観点単位でテスト関数に落とせる粒度か
-- 層・ニューロンが近傍以外の状態を読む設計になっていないか（skill `locality-and-async`）
+- ブロックが隣接ブロックからのメッセージ以外の状態を読む設計になっていないか。ブロック・メッセージ・スケジューラに特定の更新手法を焼き付けていないか（skill `locality-and-async`）
 
 ## 参照
 
-- 理論：skill `pc-alm` / 実行モデル：skill `locality-and-async`
+- 既定の更新手法：skill `pc-alm` / 実行モデル：skill `locality-and-async`
 - 規約：skill `refactor-conventions` / テスト方針：skill `testing-strategy`
 - マルチエージェントフロー：skill `agent-team-startup`

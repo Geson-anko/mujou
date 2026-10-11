@@ -1,11 +1,13 @@
 ---
 name: pc-alm
-description: mujou の学習則 PC-ALM（Augmented Lagrangian Predictive Coding）の理論リファレンス。制約付き最適化としての定式化、拡張ラグランジアン、活動の primal descent・双対の dual ascent・重み更新の具体式（勾配展開済み）、平衡点で BP と一致する条件、ハイパーパラメータ、安定性、実装時の落とし穴チェックリスト。学習則・推論ダイナミクス・レイヤーの更新式を設計・実装・レビュー・テストする前に読む。
+description: mujou の既定の更新手法 PC-ALM（Augmented Lagrangian Predictive Coding）の理論リファレンス。制約付き最適化としての定式化、拡張ラグランジアン、活動の primal descent・双対の dual ascent・重み更新の具体式（勾配展開済み）、平衡点で BP と一致する条件、ハイパーパラメータ、安定性、実装時の落とし穴チェックリスト。学習則・推論ダイナミクス・レイヤーの更新式を設計・実装・レビュー・テストする前に読む。
 ---
 
 # PC-ALM 理論リファレンス
 
 出典: Sakana AI, "PC-ALM: Augmented Lagrangian Predictive Coding" (<https://pub.sakana.ai/pc-alm/>)。
+PC-ALM は mujou の**既定の更新手法として暫定的に採用したもの**で、更新手法は差し替えられる（skill `locality-and-async`）。この skill は PC-ALM を使うブロックについての文書である。
+
 この skill の式は記事の定義に沿って勾配まで展開したもの。**記事に無い mujou 独自の拡張は「mujou の研究課題」節に分けて書き、理論と混ぜない。**
 
 ## 1. 定式化
@@ -66,7 +68,7 @@ $$W_i \leftarrow W_i + \eta_\theta\, \varepsilon_i\, h_{i-1}^\top \quad (1 \le i
 
 ### 局所性
 
-$\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lambda_{i+1}$）だけに依存する。上の層 $i+1$ が $W_{i+1}^\top \varepsilon_{i+1}$ を下へ送り、下の層 $i$ が $h_i$ を上へ送れば、通信は隣接層間で閉じる。実行モデル側の規約は skill `locality-and-async`。
+$\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lambda_{i+1}$）だけに依存する。上の層 $i+1$ が $W_{i+1}^\top \varepsilon_{i+1}$ を下へ送り、下の層 $i$ が $h_i$ を上へ送れば、通信は隣接層間で閉じる。成分ごとに見ると、ニューロン $j$ の更新も、結合でつながったニューロンとの値（$h_{i-1,k}$ と $W_{i+1}[k,j]\,\varepsilon_{i+1,k}$）だけで閉じる。そのため、PC-ALM はニューロンブロックまで分割できる。実行モデル側の規約は skill `locality-and-async`。
 
 ## 4. 平衡点と BP の関係
 
@@ -105,7 +107,7 @@ $\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lamb
 3. **clamp**: $h_0$ と教師は推論中に更新しない。推論専用（教師なし）ステップでは出力層の扱いを明示する
 4. **双対の初期化**: 記事のスカラー例では $\lambda = 0$ 始まり。ミニバッチ間・ストリームのステップ間でリセットするか持ち越すかは明示的に決めて実装する（下の研究課題）
 5. **重み更新の順序**: 学習フェーズは推論を終えた状態の $h, \lambda$ を使う。推論中に重みを動かす設計にするなら、それは記事の手順からの逸脱として明示する
-6. **計算グラフを層間で繋げない**: 層 $i$ の更新で $h_{i-1}$ の勾配が流れないよう detach する。グローバルな `.backward()` は使わない（hook が警告する）
+6. **計算グラフをブロック間で繋げない**: 層 $i$ の更新で $h_{i-1}$ の勾配が流れないよう detach する。ブロックをまたぐ `.backward()` は使わない（hook が警告する）
 7. **バッチ平均と学習率**: 外積をバッチ和にするか平均にするかで $\eta_\theta$ の意味が変わる。どちらかに統一して docstring に書く
 8. **$\alpha = 0$ の退化テスト**: PC-ALM 実装は $\alpha = 0$ で PC と一致するはず。回帰テストとして持つ
 

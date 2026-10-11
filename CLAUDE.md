@@ -13,11 +13,12 @@
 
 ## プロジェクト概要
 
-`mujou` は **Asynchronous Distributed Deep Learning Library for Continuous Learning**。PyTorch のような深層学習フレームワークだが、重みの更新に誤差逆伝播（BP）を使わず、**PC-ALM**（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）を使う。
+`mujou` は **Asynchronous Distributed Deep Learning Library for Continuous Learning**。推論と学習が同時に行われ、知能に「無常」（常が無いこと）を実現する、PyTorch のような深層学習フレームワーク。
 
 - 名前は「諸行無常」の「無常」から取った。学習後に重みを固定して推論する従来の機械学習と違い、ストリームから学び続け、常に変化し続ける学習機械を作る
 - 狙う用途はリアルタイム処理・ロボティクスなど、生涯学習し続ける機械
-- PC-ALM の更新は層局所（隣接層とのやり取りだけで決まる）なので、層・ニューロン単位で非同期に推論と学習を実行できるシステムを作る
+- 計算は**ブロック**単位で行う。ブロックの内側は同期的に計算し、ブロック同士は非同期のメッセージでやり取りする。ブロックの大きさはニューロン・レイヤー・スタック（複数レイヤー、モデル全体も可）から選べ、既定はレイヤー
+- 既定の更新手法は **PC-ALM**（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）。ただし暫定的な選択であり、更新手法は差し替えられるようにする。BP も 1 つのブロックの内側に閉じた更新手法として扱える
 
 ## 開発原則
 
@@ -44,12 +45,14 @@
 
 ## 不変の原則
 
-### BP を持ち込まない・局所性を壊さない
+### ブロック間の局所性・非同期性を壊さない
 
-mujou の存在理由。`src/mujou/` にネットワーク全体を貫く `.backward()` を書かない。層（計算単位）は自分の状態と隣接単位からのメッセージだけで更新する。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。
+mujou の存在理由。ブロックは自分の状態と隣接ブロックからのメッセージだけで更新する。ブロックをまたいで計算グラフを繋げない（`src/mujou/` でブロックをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。
 
-- 学習則の式・平衡点の性質・落とし穴: skill `pc-alm`
-- 実行モデルの不変条件・許容される例外（`# mujou: local-autograd`）: skill `locality-and-async`
+- ブロックの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
+- 更新手法は差し替え可能にする。ブロック・メッセージ・スケジューラに特定の学習則を焼き付けない
+- 既定の更新手法 PC-ALM の式・平衡点の性質・落とし穴: skill `pc-alm`
+- 実行モデルの不変条件・ブロック内 autograd の書き方（`# mujou: local-autograd`）: skill `locality-and-async`
 - 違反しそうな箇所は PostToolUse hook が警告する。破る必要があるときはユーザーに確認し、理由を `memory/` に残す
 
 ### テスト

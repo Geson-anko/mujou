@@ -10,8 +10,11 @@
 
 ## project
 
-- [プロジェクトの目的](project_purpose.md) — BP を使わず PC-ALM で、ストリームから学び続ける非同期分散学習ライブラリを作る
-- [未決定事項](project_open_decisions.md) — テンソル基盤・計算単位の粒度・双対の持ち越しなど、まだ決めていない設計判断
+- [プロジェクトの目的](project_purpose.md) — 推論と学習を同時に行い、知能に「無常」を実現するフレームワーク。既定の更新手法は暫定的に PC-ALM
+- [更新手法の差し替え](project_pluggable_update_rule.md) — PC-ALM は暫定の既定。ブロックの基盤と更新手法を分離し、他の手法も与えられるようにする
+- [計算単位の粒度](project_compute_granularity.md) — 基盤は非同期のブロック（内側は同期、ブロック間は非同期メッセージ）。大きさはニューロン/レイヤー/スタック、既定はレイヤー。BP も 1 ブロックとして取り込める
+- [コアはメッセージフレーム](project_core_message_framework.md) — コアはブロック間のメッセージプロトコルと実行フレーム。ブロック内部は PyTorch などを使ってよい
+- [未決定事項](project_open_decisions.md) — テンソル基盤・実行基盤・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback
 
