@@ -28,7 +28,7 @@ repos:
 
   # Python code linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.17.0
     hooks:
       - id: ruff
         types_or: [python, pyi]
@@ -38,10 +38,10 @@ repos:
 
   # Python syntax upgrading
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.19.0
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
-        args: [--py313-plus]
+        args: [--py314-plus]
 
   # Markdown formatting
   - repo: https://github.com/executablebooks/mdformat
