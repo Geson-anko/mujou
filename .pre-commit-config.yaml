@@ -38,10 +38,10 @@ repos:
 
   # Python syntax upgrading
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.19.0
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
-        args: [--py313-plus]
+        args: [--py314-plus]
 
   # Markdown formatting
   - repo: https://github.com/executablebooks/mdformat
