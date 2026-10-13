@@ -18,10 +18,8 @@ mujou の設計方針と仕様をまとめた文書群。2026-10-13 時点で `m
 
 ## 読む順番
 
-初めて読む場合は [概要](overview.md) → [ブロック](blocks.md) → [実行モデル](execution-model.md) の順に読むと、残りの文書の前提がそろう。
+初めて読む場合は、[概要](overview.md)、[ブロック](blocks.md)、[実行モデル](execution-model.md) の順に読むと、残りの文書の前提がそろう。
 
 ## 関連資料
 
-- PC-ALM の式・平衡点の性質・実装上の落とし穴: skill `pc-alm`（`.claude/skills/pc-alm/SKILL.md`）
-- 実行モデルの不変条件と禁止パターン: skill `locality-and-async`（`.claude/skills/locality-and-async/SKILL.md`）
-- 決定の経緯と個別メモ: [memory/](../memory/)
+PC-ALM の式・平衡点の性質・実装上の落とし穴は skill `pc-alm`（`.claude/skills/pc-alm/SKILL.md`）に、実行モデルの不変条件と禁止パターンは skill `locality-and-async`（`.claude/skills/locality-and-async/SKILL.md`）にある。決定の経緯と個別のメモは [memory/](../memory/) を参照。
