@@ -49,7 +49,7 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 
 更新量は、ステップ数ではなく経過時間 $\Delta t$ に比例させる。負荷が高いときは各ブロックの $\Delta t$ が伸びるだけで、その影響は連続時間の定式化が吸収する。ただし $\Delta t$ が大きすぎると陽的 Euler 法は不安定になるので、$\Delta t$ を上限で打ち切るか、内部で刻みを分割する。
 
-既定の更新手法 PC-ALM の連続時間形は [更新手法](update-rules.md#pc-alm-の連続時間形) を参照。
+既定の更新手法 PC-ALM の連続時間形は [PC-ALM の連続時間系](pc-alm-continuous-time.md) を参照。
 
 ## グローバルタイマー
 

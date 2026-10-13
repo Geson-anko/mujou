@@ -12,11 +12,11 @@
 
 ## 時定数
 
-連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。関連: [更新手法](update-rules.md#pc-alm-の連続時間形)
+連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## 双対変数の扱い
 
-ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。関連: [更新手法](update-rules.md#未解決の問い)
+ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## ライセンス
 
