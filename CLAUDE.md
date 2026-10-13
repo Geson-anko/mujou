@@ -132,5 +132,5 @@ hook は `python3` と `bash` だけに依存し、fail-open。テストは `tes
 - 開発フロー: `/solo-dev-cycle`（既定）/ `/agent-team-startup`（明示時）/ `/maximize-parallels`
 - 規約: `/testing-strategy` / `/refactor-conventions`
 - Git: `/github-pr` / `/merge-main` / `/do-on-worktree`
-- 文書改善: `/doc-teacher-student` / `.claude/` 編集: `/edit-dot-claude`
+- 文書改善: `/doc-teacher-student` / 日本語の推敲: `/yomiyasu` / `.claude/` 編集: `/edit-dot-claude`
 - context 管理: `/compact-prep` / 言語切替: `/japanese`
