@@ -21,6 +21,7 @@
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ブロック停止 → 木をコピー → 再開 → ホストに返す。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ブロックの on_stop、ホストへ最初の例外を送出。設定で state tree を取得（保存はユーザー）。部分停止・再起動・スキップはしない
 - [ネットワークと Port](project_network_ports.md) — Block と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
+- [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、ルートのネットワークの write / read / subscribe / state_dict / shutdown。run 前の write が初期値。複数 Port の write は版番号で一斉切り替え。入力はグローバル時間上の信号
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
