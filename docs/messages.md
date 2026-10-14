@@ -21,6 +21,8 @@ dtype は次をサポートする。
 | 符号なし整数 | `u8`                        |
 | 真偽値       | `bool`                      |
 
+dtype はオブジェクトとして `mujou.dtypes` から与える。たとえば bf16 は `mujou.dtypes.bf16` である。
+
 データは CPU 上に、連続した row-major の配置で置く。バッチを使う場合は、バッチ次元も shape の一部として扱う。フレームワークはバッチ次元を特別扱いしない。
 
 Tensor は不変であり、一度作った Tensor の中身は変更できない。この性質により、複数の読み手が同じ Tensor を同時に読んでも、書き手との間でデータ競合が起きない。
@@ -36,9 +38,9 @@ Tensor の役割は、データの入れ物と、外部ライブラリとの変�
 ```python
 import mujou
 
-mujou.default.dtype            # f32
-mujou.default.dtype = mujou.bf16
-spec = TensorSpec((B, 256))    # dtype は bf16 で確定する
+mujou.default.dtype                     # mujou.dtypes.f32
+mujou.default.dtype = mujou.dtypes.bf16
+spec = TensorSpec((B, 256))             # dtype は bf16 で確定する
 ```
 
 `TensorSpec` は、その形の Tensor を作る生成関数を持つ。`TensorSpec.zeros()` はゼロで埋めた Tensor を返し、どの dtype でも使える。`TensorSpec.rand()` は一様分布 $[0, 1)$ の乱数で埋めた Tensor を返し、浮動小数点の dtype でだけ使える。`rand` には seed か乱数生成器を渡せ、渡せば結果が決定的になる。テストを決定的に保つためである。正規分布が必要になったら `randn` を別に足す。

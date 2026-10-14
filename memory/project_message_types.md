@@ -8,7 +8,7 @@ metadata:
 2026-10-13 決定。詳細は `docs/messages.md`。
 
 - **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ブロック 1 つ、読み手は N 個可
-- **Tensor**: dtype は f16・bf16・f32・f64・i8・i16・i32・i64・u8・bool（2026-10-14 に f32 のみから拡張）。u16・u32・u64 を含めるかは未確認。bf16 を NumPy に変換するときは `ml_dtypes` の bfloat16 を使う（依存を足すときに free-threaded 対応を確認する）。CPU・連続 row-major。不変。役割はデータの入れ物と NumPy / PyTorch との相互変換（コピーあり）だけで、演算は持たない。バッチは shape の一部で特別扱いしない
+- **Tensor**: dtype は f16・bf16・f32・f64・i8・i16・i32・i64・u8・bool（2026-10-14 に f32 のみから拡張）。u16・u32・u64 を含めるかは未確認。dtype オブジェクトは `mujou.dtypes` で与える（例: `mujou.dtypes.bf16`）。bf16 を NumPy に変換するときは `ml_dtypes` の bfloat16 を使う（依存を足すときに free-threaded 対応を確認する）。CPU・連続 row-major。不変。役割はデータの入れ物と NumPy / PyTorch との相互変換（コピーあり）だけで、演算は持たない。バッチは shape の一部で特別扱いしない
 - **メッセージの型は `Tensor` と `TypedDict` の 2 種類。** TypedDict はキー名と値の型（`Tensor`）を明示し、入れ子は許さない
 - **`Tensor | None`（値が無いこと）は入れない（2026-10-14 変更）。** 一度は入れると決めたが取り消した。必要になったときに拡張する
 - **`TensorSpec(shape, dtype)` で Tensor の形を表す。** dtype を省略すると既定の dtype を使う。既定の dtype は `mujou.default.dtype` で取得・設定でき、最初は f32。TensorSpec を作った時点で読み取って確定し、あとで変えても既存の spec・スキーマは変わらない（スキーマは構築時に確定する決定と揃えるため。torch.set_default_dtype と同じ考え方）。 `TensorSpec.zeros()`（全 dtype）と `TensorSpec.rand()`（浮動小数点のみ。一様 [0, 1)、seed か乱数生成器を渡せば決定的）で初期 Tensor を作れる。正規分布が要れば `randn` を足す。`Tensor.spec` は TensorSpec を返す。spec の一致は dtype を含み、暗黙の dtype 変換はしない（dtype が違う Port は接続できない）。生成関数は演算ではないので「Tensor は演算を持たない」と矛盾しない
