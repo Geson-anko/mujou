@@ -12,7 +12,7 @@
 
 ## ライフサイクルの細部
 
-hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・保存・復元の流れは決定済み。`on_update` が例外を投げたときの扱い、停止のタイムアウトの既定値、保存ファイルの置き場所と命名、スロットを識別する名前の付け方は未決定。関連: [ブロック](blocks.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の保存復元)
+hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・保存・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、設定しておけばそのときの状態を保存することも決定済み。停止のタイムアウトの既定値、保存ファイルの置き場所と命名、スロットを識別する名前の付け方、正常な終了のときに状態を自動で保存するかは未決定。関連: [ブロック](blocks.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の保存復元)
 
 ## 時定数
 
