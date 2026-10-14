@@ -1,6 +1,6 @@
 ---
 name: project-message-types
-description: ブロック間メッセージの型とスロットの仕様の決定。Tensor（f32・不変・入れ物+変換）、メッセージ型は Tensor / Tensor | None / TypedDict、初期値必須、片方向スロット 2 本で双方向、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、ネットワークは define-and-run のネットワークオブジェクト
+description: ブロック間メッセージの型とスロットの仕様の決定。Tensor（f16/bf16/f32/f64・i8〜i64・u8・bool、不変、入れ物+変換）、メッセージ型は Tensor / TypedDict（Tensor | None は入れない）、TensorSpec(shape, dtype) と mujou.default.dtype、zeros/rand、初期値必須、片方向スロット 2 本で双方向、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、ネットワークは define-and-run のネットワークオブジェクト
 metadata:
   type: project
 ---
@@ -8,9 +8,12 @@ metadata:
 2026-10-13 決定。詳細は `docs/messages.md`。
 
 - **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ブロック 1 つ、読み手は N 個可
-- **Tensor**: dtype は f32 のみ。CPU・連続 row-major。不変。役割はデータの入れ物と NumPy / PyTorch との相互変換（コピーあり）だけで、演算は持たない。バッチは shape の一部で特別扱いしない
-- **メッセージの型は `Tensor`、`Tensor | None`、`TypedDict` の 3 種類。** TypedDict はキー名と値の型（`Tensor` か `Tensor | None`）を明示し、入れ子は許さない
-- **スロットは常に宣言どおりの型の値を持つ。** スキーマ作成時に初期値を与える（既定は `Tensor` ならゼロ、`Tensor | None` なら None）。None を書けるのは `| None` と宣言したものだけ
+- **Tensor**: dtype は f16・bf16・f32・f64・i8・i16・i32・i64・u8・bool（2026-10-14 に f32 のみから拡張）。u16・u32・u64 を含めるかは未確認。bf16 を NumPy に変換するときは `ml_dtypes` の bfloat16 を使う（依存を足すときに free-threaded 対応を確認する）。CPU・連続 row-major。不変。役割はデータの入れ物と NumPy / PyTorch との相互変換（コピーあり）だけで、演算は持たない。バッチは shape の一部で特別扱いしない
+- **メッセージの型は `Tensor` と `TypedDict` の 2 種類。** TypedDict はキー名と値の型（`Tensor`）を明示し、入れ子は許さない
+- **`Tensor | None`（値が無いこと）は入れない（2026-10-14 変更）。** 一度は入れると決めたが取り消した。必要になったときに拡張する
+- **`TensorSpec(shape, dtype)` で Tensor の形を表す。** dtype を省略すると既定の dtype を使う。既定の dtype は `mujou.default.dtype` で取得・設定でき、最初は f32。TensorSpec を作った時点で読み取って確定し、あとで変えても既存の spec・スキーマは変わらない（スキーマは構築時に確定する決定と揃えるため。torch.set_default_dtype と同じ考え方）。 `TensorSpec.zeros()`（全 dtype）と `TensorSpec.rand()`（浮動小数点のみ。一様 [0, 1)、seed か乱数生成器を渡せば決定的）で初期 Tensor を作れる。正規分布が要れば `randn` を足す。`Tensor.spec` は TensorSpec を返す。spec の一致は dtype を含み、暗黙の dtype 変換はしない（dtype が違う Port は接続できない）。生成関数は演算ではないので「Tensor は演算を持たない」と矛盾しない
+- **Port には spec を渡す。** `Tensor` のメッセージには `TensorSpec`、`TypedDict` のメッセージには TypedDict と各キーの TensorSpec の対応表（例: `DictSpec(Feedback, error=TensorSpec(...))`。名前は仮）。対応表は TypedDict と照合し、キーの過不足はエラー
+- **スロットは常に宣言どおりの型の値を持つ。** スキーマ作成時に初期値を与える。既定はゼロ（`TensorSpec.zeros()`）
 - **スキーマ（型 + shape + 初期値）はネットワーク構築時に確定し、以後は変えない。** 非同期処理の単位はブロックオブジェクト。mujou はブロックの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で、`nn.Module` のように宣言的に組み合わせられる API で記述して最終的にスキーマオブジェクトを作る
 - **「Module API」は比喩。** `nn.Module` に相当する単位がブロックになるわけではない（Module とブロックは対応しない）
 - **スロットは書き込み時のグローバル時刻を自動で添える。** 時刻は秒（f64）とナノ秒（u64）の両方で持つ

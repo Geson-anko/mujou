@@ -61,11 +61,13 @@ Port の宣言には 3 種類がある。
 
 ```python
 class Hidden(Block):
-    def __init__(self) -> None:
-        self.prev = PrevPort(send=Feedback, recv=Activity)  # 相手 1 つ
-        self.next = NextPort(send=Activity, recv=Feedback)  # 相手は複数
+    def __init__(self, n_in: int, n_out: int) -> None:
+        # 前へ W^T ε を送り、前から h を受け取る（相手 1 つ）
+        self.prev = PrevPort(send=TensorSpec((B, n_in)), recv=TensorSpec((B, n_in)))
+        # 次へ h を送り、次から W^T ε を受け取る（相手は複数）
+        self.next = NextPort(send=TensorSpec((B, n_out)), recv=TensorSpec((B, n_out)))
 
-l1, l2 = Hidden(), Hidden()
+l1, l2 = Hidden(784, 256), Hidden(256, 256)
 ch = l1.connect(l2)              # l1.next <-> l2.prev
 # l1.next.connect(l2.prev) と同じ
 ```
@@ -79,8 +81,8 @@ Channel のスロット 2 本は、それぞれ書く側の端が所有する。
 ```python
 class Stack(Network):
     def __init__(self) -> None:
-        self.l1 = Hidden()
-        self.l2 = Hidden()
+        self.l1 = Hidden(784, 256)
+        self.l2 = Hidden(256, 256)
         self.l1.connect(self.l2)
         self.prev = self.l1.prev         # 外向きに公開（前側）
         self.next = self.l2.next         # 外向きに公開（次側）

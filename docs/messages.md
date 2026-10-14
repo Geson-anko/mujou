@@ -12,37 +12,76 @@
 
 Tensor は mujou のコアが独自に持つ値の型である。
 
-dtype は f32 だけをサポートする。データは CPU 上に、連続した row-major の配置で置く。バッチを使う場合は、バッチ次元も shape の一部として扱う。フレームワークはバッチ次元を特別扱いしない。
+dtype は次をサポートする。
+
+| 種類         | dtype                       |
+| ------------ | --------------------------- |
+| 浮動小数点   | `f16`、`bf16`、`f32`、`f64` |
+| 符号付き整数 | `i8`、`i16`、`i32`、`i64`   |
+| 符号なし整数 | `u8`                        |
+| 真偽値       | `bool`                      |
+
+データは CPU 上に、連続した row-major の配置で置く。バッチを使う場合は、バッチ次元も shape の一部として扱う。フレームワークはバッチ次元を特別扱いしない。
 
 Tensor は不変であり、一度作った Tensor の中身は変更できない。この性質により、複数の読み手が同じ Tensor を同時に読んでも、書き手との間でデータ競合が起きない。
 
-Tensor の役割は、データの入れ物と、外部ライブラリとの変換である。Tensor から参照できるのは shape と dtype で、NumPy・PyTorch とは相互に変換できる（変換時にコピーする）。Tensor は演算を持たない。演算はブロックの内側で、既存のライブラリを使って行う。
+Tensor の役割は、データの入れ物と、外部ライブラリとの変換である。Tensor から参照できるのは shape・dtype と、それをまとめた `TensorSpec`（`Tensor.spec`）で、NumPy・PyTorch とは相互に変換できる（変換時にコピーする）。NumPy は bf16 を標準では持たないので、bf16 の Tensor を NumPy に変換するときは `ml_dtypes` の `bfloat16` 型を使う。Tensor は演算を持たない。演算はブロックの内側で、既存のライブラリを使って行う。
+
+## TensorSpec
+
+`TensorSpec` は Tensor の形、つまり shape と dtype の組を表す。`TensorSpec(shape, dtype)` のように作り、dtype はサポートする dtype（[Tensor](#tensor)）から選ぶ。dtype を省略すると、既定の dtype を使う。
+
+既定の dtype は `mujou.default.dtype` で取得・設定でき、最初は f32 である。既定の dtype は、`TensorSpec` を作った時点で読み取って確定する。そのため、あとで `mujou.default.dtype` を変えても、すでに作った `TensorSpec` やスキーマは変わらない。
+
+```python
+import mujou
+
+mujou.default.dtype            # f32
+mujou.default.dtype = mujou.bf16
+spec = TensorSpec((B, 256))    # dtype は bf16 で確定する
+```
+
+`TensorSpec` は、その形の Tensor を作る生成関数を持つ。`TensorSpec.zeros()` はゼロで埋めた Tensor を返し、どの dtype でも使える。`TensorSpec.rand()` は一様分布 $[0, 1)$ の乱数で埋めた Tensor を返し、浮動小数点の dtype でだけ使える。`rand` には seed か乱数生成器を渡せ、渡せば結果が決定的になる。テストを決定的に保つためである。正規分布が必要になったら `randn` を別に足す。
+
+これらは新しい Tensor を作る関数であり、既存の Tensor を変える演算ではない。そのため「Tensor は演算を持たない」という方針とは矛盾しない。
+
+逆に `Tensor.spec` は、その Tensor の `TensorSpec` を返す。Tensor が宣言どおりの形かどうかは、`t.spec == spec` のように確かめられる。spec の一致には dtype も含むので、dtype が違う Port 同士は接続できない。dtype の暗黙の変換はしない。
 
 ## メッセージの型
 
-メッセージの型は次の 3 種類である。
+メッセージの型は次の 2 種類である。
 
-| 型               | 意味                                             |
-| ---------------- | ------------------------------------------------ |
-| `Tensor`         | Tensor 1 つ。常に値がある                        |
-| `Tensor \| None` | Tensor 1 つ。値が無いことがある                  |
-| `TypedDict`      | キー名と値の型を明示した辞書。入れ子は許さない   |
+| 型          | 意味                                           |
+| ----------- | ---------------------------------------------- |
+| `Tensor`    | Tensor 1 つ                                    |
+| `TypedDict` | キー名と値の型を明示した辞書。入れ子は許さない |
 
-`TypedDict` を定義するときは、キー名と値の型を明示する。値の型は `Tensor` か `Tensor | None` のどちらかである。たとえば教師信号のように、ステップによって無いことがある値は `Tensor | None` で宣言する。
+`TypedDict` を定義するときは、キー名と値の型を明示する。値の型は `Tensor` である。
 
 ```python
 class Feedback(TypedDict):
     error: Tensor
-    target: Tensor | None
+    target: Tensor
 ```
 
-値が `None` になれるのは、`| None` を付けて宣言したものだけである。
+値が無いこと（`Tensor | None` のような型）は、現時点では表さない。必要になったときに拡張する。
 
 ## スキーマと初期値
 
-スロットのスキーマは、メッセージの型と各 Tensor の shape からなる。スキーマはネットワークを構築するときに確定し、以後は変えない（[ネットワーク](network.md#define-and-run)）。書き込みはスキーマに照らして検証する。shape が固定されているので、メッセージ用のメモリは構築時に確保できる。
+スロットのスキーマは、メッセージの型と各 Tensor の `TensorSpec` からなる。スキーマはネットワークを構築するときに確定し、以後は変えない（[ネットワーク](network.md#define-and-run)）。書き込みはスキーマに照らして検証する。shape が固定されているので、メッセージ用のメモリは構築時に確保できる。
 
-スロットは常に、宣言どおりの型の値を持つ。そのため、スキーマを作るときに初期値を与える。既定の初期値は、`Tensor` ならゼロ、`Tensor | None` なら `None` である。書き手は `| None` と宣言した値にだけ `None` を書ける。
+Port には、メッセージの型に応じた spec を渡す。`Tensor` のメッセージには `TensorSpec` を渡す。`TypedDict` のメッセージには、TypedDict と各キーの `TensorSpec` の対応表を渡す。以下はイメージで、名前や書き方はこのとおりになるとは限らない。
+
+```python
+Port(
+    send=TensorSpec((B, 256)),
+    recv=DictSpec(Feedback, error=TensorSpec((B, 256)), target=TensorSpec((B, 10))),
+)
+```
+
+対応表は TypedDict と照合して検査する。キーに過不足があればエラーになる。
+
+スロットは常に、宣言どおりの型の値を持つ。そのため、スキーマを作るときに初期値を与える。既定の初期値はゼロ（`TensorSpec.zeros()`）である。
 
 ## グローバル時刻の付与
 
