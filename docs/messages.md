@@ -27,7 +27,7 @@ dtype はオブジェクトとして `mujou.dtypes` から与える。たとえ�
 
 Tensor は不変であり、一度作った Tensor の中身は変更できない。この性質により、複数の読み手が同じ Tensor を同時に読んでも、書き手との間でデータ競合が起きない。
 
-Tensor の役割は、データの入れ物と、外部ライブラリとの変換である。Tensor から参照できるのは shape・dtype と、それをまとめた `TensorSpec`（`Tensor.spec`）で、NumPy・PyTorch とは相互に変換できる（変換時にコピーする）。NumPy は bf16 を標準では持たないので、bf16 の Tensor を NumPy に変換するときは `ml_dtypes` の `bfloat16` 型を使う。Tensor は演算を持たない。演算はブロックの内側で、既存のライブラリを使って行う。状態の保存に使うので、Tensor は pickle できる（[実行モデル](execution-model.md#停止と状態の保存復元)）。
+Tensor の役割は、データの入れ物と、外部ライブラリとの変換である。Tensor から参照できるのは shape・dtype と、それをまとめた `TensorSpec`（`Tensor.spec`）で、NumPy・PyTorch とは相互に変換できる（変換時にコピーする）。NumPy は bf16 を標準では持たないので、bf16 の Tensor を NumPy に変換するときは `ml_dtypes` の `bfloat16` 型を使う。Tensor は演算を持たない。演算はブロックの内側で、既存のライブラリを使って行う。状態の木に入るので、Tensor は pickle できる（[実行モデル](execution-model.md#停止と状態の取得復元)）。
 
 ## TensorSpec
 

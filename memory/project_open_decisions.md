@@ -9,7 +9,7 @@ metadata:
 
 - **ネットワークスキーマの API**: ブロックの組み合わせと双方向の接続を定義するネットワークオブジェクトを define-and-run で記述し、スキーマオブジェクトを作ることと、Port・Channel による双方向接続の仕組み（[[project-network-ports]]）は決定済み（[[project-message-types]]）。API の具体的な形（クラス名・メソッド名、shape の決め方、`build` をどこから呼ぶか、実行と外からの読み書きの API など）は未決定
 - **実行の配置**: 複数ブロックを同じワーカーで決まった順に回すことの指定方法、実行クラス（タスク・専用スレッド）と目標周期の指定方法（[[project-compute-granularity]]）
-- **ライフサイクルの細部**: hook の構成と停止・保存・復元の流れは決定済み（[[project-block-lifecycle]], [[project-pause-and-state]]）。例外時は全体を終了し、設定で状態を保存（[[project-shutdown-on-exception]]）。停止タイムアウトの既定値、保存ファイルの置き場所と命名、スロットの識別名、正常な終了時に状態を自動保存するかは未決定
+- **ライフサイクルの細部**: hook の構成と停止・状態の取得・復元の流れは決定済み（[[project-block-lifecycle]], [[project-pause-and-state]]）。例外時は全体を終了し、設定で状態の木を取得（[[project-shutdown-on-exception]]）。保存はユーザー。停止タイムアウトの既定値、スロットの識別名、取得・復元と例外時の木の受け取りの API は未決定
 - **時定数**: 連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い（skill `pc-alm` 7.1 節）
 - **双対変数の扱い**: ストリームのステップ間で λ をリセットするか持ち越すか、dual leak を入れるか（skill `pc-alm` 7 節）
 - **ライセンス**: LICENSE ファイル未作成

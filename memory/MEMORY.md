@@ -18,8 +18,8 @@
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust、Python はインターフェース。ブロックはタスクと専用スレッドの混在で実行。値の型は独自、PyTorch 連携は future work
 - [メッセージの型](project_message_types.md) — Tensor（f16/bf16/f32/f64・整数・bool、不変、入れ物+変換）、Tensor / TypedDict（Tensor | None なし）、TensorSpec と mujou.default.dtype、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
 - [ブロックのライフサイクル](project_block_lifecycle.md) — ブロックが分散処理の最小単位。on_start / on_update(dt) / on_pause / on_resume / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる
-- [停止と状態の保存・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ブロック停止 → lock なしで読む。スロット・最後の更新時刻・タイマーも保存。グローバルなバリア禁止の唯一の例外
-- [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ブロックの on_stop、ホストへ最初の例外を送出。設定で state tree を保存。部分停止・再起動・スキップはしない
+- [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ブロック停止 → 木をコピー → 再開 → ホストに返す。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
+- [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ブロックの on_stop、ホストへ最初の例外を送出。設定で state tree を取得（保存はユーザー）。部分停止・再起動・スキップはしない
 - [ネットワークと Port](project_network_ports.md) — Block と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
