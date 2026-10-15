@@ -7,13 +7,9 @@
   "updateRemoteUserUID": true,
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
   "workspaceFolder": "${localWorkspaceFolder}",
-  "mounts": [
-    "source=mujou-cargo-target-${devcontainerId},target=/home/vscode/.cache/cargo-target,type=volume"
-  ],
   "containerEnv": {
     "UV_PROJECT_ENVIRONMENT": ".venv-devcontainer",
     "UV_LINK_MODE": "copy",
-    "CARGO_TARGET_DIR": "/home/vscode/.cache/cargo-target",
     "GIT_CONFIG_COUNT": "1",
     "GIT_CONFIG_KEY_0": "core.fileMode",
     "GIT_CONFIG_VALUE_0": "false"
