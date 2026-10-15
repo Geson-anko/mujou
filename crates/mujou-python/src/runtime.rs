@@ -105,12 +105,50 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
     }
 }
 
+/// The hooks called more than once, looked up once on the node's thread
+/// before `_on_thread_start` instead of by name at every call.
+struct Methods {
+    on_update: Py<PyAny>,
+    on_pause: Py<PyAny>,
+    on_resume: Py<PyAny>,
+    on_exception: Py<PyAny>,
+    on_stop: Py<PyAny>,
+    state_dict: Py<PyAny>,
+}
+
+impl Methods {
+    fn of(node: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let get = |name: &str| node.getattr(name).map(Bound::unbind);
+        Ok(Self {
+            on_update: get("on_update")?,
+            on_pause: get("on_pause")?,
+            on_resume: get("on_resume")?,
+            on_exception: get("on_exception")?,
+            on_stop: get("on_stop")?,
+            state_dict: get("state_dict")?,
+        })
+    }
+
+    fn get(&self, hook: &str) -> Option<&Py<PyAny>> {
+        match hook {
+            "on_update" => Some(&self.on_update),
+            "on_pause" => Some(&self.on_pause),
+            "on_resume" => Some(&self.on_resume),
+            "on_exception" => Some(&self.on_exception),
+            "on_stop" => Some(&self.on_stop),
+            "state_dict" => Some(&self.state_dict),
+            _ => None,
+        }
+    }
+}
+
 /// A Python node seen by the runtime.
 struct PyNode {
     node: Py<PyAny>,
     name: String,
     /// The state to restore in `start`.
     state: Option<Py<PyAny>>,
+    methods: Option<Methods>,
 }
 
 impl PyNode {
@@ -130,12 +168,17 @@ impl PyNode {
         hook: &'static str,
         args: impl for<'py> FnOnce(Python<'py>) -> Bound<'py, PyTuple>,
     ) -> Result<Py<PyAny>, HookError> {
+        // The node's thread keeps its Python thread state for its whole life
+        // (`on_thread`), so this attach only takes the GIL (on a GIL build).
         Python::attach(|py| {
-            let node = self.node.bind(py);
-            match node.call_method1(hook, args(py)) {
-                Ok(value) => Ok(value.unbind()),
-                Err(e) => Err(self.error(py, hook, e)),
-            }
+            let result = match self.methods.as_ref().and_then(|m| m.get(hook)) {
+                Some(method) => method.bind(py).call1(args(py)),
+                // Before the lookup, or if it failed: by name.
+                None => self.node.bind(py).call_method1(hook, args(py)),
+            };
+            result
+                .map(Bound::unbind)
+                .map_err(|e| self.error(py, hook, e))
         })
     }
 
@@ -147,8 +190,31 @@ impl PyNode {
 impl NodeHooks for PyNode {
     type State = Py<PyAny>;
 
+    /// Attaches the thread to Python once for its whole life and detaches it
+    /// for the body, so that the hooks of a node share one Python thread state:
+    /// `threading.local`, `contextvars` and `threading.current_thread()` set or
+    /// seen in `on_start` are the same in `on_update`. The body waits without
+    /// the GIL; each hook call takes it again on this same thread state.
+    fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
+        Python::attach(|py| py.detach(body))
+    }
+
+    fn panicked(&mut self, error: &HookError) {
+        Python::attach(|py| {
+            let message = format!("node '{}' panicked in {}", self.name, error.hook);
+            log_error(
+                py,
+                &message,
+                &PyRuntimeError::new_err(error.source.to_string()),
+            );
+        });
+    }
+
     fn start(&mut self) -> Result<(), HookError> {
         let state = self.state.take();
+        let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
+        self.methods =
+            Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);
         self.call0("_on_thread_start")?;
         self.call0("on_start")?;
         if let Some(state) = state {
@@ -158,7 +224,6 @@ impl NodeHooks for PyNode {
         }
         Ok(())
     }
-
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
         self.call("on_update", |py| {
             PyTuple::new(py, [dt]).expect("a tuple of one float")
@@ -209,9 +274,10 @@ fn runtime_error(py: Python<'_>, names: &[String], err: RuntimeError) -> PyErr {
         }
         RuntimeError::PauseTimeout { .. } => PauseTimeoutError::new_err(err.to_string()),
         RuntimeError::InvalidArgument(_) => PyValueError::new_err(err.to_string()),
-        RuntimeError::NotManual | RuntimeError::Finished | RuntimeError::Reentrant => {
-            PyRuntimeError::new_err(err.to_string())
-        }
+        RuntimeError::NotManual
+        | RuntimeError::Finished
+        | RuntimeError::Reentrant
+        | RuntimeError::Internal(_) => PyRuntimeError::new_err(err.to_string()),
     }
 }
 
@@ -312,6 +378,11 @@ impl Runtime {
     /// Starts every node on its own thread and returns once all of them have
     /// started (and restored `states`) and the timer runs again. If a node
     /// raised meanwhile, raises `NetworkError` after the network has stopped.
+    /// If an argument is invalid, raises `ValueError` and nothing starts, so
+    /// `start` can be called again.
+    ///
+    /// If the wait is interrupted (Ctrl-C), the start goes on in the
+    /// background; `shutdown` stops it.
     #[pyo3(signature = (
         *,
         manual = false,
@@ -355,24 +426,36 @@ impl Runtime {
             last_update_ns,
             timer_state,
         };
-        let Pending { nodes, names } = self
-            .pending
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let Pending { nodes, names } = pending
             .take()
             .ok_or_else(|| PyRuntimeError::new_err("the runtime has already started"))?;
+        // Kept to undo the take if the core rejects the arguments.
+        let kept = Pending {
+            nodes: nodes.iter().map(|n| n.clone_ref(py)).collect(),
+            names: names.clone(),
+        };
         let mut states = states.map(Vec::into_iter);
         let hooks = (nodes.into_iter().zip(names.iter().cloned()))
             .map(|(node, name)| PyNode {
                 node,
                 name,
                 state: states.as_mut().and_then(Iterator::next),
+                methods: None,
             })
             .collect();
         let capture = on_exception_capture.map(|callback| self.exception_capture(callback));
         let (runtime, started) =
-            core::Runtime::start(hooks, names, time::global(), config, capture)
-                .map_err(|e| runtime_error(py, &self.names, e))?;
+            match core::Runtime::start(hooks, names, time::global(), config, capture) {
+                Ok(started) => started,
+                Err(e) => {
+                    if matches!(e, RuntimeError::InvalidArgument(_)) {
+                        *pending = Some(kept);
+                    }
+                    return Err(runtime_error(py, &self.names, e));
+                }
+            };
+        drop(pending);
         let _ = self.inner.set(runtime);
         self.wait(py, started)
     }

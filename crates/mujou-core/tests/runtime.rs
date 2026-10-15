@@ -285,7 +285,7 @@ mod failure {
         let Err(RuntimeError::Failed(failure)) = result else {
             panic!("expected a failure, got {result:?}");
         };
-        assert_eq!((failure.node, failure.hook), (0, "update"));
+        assert_eq!((failure.node, failure.hook), (0, "on_update"));
         assert!(failure.error.to_string().contains("panic in node 0"));
         for id in 0..2 {
             assert_exception_then_stop_once(&events_of(&log, id));
