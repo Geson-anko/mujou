@@ -18,3 +18,16 @@ Requires [uv](https://docs.astral.sh/uv/) and [just](https://just.systems/) (>= 
 just setup   # create .venv, install deps, install pre-commit hooks
 just run     # format -> test -> type
 ```
+
+### Dev container
+
+`.devcontainer/` provides Ubuntu with uv, just and the Rust toolchain. Open the repository in VS Code and choose "Reopen in Container", or use the CLI:
+
+```sh
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . just run
+```
+
+- `.venv` and `target/` live in Docker volumes, so the container's Linux builds never clash with a host checkout.
+- The container runs `uv sync` instead of `just setup`, and installs the pre-commit hook only if none exists, because the hook records the absolute path of the Python that installed it. `.venv/bin` is on `PATH`, so a hook installed on the host still finds `pre-commit` in the container.
+- `core.fileMode` is `false` inside the container only, because Docker Desktop bind mounts report every file as executable.
