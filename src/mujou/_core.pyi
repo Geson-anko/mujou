@@ -28,4 +28,136 @@ timer: Final[GlobalTimer]
 
 # --- slot (WP-A)
 
+# Imported here rather than at the top so that the sections stay independent.
+from collections.abc import Sequence  # noqa: E402
+from types import CapsuleType  # noqa: E402
+from typing import Protocol  # noqa: E402
+
+type DLDataType = tuple[int, int, int]
+"""``(code, bits, lanes)`` of a DLPack dtype."""
+
+class SupportsDLPack(Protocol):
+    """Any tensor that can be exported over DLPack, such as ``torch.Tensor``."""
+
+    def __dlpack__(self) -> object: ...
+
+@final
+class Schema:
+    """The fields of a message, fixed when the network is built.
+
+    A tensor message has one field named ``""``; a TypedDict message has one
+    field per key, in key order. Every extent must be at least 1.
+
+    Raises:
+        ValueError: No fields, duplicate names, an extent below 1, or a dtype
+            that is not a scalar of whole bytes.
+    """
+
+    def __init__(
+        self, fields: Sequence[tuple[str, Sequence[int], DLDataType]]
+    ) -> None: ...
+
+@final
+class BufferView:
+    """One field of a message, lent over DLPack.
+
+    Read it with ``torch.from_dlpack(view)`` and copy the result at once: the
+    memory belongs to the core and must not be written.
+    """
+
+    def __dlpack__(
+        self,
+        *,
+        stream: object = None,
+        max_version: tuple[int, int] | None = None,
+        dl_device: tuple[int, int] | None = None,
+        copy: bool | None = None,
+    ) -> CapsuleType: ...
+    def __dlpack_device__(self) -> tuple[int, int]: ...
+
+@final
+class Message:
+    """An immutable value of a slot."""
+
+    @property
+    def buffers(self) -> tuple[BufferView, ...]:
+        """One view per field, in key order."""
+
+    @property
+    def time_ns(self) -> int:
+        """The global time it was written at."""
+
+@final
+class Slot:
+    """The latest value of one writer, read by any number of readers."""
+
+    @property
+    def name(self) -> str: ...
+    def read(self) -> Message: ...
+    def wait_newer(self, last: Message | None, timeout: float) -> Message | None:
+        """Wait without the GIL until the value is not ``last``.
+
+        Returns ``None`` after ``timeout`` seconds of real time. With ``last``
+        ``None``, returns the current value at once.
+        """
+
+    def restore(self, values: Sequence[SupportsDLPack], time_ns: int) -> None:
+        """Set the value and its time as they were when the state was taken."""
+
+@final
+class Outlet:
+    """The sending side of one port and the only writer of its slots.
+
+    Values are copied in, so changing them afterwards does not change what
+    readers see.
+
+    Raises (``send``, ``send_to``):
+        ValueError: The number of values, a shape or a dtype differs from the
+            schema. The message names the slot and the field.
+        TypeError: A value does not support DLPack or is not in host memory.
+        IndexError: No such channel.
+    """
+
+    def __init__(self, schema: Schema, channels: int, name: str) -> None:
+        """Create the slots ``"{name}/out"`` and ``"{name}/ch{k}"`` holding zeros."""
+
+    @property
+    def outbox(self) -> Slot:
+        """The outward slot, which every ``send`` writes."""
+
+    def channel(self, index: int) -> Slot: ...
+    def send(self, values: Sequence[SupportsDLPack]) -> None:
+        """Write one message to the outward slot and every channel."""
+
+    def send_to(self, index: int, values: Sequence[SupportsDLPack]) -> None:
+        """Write one message to channel ``index`` only."""
+
+@final
+class InputGroup:
+    """The slots the host writes, switched together by one version counter."""
+
+    def __init__(self) -> None: ...
+    def input(self, schema: Schema, name: str) -> InputSlot:
+        """Create the slot ``"{name}/in"`` holding zeros."""
+
+    def write(
+        self, items: Sequence[tuple[InputSlot, Sequence[SupportsDLPack]]]
+    ) -> None:
+        """Write every item at once, all stamped with the same time.
+
+        No reader sees some of the slots new and others old. If any value is
+        invalid, no slot changes. Raises as ``Outlet.send`` does, and
+        ``ValueError`` for a slot of another group.
+        """
+
+@final
+class InputSlot:
+    """A slot the host writes through its ``InputGroup``."""
+
+    @property
+    def name(self) -> str: ...
+    def read(self) -> Message: ...
+    def restore(self, values: Sequence[SupportsDLPack], time_ns: int) -> None:
+        """Set the value and its time, dropping any pending write."""
+
 # --- runtime (WP-B)
