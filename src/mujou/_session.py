@@ -31,6 +31,8 @@ type AnySlot = _core.Slot | _core.InputSlot
 
 # Real seconds between the checks of `subscribe` for the end of the run.
 _POLL: Final = 0.05
+# Where the host receives values.
+_CPU: Final = torch.device("cpu")
 
 
 def _spec(spec: object) -> Spec | None:
@@ -38,13 +40,14 @@ def _spec(spec: object) -> Spec | None:
     return cast(Spec | None, spec)
 
 
-def _to_host(tensor: torch.Tensor) -> torch.Tensor:
-    """Cut the gradient and bring ``tensor`` to host memory for the core to copy.
+def _host_tensors(spec: Spec, msg: object, where: str) -> list[torch.Tensor]:
+    """Split ``msg`` by ``spec``, cut the gradients and bring the tensors to host
+    memory for the core to copy.
 
-    A CUDA tensor is copied on the current stream (the node's own), and only that
-    stream is synchronized.
+    A CUDA tensor is copied on the calling thread's current stream (a node's own,
+    in its hooks), and only that stream is synchronized.
     """
-    return tensor.detach().cpu()
+    return [t.detach().cpu() for t in split(spec, msg, where=where)]
 
 
 def _value(spec: Spec, message: _core.Message, device: torch.device) -> object:
@@ -124,7 +127,7 @@ class Binding:
 
     def _tensors(self, msg: object) -> list[torch.Tensor]:
         spec = cast(Spec, self._send_spec)  # an outlet exists only with a send spec
-        return [_to_host(t) for t in split(spec, msg, where=self._path)]
+        return _host_tensors(spec, msg, self._path)
 
 
 @final
@@ -147,35 +150,12 @@ class Session:
         # Every slot by name, in the order of graph.ports, for the state tree.
         self._slots: dict[str, tuple[AnySlot, Spec]] = {}
 
+        # Every outlet first: a port reads the channel slots of its peers' outlets.
         for port in graph.ports:
-            spec = _spec(port.send_spec)
-            if spec is None:
-                continue
-            outlet = _core.Outlet(
-                _core.Schema(fields(spec)), len(port.channels), graph.port_path(port)
-            )
-            self._outlets[port] = outlet
-            self._slots[outlet.outbox.name] = (outlet.outbox, spec)
-            for k in range(len(port.channels)):
-                slot = outlet.channel(k)
-                self._slots[slot.name] = (slot, spec)
-
+            self._add_outlet(port)
         for port, (index, _) in graph.ports.items():
             path = graph.port_path(port)
-            spec = _spec(port.recv_spec)
-            sources: list[tuple[Channel | None, AnySlot]] = []
-            if spec is not None and port.channels:
-                for channel in port.channels:
-                    # Each end writes its k-th channel slot for its k-th channel.
-                    peer = channel.other(port)
-                    k = peer.channels.index(channel)
-                    sources.append((channel, self._outlets[peer].channel(k)))
-            elif spec is not None and not port.multi:
-                # An unconnected single-peer port reads what the host writes.
-                slot = self._group.input(_core.Schema(fields(spec)), path)
-                self._inputs[port] = (slot, spec)
-                self._slots[slot.name] = (slot, spec)
-                sources.append((None, slot))
+            sources = self._sources(port, path)
             owner = graph.nodes[index][1]
             bind(port, Binding(owner, path, port, self._outlets.get(port), sources))
 
@@ -186,6 +166,42 @@ class Session:
         self._states: list[object] | None = None
         self._last_update_ns: list[int] | None = None
         self._timer_state: dict[str, int | float] | None = None
+
+    def _add_outlet(self, port: AnyPort) -> None:
+        spec = _spec(port.send_spec)
+        if spec is None:
+            return
+        outlet = _core.Outlet(
+            _core.Schema(fields(spec)), len(port.channels), self._graph.port_path(port)
+        )
+        self._outlets[port] = outlet
+        self._slots[outlet.outbox.name] = (outlet.outbox, spec)
+        for k in range(len(port.channels)):
+            slot = outlet.channel(k)
+            self._slots[slot.name] = (slot, spec)
+
+    def _sources(
+        self, port: AnyPort, path: str
+    ) -> list[tuple[Channel | None, AnySlot]]:
+        """The slots ``port`` reads, as ``Binding`` takes them."""
+        spec = _spec(port.recv_spec)
+        if spec is None:
+            return []
+        if port.channels:
+            # Each end writes its k-th channel slot for its k-th channel.
+            sources: list[tuple[Channel | None, AnySlot]] = []
+            for channel in port.channels:
+                peer = channel.other(port)
+                k = peer.channels.index(channel)
+                sources.append((channel, self._outlets[peer].channel(k)))
+            return sources
+        if port.multi:
+            return []
+        # An unconnected single-peer port reads what the host writes.
+        slot = self._group.input(_core.Schema(fields(spec)), path)
+        self._inputs[port] = (slot, spec)
+        self._slots[slot.name] = (slot, spec)
+        return [(None, slot)]
 
     # --- run and control
 
@@ -279,8 +295,9 @@ class Session:
         items: list[tuple[_core.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
-            where = self._graph.port_path(port)
-            items.append((slot, [_to_host(t) for t in split(spec, value, where=where)]))
+            items.append(
+                (slot, _host_tensors(spec, value, self._graph.port_path(port)))
+            )
         # The lock only for a restored network that may be starting: a plain write
         # never waits for run (an on_start may be waiting for it).
         if self._timer_state is not None:
@@ -303,18 +320,22 @@ class Session:
         return _value(spec, message, _CPU), message.time_ns / 1e9
 
     def subscribe(self, port: AnyPort) -> Iterator[tuple[object, float]]:
-        self._started()  # a subscription before run would wait for nothing
+        runtime = self._started()  # a subscription before run would wait for nothing
         self.check()
         outbox, spec = self._outbox(port)
         # Only values written after this call are new.
-        return self._follow(outbox, spec, outbox.read())
+        return self._follow(runtime, outbox, spec, outbox.read())
 
     def _follow(
-        self, outbox: _core.Slot, spec: Spec, last: _core.Message
+        self,
+        runtime: _core.Runtime,
+        outbox: _core.Slot,
+        spec: Spec,
+        last: _core.Message,
     ) -> Iterator[tuple[object, float]]:
         while True:
             self.check()
-            finished = self._runtime is not None and self._runtime.is_finished
+            finished = runtime.is_finished
             # After the end nothing is written, so one last look without waiting.
             message = outbox.wait_newer(last, 0.0 if finished else _POLL)
             if message is None:
@@ -407,6 +428,27 @@ class Session:
             )
         # Check and copy everything before changing anything, so that an error
         # changes nothing.
+        restores = self._slot_restores(slots)
+        # Copies: the nodes update their state in place, which must not reach the
+        # caller's tree (or another network loaded from it).
+        states = [copy.deepcopy(nodes[path]) for path in self._paths]
+        # The copies were made on this thread's streams; the nodes use them on
+        # their own streams, which do not wait for these.
+        self._synchronize_current_streams()
+        for slot, tensors, time_ns in restores:
+            slot.restore(tensors, time_ns)
+        self._states = states
+        self._last_update_ns = [cast(int, last_update_ns[path]) for path in self._paths]
+        self._timer_state = {
+            "time_ns": cast(int, timer["time_ns"]),
+            "scale": timer["scale"],
+        }
+
+    def _slot_restores(
+        self, slots: Mapping[str, object]
+    ) -> list[tuple[AnySlot, list[torch.Tensor], int]]:
+        """Check each slot's ``(value, time_ns)`` in the tree and copy the value to
+        the host, without restoring anything yet."""
         restores: list[tuple[AnySlot, list[torch.Tensor], int]] = []
         for name, (slot, spec) in self._slots.items():
             entry = slots[name]
@@ -422,22 +464,10 @@ class Session:
                 raise ValueError(
                     f"the state tree's slot {name!r} has a time that is not an int"
                 )
-            tensors = [_to_host(t) for t in split(spec, value, where=name)]
-            restores.append((slot, tensors, cast(int, time_ns)))
-        # Copies: the nodes update their state in place, which must not reach the
-        # caller's tree (or another network loaded from it).
-        states = [copy.deepcopy(nodes[path]) for path in self._paths]
-        # The copies were made on this thread's streams; the nodes use them on
-        # their own streams, which do not wait for these.
-        self._synchronize_current_streams()
-        for slot, tensors, time_ns in restores:
-            slot.restore(tensors, time_ns)
-        self._states = states
-        self._last_update_ns = [cast(int, last_update_ns[path]) for path in self._paths]
-        self._timer_state = {
-            "time_ns": cast(int, timer["time_ns"]),
-            "scale": timer["scale"],
-        }
+            restores.append(
+                (slot, _host_tensors(spec, value, name), cast(int, time_ns))
+            )
+        return restores
 
     def _synchronize_current_streams(self) -> None:
         """Wait for the calling thread's current stream on each CUDA device the
@@ -470,9 +500,6 @@ class Session:
         # before the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
         return tree
-
-
-_CPU: Final = torch.device("cpu")
 
 
 def _weakly[**P, T](
