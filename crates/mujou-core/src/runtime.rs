@@ -303,6 +303,8 @@ struct Control {
     /// Every node may call `stop` (set after the exception capture, if any).
     stop_allowed: bool,
     freeze: Freeze,
+    /// Counts this runtime as live on its timer until it finishes.
+    live: Option<Live>,
     finished: bool,
 }
 
@@ -604,6 +606,28 @@ impl<N: NodeHooks> Shared<N> {
     }
 }
 
+/// The number of runtimes started and not yet finished, per timer (by address).
+static LIVE: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
+
+fn lock_live() -> MutexGuard<'static, BTreeMap<usize, usize>> {
+    LIVE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// One live runtime on the timer with this address; dropping it uncounts it.
+struct Live(usize);
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        let mut live = lock_live();
+        if let Some(k) = live.get_mut(&self.0) {
+            *k -= 1;
+            if *k == 0 {
+                live.remove(&self.0);
+            }
+        }
+    }
+}
+
 enum Boundary {
     Exit,
     Again,
@@ -813,6 +837,13 @@ impl<N: NodeHooks> Controller<N> {
         // Let the time run again even after an exception, or the host's waits
         // in global time would never return.
         c.freeze.release_all();
+        // Uncount before `finished`, so that a start after `join` can restore
+        // the time; and outside the control lock, since `start` takes the
+        // count's lock before a control lock.
+        let live = c.live.take();
+        drop(c);
+        drop(live);
+        let mut c = s.lock();
         c.finished = true;
         s.changed.notify_all();
         self.done = true;
@@ -931,6 +962,7 @@ impl<N: NodeHooks> Runtime<N> {
                     .collect(),
                 stop_allowed: false,
                 freeze: Freeze::default(),
+                live: None,
                 finished: false,
             }),
             changed: Condvar::new(),
@@ -941,6 +973,18 @@ impl<N: NodeHooks> Runtime<N> {
             to_controller,
         });
 
+        // Checking for other live runtimes, loading the time and counting this
+        // runtime happen under one lock, so two starts cannot both pass.
+        let mut live = lock_live();
+        let timer_id = timer as *const GlobalTimer as usize;
+        if config.timer_state.is_some() && live.get(&timer_id).is_some_and(|&k| k > 0) {
+            // The time is shared by every runtime: moving it would make the
+            // running ones jump (or stall) by the difference in their next Δt.
+            return Err(RuntimeError::InvalidArgument(
+                "cannot restore the time while another runtime is running on the same timer"
+                    .to_owned(),
+            ));
+        }
         // No thread of this runtime exists yet, so the host may touch the timer.
         shared.lock().freeze.hold(FreezeReason::Startup, timer);
         if let Some(state) = config.timer_state {
@@ -949,6 +993,9 @@ impl<N: NodeHooks> Runtime<N> {
                 return Err(RuntimeError::InvalidArgument(e.to_string()));
             }
         }
+        *live.entry(timer_id).or_insert(0) += 1;
+        drop(live);
+        shared.lock().live = Some(Live(timer_id));
         // Where each first Δt starts: set before any thread exists, so that it
         // is right even if the system ends while starting (the state captured
         // on that exception holds it), and stays right since the time is frozen.
@@ -1110,6 +1157,10 @@ fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> Runt
     s.set_command(&mut c, Command::Stop);
     c.stop_allowed = true;
     c.freeze.release_all();
+    let live = c.live.take();
+    drop(c);
+    drop(live);
+    let mut c = s.lock();
     c.finished = true;
     s.changed.notify_all();
     RuntimeError::Internal(format!("failed to spawn {which} thread: {e}"))

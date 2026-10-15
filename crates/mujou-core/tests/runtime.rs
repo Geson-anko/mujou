@@ -321,3 +321,43 @@ mod failure {
         assert!(!timer.is_paused());
     }
 }
+
+mod restore {
+    use super::*;
+    use mujou_core::time::TimerState;
+
+    fn restoring() -> RuntimeConfig {
+        RuntimeConfig {
+            timer_state: Some(TimerState {
+                time_ns: 7 * H_NS,
+                scale: 1.0,
+            }),
+            ..manual()
+        }
+    }
+
+    #[test]
+    fn the_time_is_not_restored_under_a_running_runtime() {
+        let timer = virtual_timer();
+        let Setup { nodes, names, .. } = recorders(1);
+        let (running, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        started.wait().unwrap();
+        let before = timer.time_ns();
+
+        let Setup { log, nodes, names } = recorders(1);
+        let result = Runtime::start(nodes, names, timer, restoring(), None);
+        assert!(matches!(result, Err(RuntimeError::InvalidArgument(_))));
+        // Nothing started, and the running runtime's time did not move.
+        assert!(log.lock().unwrap().is_empty());
+        assert_eq!(timer.time_ns(), before);
+        assert!(!timer.is_paused());
+
+        // Once it has finished, the time can be restored.
+        running.shutdown().wait().unwrap();
+        let Setup { nodes, names, .. } = recorders(1);
+        let (restored, started) = Runtime::start(nodes, names, timer, restoring(), None).unwrap();
+        started.wait().unwrap();
+        assert_eq!(timer.time_ns(), 7 * H_NS);
+        restored.shutdown().wait().unwrap();
+    }
+}
