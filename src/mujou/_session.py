@@ -8,7 +8,6 @@ one is copied into the core.
 """
 
 import atexit
-import contextlib
 import copy
 import threading
 import traceback
@@ -19,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 import torch
 
 from mujou import _core
-from mujou._node import Node, end_thread, synchronize, thread_ident
+from mujou._node import Node, end_thread, thread_ident
 from mujou._port import Channel, Port, bind
 from mujou._spec import Spec, fields, join, split
 
@@ -193,6 +192,8 @@ class Session:
     def run(
         self, *, manual: bool, pause_timeout: float, capture_state_on_exception: bool
     ) -> None:
+        # Held until start returns, so that write and load_state_dict see either
+        # no run or a started one, never a run in its start.
         with self._run_lock:
             if self._runtime is not None:
                 raise RuntimeError(
@@ -200,30 +201,30 @@ class Session:
                 )
             runtime = _core.Runtime(self._nodes, self._paths)
             self._runtime = runtime
-        for session in list(_RUNNING):
-            session._settle()
-        _RUNNING.add(self)
-        try:
-            runtime.start(
-                manual=manual,
-                states=self._states,
-                last_update_ns=self._last_update_ns,
-                timer_state=self._timer_state,
-                pause_timeout=pause_timeout,
-                on_exception_capture=(
-                    _weakly(self._capture_on_exception)
-                    if capture_state_on_exception
-                    else None
-                ),
-            )
-        except _core.NetworkError:
-            raise  # a node raised while starting: this run is over
-        except Exception:
-            # Refused before any node started (e.g. an invalid argument): the
-            # network may run once the cause is gone.
-            self._runtime = None
-            _RUNNING.discard(self)
-            raise
+            for session in list(_RUNNING):
+                session._settle()
+            _RUNNING.add(self)
+            try:
+                runtime.start(
+                    manual=manual,
+                    states=self._states,
+                    last_update_ns=self._last_update_ns,
+                    timer_state=self._timer_state,
+                    pause_timeout=pause_timeout,
+                    on_exception_capture=(
+                        _weakly(self._capture_on_exception)
+                        if capture_state_on_exception
+                        else None
+                    ),
+                )
+            except _core.NetworkError:
+                raise  # a node raised while starting: this run is over
+            except Exception:
+                # Refused before any node started (e.g. an invalid argument): the
+                # network may run once the cause is gone.
+                self._runtime = None
+                _RUNNING.discard(self)
+                raise
 
     def step(self, order: Sequence[Node] | None) -> None:
         runtime = self._started()
@@ -277,14 +278,15 @@ class Session:
             slot, spec = self._writable(port)
             where = self._graph.port_path(port)
             items.append((slot, [_to_host(t) for t in split(spec, value, where=where)]))
-        if self._runtime is None and self._timer_state is not None:
-            # Restored but not running: the values belong to the restored time T,
-            # not to the process's time now. Nobody reads yet, so restoring each
-            # slot (after checking them all above) switches them together.
-            time_ns = int(self._timer_state["time_ns"])
-            for slot, tensors in items:
-                slot.restore(tensors, time_ns)
-            return
+        with self._run_lock:
+            if self._runtime is None and self._timer_state is not None:
+                # Restored but not running: the values belong to the restored time
+                # T, not to the process's time now. Nobody reads yet, so restoring
+                # each slot (after checking them all above) switches them together.
+                time_ns = int(self._timer_state["time_ns"])
+                for slot, tensors in items:
+                    slot.restore(tensors, time_ns)
+                return
         self._group.write(items)
 
     def read(self, port: AnyPort) -> tuple[object, float]:
@@ -370,13 +372,17 @@ class Session:
         return cast(dict[str, Any] | None, self._runtime.exception_state())
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        with self._run_lock:
+            self._load_state_dict(state)
+
+    def _load_state_dict(self, state: Mapping[str, Any]) -> None:
         if self._runtime is not None:
             raise RuntimeError("load_state_dict is only possible before run()")
         for key in ("nodes", "slots", "last_update_ns", "timer"):
             if key not in state:
                 raise ValueError(f"the state tree has no {key!r}")
         nodes = cast(Mapping[str, object], state["nodes"])
-        slots = cast(Mapping[str, tuple[object, int]], state["slots"])
+        slots = cast(Mapping[str, object], state["slots"])
         last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
         timer = cast(Mapping[str, object], state["timer"])
         _same_keys("nodes", nodes, self._paths)
@@ -392,20 +398,34 @@ class Session:
             raise ValueError(
                 "the state tree's timer must have an int time_ns and a scale"
             )
-        # Check every value before restoring any, so that an error changes nothing.
+        # Check and copy everything before changing anything, so that an error
+        # changes nothing.
         restores: list[tuple[AnySlot, list[torch.Tensor], int]] = []
         for name, (slot, spec) in self._slots.items():
-            value, time_ns = slots[name]
+            entry = slots[name]
+            if (
+                not isinstance(entry, tuple)
+                or len(cast(tuple[object, ...], entry)) != 2
+            ):
+                raise ValueError(
+                    f"the state tree's slot {name!r} is not (value, time_ns)"
+                )
+            value, time_ns = cast(tuple[object, object], entry)
+            if not _is_int(time_ns):
+                raise ValueError(
+                    f"the state tree's slot {name!r} has a time that is not an int"
+                )
             tensors = [_to_host(t) for t in split(spec, value, where=name)]
-            restores.append((slot, tensors, time_ns))
-        for slot, tensors, time_ns in restores:
-            slot.restore(tensors, time_ns)
+            restores.append((slot, tensors, cast(int, time_ns)))
         # Copies: the nodes update their state in place, which must not reach the
         # caller's tree (or another network loaded from it).
-        self._states = [copy.deepcopy(nodes[path]) for path in self._paths]
-        # The copies were made on this thread's stream; the nodes use them on
-        # their own streams, which do not wait for this one.
-        _synchronize_cuda()
+        states = [copy.deepcopy(nodes[path]) for path in self._paths]
+        # The copies were made on this thread's streams; the nodes use them on
+        # their own streams, which do not wait for these.
+        _synchronize_current_streams()
+        for slot, tensors, time_ns in restores:
+            slot.restore(tensors, time_ns)
+        self._states = states
         self._last_update_ns = [cast(int, last_update_ns[path]) for path in self._paths]
         self._timer_state = {
             "time_ns": cast(int, timer["time_ns"]),
@@ -415,16 +435,15 @@ class Session:
     def _tree(
         self, states: Mapping[int, object], last_update_ns: Sequence[int]
     ) -> dict[str, Any]:
-        """Copy the state of the paused network into a tree (``state_dict``)."""
-        # The copies below run on this (the control) thread's stream; wait for the
-        # nodes' own streams first.
-        for node in self._nodes:
-            synchronize(node)
+        """Copy the state of the paused network into a tree (``state_dict``).
+
+        The nodes' streams are idle here (``Node._capture_state`` waited for them).
+        """
         slots: dict[str, tuple[object, int]] = {}
         for name, (slot, spec) in self._slots.items():
             message = slot.read()
             slots[name] = (_value(spec, message, _CPU), message.time_ns)
-        return {
+        tree = {
             "nodes": {
                 self._paths[i]: copy.deepcopy(state)
                 for i, state in sorted(states.items())
@@ -433,6 +452,10 @@ class Session:
             "last_update_ns": dict(zip(self._paths, last_update_ns, strict=True)),
             "timer": _core.timer.state_dict(),
         }
+        # The copies above queue on this thread's current streams. Finish them
+        # before the runtime resumes the nodes, which update in place.
+        _synchronize_current_streams()
+        return tree
 
 
 _CPU: Final = torch.device("cpu")
@@ -459,11 +482,12 @@ def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _synchronize_cuda() -> None:
-    """Wait for every CUDA device, if CUDA is in use (only while no node runs)."""
+def _synchronize_current_streams() -> None:
+    """Wait for the calling thread's current stream on every CUDA device, if CUDA
+    is in use. Only this thread's work: not the nodes' streams, nor the device."""
     if torch.cuda.is_initialized():
         for index in range(torch.cuda.device_count()):
-            torch.cuda.synchronize(index)
+            torch.cuda.current_stream(index).synchronize()
 
 
 def _same_keys(
@@ -486,9 +510,18 @@ _RUNNING: Final[set[Session]] = set()
 
 
 def _shutdown_all() -> None:
+    # Stop every session even if one fails (e.g. Ctrl-C while waiting for its
+    # on_stop), then raise the first failure.
+    failure: BaseException | None = None
     for session in list(_RUNNING):
-        with contextlib.suppress(_core.NetworkError):
+        try:
             session.shutdown()
+        except _core.NetworkError:
+            pass  # already logged, and the host has gone
+        except BaseException as e:  # noqa: BLE001 - re-raised below
+            failure = failure or e
+    if failure is not None:
+        raise failure
 
 
 # Before the interpreter joins the non-daemon threads: a thread iterating over

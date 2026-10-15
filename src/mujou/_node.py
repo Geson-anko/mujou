@@ -1,7 +1,7 @@
 """The node, the unit of asynchronous computation."""
 
 import threading
-from typing import override
+from typing import cast, override
 
 import torch
 
@@ -22,8 +22,10 @@ class Node(_core.Node, Component):
     Before ``on_start``, the framework sets up the node's thread
     (``_on_thread_start``): it turns off gradient recording, creates ``generator``
     from ``seed``, and, when ``device`` is CUDA, makes the device and a stream of
-    the node's own current, and waits for that stream at the end of each
-    ``on_update``. Overriding ``on_start`` does not skip this.
+    the node's own current. When ``device`` is CUDA it also waits for that stream
+    after each ``on_update`` (``_after_update``) and around ``state_dict``
+    (``_capture_state``). These are hooks of their own, so overriding (or
+    replacing) ``on_start``, ``on_update`` or ``state_dict`` does not skip them.
 
     ``state_dict`` runs on the runtime's control thread while the node is paused,
     so it cannot ``recv`` or ``send``; return the node's own state from it.
@@ -59,7 +61,8 @@ class Node(_core.Node, Component):
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
 
     Raises:
-        ValueError: ``device`` is neither the CPU nor a CUDA device.
+        ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
+            while CUDA is not available.
     """
 
     # Class-level defaults, so that subclasses need not call super().__init__().
@@ -75,6 +78,17 @@ class Node(_core.Node, Component):
         device = torch.device(device)
         if device.type not in ("cpu", "cuda"):
             raise ValueError(f"a node computes on the CPU or CUDA, got {device}")
+        if device.type == "cuda":
+            if not torch.cuda.is_available():
+                raise ValueError(
+                    f"the node's device is {device}, but CUDA is not available"
+                )
+            # torch's stub types the index as int, but it is None for "cuda".
+            index = cast(int | None, device.index)
+            if index is None:
+                # Fix the device now: "cuda" means the host's current device, and
+                # set_device needs an index.
+                device = torch.device("cuda", torch.cuda.current_device())
         self._device = device
         self._seed = seed
 
@@ -116,7 +130,6 @@ class Node(_core.Node, Component):
             stream = torch.cuda.Stream(self._device)
             torch.cuda.set_stream(stream)
             self._stream = stream
-            self._synchronize_each_update(stream)
         generator = torch.Generator(self._device)
         if self._seed is None:
             generator.seed()
@@ -126,35 +139,33 @@ class Node(_core.Node, Component):
         # The OS thread id: the Python thread object may differ between hooks.
         self._thread_ident = threading.get_ident()
         _hooks.inside = True
-        self._mark_state_dict()
 
-    # The runtime looks the hooks below up after _on_thread_start, on_start and
-    # load_state_dict, so instance attributes set here replace them.
+    @override
+    def _after_update(self) -> None:
+        # The CPU never runs ahead of the GPU, and a node paused between updates
+        # has no work left on its stream.
+        if self._stream is not None:
+            self._stream.synchronize()
 
-    def _synchronize_each_update(self, stream: torch.cuda.Stream) -> None:
-        """End each ``on_update`` by waiting for the node's own stream, so that the
-        CPU never runs ahead of the GPU and a paused node has no pending work."""
-        update = self.on_update
-
-        def on_update(dt: float) -> None:
-            update(dt)
-            stream.synchronize()
-
-        self.on_update = on_update
-
-    def _mark_state_dict(self) -> None:
-        """Mark the control thread as inside a hook while it runs ``state_dict``."""
-        state_dict = self.state_dict
-
-        def marked() -> object:
-            outer = _hooks.inside
-            _hooks.inside = True
-            try:
-                return state_dict()
-            finally:
-                _hooks.inside = outer
-
-        self.state_dict = marked
+    @override
+    def _capture_state(self) -> object:
+        # On the control thread: mark it as inside a hook for the call.
+        outer = _hooks.inside
+        _hooks.inside = True
+        try:
+            stream = self._stream
+            if stream is None:
+                return self.state_dict()
+            # Copies that state_dict makes queue on the node's stream, after the
+            # work of every hook (not only on_update); wait for them before the
+            # framework copies the tree on its own stream.
+            with torch.cuda.stream(stream):
+                stream.synchronize()
+                state = self.state_dict()
+                stream.synchronize()
+            return state
+        finally:
+            _hooks.inside = outer
 
 
 class _Hooks(threading.local):
@@ -180,10 +191,3 @@ def end_thread(node: Node) -> None:
     """Forget the thread of ``node`` once its network has stopped, so that a later
     thread that reuses the id is not taken for it."""
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
-
-
-def synchronize(node: Node) -> None:
-    """Wait for the work queued on the CUDA stream of ``node``, if it has one."""
-    stream = node._stream  # pyright: ignore[reportPrivateUsage]  # Node's own module
-    if stream is not None:
-        stream.synchronize()

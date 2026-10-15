@@ -74,6 +74,12 @@ class TestThreadSetup:
         net.shutdown()
         assert thread_ident(node) is None
 
+    def test_leaves_the_hooks_of_the_node_alone(self, run_network: RunNetwork):
+        node = Probe(seed=0)
+        net = run_network(Solo(node), _manual=True)
+        net.state_dict()
+        assert not {"on_update", "state_dict"} & set(vars(node))
+
     def test_the_generator_is_made_on_the_thread(self):
         with pytest.raises(RuntimeError, match="node's thread"):
             _ = Probe(seed=0).generator
@@ -89,6 +95,15 @@ class TestDevice:
                 super().__init__(device="cpu")
 
         assert OnCpu().device == torch.device("cpu")
+
+    @pytest.mark.skipif(torch.cuda.is_available(), reason="needs no CUDA")
+    def test_rejects_cuda_without_cuda(self):
+        with pytest.raises(ValueError, match="CUDA is not available"):
+            Node(device="cuda")
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_fixes_the_cuda_index(self):
+        assert Node(device="cuda").device.index == torch.cuda.current_device()
 
     def test_rejects_devices_other_than_cpu_and_cuda(self):
         with pytest.raises(ValueError, match="CPU or CUDA"):

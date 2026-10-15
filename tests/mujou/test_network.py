@@ -656,6 +656,23 @@ class TestStateDict:
 
 
 class TestHostMethodsFromANode:
+    def test_raise_in_state_dict_on_the_control_thread(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        networks: list[Network] = []
+
+        class Writing(Pair):
+            @override
+            def state_dict(self) -> object:
+                try:
+                    networks[0].read(self.out)
+                except RuntimeError as e:
+                    return str(e)
+                return None
+
+        networks.append(run_network(Solo(Writing()), _manual=True))
+        assert "host methods" in networks[0].state_dict()["nodes"]["node"]
+
     def test_raise(self, virtual_timer: GlobalTimer, run_network: RunNetwork):
         networks: list[Chain] = []
 
@@ -711,6 +728,22 @@ class TestLoadStateDict:
         for wrong, match in broken:
             with pytest.raises(ValueError, match=match):
                 same.load_state_dict(wrong)
+
+    def test_a_broken_tree_changes_nothing(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        source = run_network(Chain(), _manual=True)
+        tree = source.state_dict()
+        source.shutdown()
+        slots = dict(tree["slots"])
+        first, last = list(slots)[0], list(slots)[-1]
+        slots[first] = (torch.full((2,), 7.0, dtype=F64), slots[first][1])
+        slots[last] = (slots[last][0], 1.5)  # not an int
+        net = Chain()
+        net.build()
+        with pytest.raises(ValueError, match="not an int"):
+            net.load_state_dict({**tree, "slots": slots})
+        assert torch.equal(net.read(net.a.next)[0], torch.zeros(2, dtype=F64))
 
     def test_a_refused_run_can_be_retried(
         self, virtual_timer: GlobalTimer, run_network: RunNetwork

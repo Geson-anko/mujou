@@ -215,7 +215,9 @@ class Port(Generic[S, R, M]):
         Call it from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not built.
+            RuntimeError: The network is not built, or the caller is not the owning
+                node's thread (only the owner reads its port; ``state_dict`` runs
+                on another thread).
             TypeError: The port receives no messages.
         """
         return self._bound().recv(with_time=False)
@@ -228,7 +230,7 @@ class Port(Generic[S, R, M]):
     ) -> dict[Channel, tuple[R2, int]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
         """Like ``recv``, but pair each message with the global time in nanoseconds
-        at which it was written."""
+        at which it was written. Raises as ``recv`` does."""
         return self._bound().recv(with_time=True)
 
     def send(self, msg: S) -> None:
