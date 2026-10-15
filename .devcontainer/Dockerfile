@@ -12,3 +12,7 @@ USER vscode
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --no-modify-path --profile minimal --component rustfmt,clippy
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
+
+# Mount point of the cargo target volume. A new volume copies this directory, so
+# it starts out owned by vscode.
+RUN mkdir -p /home/vscode/.cache/cargo-target
