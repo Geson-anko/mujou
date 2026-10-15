@@ -117,17 +117,29 @@ class Network(Component):
     or dicts). A network is a build-time structure: its nodes still run
     independently and asynchronously.
 
-    Call ``build()`` once on the root network to check and freeze the structure,
-    then ``run()`` it (or call ``mujou.run(network)``, which builds if needed). The
-    root then talks with the running nodes: ``write`` to its unconnected ports,
-    ``read`` / ``subscribe`` any port's output, take the ``state_dict``, and
-    ``shutdown``. Declare ports as instance attributes (in ``__init__``), not class
-    attributes, and do not use the names of these methods for attributes.
+    Declare ports as instance attributes (in ``__init__``), not class attributes,
+    and do not use the names of the methods below for attributes.
 
-    If a node raises, the whole network stops, and every later call of ``write``,
-    ``read``, ``subscribe``, ``state_dict``, ``shutdown`` and ``join`` raises
-    ``NetworkError`` whose ``__cause__`` is the node's exception. These methods are
-    for the host: calling them from a node's hook raises ``RuntimeError``.
+    The host (the Python code outside the nodes) uses the root network, the one
+    it called ``build`` on, in this order:
+
+    1. ``build()``: once, to check and freeze the structure.
+    2. Optionally, before ``run``: ``write`` the initial inputs, or
+       ``load_state_dict`` a saved tree.
+    3. ``run()``: once; the nodes then run in the background. ``mujou.run(net)``
+       does 1 and 3 in one call.
+    4. While it runs: ``write`` inputs, ``read`` / ``subscribe`` outputs, take a
+       ``state_dict``. ``read`` also works before ``run``.
+    5. ``shutdown()`` to stop it, or ``join()`` to wait until it stops.
+
+    These methods are for the host: calling them from a node's hook raises
+    ``RuntimeError``.
+
+    If a node raises, the whole network stops. If that happens while ``run``
+    starts the nodes, ``run`` raises ``NetworkError``; otherwise every later call
+    of ``write``, ``read``, ``subscribe`` (and its iterator), ``state_dict``,
+    ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's exception.
+    ``exception_state_dict`` does not raise it.
 
     A running network keeps running when the host drops it, until ``shutdown``
     or, at the latest, the interpreter's exit (which waits for ``on_stop``).
@@ -279,6 +291,10 @@ class Network(Component):
 
         Raises:
             RuntimeError: The network is not built, or has already run.
+            ValueError: The network was restored by ``load_state_dict`` while
+                another network runs in this process (the global time cannot be
+                set back under it). Nothing started; stop the other network and
+                call ``run`` again.
             NetworkError: A node raised while starting; the network has stopped.
         """
         _session(self).run(
@@ -346,8 +362,21 @@ class Network(Component):
     def state_dict(self) -> dict[str, Any]:
         """Pause the network, copy its state at one global time, and resume.
 
-        The tree, which pickles, is ``{"nodes": {path: state}, "slots": {name:
-        (message, time_ns)}, "last_update_ns": {path: int}, "timer": {...}}``.
+        Returns once the network has resumed. The tree is a copy (later updates
+        of the nodes do not change it) and pickles; saving it is up to the host::
+
+            {
+                "nodes": {"body.l1": ..., ...},  # each node's state_dict()
+                "slots": {"body.l1.next/out": (value, time_ns), ...},
+                "last_update_ns": {"body.l1": int, ...},
+                "timer": {"time_ns": int, "scale": float},
+            }
+
+        A node is keyed by its attribute path from the root. A slot is keyed by
+        the path of the port through its owning node (``"body.l1.prev/in"``, not
+        an exposed name such as ``"prev/in"``) and holds its latest message:
+        ``/out`` what ``read`` returns, ``/ch0``, ``/ch1``, ... each channel, and
+        ``/in`` what the host wrote.
 
         Raises:
             RuntimeError: The network is not running (before ``run`` or after
@@ -363,8 +392,11 @@ class Network(Component):
         """Restore a tree from ``state_dict`` before ``run``.
 
         The slots are restored now; the nodes' states, their last update times
-        and the global timer when ``run`` starts. The network must have the same
-        node paths and slots as the one the tree came from.
+        and the global time when ``run`` starts. ``run`` passes each node a copy
+        of ``state["nodes"][path]`` through its ``load_state_dict``, after its
+        ``on_start``, and the network continues from the time the tree was taken.
+        Build the network as the one the tree came from: it must have the same
+        node paths and slots.
 
         Raises:
             RuntimeError: The network is not built, or has already run.
@@ -375,17 +407,18 @@ class Network(Component):
     def exception_state_dict(self) -> dict[str, Any] | None:
         """Return the tree taken when a node raised, or ``None``.
 
-        Taken only with ``run(capture_state_on_exception=True)``. Besides the keys
-        of ``state_dict`` it has ``"exception": {"node": path, "hook": name,
+        Taken only with ``run(capture_state_on_exception=True)``. Call it after
+        catching the ``NetworkError``; it does not raise it. Besides the keys of
+        ``state_dict`` it has ``"exception": {"node": path, "hook": name,
         "error": traceback}``. A node whose ``state_dict`` raised is missing.
         """
         session = self._session
         return None if session is None else session.exception_state_dict()
 
     def shutdown(self) -> None:
-        """Stop every node and wait until they have stopped (``on_stop``).
+        """Stop every node and return once every ``on_stop`` has returned.
 
-        Does nothing before ``run`` or after the end.
+        Does nothing before ``run`` or after a normal end.
 
         Raises:
             RuntimeError: The network is not built.
@@ -394,7 +427,11 @@ class Network(Component):
         _session(self).shutdown()
 
     def join(self) -> None:
-        """Wait until the network stops.
+        """Wait until the network stops, without asking it to stop.
+
+        It returns once another thread called ``shutdown`` and every ``on_stop``
+        has returned; if a node raises, it raises instead. If nothing stops the
+        network, it never returns.
 
         Raises:
             RuntimeError: The network has not run.
