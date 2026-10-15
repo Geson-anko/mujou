@@ -228,9 +228,11 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
             return NotImplemented
         # Any: the other spec may be of any TypedDict; identity decides.
         other_spec = cast(DictSpec[Any], other)
-        return self._typed_dict is other_spec.typed_dict and tuple(
-            self._specs.items()
-        ) == tuple(other_spec.specs.items())
+        # The same TypedDict fixes the key order, so comparing as mappings suffices.
+        return (
+            self._typed_dict is other_spec.typed_dict
+            and self._specs == other_spec.specs
+        )
 
     @override
     def __hash__(self) -> int:

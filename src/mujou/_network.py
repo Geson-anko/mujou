@@ -5,7 +5,7 @@ ports connected into channels. ``Network.build`` walks the tree once, checks it,
 and freezes it (``docs/network.md``).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
@@ -58,7 +58,8 @@ def _sides(
     """
     found: list[Port[Any, Any, Any]] = []
     for _, port in _ports(component):
-        if isinstance(port, kind) and all(port is not p for p in found):
+        # Ports compare by identity, so `in` finds the same port.
+        if isinstance(port, kind) and port not in found:
             found.append(port)
     return found
 
@@ -100,8 +101,7 @@ class Graph:
         """
         if port not in self.ports:
             raise ValueError(f"{port!r} is not a port of this network")
-        index, name = self.ports[port]
-        return f"{self.nodes[index][0]}.{name}"
+        return _path(self.nodes, self.ports[port])
 
 
 class Network(Component):
@@ -170,53 +170,37 @@ class Network(Component):
         seen: dict[int, str] = {}  # id(component) -> path
 
         def visit(component: Component, path: str) -> None:
-            where = repr(path) if path else "the root"
             if id(component) in seen:
-                first = seen[id(component)]
                 raise ValueError(
                     f"{type(component).__name__} appears at both "
-                    f"{repr(first) if first else 'the root'} and {where}"
+                    f"{_where(seen[id(component)])} and {_where(path)}"
                 )
             seen[id(component)] = path
-            for klass in type(component).__mro__:
-                for name, value in vars(klass).items():
-                    if isinstance(value, Port):
-                        raise ValueError(
-                            f"{type(component).__name__} at {where} declares the "
-                            f"port {name!r} on the class {klass.__name__}; declare "
-                            "ports as instance attributes in __init__"
-                        )
-            for kind in (PrevPort, NextPort):
-                n = len(_sides(component, kind))
-                if n > 1:
-                    raise ValueError(
-                        f"{type(component).__name__} at {where} has {n} "
-                        f"{kind.__name__} attributes; at most one is allowed"
-                    )
+            _check_declarations(component, _where(path))
             if isinstance(component, Node):
                 index = len(nodes)
                 nodes.append((path, component))
                 for name, value in vars(component).items():
                     if isinstance(value, Component):
                         raise ValueError(
-                            f"node {where} holds a {type(value).__name__} at "
+                            f"node {_where(path)} holds a {type(value).__name__} at "
                             f"{name!r}; only networks hold nodes and networks"
                         )
                 for name, port in _ports(component):
+                    owner = (index, name)
                     if port in ports:
                         raise ValueError(
-                            f"the port {_path(nodes, (index, name))!r} is already "
-                            f"owned as {_path(nodes, ports[port])!r}"
+                            f"the port {_path(nodes, owner)!r} is already owned as "
+                            f"{_path(nodes, ports[port])!r}"
                         )
-                    ports[port] = (index, name)
+                    ports[port] = owner
                 return
             first = len(nodes)
             for name, value in vars(component).items():
                 if isinstance(value, Component):
-                    visit(value, f"{path}.{name}" if path else name)
+                    visit(value, _child(path, name))
             for name, port in _ports(component):
-                attr = f"{path}.{name}" if path else name
-                exposed.append((attr, port, range(first, len(nodes))))
+                exposed.append((_child(path, name), port, range(first, len(nodes))))
 
         visit(self, "")
         if not nodes:
@@ -259,5 +243,34 @@ def graph(network: Network) -> Graph:
     return network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
 
 
-def _path(nodes: list[tuple[str, Node]], owner: tuple[int, str]) -> str:
-    return f"{nodes[owner[0]][0]}.{owner[1]}"
+def _path(nodes: Sequence[tuple[str, Node]], owner: tuple[int, str]) -> str:
+    """Return the path of the port ``owner`` (node index, attribute name) names."""
+    index, name = owner
+    return f"{nodes[index][0]}.{name}"
+
+
+def _child(path: str, name: str) -> str:
+    return f"{path}.{name}" if path else name
+
+
+def _where(path: str) -> str:
+    return repr(path) if path else "the root"
+
+
+def _check_declarations(component: Component, where: str) -> None:
+    """Reject ports declared on the class and more than one side of a kind."""
+    for klass in type(component).__mro__:
+        for name, value in vars(klass).items():
+            if isinstance(value, Port):
+                raise ValueError(
+                    f"{type(component).__name__} at {where} declares the port "
+                    f"{name!r} on the class {klass.__name__}; declare ports as "
+                    "instance attributes in __init__"
+                )
+    for kind in (PrevPort, NextPort):
+        n = len(_sides(component, kind))
+        if n > 1:
+            raise ValueError(
+                f"{type(component).__name__} at {where} has {n} {kind.__name__} "
+                "attributes; at most one is allowed"
+            )
