@@ -9,8 +9,9 @@
 //! All control goes through a single control thread, as in pamiq-core's
 //! `ThreadController`. The host submits requests to it and waits for the reply;
 //! a node that catches an exception notifies it. Serializing the control on one
-//! thread is what keeps a capture and an exception from undoing each other's
-//! freeze of the timer.
+//! thread keeps the requests and the end after an exception from interleaving.
+//! The timer is frozen through [`PauseHold`]s, so that neither this runtime's
+//! freezes nor those of the host or another runtime undo each other.
 //!
 //! The runtime knows nothing about what the hooks compute or what the nodes
 //! exchange: [`NodeHooks`] is the whole contract, so any update rule fits.
@@ -26,7 +27,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::time::{GlobalTimer, TimerState};
+use crate::time::{GlobalTimer, PauseHold, TimerState};
 
 /// An error raised by a hook, shared because it is reported to several places.
 pub type SharedError = Arc<dyn Error + Send + Sync>;
@@ -43,8 +44,23 @@ pub struct HookError {
 /// Every hook except `state_dict` runs on the node's own thread. `state_dict`
 /// runs on the control thread while the node is paused (or has stopped after an
 /// exception), so it never overlaps with the other hooks.
+///
+/// A hook that panics is treated like one that returned an error, under the
+/// hook's name as the node's author knows it (`on_update` for `update`, ...).
 pub trait NodeHooks: Send + 'static {
     type State: Send + 'static;
+
+    /// Runs the whole body of a runtime thread (a node's or the control
+    /// thread). The bindings of a language with per-thread state wrap it here,
+    /// so that the state lives as long as the thread instead of one hook call.
+    /// The body waits a lot, so the wrapper must not hold a lock others need.
+    fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
+        body()
+    }
+
+    /// Told that a hook panicked, with the error that will stand for it, so
+    /// that the node can log it. The node may be in an inconsistent state.
+    fn panicked(&mut self, _error: &HookError) {}
 
     /// Prepares the node on its thread before the first update, and restores
     /// its state if there is one. The time is frozen meanwhile, so the time this
@@ -98,7 +114,7 @@ pub type ExceptionCapture<S> = Box<dyn FnOnce(BTreeMap<usize, S>, &NodeFailure) 
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
-    /// The system stopped because of a hook error.
+    /// The system stopped because of a hook error (or panic).
     Failed(NodeFailure),
     /// A capture gave up because these nodes did not pause in time. The system
     /// keeps running.
@@ -110,9 +126,12 @@ pub enum RuntimeError {
     /// The system has already stopped normally.
     Finished,
     InvalidArgument(String),
-    /// A runtime thread (a hook or a callback of the runtime) asked the runtime
+    /// A thread of this runtime (a hook or a callback of the runtime) asked it
     /// to do something it would have to wait for, which would never finish.
     Reentrant,
+    /// The runtime could not do what was asked: a thread could not be spawned,
+    /// or a callback (the `build` of a capture) panicked.
+    Internal(String),
 }
 
 impl fmt::Display for RuntimeError {
@@ -135,6 +154,7 @@ impl fmt::Display for RuntimeError {
                 f,
                 "cannot wait for the runtime from one of its own threads (a hook or a callback)"
             ),
+            Self::Internal(message) => f.write_str(message),
         }
     }
 }
@@ -162,32 +182,46 @@ impl Error for Panicked {}
 
 impl Panicked {
     fn from_payload(payload: Box<dyn std::any::Any + Send>) -> Self {
-        let message = match payload.downcast::<String>() {
-            Ok(message) => *message,
-            Err(payload) => payload
-                .downcast_ref::<&str>()
-                .map_or_else(|| "unknown payload".to_owned(), |s| (*s).to_owned()),
-        };
-        Self(message)
+        Self(panic_message(payload))
+    }
+}
+
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    match payload.downcast::<String>() {
+        Ok(message) => *message,
+        Err(payload) => payload
+            .downcast_ref::<&str>()
+            .map_or_else(|| "unknown payload".to_owned(), |s| (*s).to_owned()),
     }
 }
 
 thread_local! {
-    /// Whether this thread is a node or control thread of some runtime.
-    static ON_RUNTIME_THREAD: Cell<bool> = const { Cell::new(false) };
+    /// The runtime (the address of its shared state) whose thread this is, or 0.
+    static RUNTIME_OF_THREAD: Cell<usize> = const { Cell::new(0) };
 }
 
 /// The instruction from the control thread to the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Command {
-    Run,
-    Pause,
+    Run = 0,
+    Pause = 1,
     /// Final: nothing changes the command once it is `Stop`.
-    Stop,
+    Stop = 2,
 }
 
-/// Why the runtime holds the timer frozen. The timer runs again only when no
-/// reason is left, so ending one (a capture) cannot undo another (an exception).
+/// The command and its epoch in one word, so that a node can read both with
+/// one atomic load: `epoch << 2 | command`.
+fn control_word(epoch: u64, command: Command) -> u64 {
+    epoch << 2 | command as u64
+}
+
+fn is_run(word: u64) -> bool {
+    word & 3 == Command::Run as u64
+}
+
+/// Why the runtime holds the timer frozen. The runtime keeps one
+/// [`PauseHold`] while any reason is left, so ending one (a capture) cannot
+/// undo another (an exception).
 #[derive(Debug, Clone, Copy)]
 enum FreezeReason {
     /// From before the nodes start until all of them are ready to update.
@@ -198,32 +232,30 @@ enum FreezeReason {
     Failure = 4,
 }
 
-#[derive(Debug, Default)]
-struct Freeze(u8);
+#[derive(Default)]
+struct Freeze {
+    reasons: u8,
+    hold: Option<PauseHold<'static>>,
+}
 
 impl Freeze {
-    fn hold(&mut self, reason: FreezeReason, timer: &GlobalTimer) {
-        if self.0 == 0 {
-            timer.pause();
+    fn hold(&mut self, reason: FreezeReason, timer: &'static GlobalTimer) {
+        if self.hold.is_none() {
+            self.hold = Some(timer.hold());
         }
-        self.0 |= reason as u8;
+        self.reasons |= reason as u8;
     }
 
-    fn release(&mut self, reason: FreezeReason, timer: &GlobalTimer) {
-        if self.0 & reason as u8 == 0 {
-            return;
-        }
-        self.0 &= !(reason as u8);
-        if self.0 == 0 {
-            timer.resume();
+    fn release(&mut self, reason: FreezeReason) {
+        self.reasons &= !(reason as u8);
+        if self.reasons == 0 {
+            self.hold = None;
         }
     }
 
-    fn release_all(&mut self, timer: &GlobalTimer) {
-        if self.0 != 0 {
-            self.0 = 0;
-            timer.resume();
-        }
+    fn release_all(&mut self) {
+        self.reasons = 0;
+        self.hold = None;
     }
 }
 
@@ -271,6 +303,8 @@ struct Control {
     /// Every node may call `stop` (set after the exception capture, if any).
     stop_allowed: bool,
     freeze: Freeze,
+    /// Counts this runtime as live on its timer until it finishes.
+    live: Option<Live>,
     finished: bool,
 }
 
@@ -291,10 +325,12 @@ struct Shared<N: NodeHooks> {
     control: Mutex<Control>,
     /// Notified on every change of `control`, in both directions.
     changed: Condvar,
-    /// A copy of `Control::epoch` that a node can read while it waits on the
-    /// timer: the timer checks the interrupt condition under its own lock, and
-    /// the control lock is taken before the timer's elsewhere.
-    epoch: AtomicU64,
+    /// `control_word(Control::epoch, Control::command)`, stored under the
+    /// control lock. A free-running node reads it at its loop boundary without
+    /// taking the lock, and while it waits on the timer (which checks the
+    /// interrupt condition under the timer's lock, and the control lock is taken
+    /// before the timer's elsewhere).
+    word: AtomicU64,
     last_update_ns: Vec<AtomicU64>,
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
@@ -302,6 +338,15 @@ struct Shared<N: NodeHooks> {
 }
 
 impl<N: NodeHooks> Shared<N> {
+    /// Identifies this runtime for [`RUNTIME_OF_THREAD`].
+    fn id(&self) -> usize {
+        self as *const Self as usize
+    }
+
+    fn on_own_thread(&self) -> bool {
+        RUNTIME_OF_THREAD.get() == self.id()
+    }
+
     fn lock(&self) -> MutexGuard<'_, Control> {
         // Hooks run outside this lock, so a poisoned state is still consistent.
         self.control.lock().unwrap_or_else(|e| e.into_inner())
@@ -333,7 +378,8 @@ impl<N: NodeHooks> Shared<N> {
         if command == Command::Run {
             c.run_epoch = c.epoch;
         }
-        self.epoch.store(c.epoch, Ordering::SeqCst);
+        self.word
+            .store(control_word(c.epoch, command), Ordering::SeqCst);
         self.changed.notify_all();
         self.timer.interrupt_waiters();
     }
@@ -347,10 +393,12 @@ impl<N: NodeHooks> Shared<N> {
     ) -> Result<T, HookError> {
         let mut node = self.hooks[i].lock().unwrap_or_else(|e| e.into_inner());
         panic::catch_unwind(AssertUnwindSafe(|| f(&mut node))).unwrap_or_else(|payload| {
-            Err(HookError {
+            let error = HookError {
                 hook,
                 source: Arc::new(Panicked::from_payload(payload)),
-            })
+            };
+            node.panicked(&error);
+            Err(error)
         })
     }
 
@@ -400,8 +448,8 @@ impl<N: NodeHooks> Shared<N> {
 
     /// The thread of node `i`.
     fn run_node(&self, i: usize) {
-        ON_RUNTIME_THREAD.set(true);
-        let started = self.call(i, "start", |n| n.start()).is_ok();
+        RUNTIME_OF_THREAD.set(self.id());
+        let started = self.call(i, "on_start", |n| n.start()).is_ok();
         let mut c = self.lock();
         c.nodes[i].started = true;
         self.changed.notify_all();
@@ -424,32 +472,11 @@ impl<N: NodeHooks> Shared<N> {
     fn node_loop(&self, i: usize) {
         let mut last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
         loop {
-            // The loop boundary: the only place where the node pauses or stops,
-            // so an update always runs to its end.
-            let c = self.lock();
-            match c.command {
-                Command::Stop => return,
-                Command::Pause => {
-                    let epoch = c.epoch;
-                    drop(c);
-                    if !self.pause_node(i, epoch) {
-                        return;
-                    }
-                    continue;
-                }
-                Command::Run => {}
-            }
-            if self.manual && c.grant != Some(i) {
-                drop(self.wait(c));
-                continue;
-            }
-            // Read the time under the control lock. A pause request either came
-            // before (and was seen above), or comes after and freezes the timer
-            // at some T no earlier than this time. Either way, no update after
-            // the request uses a time later than T.
-            let now_ns = self.timer.time_ns();
-            let epoch = c.epoch;
-            drop(c);
+            let (now_ns, word) = match self.boundary(i) {
+                Boundary::Exit => return,
+                Boundary::Again => continue,
+                Boundary::Update { now_ns, word } => (now_ns, word),
+            };
             if now_ns <= last_ns {
                 if self.manual {
                     // Nothing to do for a step without time passing.
@@ -459,7 +486,7 @@ impl<N: NodeHooks> Shared<N> {
                     // spinning, but wake up on any control request.
                     self.timer
                         .wait_until_ns_or(last_ns.saturating_add(1), Duration::MAX, || {
-                            self.epoch.load(Ordering::SeqCst) != epoch
+                            self.word.load(Ordering::SeqCst) != word
                         });
                 }
                 continue;
@@ -467,7 +494,7 @@ impl<N: NodeHooks> Shared<N> {
             // From the nanosecond difference, not a difference of seconds,
             // which would round differently at every absolute time.
             let dt = (now_ns - last_ns) as f64 / 1e9;
-            if self.call(i, "update", |n| n.update(dt)).is_err() {
+            if self.call(i, "on_update", |n| n.update(dt)).is_err() {
                 return;
             }
             last_ns = now_ns;
@@ -478,10 +505,57 @@ impl<N: NodeHooks> Shared<N> {
         }
     }
 
+    /// The loop boundary: the only place where the node pauses or stops, so an
+    /// update always runs to its end. Returns the time for the next update.
+    ///
+    /// The time read here is never later than the frozen time T of a pause (or
+    /// of a stop on an exception) whose request the node did not see. The
+    /// controller stores the new control word and only then freezes the timer,
+    /// both under the control lock. The node reads the word, then the time, then
+    /// the word again, and uses the time only if the word did not change. If the
+    /// freeze came before the time was read, the timer's lock orders the
+    /// controller's store before the node's second load, which then sees the new
+    /// word, and the node discards the time. So a time that is used was read
+    /// before the freeze, and is at most T.
+    fn boundary(&self, i: usize) -> Boundary {
+        // Fast path for free running: no lock shared with the other nodes.
+        let word = self.word.load(Ordering::SeqCst);
+        if !self.manual && is_run(word) {
+            let now_ns = self.timer.time_ns();
+            if self.word.load(Ordering::SeqCst) != word {
+                return Boundary::Again;
+            }
+            return Boundary::Update { now_ns, word };
+        }
+        let c = self.lock();
+        match c.command {
+            Command::Stop => Boundary::Exit,
+            Command::Pause => {
+                let epoch = c.epoch;
+                drop(c);
+                if self.pause_node(i, epoch) {
+                    Boundary::Again
+                } else {
+                    Boundary::Exit
+                }
+            }
+            Command::Run if self.manual && c.grant != Some(i) => {
+                drop(self.wait(c));
+                Boundary::Again
+            }
+            Command::Run => {
+                // Under the control lock, the freeze cannot come in between.
+                let now_ns = self.timer.time_ns();
+                let word = self.word.load(Ordering::SeqCst);
+                Boundary::Update { now_ns, word }
+            }
+        }
+    }
+
     /// Pauses node `i` for the pause request of `epoch` and waits until the
     /// request changes. Returns whether the node goes on with its loop.
     fn pause_node(&self, i: usize, epoch: u64) -> bool {
-        if self.call(i, "pause", |n| n.pause()).is_err() {
+        if self.call(i, "on_pause", |n| n.pause()).is_err() {
             return false;
         }
         let mut c = self.lock();
@@ -497,7 +571,7 @@ impl<N: NodeHooks> Shared<N> {
         // completed capture is followed by `resume` on every node.
         let resumed = c.run_epoch > epoch;
         drop(c);
-        resumed && self.call(i, "resume", |n| n.resume()).is_ok()
+        resumed && self.call(i, "on_resume", |n| n.resume()).is_ok()
     }
 
     fn end_step(&self) {
@@ -519,7 +593,7 @@ impl<N: NodeHooks> Shared<N> {
                 c.nodes[i].exception = ExceptionHook::Calling;
                 drop(c);
                 // Called without waiting for the others, for an early safe stop.
-                let _ = self.invoke(i, "exception", |n| n.exception());
+                let _ = self.invoke(i, "on_exception", |n| n.exception());
                 c = self.lock();
                 c.nodes[i].exception = ExceptionHook::Done;
                 self.changed.notify_all();
@@ -528,8 +602,36 @@ impl<N: NodeHooks> Shared<N> {
             }
         }
         drop(c);
-        let _ = self.invoke(i, "stop", |n| n.stop());
+        let _ = self.invoke(i, "on_stop", |n| n.stop());
     }
+}
+
+/// The number of runtimes started and not yet finished, per timer (by address).
+static LIVE: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
+
+fn lock_live() -> MutexGuard<'static, BTreeMap<usize, usize>> {
+    LIVE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// One live runtime on the timer with this address; dropping it uncounts it.
+struct Live(usize);
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        let mut live = lock_live();
+        if let Some(k) = live.get_mut(&self.0) {
+            *k -= 1;
+            if *k == 0 {
+                live.remove(&self.0);
+            }
+        }
+    }
+}
+
+enum Boundary {
+    Exit,
+    Again,
+    Update { now_ns: u64, word: u64 },
 }
 
 fn finished_error(failure: &OnceLock<NodeFailure>) -> RuntimeError {
@@ -560,14 +662,13 @@ struct Controller<N: NodeHooks> {
     shared: Arc<Shared<N>>,
     threads: Vec<JoinHandle<()>>,
     exception_capture: Option<ExceptionCapture<N::State>>,
-    last_update_ns: Option<Vec<u64>>,
     pause_timeout: Duration,
     done: bool,
 }
 
 impl<N: NodeHooks> Controller<N> {
     fn run(mut self, messages: Receiver<Message<N>>, started: Sender<Result<(), RuntimeError>>) {
-        ON_RUNTIME_THREAD.set(true);
+        RUNTIME_OF_THREAD.set(self.shared.id());
         let _ = started.send(self.startup());
         while !self.done {
             // `shared` holds a sender, so this does not disconnect.
@@ -591,16 +692,10 @@ impl<N: NodeHooks> Controller<N> {
             self.finish();
             return Err(s.finished_error());
         }
-        // The timer is still frozen at the time T it had before the nodes
-        // started, so `start` (and restoring) takes no global time.
-        let now_ns = s.timer.time_ns();
-        for (i, last) in s.last_update_ns.iter().enumerate() {
-            let ns = self.last_update_ns.as_ref().map_or(now_ns, |v| v[i]);
-            last.store(ns, Ordering::SeqCst);
-        }
-        // Resume the time before letting the nodes go, as after a pause, so
-        // that the first Δt is not 0.
-        c.freeze.release(FreezeReason::Startup, s.timer);
+        // The timer was frozen at T before the nodes started, so `start` (and
+        // restoring) took no global time. Resume the time before letting the
+        // nodes go, as after a pause, so that the first Δt is not 0.
+        c.freeze.release(FreezeReason::Startup);
         c.go = true;
         s.changed.notify_all();
         Ok(())
@@ -681,7 +776,7 @@ impl<N: NodeHooks> Controller<N> {
         // the time stands at T: the states are consistent at T.
         let mut states = Vec::with_capacity(s.hooks.len());
         for i in 0..s.hooks.len() {
-            match s.call(i, "state_dict", |n| n.state_dict()) {
+            match s.call(i, "state_dict", N::state_dict) {
                 Ok(state) => states.push(state),
                 Err(()) => {
                     self.finish();
@@ -689,9 +784,13 @@ impl<N: NodeHooks> Controller<N> {
                 }
             }
         }
-        let result = build(states);
+        let result = panic::catch_unwind(AssertUnwindSafe(|| build(states)));
+        // Resume even if `build` panicked, so the system is not left paused.
         resume_after_pause(&s, &mut s.lock());
-        Ok(result)
+        result.map_err(|payload| {
+            let message = panic_message(payload);
+            RuntimeError::Internal(format!("the build of a capture panicked: {message}"))
+        })
     }
 
     /// Stops every node and ends the system. Does nothing once ended.
@@ -716,12 +815,14 @@ impl<N: NodeHooks> Controller<N> {
                 // `state_dict` fails is left out; the hook logged the error.
                 let states = (0..s.hooks.len())
                     .filter_map(|i| {
-                        let state = s.invoke(i, "state_dict", |n| n.state_dict());
+                        let state = s.invoke(i, "state_dict", N::state_dict);
                         state.ok().map(|state| (i, state))
                     })
                     .collect();
                 let failure = s.failure.get().expect("a failure was recorded");
-                capture(states, failure);
+                // A panic must not keep the system from ending (and the time
+                // frozen); the panic hook has already printed it.
+                let _ = panic::catch_unwind(AssertUnwindSafe(|| capture(states, failure)));
             }
         }
         let mut c = s.lock();
@@ -735,7 +836,14 @@ impl<N: NodeHooks> Controller<N> {
         let mut c = s.lock();
         // Let the time run again even after an exception, or the host's waits
         // in global time would never return.
-        c.freeze.release_all(s.timer);
+        c.freeze.release_all();
+        // Uncount before `finished`, so that a start after `join` can restore
+        // the time; and outside the control lock, since `start` takes the
+        // count's lock before a control lock.
+        let live = c.live.take();
+        drop(c);
+        drop(live);
+        let mut c = s.lock();
         c.finished = true;
         s.changed.notify_all();
         self.done = true;
@@ -750,7 +858,7 @@ impl<N: NodeHooks> Controller<N> {
 /// Ends a pause: resume the time first, then lower the flag, so that the first
 /// Δt after the pause is not 0 and no wait enters it.
 fn resume_after_pause<N: NodeHooks>(s: &Shared<N>, c: &mut Control) {
-    c.freeze.release(FreezeReason::Capture, s.timer);
+    c.freeze.release(FreezeReason::Capture);
     // A no-op if an exception already turned the command to `Stop`.
     s.set_command(c, Command::Run);
 }
@@ -854,47 +962,75 @@ impl<N: NodeHooks> Runtime<N> {
                     .collect(),
                 stop_allowed: false,
                 freeze: Freeze::default(),
+                live: None,
                 finished: false,
             }),
             changed: Condvar::new(),
-            epoch: AtomicU64::new(0),
+            word: AtomicU64::new(control_word(0, Command::Run)),
             last_update_ns: (0..n).map(|_| AtomicU64::new(0)).collect(),
             failure: Arc::new(OnceLock::new()),
             hooks: nodes.into_iter().map(Mutex::new).collect(),
             to_controller,
         });
 
+        // Checking for other live runtimes, loading the time and counting this
+        // runtime happen under one lock, so two starts cannot both pass.
+        let mut live = lock_live();
+        let timer_id = timer as *const GlobalTimer as usize;
+        if config.timer_state.is_some() && live.get(&timer_id).is_some_and(|&k| k > 0) {
+            // The time is shared by every runtime: moving it would make the
+            // running ones jump (or stall) by the difference in their next Δt.
+            return Err(RuntimeError::InvalidArgument(
+                "cannot restore the time while another runtime is running on the same timer"
+                    .to_owned(),
+            ));
+        }
         // No thread of this runtime exists yet, so the host may touch the timer.
         shared.lock().freeze.hold(FreezeReason::Startup, timer);
         if let Some(state) = config.timer_state {
             if let Err(e) = timer.load_state(state) {
-                shared.lock().freeze.release_all(timer);
+                shared.lock().freeze.release_all();
                 return Err(RuntimeError::InvalidArgument(e.to_string()));
             }
         }
+        *live.entry(timer_id).or_insert(0) += 1;
+        drop(live);
+        shared.lock().live = Some(Live(timer_id));
+        // Where each first Δt starts: set before any thread exists, so that it
+        // is right even if the system ends while starting (the state captured
+        // on that exception holds it), and stays right since the time is frozen.
+        let now_ns = timer.time_ns();
+        for (i, last) in shared.last_update_ns.iter().enumerate() {
+            let ns = config.last_update_ns.as_ref().map_or(now_ns, |v| v[i]);
+            last.store(ns, Ordering::SeqCst);
+        }
 
-        let threads = (0..n)
-            .map(|i| {
-                let shared = Arc::clone(&shared);
-                thread::Builder::new()
-                    .name(format!("mujou-node-{}", shared.names[i]))
-                    .spawn(move || shared.run_node(i))
-                    .expect("failed to spawn a node thread")
-            })
-            .collect();
+        let mut threads = Vec::with_capacity(n);
+        for i in 0..n {
+            let node_shared = Arc::clone(&shared);
+            let spawned = thread::Builder::new()
+                .name(format!("mujou-node-{}", shared.names[i]))
+                .spawn(move || N::on_thread(move || node_shared.run_node(i)));
+            match spawned {
+                Ok(thread) => threads.push(thread),
+                Err(e) => return Err(abandon(&shared, "a node", &e)),
+            }
+        }
         let controller = Controller {
             shared: Arc::clone(&shared),
             threads,
             exception_capture,
-            last_update_ns: config.last_update_ns,
             pause_timeout: config.pause_timeout,
             done: false,
         };
         let (started_tx, started_rx) = mpsc::channel();
-        thread::Builder::new()
+        let spawned = thread::Builder::new()
             .name("mujou-control".to_owned())
-            .spawn(move || controller.run(messages, started_tx))
-            .expect("failed to spawn the control thread");
+            .spawn(move || N::on_thread(move || controller.run(messages, started_tx)));
+        if let Err(e) = spawned {
+            // The controller (with the node threads' handles) was dropped.
+            return Err(abandon(&shared, "the control", &e));
+        }
         let reply = Reply {
             rx: started_rx,
             failure: Arc::clone(&shared.failure),
@@ -909,7 +1045,7 @@ impl<N: NodeHooks> Runtime<N> {
         job: impl FnOnce(&mut Controller<N>) -> Result<R, RuntimeError> + Send + 'static,
     ) -> Reply<R> {
         let failure = Arc::clone(&self.shared.failure);
-        if ON_RUNTIME_THREAD.get() {
+        if self.shared.on_own_thread() {
             return Reply::ready(Err(RuntimeError::Reentrant), failure);
         }
         let (tx, rx) = mpsc::channel();
@@ -966,7 +1102,7 @@ impl<N: NodeHooks> Runtime<N> {
     pub fn join(&self, timeout: Option<Duration>) -> Result<bool, RuntimeError> {
         let s = &self.shared;
         let mut c = s.lock();
-        if !c.finished && ON_RUNTIME_THREAD.get() {
+        if !c.finished && s.on_own_thread() {
             return Err(RuntimeError::Reentrant);
         }
         let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
@@ -1012,6 +1148,24 @@ impl<N: NodeHooks> Runtime<N> {
     }
 }
 
+/// Gives up a start whose threads could not all be spawned: lets the time run
+/// and lets the threads already spawned end on their own (they call `on_stop`
+/// after `on_start`). Does not wait for them, since the caller may hold a lock
+/// they need.
+fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> RuntimeError {
+    let mut c = s.lock();
+    s.set_command(&mut c, Command::Stop);
+    c.stop_allowed = true;
+    c.freeze.release_all();
+    let live = c.live.take();
+    drop(c);
+    drop(live);
+    let mut c = s.lock();
+    c.finished = true;
+    s.changed.notify_all();
+    RuntimeError::Internal(format!("failed to spawn {which} thread: {e}"))
+}
+
 impl<N: NodeHooks> Drop for Runtime<N> {
     fn drop(&mut self) {
         // Do not wait: the caller may hold a lock the nodes need (the GIL).
@@ -1026,26 +1180,27 @@ mod tests {
 
     #[test]
     fn freeze_holds_the_timer_until_every_reason_is_released() {
-        let timer = GlobalTimer::new();
+        let timer: &'static GlobalTimer = Box::leak(Box::new(GlobalTimer::new()));
         let mut freeze = Freeze::default();
-        freeze.hold(FreezeReason::Failure, &timer);
-        freeze.hold(FreezeReason::Capture, &timer);
+        freeze.hold(FreezeReason::Failure, timer);
+        freeze.hold(FreezeReason::Capture, timer);
         // Ending the capture must not undo the freeze for the exception.
-        freeze.release(FreezeReason::Capture, &timer);
+        freeze.release(FreezeReason::Capture);
         assert!(timer.is_paused());
         // Releasing a reason that is not held changes nothing.
-        freeze.release(FreezeReason::Capture, &timer);
+        freeze.release(FreezeReason::Capture);
         assert!(timer.is_paused());
-        freeze.release(FreezeReason::Failure, &timer);
+        freeze.release(FreezeReason::Failure);
         assert!(!timer.is_paused());
     }
 
     #[test]
-    fn release_all_resumes_only_a_timer_it_froze() {
-        let timer = GlobalTimer::new();
-        let mut freeze = Freeze::default();
+    fn releasing_every_reason_keeps_a_pause_by_someone_else() {
+        let timer: &'static GlobalTimer = Box::leak(Box::new(GlobalTimer::new()));
         timer.pause();
-        freeze.release_all(&timer);
+        let mut freeze = Freeze::default();
+        freeze.hold(FreezeReason::Startup, timer);
+        freeze.release_all();
         assert!(timer.is_paused());
     }
 }

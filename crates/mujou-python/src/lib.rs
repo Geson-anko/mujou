@@ -59,12 +59,15 @@ impl GlobalTimer {
         time::global().set_scale(scale).map_err(to_py_err)
     }
 
-    /// Freezes the global time. For the framework's pause and state capture.
+    /// Freezes the global time until `resume`. For hosts and tests: the runtime
+    /// freezes the time with its own holds, which this switch neither ends nor is
+    /// ended by.
     fn pause(&self) {
         time::global().pause();
     }
 
-    /// Lets the global time run again from where it was frozen.
+    /// Turns off the switch set by `pause`. The time runs again only when no
+    /// runtime holds it frozen either.
     fn resume(&self) {
         time::global().resume();
     }

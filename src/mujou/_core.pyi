@@ -189,8 +189,10 @@ class InputSlot:
 class Node:
     """The base of every node.
 
-    The runtime calls the hooks by name on the node's own thread (``state_dict``
-    on the control thread while the node is paused). They do nothing by default.
+    The runtime calls the hooks on the node's own thread (``state_dict`` on the
+    control thread while the node is paused). They do nothing by default. The
+    hooks other than ``_on_thread_start``, ``on_start`` and ``load_state_dict``
+    are looked up once, after those three, so replacing one there takes effect.
     """
 
     def __new__(cls, *args: object, **kwargs: object) -> Self: ...
