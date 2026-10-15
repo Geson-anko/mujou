@@ -23,7 +23,7 @@
 - [ネットワークと Port](project_network_ports.md) — Block と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
 - [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、ルートのネットワークの write / read / subscribe / state_dict / shutdown。run 前の write が初期値。複数 Port の write は版番号で一斉切り替え。入力はグローバル時間上の信号
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。Tensor はホストだけ、GPU のブロックは境界で device → host → device、DLPack は使わない。ブロック内の GPU 利用は自由
-- [mujou.torch と TorchBlock](project_torch_module.md) — PyTorch の支援は mujou.torch に置く。TorchBlock が on_start で勾配停止・ブロックごとのストリーム・乱数生成器を設定。CPU と CUDA のみ、MPS は考えない
+- [mujou.torch と TorchBlock](project_torch_module.md) — PyTorch の支援は mujou.torch に置く。TorchBlock が on_start で勾配停止・ブロックごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA のみ、MPS は考えない。JAX は多数スレッドで伸びず不採用
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
