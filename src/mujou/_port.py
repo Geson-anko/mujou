@@ -7,6 +7,7 @@ and each connection is one ``Channel`` registered at both ends
 """
 
 from typing import (
+    TYPE_CHECKING,
     Any,
     Final,
     Generic,
@@ -20,6 +21,9 @@ from typing import (
 )
 
 from mujou._spec import DictSpec, MessageSpec, TensorSpec
+
+if TYPE_CHECKING:
+    from mujou._session import Binding
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
 # that pyright solves the message type of an omitted direction to Never, where an
@@ -126,6 +130,8 @@ class Port(Generic[S, R, M]):
         self._channels: list[Channel] = []
         # Set by Network.build; a frozen port takes no more connections.
         self._frozen = False
+        # Set by Network.build: the slots recv and send use.
+        self._binding: Binding | None = None
 
     @property
     def send_spec(self) -> MessageSpec[S] | None:
@@ -200,12 +206,19 @@ class Port(Generic[S, R, M]):
     def recv(self) -> Any:  # Any: the overloads above give the precise types
         """Return the latest message received.
 
-        A single-peer port returns the message itself (the initial value, zeros,
-        while unconnected). A multi-peer port returns ``{channel: message}`` in
-        connection order (``{}`` while unconnected). Call it from the owning node's
-        hooks while the network runs.
+        A single-peer port returns the message itself; until the peer (or, for an
+        unconnected port, the host) first writes, that is the initial value, zeros.
+        A multi-peer port returns ``{channel: message}`` in connection order (``{}``
+        while unconnected). Every call returns new tensors on the owning node's
+        device, so changing them in place changes nothing else. It never waits.
+
+        Call it from the owning node's hooks while the network runs.
+
+        Raises:
+            RuntimeError: The network is not built.
+            TypeError: The port receives no messages.
         """
-        raise _not_running()
+        return self._bound().recv(with_time=False)
 
     @overload
     def recv_with_time[R2](self: Port[Any, R2, Single]) -> tuple[R2, int]: ...
@@ -214,23 +227,37 @@ class Port(Generic[S, R, M]):
         self: Port[Any, R2, Multi],
     ) -> dict[Channel, tuple[R2, int]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
-        """Like ``recv``, but pair each message with its global time in
-        nanoseconds."""
-        raise _not_running()
+        """Like ``recv``, but pair each message with the global time in nanoseconds
+        at which it was written."""
+        return self._bound().recv(with_time=True)
 
     def send(self, msg: S) -> None:
         """Send ``msg`` to every peer (and to readers of this port's output).
 
-        Call it from the owning node's hooks while the network runs.
+        The values are detached and copied, so later changes to them are not seen.
+        A CUDA tensor is copied to the host on the node's stream.
+
+        Raises:
+            RuntimeError: The network is not built, or the caller is not the owning
+                node's thread (only the owner writes its port).
+            TypeError, ValueError: ``msg`` does not match the send spec, or the
+                port sends no messages.
         """
-        raise _not_running()
+        self._bound().send(msg)
 
     def send_to(self, channel: Channel, msg: S) -> None:
         """Send ``msg`` only to the peer across ``channel``.
 
-        Call it from the owning node's hooks while the network runs.
+        The output that the host reads (``Network.read``) changes only with
+        ``send``. Raises as ``send`` does, and ``ValueError`` when ``channel`` is
+        not one of this port's.
         """
-        raise _not_running()
+        self._bound().send_to(channel, msg)
+
+    def _bound(self) -> Binding:
+        if self._binding is None:
+            raise _not_running()
+        return self._binding
 
     @override
     def __repr__(self) -> str:
@@ -366,6 +393,11 @@ def _not_running() -> RuntimeError:
         "the port is not bound to slots: build the network and run it, then use "
         "recv/send from the owning node's hooks"
     )
+
+
+def bind(port: Port[Any, Any, Any], binding: Binding) -> None:
+    """Bind ``port`` to its slots (the network's ``Session`` calls this)."""
+    port._binding = binding  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
 # Any (here and below): freezing does not depend on the message types.
