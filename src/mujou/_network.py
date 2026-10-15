@@ -49,11 +49,25 @@ def _ports(component: Component) -> list[tuple[str, Port[Any, Any, Any]]]:
     ]
 
 
+def _sides(
+    component: Component, kind: type[PrevPort[Any, Any, Any] | NextPort[Any, Any, Any]]
+) -> list[Port[Any, Any, Any]]:
+    """Return the distinct direct attributes of ``component`` that are ``kind``.
+
+    The same port under two names counts once.
+    """
+    found: list[Port[Any, Any, Any]] = []
+    for _, port in _ports(component):
+        if isinstance(port, kind) and all(port is not p for p in found):
+            found.append(port)
+    return found
+
+
 def _side(
     component: Component, kind: type[PrevPort[Any, Any, Any] | NextPort[Any, Any, Any]]
 ) -> Port[Any, Any, Any]:
     """Return the only direct attribute of ``component`` that is a ``kind``."""
-    found = [p for _, p in _ports(component) if isinstance(p, kind)]
+    found = _sides(component, kind)
     if len(found) != 1:
         raise ValueError(
             f"{type(component).__name__} must have exactly one {kind.__name__} as a "
@@ -101,6 +115,7 @@ class Network(Component):
     independently and asynchronously.
 
     Call ``build()`` once on the root network to check and freeze the structure.
+    Declare ports as instance attributes (in ``__init__``), not class attributes.
 
     Example::
 
@@ -136,10 +151,11 @@ class Network(Component):
                 to another built network.
             ValueError: The structure is invalid: the tree has no node; a component
                 appears at two paths; a port is owned by two nodes (or under two
-                names); a node holds a node or network as an attribute; a network
-                exposes a port that no node of the tree owns; a channel leads to a
-                port outside the tree; or a component has more than one
-                ``PrevPort`` or ``NextPort`` as direct attributes.
+                names); a port is declared as a class attribute; a node holds a
+                node or network as an attribute; a network exposes a port that no
+                node inside it owns; a channel leads to a port outside the tree; or
+                a component has more than one ``PrevPort`` or ``NextPort`` as
+                direct attributes.
         """
         # Imported here: _node imports Component from this module.
         from mujou._node import Node
@@ -149,7 +165,8 @@ class Network(Component):
 
         nodes: list[tuple[str, Node]] = []
         ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
-        exposed: list[tuple[str, Port[Any, Any, Any]]] = []
+        # (attribute path, port, indices of the nodes in the exposing subtree)
+        exposed: list[tuple[str, Port[Any, Any, Any], range]] = []
         seen: dict[int, str] = {}  # id(component) -> path
 
         def visit(component: Component, path: str) -> None:
@@ -161,8 +178,16 @@ class Network(Component):
                     f"{repr(first) if first else 'the root'} and {where}"
                 )
             seen[id(component)] = path
+            for klass in type(component).__mro__:
+                for name, value in vars(klass).items():
+                    if isinstance(value, Port):
+                        raise ValueError(
+                            f"{type(component).__name__} at {where} declares the "
+                            f"port {name!r} on the class {klass.__name__}; declare "
+                            "ports as instance attributes in __init__"
+                        )
             for kind in (PrevPort, NextPort):
-                n = sum(isinstance(p, kind) for _, p in _ports(component))
+                n = len(_sides(component, kind))
                 if n > 1:
                     raise ValueError(
                         f"{type(component).__name__} at {where} has {n} "
@@ -185,20 +210,25 @@ class Network(Component):
                         )
                     ports[port] = (index, name)
                 return
+            first = len(nodes)
             for name, value in vars(component).items():
                 if isinstance(value, Component):
                     visit(value, f"{path}.{name}" if path else name)
             for name, port in _ports(component):
-                exposed.append((f"{path}.{name}" if path else name, port))
+                attr = f"{path}.{name}" if path else name
+                exposed.append((attr, port, range(first, len(nodes))))
 
         visit(self, "")
         if not nodes:
-            raise ValueError("the network has no node")
-        for path, port in exposed:
-            if port not in ports:
+            raise ValueError(
+                "the network has no node (only direct attributes are walked, not "
+                "lists or dicts)"
+            )
+        for path, port, subtree in exposed:
+            if port not in ports or ports[port][0] not in subtree:
                 raise ValueError(
-                    f"the port exposed at {path!r} is not owned by a node of the "
-                    "network"
+                    f"the port exposed at {path!r} is not owned by a node inside the "
+                    "network that exposes it (only direct attributes are walked)"
                 )
         for port, owner in ports.items():
             if is_frozen(port):
@@ -210,11 +240,23 @@ class Network(Component):
                 if channel.other(port) not in ports:
                     raise ValueError(
                         f"the port {_path(nodes, owner)!r} is connected to a port "
-                        "outside the network"
+                        "outside the network (only direct attributes are walked, "
+                        "not lists or dicts)"
                     )
         for port in ports:
             freeze(port)
         self._graph = Graph(tuple(nodes), MappingProxyType(ports))
+
+
+def graph(network: Network) -> Graph:
+    """Return the graph of a built ``network``.
+
+    Raises:
+        RuntimeError: ``network`` is not built.
+    """
+    if network._graph is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
+        raise RuntimeError("the network is not built; call build() first")
+    return network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
 
 
 def _path(nodes: list[tuple[str, Node]], owner: tuple[int, str]) -> str:

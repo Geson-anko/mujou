@@ -18,6 +18,16 @@
 - `Network._graph` はクラス属性の既定値 `None`（サブクラスが `super().__init__()` を呼ばなくてよい）。`Component` と `Network` は `__init__` を持たない
 - `_network.py` は `Node` を `TYPE_CHECKING` と `build` の中で import する（`_node.py` が `_network.Component` を import する循環のため）
 
+### レビュー（`memory/agents/code-reviewer/core-runtime-C.md`）を受けた IF の追加・変更
+
+- **追加: `_network.graph(network: Network) -> Graph`。** build 済みのネットワークの `Graph` を返す。未 build なら `RuntimeError`。テストと D（`mujou.run` の「未 build なら build」の判定、Session の構築）は `network._graph` ではなくこれを使う（M1）
+- **変更: `Port`（3 種とも）の `send` / `recv` は `TensorSpec` / `DictSpec` / `None` 以外を `TypeError` で拒否する（S1）。** D は Port の spec を `Spec` へ `cast` してよい
+- **変更: `DictSpec` は各キーの spec が `TensorSpec` でないと `TypeError`、キーの無い TypedDict を `ValueError` で拒否する（S1・N2）**
+- **変更: `split` は strided でない tensor（sparse など）を `TypeError` で拒否する（N3）。** `join(TensorSpec, ...)` は tensor がちょうど 1 つであることを確かめる（N4）
+- **変更: build の検査を 2 つ足した（`ValueError`）。** クラス属性として宣言した Port（S2）、入れ子のネットワークが自分の部分木の外のノードの Port を公開すること（S3）
+- 同じ PrevPort / NextPort を 2 つの属性名で持つ場合は 1 つと数える（N8。`Component.connect` も同じ）
+- `TensorSpec` は shape を最初に tuple にしてから検査する（S4。iterator も正しく受け付ける）
+
 ## 計画外の判断
 
 - `connect` の検査順: build 済み（`RuntimeError`）→ 自分自身との接続（`ValueError`）→ spec の不一致（`TypeError`）→ 両向きとも spec なし（`TypeError`）→ 相手 1 つの Port の 2 本目（`ValueError`）。失敗したときはどちらの `channels` も変えない
@@ -29,4 +39,4 @@
 - `split` の例外: メッセージの型の違い・dtype の違いは `TypeError`、dict のキーの過不足・shape の違いは `ValueError`。どれもメッセージに `where`（dict ならキー名つき `where['key']`）を含む
 - `DictSpec` は `NotRequired` も `total=False` も `__optional_keys__` で拒否（`TypeError`）
 - `Channel(a, b)` のコンストラクタは制限していない（docstring で「`Port.connect` だけが作る」と書いた）
-- テストが `Network._graph` を読む: build の出力である `Graph` には公開の入口が無いので、`tests/mujou/test_network.py` の `built_graph` 1 か所だけで private を読む
+- テストは `_network.graph()` を通して `Graph` を読む（レビュー M1 の後）

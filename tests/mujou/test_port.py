@@ -50,6 +50,15 @@ class TestPortTypes:
         assert multi.multi and prev_multi.multi and nxt.multi
 
 
+class TestPortSpecs:
+    @pytest.mark.parametrize("spec", [(2, 3), torch.zeros(3), TensorSpec])
+    def test_rejects_what_is_not_a_spec(self, spec: object):
+        with pytest.raises(TypeError, match="TensorSpec, a DictSpec or None"):
+            Port(send=spec)  # pyright: ignore[reportArgumentType, reportUnknownVariableType]
+        with pytest.raises(TypeError, match="PrevPort recv"):
+            PrevPort(recv=spec)  # pyright: ignore[reportArgumentType, reportUnknownVariableType]
+
+
 class TestConnect:
     def test_registers_the_channel_at_both_ends_in_order(self):
         a = NextPort(send=h(), recv=fb())

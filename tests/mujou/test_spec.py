@@ -34,6 +34,10 @@ class Partial(TypedDict, total=False):
     error: torch.Tensor
 
 
+class Empty(TypedDict):
+    pass
+
+
 ALL_DTYPES = list(DLPACK_DTYPES)
 FLOAT_DTYPES = [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 
@@ -107,6 +111,9 @@ class TestTensorSpec:
         with pytest.raises(TypeError, match="must be int"):
             TensorSpec(shape)  # pyright: ignore[reportArgumentType]
 
+    def test_shape_from_an_iterator(self):
+        assert TensorSpec(d for d in (2, 3)).shape == (2, 3)  # pyright: ignore[reportArgumentType]
+
     def test_equality_includes_shape_and_dtype(self):
         spec = TensorSpec((2, 3), torch.float32)
         assert spec == TensorSpec([2, 3], torch.float32)
@@ -152,6 +159,14 @@ class TestDictSpec:
     def test_rejects_optional_keys(self, typed_dict: type[WithOptional | Partial]):
         with pytest.raises(TypeError, match="required"):
             DictSpec(typed_dict, error=TensorSpec((2,)), target=TensorSpec((2,)))
+
+    def test_rejects_a_typed_dict_without_keys(self):
+        with pytest.raises(ValueError, match="none"):
+            DictSpec(Empty)
+
+    def test_rejects_values_that_are_not_tensor_specs(self):
+        with pytest.raises(TypeError, match="TensorSpec for 'target'"):
+            DictSpec(Feedback, error=TensorSpec((2,)), target=(2,))  # pyright: ignore[reportArgumentType]
 
     def test_rejects_a_plain_dict_type(self):
         with pytest.raises(TypeError, match="TypedDict"):
@@ -219,6 +234,11 @@ class TestSplitJoin:
         msg = {"error": torch.zeros(3, 2), "target": torch.zeros(2)}
         with pytest.raises(ValueError, match="'error'"):
             split(feedback_spec(), msg, where="a.next")
+
+    def test_rejects_sparse_tensors(self):
+        sparse = torch.zeros(2, 3).to_sparse()
+        with pytest.raises(TypeError, match="strided"):
+            split(TensorSpec((2, 3)), sparse, where="a.next")
 
     def test_dict_keys_must_match(self):
         with pytest.raises(ValueError, match="missing \\['target'\\]"):

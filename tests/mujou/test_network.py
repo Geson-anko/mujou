@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from mujou._network import Graph, Network
+from mujou._network import Graph, Network, graph
 from mujou._node import Node
 from mujou._port import NextPort, Port, PrevPort
 from mujou._spec import TensorSpec
@@ -48,14 +48,8 @@ class Classifier(Network):
 
 
 def built_graph(net: Network) -> Graph:
-    """Build ``net`` and return its graph.
-
-    The graph is what build hands to the runtime, and it has no public accessor.
-    """
     net.build()
-    graph = net._graph  # pyright: ignore[reportPrivateUsage]
-    assert graph is not None
-    return graph
+    return graph(net)
 
 
 class TestComponentConnect:
@@ -84,6 +78,17 @@ class TestComponentConnect:
             Sink().connect(Hidden())
         with pytest.raises(ValueError, match="PrevPort"):
             Hidden().connect(Source())
+
+    def test_the_same_port_under_two_names_is_one_side(self):
+        class Aliased(Network):
+            def __init__(self) -> None:
+                self.node = Hidden()
+                self.next = self.node.next
+                self.out = self.node.next
+
+        net, sink = Aliased(), Sink()
+        ch = net.connect(sink)
+        assert ch.ends == (net.node.next, sink.prev)
 
     def test_two_sides(self):
         class TwoNext(Node):
@@ -126,6 +131,10 @@ class TestBuild:
         graph = built_graph(Classifier())
         with pytest.raises(ValueError, match="not a port of this network"):
             graph.port_path(Port(send=h()))
+
+    def test_graph_before_build(self):
+        with pytest.raises(RuntimeError, match="not built"):
+            graph(Classifier())
 
     def test_unconnected_ports_are_allowed(self):
         class Single(Network):
@@ -208,6 +217,31 @@ class TestBuild:
                 self.out = Port(send=h())
 
         with pytest.raises(ValueError, match="exposed at 'out'"):
+            Net().build()
+
+    def test_rejects_exposing_a_port_of_a_sibling(self):
+        class Inner(Network):
+            def __init__(self, node: Hidden) -> None:
+                self.own = Hidden()
+                self.prev = node.prev
+
+        class Outer(Network):
+            def __init__(self) -> None:
+                self.node = Hidden()
+                self.inner = Inner(self.node)
+
+        with pytest.raises(ValueError, match="exposed at 'inner.prev'"):
+            Outer().build()
+
+    def test_rejects_ports_declared_on_the_class(self):
+        class ClassPort(Node):
+            port = Port(send=h())
+
+        class Net(Network):
+            def __init__(self) -> None:
+                self.node = ClassPort()
+
+        with pytest.raises(ValueError, match="'port' on the class ClassPort"):
             Net().build()
 
     def test_rejects_two_prev_ports_on_a_network(self):

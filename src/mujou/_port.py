@@ -19,7 +19,7 @@ from typing import (
     override,
 )
 
-from mujou._spec import MessageSpec
+from mujou._spec import DictSpec, MessageSpec, TensorSpec
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
 # that pyright solves the message type of an omitted direction to Never, where an
@@ -80,6 +80,10 @@ class Port(Generic[S, R, M]):
 
         sensor, monitor = Sensor(), Monitor()
         sensor.out.connect(monitor.inp)
+
+    Raises:
+        TypeError: ``send`` or ``recv`` is not a ``TensorSpec``, a ``DictSpec`` or
+            ``None``.
     """
 
     @overload
@@ -110,6 +114,12 @@ class Port(Generic[S, R, M]):
     def _init(
         self, send: MessageSpec[S] | None, recv: MessageSpec[R] | None, multi: bool
     ) -> None:
+        for direction, spec in (("send", send), ("recv", recv)):
+            if spec is not None and not isinstance(spec, TensorSpec | DictSpec):
+                raise TypeError(
+                    f"{type(self).__name__} {direction} must be a TensorSpec, a "
+                    f"DictSpec or None, got {type(spec).__name__}"
+                )
         self._send_spec = send
         self._recv_spec = recv
         self._multi = multi
@@ -187,7 +197,7 @@ class Port(Generic[S, R, M]):
     def recv[R2](self: Port[Any, R2, Single]) -> R2: ...
     @overload
     def recv[R2](self: Port[Any, R2, Multi]) -> dict[Channel, R2]: ...
-    def recv(self) -> Any:
+    def recv(self) -> Any:  # Any: the overloads above give the precise types
         """Return the latest message received.
 
         A single-peer port returns the message itself (the initial value, zeros,
@@ -203,7 +213,7 @@ class Port(Generic[S, R, M]):
     def recv_with_time[R2](
         self: Port[Any, R2, Multi],
     ) -> dict[Channel, tuple[R2, int]]: ...
-    def recv_with_time(self) -> Any:
+    def recv_with_time(self) -> Any:  # Any: as recv
         """Like ``recv``, but pair each message with its global time in
         nanoseconds."""
         raise _not_running()
@@ -322,6 +332,7 @@ class Channel:
         ch.other(a.next) is b.prev  # True
     """
 
+    # Any: a channel joins ports of any message types (connect checks they match).
     def __init__(self, a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> None:
         # Only Port.connect creates channels.
         self._ends = (a, b)
@@ -357,6 +368,7 @@ def _not_running() -> RuntimeError:
     )
 
 
+# Any (here and below): freezing does not depend on the message types.
 def freeze(port: Port[Any, Any, Any]) -> None:
     """Make ``port`` reject further connections (``Network.build`` calls this)."""
     port._frozen = True  # pyright: ignore[reportPrivateUsage]  # Port's own module

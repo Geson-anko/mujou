@@ -6,7 +6,8 @@ from mujou._network import Component
 class Node(Component):
     """A unit of asynchronous computation: the leaf of a network.
 
-    Declare the ports in ``__init__``. When the network runs, the framework calls
+    Declare the ports as instance attributes in ``__init__`` (``build`` rejects
+    ports declared on the class). When the network runs, the framework calls
     the node's lifecycle hooks (``on_start``, ``on_update(dt)``, ...) on a thread of
     its own; in the hooks the node reads its ports with ``recv`` and writes them
     with ``send``. A node must not hold other nodes or networks as attributes; put

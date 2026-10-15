@@ -66,15 +66,17 @@ class TensorSpec(MessageSpec[torch.Tensor]):
     """
 
     def __init__(self, shape: Sequence[int], dtype: torch.dtype | None = None) -> None:
-        dims = cast(Sequence[object], shape)  # user input: check the types at runtime
+        # User input: copy first (an iterator would be consumed by the checks), then
+        # check the types at runtime.
+        dims = tuple(cast(Sequence[object], shape))
         for d in dims:
             if isinstance(d, bool) or not isinstance(d, int):
                 raise TypeError(
-                    f"TensorSpec dimensions must be int, got {d!r} in shape {shape!r}"
+                    f"TensorSpec dimensions must be int, got {d!r} in shape {dims!r}"
                 )
             if d < 1:
                 raise ValueError(
-                    f"TensorSpec dimensions must be >= 1, got {d} in shape {shape!r}"
+                    f"TensorSpec dimensions must be >= 1, got {d} in shape {dims!r}"
                 )
         if dtype is None:
             dtype = torch.get_default_dtype()
@@ -83,7 +85,7 @@ class TensorSpec(MessageSpec[torch.Tensor]):
             raise TypeError(
                 f"TensorSpec dtype {dtype} is not supported; use one of {supported}"
             )
-        self._shape = tuple(shape)
+        self._shape = cast(tuple[int, ...], dims)
         self._dtype = dtype
 
     @property
@@ -161,9 +163,11 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         msg: Feedback = spec.zeros()
 
     Raises:
-        TypeError: ``typed_dict`` is not a ``TypedDict``, a key is not required, or a
-            value is not annotated as ``torch.Tensor``.
-        ValueError: The keyword arguments miss a key or name an unknown key.
+        TypeError: ``typed_dict`` is not a ``TypedDict``, a key is not required, a
+            value is not annotated as ``torch.Tensor``, or a spec is not a
+            ``TensorSpec``.
+        ValueError: The ``TypedDict`` has no key, or the keyword arguments miss a
+            key or name an unknown key.
     """
 
     def __init__(self, typed_dict: type[TD], /, **specs: TensorSpec) -> None:
@@ -177,6 +181,8 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
                 f"{sorted(optional)}"
             )
         hints = typing.get_type_hints(typed_dict)
+        if not hints:
+            raise ValueError(f"DictSpec needs a TypedDict with keys, {name} has none")
         for key, hint in hints.items():
             if hint is not torch.Tensor:
                 raise TypeError(
@@ -189,6 +195,13 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
                 f"DictSpec({name}) keys do not match the TypedDict: "
                 f"missing {missing}, unknown {unknown}"
             )
+        values = cast(Mapping[str, object], specs)  # user input: check at runtime
+        for key, spec in values.items():
+            if not isinstance(spec, TensorSpec):
+                raise TypeError(
+                    f"DictSpec({name}) needs a TensorSpec for {key!r}, "
+                    f"got {type(spec).__name__}"
+                )
         self._typed_dict = typed_dict
         self._specs: Mapping[str, TensorSpec] = MappingProxyType(
             {k: specs[k] for k in hints}
@@ -213,6 +226,7 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DictSpec):
             return NotImplemented
+        # Any: the other spec may be of any TypedDict; identity decides.
         other_spec = cast(DictSpec[Any], other)
         return self._typed_dict is other_spec.typed_dict and tuple(
             self._specs.items()
@@ -250,6 +264,10 @@ def _check_tensor(spec: TensorSpec, value: object, where: str) -> torch.Tensor:
         raise ValueError(
             f"{where}: expected shape {spec.shape}, got {tuple(value.shape)}"
         )
+    if value.layout != torch.strided:
+        raise TypeError(
+            f"{where}: expected a dense (strided) tensor, got {value.layout}"
+        )
     if value.dtype != spec.dtype:
         raise TypeError(f"{where}: expected dtype {spec.dtype}, got {value.dtype}")
     return value
@@ -262,7 +280,8 @@ def split(spec: Spec, msg: object, *, where: str) -> list[torch.Tensor]:
     The tensors are returned as they are: no copy, ``detach`` or device move.
 
     Raises:
-        TypeError: ``msg`` is not of the message type, or a dtype differs.
+        TypeError: ``msg`` is not of the message type, a tensor is not dense
+            (strided), or a dtype differs.
         ValueError: The keys of a dict message differ, or a shape differs.
     """
     if isinstance(spec, TensorSpec):
@@ -291,5 +310,6 @@ def join(
     """Build a message of ``spec`` from its tensors in field order (``split``'s
     inverse)."""
     if isinstance(spec, TensorSpec):
-        return tensors[0]
+        (tensor,) = tensors
+        return tensor
     return dict(zip(spec.specs, tensors, strict=True))
