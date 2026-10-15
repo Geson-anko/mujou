@@ -92,18 +92,23 @@ impl State {
         self.paused || self.is_virtual
     }
 
-    fn now_ns(&self) -> u64 {
+    fn ns_at(&self, instant: Instant) -> u64 {
         if self.is_frozen() {
             return self.anchor_ns;
         }
-        let real_ns = self.anchor_instant.elapsed().as_nanos() as f64;
+        let real_ns = instant.duration_since(self.anchor_instant).as_nanos() as f64;
         self.anchor_ns.saturating_add((real_ns * self.scale) as u64)
+    }
+
+    fn now_ns(&self) -> u64 {
+        self.ns_at(Instant::now())
     }
 
     /// Moves the anchor to now, before the rate of the time changes.
     fn reanchor(&mut self) {
-        self.anchor_ns = self.now_ns();
-        self.anchor_instant = Instant::now();
+        let now = Instant::now();
+        self.anchor_ns = self.ns_at(now);
+        self.anchor_instant = now;
     }
 }
 
@@ -145,7 +150,7 @@ impl GlobalTimer {
     }
 
     pub fn time(&self) -> f64 {
-        self.time_ns() as f64 * 1e-9
+        self.time_ns() as f64 / 1e9
     }
 
     pub fn scale(&self) -> f64 {
@@ -162,7 +167,7 @@ impl GlobalTimer {
         Ok(())
     }
 
-    /// Freezes the time. Does nothing if already paused.
+    /// Freezes the time. Pausing while paused leaves the time as it is.
     pub fn pause(&self) {
         self.update(|s| {
             s.reanchor();
@@ -230,15 +235,17 @@ impl GlobalTimer {
     /// Blocks until the time reaches `target_ns` or `timeout` of real time
     /// passes, and returns whether the target was reached.
     pub fn wait_until_ns(&self, target_ns: u64, timeout: Duration) -> bool {
-        let deadline = Instant::now() + timeout;
+        // A timeout too long to represent never expires.
+        let deadline = Instant::now().checked_add(timeout);
         let mut s = self.lock();
         loop {
             let now_ns = s.now_ns();
             if now_ns >= target_ns {
                 return true;
             }
-            let Some(mut wait) = deadline.checked_duration_since(Instant::now()) else {
-                return false;
+            let mut wait = match deadline {
+                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
+                None => Duration::MAX,
             };
             if wait.is_zero() {
                 return false;
@@ -258,6 +265,6 @@ impl GlobalTimer {
     /// Blocks for `dt_ns` of global time. Waits through pauses.
     pub fn sleep_ns(&self, dt_ns: u64) {
         let target_ns = self.time_ns().saturating_add(dt_ns);
-        while !self.wait_until_ns(target_ns, Duration::from_secs(3600)) {}
+        while !self.wait_until_ns(target_ns, Duration::MAX) {}
     }
 }

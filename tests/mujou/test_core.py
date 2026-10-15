@@ -4,14 +4,10 @@ import subprocess
 import sys
 import sysconfig
 import threading
-from typing import TYPE_CHECKING
 
 import pytest
 
 from mujou._core import GlobalTimer
-
-if TYPE_CHECKING:
-    from tests.conftest import MeasureSleep
 
 
 class TestCoreModule:
@@ -37,19 +33,12 @@ class TestCoreModule:
 
 
 class TestGlobalTimer:
+    """The private controls; the public functions are tested via mujou.time."""
+
     def test_advance_converts_seconds_to_nanoseconds(self, virtual_timer: GlobalTimer):
-        start = virtual_timer.time_ns()
         virtual_timer.advance(0.25)
         virtual_timer.advance(1e-9)
-        assert virtual_timer.time_ns() == start + 250_000_001
-        assert virtual_timer.time() == virtual_timer.time_ns() * 1e-9
-
-    def test_sleep_releases_the_gil_until_advanced(
-        self, virtual_timer: GlobalTimer, measure_sleep: MeasureSleep
-    ):
-        # If sleep held the GIL (on a GIL build), the main thread could not advance.
-        slept = measure_sleep(virtual_timer.sleep, 1.0)
-        assert slept >= 1_000_000_000
+        assert virtual_timer.time_ns() == 250_000_001
 
     def test_sleep_waits_while_paused(self, virtual_timer: GlobalTimer):
         virtual_timer.use_virtual_clock(False)
@@ -68,23 +57,17 @@ class TestGlobalTimer:
         virtual_timer.set_time_scale(2.0)
         virtual_timer.advance(3.0)
         state = pickle.loads(pickle.dumps(virtual_timer.state_dict()))
-        expected_ns = virtual_timer.time_ns()
 
         virtual_timer.set_time_scale(1.0)
         virtual_timer.advance(5.0)
         virtual_timer.load_state_dict(state)
-        assert virtual_timer.time_ns() == expected_ns
+        assert virtual_timer.time_ns() == 3_000_000_000
         assert virtual_timer.time_scale() == 2.0
 
-    @pytest.mark.parametrize("scale", [0.0, -1.0, float("nan")])
-    def test_rejects_invalid_scale(self, virtual_timer: GlobalTimer, scale: float):
-        with pytest.raises(ValueError, match="scale"):
-            virtual_timer.set_time_scale(scale)
-
     @pytest.mark.parametrize("seconds", [-1.0, float("nan")])
-    def test_rejects_invalid_duration(self, virtual_timer: GlobalTimer, seconds: float):
-        with pytest.raises(ValueError, match="duration"):
-            virtual_timer.sleep(seconds)
+    def test_advance_rejects_invalid_duration(
+        self, virtual_timer: GlobalTimer, seconds: float
+    ):
         with pytest.raises(ValueError, match="duration"):
             virtual_timer.advance(seconds)
 

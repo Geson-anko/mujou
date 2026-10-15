@@ -39,3 +39,16 @@
 - 欠陥: 大きな秒数で `sleep` すると、ns が u64::MAX に飽和したあと `time_ns() + dt_ns` が release ビルドで wrap し、すぐ戻る。`advance_ns` も同じ → `saturating_add` に直し、テスト 2 件を追加（段階 2・3 に戻した）
 - 整理: 1 箇所でしか使わない `_start_sleeper` をインライン化
 - 局所性・非同期性: タイマーはノード間の通信ではなく、ノードの更新則に触れない。グローバルなバリアも入れていない（停止は制御側の操作だけ）
+
+## レビュー（code-reviewer・algorithm-reviewer、どちらも approve）と対応
+
+- 実時計の上界が、実時間の計測より前の区間を含まず理論上 flaky → 計測を先に取る（2 件）
+- `time_ns * 1e-9` は正しく丸められない → `/ 1e9`
+- `set_time_scale` などに doc comment が無く `mujou.time.set_time_scale.__doc__` が None → 追加
+- 公開した名前を `_core.timer` から直接テストしていた → `mujou.time` を通すテストに移し、`test_core.py` は private な制御だけ。getter/setter の往復テストは削除
+- 仮想時計の原点が非決定的 → fixture で `load_state_dict({"time_ns": 0, ...})`。fixture は `tests/mujou/conftest.py` に移し、`measure_sleep` は唯一の利用者 `test_time.py` の関数にした
+- `wait_until_ns` に大きな timeout を渡すと panic → `checked_add`、表せない期限は無期限
+- `reanchor` が `Instant::now()` を 2 回取り、張り替えのたびに数十 ns 遅れる → 1 回にした
+- 復元の順序（停止 → load → 起動 → 再開）と、Δt を ns の差から作ることを `docs/execution-model.md` に追記
+- 見送り（`memory/project_open_decisions.md` に記録）: 停止要求で待機を起こす方法、pause の持ち主、Mutex の競合、f64 の分解能
+- 見送り: `state_dict` の TypedDict（実行時に存在しない型を stub に置くことになる）、`load_state_dict` の例外の型の統一（private）、`import mujou` で `mujou.time` を読み込まない（`torch` 同様に明示 import でよい）

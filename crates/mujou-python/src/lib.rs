@@ -51,14 +51,17 @@ impl GlobalTimer {
         time::global().scale()
     }
 
+    /// Sets how many global seconds pass per real second (finite and > 0).
     fn set_time_scale(&self, scale: f64) -> PyResult<()> {
         time::global().set_scale(scale).map_err(to_py_err)
     }
 
+    /// Freezes the global time. For the framework's pause and state capture.
     fn pause(&self) {
         time::global().pause();
     }
 
+    /// Lets the global time run again from where it was frozen.
     fn resume(&self) {
         time::global().resume();
     }

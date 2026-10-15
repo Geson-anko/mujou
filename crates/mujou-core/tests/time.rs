@@ -48,12 +48,12 @@ mod real_clock {
     fn changing_the_scale_does_not_jump_the_time() {
         let timer = GlobalTimer::new();
         thread::sleep(Duration::from_millis(2));
-        let before = timer.time_ns();
         let real_start = Instant::now();
+        let before = timer.time_ns();
         timer.set_scale(1000.0).unwrap();
         let after = timer.time_ns();
         let real_elapsed = real_ns(real_start.elapsed());
-        // Only the time since `before` counts, at most at the new scale.
+        // At most the new scale applies since `before`; no jump on the change.
         assert!((after - before) as f64 <= 1000.0 * real_elapsed + 2.0);
     }
 
@@ -73,7 +73,7 @@ mod real_clock {
     fn seconds_and_nanoseconds_agree() {
         let timer = GlobalTimer::new();
         timer.pause();
-        assert_eq!(timer.time(), timer.time_ns() as f64 * 1e-9);
+        assert_eq!(timer.time(), timer.time_ns() as f64 / 1e9);
     }
 
     #[test]
@@ -183,11 +183,11 @@ mod virtual_clock {
         thread::sleep(Duration::from_millis(5));
         assert_eq!(timer.time_ns(), switched);
 
-        timer.use_virtual_clock(false);
         let real_start = Instant::now();
+        timer.use_virtual_clock(false);
         let back = timer.time_ns();
         assert!(back >= switched);
-        assert!((back - switched) as f64 <= 1000.0 * real_ns(real_start.elapsed()) + 1e6);
+        assert!((back - switched) as f64 <= 1000.0 * real_ns(real_start.elapsed()) + 2.0);
     }
 
     #[test]
