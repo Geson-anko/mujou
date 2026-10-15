@@ -38,3 +38,11 @@ clean:
     rm -rf dist build htmlcov .coverage
     find . -type d -name "__pycache__" -prune -exec rm -r {} +
     find . -type d -name ".pytest_cache" -prune -exec rm -r {} +
+
+# Run a command in the dev container, in this checkout (the main one or a worktree)
+container *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    main="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+    devcontainer up --workspace-folder "$main" > /dev/null
+    devcontainer exec --workspace-folder "$main" bash -lc 'cd "$1" && shift && "$@"' _ "{{justfile_directory()}}" {{args}}

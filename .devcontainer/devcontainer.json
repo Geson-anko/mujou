@@ -4,20 +4,24 @@
     "dockerfile": "Dockerfile"
   },
   "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
   "mounts": [
-    "source=mujou-venv-${devcontainerId},target=${containerWorkspaceFolder}/.venv,type=volume",
-    "source=mujou-target-${devcontainerId},target=${containerWorkspaceFolder}/target,type=volume"
+    "source=mujou-cargo-target-${devcontainerId},target=/home/vscode/.cache/cargo-target,type=volume"
   ],
   "containerEnv": {
+    "UV_PROJECT_ENVIRONMENT": ".venv-devcontainer",
     "UV_LINK_MODE": "copy",
+    "CARGO_TARGET_DIR": "/home/vscode/.cache/cargo-target",
     "GIT_CONFIG_COUNT": "1",
     "GIT_CONFIG_KEY_0": "core.fileMode",
     "GIT_CONFIG_VALUE_0": "false"
   },
   "remoteEnv": {
-    "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}"
+    "PATH": "${containerWorkspaceFolder}/.venv-devcontainer/bin:${containerEnv:PATH}"
   },
-  "postCreateCommand": "sudo chown vscode:vscode .venv target && uv sync && { [ -f .git/hooks/pre-commit ] || uv run pre-commit install; }",
+  "postCreateCommand": "uv sync && { [ -f .git/hooks/pre-commit ] || uv run pre-commit install; }",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -26,7 +30,10 @@
         "tamasfe.even-better-toml",
         "skellock.just",
         "rust-lang.rust-analyzer"
-      ]
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv-devcontainer/bin/python"
+      }
     }
   }
 }

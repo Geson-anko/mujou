@@ -39,5 +39,8 @@ wandb/
 .DS_Store
 Thumbs.db
 
-# Rust (also the mount point of the dev container's target volume)
+# Rust
 target/
+
+# Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
+.venv-devcontainer/
