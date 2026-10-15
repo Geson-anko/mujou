@@ -24,7 +24,7 @@ description: orchestrator（メインエージェント）が implementation-pla
 | ---------------------- | ------------ | ------------------------------------------------------------------------ |
 | orchestrator           | セッション値 | メインエージェント。統括・委譲・レビュー裁定・合流検証・ユーザーとの対話 |
 | code-reviewer          | high         | レビュー（仕様準拠・バグ・規約・テスト品質）。コードは修正しない         |
-| algorithm-reviewer     | high         | 更新手法の数理・ブロック間の局所性・非同期性の監査。コードは修正しない  |
+| algorithm-reviewer     | high         | 更新手法の数理・ノード間の局所性・非同期性の監査。コードは修正しない  |
 | implementation-planner | medium       | 要件の仕様化・計画書作成（コードは書かない）                             |
 | plan-implementer       | medium       | 計画に基づく実装・テスト・グリーン化                                     |
 | spec-test-author       | medium       | 仕様テスト（`tests/` のみ、`src/` は触らない）                           |

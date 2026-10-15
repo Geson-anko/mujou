@@ -6,7 +6,7 @@ description: mujou の既定の更新手法 PC-ALM（Augmented Lagrangian Predic
 # PC-ALM 理論リファレンス
 
 出典: Sakana AI, "PC-ALM: Augmented Lagrangian Predictive Coding" (<https://pub.sakana.ai/pc-alm/>)。
-PC-ALM は mujou の**既定の更新手法として暫定的に採用したもの**で、更新手法は差し替えられる（skill `locality-and-async`）。この skill は PC-ALM を使うブロックについての文書である。
+PC-ALM は mujou の**既定の更新手法として暫定的に採用したもの**で、更新手法は差し替えられる（skill `locality-and-async`）。この skill は PC-ALM を使うノードについての文書である。
 
 この skill の式は記事の定義に沿って勾配まで展開したもの。**記事に無い mujou 独自の拡張は「mujou の研究課題」節に分けて書き、理論と混ぜない。**
 
@@ -68,7 +68,7 @@ $$W_i \leftarrow W_i + \eta_\theta\, \varepsilon_i\, h_{i-1}^\top \quad (1 \le i
 
 ### 局所性
 
-$\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lambda_{i+1}$）だけに依存する。上の層 $i+1$ が $W_{i+1}^\top \varepsilon_{i+1}$ を下へ送り、下の層 $i$ が $h_i$ を上へ送れば、通信は隣接層間で閉じる。成分ごとに見ると、ニューロン $j$ の更新も、結合でつながったニューロンとの値（$h_{i-1,k}$ と $W_{i+1}[k,j]\,\varepsilon_{i+1,k}$）だけで閉じる。そのため、PC-ALM はニューロンブロックまで分割できる。実行モデル側の規約は skill `locality-and-async`。
+$\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lambda_{i+1}$）だけに依存する。上の層 $i+1$ が $W_{i+1}^\top \varepsilon_{i+1}$ を下へ送り、下の層 $i$ が $h_i$ を上へ送れば、通信は隣接層間で閉じる。成分ごとに見ると、ニューロン $j$ の更新も、結合でつながったニューロンとの値（$h_{i-1,k}$ と $W_{i+1}[k,j]\,\varepsilon_{i+1,k}$）だけで閉じる。そのため、PC-ALM はニューロンノードまで分割できる。実行モデル側の規約は skill `locality-and-async`。
 
 ## 4. 平衡点と BP の関係
 
@@ -107,7 +107,7 @@ $\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lamb
 3. **clamp**: $h_0$ と教師は推論中に更新しない。推論専用（教師なし）ステップでは出力層の扱いを明示する
 4. **双対の初期化**: 記事のスカラー例では $\lambda = 0$ 始まり。ミニバッチ間・ストリームのステップ間でリセットするか持ち越すかは明示的に決めて実装する（下の研究課題）
 5. **重み更新の順序**: 学習フェーズは推論を終えた状態の $h, \lambda$ を使う。推論中に重みを動かす設計にするなら、それは記事の手順からの逸脱として明示する
-6. **計算グラフをブロック間で繋げない**: 層 $i$ の更新で $h_{i-1}$ の勾配が流れないよう detach する。ブロックをまたぐ `.backward()` は使わない（hook が警告する）
+6. **計算グラフをノード間で繋げない**: 層 $i$ の更新で $h_{i-1}$ の勾配が流れないよう detach する。ノードをまたぐ `.backward()` は使わない（hook が警告する）
 7. **バッチ平均と学習率**: 外積をバッチ和にするか平均にするかで $\eta_\theta$ の意味が変わる。どちらかに統一して docstring に書く
 8. **$\alpha = 0$ の退化テスト**: PC-ALM 実装は $\alpha = 0$ で PC と一致するはず。回帰テストとして持つ
 
@@ -117,15 +117,15 @@ $\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lamb
 
 ### 7.1 連続時間形（mujou の定式化）
 
-mujou のブロックは、それぞれ独自の周期で非同期に動く（`memory/project_async_block_execution.md`）。そのため 3 節の離散更新を、グローバルな時間 $t$ に対する微分方程式として扱い直す。時定数 $\tau_h, \tau_\lambda, \tau_\theta$ を導入する。
+mujou のノードは、それぞれ独自の周期で非同期に動く（`memory/project_async_node_execution.md`）。そのため 3 節の離散更新を、グローバルな時間 $t$ に対する微分方程式として扱い直す。時定数 $\tau_h, \tau_\lambda, \tau_\theta$ を導入する。
 
 $$\tau_h \frac{dh_i}{dt} = -\nabla_{h_i}\mathcal{L}, \qquad \tau_\lambda \frac{d\lambda_i}{dt} = r_i, \qquad \tau_\theta \frac{dW_i}{dt} = \varepsilon_i\, h_{i-1}^\top \ \ (\text{出力層は } e_L h_{L-1}^\top)$$
 
 - 活動は拡張ラグランジアンの勾配流、双対はその上昇流、重みは勾配流。入力 $x(t)$ と教師 $y(t)$ は時間とともに変わるストリームとして与える
-- 各ブロックは、前回の更新からグローバルタイマーで測った経過時間 $\Delta t$ で離散化する。陽的 Euler なら $h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}$
-- 3 節の離散パラメータとの対応: $\eta_h = \Delta t/\tau_h$、$\alpha = \Delta t/\tau_\lambda$、$\eta_\theta = \Delta t/\tau_\theta$。全ブロックを固定の $\Delta t$ で同期的に回すと、3 節の更新に一致する（テストのオラクル）
+- 各ノードは、前回の更新からグローバルタイマーで測った経過時間 $\Delta t$ で離散化する。陽的 Euler なら $h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}$
+- 3 節の離散パラメータとの対応: $\eta_h = \Delta t/\tau_h$、$\alpha = \Delta t/\tau_\lambda$、$\eta_\theta = \Delta t/\tau_\theta$。全ノードを固定の $\Delta t$ で同期的に回すと、3 節の更新に一致する（テストのオラクル）
 - 記事の「推論 $T$ ステップ → 学習 1 ステップ」は、$\tau_\theta \gg T\,\tau_h$ という時間スケールの分離として近似される。フェーズの切替は持たず、推論と学習は同時に進む
-- 安定性: 陽的 Euler は $\Delta t/\tau$ が大きいと発散する。5 節の $\alpha$ の上限は $\Delta t/\tau_\lambda$ の上限として読み替える。ブロックが遅れて $\Delta t$ が大きくなった場合に備え、$\Delta t$ の上限か刻みの分割を持つ
+- 安定性: 陽的 Euler は $\Delta t/\tau$ が大きいと発散する。5 節の $\alpha$ の上限は $\Delta t/\tau_\lambda$ の上限として読み替える。ノードが遅れて $\Delta t$ が大きくなった場合に備え、$\Delta t$ の上限か刻みの分割を持つ
 - 時定数どうしの比、$\Delta t$ の揺らぎや読み取る値の古さに対する収束性は未検証。下の「非同期更新」の問いに含まれる
 
 - **フェーズの撤廃**: 推論 $T$ ステップ → 学習 1 ステップの同期的な区切りを、ストリーム上で連続的に回すダイナミクスに置き換えられるか。7.1 の連続時間形がその定式化で、時定数の選び方が問いとして残る

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """PostToolUse hook (matcher: Edit|Write|MultiEdit): warn on global backprop in src/.
 
-mujou はブロック（内側は同期、ブロック間は非同期のメッセージ）単位で計算し、
-ブロックをまたぐ誤差逆伝播（``loss.backward()`` 等）を ``src/mujou/`` に持ち込まない。
-ブロック内に閉じた autograd（ローカルエネルギーの勾配やブロック内の BP）は許容される
+mujou はノード（内側は同期、ノード間は非同期のメッセージ）単位で計算し、
+ノードをまたぐ誤差逆伝播（``loss.backward()`` 等）を ``src/mujou/`` に持ち込まない。
+ノード内に閉じた autograd（ローカルエネルギーの勾配やノード内の BP）は許容される
 ので、ツール呼び出しは止めず警告だけを返す。
 
-意図的なブロック内 autograd は、その行に ``# mujou: local-autograd`` を付けると警告対象から
+意図的なノード内 autograd は、その行に ``# mujou: local-autograd`` を付けると警告対象から
 外れる。fail-open（常に exit 0）。依存は標準ライブラリのみ。
 """
 
@@ -64,9 +64,9 @@ def main() -> int:
         [
             f"[LOCALITY GUARD] {path} にグローバル勾配計算に見える箇所がある。",
             *hits,
-            "- mujou はブロック間を非同期のメッセージでつなぎ、ブロックをまたぐ勾配計算を持ち込まない（skill `locality-and-async`）",
-            "- ブロックをまたいで計算グラフが繋がっていないか確認せよ（入力側の活動は detach されているか）",
-            f"- ブロック内に閉じた勾配（ローカルエネルギーやブロック内 BP）として意図的に使うなら、その行に `{_ALLOW_MARKER}` を付けて理由をコメントせよ",
+            "- mujou はノード間を非同期のメッセージでつなぎ、ノードをまたぐ勾配計算を持ち込まない（skill `locality-and-async`）",
+            "- ノードをまたいで計算グラフが繋がっていないか確認せよ（入力側の活動は detach されているか）",
+            f"- ノード内に閉じた勾配（ローカルエネルギーやノード内 BP）として意図的に使うなら、その行に `{_ALLOW_MARKER}` を付けて理由をコメントせよ",
         ]
     )
     print(
