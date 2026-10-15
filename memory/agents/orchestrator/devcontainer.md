@@ -27,3 +27,9 @@
 - nit `core.fileMode=false` の副作用、新しい clone をコンテナで先に開いたときのフック、CLI の入手先 → README に追記
 - nit rustup が `~/.profile` などに PATH を追記する → `--no-modify-path`
 - nit ツールの版の固定 → 見送り。Rust の版を固定するかどうかは別途決める
+
+## ユーザーのフィードバック（2026-10-15）と対応
+
+- 「worktree も devcontainer で実行する」→ ワークスペースをホストと同じ絶対パスにマウントした（worktree の `.git` ファイルがホストの絶対パスを持つため）。`.venv` の volume はやめ、`UV_PROJECT_ENVIRONMENT=.venv-devcontainer`（相対パスはプロジェクトのルート基準で解決されることを確認）で checkout ごとに Linux の venv を分けた。cargo の target は volume 上の `CARGO_TARGET_DIR` を全 checkout で共有（cargo がロックする）。`just container <cmd>` で今いる checkout のコマンドをコンテナで実行する
+- 「root で書き込まれないか、uid/gid を合わせるユーザーと NOPASSWD が要るか」→ remoteUser は `vscode`。macOS（Docker Desktop）ではコンテナで作ったファイルもホストの uid 501 になることを確認。Linux では Dev Container CLI の `updateRemoteUserUID`（既定 true、明示した）が vscode の UID/GID をホストに合わせる。base イメージの vscode は NOPASSWD の sudo を持つが、volume の chown をやめたので postCreate で sudo は使わない。自前のユーザー作成は不要
+- `.vscode/settings.json` の `python.defaultInterpreterPath`（`.venv`）はワークスペース設定でコンテナ側の設定より優先されるので削除し、コンテナ側は customizations で `.venv-devcontainer` を指定。ホストは Python 拡張が `.venv` を自動で選ぶ

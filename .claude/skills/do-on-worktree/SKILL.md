@@ -46,6 +46,8 @@ Bash で `cd` した先は次の呼び出しに持ち越されることがある
 
 変更内容に応じて検証する（コード変更なら `just run`）。**検証通過前にはコミットしない**。
 
+worktree の検証は dev container の中でも行う。worktree のディレクトリで `just container just run` を実行すると、main のチェックアウトの dev container（必要なら起動する）の中で、その worktree の `just run` が走る。コンテナ用の venv は worktree ごとの `.venv-devcontainer/` に作られ、ホストの `.venv/` とは衝突しない（README の Dev container 節）。
+
 ### 5. コミット
 
 CLAUDE.md のコミット規約（`<種別>(<スコープ>): <内容>`、1 コミット 1 関心事）に従う。
