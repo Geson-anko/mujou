@@ -36,6 +36,22 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
+  # Rust formatting and linting (uses the local toolchain)
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        files: ^(Cargo\.(toml|lock)|crates/)
+        pass_filenames: false
+
   # Python syntax upgrading
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.22.0
@@ -65,8 +81,9 @@ repos:
       - id: codespell
         args:
           - --skip=uv.lock
-          # "ALM" = Augmented Lagrangian Method; "ans" used in examples.
-          - --ignore-words-list=alm,ans
+          # "ALM" = Augmented Lagrangian Method; "ans" used in examples;
+          # "crate" is a Rust package.
+          - --ignore-words-list=alm,ans,crate
 
   # Additional Python checks
   - repo: https://github.com/pre-commit/pygrep-hooks

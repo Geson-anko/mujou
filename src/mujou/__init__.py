@@ -1,4 +1,4 @@
 """Mujou: asynchronous, continually learning deep learning trained with PC-
 ALM."""
 
-__version__ = "0.0.1"
+from mujou._core import __version__ as __version__

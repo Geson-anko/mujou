@@ -41,3 +41,7 @@ Thumbs.db
 
 # Rust (also the mount point of the dev container's target volume)
 target/
+
+# Native extension built in place by the editable install
+src/mujou/*.so
+src/mujou/*.pyd
