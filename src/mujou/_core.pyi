@@ -25,3 +25,7 @@ class GlobalTimer:
     def advance(self, seconds: float) -> None: ...
 
 timer: Final[GlobalTimer]
+
+# --- slot (WP-A)
+
+# --- runtime (WP-B)

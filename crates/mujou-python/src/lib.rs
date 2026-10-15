@@ -1,5 +1,8 @@
 //! Python bindings of the native core, imported as the private module `mujou._core`.
 
+mod runtime;
+mod slot;
+
 use std::time::Duration;
 
 use mujou_core::time::{self, TimerError, TimerState, seconds_to_ns};
@@ -104,5 +107,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<GlobalTimer>()?;
     m.add("timer", GlobalTimer)?;
+    slot::register(m)?;
+    runtime::register(m)?;
     Ok(())
 }

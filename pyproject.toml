@@ -4,7 +4,9 @@ dynamic = ["version"]
 description = "Asynchronous Distributed Deep Learning Library for Continuous Learning, trained with PC-ALM instead of backpropagation"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "torch>=2.14.1",
+]
 
 [build-system]
 requires = ["maturin>=1.15,<2"]
@@ -106,3 +108,13 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+# On Linux, take torch from the CPU-only index: mujou's core does not use the GPU,
+# and the default index pulls the CUDA wheels (several GB).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
