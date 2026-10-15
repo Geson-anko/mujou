@@ -38,3 +38,6 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust (also the mount point of the dev container's target volume)
+target/

@@ -19,3 +19,11 @@
 
 - `devcontainer up` → `devcontainer exec just run` が green（pytest 21 passed、pyright 0 errors）
 - ホストの `.venv` と `.git/hooks/pre-commit` は変化なし
+
+## レビュー（code-reviewer、approve）と対応
+
+- should-fix `target/` が ignore されていない → `.gitignore` に追加。PR 2 と `.gitignore` が衝突しないよう、PR 2 をこのブランチの上に積む
+- should-fix worktree をコンテナで開くと git が動かない → README に「メインのチェックアウトを開く」と書いた
+- nit `core.fileMode=false` の副作用、新しい clone をコンテナで先に開いたときのフック、CLI の入手先 → README に追記
+- nit rustup が `~/.profile` などに PATH を追記する → `--no-modify-path`
+- nit ツールの版の固定 → 見送り。Rust の版を固定するかどうかは別途決める

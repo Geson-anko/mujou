@@ -10,5 +10,5 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
 # Rust toolchain for the native core (mujou._core).
 USER vscode
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --profile minimal --component rustfmt,clippy
+    | sh -s -- -y --no-modify-path --profile minimal --component rustfmt,clippy
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"

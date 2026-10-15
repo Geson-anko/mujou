@@ -21,7 +21,7 @@ just run     # format -> test -> type
 
 ### Dev container
 
-`.devcontainer/` provides Ubuntu with uv, just and the Rust toolchain. Open the repository in VS Code and choose "Reopen in Container", or use the CLI:
+`.devcontainer/` provides Ubuntu with uv, just and the Rust toolchain. Open the repository in VS Code and choose "Reopen in Container", or use the [Dev Container CLI](https://github.com/devcontainers/cli) (`brew install devcontainer` or `npm install -g @devcontainers/cli`):
 
 ```sh
 devcontainer up --workspace-folder .
@@ -29,5 +29,6 @@ devcontainer exec --workspace-folder . just run
 ```
 
 - `.venv` and `target/` live in Docker volumes, so the container's Linux builds never clash with a host checkout.
-- The container runs `uv sync` instead of `just setup`, and installs the pre-commit hook only if none exists, because the hook records the absolute path of the Python that installed it. `.venv/bin` is on `PATH`, so a hook installed on the host still finds `pre-commit` in the container.
-- `core.fileMode` is `false` inside the container only, because Docker Desktop bind mounts report every file as executable.
+- The container runs `uv sync` instead of `just setup`, and installs the pre-commit hook only if none exists, because the hook records the absolute path of the Python that installed it. `.venv/bin` is on `PATH`, so a hook installed on the host still finds `pre-commit` in the container. If you open a fresh clone in the container first, the hook points into the container; run `just setup` on the host before committing there.
+- `core.fileMode` is `false` inside the container only, because Docker Desktop bind mounts report every file as executable. To commit a new executable from the container, use `git update-index --chmod=+x <file>`.
+- Open the main checkout, not a git worktree: a worktree's `.git` file points to an absolute host path that does not exist in the container.
