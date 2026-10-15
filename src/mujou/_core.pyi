@@ -1,7 +1,8 @@
 """Type stubs for the native extension module built from crates/mujou-python."""
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Final, Self, final
+from types import CapsuleType
+from typing import Final, Protocol, Self, final
 
 __version__: str
 
@@ -28,11 +29,6 @@ class GlobalTimer:
 timer: Final[GlobalTimer]
 
 # --- slot (WP-A)
-
-# Imported here rather than at the top so that the sections stay independent.
-from collections.abc import Sequence  # noqa: E402
-from types import CapsuleType  # noqa: E402
-from typing import Protocol  # noqa: E402
 
 type DLDataType = tuple[int, int, int]
 """``(code, bits, lanes)`` of a DLPack dtype."""
