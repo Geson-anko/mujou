@@ -6,9 +6,9 @@
 
 ## free-threaded 版を使う理由
 
-Python のブロック（PyTorch を使うものなど）を、専用スレッドで並列に動かしたいからである（[ネイティブコア](native-core.md)）。
+Python のノード（PyTorch を使うものなど）を、専用スレッドで並列に動かしたいからである（[ネイティブコア](native-core.md)）。
 
-GIL ありの環境では Python のブロック同士が GIL を取り合う。それでも Rust のコアは GIL を解放して並列に動くので、利用者の環境を free-threaded 版に限定する理由はない。
+GIL ありの環境では Python のノード同士が GIL を取り合う。それでも Rust のコアは GIL を解放して並列に動くので、利用者の環境を free-threaded 版に限定する理由はない。
 
 3.13t を選ばなかったのは、3.13 の free-threaded ビルドが実験的な扱いで、1 スレッドでの性能低下も大きいためである。free-threaded ビルドは 3.14 から公式サポートになった（PEP 779）。
 

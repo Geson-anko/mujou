@@ -11,7 +11,7 @@ metadata:
 - **GIL ありの通常ビルドもサポートする。** CI のテストは 3.14t と 3.14 の両方で回す
 - 3.13t を選ばなかった理由: 3.13 の free-threaded ビルドは実験的扱いで、1 スレッド性能の低下も大きい。3.14 から公式サポート（PEP 779）
 
-**Why:** Python のブロック（PyTorch など）を専用スレッドで並列に動かしたい（[[project-native-core-rust]]）。GIL ありの環境では Python のブロック同士が GIL を取り合うが、Rust のコアは GIL を解放して並列に動くので、利用者の環境を free-threaded 版に限定する理由はない。
+**Why:** Python のノード（PyTorch など）を専用スレッドで並列に動かしたい（[[project-native-core-rust]]）。GIL ありの環境では Python のノード同士が GIL を取り合うが、Rust のコアは GIL を解放して並列に動くので、利用者の環境を free-threaded 版に限定する理由はない。
 
 **How to apply:**
 

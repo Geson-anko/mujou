@@ -17,8 +17,8 @@
 
 - 名前は「諸行無常」の「無常」から取った。学習後に重みを固定して推論する従来の機械学習と違い、ストリームから学び続け、常に変化し続ける学習機械を作る
 - 狙う用途はリアルタイム処理・ロボティクスなど、生涯学習し続ける機械
-- 計算は**ブロック**単位で行う。ブロックの内側は同期的に計算し、ブロック同士は非同期のメッセージでやり取りする。ブロックは分散処理の最小単位で、ライフサイクル hook（`on_start` / `on_update(dt)` など）を override して書く。大きさはブロックのクラスで決まり（既定はレイヤー、スタックも可、ニューロン単位は future work）、設定では分割しない
-- 既定の更新手法は **PC-ALM**（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）。ただし暫定的な選択であり、更新手法は差し替えられるようにする。BP も 1 つのブロックの内側に閉じた更新手法として扱える
+- 計算は**ノード**単位で行う。ノードの内側は同期的に計算し、ノード同士は非同期のメッセージでやり取りする。ノードは分散処理の最小単位で、ライフサイクル hook（`on_start` / `on_update(dt)` など）を override して書く。大きさはノードのクラスで決まり（既定はレイヤー、スタックも可、ニューロン単位は future work）、設定では分割しない
+- 既定の更新手法は **PC-ALM**（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）。ただし暫定的な選択であり、更新手法は差し替えられるようにする。BP も 1 つのノードの内側に閉じた更新手法として扱える
 
 ## 開発原則
 
@@ -45,14 +45,14 @@
 
 ## 不変の原則
 
-### ブロック間の局所性・非同期性を壊さない
+### ノード間の局所性・非同期性を壊さない
 
-mujou の存在理由。ブロックは自分の状態と隣接ブロックからのメッセージだけで更新する。ブロックをまたいで計算グラフを繋げない（`src/mujou/` でブロックをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`docs/execution-model.md`）。
+mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`docs/execution-model.md`）。
 
-- ブロックの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
-- 更新手法は差し替え可能にする。ブロック・メッセージ・スケジューラに特定の学習則を焼き付けない
+- ノードの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
+- 更新手法は差し替え可能にする。ノード・メッセージ・スケジューラに特定の学習則を焼き付けない
 - 既定の更新手法 PC-ALM の式・平衡点の性質・落とし穴: skill `pc-alm`
-- 実行モデルの不変条件・ブロック内 autograd の書き方（`# mujou: local-autograd`）: skill `locality-and-async`
+- 実行モデルの不変条件・ノード内 autograd の書き方（`# mujou: local-autograd`）: skill `locality-and-async`
 - 違反しそうな箇所は PostToolUse hook が警告する。破る必要があるときはユーザーに確認し、理由を `memory/` に残す
 
 ### テスト
@@ -73,8 +73,8 @@ mujou の存在理由。ブロックは自分の状態と隣接ブロックか�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock ほか
-- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin の想定。ツールチェーンは未整備）。メッセージの値の型はコアが独自に持つ（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
-- torch に依存しないのは private な `mujou._core` だけで、それ以外はブロック内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ブロックの内側でだけ使う。利用者が継承するのは `mujou.Block`（コアの `Block` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin の想定。ツールチェーンは未整備）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- torch に依存しないのは private な `mujou._core` だけで、それ以外はノード内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
 

@@ -1,21 +1,23 @@
 ---
 name: project-message-types
-description: ブロック間メッセージの型とスロットの仕様の決定。Tensor（f16/bf16/f32/f64・i8〜i64・u8・bool、不変、入れ物+変換）、メッセージ型は Tensor / TypedDict（Tensor | None は入れない）、TensorSpec(shape, dtype) と mujou.default.dtype、zeros/rand、初期値必須、片方向スロット 2 本で双方向、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、ネットワークは define-and-run のネットワークオブジェクト
+description: ノード間メッセージの型とスロットの仕様の決定。利用者が扱う値は torch.Tensor だけ（コアの値の型・mujou.dtypes・mujou.default.dtype は公開しない）、コアとは DLPack で必ずコピー、メッセージ型は torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本で双方向、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、ネットワークは define-and-run のネットワークオブジェクト
 metadata:
   type: project
 ---
 
 2026-10-13 決定。詳細は `docs/messages.md`。
 
-- **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ブロック 1 つ、読み手は N 個可
-- **Tensor**: dtype は f16・bf16・f32・f64・i8・i16・i32・i64・u8・bool（2026-10-14 に f32 のみから拡張）。u16・u32・u64 を含めるかは未確認。dtype オブジェクトは `mujou.dtypes` で与える（例: `mujou.dtypes.bf16`）。bf16 を NumPy に変換するときは `ml_dtypes` の bfloat16 を使う（依存を足すときに free-threaded 対応を確認する）。CPU・連続 row-major。不変。役割はデータの入れ物と NumPy / PyTorch との相互変換（コピーあり）だけで、演算は持たない。バッチは shape の一部で特別扱いしない
-- **メッセージの型は `Tensor` と `TypedDict` の 2 種類。** TypedDict はキー名と値の型（`Tensor`）を明示し、入れ子は許さない
-- **`Tensor | None`（値が無いこと）は入れない（2026-10-14 変更）。** 一度は入れると決めたが取り消した。必要になったときに拡張する
-- **`TensorSpec(shape, dtype)` で Tensor の形を表す。** dtype を省略すると既定の dtype を使う。既定の dtype は `mujou.default.dtype` で取得・設定でき、最初は f32。TensorSpec を作った時点で読み取って確定し、あとで変えても既存の spec・スキーマは変わらない（スキーマは構築時に確定する決定と揃えるため。torch.set_default_dtype と同じ考え方）。 `TensorSpec.zeros()`（全 dtype）と `TensorSpec.rand()`（浮動小数点のみ。一様 [0, 1)、seed か乱数生成器を渡せば決定的）で初期 Tensor を作れる。正規分布が要れば `randn` を足す。`Tensor.spec` は TensorSpec を返す。spec の一致は dtype を含み、暗黙の dtype 変換はしない（dtype が違う Port は接続できない）。生成関数は演算ではないので「Tensor は演算を持たない」と矛盾しない
-- **Port には spec を渡す。** `Tensor` のメッセージには `TensorSpec`、`TypedDict` のメッセージには TypedDict と各キーの TensorSpec の対応表（例: `DictSpec(Feedback, error=TensorSpec(...))`。名前は仮）。対応表は TypedDict と照合し、キーの過不足はエラー
+- **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ノード 1 つ、読み手は N 個可
+- **利用者が扱う値は `torch.Tensor` だけ（2026-10-15 変更）。** Port の `recv()` / `send()`、ホストの `write` / `read`、`TensorSpec.zeros()` / `rand()` はすべて `torch.Tensor`。コアの値の型（旧 `mujou.Tensor`）は `mujou._core` の内部に閉じ、`mujou.dtypes` と `mujou.default.dtype` は廃止。NumPy との変換と `ml_dtypes` も不要になった
+- **dtype は torch の dtype。** float16・bfloat16・float32・float64・int8・int16・int32・int64・uint8・bool。バッチは shape の一部で特別扱いしない
+- **コアの中の値は、ホストのメモリ上の不変なバッファ（連続 row-major）。** torch とは DLPack で受け渡し、読み書きとも必ずコピーする（ゼロコピーにすると、利用者が受け取った値をその場で書き換えたときに他の読み手のバッファまで変わるため）。コアは独自の dtype を持たず DLPack の dtype 表現を使う。NumPy 経由では bf16 を渡せないので DLPack を選んだ。書くときは `detach()` し（`requires_grad` の値は `__dlpack__` で書き出せない）、GPU 上の値はホストへコピーしてから渡す。ノードの `send()` とホストの `write()` で同じ。ホストの `read` / `subscribe` と `TensorSpec.zeros()` / `rand()` は CPU 上の値を返す。コアが受け取るのは `kDLCPU` と `kDLCUDAHost`（pinned）の値だけ。`torch.dtype` → DLPack dtype の対応表は torch 依存の側が持つ
+- **メッセージの型は `torch.Tensor` と `TypedDict` の 2 種類。** TypedDict はキー名と値の型（`torch.Tensor`）を明示し、入れ子は許さない
+- **`torch.Tensor | None`（値が無いこと）は入れない（2026-10-14 変更）。** 一度は入れると決めたが取り消した。必要になったときに拡張する
+- **`TensorSpec(shape, dtype)` で値の形を表す。** dtype は torch の dtype。省略すると、TensorSpec を作った時点の `torch.get_default_dtype()` を読み取って確定し、あとで変えても既存の spec・スキーマは変わらない（スキーマは構築時に確定する決定と揃えるため）。`TensorSpec.zeros()`（全 dtype）と `TensorSpec.rand()`（浮動小数点のみ。一様 [0, 1)、seed か `torch.Generator` を渡せば決定的）で初期値の `torch.Tensor` を作れる。正規分布が要れば `randn` を足す。spec の一致は dtype を含み、暗黙の dtype 変換はしない（dtype が違う Port は接続できない）
+- **Port には spec を渡す。** `torch.Tensor` のメッセージには `TensorSpec`、`TypedDict` のメッセージには TypedDict と各キーの TensorSpec の対応表（例: `DictSpec(Feedback, error=TensorSpec(...))`。名前は仮）。対応表は TypedDict と照合し、キーの過不足はエラー
 - **スロットは常に宣言どおりの型の値を持つ。** スキーマ作成時に初期値を与える。既定はゼロ（`TensorSpec.zeros()`）
-- **スキーマ（型 + shape + 初期値）はネットワーク構築時に確定し、以後は変えない。** 非同期処理の単位はブロックオブジェクト。mujou はブロックの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で、`nn.Module` のように宣言的に組み合わせられる API で記述して最終的にスキーマオブジェクトを作る
-- **「Module API」は比喩。** `nn.Module` に相当する単位がブロックになるわけではない（Module とブロックは対応しない）
+- **スキーマ（型 + shape + 初期値）はネットワーク構築時に確定し、以後は変えない。** 非同期処理の単位はノードオブジェクト。mujou はノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で、`nn.Module` のように宣言的に組み合わせられる API で記述して最終的にスキーマオブジェクトを作る
+- **「Module API」は比喩。** `nn.Module` に相当する単位がノードになるわけではない（Module とノードは対応しない）
 - **スロットは書き込み時のグローバル時刻を自動で添える。** 時刻は秒（f64）とナノ秒（u64）の両方で持つ
 - **メモリ管理はバッファプールだけ。** seqlock + copy は、メモリが増えても安全性と速度を優先して不採用
 - **複数マシンにまたがる実行は現状想定しない**
@@ -25,8 +27,8 @@ metadata:
 **How to apply:**
 
 - 空きが無ければ書き手が追加で確保し、読み手を待たない。定常状態でヒープへの確保と解放が起きないことを目標にする。プールの初期サイズと縮小は実装時に決める
-- 読み手が Tensor を長く持っても、寿命の制約は設けない。読み手の数から必要なバッファ数を見積もる設計にしない
-- Tensor に演算を足さない。演算はブロックの内側の既存ライブラリで行う
+- Python の読み手（`mujou.Node`・ホスト）は読むときにコピーするので、バッファを参照するのはコピーの間だけ（Rust のネイティブなノードは `on_update` の間だけ直接参照する）。読み手の数から必要なバッファ数を見積もる設計にしない
+- コアの値に演算を足さない。演算はノードの内側で torch を使って行う
 - 未決定（勝手に決めずにユーザーに確認する）: ネットワークオブジェクトの API の具体的な形（shape の決め方など）
 
-関連: [[project-async-block-execution]], [[project-native-core-rust]], [[project-core-message-framework]], [[project-open-decisions]]
+関連: [[project-async-node-execution]], [[project-native-core-rust]], [[project-core-message-framework]], [[project-open-decisions]]
