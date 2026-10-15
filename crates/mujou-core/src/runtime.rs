@@ -180,12 +180,6 @@ impl fmt::Display for Panicked {
 
 impl Error for Panicked {}
 
-impl Panicked {
-    fn from_payload(payload: Box<dyn std::any::Any + Send>) -> Self {
-        Self(panic_message(payload))
-    }
-}
-
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     match payload.downcast::<String>() {
         Ok(message) => *message,
@@ -259,15 +253,16 @@ impl Freeze {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum ExceptionHook {
+    #[default]
     NotCalled,
     Calling,
     Done,
 }
 
 /// What a node reports to the control thread.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Report {
     /// `start` returned (successfully or not).
     started: bool,
@@ -395,7 +390,7 @@ impl<N: NodeHooks> Shared<N> {
         panic::catch_unwind(AssertUnwindSafe(|| f(&mut node))).unwrap_or_else(|payload| {
             let error = HookError {
                 hook,
-                source: Arc::new(Panicked::from_payload(payload)),
+                source: Arc::new(Panicked(panic_message(payload))),
             };
             node.panicked(&error);
             Err(error)
@@ -442,8 +437,50 @@ impl<N: NodeHooks> Shared<N> {
         let _ = self.to_controller.send(Message::Failed);
     }
 
-    fn finished_error(&self) -> RuntimeError {
-        finished_error(&self.failure)
+    /// Freezes the timer for the startup, loads `timer_state` into it and
+    /// counts this runtime as live on it. Called by the host before any thread
+    /// of this runtime exists, so the host may touch the timer.
+    fn freeze_for_startup(&self, timer_state: Option<TimerState>) -> Result<(), RuntimeError> {
+        // Checking for other live runtimes, loading the time and counting this
+        // runtime happen under one lock, so two starts cannot both pass.
+        let mut live = lock_live();
+        let timer_id = self.timer as *const GlobalTimer as usize;
+        if timer_state.is_some() && live.contains_key(&timer_id) {
+            // The time is shared by every runtime: moving it would make the
+            // running ones jump (or stall) by the difference in their next Δt.
+            return Err(RuntimeError::InvalidArgument(
+                "cannot restore the time while another runtime is running on the same timer"
+                    .to_owned(),
+            ));
+        }
+        self.lock().freeze.hold(FreezeReason::Startup, self.timer);
+        if let Some(state) = timer_state {
+            if let Err(e) = self.timer.load_state(state) {
+                self.lock().freeze.release_all();
+                return Err(RuntimeError::InvalidArgument(e.to_string()));
+            }
+        }
+        *live.entry(timer_id).or_insert(0) += 1;
+        drop(live);
+        self.lock().live = Some(Live(timer_id));
+        Ok(())
+    }
+
+    /// Lets the time run, uncounts the runtime on its timer and marks it
+    /// finished. Takes the control lock held by the caller.
+    fn mark_finished(&self, mut c: MutexGuard<'_, Control>) {
+        // Let the time run again even after an exception, or the host's waits
+        // in global time would never return.
+        c.freeze.release_all();
+        // Uncount before `finished`, so that a start after `join` can restore
+        // the time; and outside the control lock, since `start` takes the
+        // count's lock before a control lock.
+        let live = c.live.take();
+        drop(c);
+        drop(live);
+        let mut c = self.lock();
+        c.finished = true;
+        self.changed.notify_all();
     }
 
     /// The thread of node `i`.
@@ -453,17 +490,13 @@ impl<N: NodeHooks> Shared<N> {
         let mut c = self.lock();
         c.nodes[i].started = true;
         self.changed.notify_all();
-        if started {
-            while !c.go && c.command != Command::Stop {
-                c = self.wait(c);
-            }
-            let go = c.command != Command::Stop;
-            drop(c);
-            if go {
-                self.node_loop(i);
-            }
-        } else {
-            drop(c);
+        while started && !c.go && c.command != Command::Stop {
+            c = self.wait(c);
+        }
+        let go = started && c.command != Command::Stop;
+        drop(c);
+        if go {
+            self.node_loop(i);
         }
         self.node_finish(i);
     }
@@ -607,6 +640,7 @@ impl<N: NodeHooks> Shared<N> {
 }
 
 /// The number of runtimes started and not yet finished, per timer (by address).
+/// A timer has an entry only while the number is positive.
 static LIVE: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
 
 fn lock_live() -> MutexGuard<'static, BTreeMap<usize, usize>> {
@@ -656,6 +690,13 @@ fn stopped(failure: &OnceLock<NodeFailure>) -> Result<(), RuntimeError> {
     }
 }
 
+/// What is left of a wait until `deadline` (no end if `None`).
+fn remaining(deadline: Option<Instant>) -> Duration {
+    deadline.map_or(Duration::MAX, |d| {
+        d.saturating_duration_since(Instant::now())
+    })
+}
+
 /// The control thread: serves the host's requests one at a time and ends the
 /// system on a failure.
 struct Controller<N: NodeHooks> {
@@ -689,8 +730,7 @@ impl<N: NodeHooks> Controller<N> {
         }
         if c.failed {
             drop(c);
-            self.finish();
-            return Err(s.finished_error());
+            return Err(self.end());
         }
         // The timer was frozen at T before the nodes started, so `start` (and
         // restoring) took no global time. Resume the time before letting the
@@ -703,11 +743,8 @@ impl<N: NodeHooks> Controller<N> {
 
     /// Ends the system if a failure was recorded, and fails if it has ended.
     fn ensure_running(&mut self) -> Result<(), RuntimeError> {
-        if !self.done && self.shared.lock().failed {
-            self.finish();
-        }
-        if self.done {
-            return Err(self.shared.finished_error());
+        if self.done || self.shared.lock().failed {
+            return Err(self.end());
         }
         Ok(())
     }
@@ -726,8 +763,7 @@ impl<N: NodeHooks> Controller<N> {
             }
             if c.failed {
                 drop(c);
-                self.finish();
-                return Err(s.finished_error());
+                return Err(self.end());
             }
         }
         Ok(())
@@ -748,13 +784,8 @@ impl<N: NodeHooks> Controller<N> {
         let epoch = c.epoch;
         c.freeze.hold(FreezeReason::Capture, s.timer);
         let deadline = Instant::now().checked_add(timeout);
-        loop {
-            if c.failed || c.nodes.iter().all(|r| r.paused_at == Some(epoch)) {
-                break;
-            }
-            let remaining = deadline.map_or(Duration::MAX, |d| {
-                d.saturating_duration_since(Instant::now())
-            });
+        while !c.failed && !c.nodes.iter().all(|r| r.paused_at == Some(epoch)) {
+            let remaining = remaining(deadline);
             if remaining.is_zero() {
                 let nodes = (c.nodes.iter().zip(&s.names))
                     .filter(|(r, _)| r.paused_at != Some(epoch))
@@ -766,24 +797,17 @@ impl<N: NodeHooks> Controller<N> {
             }
             c = s.wait_timeout(c, remaining);
         }
-        if c.failed {
-            drop(c);
-            self.finish();
-            return Err(s.finished_error());
-        }
+        let failed = c.failed;
         drop(c);
+        if failed {
+            return Err(self.end());
+        }
         // Every node waits at its loop boundary without holding its lock, and
         // the time stands at T: the states are consistent at T.
-        let mut states = Vec::with_capacity(s.hooks.len());
-        for i in 0..s.hooks.len() {
-            match s.call(i, "state_dict", N::state_dict) {
-                Ok(state) => states.push(state),
-                Err(()) => {
-                    self.finish();
-                    return Err(s.finished_error());
-                }
-            }
-        }
+        let states = (0..s.hooks.len()).map(|i| s.call(i, "state_dict", N::state_dict));
+        let Ok(states) = states.collect::<Result<Vec<_>, ()>>() else {
+            return Err(self.end());
+        };
         let result = panic::catch_unwind(AssertUnwindSafe(|| build(states)));
         // Resume even if `build` panicked, so the system is not left paused.
         resume_after_pause(&s, &mut s.lock());
@@ -833,20 +857,14 @@ impl<N: NodeHooks> Controller<N> {
             // A node thread does not panic: hook panics are caught.
             let _ = thread.join();
         }
-        let mut c = s.lock();
-        // Let the time run again even after an exception, or the host's waits
-        // in global time would never return.
-        c.freeze.release_all();
-        // Uncount before `finished`, so that a start after `join` can restore
-        // the time; and outside the control lock, since `start` takes the
-        // count's lock before a control lock.
-        let live = c.live.take();
-        drop(c);
-        drop(live);
-        let mut c = s.lock();
-        c.finished = true;
-        s.changed.notify_all();
+        s.mark_finished(s.lock());
         self.done = true;
+    }
+
+    /// Ends the system (if not yet ended) and returns how it ended.
+    fn end(&mut self) -> RuntimeError {
+        self.finish();
+        finished_error(&self.shared.failure)
     }
 
     fn shutdown(&mut self) -> Result<(), RuntimeError> {
@@ -952,14 +970,7 @@ impl<N: NodeHooks> Runtime<N> {
                 failed: false,
                 go: false,
                 grant: None,
-                nodes: (0..n)
-                    .map(|_| Report {
-                        started: false,
-                        paused_at: None,
-                        exited: false,
-                        exception: ExceptionHook::NotCalled,
-                    })
-                    .collect(),
+                nodes: (0..n).map(|_| Report::default()).collect(),
                 stop_allowed: false,
                 freeze: Freeze::default(),
                 live: None,
@@ -972,30 +983,7 @@ impl<N: NodeHooks> Runtime<N> {
             hooks: nodes.into_iter().map(Mutex::new).collect(),
             to_controller,
         });
-
-        // Checking for other live runtimes, loading the time and counting this
-        // runtime happen under one lock, so two starts cannot both pass.
-        let mut live = lock_live();
-        let timer_id = timer as *const GlobalTimer as usize;
-        if config.timer_state.is_some() && live.get(&timer_id).is_some_and(|&k| k > 0) {
-            // The time is shared by every runtime: moving it would make the
-            // running ones jump (or stall) by the difference in their next Δt.
-            return Err(RuntimeError::InvalidArgument(
-                "cannot restore the time while another runtime is running on the same timer"
-                    .to_owned(),
-            ));
-        }
-        // No thread of this runtime exists yet, so the host may touch the timer.
-        shared.lock().freeze.hold(FreezeReason::Startup, timer);
-        if let Some(state) = config.timer_state {
-            if let Err(e) = timer.load_state(state) {
-                shared.lock().freeze.release_all();
-                return Err(RuntimeError::InvalidArgument(e.to_string()));
-            }
-        }
-        *live.entry(timer_id).or_insert(0) += 1;
-        drop(live);
-        shared.lock().live = Some(Live(timer_id));
+        shared.freeze_for_startup(config.timer_state)?;
         // Where each first Δt starts: set before any thread exists, so that it
         // is right even if the system ends while starting (the state captured
         // on that exception holds it), and stays right since the time is frozen.
@@ -1107,18 +1095,13 @@ impl<N: NodeHooks> Runtime<N> {
         }
         let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
         while !c.finished {
-            let remaining = deadline.map_or(Duration::MAX, |d| {
-                d.saturating_duration_since(Instant::now())
-            });
+            let remaining = remaining(deadline);
             if remaining.is_zero() {
                 return Ok(false);
             }
             c = s.wait_timeout(c, remaining);
         }
-        match s.failure.get() {
-            Some(failure) => Err(RuntimeError::Failed(failure.clone())),
-            None => Ok(true),
-        }
+        stopped(&s.failure).map(|()| true)
     }
 
     /// The first failure, as soon as it is recorded (possibly before the system
@@ -1156,13 +1139,7 @@ fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> Runt
     let mut c = s.lock();
     s.set_command(&mut c, Command::Stop);
     c.stop_allowed = true;
-    c.freeze.release_all();
-    let live = c.live.take();
-    drop(c);
-    drop(live);
-    let mut c = s.lock();
-    c.finished = true;
-    s.changed.notify_all();
+    s.mark_finished(c);
     RuntimeError::Internal(format!("failed to spawn {which} thread: {e}"))
 }
 
