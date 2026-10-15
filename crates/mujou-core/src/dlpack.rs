@@ -79,7 +79,12 @@ pub struct DLManagedTensorVersioned {
 }
 
 /// Copies the tensor `t` into `dst` as compact row-major bytes, after checking it
-/// against `field`. Any strides are accepted, negative ones included.
+/// against `field`. Any strides are accepted, negative and zero (broadcast) ones
+/// included.
+///
+/// Pinned host memory (`kDLCUDAHost`) is read without synchronizing any CUDA
+/// stream, since no stream is passed to the producer. The writer must have
+/// synchronized the device-to-host copy that filled it before handing it over.
 ///
 /// The error names the field but not the slot; the caller adds it with
 /// [`SlotError::at_slot`].
@@ -249,28 +254,8 @@ pub(crate) fn format_dtype(dtype: DLDataType) -> String {
 struct Lent<T> {
     managed: T,
     _message: Arc<Message>,
-    _shape: Box<[i64]>,
-    _strides: Box<[i64]>,
-}
-
-/// The `DLTensor` of buffer `i` of `msg`, with its shape and strides kept in `ctx`.
-fn describe(msg: &Message, i: usize, shape: &mut [i64], strides: &mut [i64]) -> DLTensor {
-    let buffer = &msg.buffers()[i];
-    DLTensor {
-        // The pointer is mutable only because DLPack says so: the buffer is
-        // immutable, and every reader copies it out instead of writing to it.
-        // READ_ONLY is not set, because consumers may refuse such tensors.
-        data: buffer.bytes().as_ptr() as *mut c_void,
-        device: DLDevice {
-            device_type: DEVICE_CPU,
-            device_id: 0,
-        },
-        ndim: shape.len() as i32,
-        dtype: buffer.field().dtype,
-        shape: shape.as_mut_ptr(),
-        strides: strides.as_mut_ptr(),
-        byte_offset: 0,
-    }
+    shape: Box<[i64]>,
+    strides: Box<[i64]>,
 }
 
 /// Explicit strides, since DLPack 1.2 asks producers not to leave them null.
@@ -282,50 +267,75 @@ fn row_major_strides(shape: &[i64]) -> Box<[i64]> {
     strides.into_boxed_slice()
 }
 
-fn lend<T>(msg: Arc<Message>, i: usize, make: impl FnOnce(DLTensor) -> T) -> *mut Lent<T> {
-    let mut shape: Box<[i64]> = msg.buffers()[i].field().shape.clone().into_boxed_slice();
-    let mut strides = row_major_strides(&shape);
-    // The boxed slices do not move when they move into `Lent`, so the pointers in
-    // the tensor stay valid.
-    let tensor = describe(&msg, i, &mut shape, &mut strides);
-    Box::into_raw(Box::new(Lent {
+/// Boxes the managed tensor `make` builds around buffer `i` of `msg`, and points
+/// it at the shape, the strides and the box itself (its `manager_ctx`). `parts`
+/// picks the tensor and the context out of the managed struct.
+fn lend<T>(
+    msg: Arc<Message>,
+    i: usize,
+    make: impl FnOnce(DLTensor) -> T,
+    parts: fn(&mut T) -> (&mut DLTensor, &mut *mut c_void),
+) -> *mut T {
+    let buffer = &msg.buffers()[i];
+    let shape: Box<[i64]> = buffer.field().shape.clone().into_boxed_slice();
+    let tensor = DLTensor {
+        // The pointer is mutable only because DLPack says so: the buffer is
+        // immutable, and every reader copies it out instead of writing to it.
+        // READ_ONLY is not set, because consumers may refuse such tensors.
+        data: buffer.bytes().as_ptr() as *mut c_void,
+        device: DLDevice {
+            device_type: DEVICE_CPU,
+            device_id: 0,
+        },
+        ndim: shape.len() as i32,
+        dtype: buffer.field().dtype,
+        // Set below, once the box is in place.
+        shape: ptr::null_mut(),
+        strides: ptr::null_mut(),
+        byte_offset: 0,
+    };
+    let lent = Box::into_raw(Box::new(Lent {
         managed: make(tensor),
+        strides: row_major_strides(&shape),
+        shape,
         _message: msg,
-        _shape: shape,
-        _strides: strides,
-    }))
+    }));
+    // SAFETY: `lent` was just allocated and is not shared yet. The pointers are
+    // taken after `into_raw`, from the slices the box owns, so they stay valid
+    // until the deleter drops the box.
+    unsafe {
+        let shape = (*lent).shape.as_mut_ptr();
+        let strides = (*lent).strides.as_mut_ptr();
+        let (tensor, ctx) = parts(&mut (*lent).managed);
+        tensor.shape = shape;
+        tensor.strides = strides;
+        *ctx = lent.cast();
+        &raw mut (*lent).managed
+    }
 }
 
 /// Lends buffer `i` of `msg` as a 1.x DLPack tensor. The message stays alive
 /// until the consumer calls the tensor's deleter.
 pub fn export_versioned(msg: Arc<Message>, i: usize) -> *mut DLManagedTensorVersioned {
-    let lent = lend(msg, i, |dl_tensor| DLManagedTensorVersioned {
+    let make = |dl_tensor| DLManagedTensorVersioned {
         version: VERSION,
         manager_ctx: ptr::null_mut(),
         deleter: Some(delete_versioned),
         flags: 0,
         dl_tensor,
-    });
-    // SAFETY: `lent` was just allocated by `lend` and is not shared yet.
-    unsafe {
-        (*lent).managed.manager_ctx = lent.cast();
-        &raw mut (*lent).managed
-    }
+    };
+    lend(msg, i, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
 }
 
 /// Lends buffer `i` of `msg` as an unversioned DLPack tensor, for consumers that
 /// do not know the 1.x protocol.
 pub fn export_legacy(msg: Arc<Message>, i: usize) -> *mut DLManagedTensor {
-    let lent = lend(msg, i, |dl_tensor| DLManagedTensor {
+    let make = |dl_tensor| DLManagedTensor {
         dl_tensor,
         manager_ctx: ptr::null_mut(),
         deleter: Some(delete_legacy),
-    });
-    // SAFETY: `lent` was just allocated by `lend` and is not shared yet.
-    unsafe {
-        (*lent).managed.manager_ctx = lent.cast();
-        &raw mut (*lent).managed
-    }
+    };
+    lend(msg, i, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
 }
 
 unsafe extern "C" fn delete_versioned(t: *mut DLManagedTensorVersioned) {
@@ -458,6 +468,22 @@ mod tests {
         assert_eq!(
             Tensor::new(vec![7.0], &[], None).copy(&field(&[])).unwrap(),
             [7.0]
+        );
+    }
+
+    #[test]
+    fn copies_broadcast_dimensions() {
+        // [0, 1, 2] repeated over rows (stride 0 outside), and each of
+        // [[0], [1]] repeated along a row (stride 0 inside).
+        let mut rows = Tensor::new(range(3), &[2, 3], Some(&[0, 1]));
+        assert_eq!(
+            rows.copy(&field(&[2, 3])).unwrap(),
+            [0., 1., 2., 0., 1., 2.]
+        );
+        let mut cols = Tensor::new(range(2), &[2, 3], Some(&[1, 0]));
+        assert_eq!(
+            cols.copy(&field(&[2, 3])).unwrap(),
+            [0., 0., 0., 1., 1., 1.]
         );
     }
 

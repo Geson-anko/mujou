@@ -43,9 +43,19 @@ impl FieldSpec {
         usize::from(self.dtype.bits / 8) * usize::from(self.dtype.lanes)
     }
 
-    /// The size of the field as compact row-major bytes.
+    /// The size of the field as compact row-major bytes. Cannot overflow for the
+    /// fields of a [`Schema`], which checks it.
     pub fn nbytes(&self) -> usize {
         self.numel() * self.elem_bytes()
+    }
+
+    /// `nbytes`, or `None` if it exceeds `isize::MAX`, the most one allocation
+    /// (and a pointer offset within it) can span.
+    fn checked_nbytes(&self) -> Option<usize> {
+        let nbytes = self.shape.iter().try_fold(self.elem_bytes(), |acc, &n| {
+            acc.checked_mul(usize::try_from(n).ok()?)
+        })?;
+        (nbytes <= isize::MAX as usize).then_some(nbytes)
     }
 }
 
@@ -57,8 +67,8 @@ pub struct Schema {
 
 impl Schema {
     /// Checks that there is at least one field, the names are distinct, every
-    /// extent is at least 1 (a 0-dimensional shape is fine), and every dtype is a
-    /// scalar of whole bytes.
+    /// extent is at least 1 (a 0-dimensional shape is fine), every dtype is a
+    /// scalar of whole bytes, and every field fits in one allocation.
     pub fn new(fields: Vec<FieldSpec>) -> Result<Self, SlotError> {
         if fields.is_empty() {
             return Err(SlotError::InvalidSchema(
@@ -85,6 +95,14 @@ impl Schema {
                 return Err(SlotError::InvalidSchema(format!(
                     "field '{}': unsupported dtype {}",
                     f.name,
+                    format_dtype(f.dtype)
+                )));
+            }
+            if f.checked_nbytes().is_none() {
+                return Err(SlotError::InvalidSchema(format!(
+                    "field '{}': shape {} of {} takes more than isize::MAX bytes",
+                    f.name,
+                    format_shape(&f.shape),
                     format_dtype(f.dtype)
                 )));
             }
@@ -441,6 +459,9 @@ impl Slot {
 
     /// Waits until the slot holds a message other than `last`, up to `timeout` of
     /// real time. With `last` absent, returns the current message at once.
+    ///
+    /// Only for the host (`subscribe`): a node must never wait for another, so the
+    /// ports that nodes use do not expose it.
     pub fn wait_newer(
         &self,
         last: Option<&Arc<Message>>,
@@ -456,6 +477,10 @@ impl Slot {
     }
 
     /// Sets the value and its time as they were when the state was taken.
+    ///
+    /// Call it only while no node runs (before the start, or while every node is
+    /// paused with the timer frozen): it is a second way to write the slot, beside
+    /// its writer, and the readers' handles reach it too.
     pub fn restore<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<(), E> {
         let msg = self.messages.build(time_ns, fill)?;
         self.publish(msg);
@@ -479,6 +504,12 @@ pub enum Target {
 
 /// The sending side of one port and the only writer of its slots: the outward
 /// slot, which the host reads, and one slot per channel, which the peer reads.
+///
+/// Being the only writer is up to the caller: `send_with` takes `&self`, and the
+/// port that owns the outlet accepts sends only from its node's thread. Sends
+/// from two threads at once stay memory safe, but the slots may then keep their
+/// messages out of time order, and `Target::All` may leave the outward slot and
+/// the channels holding different messages.
 pub struct Outlet {
     messages: Arc<Messages>,
     outbox: Arc<Slot>,
@@ -615,7 +646,7 @@ impl InputGroup {
     /// `fill(i, bytes)` fills the message of `slots[i]`. Every message is filled
     /// before any is placed, so if one `fill` fails no slot changes.
     ///
-    /// Panics if a slot belongs to another group.
+    /// Panics if a slot belongs to another group or appears more than once.
     pub fn write<E>(
         &self,
         slots: &[&InputSlot],
@@ -624,6 +655,13 @@ impl InputGroup {
         assert!(
             slots.iter().all(|s| std::ptr::eq(&*s.group, self)),
             "every slot must belong to this input group"
+        );
+        assert!(
+            slots
+                .iter()
+                .enumerate()
+                .all(|(i, a)| slots[..i].iter().all(|b| !std::ptr::eq(*a, *b))),
+            "each slot may appear only once in a write"
         );
         let _guard = lock(&self.write_lock);
         let filled = slots
@@ -673,6 +711,10 @@ impl InputSlot {
     }
 
     /// Sets the value and its time as they were when the state was taken.
+    ///
+    /// Call it only while no node runs (before the start, or while every node is
+    /// paused with the timer frozen): it is a second way to write the slot, beside
+    /// its writer, and the readers' handles reach it too.
     pub fn restore<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<(), E> {
         let current = self.messages.build(time_ns, fill)?;
         let _guard = lock(&self.group.write_lock);
@@ -765,6 +807,9 @@ mod tests {
         assert!(Schema::new(vec![]).is_err());
         assert!(Schema::new(vec![field("a", &[]), field("a", &[2])]).is_err());
         assert!(Schema::new(vec![field("a", &[2, 0])]).is_err());
+        // 2^61 int64 elements are 2^64 bytes, and 2^32 x 2^32 overflows usize.
+        assert!(Schema::new(vec![field("a", &[1 << 61])]).is_err());
+        assert!(Schema::new(vec![field("a", &[1 << 32, 1 << 32])]).is_err());
         let mut f = field("a", &[2]);
         f.dtype.lanes = 4;
         assert!(Schema::new(vec![f]).is_err());

@@ -75,8 +75,10 @@ class TestSchema:
             [("a", (2,), (2, 32, 1)), ("a", (3,), (2, 32, 1))],
             [("a", (2, 0), (2, 32, 1))],
             [("a", (2,), (2, 32, 4))],
+            [("a", (2**61,), (2, 32, 1))],
+            [("a", (2**32, 2**32), (2, 32, 1))],
         ],
-        ids=["empty", "duplicate", "zero-extent", "vector-dtype"],
+        ids=["empty", "duplicate", "zero-extent", "vector-dtype", "huge", "overflow"],
     )
     def test_rejects_invalid_fields(
         self, fields: list[tuple[str, tuple[int, ...], DLDataType]]
@@ -119,9 +121,16 @@ class TestOutlet:
             lambda x: x.T,
             lambda x: x[:, ::2],
             lambda x: x[1:],
-            lambda x: x.unsqueeze(0).expand(2, -1, -1)[1],
+            lambda x: x[0].expand(4, 6),
+            lambda x: x[:, :1].expand(4, 6),
         ],
-        ids=["transposed", "sliced", "storage-offset", "expanded"],
+        ids=[
+            "transposed",
+            "sliced",
+            "storage-offset",
+            "broadcast-rows",
+            "broadcast-cols",
+        ],
     )
     def test_copies_non_contiguous_tensors(
         self, make: Callable[[torch.Tensor], torch.Tensor]
@@ -233,6 +242,16 @@ class TestOutlet:
         assert view.__dlpack_device__() == (1, 0)
 
     @pytest.mark.parametrize(
+        "kwargs",
+        [{"copy": True}, {"dl_device": (2, 0)}],
+        ids=["copy", "cuda-device"],
+    )
+    def test_view_refuses_what_it_cannot_lend(self, kwargs: dict[str, object]):
+        (view,) = Outlet(tensor_schema((2,)), 0, "p").outbox.read().buffers
+        with pytest.raises(BufferError):
+            view.__dlpack__(**kwargs)  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize(
         ("value", "expected"),
         [
             (torch.zeros(3, 2), "shape (2, 3), got (3, 2)"),
@@ -256,14 +275,22 @@ class TestOutlet:
         outlet = Outlet(
             schema(("x", (2,), torch.float32), ("y", (2,), torch.float32)), 0, "p"
         )
-        with pytest.raises(ValueError, match="field count") as exc:
+        with pytest.raises(ValueError, match="expected 2 tensors") as exc:
             outlet.send([torch.zeros(2)])
+        assert "slot 'p/out'" in str(exc.value)
         assert "'x', 'y'" in str(exc.value)
 
-    def test_rejects_values_without_dlpack(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p")
-        with pytest.raises(TypeError, match="DLPack"):
+    def test_rejects_values_without_dlpack_naming_slot_and_field(self):
+        outlet = Outlet(schema(("x", (2,), torch.float32)), 0, "p")
+        with pytest.raises(TypeError, match="DLPack") as exc:
             outlet.send([[1.0, 2.0]])  # pyright: ignore[reportArgumentType]
+        assert "slot 'p/out', field 'x'" in str(exc.value)
+
+    def test_producer_errors_name_the_slot(self):
+        outlet = Outlet(tensor_schema((2,)), 0, "p")
+        with pytest.raises(BufferError) as exc:
+            outlet.send([torch.zeros(2, requires_grad=True)])
+        assert any("slot 'p/out'" in note for note in exc.value.__notes__)
 
     def test_rejects_a_bare_tensor_for_the_sequence(self):
         outlet = Outlet(tensor_schema((2,)), 0, "p")
@@ -302,7 +329,9 @@ class TestSlotWaitNewer:
 
         writer = threading.Thread(target=write)
         writer.start()
-        # The writer can only run while this thread waits if the wait drops the GIL.
+        # With the GIL (the CI job on the default build), the writer can only run
+        # while this thread waits if the wait drops it. The free-threaded build
+        # checks nothing about the GIL here.
         started.set()
         msg = outlet.outbox.wait_newer(last, 10.0)
         writer.join()
@@ -336,6 +365,13 @@ class TestInputGroup:
             group.write([(x, [torch.ones(2)]), (y, [torch.ones(3)])])
         assert torch.equal(values(x.read())[0], torch.zeros(2))
         assert torch.equal(values(y.read())[0], torch.zeros(2))
+
+    def test_rejects_slot_given_twice(self):
+        group = InputGroup()
+        x = group.input(tensor_schema((2,)), "x")
+        with pytest.raises(ValueError, match="more than once"):
+            group.write([(x, [torch.ones(2)]), (x, [torch.zeros(2)])])
+        assert torch.equal(values(x.read())[0], torch.zeros(2))
 
     def test_rejects_slot_of_another_group(self):
         other = InputGroup().input(tensor_schema((2,)), "x")

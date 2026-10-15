@@ -99,22 +99,37 @@ class Slot:
 
         Returns ``None`` after ``timeout`` seconds of real time. With ``last``
         ``None``, returns the current value at once.
+
+        Only for the host's ``subscribe``: a node must never wait for another,
+        so ports do not expose it.
         """
 
     def restore(self, values: Sequence[SupportsDLPack], time_ns: int) -> None:
-        """Set the value and its time as they were when the state was taken."""
+        """Set the value and its time as they were when the state was taken.
+
+        Call it only while no node runs (before the start, or while every node
+        is paused): it writes beside the slot's own writer.
+        """
 
 @final
 class Outlet:
     """The sending side of one port and the only writer of its slots.
 
-    Values are copied in, so changing them afterwards does not change what
-    readers see.
+    The caller keeps it the only writer: send from one thread at a time (the
+    owning node's). Concurrent sends stay memory safe but may leave the slots
+    out of time order, or the outward slot and the channels holding different
+    messages.
+
+    Values are copied in without the GIL, so changing them afterwards does not
+    change what readers see. Resizing or freeing a value from another thread
+    while it is being sent is a data race in the caller's code.
 
     Raises (``send``, ``send_to``):
         ValueError: The number of values, a shape or a dtype differs from the
             schema. The message names the slot and the field.
         TypeError: A value does not support DLPack or is not in host memory.
+            Pinned memory is read without synchronizing any CUDA stream, so
+            synchronize the copy that filled it before sending.
         IndexError: No such channel.
     """
 
@@ -145,9 +160,11 @@ class InputGroup:
     ) -> None:
         """Write every item at once, all stamped with the same time.
 
-        No reader sees some of the slots new and others old. If any value is
-        invalid, no slot changes. Raises as ``Outlet.send`` does, and
-        ``ValueError`` for a slot of another group.
+        No reader sees some of the slots new and others old at any one
+        moment; a reader that reads two slots one after the other may still
+        see a write complete in between. If any value is invalid, no slot
+        changes. Raises as ``Outlet.send`` does, and ``ValueError`` for a slot
+        of another group or a slot given twice.
         """
 
 @final
@@ -158,6 +175,10 @@ class InputSlot:
     def name(self) -> str: ...
     def read(self) -> Message: ...
     def restore(self, values: Sequence[SupportsDLPack], time_ns: int) -> None:
-        """Set the value and its time, dropping any pending write."""
+        """Set the value and its time, dropping any pending write.
+
+        Call it only while no node runs (before the start, or while every node
+        is paused).
+        """
 
 # --- runtime (WP-B)
