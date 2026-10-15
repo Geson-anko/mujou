@@ -18,12 +18,14 @@ setup:
 format:
     uv run pre-commit run -a
 
-# Run pytest (all tests, including slow ones)
+# Run cargo test and pytest (all tests, including slow ones)
 test:
+    cargo test --workspace
     uv run pytest -v --cov
 
-# Run pytest without slow convergence / training checks
+# Run cargo test and pytest without slow convergence / training checks
 test-fast:
+    cargo test --workspace
     uv run pytest -v -m "not slow"
 
 # Run pyright strict over src/

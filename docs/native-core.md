@@ -58,6 +58,14 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 
 ## ツールチェーン
 
-maturin のビルドバックエンド、Rust の lint・テスト、CI、`just` レシピはまだ整えていない。最初の実装タスクで整える。
+リポジトリのルートを Cargo workspace にし、crate を 2 つに分ける。
 
-拡張モジュールの `mujou._core` は型情報を持たないので、pyright strict を通すために型スタブ `_core.pyi` を用意する。手で書くか、`pyo3-stub-gen` などで生成するかは、実装するときに決める。
+| crate                  | 中身                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `crates/mujou-core`    | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る           |
+| `crates/mujou-python`  | PyO3 の bindings。拡張モジュール `mujou._core` になる。free-threaded 対応を明示する（`gil_used = false`） |
+
+- Python のパッケージのビルドバックエンドは maturin にする。`uv sync` が拡張モジュールをビルドし、`src/mujou/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
+- 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `mujou._core.__version__` を再 export する
+- `just test` は `cargo test --workspace` と pytest を回す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で回す
+- 型スタブ `src/mujou/_core.pyi` は手で書く。公開する名前が増えたら `pyo3-stub-gen` での生成を検討する

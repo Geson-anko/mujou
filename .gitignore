@@ -42,5 +42,9 @@ Thumbs.db
 # Rust
 target/
 
+# Native extension built in place by the editable install
+src/mujou/*.so
+src/mujou/*.pyd
+
 # Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
 .venv-devcontainer/
