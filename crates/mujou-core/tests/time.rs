@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use mujou_core::time::{GlobalTimer, TimerError, TimerState, seconds_to_ns};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use mujou_core::time::{GlobalTimer, TimerError, TimerState, Wait, seconds_to_ns};
 
 const SECOND: u64 = 1_000_000_000;
 
@@ -217,6 +219,39 @@ mod virtual_clock {
         assert!(!timer.wait_until_ns(target, Duration::from_millis(10)));
         timer.advance_ns(1).unwrap();
         assert!(timer.wait_until_ns(target, Duration::ZERO));
+    }
+
+    #[test]
+    fn wait_until_or_wakes_on_interrupt() {
+        let timer = Arc::new(virtual_timer());
+        let flag = Arc::new(AtomicBool::new(false));
+        let waiter = {
+            let (timer, flag) = (Arc::clone(&timer), Arc::clone(&flag));
+            thread::spawn(move || {
+                let target = timer.time_ns() + 1;
+                timer.wait_until_ns_or(target, Duration::MAX, || flag.load(Ordering::SeqCst))
+            })
+        };
+        // Whether the waiter is already asleep or not, it must see the flag.
+        flag.store(true, Ordering::SeqCst);
+        timer.interrupt_waiters();
+        assert_eq!(waiter.join().unwrap(), Wait::Interrupted);
+    }
+
+    #[test]
+    fn wait_until_or_wakes_at_the_target() {
+        let timer = Arc::new(virtual_timer());
+        let target = timer.time_ns() + 5;
+        let waiter = {
+            let timer = Arc::clone(&timer);
+            thread::spawn(move || timer.wait_until_ns_or(target, Duration::MAX, || false))
+        };
+        timer.advance_ns(5).unwrap();
+        assert_eq!(waiter.join().unwrap(), Wait::Reached);
+        assert_eq!(
+            timer.wait_until_ns_or(target + 1, Duration::from_millis(5), || false),
+            Wait::TimedOut
+        );
     }
 
     #[test]
