@@ -2,7 +2,7 @@
 
 mujou は、ノードの内側の計算に PyTorch を全面的に採用する。この文書では、モジュールの構成と、PyTorch を使うノードの方針・ノードの基底クラス `mujou.Node` の仕様を定める。
 
-> 状態: `mujou.Node` は未実装。コアのノード（`mujou._core.Node`）を実装してから作る。
+> 状態: `mujou.Node` は実装済み（2026-10-16）。Port の読み書きの実装は [ネットワーク](network.md#port-の読み書き) を参照。
 
 ## モジュールの構成
 
@@ -50,7 +50,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ### 実行スレッドの設定
 
-`on_start` はノードを実行するスレッドの上で呼ばれる（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` は `on_start` で次を設定する。どれもスレッドごとの設定なので、ほかのノードには影響しない。
+フレームワークは、ノードを実行するスレッドの上で、`on_start` の前に `_on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
@@ -58,7 +58,9 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 | ストリーム | CUDA のときは自分の `torch.cuda.Stream` を作り、`torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | 乱数生成器 | ノードごとの `torch.Generator` を、渡された seed で作る | 既定の乱数生成器はプロセス全体で共有されるので、テストが決定的でなくなる |
 
-デバイスと seed は、`mujou.Node` の構築時に渡す。
+デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA で、それ以外は `ValueError`。seed を省略すると、乱数生成器は決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動き、そのときは CPU で、seed は省略したのと同じになる。
+
+乱数生成器は `self.generator` で使う。スレッドで作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。`_on_thread_start` は記録したスレッドの ID（`threading.get_ident()`）を、Port の `send` が所有ノードのスレッドかを確かめるのに使う。
 
 ### 境界の変換
 
@@ -90,6 +92,8 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
 CPU で計算する torch の演算は、呼び出したスレッドごとに内部でスレッドを立てる。ノードの数と内部のスレッド数の積がコア数を大きく超えると、CPU を取り合って全体が遅くなる。内部のスレッド数は小さく設定しておく。
+
+mujou は内部のスレッド数を設定しない。プロセス全体の設定なので、ホストが `run()` の前に決める。目安は、CPU で計算するノードの数と `torch.set_num_threads(n)` の `n` の積が、物理コア数を超えないようにすることである。小さな行列を扱うノードが多いときは `n = 1` でよい。
 
 ## 性能の測定
 

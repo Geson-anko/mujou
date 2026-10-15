@@ -4,7 +4,11 @@
 
 ## ネットワークスキーマの API
 
-ノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で記述してスキーマオブジェクトを作ることは決定済み。Port・Channel による双方向接続の仕組みも決定済み。Node と Network の Composite、`a.connect(b)`、PrevPort・NextPort も決定済み。実行と外からの読み書き（バックグラウンドでの `run`、`write`・`read`・`subscribe`、版番号による一斉切り替え、例外の伝え方）は暫定案を置いた（[ネットワークの入力と出力](network.md#ネットワークの入力と出力)）。API の具体的な形（クラス名・メソッド名、shape の決め方など）は未決定。すべての値を記録する読み出しは future work。関連: [ネットワーク](network.md)
+ノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で記述してスキーマオブジェクトを作ることは決定済み。Port・Channel による双方向接続の仕組み、Node と Network の Composite、`a.connect(b)`、PrevPort・NextPort も決定済み。
+
+クラス名・メソッド名と、実行と外からの読み書き（`mujou.run`、`write`・`read`・`subscribe`、版番号による一斉切り替え、例外の伝え方）は、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](network.md#実装)）。そのうち次の 3 点は docs の当初の案から変えた。`run()` は全ノードの起動が終わってから戻る（当初は「すぐに戻る」）。`state_dict()` は実行中だけ呼べる（当初は「いつでも」）。相手 1 つの Port への 2 本目の接続は `connect` の時点でエラーにする（当初は「構築時」）。`send_to` だけを使う Port を外から読むと初期値が返る。
+
+shape の決め方は未決定。すべての値を記録する読み出しは future work。関連: [ネットワーク](network.md)
 
 ## 実行の配置
 
@@ -12,7 +16,9 @@
 
 ## ライフサイクルの細部
 
-hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・状態の取得・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、全ノードの引数なしの `on_exception()` を呼び、設定しておけばそのときの状態の木を取得することも決定済み。状態の保存はユーザーが行う。停止のタイムアウトの既定値、スロットを識別する名前の付け方、例外のときの木を受け取る API の名前は未決定。関連: [ノード](nodes.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の取得復元)
+hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・状態の取得・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、全ノードの引数なしの `on_exception()` を呼び、設定しておけばそのときの状態の木を取得することも決定済み。状態の保存はユーザーが行う。
+
+停止のタイムアウトの既定値（実時間 10 秒）、スロットを識別する名前（`"body.l1.next/out"` など）、例外のときの木を受け取る API（`run(capture_state_on_exception=True)` と `exception_state_dict()`）、例外で終了した後にタイマーを再開することは、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](execution-model.md#実装-1)）。正常な終了と例外の終了処理にタイムアウトが無いこと（止まらないノードがあると `shutdown()` が戻らず、Ctrl-C でだけ抜けられる）も確認待ち。関連: [ノード](nodes.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の取得復元)
 
 ## 時定数
 
@@ -24,24 +30,15 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## mujou.Node の細部
 
-GPU をサポートしないこと、private な `mujou._core` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を `on_start` で設定することは決定済み。`mujou.*` のトップレベルに公開する名前の一覧（PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み、[更新手法](update-rules.md#実装と公開元)）、サブクラスが `on_start` を override したときに設定が漏れない仕組み、torch の内部スレッド数を誰がどう決めるかは未決定。関連: [PyTorch の利用](torch.md)
+GPU をサポートしないこと、private な `mujou._core` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を設定することは決定済み。
+
+次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ `_on_thread_start()` で行い、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
 
 ## グローバルタイマーとスケジューラの境界
 
-グローバルタイマーは実装済み（[実行モデル](execution-model.md#グローバルタイマー)）。スケジューラを実装するときに、次を決める。
+ノードの実行と制御は実装した（[実行モデル](execution-model.md#実装-1)）。pamiq-core の `thread_control.py` に倣い、制御は 1 本のスレッドに直列化した。$\Delta t = 0$ で待つノードは、目標の時刻か制御の要求で起きる。
 
-ノードのスレッドを起こす方法と、例外を制御側に伝える方法は、pamiq-core の `thread_control.py`（<https://github.com/MLShukai/pamiq-core/blob/main/src/pamiq_core/thread/thread_control.py>）に倣う方向で考える。
-
-- `ThreadController`: 制御側から各スレッドへの指示。再開のイベント（停止で clear）と終了のイベントを持つ。終了は、待っているスレッドをすぐ起こすために、先に再開のイベントを set してから終了のイベントを set する。**制御するのは 1 本のスレッドだけ**と決めている。ノードには読み取り専用の view（`ReadOnlyController`）だけを渡す
-- `ThreadStatus`: 各スレッドから制御側への報告。停止したことのイベントと、例外が起きたことのイベントを持つ。制御側は `ThreadStatusesMonitor` で、全スレッドが停止するのをタイムアウト付きで待ち、例外のフラグを確かめる
-- ノードのループは、区切りごとに再開のイベントを見て、停止中は再開か終了まで待つ（`manage_loop`）
-
-この方式で、次の 2 点に答えられる見込みである。
-
-- 目標周期の期限まで待っているノードを停止要求で起こす方法: 今の `wait_until_ns` は目標時刻かタイムアウトでしか戻らない。周期の待ちを、グローバル時間の期限に加えて制御のイベントでも起きるようにする
-- 状態の取得と例外時の凍結が重なったときに、片方の再開がもう片方の凍結を解かないようにする方法: 制御を 1 本のスレッドに直列化する。例外で終了した後に停止したまま残るタイマーの扱いも、この制御スレッドの終了処理で決める
-
-残りは次の 2 点である。時刻の読み取りが Mutex を取ることによる競合（性能が問題になったら seqlock などを検討する）。実経過を f64 で扱うことによる、長時間の実行での分解能の低下。
+残りは次の 3 点である。時刻の読み取りが Mutex を取ることによる競合（性能が問題になったら seqlock などを検討する）。実経過を f64 で扱うことによる、長時間の実行での分解能の低下。1 つのネットワークの停止がプロセスのグローバル時間を止め、同時に走るほかのネットワークも止めること（[複数のネットワーク](execution-model.md#複数のネットワーク)、この意味でよいかユーザー確認待ち）。
 
 ## ライセンス
 

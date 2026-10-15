@@ -7,7 +7,8 @@ metadata:
 
 2026-10-14 決定（暫定）。ユーザーが方針（バックグラウンド実行、run 前の初期値書き込み、複数 Port の同時書き込み、read と subscribe）を決め、細部はユーザーの指示で Claude が暫定案として考案した。詳細は `docs/network.md` のネットワークの入力と出力の節。
 
-- **`run()` は常にバックグラウンドで実行し、すぐ戻る（ユーザーの決定）。** ホストは公開インターフェイスだけでやり取りする。インターフェイスは `build()` を呼んだルートのインスタンスが持つ（インスタンスが定義と実行を兼ねる方針、[[project-node-lifecycle]]）
+- **2026-10-16 に実装（名前は推奨案、ユーザー確認待ち）。** `mujou.run(network)` は未 build なら build して run し、同じ network を返す。`run()` は全ノードの `on_start`（と復元）が終わり、タイマーが動き出してから戻る（起動中の例外を `run()` が送出するため。当初の「すぐ戻る」から変更）。`state_dict()` は実行中だけ（run 前・正常終了後は `RuntimeError`、例外終了後は `NetworkError`）。`subscribe` は呼んだ後に書かれた値だけを返す。`send_to` だけの Port の `read` は初期値。詳細は `docs/network.md` の実装の節
+- **`run()` は常にバックグラウンドで実行する（ユーザーの決定）。** ホストは公開インターフェイスだけでやり取りする。インターフェイスは `build()` を呼んだルートのインスタンスが持つ（インスタンスが定義と実行を兼ねる方針、[[project-node-lifecycle]]）
 - **操作:** `build()`、`write(...)`、`load_state_dict(state)`（run 前）、`run()`、`read(port)`、`subscribe(port)`、`state_dict()`、`shutdown()`、`join()`
 - **paused 起動は持たない。run 前に `write` した値がそのスロットの初期値になる（ユーザーの決定）。** `load_state_dict` の後に書いた値が優先
 - **書く値・読む値は `torch.Tensor`（2026-10-15）。** `read` / `subscribe` は CPU 上の値を返す。`write` は値を `detach()` し、GPU 上の値はホストへコピーしてから受け取る（[[project-message-types]]）
@@ -18,6 +19,6 @@ metadata:
 
 **Why:** 外の消費者や生産者の速さがノードの歩調に影響しないこと（非同期性）を、入出力の境界でも守るため。
 
-**How to apply:** 実装中に問題が出たら見直してよい暫定案として扱い、変える場合はユーザーに確認する。名前は未決定。
+**How to apply:** 実装中に問題が出たら見直してよい暫定案として扱い、変える場合はユーザーに確認する。名前は推奨案で実装済みで、ユーザー確認待ち。
 
 関連: [[project-network-ports]], [[project-shutdown-on-exception]], [[project-message-types]]
