@@ -52,3 +52,8 @@
 - 復元の順序（停止 → load → 起動 → 再開）と、Δt を ns の差から作ることを `docs/execution-model.md` に追記
 - 見送り（`memory/project_open_decisions.md` に記録）: 停止要求で待機を起こす方法、pause の持ち主、Mutex の競合、f64 の分解能
 - 見送り: `state_dict` の TypedDict（実行時に存在しない型を stub に置くことになる）、`load_state_dict` の例外の型の統一（private）、`import mujou` で `mujou.time` を読み込まない（`torch` 同様に明示 import でよい）
+
+## ユーザーのフィードバック（2026-10-15）
+
+- 「スレッドを起こす・例外を送る方法は pamiq-core の thread_control.py を見るべき」→ 未決定事項（docs/open-decisions.md、memory/project_open_decisions.md）に、ThreadController / ThreadStatus / 制御は 1 本のスレッドだけ、の方式に倣う方向として記録。レビューで持ち越した 2 点（停止要求で待ちを起こす、pause の持ち主）にこれで答える見込み
+- 「time は pamiq-core の time.py を参考にしたか」→ 設計前に読み、anchor の方式を引き継いだ。意図して変えた点（時刻は 1 本で 0 起点、sleep はグローバル時間で待ち停止中は戻らない、状態にスケール、仮想時計）を docs/execution-model.md の実装節に明記
