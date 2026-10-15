@@ -29,3 +29,4 @@
 - nit `PYTHON_GIL=0` があるとテストが素通りする → subprocess の env から除いた
 - nit CLAUDE.md の pre-commit の列挙 → cargo fmt / clippy を追加
 - 見送り: プレリリース版での版数のずれ（今は起きない）、`just clean` の拡張（範囲外）、`gil_used = false` は既定値だが意図の明示として残す
+- workflow scope が付いたので、test.yml と type-check.yml の paths に `**/*.rs`・`**/Cargo.toml`・`Cargo.lock` を追加（2026-10-15）

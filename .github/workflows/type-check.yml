@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "src/**/*.py"
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
@@ -13,6 +16,9 @@ on:
     branches: [main]
     paths:
       - "src/**/*.py"
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
