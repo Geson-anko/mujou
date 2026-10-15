@@ -9,7 +9,7 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | モジュール | torch への依存 | 中身 |
 | --- | --- | --- |
 | `mujou._core` | しない | Rust コアの Python インターフェース（private）。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
-| それ以外 | する | `mujou.Node`、`TensorSpec`、PC-ALM のノード、Port での `torch.Tensor` の読み書きなど |
+| それ以外 | する | `mujou.Node`、`TensorSpec`、PC-ALM のノード（`mujou.pc`）、Port での `torch.Tensor` の読み書きなど |
 
 torch は mujou の必須の依存である。`mujou._core` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
 

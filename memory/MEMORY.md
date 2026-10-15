@@ -17,6 +17,7 @@
 - [非同期ノードの実行](project_async_node_execution.md) — queue・pipe を使わず lock 付きの値の読み書きだけで共有。グローバルタイマー上の微分方程式として各ノードが独自に更新する
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust、Python はインターフェース。ノードはタスクと専用スレッドの混在で実行。コアの値の型は内部に閉じ、torch とは DLPack で必ずコピー
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ（mujou.Tensor・mujou.dtypes・mujou.default.dtype は廃止）、torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
+- [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）
 - [ノードのライフサイクル](project_node_lifecycle.md) — ノードが分散処理の最小単位。on_start / on_update(dt) / on_pause / on_resume / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → 木をコピー → 再開 → ホストに返す。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_stop、ホストへ最初の例外を送出。設定で state tree を取得（保存はユーザー）。部分停止・再起動・スキップはしない

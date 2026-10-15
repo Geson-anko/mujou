@@ -24,7 +24,7 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## mujou.Node の細部
 
-GPU をサポートしないこと、private な `mujou._core` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を `on_start` で設定することは決定済み。`mujou.*` のトップレベルに公開する名前の一覧、サブクラスが `on_start` を override したときに設定が漏れない仕組み、torch の内部スレッド数を誰がどう決めるかは未決定。関連: [PyTorch の利用](torch.md)
+GPU をサポートしないこと、private な `mujou._core` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を `on_start` で設定することは決定済み。`mujou.*` のトップレベルに公開する名前の一覧（PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み、[更新手法](update-rules.md#実装と公開元)）、サブクラスが `on_start` を override したときに設定が漏れない仕組み、torch の内部スレッド数を誰がどう決めるかは未決定。関連: [PyTorch の利用](torch.md)
 
 ## ライセンス
 
