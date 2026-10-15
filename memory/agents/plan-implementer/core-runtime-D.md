@@ -78,3 +78,47 @@
 - `on_update` をインスタンス属性で包むので、`vars(node)` に `on_update` / `state_dict` が現れる。利用者がそれを見ることはまず無いが、ノードの属性を走査するコードには見える
 - 例外で終わったネットワークは、ホストが触るまで `_RUNNING` に残る（メモリだけで、スレッドは止まっている）
 - `threading._register_atexit` は private な API
+
+## 再レビュー（r2）への対応（2026-10-16）
+
+対象: `memory/agents/{code-reviewer,algorithm-reviewer}/core-runtime-D-r2.md`（main checkout 側）。orchestrator の裁定どおり。B の simplifier（03b2bca）を含む merge の後で対応した。
+
+### IF の変更（`_core`）
+
+- `_core.Node` にフレームワーク用の hook を 2 つ足した（`crates/mujou-python/src/runtime.rs`、`_core.pyi`）。どちらも他の hook と同じく `start` の最後に bound method を引く
+    - `_after_update()`: ランタイムが各 `on_update` の直後に同じスレッドで呼ぶ。既定は何もしない。投げると `on_update` と同じく全体が終了する（hook 名は `_after_update`）
+    - `_capture_state()`: 状態の取得（通常と例外のとき）で、ランタイムは `state_dict()` の代わりにこれを呼ぶ。既定は `self.state_dict()` を返す。エラーの hook 名は `state_dict` のまま（`attribute(hook)` で呼ぶ属性だけを差し替える）
+- `test_core_runtime.py` の `TestFrameworkHooks`（順序とスレッド、置き換え、エラーの名前）
+
+### mujou.Node の変更
+
+- インスタンス属性で `on_update` / `state_dict` を包むのをやめた（code should-fix 1 の根本対応）。実行後の `vars(node)` に hook が残らず、pickle・deepcopy・2 回目の実行の問題が消える。利用者が hook を置き換えても同期が外れない（code nit 1）
+- `_after_update`: CUDA なら自分のストリームを同期する
+- `_capture_state`: hook の中の印を立て、CUDA なら `with torch.cuda.stream(自分のストリーム):` の下で、同期 → `state_dict()` → 同期。最初の同期で、`on_update` 以外の hook（`on_start`・`load_state_dict`・`on_pause`）が積んだ仕事も終わる（algorithm must-fix の RAW）。後の同期で、`state_dict` が自分のストリームに積んだコピーが終わってから、フレームワークが既定のストリームで木をコピーする
+- `Session._tree` は、コピーの後、build から戻る前（= ノードの再開の前）に、制御スレッドの current stream を初期化済みの全デバイスで同期する（code must-fix 2 / algorithm must-fix の WAR）。例外のときの取得も同じ `_tree` を通る
+- `load_state_dict` の同期は、デバイス全体ではなくホストのスレッドの current stream に（algorithm nit 2）
+- `device="cuda"` などの添字の無いデバイスは、`__init__` で `torch.device("cuda", torch.cuda.current_device())` に決める。CUDA が使えなければ構築時に `ValueError`（code must-fix 1）。`set_device` は添字付きで呼ぶ
+
+### Session の変更
+
+- `run` は `start` が戻るまで `_run_lock` を持つ。`write` の分岐の判定と木の時刻での restore、`load_state_dict` 全体も同じ lock の下（algorithm nit 1 / code nit 2）。ノードの `on_start` からホストのメソッドを呼ぶと lock の前に `RuntimeError` になるので、デッドロックはしない
+- `load_state_dict` は、スロットの組（`(value, time_ns)`）と時刻の型の検査、ノードの状態の deepcopy をすべて済ませてから書き換える（code should-fix 3）
+- `_shutdown_all` は `NetworkError` 以外の例外（Ctrl-C など）も捕まえて残りのセッションを止め、最後に最初の例外を送出する（code nit 5）
+- `recv` の docstring の Raises に、所有ノード以外のスレッドからの `RuntimeError` を足した（code should-fix 2）
+
+### テスト
+
+- `state_dict` の hook（制御スレッド）からホストのメソッドを呼ぶと `RuntimeError`（algorithm nit 5）
+- 壊れた木（先頭のスロットの値を変え、最後のスロットの時刻を float に）で、何も変わらない
+- 実行と取得の後、ノードの `__dict__` に `on_update` / `state_dict` が無い
+- CUDA が無いときの `Node(device="cuda")` は `ValueError`。CUDA があれば添字が決まる（skip）
+
+### docs
+
+- torch.md: 同期の表とフレームワーク用の hook、取得の同期の順序、添字の決め方。nodes.md: フレームワーク用の hook 3 つを一段落で。execution-model.md: 実装の節の CUDA の項目
+- network.md: 「ホストが終了を見るまで」（code nit 3, 4 / algorithm nit 3）、hook からはほかのネットワークのメソッドも呼べず、橋渡しはホストのスレッドか I/O のノードで書く（code nit 6、仕様として維持）
+
+### 記録だけ
+
+- algorithm nit 4: `exception_state_dict` は `_session()` を通らないので hook から呼べる。読み取りだけで待たないので、そのままにした
+- CUDA の経路は引き続き未実測
