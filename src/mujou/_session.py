@@ -193,18 +193,27 @@ class Session:
         runtime = _core.Runtime(self._nodes, self._paths)
         self._runtime = runtime
         _RUNNING.add(self)
-        runtime.start(
-            manual=manual,
-            states=self._states,
-            last_update_ns=self._last_update_ns,
-            timer_state=self._timer_state,
-            pause_timeout=pause_timeout,
-            on_exception_capture=(
-                _exception_capture(weakref.ref(self))
-                if capture_state_on_exception
-                else None
-            ),
-        )
+        try:
+            runtime.start(
+                manual=manual,
+                states=self._states,
+                last_update_ns=self._last_update_ns,
+                timer_state=self._timer_state,
+                pause_timeout=pause_timeout,
+                on_exception_capture=(
+                    _exception_capture(weakref.ref(self))
+                    if capture_state_on_exception
+                    else None
+                ),
+            )
+        except _core.NetworkError:
+            raise  # a node raised while starting: this run is over
+        except Exception:
+            # Refused before any node started (e.g. an invalid argument): the
+            # network may run once the cause is gone.
+            self._runtime = None
+            _RUNNING.discard(self)
+            raise
 
     def step(self, order: Sequence[Node] | None) -> None:
         runtime = self._started()

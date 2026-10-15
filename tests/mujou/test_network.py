@@ -650,6 +650,20 @@ class TestLoadStateDict:
         with pytest.raises(ValueError, match="no 'timer'"):
             same.load_state_dict(tree)
 
+    def test_a_refused_run_can_be_retried(self, run_network: RunNetwork):
+        source = run_network(Chain())
+        tree = source.state_dict()
+        source.shutdown()
+        net = Chain()
+        net.build()
+        net.load_state_dict({**tree, "timer": {**tree["timer"], "scale": -1.0}})
+        with pytest.raises(ValueError):
+            run_network(net)  # refused before any node starts
+        assert not net.a.started
+        net.load_state_dict(tree)
+        run_network(net)
+        assert net.a.started
+
 
 class TestNodeException:
     def test_stops_the_network_and_reaches_the_host(
