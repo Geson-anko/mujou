@@ -79,3 +79,4 @@ A/B/C は scaffold から別 worktree で並列に実装し、stack にすると
 - yomiyasu: exec+nodes、torch+open-decisions+memory、network.md、PR #7〜#11 の説明文の 4 体を並列起動
 - yomiyasu 完了（docs 3 体、PR 説明文 1 体）。docs のコミット a1bf990, 4ebc9f8。just run 288 passed / 2 skipped（CUDA）
 - docs PR: docs/2026-10-16/core-runtime-docs（base run-network）
+- 2026-10-16 ユーザーの指示で std-00（RTX 4090 + 4060、torch 2.14.1+cu130）で CUDA を検証。Q-m・Q-o は解決: 両ビルドで全件通過、同期を外した陰性対照で失敗を確認。CUDA テストを cuda-tests ブランチ（fb02edf）に追加し、docs/torch.md の注記を更新。std-00 には rustup（~/.cargo）と /data/geson/mujou-cuda-check を置いた
