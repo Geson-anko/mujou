@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import sysconfig
@@ -21,5 +22,7 @@ class TestCoreModule:
             capture_output=True,
             text=True,
             check=True,
+            # PYTHON_GIL=0 would keep the GIL off whatever the module declares.
+            env={k: v for k, v in os.environ.items() if k != "PYTHON_GIL"},
         )
         assert result.stdout.strip() == "False"

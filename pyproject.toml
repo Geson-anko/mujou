@@ -15,7 +15,6 @@ build-backend = "maturin"
 manifest-path = "crates/mujou-python/Cargo.toml"
 python-source = "src"
 module-name = "mujou._core"
-features = ["pyo3/extension-module"]
 
 # Rebuild the extension on `uv sync` / `uv run` when the Rust sources change.
 [tool.uv]
