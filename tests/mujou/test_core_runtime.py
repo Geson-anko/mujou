@@ -1,3 +1,4 @@
+import contextvars
 import gc
 import threading
 import time
@@ -208,15 +209,20 @@ class TestStart:
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         local = threading.local()
-        seen: dict[str, tuple[object, threading.Thread]] = {}
+        var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+            "var", default=None
+        )
+        seen: dict[str, tuple[object, object, threading.Thread]] = {}
 
         class ThreadLocal(Recorder):
             @override
             def hook(self, event: str) -> None:
                 if event == "on_start":
                     local.value = self.name
+                    var.set(self.name)
                 seen[event] = (
                     getattr(local, "value", None),
+                    var.get(),
                     threading.current_thread(),
                 )
                 super().hook(event)
@@ -228,11 +234,82 @@ class TestStart:
         runtime.capture(lambda states: None)
         runtime.shutdown()
 
-        on_start_thread = seen["on_start"][1]
+        on_start_thread = seen["on_start"][2]
         for event in ["on_start", "on_update", "on_pause", "on_resume", "on_stop"]:
-            value, thread = seen[event]
+            value, context_value, thread = seen[event]
             assert value == "a", event
+            assert context_value == "a", event
             assert thread is on_start_thread, event
+
+    def test_the_control_thread_keeps_one_python_thread_state(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        local = threading.local()
+        seen: list[tuple[object, threading.Thread]] = []
+
+        class Remember(Recorder):
+            @override
+            def state_dict(self) -> object:
+                seen.append((getattr(local, "value", None), threading.current_thread()))
+                local.value = "set"
+                return super().state_dict()
+
+        runtime = make_runtime([Remember("a", Log())])
+        runtime.start()
+
+        def build(states: list[object]) -> None:
+            seen.append((getattr(local, "value", None), threading.current_thread()))
+
+        for _ in range(2):
+            runtime.capture(build)
+        # state_dict, build, state_dict, build: all on one thread state.
+        assert [value for value, _ in seen] == [None, "set", "set", "set"]
+        assert len({id(thread) for _, thread in seen}) == 1
+
+    def test_hooks_replaced_while_starting_take_effect(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        calls: list[str] = []
+
+        class Wrapping(Recorder):
+            @override
+            def on_start(self) -> None:
+                plain = self.on_update
+
+                def wrapped(dt: float) -> None:
+                    calls.append("wrapped")
+                    plain(dt)
+
+                self.on_update = wrapped
+
+            @override
+            def on_update(self, dt: float) -> None:
+                calls.append("plain")
+
+        runtime = make_runtime([Wrapping("a", Log())])
+        runtime.start(manual=True)
+        virtual_timer.advance(H)
+        runtime.step()
+        assert calls == ["wrapped", "plain"]
+
+    def test_the_time_is_not_restored_under_a_running_runtime(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        running_log, restored_log = Log(), Log()
+        running = make_runtime(recorders(running_log, "a"))
+        restored = make_runtime(recorders(restored_log, "b"))
+        running.start()
+        before = virtual_timer.time_ns()
+        state = {"time_ns": before + 10**12, "scale": 1.0}
+        with pytest.raises(ValueError, match="another runtime"):
+            restored.start(timer_state=state)
+        # Nothing started, and the running network's time did not jump.
+        assert restored_log.events == []
+        assert virtual_timer.time_ns() == before
+        # After the other one has stopped, the same runtime can restore.
+        running.shutdown()
+        restored.start(timer_state=state)
+        assert virtual_timer.time_ns() == before + 10**12
 
     def test_restores_the_time_and_where_each_dt_starts(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -325,6 +402,22 @@ class TestStart:
         gc.collect()
         # Dropping does not wait (the GIL may be held); the stop follows soon.
         log.wait_for(lambda: log.count("a", "on_stop") == 1)
+        wait_until_no_runtime_runs()
+
+
+def wait_until_no_runtime_runs() -> None:
+    """Wait until restoring the time is allowed again, so that a runtime ending
+    in the background does not leak into the next test."""
+    deadline = time.monotonic() + WAIT
+    while True:
+        probe = Runtime([], [])
+        try:
+            probe.start(timer_state=timer.state_dict())
+            probe.shutdown()
+            return
+        except ValueError:
+            assert time.monotonic() < deadline, "a runtime kept running"
+            time.sleep(0.001)
 
 
 class TestFreeRun:

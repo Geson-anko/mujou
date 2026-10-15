@@ -105,8 +105,8 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
     }
 }
 
-/// The hooks called more than once, looked up once on the node's thread
-/// before `_on_thread_start` instead of by name at every call.
+/// The hooks called more than once, looked up once on the node's thread at the
+/// end of `start` instead of by name at every call.
 struct Methods {
     on_update: Py<PyAny>,
     on_pause: Py<PyAny>,
@@ -200,7 +200,9 @@ impl NodeHooks for PyNode {
     }
 
     fn panicked(&mut self, error: &HookError) {
-        Python::attach(|py| {
+        // `try_attach`: this runs outside the runtime's `catch_unwind`, and
+        // `attach` panics while the interpreter finalizes.
+        Python::try_attach(|py| {
             let message = format!("node '{}' panicked in {}", self.name, error.hook);
             log_error(
                 py,
@@ -212,9 +214,6 @@ impl NodeHooks for PyNode {
 
     fn start(&mut self) -> Result<(), HookError> {
         let state = self.state.take();
-        let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
-        self.methods =
-            Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);
         self.call0("_on_thread_start")?;
         self.call0("on_start")?;
         if let Some(state) = state {
@@ -222,6 +221,11 @@ impl NodeHooks for PyNode {
                 PyTuple::new(py, [state]).expect("a tuple of one object")
             })?;
         }
+        // Look the hooks up last, so that `_on_thread_start` and `on_start`
+        // may still replace them (by instance attributes, to wrap them).
+        let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
+        self.methods =
+            Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);
         Ok(())
     }
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
@@ -472,8 +476,10 @@ impl Runtime {
     /// order while paused, resumes, and returns what `build` returned.
     ///
     /// `build` runs on the control thread and must not call this runtime's
-    /// waiting methods. If `build` raises, the exception propagates and the
-    /// network keeps running.
+    /// waiting methods. It may capture another runtime, but two builds must
+    /// not wait for each other's runtime: that cycle deadlocks, and the control
+    /// threads cannot see Ctrl-C. If `build` raises, the exception propagates
+    /// and the network keeps running.
     #[pyo3(signature = (build, *, timeout = None))]
     fn capture(
         &self,

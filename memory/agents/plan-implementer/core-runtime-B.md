@@ -55,7 +55,7 @@
 
 ### IF 変更通知（追加分）
 
-- **`GlobalTimer` に停止の保持を足した（Rust）。** `GlobalTimer::hold() -> PauseHold<'_>` は保持を 1 つ増やし、`PauseHold` を drop すると減る。保持が 1 つでもあるか、`pause()` のスイッチが入っていれば時刻は止まる。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真。仮想時計の `advance` は、どちらかで止まっていれば `TimerError::Paused`。Python の `_core.timer` の API は変えていない（`pause`/`resume` がスイッチ）。`lib.rs` の `pause` の docstring（"For the framework's pause and state capture"）は、ランタイムがもうスイッチを使わないので古くなった。`lib.rs` は触らない約束なので、D か後続で直す。`docs/execution-model.md` のタイマーの実装の節に 1 項目足した
+- **`GlobalTimer` に停止の保持を足した（Rust）。** `GlobalTimer::hold() -> PauseHold<'_>` は保持を 1 つ増やし、`PauseHold` を drop すると減る。保持が 1 つでもあるか、`pause()` のスイッチが入っていれば時刻は止まる。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真。仮想時計の `advance` は、どちらかで止まっていれば `TimerError::Paused`。Python の `_core.timer` の API は変えていない（`pause`/`resume` がスイッチ）。`lib.rs` の `pause` の docstring（"For the framework's pause and state capture"）は、ランタイムがもうスイッチを使わないので古くなった。この docstring は orchestrator が 7c585fb で直した。`docs/execution-model.md` のタイマーの実装の節に 1 項目足した
 - ランタイムはタイマーの停止にスイッチを使わず、保持だけを使う。そのため、ホストが `pause()` してから `start` しても、ホストの停止は残る。2 つの Runtime の状態の取得が重なっても、片方の終わりがもう片方の停止を解かない
 - `NodeHooks` に既定の実装つきで 2 つ足した: `fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R`（ランタイムのスレッドの本体を包む口。bindings は `Python::attach(|py| py.detach(body))`）と `fn panicked(&mut self, error: &HookError)`（panic を知らせてログに出させる）
 - `RuntimeError::Internal(String)`（Python では `RuntimeError`）を足した。スレッドを作れなかったときと、`capture` の `build` が panic したとき
@@ -68,7 +68,7 @@
 - M1: ノードのスレッドと制御スレッドの本体を `NodeHooks::on_thread` で包んだ。bindings はスレッドの寿命の間 Python のスレッド状態を 1 つ保ち、本体の間は detach する。hook ごとの attach は既存のスレッド状態を使い直すので、`threading.local` と `threading.current_thread()` が hook 間で同じになる（回帰テスト `test_hooks_share_one_python_thread_state`）
 - 停止の保持: 上記。`Freeze` は理由の集合が空でない間 `PauseHold` を 1 つ持つ。回帰テストは Rust の `tests/time.rs` の `hold` モジュールと、Python の `test_one_capture_does_not_end_the_pause_of_another`（A の `build` の中で B の `capture` を呼ぶ。スレッドを使わずに決定的にできる）・`test_a_pause_by_the_host_outlasts_the_runtime`
 - N2: 自由実行の区切りは、指示と epoch を 1 語にした atomic（`epoch << 2 | command`）を読み、時刻を読み、もう一度読んで一致したときだけその時刻を使う。停止中の時刻が T 以下になる理由は `Shared::boundary` のコメントに書いた（制御側は語を書いてから凍結し、凍結がタイマーの lock の下で先に起きていれば、2 回目の読みが新しい語を見て時刻を捨てる）。手動モードと停止・終了の処理は従来どおり lock の下
-- N7: 2 回以上呼ぶ hook（`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`）の bound method を、`start` の最初にノードのスレッドで 1 回だけ引いて持つ
+- N7: 2 回以上呼ぶ hook（`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`）の bound method を、ノードのスレッドで 1 回だけ引いて持つ（引く位置は再レビュー後に `start` の最後へ移した。下記）
 - algorithm should-fix 1: `last_update_ns` は `Runtime::start` でタイマーを凍結して状態を読み込んだ直後、スレッドを作る前に設定する（起動中の例外で取得した値が 0 にならない。テスト `test_the_start_of_each_dt_is_known_when_starting_fails`）
 - algorithm should-fix 2: `test_the_pause_takes_no_global_time`（実時計で `build` の中で 0.3 s 眠り、再開後の最初の Δt < 0.25）
 - algorithm should-fix 3 / code S3: `test_restores_the_time_and_where_each_dt_starts`（`on_start`・`load_state_dict` の中では時刻が T でタイマーが停止中、最初の Δt が `(k + h) / 1e9` に完全一致、T より先の `last_update_ns` では更新しない）
@@ -102,3 +102,19 @@ fast path の効果は数 % にとどまる。合計はノード数によらず 
 | 3.14t、`PYTHON_GIL=1` | 7.66M（0.13 µs/回） | 3.37M | 1.29M |
 
 レビュー時（M1 の前）は約 1.8 万回/秒（約 55 µs/回）だった。同じメソッドを Python のスレッドから直接呼ぶと 0.025 µs/回。M1 と N7 の効果を分けては測っていない。ノードを増やすと合計が落ちるのは、タイマーの `Mutex` と、hook ごとの attach/detach の競合だと考えている（未検証）。
+
+## 再レビュー（r2）後の対応（2026-10-16）
+
+対象: `memory/agents/code-reviewer/core-runtime-B-r2.md`・`memory/agents/algorithm-reviewer/core-runtime-B-r2.md`（main checkout 側）。どちらも approve。orchestrator の指示に従い次を足した。
+
+### IF 変更通知（追加分）
+
+- **同じタイマーで別のランタイムが走っている（起動済みで未終了の）間は、`timer_state` 付きの `start` を拒む。** 何も起動せず `RuntimeError::InvalidArgument`（Python では `ValueError`、メッセージに `another runtime`）を返す。タイマーの時刻はプロセスで 1 つなので、戻すと走っているランタイムの次の Δt が飛ぶ（または止まる）ため。走っているランタイムの数は、タイマーのアドレスごとにプロセス全体の静的な表（`LIVE`）で数える。確認、時刻の読み込み、数えるまでを 1 つの lock の下で行うので、2 つの `start` が同時に通ることはない。数を減らすのは終了処理で `finished` を立てる前（`join` の後の `start` が復元できるように）と、スレッドを作れなかったとき。`timer_state` の無い `start` は従来どおり並べて走らせられる
+- hook の bound method を引く位置を、`start` の最初から最後（`_on_thread_start` → `on_start` → `load_state_dict` の後）に移した。この 3 つの中でインスタンス属性として hook を差し替えれば効く。`_core.pyi` の `Node` の docstring に書いた
+
+### その他
+
+- N1: `PyNode::panicked` を `Python::try_attach` にした（終了処理中でも panic しない）
+- N2: `capture` の docstring に「2 つのランタイムの `build` が互いの `capture` を待つ循環はデッドロックし、Ctrl-C でも抜けられない」と書いた
+- N3: テストを足した。`contextvars` が hook 間で共有されること、制御スレッドで `state_dict` と `build` が 1 つのスレッド状態を共有すること
+- テストの後始末: GC で解放したランタイムはバックグラウンドで終わる。次のテストの復元に漏れないよう、`test_a_runtime_without_references_stops` の最後で復元が通るようになるまで待つ
