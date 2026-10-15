@@ -1,8 +1,23 @@
 # PyTorch の利用
 
-ブロックの内側で PyTorch を使うときの方針と、そのための支援モジュール `mujou.torch` の仕様を定める。
+mujou は、ブロックの内側の計算に PyTorch を全面的に採用する。この文書では、モジュールの構成と、PyTorch を使うブロックの方針・ブロックの基底クラス `mujou.Block` の仕様を定める。
 
-> 状態: `mujou.torch` は未実装。コアの `Block` を実装してから作る。
+> 状態: `mujou.Block` は未実装。コアのブロック（`mujou._core.Block`）を実装してから作る。
+
+## モジュールの構成
+
+| モジュール | torch への依存 | 中身 |
+| --- | --- | --- |
+| `mujou._core` | しない | Rust コアの Python インターフェース（private）。Tensor・スロット・コアのブロック `Block`・スケジューラ・グローバルタイマーなど |
+| それ以外 | する | `mujou.Block`、PC-ALM のブロック、Tensor と torch のテンソルの変換など |
+
+torch は mujou の必須の依存である。`mujou._core` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
+
+`mujou._core` は private なモジュールで、利用者は直接使わない。Tensor や TensorSpec など利用者が使うものは、mujou のトップレベル（`mujou.*`）に公開する。
+
+コアにも `Block` という名前のクラスがあるが、利用者が継承するのはトップレベルの `mujou.Block` である。`mujou.Block` はコアの `Block` を継承し、PyTorch を使う前提の設定を加えたものである。利用者が直接使うクラスなので、`Torch` のような接頭辞は付けない。
+
+バックエンドを分けた `mujou.torch` や `mujou.jax` は、必要になったら mujou 1.0 などの正式版で検討する。それまでは torch 以外のバックエンドを想定しない。
 
 ## GPU の扱い
 
@@ -29,13 +44,13 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ブ�
 
 各ステップの終わりに自分のストリームを同期するので、CPU が GPU を追い越してカーネルを積み続けることはない。グローバルタイマーで測る $\Delta t$ と、実際に計算した時間がずれない。
 
-## TorchBlock
+## mujou.Block
 
-`mujou.torch.TorchBlock` は、PyTorch を使うブロックの基底クラスである。`Block` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ブロックの作者に代わって行う。PyTorch を使うブロックは、専用スレッドで実行する（[ネイティブコア](native-core.md#mn-スケジューリング)）。
+`mujou.Block` は、利用者が継承するブロックの基底クラスである。コアの `mujou._core.Block` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ブロックの作者に代わって行う。PyTorch を使うブロックは、専用スレッドで実行する（[ネイティブコア](native-core.md#mn-スケジューリング)）。
 
 ### 実行スレッドの設定
 
-`on_start` はブロックを実行するスレッドの上で呼ばれる（[ブロック](blocks.md#ライフサイクル-hook)）。TorchBlock は `on_start` で次を設定する。どれもスレッドごとの設定なので、ほかのブロックには影響しない。
+`on_start` はブロックを実行するスレッドの上で呼ばれる（[ブロック](blocks.md#ライフサイクル-hook)）。`mujou.Block` は `on_start` で次を設定する。どれもスレッドごとの設定なので、ほかのブロックには影響しない。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
@@ -43,11 +58,11 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ブ�
 | ストリーム | CUDA のときは自分の `torch.cuda.Stream` を作り、`torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | 乱数生成器 | ブロックごとの `torch.Generator` を、渡された seed で作る | 既定の乱数生成器はプロセス全体で共有されるので、テストが決定的でなくなる |
 
-デバイスと seed は、TorchBlock の構築時に渡す。
+デバイスと seed は、`mujou.Block` の構築時に渡す。
 
 ### 境界の変換
 
-TorchBlock は、Port から読んだ Tensor を torch のテンソルにする変換と、torch のテンソルを Tensor にして Port に書く変換を提供する。
+`mujou.Block` は、Port から読んだ Tensor を torch のテンソルにする変換と、torch のテンソルを Tensor にして Port に書く変換を提供する。
 
 - 読むとき: Tensor をコピーして、ブロックのデバイスへ送る
 - 書くとき: 自分のストリームでホストへコピーし、自分のストリームだけを同期してから、Tensor を作る
@@ -75,10 +90,6 @@ TorchBlock は、Port から読んだ Tensor を torch のテンソルにする�
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
 CPU で計算する torch の演算は、呼び出したスレッドごとに内部でスレッドを立てる。ブロックの数と内部のスレッド数の積がコア数を大きく超えると、CPU を取り合って全体が遅くなる。内部のスレッド数は小さく設定しておく。
-
-## 依存関係
-
-コアは torch に依存しない。torch が要るのは `mujou.torch` を使うときだけである。
 
 ## 性能の測定
 

@@ -23,7 +23,7 @@ PC-ALM をコアで提供しても、ブロック・スロット・スケジュ�
 
 ## 実装言語
 
-コアは Rust で実装し、Python はインターフェースにする。Python からは PyO3 + maturin で呼ぶ想定で、コアの処理中は GIL を解放する。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。
+コアは Rust で実装し、Python はインターフェースにする。Python からは private なモジュール `mujou._core` として使い、利用者が使う名前は `mujou.*` のトップレベルに公開する。`mujou._core` は torch に依存しない（[PyTorch の利用](torch.md#モジュールの構成)）。Python からは PyO3 + maturin で呼ぶ想定で、コアの処理中は GIL を解放する。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。
 
 ## M:N スケジューリング
 
@@ -59,3 +59,5 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 ## ツールチェーン
 
 maturin のビルドバックエンド、Rust の lint・テスト、CI、`just` レシピはまだ整えていない。最初の実装タスクで整える。
+
+拡張モジュールの `mujou._core` は型情報を持たないので、pyright strict を通すために型スタブ `_core.pyi` を用意する。手で書くか、`pyo3-stub-gen` などで生成するかは、実装するときに決める。トップレベルに公開するクラスは、PyO3 の `#[pyclass(module = "mujou")]` でモジュール名を `mujou` にしておき、`repr` などで `mujou.Tensor` と表示されるようにする。

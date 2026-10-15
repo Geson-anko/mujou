@@ -22,9 +22,9 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
-## mujou.torch の細部
+## mujou.Block の細部
 
-GPU をサポートしないこと、`mujou.torch` に TorchBlock を置き、勾配の記録の停止・ブロックごとのストリーム・乱数生成器を `on_start` で設定することは決定済み。境界の変換のメソッド名、サブクラスが `on_start` を override したときに設定が漏れない仕組み、torch の内部スレッド数を誰がどう決めるか、torch を optional な依存にする方法（extra の名前など）は未決定。関連: [PyTorch の利用](torch.md)
+GPU をサポートしないこと、private な `mujou._core` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Block` がコアの `Block` を継承し、勾配の記録の停止・ブロックごとのストリーム・乱数生成器を `on_start` で設定することは決定済み。`mujou.*` のトップレベルに公開する名前の一覧、境界の変換のメソッド名、サブクラスが `on_start` を override したときに設定が漏れない仕組み、torch の内部スレッド数を誰がどう決めるかは未決定。関連: [PyTorch の利用](torch.md)
 
 ## ライセンス
 

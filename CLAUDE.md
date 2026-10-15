@@ -73,7 +73,8 @@ mujou の存在理由。ブロックは自分の状態と隣接ブロックか�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock ほか
-- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin の想定。ツールチェーンは未整備）。メッセージの値の型はコアが独自に持ち、PyTorch テンソル連携は future work（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin の想定。ツールチェーンは未整備）。メッセージの値の型はコアが独自に持つ（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- torch に依存しないのは private な `mujou._core` だけで、それ以外はブロック内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ブロックの内側でだけ使う。利用者が継承するのは `mujou.Block`（コアの `Block` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
 

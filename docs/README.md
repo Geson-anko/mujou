@@ -16,7 +16,7 @@ mujou の設計方針と仕様をまとめた文書群。2026-10-14 時点で `m
 | [ネイティブコア](native-core.md)                 | Rust コア、M:N スケジューリング、メッセージの値の型                             |
 | [更新手法](update-rules.md)                      | 更新手法の差し替え、既定の PC-ALM の位置づけと連続時間形                        |
 | [PC-ALM の連続時間系](pc-alm-continuous-time.md) | 連続時間形の各式の意味、時定数、平衡点での BP との一致、離散化                  |
-| [PyTorch の利用](torch.md)                       | GPU の扱い、`mujou.torch` と TorchBlock、プロセス全体に効く設定                 |
+| [PyTorch の利用](torch.md)                       | モジュール構成、GPU の扱い、`mujou.Block`、プロセス全体に効く設定                 |
 | [Python 環境](python-environment.md)             | free-threaded Python 3.14t での開発と GIL ありビルドのサポート                  |
 | [未決定事項](open-decisions.md)                  | まだ決めていない設計判断                                                        |
 
