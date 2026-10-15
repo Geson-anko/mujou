@@ -55,6 +55,14 @@ impl fmt::Display for TimerError {
 
 impl std::error::Error for TimerError {}
 
+/// How [`GlobalTimer::wait_until_ns_or`] returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    Reached,
+    Interrupted,
+    TimedOut,
+}
+
 /// Converts seconds to the nearest nanosecond.
 pub fn seconds_to_ns(seconds: f64) -> Result<u64, TimerError> {
     if !(seconds.is_finite() && seconds >= 0.0) {
@@ -235,20 +243,41 @@ impl GlobalTimer {
     /// Blocks until the time reaches `target_ns` or `timeout` of real time
     /// passes, and returns whether the target was reached.
     pub fn wait_until_ns(&self, target_ns: u64, timeout: Duration) -> bool {
+        self.wait_until_ns_or(target_ns, timeout, || false) == Wait::Reached
+    }
+
+    /// Blocks until the time reaches `target_ns`, `interrupted` returns true, or
+    /// `timeout` of real time passes.
+    ///
+    /// `interrupted` is checked under the timer's lock, before every wait. A
+    /// waker that makes it true and then calls [`GlobalTimer::interrupt_waiters`]
+    /// is therefore never missed: either the waiter sees the condition before it
+    /// sleeps, or it is already sleeping when the notification comes. Because it
+    /// runs under the timer's lock, `interrupted` must not take a lock that is
+    /// held while calling into the timer (read an atomic instead).
+    pub fn wait_until_ns_or(
+        &self,
+        target_ns: u64,
+        timeout: Duration,
+        interrupted: impl Fn() -> bool,
+    ) -> Wait {
         // A timeout too long to represent never expires.
         let deadline = Instant::now().checked_add(timeout);
         let mut s = self.lock();
         loop {
             let now_ns = s.now_ns();
             if now_ns >= target_ns {
-                return true;
+                return Wait::Reached;
+            }
+            if interrupted() {
+                return Wait::Interrupted;
             }
             let mut wait = match deadline {
                 Some(deadline) => deadline.saturating_duration_since(Instant::now()),
                 None => Duration::MAX,
             };
             if wait.is_zero() {
-                return false;
+                return Wait::TimedOut;
             }
             if !s.is_frozen() {
                 let real_ns = ((target_ns - now_ns) as f64 / s.scale).ceil();
@@ -260,6 +289,14 @@ impl GlobalTimer {
                 .unwrap_or_else(|e| e.into_inner())
                 .0;
         }
+    }
+
+    /// Wakes every [`GlobalTimer::wait_until_ns_or`] so that it checks its
+    /// `interrupted` condition again.
+    pub fn interrupt_waiters(&self) {
+        // Taking the lock orders this after any waiter's check of its condition.
+        let _s = self.lock();
+        self.changed.notify_all();
     }
 
     /// Blocks for `dt_ns` of global time. Waits through pauses.
