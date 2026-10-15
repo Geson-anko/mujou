@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 import torch
 
 from mujou import _core
-from mujou._node import Node, thread_ident
+from mujou._node import Node, end_thread, synchronize, thread_ident
 from mujou._port import Channel, Port, bind
 from mujou._spec import Spec, fields, join, split
 
@@ -82,6 +82,7 @@ class Binding:
         self._indices = {channel: k for k, channel in enumerate(port.channels)}
 
     def recv(self, with_time: bool) -> object:
+        self._check_owner("receives on")
         spec = self._recv_spec
         if spec is None:
             raise TypeError(f"the port {self._path!r} receives no messages")
@@ -107,13 +108,17 @@ class Binding:
             raise ValueError(f"{channel!r} is not a channel of {self._path!r}")
         outlet.send_to(index, self._tensors(msg))
 
-    def _sending(self) -> _core.Outlet:
-        # Keeps the owning node the only writer of the port's slots.
+    def _check_owner(self, verb: str) -> None:
+        # A port is read and written only by its owner: this keeps each slot to
+        # one writer, and a node to the slots of its own ports (locality).
         if threading.get_ident() != thread_ident(self._owner):
             raise RuntimeError(
-                f"only the node that owns the port {self._path!r} sends on it, from "
-                "its own hooks"
+                f"only the node that owns the port {self._path!r} {verb} it, from its "
+                "own hooks while the network runs (state_dict runs on another thread)"
             )
+
+    def _sending(self) -> _core.Outlet:
+        self._check_owner("sends on")
         if self._outlet is None:
             raise TypeError(f"the port {self._path!r} sends no messages")
         return self._outlet
@@ -176,6 +181,8 @@ class Session:
             bind(port, Binding(owner, path, port, self._outlets.get(port), sources))
 
         self._runtime: _core.Runtime | None = None
+        # Makes the check and the start of a run one step for concurrent callers.
+        self._run_lock = threading.Lock()
         # Restored by load_state_dict and passed to the runtime by run.
         self._states: list[object] | None = None
         self._last_update_ns: list[int] | None = None
@@ -186,12 +193,15 @@ class Session:
     def run(
         self, *, manual: bool, pause_timeout: float, capture_state_on_exception: bool
     ) -> None:
-        if self._runtime is not None:
-            raise RuntimeError(
-                "the network has already run; build a new instance to run again"
-            )
-        runtime = _core.Runtime(self._nodes, self._paths)
-        self._runtime = runtime
+        with self._run_lock:
+            if self._runtime is not None:
+                raise RuntimeError(
+                    "the network has already run; build a new instance to run again"
+                )
+            runtime = _core.Runtime(self._nodes, self._paths)
+            self._runtime = runtime
+        for session in list(_RUNNING):
+            session._settle()
         _RUNNING.add(self)
         try:
             runtime.start(
@@ -201,7 +211,7 @@ class Session:
                 timer_state=self._timer_state,
                 pause_timeout=pause_timeout,
                 on_exception_capture=(
-                    _exception_capture(weakref.ref(self))
+                    _weakly(self._capture_on_exception)
                     if capture_state_on_exception
                     else None
                 ),
@@ -222,14 +232,30 @@ class Session:
 
     def check(self) -> None:
         if self._runtime is not None:
+            self._settle()
             self._runtime.check()
 
     def shutdown(self) -> None:
         if self._runtime is not None:
-            self._runtime.shutdown()
+            try:
+                self._runtime.shutdown()
+            finally:
+                self._settle()
 
     def join(self) -> None:
-        self._started().join()
+        runtime = self._started()
+        try:
+            runtime.join()
+        finally:
+            self._settle()
+
+    def _settle(self) -> None:
+        """Once the run has ended, stop keeping the session and forget the nodes'
+        threads."""
+        if self._runtime is not None and self._runtime.is_finished:
+            _RUNNING.discard(self)
+            for node in self._nodes:
+                end_thread(node)
 
     def _started(self) -> _core.Runtime:
         if self._runtime is None:
@@ -244,13 +270,21 @@ class Session:
 
     # --- host input and output
 
-    def write(self, values: Mapping[AnyPort, object]) -> None:
+    def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
         self.check()
         items: list[tuple[_core.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
             where = self._graph.port_path(port)
             items.append((slot, [_to_host(t) for t in split(spec, value, where=where)]))
+        if self._runtime is None and self._timer_state is not None:
+            # Restored but not running: the values belong to the restored time T,
+            # not to the process's time now. Nobody reads yet, so restoring each
+            # slot (after checking them all above) switches them together.
+            time_ns = int(self._timer_state["time_ns"])
+            for slot, tensors in items:
+                slot.restore(tensors, time_ns)
+            return
         self._group.write(items)
 
     def read(self, port: AnyPort) -> tuple[object, float]:
@@ -260,6 +294,7 @@ class Session:
         return _value(spec, message, _CPU), message.time_ns / 1e9
 
     def subscribe(self, port: AnyPort) -> Iterator[tuple[object, float]]:
+        self._started()  # a subscription before run would wait for nothing
         self.check()
         outbox, spec = self._outbox(port)
         # Only values written after this call are new.
@@ -308,6 +343,27 @@ class Session:
             lambda states: self._tree(dict(enumerate(states)), runtime.last_update_ns())
         )
 
+    def _capture_on_exception(
+        self, states: dict[int, object], index: int, hook: str, error: BaseException
+    ) -> object:
+        """Build the state tree when a node has raised (the runtime calls this)."""
+        runtime = cast(_core.Runtime, self._runtime)
+        try:
+            last_update_ns = runtime.last_update_ns()
+        except RuntimeError:
+            # A node raised while starting, before run had the runtime: no node
+            # has updated, so each dt starts where the run started.
+            last_update_ns = self._last_update_ns or [_core.timer.time_ns()] * len(
+                self._nodes
+            )
+        tree = self._tree(states, last_update_ns)
+        tree["exception"] = {
+            "node": self._paths[index],
+            "hook": hook,
+            "error": "".join(traceback.format_exception(error)),
+        }
+        return tree
+
     def exception_state_dict(self) -> dict[str, Any] | None:
         if self._runtime is None:
             return None
@@ -321,10 +377,21 @@ class Session:
                 raise ValueError(f"the state tree has no {key!r}")
         nodes = cast(Mapping[str, object], state["nodes"])
         slots = cast(Mapping[str, tuple[object, int]], state["slots"])
-        last_update_ns = cast(Mapping[str, int], state["last_update_ns"])
+        last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
+        timer = cast(Mapping[str, object], state["timer"])
         _same_keys("nodes", nodes, self._paths)
         _same_keys("slots", slots, self._slots)
         _same_keys("last_update_ns", last_update_ns, self._paths)
+        _same_keys("timer", timer, ("time_ns", "scale"))
+        for path in self._paths:
+            if not _is_int(last_update_ns[path]):
+                raise ValueError(
+                    f"the state tree's last_update_ns[{path!r}] is not an int"
+                )
+        if not _is_int(timer["time_ns"]) or not isinstance(timer["scale"], int | float):
+            raise ValueError(
+                "the state tree's timer must have an int time_ns and a scale"
+            )
         # Check every value before restoring any, so that an error changes nothing.
         restores: list[tuple[AnySlot, list[torch.Tensor], int]] = []
         for name, (slot, spec) in self._slots.items():
@@ -336,13 +403,23 @@ class Session:
         # Copies: the nodes update their state in place, which must not reach the
         # caller's tree (or another network loaded from it).
         self._states = [copy.deepcopy(nodes[path]) for path in self._paths]
-        self._last_update_ns = [last_update_ns[path] for path in self._paths]
-        self._timer_state = dict(cast(Mapping[str, int | float], state["timer"]))
+        # The copies were made on this thread's stream; the nodes use them on
+        # their own streams, which do not wait for this one.
+        _synchronize_cuda()
+        self._last_update_ns = [cast(int, last_update_ns[path]) for path in self._paths]
+        self._timer_state = {
+            "time_ns": cast(int, timer["time_ns"]),
+            "scale": timer["scale"],
+        }
 
     def _tree(
         self, states: Mapping[int, object], last_update_ns: Sequence[int]
     ) -> dict[str, Any]:
         """Copy the state of the paused network into a tree (``state_dict``)."""
+        # The copies below run on this (the control) thread's stream; wait for the
+        # nodes' own streams first.
+        for node in self._nodes:
+            synchronize(node)
         slots: dict[str, tuple[object, int]] = {}
         for name, (slot, spec) in self._slots.items():
             message = slot.read()
@@ -361,30 +438,32 @@ class Session:
 _CPU: Final = torch.device("cpu")
 
 
-def _exception_capture(
-    session: weakref.ref[Session],
-) -> Callable[[dict[int, object], int, str, BaseException], object]:
-    """Return the runtime's callback that builds the state tree on an exception.
+def _weakly[**P, T](
+    method: Callable[P, T],
+) -> Callable[P, T | None]:
+    """Wrap a bound method so that it holds its object weakly.
 
-    It holds the session weakly: the runtime is not tracked by the garbage collector,
-    so a strong reference back to the session would never be collected.
+    The runtime is not tracked by the garbage collector, so a strong reference
+    from its callback back to the session would never be collected.
     """
+    ref = weakref.WeakMethod(cast(Any, method))
 
-    def capture(
-        states: dict[int, object], index: int, hook: str, error: BaseException
-    ) -> object:
-        s = session()
-        if s is None or s._runtime is None:  # pyright: ignore[reportPrivateUsage]  # this module
-            return None
-        tree = s._tree(states, s._runtime.last_update_ns())  # pyright: ignore[reportPrivateUsage]  # this module
-        tree["exception"] = {
-            "node": s._paths[index],  # pyright: ignore[reportPrivateUsage]  # this module
-            "hook": hook,
-            "error": "".join(traceback.format_exception(error)),
-        }
-        return tree
+    def call(*args: P.args, **kwargs: P.kwargs) -> T | None:
+        bound = ref()
+        return None if bound is None else cast(Callable[P, T], bound)(*args, **kwargs)
 
-    return capture
+    return call
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _synchronize_cuda() -> None:
+    """Wait for every CUDA device, if CUDA is in use (only while no node runs)."""
+    if torch.cuda.is_initialized():
+        for index in range(torch.cuda.device_count()):
+            torch.cuda.synchronize(index)
 
 
 def _same_keys(
@@ -399,13 +478,23 @@ def _same_keys(
         )
 
 
-# The sessions that may be running, stopped at interpreter exit: the runtime's
-# threads are not Python threads, and must not call into a finalizing interpreter.
-_RUNNING: Final = weakref.WeakSet[Session]()
+# The sessions that have run and not yet been seen to end. Held strongly: a running
+# network keeps running when the host drops it, until it is shut down here at the
+# latest. The runtime's threads are not Python threads, and must not call into a
+# finalizing interpreter.
+_RUNNING: Final[set[Session]] = set()
 
 
-@atexit.register
 def _shutdown_all() -> None:
     for session in list(_RUNNING):
         with contextlib.suppress(_core.NetworkError):
             session.shutdown()
+
+
+# Before the interpreter joins the non-daemon threads: a thread iterating over
+# subscribe ends only when its network does. threading._register_atexit is private,
+# so fall back to atexit (after the join) where it is missing.
+_register: Callable[[Callable[[], None]], object] = getattr(
+    threading, "_register_atexit", atexit.register
+)
+_register(_shutdown_all)

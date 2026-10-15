@@ -280,6 +280,20 @@ class TestRecv:
         assert torch.equal(value, torch.ones(2, 3))
         assert time_ns == virtual_timer.time_ns()
 
+    def test_only_the_owning_node_receives(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        mine, theirs = Port(recv=h()), Port(recv=h())
+        owner = Probe(mine=mine)
+        other = Probe(theirs.recv, theirs=Port(recv=h()))  # reads another's port
+        net = run_network(
+            Net(owner=Probe(mine=theirs), node=owner, other=other), _manual=True
+        )
+        step(net, virtual_timer)
+        assert isinstance(other.results[0], RuntimeError)
+        with pytest.raises(RuntimeError, match="only the node that owns"):
+            mine.recv()  # from the host
+
     def test_rejects_a_port_that_receives_nothing(
         self, virtual_timer: GlobalTimer, run_network: RunNetwork
     ):

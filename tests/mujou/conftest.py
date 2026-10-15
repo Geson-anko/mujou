@@ -36,9 +36,10 @@ class RunNetwork(Protocol):
 def run_network() -> Iterator[RunNetwork]:
     """``mujou.run`` that shuts the networks down at the end of the test.
 
-    A running network is not collected by the garbage collector, so a test must
-    stop what it starts. Request it after ``virtual_timer`` so that the networks
-    stop before the timer is reset.
+    A running network keeps running when dropped (until the interpreter exits), so
+    a test must stop what it starts. Request it after ``virtual_timer`` so that
+    the networks stop before the timer is reset: ``virtual_timer`` turns off the
+    host's pause switch only, and a running network may still hold the time.
     """
     started: list[Network] = []
 

@@ -1,7 +1,10 @@
 import math
 import pickle
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
@@ -315,6 +318,8 @@ class Leaky(Node):
         self.next = NextPort(send=vec())
         self.tau = tau
         self.raise_at = raise_at
+        # Set by a test to make the next on_update raise.
+        self.trigger = threading.Event()
         self.x = torch.zeros(2, dtype=F64)
         self.updates = 0
         self.started = False
@@ -333,7 +338,7 @@ class Leaky(Node):
     @override
     def on_update(self, dt: float) -> None:
         self.updates += 1
-        if self.updates == self.raise_at:
+        if self.updates == self.raise_at or self.trigger.is_set():
             self.fail()
         self.x += min(dt / self.tau, 1.0) * (self.prev.recv() - self.x)
         self.next.send(self.x)
@@ -474,21 +479,31 @@ class TestWrite:
         first = Pair()
         net = run_network(Solo(first), _manual=True)
         net.write({first.x: u(1)})
+        step(net, virtual_timer)
         tree = net.state_dict()
+        written_at = tree["slots"]["node.x/in"][1]
+        frozen_at = tree["timer"]["time_ns"]
         net.shutdown()
+        virtual_timer.advance(100.0)  # the process's time is far from the tree's
 
-        kept, overwritten = Pair(), Pair()
-        for node, value in ((kept, None), (overwritten, u(2))):
+        kept, before, after = Pair(), Pair(), Pair()
+        for node in (kept, before, after):
             restored = Solo(node)
             restored.build()
+            if node is before:
+                restored.write({node.x: u(2)})  # replaced by the tree
             restored.load_state_dict(tree)
-            if value is not None:
-                restored.write({node.x: value})
+            if node is after:
+                restored.write({node.x: u(3)})
             run_network(restored, _manual=True)
             step(restored, virtual_timer)
             restored.shutdown()
         assert torch.equal(kept.seen[0][0][0], u(1))
-        assert torch.equal(overwritten.seen[0][0][0], u(2))
+        assert kept.seen[0][0][1] == written_at
+        assert torch.equal(before.seen[0][0][0], u(1))
+        assert torch.equal(after.seen[0][0][0], u(3))
+        # Written for the restored run, so stamped with the tree's time.
+        assert after.seen[0][0][1] == frozen_at
 
     def test_rejects_ports_it_cannot_write(self):
         net = Chain()
@@ -605,6 +620,9 @@ class TestStateDict:
             assert written_at <= frozen_at
         for updated_at in tree["last_update_ns"].values():
             assert 0 < updated_at <= frozen_at
+        # Each node sends at the end of its update, so a node paused between
+        # updates has sent its state as it is.
+        assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
 
     def test_is_a_copy_that_pickles(
         self, virtual_timer: GlobalTimer, run_network: RunNetwork
@@ -621,37 +639,83 @@ class TestStateDict:
         assert torch.equal(again["nodes"]["a"]["x"], x)
         assert again["timer"] == tree["timer"]
 
-    def test_cannot_be_called_from_a_node(
+    def test_cannot_receive_in_the_node_state_dict(
         self, virtual_timer: GlobalTimer, run_network: RunNetwork
     ):
-        networks: list[Network] = []
-        node = Calls(lambda: networks[0].state_dict())
-        networks.append(run_network(Solo(node), _manual=True))
-        step(networks[0], virtual_timer)
-        assert isinstance(node.errors[0], RuntimeError)
+        class Receiving(Pair):
+            @override
+            def state_dict(self) -> object:
+                try:
+                    self.x.recv()
+                except RuntimeError as e:
+                    return str(e)
+                return None
+
+        net = run_network(Solo(Receiving()), _manual=True)
+        assert "only the node that owns" in net.state_dict()["nodes"]["node"]
+
+
+class TestHostMethodsFromANode:
+    def test_raise(self, virtual_timer: GlobalTimer, run_network: RunNetwork):
+        networks: list[Chain] = []
+
+        def call_every_host_method() -> None:
+            net = networks[0]
+            for call in (
+                lambda: net.write({net.prev: u(0)}),
+                lambda: net.read(net.next),
+                lambda: net.subscribe(net.next),
+                net.state_dict,
+                net.shutdown,
+                net.join,
+            ):
+                try:
+                    call()
+                except RuntimeError as e:
+                    node.errors.append(e)
+
+        node = Calls(call_every_host_method)
+        chain = Chain()
+        chain.caller = node  # pyright: ignore[reportAttributeAccessIssue]
+        networks.append(run_network(chain, _manual=True))
+        step(chain, virtual_timer)
+        assert len(node.errors) == 6
+        assert all("host methods" in str(e) for e in node.errors)
 
 
 class TestLoadStateDict:
-    def test_only_before_run(self, run_network: RunNetwork):
-        net = run_network(Chain())
+    def test_only_before_run(self, virtual_timer: GlobalTimer, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
         tree = net.state_dict()
         with pytest.raises(RuntimeError, match="before run"):
             net.load_state_dict(tree)
 
-    def test_rejects_a_tree_of_another_network(self, run_network: RunNetwork):
-        tree = run_network(Chain()).state_dict()
+    def test_rejects_a_tree_that_does_not_match(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        source = run_network(Chain(), _manual=True)
+        tree = source.state_dict()
+        source.shutdown()
         other = Solo(Pair())
         other.build()
         with pytest.raises(ValueError, match="do not match"):
             other.load_state_dict(tree)
-        del tree["timer"]
         same = Chain()
         same.build()
-        with pytest.raises(ValueError, match="no 'timer'"):
-            same.load_state_dict(tree)
+        broken: list[tuple[dict[str, Any], str]] = [
+            ({k: v for k, v in tree.items() if k != "timer"}, "no 'timer'"),
+            ({**tree, "timer": {"time_ns": 0}}, "timer do not match"),
+            ({**tree, "timer": {"time_ns": "0", "scale": 1.0}}, "int time_ns"),
+            ({**tree, "last_update_ns": {"a": 0.5, "b": 0}}, "is not an int"),
+        ]
+        for wrong, match in broken:
+            with pytest.raises(ValueError, match=match):
+                same.load_state_dict(wrong)
 
-    def test_a_refused_run_can_be_retried(self, run_network: RunNetwork):
-        source = run_network(Chain())
+    def test_a_refused_run_can_be_retried(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        source = run_network(Chain(), _manual=True)
         tree = source.state_dict()
         source.shutdown()
         net = Chain()
@@ -661,7 +725,7 @@ class TestLoadStateDict:
             run_network(net)  # refused before any node starts
         assert not net.a.started
         net.load_state_dict(tree)
-        run_network(net)
+        run_network(net, _manual=True)
         assert net.a.started
 
 
@@ -711,21 +775,33 @@ class TestNodeException:
         pickle.dumps(tree)
 
     def test_ends_a_subscription(self, run_network: RunNetwork):
-        net = run_network(Chain(raise_in_b=100))
+        net = run_network(Chain())
+        values = net.subscribe(net.next)
+        next(values)  # the iterator is waiting on the running network
+        net.b.trigger.set()
         with pytest.raises(NetworkError) as raised:
-            for _ in net.subscribe(net.next):
+            for _ in values:
                 pass
         assert raised.value.__cause__ is net.b.error
 
 
 class TestEndToEnd:
+    @pytest.mark.slow
     def test_approaches_the_equilibrium_in_real_time(self, run_network: RunNetwork):
-        net = run_network(Chain(tau=0.01))
+        tau, presented = 0.01, 0.3  # 30 time constants
+        net = run_network(Chain(tau=tau))
+        before = torch.zeros(2, dtype=F64)
         for k in (1, 2):
             net.write({net.prev: u(k)})
-            mujou.time.sleep(0.3)  # 30 time constants
+            mujou.time.sleep(presented)
             out, _ = net.read(net.next)
-            assert torch.allclose(out, u(k), rtol=0, atol=1e-6)
+            # After a step of the input by d, the error of two leaky stages in a
+            # row is d (1 + t/tau) exp(-t/tau). Allow the nodes to have run for
+            # only a third of the time (scheduling under load): t = 10 tau.
+            d = (u(k) - before).abs().max().item()
+            bound = d * (1 + 10) * math.exp(-10)
+            assert (out - u(k)).abs().max().item() <= bound
+            before = u(k)
 
     @pytest.mark.parametrize("b_first", [False, True])
     def test_manual_steps_match_the_discrete_algorithm(
@@ -747,18 +823,21 @@ class TestEndToEnd:
         assert torch.equal(net.b.x, xb)
         assert torch.equal(net.read(net.next)[0], xb)
 
+    @pytest.mark.parametrize("b_first", [False, True])
     def test_a_restored_network_continues_the_same(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork, b_first: bool
     ):
         k, m = 5, 7
         net = run_network(Chain(), _manual=True)
+        order = (net.b, net.a) if b_first else (net.a, net.b)
         for i in range(k):
             net.write({net.prev: u(i)})
-            step(net, virtual_timer)
+            step(net, virtual_timer, *order)
+        step(net, virtual_timer, net.a)  # b's last update is now one step behind
         net.write({net.prev: u(k)})  # the input slot is part of the state too
         tree = pickle.loads(pickle.dumps(net.state_dict()))
         for i in range(k, k + m):
-            step(net, virtual_timer)
+            step(net, virtual_timer, *order)
             net.write({net.prev: u(i + 1)})
         expected = (net.a.x.clone(), net.b.x.clone(), net.read(net.next))
         net.shutdown()
@@ -767,10 +846,79 @@ class TestEndToEnd:
         restored.build()
         restored.load_state_dict(tree)
         run_network(restored, _manual=True)
+        # Right after the restore the state is the tree, including where each dt
+        # starts and every channel slot (which Jacobi order reads first).
+        again = restored.state_dict()
+        assert again["last_update_ns"] == tree["last_update_ns"]
+        assert again["timer"] == tree["timer"]
+        for name, (value, time_ns) in tree["slots"].items():
+            assert torch.equal(again["slots"][name][0], value)
+            assert again["slots"][name][1] == time_ns
+        restored_order = (
+            (restored.b, restored.a) if b_first else (restored.a, restored.b)
+        )
         for i in range(k, k + m):
-            step(restored, virtual_timer)
+            step(restored, virtual_timer, *restored_order)
             restored.write({restored.prev: u(i + 1)})
         assert torch.equal(restored.a.x, expected[0])
         assert torch.equal(restored.b.x, expected[1])
         out, t = restored.read(restored.next)
         assert torch.equal(out, expected[2][0]) and t == expected[2][1]
+        # The nodes got copies: their updates in place did not reach the tree.
+        assert not torch.equal(tree["nodes"]["a"]["x"], restored.a.x)
+
+
+class TestInterpreterExit:
+    """Run a script in a new interpreter and see what happens at its exit."""
+
+    PRELUDE = """
+import pathlib, sys, threading, time
+import torch
+import mujou
+from mujou import Network, NextPort, Node, Port, TensorSpec
+
+class Slow(Node):
+    def __init__(self) -> None:
+        self.out = NextPort(send=TensorSpec((2,)))
+
+    def on_update(self, dt: float) -> None:
+        self.out.send(torch.ones(2))
+
+    def on_stop(self) -> None:
+        time.sleep(0.3)  # an actuator taking its time to stop
+        pathlib.Path(sys.argv[1]).write_text("stopped")
+
+class Net(Network):
+    def __init__(self) -> None:
+        self.node = Slow()
+        self.out = self.node.out
+"""
+
+    def run_script(self, body: str, marker: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-c", self.PRELUDE + body, str(marker)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    @pytest.mark.slow
+    def test_waits_for_on_stop_of_a_dropped_network(self, tmp_path: Path):
+        marker = tmp_path / "marker"
+        body = "def main() -> None:\n    mujou.run(Net())\nmain()\n"
+        done = self.run_script(body, marker)
+        assert done.returncode == 0, done.stderr
+        assert marker.read_text() == "stopped"
+
+    @pytest.mark.slow
+    def test_ends_a_subscribing_thread(self, tmp_path: Path):
+        marker = tmp_path / "marker"
+        body = (
+            "net = mujou.run(Net())\n"
+            "threading.Thread(target=lambda: [_ for _ in net.subscribe(net.out)])"
+            ".start()\n"
+        )
+        done = self.run_script(body, marker)
+        assert done.returncode == 0, done.stderr
+        assert marker.read_text() == "stopped"

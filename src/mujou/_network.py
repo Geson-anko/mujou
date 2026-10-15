@@ -126,9 +126,11 @@ class Network(Component):
 
     If a node raises, the whole network stops, and every later call of ``write``,
     ``read``, ``subscribe``, ``state_dict``, ``shutdown`` and ``join`` raises
-    ``NetworkError`` whose ``__cause__`` is the node's exception. Calling the
-    methods that wait (``state_dict``, ``shutdown``, ``join``) from a node's hook
-    raises ``RuntimeError``.
+    ``NetworkError`` whose ``__cause__`` is the node's exception. These methods are
+    for the host: calling them from a node's hook raises ``RuntimeError``.
+
+    A running network keeps running when the host drops it, until ``shutdown``
+    or, at the latest, the interpreter's exit (which waits for ``on_stop``).
 
     Example::
 
@@ -285,9 +287,10 @@ class Network(Component):
             capture_state_on_exception=capture_state_on_exception,
         )
 
-    def write(
-        self,
-        values: Mapping[Port[Any, Any, Any], torch.Tensor | Mapping[str, torch.Tensor]],
+    # P: a dict built beforehand has a precise key type, which a Mapping keyed by
+    # Port[Any, Any, Any] would reject (Mapping keys are invariant).
+    def write[P: Port[Any, Any, Any]](
+        self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
     ) -> None:
         """Write messages to unconnected single-peer ports that receive.
 
@@ -295,7 +298,9 @@ class Network(Component):
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Written before ``run``, they
-        are the initial values; they take precedence over ``load_state_dict``.
+        are the initial values. ``load_state_dict`` replaces what was written
+        before it; what is written after it replaces the tree's values and carries
+        the tree's time.
 
         Raises:
             RuntimeError: The network is not built.
@@ -311,7 +316,8 @@ class Network(Component):
 
         Any port that sends can be read, so a connected port shows an inner
         node. Only ``send`` (to every peer) updates the value read here; before
-        the first one it is zeros. The tensors are new copies on the CPU.
+        the first one it is zeros (or the value restored by ``load_state_dict``).
+        The tensors are new copies on the CPU.
 
         Raises:
             RuntimeError: The network is not built.
@@ -326,10 +332,11 @@ class Network(Component):
         Each step waits until a newer message than the last one is sent, and
         yields the latest; messages sent in between are skipped. Only the
         consumer waits: the sending node never does. The iterator ends when the
-        network shuts down normally.
+        network shuts down normally. Shut the network down before the program
+        ends: a thread iterating here ends only with the network.
 
         Raises:
-            RuntimeError: The network is not built.
+            RuntimeError: The network is not built or not run yet.
             ValueError: ``port`` is outside the network or sends nothing.
             NetworkError: The network stopped because a node raised (also from
                 the iterator).
@@ -381,6 +388,7 @@ class Network(Component):
         Does nothing before ``run`` or after the end.
 
         Raises:
+            RuntimeError: The network is not built.
             NetworkError: The network stopped because a node raised.
         """
         _session(self).shutdown()
@@ -431,6 +439,14 @@ def run[N: Network](
 
 
 def _session(network: Network) -> Session:
+    # Imported here: _node imports this module.
+    from mujou._node import in_hook
+
+    if in_hook():
+        raise RuntimeError(
+            "a node's hook cannot call the network's host methods; a node talks "
+            "only through its own ports"
+        )
     if network._session is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
         raise RuntimeError("the network is not built; call build() first")
     return network._session  # pyright: ignore[reportPrivateUsage]  # Network's own module

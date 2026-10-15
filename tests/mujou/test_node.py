@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from mujou import Network, Node, Port, TensorSpec
+from mujou._node import thread_ident
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork
@@ -65,6 +66,13 @@ class TestThreadSetup:
         assert node.device == torch.device("cpu")
         assert node.grad_enabled is False
         assert node.draws is not None
+
+    def test_the_thread_is_forgotten_after_the_end(self, run_network: RunNetwork):
+        node = Probe()
+        net = run_network(Solo(node), _manual=True)
+        assert thread_ident(node) == node.ident
+        net.shutdown()
+        assert thread_ident(node) is None
 
     def test_the_generator_is_made_on_the_thread(self):
         with pytest.raises(RuntimeError, match="node's thread"):

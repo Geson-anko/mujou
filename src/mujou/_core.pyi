@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping, Sequence
 from types import CapsuleType
-from typing import Final, Protocol, Self, final
+from typing import Any, Final, Protocol, Self, final
 
 __version__: str
 
@@ -195,7 +195,8 @@ class Node:
     are looked up once, after those three, so replacing one there takes effect.
     """
 
-    def __new__(cls, *args: object, **kwargs: object) -> Self: ...
+    # Any: subclasses take their own __init__ arguments, which this drops.
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
     def _on_thread_start(self) -> None: ...
     def on_start(self) -> None: ...
     def on_update(self, dt: float) -> None: ...
