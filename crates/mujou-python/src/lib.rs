@@ -38,7 +38,8 @@ impl GlobalTimer {
     /// Blocks for `seconds` of global time, following the scale and pauses.
     fn sleep(&self, py: Python<'_>, seconds: f64) -> PyResult<()> {
         let timer = time::global();
-        let target_ns = timer.time_ns() + seconds_to_ns(seconds).map_err(to_py_err)?;
+        let dt_ns = seconds_to_ns(seconds).map_err(to_py_err)?;
+        let target_ns = timer.time_ns().saturating_add(dt_ns);
         while !py.detach(|| timer.wait_until_ns(target_ns, SIGNAL_CHECK_INTERVAL)) {
             py.check_signals()?;
         }

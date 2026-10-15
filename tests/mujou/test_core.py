@@ -36,12 +36,6 @@ class TestCoreModule:
         assert result.stdout.strip() == "False"
 
 
-def _start_sleeper(timer: GlobalTimer, seconds: float) -> threading.Thread:
-    sleeper = threading.Thread(target=timer.sleep, args=(seconds,))
-    sleeper.start()
-    return sleeper
-
-
 class TestGlobalTimer:
     def test_advance_converts_seconds_to_nanoseconds(self, virtual_timer: GlobalTimer):
         start = virtual_timer.time_ns()
@@ -62,7 +56,8 @@ class TestGlobalTimer:
         virtual_timer.set_time_scale(1000.0)
         virtual_timer.pause()
         assert virtual_timer.is_paused()
-        sleeper = _start_sleeper(virtual_timer, 1.0)
+        sleeper = threading.Thread(target=virtual_timer.sleep, args=(1.0,))
+        sleeper.start()
         sleeper.join(timeout=0.05)
         assert sleeper.is_alive()
         virtual_timer.resume()

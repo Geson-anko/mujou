@@ -63,6 +63,17 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 
 ホストが入力の提示時間などを待つために、グローバル時間で待つ関数（`mujou.time.sleep(dt)` など、名前は暫定）を用意する。時間のスケール・停止・仮想時計に従って待つ。実時間の `time.sleep` で待つと、これらと噛み合わない（[ネットワーク](network.md#入力はグローバル時間上の信号)）。
 
+### 実装
+
+> 状態: 実装済み、公開する名前は暫定（2026-10-15）。
+
+- Rust の `mujou_core::time::GlobalTimer` が本体で、`mujou_core::time::global()` がシングルトンを返す。時刻の正は u64 のナノ秒で、秒の f64 はそこから作る。時刻はタイマーを最初に使った時点を 0 とし、`u64::MAX`（約 584 年）で飽和する
+- 時刻は「anchor の時刻 + anchor からの実経過 × スケール」で求める。スケールの変更・停止・再開・時計の切り替えでは、先に anchor を今の時刻へ張り替えるので、時刻は飛ばない
+- グローバル時間で待つ処理は、条件変数で状態の変化を待つ。停止中は時刻が進まないので、停止中の `sleep` は再開まで戻らない
+- 状態の木に入れるのは時刻（ns）とスケールだけである。状態は必ず停止中に取得するので、停止中かどうかは入れない。時計の種類はテストの設定なので入れない
+- Python からは `mujou._core.timer`（private）が全機能を持つ。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで、停止・状態・仮想時計はフレームワークとテストが `mujou._core.timer` から使う。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる
+- 仮想時計（`use_virtual_clock(True)`）では、時刻は `advance(seconds)` で進めた分だけ進み、スケールは効かない。停止中は `advance` できない
+
 ## 停止と状態の取得・復元
 
 実行中のシステムを止めて、状態を取得・復元できるようにする。停止の流れは pamiq-core の `ThreadController`（<https://github.com/MLShukai/pamiq-core/blob/main/src/pamiq_core/thread/thread_control.py>）を参考にする。

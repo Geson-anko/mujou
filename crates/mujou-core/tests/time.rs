@@ -220,6 +220,28 @@ mod virtual_clock {
     }
 
     #[test]
+    fn saturates_instead_of_wrapping_around() {
+        let timer = virtual_timer();
+        timer.advance_ns(u64::MAX).unwrap();
+        timer.advance_ns(1).unwrap();
+        assert_eq!(timer.time_ns(), u64::MAX);
+    }
+
+    #[test]
+    fn sleep_beyond_the_representable_time_does_not_return_early() {
+        let timer = Arc::new(virtual_timer());
+        timer.advance_ns(SECOND).unwrap();
+        let sleeper = {
+            let timer = Arc::clone(&timer);
+            thread::spawn(move || timer.sleep_ns(u64::MAX))
+        };
+        thread::sleep(Duration::from_millis(20));
+        assert!(!sleeper.is_finished());
+        timer.advance_ns(u64::MAX).unwrap();
+        sleeper.join().unwrap();
+    }
+
+    #[test]
     fn rejects_advance_while_paused() {
         let timer = virtual_timer();
         timer.pause();

@@ -30,3 +30,12 @@
 ## 計画外の判断
 
 - テストの修正: `state::restores_the_time_and_scale` が新しいタイマーの時刻を 0 と仮定していた。仮想時計に切り替えるまでの実時間ぶん進むので、切り替え後の時刻を起点にした（仕様の変更ではない）
+- `mujou.time` の属性 docstring は `check-docstring-first` に弾かれるので、モジュールの docstring に一覧で書いた。関数の説明は Rust の doc comment が `__doc__` になる
+- sleep のテストは、sleeper スレッドが起動する前に advance されると目標がずれて落ちた。スレッドの中で自分の sleep の長さを測り、メインは少しずつ advance して戻るまで回す形にした（起動のタイミングに依らない）。fixture `measure_sleep`（tests/conftest.py）
+- 30 回（Rust）・10 回（pytest）の繰り返しで不安定なテストなし
+
+## 自己レビュー（段階 4）
+
+- 欠陥: 大きな秒数で `sleep` すると、ns が u64::MAX に飽和したあと `time_ns() + dt_ns` が release ビルドで wrap し、すぐ戻る。`advance_ns` も同じ → `saturating_add` に直し、テスト 2 件を追加（段階 2・3 に戻した）
+- 整理: 1 箇所でしか使わない `_start_sleeper` をインライン化
+- 局所性・非同期性: タイマーはノード間の通信ではなく、ノードの更新則に触れない。グローバルなバリアも入れていない（停止は制御側の操作だけ）
