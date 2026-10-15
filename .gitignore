@@ -38,3 +38,9 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust
+target/
+
+# Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
+.venv-devcontainer/

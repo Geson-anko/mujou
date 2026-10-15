@@ -1,0 +1,35 @@
+{
+  "name": "mujou",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "containerEnv": {
+    "UV_PROJECT_ENVIRONMENT": ".venv-devcontainer",
+    "UV_LINK_MODE": "copy",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "core.fileMode",
+    "GIT_CONFIG_VALUE_0": "false"
+  },
+  "remoteEnv": {
+    "PATH": "${containerWorkspaceFolder}/.venv-devcontainer/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "uv sync && { [ -f .git/hooks/pre-commit ] || uv run pre-commit install; }",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "skellock.just",
+        "rust-lang.rust-analyzer"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv-devcontainer/bin/python"
+      }
+    }
+  }
+}

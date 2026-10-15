@@ -78,14 +78,15 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 
 ## コマンド
 
-| レシピ           | 内容                                                                 |
-| ---------------- | -------------------------------------------------------------------- |
-| `just setup`     | 開発環境のセットアップ（`uv venv` + `uv sync` + pre-commit install） |
-| `just format`    | pre-commit フックを全ファイルに実行                                  |
-| `just test`      | pytest（slow を含む全テスト、coverage 付き）                         |
-| `just test-fast` | slow を除いた pytest。反復中に使う                                   |
-| `just type`      | pyright strict                                                       |
-| `just run`       | format → test → type。**コミット前の検証はこれ**                     |
+| レシピ                 | 内容                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `just setup`           | 開発環境のセットアップ（`uv venv` + `uv sync` + pre-commit install）                                          |
+| `just format`          | pre-commit フックを全ファイルに実行                                                                           |
+| `just test`            | pytest（slow を含む全テスト、coverage 付き）                                                                  |
+| `just test-fast`       | slow を除いた pytest。反復中に使う                                                                            |
+| `just type`            | pyright strict                                                                                                |
+| `just run`             | format → test → type。**コミット前の検証はこれ**                                                              |
+| `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run` |
 
 単一テスト: `uv run pytest tests/mujou/test_x.py -v` / キーワード: `uv run pytest -k "<expr>"`
 
