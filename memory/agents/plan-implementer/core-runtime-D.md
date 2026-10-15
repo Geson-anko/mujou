@@ -122,3 +122,21 @@
 
 - algorithm nit 4: `exception_state_dict` は `_session()` を通らないので hook から呼べる。読み取りだけで待たないので、そのままにした
 - CUDA の経路は引き続き未実測
+
+## 3 回目のレビュー（r3）への対応（2026-10-16）
+
+対象: `memory/agents/code-reviewer/core-runtime-D-r3.md`（main checkout 側）。orchestrator の指示で、M1・S1・S2・N1・N2・N8 だけを直した。
+
+- M1: `run` は `runtime.start` の前（lock の中）で、ホストのスレッドの current stream を、ノードが使う CUDA デバイスごとに同期する。`__init__` で確保した Tensor や `load_state_dict` のコピーが、ノードのストリームが使う前に終わる。ほかのホストのスレッドで確保したものは、そのスレッドで同期してから `run()` する（docs/torch.md）
+- S1: `write` が `_run_lock` を取るのは `_timer_state is not None`（復元待ち）のときだけ。ふつうのネットワークの `write` は、起動中でも待たずに `_group.write` に進む。回帰テストは `test_does_not_wait_for_a_run_in_its_start`（`on_start` が `recv` を poll し、別スレッドが 0.2 秒後に `write`。値が届き、`write` が 1 秒以内に戻ること）。復元したネットワークの `write` は、木の時刻か起動後の時刻かを決めるために起動の終わりまで待つ（docs/network.md に書いた）
+- S2: `_synchronize_current_streams` を Session のメソッドにし、ノードが使う CUDA デバイスだけを同期する（使っていない GPU にコンテキストを作らない）
+- N1: docs/nodes.md に、CUDA の非同期のエラーが `_after_update` の名前で出ることを書いた。N2: `_after_update` のコメントを直した。N8: stub に「`state_dict` は既定の `_capture_state` が取得のたびに引く」と書いた
+
+記録だけ（N3〜N7, N9）:
+
+- N3: キャッシュアロケータはストリームごとのプールなので、ホストのストリームで確保した Tensor をノードが手放すと、ノードのカーネルがまだ読んでいる間にブロックが再利用されうる（`record_stream` が無い）。その場の更新を勧めているので起きにくい
+- N4: `device="cuda"` は構築時に `torch.cuda.current_device()` で CUDA を初期化するので、構築の後に fork すると子で CUDA が使えない。`cuda:N` の N の範囲は `set_device` まで検査しない
+- N5: 例外のときの取得が `_capture_state` を通ることと、そのときの `in_hook` の印を確かめる Python のテストが無い。`_shutdown_all` の `BaseException` の分岐にもテストが無い
+- N6: 起動中に別スレッドが `state_dict` / `step` / `join` / `subscribe` を呼ぶと、コアの「the runtime has not started」になり、メッセージが状況と合わない
+- N7: `_shutdown_all` が例外を送出し直すと、`threading._shutdown` が残りの join を飛ばす。全部を止めてからログに出すだけのほうが安全かもしれない
+- N9: CPU のノードでも、ステップごとに `_after_update` を 1 回余計に呼ぶ（未測定）
