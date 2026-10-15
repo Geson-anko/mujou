@@ -291,16 +291,11 @@ fn duration(seconds: f64) -> PyResult<Duration> {
     ))
 }
 
-/// The nodes and their names before `start`.
-struct Pending {
-    nodes: Vec<Py<PyAny>>,
-    names: Vec<String>,
-}
-
 /// Runs nodes, each on its own thread, under one control thread.
 #[pyclass(frozen, module = "mujou._core")]
 pub struct Runtime {
-    pending: Mutex<Option<Pending>>,
+    /// The nodes before `start`.
+    pending: Mutex<Option<Vec<Py<PyAny>>>>,
     names: Vec<String>,
     inner: OnceLock<core::Runtime<PyNode>>,
     exception_state: Arc<OnceLock<Py<PyAny>>>,
@@ -314,8 +309,7 @@ impl Runtime {
     }
 
     /// Waits for a reply without the GIL, checking for signals in between.
-    fn wait<T: Send>(&self, py: Python<'_>, reply: Reply<T>) -> PyResult<T> {
-        let mut reply = reply;
+    fn wait<T: Send>(&self, py: Python<'_>, mut reply: Reply<T>) -> PyResult<T> {
         loop {
             // `Reply` is not `Sync`, so it moves in and out instead of being
             // borrowed across the detach.
@@ -369,10 +363,7 @@ impl Runtime {
         }
         let nodes = nodes.into_iter().map(|n| n.into_any().unbind()).collect();
         Ok(Self {
-            pending: Mutex::new(Some(Pending {
-                nodes,
-                names: names.clone(),
-            })),
+            pending: Mutex::new(Some(nodes)),
             names,
             inner: OnceLock::new(),
             exception_state: Arc::new(OnceLock::new()),
@@ -431,16 +422,13 @@ impl Runtime {
             timer_state,
         };
         let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
-        let Pending { nodes, names } = pending
+        let nodes = pending
             .take()
             .ok_or_else(|| PyRuntimeError::new_err("the runtime has already started"))?;
         // Kept to undo the take if the core rejects the arguments.
-        let kept = Pending {
-            nodes: nodes.iter().map(|n| n.clone_ref(py)).collect(),
-            names: names.clone(),
-        };
+        let kept = nodes.iter().map(|n| n.clone_ref(py)).collect();
         let mut states = states.map(Vec::into_iter);
-        let hooks = (nodes.into_iter().zip(names.iter().cloned()))
+        let hooks = (nodes.into_iter().zip(self.names.iter().cloned()))
             .map(|(node, name)| PyNode {
                 node,
                 name,
@@ -449,16 +437,21 @@ impl Runtime {
             })
             .collect();
         let capture = on_exception_capture.map(|callback| self.exception_capture(callback));
-        let (runtime, started) =
-            match core::Runtime::start(hooks, names, time::global(), config, capture) {
-                Ok(started) => started,
-                Err(e) => {
-                    if matches!(e, RuntimeError::InvalidArgument(_)) {
-                        *pending = Some(kept);
-                    }
-                    return Err(runtime_error(py, &self.names, e));
+        let (runtime, started) = match core::Runtime::start(
+            hooks,
+            self.names.clone(),
+            time::global(),
+            config,
+            capture,
+        ) {
+            Ok(started) => started,
+            Err(e) => {
+                if matches!(e, RuntimeError::InvalidArgument(_)) {
+                    *pending = Some(kept);
                 }
-            };
+                return Err(runtime_error(py, &self.names, e));
+            }
+        };
         drop(pending);
         let _ = self.inner.set(runtime);
         self.wait(py, started)
