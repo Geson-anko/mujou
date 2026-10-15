@@ -57,16 +57,6 @@ struct Borrowed<'py> {
     tensors: Vec<TensorPtr>,
 }
 
-/// `slot 'a/out', field 'x'`, or just the slot for a tensor message, whose one
-/// field is named `""`.
-fn location(slot: &str, field: &str) -> String {
-    if field.is_empty() {
-        format!("slot '{slot}'")
-    } else {
-        format!("slot '{slot}', field '{field}'")
-    }
-}
-
 /// Asks `value` for its DLPack capsule, preferring the 1.x protocol and falling
 /// back to the unversioned one for producers that do not take `max_version`.
 fn borrow_tensor<'py>(
@@ -184,16 +174,17 @@ fn borrow_values<'py>(
             values.len()
         )));
     }
-    let mut borrowed = Borrowed {
-        _capsules: Vec::with_capacity(values.len()),
-        tensors: Vec::with_capacity(values.len()),
-    };
-    for (value, field) in values.iter().zip(fields) {
-        let (capsule, tensor) = borrow_tensor(value, &location(slot, &field.name))?;
-        borrowed._capsules.push(capsule);
-        borrowed.tensors.push(tensor);
-    }
-    Ok(borrowed)
+    let (capsules, tensors) = values
+        .iter()
+        .zip(fields)
+        .map(|(value, field)| borrow_tensor(value, &core::location(slot, &field.name)))
+        .collect::<PyResult<Vec<_>>>()?
+        .into_iter()
+        .unzip();
+    Ok(Borrowed {
+        _capsules: capsules,
+        tensors,
+    })
 }
 
 /// Copies each borrowed tensor into the buffer of its field. Calls no Python, so
@@ -212,6 +203,18 @@ fn copy_into(
         unsafe { dlpack::copy_from(&*t.0, field, dst) }.map_err(|e| e.at_slot(slot))?;
     }
     Ok(())
+}
+
+/// Borrows `values` for `slot` with the GIL, then runs `write` without it, giving
+/// it a `fill` that copies the values into the buffers of the new message.
+fn write_values<W>(values: &Bound<'_, PyAny>, schema: &Schema, slot: &str, write: W) -> PyResult<()>
+where
+    W: Send + FnOnce(&dyn Fn(&mut [&mut [u8]]) -> Result<(), SlotError>) -> Result<(), SlotError>,
+{
+    let borrowed = borrow_values(values, schema, slot)?;
+    let tensors = &borrowed.tensors;
+    let fill = |bytes: &mut [&mut [u8]]| copy_into(tensors, schema, slot, bytes);
+    values.py().detach(|| write(&fill)).map_err(to_py_err)
 }
 
 fn check_index(index: isize, len: usize) -> PyResult<usize> {
@@ -408,17 +411,10 @@ impl PySlot {
 
     /// Sets the value and its time as they were when the state was taken.
     fn restore(&self, values: &Bound<'_, PyAny>, time_ns: u64) -> PyResult<()> {
-        let (schema, name) = (self.0.schema(), self.0.name());
-        let borrowed = borrow_values(values, schema, name)?;
-        let tensors = &borrowed.tensors;
-        values
-            .py()
-            .detach(|| {
-                self.0.restore(time_ns, |bytes: &mut [&mut [u8]]| {
-                    copy_into(tensors, schema, name, bytes)
-                })
-            })
-            .map_err(to_py_err)
+        let slot = &self.0;
+        write_values(values, slot.schema(), slot.name(), |fill| {
+            slot.restore(time_ns, fill)
+        })
     }
 }
 
@@ -428,21 +424,14 @@ struct PyOutlet(core::Outlet);
 
 impl PyOutlet {
     fn send_with(&self, target: Target, values: &Bound<'_, PyAny>) -> PyResult<()> {
-        let schema = self.0.schema();
+        let outlet = &self.0;
         let name = match target {
-            Target::All => self.0.outbox().name(),
-            Target::Channel(k) => self.0.channel(k).name(),
+            Target::All => outlet.outbox().name(),
+            Target::Channel(k) => outlet.channel(k).name(),
         };
-        let borrowed = borrow_values(values, schema, name)?;
-        let tensors = &borrowed.tensors;
-        values
-            .py()
-            .detach(|| {
-                self.0.send_with(target, |bytes: &mut [&mut [u8]]| {
-                    copy_into(tensors, schema, name, bytes)
-                })
-            })
-            .map_err(to_py_err)
+        write_values(values, outlet.schema(), name, |fill| {
+            outlet.send_with(target, fill)
+        })
     }
 }
 
@@ -495,8 +484,8 @@ impl PyInputGroup {
         PyInputSlot(self.0.input(Arc::clone(&schema.0), name))
     }
 
-    /// Writes every item at once: no reader sees some slots new and others old,
-    /// and if any value is invalid no slot changes.
+    /// Writes every item at once: at no moment does a reader see some slots new
+    /// and others old, and if any value is invalid no slot changes.
     fn write(
         &self,
         py: Python<'_>,
@@ -548,17 +537,10 @@ impl PyInputSlot {
 
     /// Sets the value and its time as they were when the state was taken.
     fn restore(&self, values: &Bound<'_, PyAny>, time_ns: u64) -> PyResult<()> {
-        let (schema, name) = (self.0.schema(), self.0.name());
-        let borrowed = borrow_values(values, schema, name)?;
-        let tensors = &borrowed.tensors;
-        values
-            .py()
-            .detach(|| {
-                self.0.restore(time_ns, |bytes: &mut [&mut [u8]]| {
-                    copy_into(tensors, schema, name, bytes)
-                })
-            })
-            .map_err(to_py_err)
+        let slot = &self.0;
+        write_values(values, slot.schema(), slot.name(), |fill| {
+            slot.restore(time_ns, fill)
+        })
     }
 }
 

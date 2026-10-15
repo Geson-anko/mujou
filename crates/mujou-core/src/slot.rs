@@ -155,19 +155,22 @@ impl SlotError {
 }
 
 /// `slot 'a/out', field 'x'`, leaving out what is empty: a tensor message has
-/// one field named `""`.
+/// one field named `""`, and an error from [`crate::dlpack::copy_from`] has no
+/// slot until [`SlotError::at_slot`] names it.
+pub fn location(slot: &str, field: &str) -> String {
+    match (slot.is_empty(), field.is_empty()) {
+        (false, false) => format!("slot '{slot}', field '{field}'"),
+        (false, true) => format!("slot '{slot}'"),
+        (true, false) => format!("field '{field}'"),
+        (true, true) => String::new(),
+    }
+}
+
+/// [`location`] followed by `": "`, or nothing if it is empty.
 fn write_location(f: &mut fmt::Formatter<'_>, slot: &str, field: &str) -> fmt::Result {
-    let mut parts = Vec::new();
-    if !slot.is_empty() {
-        parts.push(format!("slot '{slot}'"));
-    }
-    if !field.is_empty() {
-        parts.push(format!("field '{field}'"));
-    }
-    if parts.is_empty() {
-        Ok(())
-    } else {
-        write!(f, "{}: ", parts.join(", "))
+    match location(slot, field) {
+        at if at.is_empty() => Ok(()),
+        at => write!(f, "{at}: "),
     }
 }
 

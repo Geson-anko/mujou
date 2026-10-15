@@ -49,8 +49,9 @@ class Schema:
     field per key, in key order. Every extent must be at least 1.
 
     Raises:
-        ValueError: No fields, duplicate names, an extent below 1, or a dtype
-            that is not a scalar of whole bytes.
+        ValueError: No fields, duplicate names, an extent below 1, a dtype
+            that is not a scalar of whole bytes, or a field too large to
+            allocate.
     """
 
     def __init__(
@@ -62,7 +63,8 @@ class BufferView:
     """One field of a message, lent over DLPack.
 
     Read it with ``torch.from_dlpack(view)`` and copy the result at once: the
-    memory belongs to the core and must not be written.
+    memory belongs to the core and must not be written. ``__dlpack__`` raises
+    ``BufferError`` for ``copy=True`` or a ``dl_device`` other than the CPU.
     """
 
     def __dlpack__(
@@ -102,13 +104,17 @@ class Slot:
 
         Only for the host's ``subscribe``: a node must never wait for another,
         so ports do not expose it.
+
+        Raises:
+            ValueError: ``timeout`` is negative or not finite.
         """
 
     def restore(self, values: Sequence[SupportsDLPack], time_ns: int) -> None:
         """Set the value and its time as they were when the state was taken.
 
         Call it only while no node runs (before the start, or while every node
-        is paused): it writes beside the slot's own writer.
+        is paused): it writes beside the slot's own writer. Raises as
+        ``Outlet.send`` does.
         """
 
 @final
@@ -178,7 +184,7 @@ class InputSlot:
         """Set the value and its time, dropping any pending write.
 
         Call it only while no node runs (before the start, or while every node
-        is paused).
+        is paused). Raises as ``Outlet.send`` does.
         """
 
 # --- runtime (WP-B)
