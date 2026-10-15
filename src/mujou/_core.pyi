@@ -193,7 +193,8 @@ class Node:
     ``_capture_state``, on the control thread while the node is paused). They do
     nothing by default. The hooks other than ``_on_thread_start``, ``on_start``
     and ``load_state_dict`` are looked up once, after those three, so replacing
-    one there takes effect.
+    one there takes effect. ``state_dict`` itself is looked up by the default
+    ``_capture_state`` at each capture, so replacing it later takes effect too.
     """
 
     # Any: subclasses take their own __init__ arguments, which this drops.

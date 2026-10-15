@@ -3,6 +3,7 @@ import pickle
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
@@ -472,6 +473,40 @@ class TestWrite:
         ((x, tx), (y, ty)) = node.seen[0]
         assert torch.equal(x, u(1)) and torch.equal(y, u(2))
         assert tx == ty == written_at
+
+    def test_does_not_wait_for_a_run_in_its_start(self, run_network: RunNetwork):
+        # on_start waits for the host's first input, written by another thread
+        # while run() is still starting the nodes.
+        class WaitsForInput(Pair):
+            got: torch.Tensor | None = None
+
+            @override
+            def on_start(self) -> None:
+                deadline = time.monotonic() + 5.0
+                while time.monotonic() < deadline:
+                    value = self.x.recv()
+                    if value.any():
+                        self.got = value
+                        return
+                    time.sleep(0.005)
+
+        node = WaitsForInput()
+        net = Solo(node)
+        net.build()
+        returned_after: list[float] = []
+
+        def write_later() -> None:
+            time.sleep(0.2)
+            started = time.monotonic()
+            net.write({node.x: u(1)})
+            returned_after.append(time.monotonic() - started)
+
+        writer = threading.Thread(target=write_later)
+        writer.start()
+        run_network(net, _manual=True)
+        writer.join()
+        assert node.got is not None and torch.equal(node.got, u(1))
+        assert returned_after[0] < 1.0
 
     def test_after_load_state_dict_takes_precedence(
         self, virtual_timer: GlobalTimer, run_network: RunNetwork

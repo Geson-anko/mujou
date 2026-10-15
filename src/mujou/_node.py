@@ -142,8 +142,8 @@ class Node(_core.Node, Component):
 
     @override
     def _after_update(self) -> None:
-        # The CPU never runs ahead of the GPU, and a node paused between updates
-        # has no work left on its stream.
+        # The CPU never runs ahead of the GPU. (Other hooks may still leave work on
+        # the stream; _capture_state waits for it before taking the state.)
         if self._stream is not None:
             self._stream.synchronize()
 

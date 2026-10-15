@@ -204,6 +204,9 @@ class Session:
             for session in list(_RUNNING):
                 session._settle()
             _RUNNING.add(self)
+            # What this thread queued for the nodes (tensors made in __init__ or
+            # by load_state_dict) is done before their streams use it.
+            self._synchronize_current_streams()
             try:
                 runtime.start(
                     manual=manual,
@@ -278,15 +281,19 @@ class Session:
             slot, spec = self._writable(port)
             where = self._graph.port_path(port)
             items.append((slot, [_to_host(t) for t in split(spec, value, where=where)]))
-        with self._run_lock:
-            if self._runtime is None and self._timer_state is not None:
-                # Restored but not running: the values belong to the restored time
-                # T, not to the process's time now. Nobody reads yet, so restoring
-                # each slot (after checking them all above) switches them together.
-                time_ns = int(self._timer_state["time_ns"])
-                for slot, tensors in items:
-                    slot.restore(tensors, time_ns)
-                return
+        # The lock only for a restored network that may be starting: a plain write
+        # never waits for run (an on_start may be waiting for it).
+        if self._timer_state is not None:
+            with self._run_lock:
+                if self._runtime is None:
+                    # Restored but not running: the values belong to the restored
+                    # time T, not to the process's time now. Nobody reads yet, so
+                    # restoring each slot (after checking them all above) switches
+                    # them together.
+                    time_ns = int(self._timer_state["time_ns"])
+                    for slot, tensors in items:
+                        slot.restore(tensors, time_ns)
+                    return
         self._group.write(items)
 
     def read(self, port: AnyPort) -> tuple[object, float]:
@@ -422,7 +429,7 @@ class Session:
         states = [copy.deepcopy(nodes[path]) for path in self._paths]
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
-        _synchronize_current_streams()
+        self._synchronize_current_streams()
         for slot, tensors, time_ns in restores:
             slot.restore(tensors, time_ns)
         self._states = states
@@ -431,6 +438,13 @@ class Session:
             "time_ns": cast(int, timer["time_ns"]),
             "scale": timer["scale"],
         }
+
+    def _synchronize_current_streams(self) -> None:
+        """Wait for the calling thread's current stream on each CUDA device the
+        nodes use: only this thread's work, not the nodes' streams nor the whole
+        device, and no context on a device the network does not use."""
+        for device in {n.device for n in self._nodes if n.device.type == "cuda"}:
+            torch.cuda.current_stream(device).synchronize()
 
     def _tree(
         self, states: Mapping[int, object], last_update_ns: Sequence[int]
@@ -454,7 +468,7 @@ class Session:
         }
         # The copies above queue on this thread's current streams. Finish them
         # before the runtime resumes the nodes, which update in place.
-        _synchronize_current_streams()
+        self._synchronize_current_streams()
         return tree
 
 
@@ -480,14 +494,6 @@ def _weakly[**P, T](
 
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _synchronize_current_streams() -> None:
-    """Wait for the calling thread's current stream on every CUDA device, if CUDA
-    is in use. Only this thread's work: not the nodes' streams, nor the device."""
-    if torch.cuda.is_initialized():
-        for index in range(torch.cuda.device_count()):
-            torch.cuda.current_stream(index).synchronize()
 
 
 def _same_keys(
