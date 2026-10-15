@@ -189,10 +189,11 @@ class InputSlot:
 class Node:
     """The base of every node.
 
-    The runtime calls the hooks on the node's own thread (``state_dict`` on the
-    control thread while the node is paused). They do nothing by default. The
-    hooks other than ``_on_thread_start``, ``on_start`` and ``load_state_dict``
-    are looked up once, after those three, so replacing one there takes effect.
+    The runtime calls the hooks on the node's own thread (``state_dict``, through
+    ``_capture_state``, on the control thread while the node is paused). They do
+    nothing by default. The hooks other than ``_on_thread_start``, ``on_start``
+    and ``load_state_dict`` are looked up once, after those three, so replacing
+    one there takes effect.
     """
 
     # Any: subclasses take their own __init__ arguments, which this drops.
@@ -200,12 +201,19 @@ class Node:
     def _on_thread_start(self) -> None: ...
     def on_start(self) -> None: ...
     def on_update(self, dt: float) -> None: ...
+    def _after_update(self) -> None:
+        """Called on the node's thread right after each ``on_update``, for the
+        framework's per-step work."""
     def on_pause(self) -> None: ...
     def on_resume(self) -> None: ...
     def on_exception(self) -> None: ...
     def on_stop(self) -> None: ...
     def state_dict(self) -> object: ...
     def load_state_dict(self, state: object) -> None: ...
+    def _capture_state(self) -> object:
+        """Called instead of ``state_dict`` when the state is taken (on the
+        control thread, while the node is paused), for the framework's work
+        around it. Returns ``self.state_dict()`` by default."""
 
 class NetworkError(RuntimeError):
     """The network stopped because a node raised.

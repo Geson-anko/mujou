@@ -59,6 +59,10 @@ impl Node {
 
     fn on_update(&self, _dt: f64) {}
 
+    /// Called on the node's thread right after each `on_update`, for the
+    /// framework's per-step work (so that overriding `on_update` cannot skip it).
+    fn _after_update(&self) {}
+
     fn on_pause(&self) {}
 
     fn on_resume(&self) {}
@@ -72,6 +76,13 @@ impl Node {
     }
 
     fn load_state_dict(&self, _state: &Bound<'_, PyAny>) {}
+
+    /// Called instead of `state_dict` when the runtime takes the state (on the
+    /// control thread, while the node is paused), for the framework's work
+    /// around it. Returns `self.state_dict()` by default.
+    fn _capture_state(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
+        slf.call_method0("state_dict").map(Bound::unbind)
+    }
 }
 
 /// A Python exception raised by a hook, kept to become `__cause__`.
@@ -109,36 +120,48 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
 /// end of `start` instead of by name at every call.
 struct Methods {
     on_update: Py<PyAny>,
+    after_update: Py<PyAny>,
     on_pause: Py<PyAny>,
     on_resume: Py<PyAny>,
     on_exception: Py<PyAny>,
     on_stop: Py<PyAny>,
-    state_dict: Py<PyAny>,
+    capture_state: Py<PyAny>,
 }
 
 impl Methods {
     fn of(node: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let get = |name: &str| node.getattr(name).map(Bound::unbind);
+        let get = |hook: &str| node.getattr(attribute(hook)).map(Bound::unbind);
         Ok(Self {
             on_update: get("on_update")?,
+            after_update: get("_after_update")?,
             on_pause: get("on_pause")?,
             on_resume: get("on_resume")?,
             on_exception: get("on_exception")?,
             on_stop: get("on_stop")?,
-            state_dict: get("state_dict")?,
+            capture_state: get("state_dict")?,
         })
     }
 
     fn get(&self, hook: &str) -> Option<&Py<PyAny>> {
         match hook {
             "on_update" => Some(&self.on_update),
+            "_after_update" => Some(&self.after_update),
             "on_pause" => Some(&self.on_pause),
             "on_resume" => Some(&self.on_resume),
             "on_exception" => Some(&self.on_exception),
             "on_stop" => Some(&self.on_stop),
-            "state_dict" => Some(&self.state_dict),
+            "state_dict" => Some(&self.capture_state),
             _ => None,
         }
+    }
+}
+
+/// The attribute the runtime calls for `hook`. Taking the state goes through
+/// `_capture_state`, which calls `state_dict`; errors still name `state_dict`.
+fn attribute(hook: &str) -> &str {
+    match hook {
+        "state_dict" => "_capture_state",
+        _ => hook,
     }
 }
 
@@ -174,7 +197,7 @@ impl PyNode {
             let result = match self.methods.as_ref().and_then(|m| m.get(hook)) {
                 Some(method) => method.bind(py).call1(args(py)),
                 // Before the lookup, or if it failed: by name.
-                None => self.node.bind(py).call_method1(hook, args(py)),
+                None => self.node.bind(py).call_method1(attribute(hook), args(py)),
             };
             result
                 .map(Bound::unbind)
@@ -221,8 +244,8 @@ impl NodeHooks for PyNode {
                 PyTuple::new(py, [state]).expect("a tuple of one object")
             })?;
         }
-        // Look the hooks up last, so that `_on_thread_start` and `on_start`
-        // may still replace them (by instance attributes, to wrap them).
+        // Look the hooks up last, so that `_on_thread_start`, `on_start` and
+        // `load_state_dict` may still replace them (by instance attributes).
         let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
         self.methods =
             Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);
@@ -231,8 +254,8 @@ impl NodeHooks for PyNode {
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
         self.call("on_update", |py| {
             PyTuple::new(py, [dt]).expect("a tuple of one float")
-        })
-        .map(drop)
+        })?;
+        self.call0("_after_update")
     }
 
     fn pause(&mut self) -> Result<(), HookError> {

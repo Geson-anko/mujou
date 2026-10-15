@@ -420,6 +420,71 @@ def wait_until_no_runtime_runs() -> None:
             time.sleep(0.001)
 
 
+class FrameworkHooks(Recorder):
+    """Records the framework's hooks too, and wraps the state in _capture_state."""
+
+    @override
+    def _after_update(self) -> None:
+        self.hook("_after_update")
+
+    @override
+    def _capture_state(self) -> object:
+        self.hook("_capture_state")
+        return {"captured": super()._capture_state()}
+
+
+class TestFrameworkHooks:
+    def test_after_update_follows_each_update_on_the_node_thread(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log)
+        runtime = make_runtime([node])
+        runtime.start(manual=True)
+        for _ in range(2):
+            virtual_timer.advance(H)
+            runtime.step()
+        runtime.shutdown()
+        updates = [e for e in log.of("a") if e in ("on_update", "_after_update")]
+        assert updates == ["on_update", "_after_update"] * 2
+        assert node.threads["_after_update"] == node.threads["on_update"]
+
+    def test_capture_state_replaces_state_dict(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log)
+        runtime = make_runtime([node])
+        runtime.start(manual=True)
+        states = runtime.capture(lambda states: states)
+        runtime.shutdown()
+        assert states == [{"captured": {"name": "a", "updates": 0}}]
+        assert log.of("a").count("_capture_state") == 1
+        assert log.of("a").count("state_dict") == 1  # called by the default
+
+    def test_an_error_in_state_dict_still_names_state_dict(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = Recorder("a", log, raise_in="state_dict")
+        runtime = make_runtime([node])
+        runtime.start(manual=True)
+        with pytest.raises(NetworkError, match="state_dict"):
+            runtime.capture(lambda states: states)
+
+    def test_an_error_after_an_update_stops_the_network(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log, raise_in="_after_update")
+        runtime = make_runtime([node])
+        runtime.start(manual=True)
+        virtual_timer.advance(H)
+        with pytest.raises(NetworkError, match="_after_update") as raised:
+            runtime.step()
+        assert raised.value.__cause__ is node.error
+
+
 class TestFreeRun:
     def test_dt_sums_to_the_time_since_the_start(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
