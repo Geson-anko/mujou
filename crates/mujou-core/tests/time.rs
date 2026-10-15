@@ -146,6 +146,54 @@ mod pause {
     }
 }
 
+mod hold {
+    use super::*;
+
+    #[test]
+    fn the_time_runs_again_only_when_every_hold_is_dropped() {
+        let timer = GlobalTimer::new();
+        let first = timer.hold();
+        let second = timer.hold();
+        let frozen = timer.time_ns();
+        drop(first);
+        // Ending one freeze must not let the time run during the other one.
+        assert!(timer.is_paused());
+        thread::sleep(Duration::from_millis(2));
+        assert_eq!(timer.time_ns(), frozen);
+        drop(second);
+        assert!(!timer.is_paused());
+    }
+
+    #[test]
+    fn resume_does_not_undo_a_hold() {
+        let timer = GlobalTimer::new();
+        let hold = timer.hold();
+        timer.pause();
+        timer.resume();
+        assert!(timer.is_paused());
+        drop(hold);
+        assert!(!timer.is_paused());
+    }
+
+    #[test]
+    fn dropping_a_hold_does_not_undo_pause() {
+        let timer = GlobalTimer::new();
+        timer.pause();
+        drop(timer.hold());
+        assert!(timer.is_paused());
+        timer.resume();
+        assert!(!timer.is_paused());
+    }
+
+    #[test]
+    fn a_held_virtual_clock_cannot_advance() {
+        let timer = GlobalTimer::new();
+        timer.use_virtual_clock(true);
+        let _hold = timer.hold();
+        assert!(matches!(timer.advance_ns(1), Err(TimerError::Paused)));
+    }
+}
+
 mod virtual_clock {
     use super::*;
 
