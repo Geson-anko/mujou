@@ -50,7 +50,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ### 実行スレッドの設定
 
-フレームワークは、ノードを実行するスレッドの上で、`on_start` の前に `_on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
+フレームワークは、ノードを実行するスレッドの上で `on_start` の前に `_on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
@@ -60,15 +60,15 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 | ステップの終わりの同期 | CUDA のときは、各 `on_update` の直後に呼ばれる `_after_update()` で自分のストリームを `synchronize` する | CPU が GPU を追い越さない |
 | 乱数生成器 | ノードごとの `torch.Generator` を、渡された seed で作る | 既定の乱数生成器はプロセス全体で共有されるので、テストが決定的でなくなる |
 
-デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA で、それ以外は `ValueError`。seed を省略すると、乱数生成器は決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動き、そのときは CPU で、seed は省略したのと同じになる。
+デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA で、それ以外は `ValueError`。seed を省略すると、乱数生成器を決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
 
-乱数生成器は `self.generator` で使う。スレッドで作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。生成器は起動のたびに seed から作り直すので、復元しても生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
+乱数生成器は `self.generator` で使う。ノードのスレッドの上で作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。生成器は起動のたびに seed から作り直すので、復元しても生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
-`_on_thread_start` は、記録したスレッドの ID（`threading.get_ident()`）を、Port の `recv` / `send` が所有ノードのスレッドかを確かめるのに使う。
+`_on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。
 
 `_on_thread_start`・`_after_update`・`_capture_state` は、コアの `Node` が持つフレームワーク用の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_start`・`on_update`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
 
-`state_dict()` は、ノードのスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。このスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
+`state_dict()` は、ノードのスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。制御スレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
 
 1. `with torch.cuda.stream(自分のストリーム):` の下で、まず自分のストリームを同期する。`on_update` に限らず、`on_start`・`load_state_dict`・`on_pause` などのどの hook が積んだ仕事も、ここで終わる
 2. `state_dict()` を呼ぶ。中で作るコピーは自分のストリームに積まれる
@@ -86,9 +86,9 @@ CUDA のときにどこで何を同期するかを次の表にまとめる。ど
 
 `run()` が同期するのは、`run()` を呼んだスレッドのストリームだけである。ほかのホストのスレッドで確保した Tensor は、そのスレッドで同期してから `run()` する。
 
-PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）から順に割り当てるので、1 つのデバイスに 32 を超える CUDA のノードを置くと、複数のノードが 1 本のストリームを共有する。正しさは変わらないが、同期がほかのノードの仕事も待つ。
+PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）から順に割り当てる。そのため、1 つのデバイスに 32 を超える CUDA のノードを置くと、複数のノードが 1 本のストリームを共有する。正しさは変わらないが、同期のときにほかのノードの仕事も待つ。
 
-`device="cuda"` のように添字の無いデバイスは、構築したときのホストの現在のデバイスに決める。CUDA が使えない環境で CUDA のデバイスを渡すと、構築時に `ValueError` になる。
+`device="cuda"` のように添字の無いデバイスを渡すと、構築したときのホストの現在のデバイスに決まる。CUDA が使えない環境で CUDA のデバイスを渡すと、構築時に `ValueError` になる。
 
 > 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わりと取得・復元の同期）は、CUDA の無い環境で実装したので実機で確かめていない（2026-10-16）。
 

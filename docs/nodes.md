@@ -68,7 +68,7 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 | `state_dict()`           | 状態の取得時。全ノードが止まっている間。ノードのスレッドではなく制御スレッドで呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す               |
 | `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す                      |
 
-表の hook のほかに、フレームワークが自分のために使う hook がある。`_on_thread_start()`（`on_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出るので、`NetworkError` のメッセージと例外のときの木の `"hook"` には `_after_update` と出る。原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
+表の hook のほかに、フレームワークが自分のために使う hook がある。`_on_thread_start()`（`on_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージと例外のときの木の `"hook"` には `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
 
 `on_pause` と `on_resume` は引数を取らない。停止している間、グローバル時間は進まないので、グローバル時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻はグローバルタイマーから読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
 
