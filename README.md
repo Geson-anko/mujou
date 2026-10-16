@@ -19,6 +19,15 @@ just setup   # create .venv, install deps, install pre-commit hooks
 just run     # format -> test -> type
 ```
 
+### Documentation
+
+The user documentation (English and Japanese) is in `docs/` and built with MkDocs; the design specifications for developers (Japanese) are in `specs/`.
+
+```sh
+just docs         # serve the site at http://127.0.0.1:8000 with live reload
+just docs-build   # build it strictly into site/
+```
+
 ### Dev container
 
 `.devcontainer/` provides Ubuntu with uv, just and the Rust toolchain. Open the main checkout in VS Code and choose "Reopen in Container", or use the [Dev Container CLI](https://github.com/devcontainers/cli) (`brew install devcontainer` or `npm install -g @devcontainers/cli`) through just, from the main checkout or any worktree under `.claude/worktrees/`:

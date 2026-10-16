@@ -67,12 +67,26 @@ repos:
         args: ["--number"]
         # memory/ uses [[wiki-links]] between memories, which mdformat escapes
         # into \[\[...\]\] and thereby breaks. .claude/ skills and specs/ contain
-        # LaTeX whose escaping mdformat would also alter.
-        exclude: ^(memory/|\.claude/|specs/)
+        # LaTeX whose escaping mdformat would also alter. docs/ has its own entry below.
+        exclude: ^(memory/|\.claude/|specs/|docs/)
         additional_dependencies:
           - mdformat-gfm
           - mdformat-tables
           - mdformat_frontmatter
+
+  # Markdown formatting of the user documentation (docs/). It uses the MkDocs
+  # syntax (admonitions, content tabs, snippets, mkdocstrings), which plain mdformat
+  # turns into code blocks. mdformat-mkdocs needs a newer mdformat than the entry
+  # above.
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        name: mdformat (docs)
+        args: ["--number"]
+        files: ^docs/
+        additional_dependencies:
+          - mdformat-mkdocs==5.3.0
 
   # Spell checking
   - repo: https://github.com/codespell-project/codespell

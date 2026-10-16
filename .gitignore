@@ -48,3 +48,6 @@ src/mujou/*.pyd
 
 # Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
 .venv-devcontainer/
+
+# Documentation site built by mkdocs
+site/

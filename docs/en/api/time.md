@@ -1,0 +1,3 @@
+# Global Time
+
+::: mujou.time
