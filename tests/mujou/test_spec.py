@@ -1,4 +1,4 @@
-from typing import NotRequired, TypedDict
+from typing import NotRequired, TypedDict, cast
 
 import pytest
 import torch
@@ -93,6 +93,35 @@ class TestTensorSpec:
     def test_rand_rejects_seed_and_generator(self):
         with pytest.raises(ValueError, match="either seed or generator"):
             TensorSpec((2,)).rand(seed=0, generator=torch.Generator())
+
+    def test_empty_has_the_shape_and_dtype_on_the_cpu(self):
+        spec = TensorSpec((2, 3), torch.int16)
+        x = spec.empty()
+        assert x.shape == (2, 3)
+        assert x.dtype == torch.int16
+        assert x.device == torch.device("cpu")
+
+    def test_empty_is_filled_in_place(self):
+        x = TensorSpec((2,), torch.float64).empty().fill_(0.5)
+        assert torch.equal(x, torch.full((2,), 0.5, dtype=torch.float64))
+
+    @pytest.mark.parametrize("make", ["zeros", "empty", "rand"])
+    def test_makes_the_value_on_the_given_device(self, make: str):
+        # The meta device has no memory, so it needs no accelerator to test with.
+        spec = TensorSpec((2, 3), torch.float32)
+        for device in ("meta", torch.device("meta")):
+            x = cast(torch.Tensor, getattr(spec, make)(device=device))
+            assert x.device == torch.device("meta")
+            assert x.shape == (2, 3) and x.dtype == torch.float32
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_rand_on_cuda_is_deterministic(self):
+        spec = TensorSpec((1000,), torch.float32)
+        x = spec.rand(seed=7, device="cuda")
+        assert x.device.type == "cuda"
+        assert torch.equal(x, spec.rand(seed=7, device="cuda"))
+        generator = torch.Generator("cuda").manual_seed(7)
+        assert torch.equal(x, spec.rand(generator=generator, device="cuda"))
 
     @pytest.mark.parametrize(
         "dtype", [torch.complex64, torch.uint16, torch.float8_e4m3fn]
