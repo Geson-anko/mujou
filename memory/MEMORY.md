@@ -14,8 +14,10 @@
 - [更新手法の差し替え](project_pluggable_update_rule.md) — PC-ALM は暫定の既定。ノードの基盤と更新手法を分離し、他の手法も与えられるようにする
 - [計算単位の粒度](project_compute_granularity.md) — 基盤は非同期のノード（内側は同期、ノード間は非同期メッセージ）。大きさはノードのクラスで決まり設定では分割しない、既定はレイヤー、ニューロン単位は future work。BP も 1 ノードとして取り込める
 - [コアの責務](project_core_message_framework.md) — ノードを非同期・分散的に回すこと（プロトコル + 実行フレーム）と、非同期・分散的な学習のフレームワーク（PC-ALM）自体の提供。ノード内部は PyTorch などを使ってよい
-- [非同期ノードの実行](project_async_node_execution.md) — queue・pipe を使わず lock 付きの値の読み書きだけで共有。グローバルタイマー上の微分方程式として各ノードが独自に更新する
+- [非同期ノードの実行](project_async_node_execution.md) — queue・pipe を使わず lock 付きの値の読み書きだけで共有。その実行のタイマー上の微分方程式として各ノードが独自に更新する
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust、Python はインターフェース。ノードはタスクと専用スレッドの混在で実行。コアの値の型は内部に閉じ、torch とは DLPack で必ずコピー
+- [実行ごとのタイマー](project_timer_per_run.md) — 時間軸は実行ごとに 1 本、既定はグローバルタイマー。1 つの実行のノード・スロット・ホストの入力は同じタイマー。時刻は Timestamp
+- [_core のスタブは生成物](project_core_stub.md) — `src/mujou/_core.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ（mujou.Tensor・mujou.dtypes・mujou.default.dtype は廃止）、torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
 - [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）
 - [ノードのライフサイクル](project_node_lifecycle.md) — ノードが分散処理の最小単位。on_start / on_update(dt) / on_pause / on_resume / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる

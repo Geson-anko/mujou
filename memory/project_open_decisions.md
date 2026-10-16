@@ -13,7 +13,7 @@ metadata:
 - **時定数**: 連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い（skill `pc-alm` 7.1 節）
 - **双対変数の扱い**: ストリームのステップ間で λ をリセットするか持ち越すか、dual leak を入れるか（skill `pc-alm` 7 節）
 - **mujou.Node の細部**: モジュール構成と `mujou.Node` の構成は決定済み（[[project-torch-module]]）。2026-10-16 に推奨案で実装、ユーザー確認待ち: 設定は `on_start` の前に呼ぶ `_on_thread_start()` で行う／トップレベルの公開名は `Node, Network, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（PC-ALM は `mujou.pc` だけ、[[project-pc-module]]）／torch の内部スレッド数は mujou が設定せずホストが決める
-- **グローバルタイマーとスケジューラの境界**（2026-10-15 に挙がり、2026-10-16 にランタイムを実装）: 制御は 1 本のスレッドに直列化し、Δt=0 の待ちは制御の要求でも起きる（pamiq-core の `thread_control.py` に倣った）。残り: 時刻の読み取りがグローバルな Mutex を取る（性能が問題になったら seqlock など）／実経過を f64 で扱うので、約 104 日後に ns の分解能が落ちる／1 つのネットワークを停止するとプロセスのグローバル時間が止まり、同時に走る他のネットワークも止まる（この意味でよいかユーザー確認待ち）
+- **グローバルタイマーとスケジューラの境界**（2026-10-15 に挙がり、2026-10-16 にランタイムを実装）: 制御は 1 本のスレッドに直列化し、Δt=0 の待ちは制御の要求でも起きる（pamiq-core の `thread_control.py` に倣った）。残り: 時刻の読み取りがグローバルな Mutex を取る（性能が問題になったら seqlock など）／実経過を f64 で扱うので、約 104 日後に ns の分解能が落ちる。同じタイマーで動くネットワーク同士は停止で時間を止め合う。止め合いたくないネットワークは別のタイマーで動かす（2026-10-16 にユーザーが決定、[[project-timer-per-run]]。`mujou.run(..., timer=...)` はホスト側の作業で入れる）
 - **ライセンス**: LICENSE ファイル未作成
 
 **How to apply:** これらに触れるタスクでは、勝手に決めずにユーザーに確認する（CLAUDE.md 開発原則 1）。
