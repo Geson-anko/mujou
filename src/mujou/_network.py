@@ -272,7 +272,7 @@ class Network(Component):
 
         self._session = Session(self._graph)
 
-    def run(self, *, pause_timeout: float = 10.0, _manual: bool = False) -> None:
+    def run(self, *, pause_timeout: float = 30.0, _manual: bool = False) -> None:
         """Start running the nodes in the background and return once they started.
 
         Every node's thread is set up, ``on_start`` (and, after
@@ -456,7 +456,7 @@ class Network(Component):
 
 
 def run[N: Network](
-    network: N, *, pause_timeout: float = 10.0, _manual: bool = False
+    network: N, *, pause_timeout: float = 30.0, _manual: bool = False
 ) -> N:
     """Build ``network`` unless it is built, run it, and return it.
 
