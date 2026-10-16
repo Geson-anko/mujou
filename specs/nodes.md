@@ -66,8 +66,8 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 | `on_resume()`            | 停止から再開し、次の `on_update` の前              | I/O の再開、停止中に溜まった外界の値の破棄など               |
 | `on_exception()`         | どれかのノードの例外で終了するとき、全ノードに 1 回。`on_stop` の前 | アクチュエータの安全停止など、異常終了に固有の I/O の処理 |
 | `on_stop()`              | 実行終了時に 1 回。例外による終了でも呼ぶ          | I/O などの資源の解放。`state_dict()` が返す状態は変えない     |
-| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードのスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す               |
-| `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す                      |
+| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードのスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す。`mujou.Node` の既定は自動で集めた状態（[状態の自動収集](#状態の自動収集)） |
+| `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す。`mujou.Node` の既定はその場でコピーする |
 
 `mujou.Node` は `on_thread_start()` でスレッドの設定を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。`on_start` とは別の hook なので、`on_start` を override して `super().on_start()` を呼ばなくても設定は漏れない。`on_thread_start` を override するノードは、最初に `super().on_thread_start()` を呼ぶ。呼ばないと、勾配の記録が止まらず、`generator` が作られず、Port の `recv` / `send` が所有ノードのスレッドを確かめられずに失敗する。
 
@@ -101,7 +101,7 @@ class Linear(Node):
         self.next = NextPort(send=TensorSpec((B, n_out)), recv=TensorSpec((B, n_out)))
 
     def on_start(self) -> None:
-        self._w = ...
+        self._w = ...             # Tensor を代入すると、状態として自動で集まる
         self._h = ...
 
     def on_update(self, dt: float) -> None:
@@ -111,12 +111,34 @@ class Linear(Node):
         self.next.send(h)
         self.prev.send(wt_eps)
 
-    def state_dict(self) -> object:
-        return {"w": self._w, "h": self._h}
-
-    def load_state_dict(self, state: object) -> None:
-        ...
+    # state_dict / load_state_dict は既定のままで {"_w": ..., "_h": ...} を保存・復元する
 ```
+
+### 状態の自動収集
+
+`mujou.Node` は、`nn.Module` と同じく `__setattr__` をフックして状態を集める。名前の `_` の有無にかかわらず、`torch.Tensor`（`nn.Parameter` を含む）か `nn.Module` を代入した属性を、代入した順に登録する。
+
+| 操作 | 登録 |
+| --- | --- |
+| Tensor か nn.Module を代入 | 登録する。登録済みの名前なら順序はそのまま |
+| ほかの値（`None` を含む）で上書き | 外す |
+| `del` | 外す |
+
+Port・数値・Tensor のリストや dict は集めない。`__init__` でも `on_start` でも、どの hook で代入してもよい。
+
+既定の `state_dict()` は、属性名をキーにした dict を返す。値は、Tensor なら `detach()` したもの（記憶域は共有し、コピーはフレームワークが取る）、nn.Module ならその `state_dict()` である。`requires_grad` は木に入れない（`nn.Module.state_dict` と同じ）。`detach` するので、ノード内 BP のグラフにつながったテンソルでも pickle できる。
+
+既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。
+
+| 不一致 | 例外 |
+| --- | --- |
+| `state` が mapping でない、Tensor の値が Tensor でない | `TypeError` |
+| キーの過不足、Tensor の shape の違い | `ValueError`（どれもコピーの前に確かめるので、何も書き換えない） |
+| nn.Module の中の不一致 | torch の `RuntimeError`（途中まで書き換わっていることがある） |
+
+自分で状態を選ぶノードは、`state_dict` と `load_state_dict` を override する。`super()` を呼んで既定の木に足してもよい（乱数生成器の状態など）。
+
+mujou は、override の有無にかかわらず、登録した状態を内部の関数 `mujou._core.node.state_items(node)` で列挙できる。例外で終了したときの mujou 管理下のオブジェクトの救済措置は、これを下地に別に設計する。
 
 ノードのインスタンスは、定義と実行の両方を担う。`__init__` で Port を宣言したインスタンスが、そのまま実行時に hook を呼ばれる。ネットワークを構築すると、Port は実際のスロットに結び付けられる。
 

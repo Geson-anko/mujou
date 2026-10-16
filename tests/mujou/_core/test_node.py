@@ -1,12 +1,16 @@
+import copy
+import pickle
 import threading
-from typing import TYPE_CHECKING, override
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, cast, override
 
 import pytest
 import torch
+from torch import nn
 
 from mujou import Network, Node, Port, TensorSpec
 from mujou._core._native import GlobalTimer
-from mujou._core.node import thread_ident
+from mujou._core.node import state_items, thread_ident
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork
@@ -137,6 +141,201 @@ class TestOnThreadStart:
         assert node.draws is not None
         assert torch.equal(node.draws, torch.rand(3, generator=generator))
         assert thread_ident(node) == node.ident
+
+
+class Stateful(Node):
+    """Holds a public and a private tensor, a parameter that records gradients, a
+    module and values that are not state."""
+
+    def __init__(self, fill: float) -> None:
+        self.out = Port(send=TensorSpec((3,)))
+        self.w = torch.full((2, 3), fill)
+        self._h = torch.full((3,), fill + 1)
+        self.p = torch.full((3,), fill + 2, requires_grad=True)
+        self.linear = nn.Linear(3, 2)
+        with torch.no_grad():
+            self.linear.weight.fill_(fill + 3)
+            self.linear.bias.fill_(fill + 4)
+        self.rate = 0.5
+        self.history: list[torch.Tensor] = []
+
+
+def at(state: object, *path: str) -> torch.Tensor:
+    """The tensor at ``path`` in a tree of mappings."""
+    for key in path:
+        state = cast(Mapping[str, object], state)[key]
+    assert isinstance(state, torch.Tensor)
+    return state
+
+
+class TestStateCollection:
+    def test_collects_tensors_and_modules_by_attribute_name(self):
+        node = Stateful(0.0)
+        state = node.state_dict()
+        assert list(state) == ["w", "_h", "p", "linear"]
+        assert torch.equal(at(state, "w"), node.w)
+        assert torch.equal(at(state, "_h"), node._h)  # pyright: ignore[reportPrivateUsage]
+        assert torch.equal(at(state, "p"), node.p.detach())
+        assert set(cast(Mapping[str, object], state["linear"])) == {"weight", "bias"}
+        assert torch.equal(at(state, "linear", "weight"), node.linear.weight.detach())
+
+    def test_the_tree_holds_detached_views_of_the_live_tensors(self):
+        node = Stateful(0.0)
+        state = node.state_dict()
+        p, weight = at(state, "p"), at(state, "linear", "weight")
+        assert not p.requires_grad and not weight.requires_grad
+        assert p.data_ptr() == node.p.data_ptr()
+        assert weight.data_ptr() == node.linear.weight.data_ptr()
+
+    def test_the_tree_pickles_even_with_a_tensor_in_a_graph(self):
+        node = Stateful(0.0)
+        with torch.enable_grad():  # mujou: local-autograd
+            y = node.p * 2
+        assert y.grad_fn is not None
+        setattr(node, "y", y)  # noqa: B010  # not declared by Stateful
+        state = pickle.loads(pickle.dumps(node.state_dict()))
+        assert torch.equal(at(state, "y"), torch.full((3,), 4.0))
+
+    def test_follows_reassignment_and_deletion(self):
+        node = Stateful(0.0)
+        node.w = torch.ones(1)  # another tensor under the same name
+        setattr(node, "_h", None)  # noqa: B010  # not the declared type
+        del node.p
+        setattr(node, "linear", nn.Identity())  # noqa: B010  # a module without state
+        setattr(node, "rate", torch.tensor(0.25))  # noqa: B010  # becomes a tensor
+        state = node.state_dict()
+        assert list(state) == ["w", "linear", "rate"]
+        assert torch.equal(at(state, "w"), torch.ones(1))
+        assert state["linear"] == {}
+        node._h = torch.zeros(3)  # pyright: ignore[reportPrivateUsage]  # registered again, at the end
+        assert list(node.state_dict()) == ["w", "linear", "rate", "_h"]
+
+    def test_a_node_without_tensors_has_an_empty_state(self):
+        node = Probe()  # draws is None until on_start
+        assert node.state_dict() == {}
+        node.load_state_dict({})
+
+    def test_loads_in_place_into_the_same_objects(self):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        before = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
+        target.load_state_dict(copy.deepcopy(source.state_dict()))
+        after = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
+        assert all(a is b for a, b in zip(after, before, strict=True))
+        assert torch.equal(target.w, source.w)
+        assert torch.equal(target._h, source._h)  # pyright: ignore[reportPrivateUsage]
+        assert torch.equal(target.p, source.p)
+        assert torch.equal(target.linear.weight, source.linear.weight)
+        assert torch.equal(target.linear.bias, source.linear.bias)
+        # The parameter is still a leaf that records gradients.
+        assert target.p.requires_grad and target.p.is_leaf
+
+    @pytest.mark.parametrize(
+        ("change", "match"),
+        [
+            (lambda s: s.pop("w"), "missing \\['w'\\]"),
+            (lambda s: s.update(extra=torch.zeros(1)), "unexpected \\['extra'\\]"),
+            (lambda s: s.update(w=torch.zeros(3)), "'w'.*shape"),
+        ],
+    )
+    def test_rejects_a_tree_that_does_not_match_and_changes_nothing(
+        self, change: Callable[[dict[str, object]], object], match: str
+    ):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        state = copy.deepcopy(source.state_dict())
+        change(state)
+        with pytest.raises(ValueError, match=match):
+            target.load_state_dict(state)
+        assert torch.equal(target.w, torch.full((2, 3), -1.0))
+        assert torch.equal(target.p, torch.full((3,), 1.0))
+
+    def test_rejects_a_tree_that_is_not_a_mapping(self):
+        with pytest.raises(TypeError, match="mapping"):
+            Stateful(0.0).load_state_dict([1, 2])
+
+    def test_a_module_mismatch_raises_as_torch_does(self):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        state = copy.deepcopy(source.state_dict())
+        del cast(dict[str, torch.Tensor], state["linear"])["bias"]
+        with pytest.raises(RuntimeError, match="bias"):
+            target.load_state_dict(state)
+
+    def test_lists_the_registered_state(self):
+        node = Stateful(0.0)
+        items = state_items(node)
+        assert [name for name, _ in items] == ["w", "_h", "p", "linear"]
+        attributes = [node.w, node._h, node.p, node.linear]  # pyright: ignore[reportPrivateUsage]
+        assert all(v is a for (_, v), a in zip(items, attributes, strict=True))
+
+
+INPUT = torch.tensor([1.0, -1.0, 0.5])
+TARGET = torch.tensor([0.5, 2.0])
+
+
+class Learner(Node):
+    """Fits ``linear`` to ``TARGET`` by backpropagation inside the node, and relaxes
+    ``_x`` toward 1, both in proportion to ``dt``."""
+
+    def __init__(self, fill: float) -> None:
+        super().__init__(seed=0)
+        self.out = Port(send=TensorSpec((3,)))
+        self.linear = nn.Linear(3, 2)
+        with torch.no_grad():
+            self.linear.weight.fill_(fill)
+            self.linear.bias.fill_(fill)
+
+    @override
+    def on_start(self) -> None:
+        self._x = torch.zeros(3)
+        self.steps = torch.zeros((), dtype=torch.int64)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        params = list(self.linear.parameters())
+        with torch.enable_grad():  # mujou: local-autograd
+            loss = (self.linear(INPUT) - TARGET).pow(2).sum()
+            grads = torch.autograd.grad(loss, params)
+        for p, g in zip(params, grads, strict=True):
+            p.sub_(100.0 * dt * g)
+        self._x.add_(dt * (1 - self._x))
+        self.steps.add_(1)
+
+
+def steps(net: Network, timer: GlobalTimer, n: int) -> None:
+    for _ in range(n):
+        timer.advance(0.001)
+        net._step()  # pyright: ignore[reportPrivateUsage]
+
+
+class TestRestore:
+    def test_a_restored_node_continues_the_same(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        k, m = 4, 6
+        net = run_network(Solo(Learner(0.0)), _manual=True)
+        steps(net, virtual_timer, k)
+        tree = pickle.loads(pickle.dumps(net.state_dict()))
+        steps(net, virtual_timer, m)
+        node = cast(Learner, net.node)
+        expected = copy.deepcopy(node.state_dict())
+        net.shutdown()
+        assert int(at(expected, "steps")) == k + m
+
+        restored_node = Learner(5.0)
+        weight = restored_node.linear.weight
+        restored = Solo(restored_node)
+        restored.build()
+        restored.load_state_dict(tree)
+        run_network(restored, _manual=True)
+        x = restored_node._x  # pyright: ignore[reportPrivateUsage]  # made in on_start
+        steps(restored, virtual_timer, m)
+        actual = restored_node.state_dict()
+        assert torch.equal(at(actual, "_x"), at(expected, "_x"))
+        assert int(at(actual, "steps")) == k + m
+        for name in ("weight", "bias"):
+            assert torch.equal(at(actual, "linear", name), at(expected, "linear", name))
+        # Restored in place: the objects made in __init__ and on_start remain.
+        assert restored_node.linear.weight is weight
+        assert restored_node._x is x  # pyright: ignore[reportPrivateUsage]
 
 
 class OnDevice(Node):

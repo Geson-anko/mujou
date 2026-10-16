@@ -1,9 +1,11 @@
 """The node, the unit of asynchronous computation."""
 
 import threading
-from typing import cast, override
+from collections.abc import Mapping
+from typing import Any, cast, override
 
 import torch
+from torch import nn
 
 from mujou._core import _native
 from mujou._core.network import Component
@@ -17,8 +19,8 @@ class Node(_native.Node, Component):
     attributes; put them side by side in a ``Network`` instead.
 
     Override the lifecycle hooks below; each does nothing by default, except
-    ``on_thread_start``. The framework calls them on the node's own thread,
-    except ``state_dict``:
+    ``on_thread_start``, ``state_dict`` and ``load_state_dict``. The framework
+    calls them on the node's own thread, except ``state_dict``:
 
     - ``on_thread_start()``: once, right before ``on_start``. It sets up the
       thread (see below); an override must call ``super().on_thread_start()``
@@ -27,7 +29,8 @@ class Node(_native.Node, Component):
       Allocate and initialize the state here.
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
-      this node's ``state_dict`` returned.
+      this node's ``state_dict`` returned. By default it copies the state into the
+      collected tensors and modules (see below).
     - ``on_update(dt)``: repeatedly. ``dt`` is the global time in seconds since
       the node's last update. Read the ports with ``recv``, update in proportion
       to ``dt``, and write the ports with ``send``. It never waits for other nodes.
@@ -44,7 +47,16 @@ class Node(_native.Node, Component):
       thread that called ``Network.state_dict``), so ``recv`` and ``send`` raise
       ``RuntimeError`` there. Return the node's own state as a picklable object;
       it may hold the live tensors, because the framework copies it before the
-      node resumes.
+      node resumes. By default it returns the collected tensors and modules (see
+      below).
+
+    The node collects its state by itself, as ``nn.Module`` does: every attribute
+    assigned a ``torch.Tensor`` (``nn.Parameter`` included) or an ``nn.Module``,
+    whether or not its name starts with ``_``, is registered under its name.
+    Assigning any other value (``None`` too) under that name, or ``del``, removes
+    it. Ports, numbers, lists and dicts of tensors are not collected. The default
+    ``state_dict`` and ``load_state_dict`` save and restore what is registered;
+    override both to choose the state yourself (they may call ``super()``).
 
     If any hook raises, the whole network stops. A hook must not call the methods
     of any ``Network`` (``write``, ``read``, ``state_dict``, ...): they raise
@@ -140,8 +152,9 @@ class Node(_native.Node, Component):
         Use it instead of the global generator, which all nodes share (do not
         call ``torch.manual_seed`` in a node). It is created anew from ``seed``
         whenever the network starts, also when it is restored; to continue the
-        same sequence after a restore, put ``self.generator.get_state()`` in
-        ``state_dict`` and ``set_state`` it in ``load_state_dict``.
+        same sequence after a restore, add ``self.generator.get_state()`` to what
+        ``super().state_dict()`` returns, and in ``load_state_dict`` take it out
+        and ``set_state`` it before passing the rest to ``super()``.
 
         Raises:
             RuntimeError: The node's thread has not started yet.
@@ -152,6 +165,93 @@ class Node(_native.Node, Component):
                 "or a later hook"
             )
         return self._generator
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        super().__setattr__(name, value)
+        names = _state_names(self)
+        if isinstance(value, torch.Tensor | nn.Module):
+            names[name] = None  # A name already registered keeps its place.
+        else:
+            names.pop(name, None)
+
+    @override
+    def __delattr__(self, name: str) -> None:
+        super().__delattr__(name)
+        _state_names(self).pop(name, None)
+
+    @override
+    def state_dict(self) -> Any:  # Any: an override returns any picklable object.
+        """Return the collected state: a dict with, for each registered attribute
+        in the order of registration, the tensor ``detach``-ed or the module's
+        ``state_dict()``, under the attribute's name.
+
+        The tensors share memory with the attributes (the framework copies the
+        tree). ``requires_grad`` is not part of the state, as in
+        ``nn.Module.state_dict``: detaching also makes a tensor that is part of an
+        autograd graph picklable.
+        """
+        return {
+            name: value.detach()
+            if isinstance(value, torch.Tensor)
+            else value.state_dict()
+            for name, value in state_items(self)
+        }
+
+    @override
+    def load_state_dict(self, state: object) -> None:
+        """Copy ``state`` (from the default ``state_dict``) into the registered
+        attributes in place: ``copy_`` into each tensor and ``load_state_dict``
+        into each module, without recording gradients.
+
+        The objects stay the same, so references taken in ``__init__`` or
+        ``on_start`` see the restored values, and a tensor that records gradients
+        stays a leaf that does. ``copy_`` casts the dtype and moves the device.
+        The keys and the shapes of the tensors are checked before anything is
+        copied.
+
+        Raises:
+            TypeError: ``state`` is not a mapping, or the value for a tensor is not
+                a tensor.
+            ValueError: The keys are not the names of the registered attributes,
+                or a tensor's shape differs.
+            RuntimeError: As ``nn.Module.load_state_dict`` (strict), when a
+                module's state does not match; the state may then be partly
+                copied.
+        """
+        if not isinstance(state, Mapping):
+            raise TypeError(
+                f"the default load_state_dict takes a mapping, got "
+                f"{type(state).__name__}"
+            )
+        tree = cast(Mapping[str, object], state)
+        items = state_items(self)
+        missing = [name for name, _ in items if name not in tree]
+        unexpected = [key for key in tree if key not in _state_names(self)]
+        if missing or unexpected:
+            raise ValueError(
+                f"the state does not match the node's tensors and modules: missing "
+                f"{missing}, unexpected {unexpected}"
+            )
+        for name, value in items:
+            if isinstance(value, torch.Tensor):
+                source = tree[name]
+                if not isinstance(source, torch.Tensor):
+                    raise TypeError(
+                        f"the state's {name!r} is a {type(source).__name__}, not a "
+                        "tensor"
+                    )
+                if source.shape != value.shape:
+                    raise ValueError(
+                        f"the state's {name!r} has the shape {tuple(source.shape)}, "
+                        f"but the tensor has {tuple(value.shape)}"
+                    )
+        with torch.no_grad():
+            for name, value in items:
+                if isinstance(value, torch.Tensor):
+                    value.copy_(cast(torch.Tensor, tree[name]))
+                else:
+                    value.load_state_dict(cast(Mapping[str, object], tree[name]))
 
     @override
     def on_thread_start(self) -> None:
@@ -205,6 +305,24 @@ class Node(_native.Node, Component):
             return state
         finally:
             _hooks.inside = outer
+
+
+def _state_names(node: Node) -> dict[str, None]:
+    """The names of the attributes of ``node`` that hold state, in the order of
+    registration (an ordered set). Made on the first assignment, so that
+    subclasses need not call ``super().__init__()``."""
+    attributes = vars(node)
+    names = attributes.get("_state_names")
+    if names is None:
+        names = attributes["_state_names"] = {}
+    return cast(dict[str, None], names)
+
+
+def state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
+    """Return ``(attribute name, value)`` for the tensors and modules registered on
+    ``node``, in the order of registration: the state mujou manages for it,
+    whether or not ``state_dict`` is overridden."""
+    return [(name, getattr(node, name)) for name in _state_names(node)]
 
 
 class _Hooks(threading.local):
