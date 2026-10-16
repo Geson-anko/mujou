@@ -34,11 +34,27 @@
 
 - 目次は decisions-2026-10-16（`mujou._core` パッケージ、`h = mujou.run(*networks, timer=None, inputs=..., state=...)` のハンドル、`Compose`、`Timestamp`、自動の状態収集、`on_thread_start` の公開）を前提にした
 - 各ページは見出しと「書く内容」の admonition だけ。API リファレンスは今ある公開の名前だけを載せた（まだ無い `Compose` や `Timestamp` を書くと strict ビルドが落ちる）。API が変わったら `docs/en/api/*.md` の `:::` を差し替える
-- テスト用の口（仮想時計など）は公開しない決定なので、pamiq-core の Testing ページに当たるものは作らなかった
+- テスト用の口（仮想時計など）は公開しない決定なので、pamiq-core の Testing ページに当たるものは作らなかった（レビュー対応で変更。下の節）
 - 日本語のメモには yomiyasu をかけた。リンターの「英単語の前後の半角空白」の警告は、specs/ と CLAUDE.md の表記に合わせて従わなかった
 
-## 残る確認事項
+## 残る確認事項（第 1 版の時点。レビュー対応の節で解消）
 
-- サイトの公開先（GitHub Pages など）とデプロイの workflow をいつ足すか
-- 利用者向けのテストのページ（仮想時計で決定的にノードを試す方法）を作るか。テスト用の口を見せない決定との兼ね合い
-- インストールの手順。PyPI に出すまではソースからのビルド（Rust のツールチェーンが要る）になる
+- サイトの公開先とデプロイ: 今は公開しない（ユーザーの回答）
+- 利用者向けのテストのページ: 作る（ユーザーの回答）
+- インストールの手順: PyPI とソースの両方を書く（ユーザーの回答）
+
+## レビュー対応（`memory/agents/code-reviewer/docs-site.md`）
+
+- must-fix 1: ユーザーの回答は「docstring とコードのコメントは英語に統一。API リファレンスは英語で、日本語のサイトでも英語のまま出す。日本語は specs/ とユーザー向けの本文で使う」。CLAUDE.md の記述を残してこの内容にし、`memory/feedback_doc_language.md`（以前の「どちらでもよい」から変わったことを書いた）と `.claude/agents/doc-teacher.md` の「日本語 docstring は 1 文を 1 行」を直した
+- should-fix 1: `show_if_no_docstring: true` を足した。Node の hook 8 個が API リファレンスに出る。stub に docstring を書く案は採らなかった（stub は自動生成に切り替える決定があり、並列のブランチも `_core.pyi` を変えている）
+- should-fix 2: `docs/en/api/time.md` で 5 つの関数を `members` に並べた。`src/mujou/time.py` の docstring から `specs/execution-model.md` のパスを消した。ビルドした site/ に `specs/` を含むファイルが無いことを確かめた。利用者向けのページと公開の docstring に specs/ のパスを書かない規則を `memory/project_docs_site.md` に書いた
+- should-fix 3: README の `just run` の説明に docs-build を足した
+- should-fix 4: `tests/test_examples.py` は stderr に `Traceback` が出ても失敗にする。`examples/README.md` に「ネットワークを走らせるプログラムは最後に shutdown() か join() を呼ぶ」を足した
+- should-fix 5: 合流は orchestrator が行う。手順: timers などのブランチと合流したら `grep -rn "docs/" --exclude-dir=.git --exclude-dir=.venv --exclude-dir=target --exclude-dir=agents .` を流し直し、設計仕様を指すものを `specs/` に直す
+- should-fix 6: `memory/project_docs_site.md` と `memory/project_testing_api.md` を足して MEMORY.md からリンクし、feedback_doc_language の description を更新した
+- should-fix 7: skill solo-dev-cycle の段階 5 と、agent code-simplifier のドキュメント同期の対象に `docs/` と `docs/en/api/*.md` の `:::` を足した（edit-dot-claude の手順）
+- ユーザーの回答から、User Guide に Testing ページ、API リファレンスに Testing ページの枠（`mujou.testing` はまだ無いので `:::` は書かない）を足した。Installation のメモを PyPI とソースの両方にした
+- nit 1: `watch: [src, examples]` を足した。nit 3: `specs/open-decisions.md` の「docs の当初の案」を「仕様書（specs/）の当初の案」にした。nit 4: 失敗時に stdout と stderr の両方を出す
+- nit 7: CI はどのジョブも `uv sync` で既定の dev グループを入れる。docs グループに分けると test と type-check のジョブは mkdocs 一式（純 Python で 20 個ほど）を入れずに済むが、`just setup` と `just run` でも docs グループを入れる設定が要る。得るものが小さいので、pamiq-core と同じく dev に置いたままにした
+- 記録だけの nit: 2（`site_url` はデプロイを足すときに入れる）、5（サンプルが 0 本の間は `[NOTSET] SKIPPED` と出る）、6（docs の CI も Rust の拡張をビルドする。type-check.yml とそろえた）、8（`\[x\]` は mdformat で `[x]` になる。数式を入れるときに mdformat 側の数式対応が要る）、9（検索のインデックスは en と ja が 1 つ）、10（3.14t の `just docs` で watchdog が GIL を有効にする警告が出る。害はない）
+- `src/mujou/time.py` の docstring の 1 行も、並列のブランチが同じ行を変えていれば合流時に衝突する
