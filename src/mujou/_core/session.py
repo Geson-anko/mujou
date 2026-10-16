@@ -608,7 +608,7 @@ def _stop_at_exit() -> None:
     before it joins the non-daemon threads, so this starts stopping the networks
     before that join and a thread iterating over ``subscribe`` ends with its
     network. That order is CPython's implementation, not its documented
-    behavior; ``TestInterpreterExit`` in ``tests/mujou/test_network.py`` guards
+    behavior; ``TestInterpreterExit`` in ``tests/mujou/_core/test_network.py`` guards
     it.
     """
     threading.main_thread().join()

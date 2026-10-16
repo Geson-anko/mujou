@@ -25,9 +25,9 @@
 
 ### コアの中の値
 
-コアは、スロットの値を不変なバッファとしてホストのメモリに持つ。連続した row-major の配置で、GPU などのデバイス上には置かない。このバッファは `mujou._core` の内部の型であり、利用者には見せない。不変なので、複数の読み手が同じバッファを同時に読んでも、書き手との間でデータ競合が起きない。
+コアは、スロットの値を不変なバッファとしてホストのメモリに持つ。連続した row-major の配置で、GPU などのデバイス上には置かない。このバッファは `mujou._core._native` の内部の型であり、利用者には見せない。不変なので、複数の読み手が同じバッファを同時に読んでも、書き手との間でデータ競合が起きない。
 
-`torch.Tensor` とコアの間の受け渡しには DLPack を使う。DLPack は、データの場所・dtype・shape・strides を表す標準の形式で、torch は `__dlpack__` と `torch.from_dlpack` で対応している。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。torch には `torch.dtype` を DLPack の dtype に直す公開 API がないので、torch に依存する側（`mujou._core` の外）が、サポートする dtype の対応表を持つ。NumPy の配列を経由すると bf16 を受け渡せないので、DLPack を使う。
+`torch.Tensor` とコアの間の受け渡しには DLPack を使う。DLPack は、データの場所・dtype・shape・strides を表す標準の形式で、torch は `__dlpack__` と `torch.from_dlpack` で対応している。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。torch には `torch.dtype` を DLPack の dtype に直す公開 API がないので、torch に依存する側（`mujou._core._native` の外。`mujou._core.spec`）が、サポートする dtype の対応表を持つ。NumPy の配列を経由すると bf16 を受け渡せないので、DLPack を使う。
 
 受け渡しは、読み書きのどちらでも必ずコピーする。ゼロコピーで共有すると、利用者が受け取った `torch.Tensor` をその場で書き換えたときに、ほかの読み手が見ているバッファまで変わってしまうからである。
 

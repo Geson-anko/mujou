@@ -17,6 +17,6 @@ metadata:
 
 - スロット（`Outlet` / `InputGroup`）とランタイムは同じタイマーで作る。今はコアも bindings も一致を確かめない。一致を強制するのは、run の API の作り直し（スロットを run の時点でその実行のタイマーで作る）で入れる
 - 停止・復元の排他はタイマーごと。同じタイマーで走るランタイムがあれば時刻を戻さない
-- 実装（2026-10-16）: Rust の `mujou_core::time::Timer`（`Arc` で共有）と `time::global()`、Python の `mujou._core.Timer` / `GlobalTimer` / `Timestamp` と各部品の `timer=`（`specs/execution-model.md` のグローバルタイマーの実装節）
+- 実装（2026-10-16）: Rust の `mujou_core::time::Timer`（`Arc` で共有）と `time::global()`、Python の `mujou._core._native.Timer` / `GlobalTimer` / `Timestamp` と各部品の `timer=`（`specs/execution-model.md` のグローバルタイマーの実装節）
 
 関連: [[project-async-node-execution]], [[project-pause-and-state]], [[project-open-decisions]]

@@ -8,12 +8,14 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 
 | モジュール | torch への依存 | 中身 |
 | --- | --- | --- |
-| `mujou._core` | しない | Rust コアの Python インターフェース（private）。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
-| それ以外 | する | `mujou.Node`、`TensorSpec`、PC-ALM のノード（`mujou.pc`）、Port での `torch.Tensor` の読み書きなど |
+| `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
+| `mujou._core` のほか（`spec` / `port` / `network` / `node` / `session`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
+| `mujou` / `mujou.time` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
+| `mujou.pc`（予定） | する | PC-ALM のノード |
 
-torch は mujou の必須の依存である。`mujou._core` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
+torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
 
-`mujou._core` は private なモジュールで、利用者は直接使わない。`TensorSpec` など利用者が使うものは、mujou のトップレベル（`mujou.*`）に公開する。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型は公開しない（[メッセージ](messages.md#値の型)）。
+`mujou._core` は private なパッケージで、利用者は直接使わない。`TensorSpec` など利用者が使うものは、mujou のトップレベル（`mujou.*`）に公開する。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型は公開しない（[メッセージ](messages.md#値の型)）。
 
 コアにも `Node` という名前のクラスがあるが、利用者が継承するのはトップレベルの `mujou.Node` である。`mujou.Node` はコアの `Node` を継承し、PyTorch を使う前提の設定を加えたものである。利用者が直接使うクラスなので、`Torch` のような接頭辞は付けない。
 
@@ -46,7 +48,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ## mujou.Node
 
-`mujou.Node` は、利用者が継承するノードの基底クラスである。コアの `mujou._core.Node` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ノードの作者に代わって行う。PyTorch を使うノードは、専用スレッドで実行する（[ネイティブコア](native-core.md#mn-スケジューリング)）。
+`mujou.Node` は、利用者が継承するノードの基底クラスである。コアの `mujou._core._native.Node` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ノードの作者に代わって行う。PyTorch を使うノードは、専用スレッドで実行する（[ネイティブコア](native-core.md#mn-スケジューリング)）。
 
 ### 実行スレッドの設定
 
@@ -90,7 +92,7 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 `device="cuda"` のように添字の無いデバイスを渡すと、構築したときのホストの現在のデバイスに決まる。CUDA が使えない環境で CUDA のデバイスを渡すと、構築時に `ValueError` になる。
 
-> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/test_node.py` と `test_network.py` の `TestCuda` で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる。
+> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py` と `test_network.py` の `TestCuda` で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる。
 
 ### 境界の変換
 
