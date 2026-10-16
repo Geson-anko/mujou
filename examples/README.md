@@ -8,3 +8,6 @@ each of them, so the code on the site keeps working.
   `examples/<name>/` whose entry point is `main.py` (other files there are helpers).
 - A program must finish by itself, with exit status 0, within the timeout of the
   test (60 seconds), and must not need a GPU or the network.
+- A program that runs a network must end with `shutdown()` or `join()` on it, so
+  that an exception in a node reaches the program. The test also fails when the
+  program prints a traceback to stderr.

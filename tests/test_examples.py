@@ -26,4 +26,7 @@ class TestExamples:
             text=True,
             timeout=TIMEOUT_SECONDS,
         )
-        assert result.returncode == 0, result.stderr
+        output = f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        assert result.returncode == 0, output
+        # An exception on another thread does not change the exit status.
+        assert "Traceback" not in result.stderr, output
