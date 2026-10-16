@@ -32,7 +32,9 @@ class Node(_core.Node, Component):
       the next ``on_update``.
     - ``on_exception()``: once on every node, when a hook of any node has raised,
       before ``on_stop``.
-    - ``on_stop()``: once, when the network stops, also after an exception.
+    - ``on_stop()``: once, when the network stops, also after an exception. It
+      must not change what ``state_dict`` returns: the state taken after a normal
+      end is the state at the stop.
     - ``state_dict()``: when the network's state is taken, on the runtime's control
       thread while the node is paused (or, after a normal end, on the host's
       thread that called ``Network.state_dict``), so ``recv`` and ``send`` raise
