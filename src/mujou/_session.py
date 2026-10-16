@@ -162,6 +162,11 @@ class Session:
         self._runtime: _core.Runtime | None = None
         # Makes the check and the start of a run one step for concurrent callers.
         self._run_lock = threading.Lock()
+        # The timer when shutdown first asked the run to stop, and the thread
+        # that asks for a shutdown with a finite timeout (one per session).
+        self._stop_lock = threading.Lock()
+        self._stop_timer: dict[str, int | float] | None = None
+        self._stopper: threading.Thread | None = None
         # Restored by load_state_dict and passed to the runtime by run.
         self._states: list[object] | None = None
         self._last_update_ns: list[int] | None = None
@@ -255,18 +260,27 @@ class Session:
         if runtime is None:
             return
         try:
+            with self._stop_lock:
+                if not runtime.is_finished:
+                    # A normal end is a pause at this time that never resumes:
+                    # the state after the end is taken at it.
+                    if self._stop_timer is None:
+                        self._stop_timer = _core.timer.state_dict()
+                    # The runtime's shutdown waits without a limit, so a finite
+                    # timeout asks on another thread (one per session) and waits
+                    # here with the limit. On a timeout the request stands and
+                    # the network goes on stopping.
+                    if wait is not None and self._stopper is None:
+                        self._stopper = threading.Thread(
+                            target=_request_stop,
+                            args=(runtime,),
+                            name="mujou-shutdown",
+                            daemon=True,
+                        )
+                        self._stopper.start()
             if wait is None:
                 runtime.shutdown()
                 return
-            # The runtime's shutdown waits without a limit, so it asks on another
-            # thread and this one waits for the end with the limit. On a timeout
-            # the request stands and the network goes on stopping.
-            threading.Thread(
-                target=_request_stop,
-                args=(runtime,),
-                name="mujou-shutdown",
-                daemon=True,
-            ).start()
             if not runtime.join(wait):
                 raise TimeoutError(
                     f"the network did not stop within {timeout} s; it goes on "
@@ -308,7 +322,13 @@ class Session:
     # --- host input and output
 
     def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
-        self.check()
+        runtime = self._runtime
+        finished = runtime is not None and runtime.is_finished
+        self.check()  # after is_finished: an end by an exception raises here
+        if finished:
+            raise RuntimeError(
+                "the network has stopped; no node reads what is written now"
+            )
         items: list[tuple[_core.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
@@ -388,8 +408,9 @@ class Session:
 
     def state_dict(self) -> dict[str, Any]:
         runtime = self._started()
-        self.check()
-        if not runtime.is_finished:
+        finished = runtime.is_finished
+        self.check()  # after is_finished: an end by an exception raises here
+        if not finished:
             try:
                 return runtime.capture(
                     lambda states: self._tree(
@@ -412,19 +433,23 @@ class Session:
 
         The nodes' threads are gone, so this thread calls their ``state_dict``
         (through ``_capture_state``, which waits for a CUDA node's stream). The
-        timer reads the time of the latest update or write: the time that passed
-        after the end is not part of the run.
+        timer is the one ``shutdown`` read when it asked the run to stop, as a
+        pause would have frozen it, and not earlier than any update or slot
+        (an ``on_stop`` may still send after the request).
         """
         states = [capture_state(node) for node in self._nodes]
-        last_update_ns = runtime.last_update_ns()
+        # Only shutdown ends a run normally, and it reads the timer first.
+        stop_timer = cast(dict[str, int | float], self._stop_timer)
+        tree = self._tree(states, runtime.last_update_ns(), stop_timer)
         latest = max(
             [
-                *last_update_ns,
-                *(slot.read().time_ns for slot, _ in self._slots.values()),
+                int(stop_timer["time_ns"]),
+                *tree["last_update_ns"].values(),
+                *(time_ns for _, time_ns in tree["slots"].values()),
             ]
         )
-        timer = {"time_ns": latest, "scale": _core.timer.time_scale()}
-        return self._tree(states, last_update_ns, timer)
+        tree["timer"]["time_ns"] = latest
+        return tree
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         with self._run_lock:
@@ -592,8 +617,11 @@ def _stop_at_exit() -> None:
     """Stop every running network once the main thread has ended.
 
     At the interpreter's exit, ``threading`` marks the main thread as ended
-    before it joins the non-daemon threads, so this wakes up before that join
-    and a thread iterating over ``subscribe`` ends with its network.
+    before it joins the non-daemon threads, so this starts stopping the networks
+    before that join and a thread iterating over ``subscribe`` ends with its
+    network. That order is CPython's implementation, not its documented
+    behavior; ``TestInterpreterExit`` in ``tests/mujou/test_network.py`` guards
+    it.
     """
     threading.main_thread().join()
     # On a failure the atexit call below tries again, and raises.

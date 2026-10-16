@@ -145,8 +145,9 @@ class Network(Component):
 
     A running network keeps running when the host drops it, until ``shutdown``
     or, at the latest, the interpreter's exit (which waits for ``on_stop``). At
-    the exit, the networks stop once the main thread has ended, before the
-    interpreter joins the non-daemon threads.
+    the exit, the networks start stopping once the main thread has ended, before
+    the interpreter joins the non-daemon threads, and the exit waits until they
+    have stopped.
 
     Example::
 
@@ -312,7 +313,8 @@ class Network(Component):
         the tree's time.
 
         Raises:
-            RuntimeError: The network is not built.
+            RuntimeError: The network is not built, or has stopped normally (no
+                node reads what is written then).
             ValueError: A port is outside the network, connected, takes many
                 peers, or receives nothing; or a shape or the keys differ.
             TypeError: A message or dtype differs from the spec.
@@ -361,9 +363,11 @@ class Network(Component):
         While it runs, this pauses the network, copies the state and resumes, and
         returns once the network has resumed. After a normal end, this copies the
         state as the nodes left it, calling each node's ``state_dict`` on this
-        thread; the tree's timer then holds the time of the latest update or
-        write, so that a restored network goes on from the end without the time
-        that passed since.
+        thread (an exception it raises reaches the caller as it is). The tree's
+        timer holds the time at which ``shutdown`` asked the network to stop, as
+        if the network had paused then (or a later update or send of an
+        ``on_stop``), so that a restored network goes on from there without the
+        time that passed after the end.
 
         The tree is a copy (later updates of the nodes do not change it) and
         pickles; saving it is up to the host::
