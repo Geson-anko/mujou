@@ -443,7 +443,7 @@ impl PyOutlet {
             Arc::clone(&schema.0),
             channels,
             name,
-            time::global(),
+            Arc::clone(time::global()),
         ))
     }
 
@@ -477,7 +477,7 @@ struct PyInputGroup(Arc<core::InputGroup>);
 impl PyInputGroup {
     #[new]
     fn new() -> Self {
-        Self(core::InputGroup::new(time::global()))
+        Self(core::InputGroup::new(Arc::clone(time::global())))
     }
 
     fn input(&self, schema: PyRef<'_, PySchema>, name: &str) -> PyInputSlot {

@@ -463,7 +463,7 @@ impl Runtime {
         let (runtime, started) = match core::Runtime::start(
             hooks,
             self.names.clone(),
-            time::global(),
+            Arc::clone(time::global()),
             config,
             capture,
         ) {
