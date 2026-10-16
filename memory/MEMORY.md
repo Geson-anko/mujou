@@ -19,8 +19,8 @@
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ（mujou.Tensor・mujou.dtypes・mujou.default.dtype は廃止）、torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
 - [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）
 - [ノードのライフサイクル](project_node_lifecycle.md) — ノードが分散処理の最小単位。on_start / on_update(dt) / on_pause / on_resume / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる
-- [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → 木をコピー → 再開 → ホストに返す。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
-- [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_stop、ホストへ最初の例外を送出。設定で state tree を取得（保存はユーザー）。部分停止・再起動・スキップはしない
+- [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → 木をコピー → 再開 → ホストに返す。正常終了後も取得できる。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
+- [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_stop、ホストへ最初の例外を送出。例外時の state tree は取得しない。部分停止・再起動・スキップはしない
 - [ネットワークと Port](project_network_ports.md) — Node と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
 - [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、ルートのネットワークの write / read / subscribe / state_dict / shutdown。run 前の write が初期値。複数 Port の write は版番号で一斉切り替え。入力はグローバル時間上の信号
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由
