@@ -10,15 +10,13 @@ one is copied into the core.
 import atexit
 import copy
 import threading
-import traceback
-import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import torch
 
 from mujou import _core
-from mujou._node import Node, end_thread, thread_ident
+from mujou._node import Node, capture_state, end_thread, thread_ident
 from mujou._port import Channel, Port, bind
 from mujou._spec import Spec, fields, join, split
 
@@ -205,9 +203,7 @@ class Session:
 
     # --- run and control
 
-    def run(
-        self, *, manual: bool, pause_timeout: float, capture_state_on_exception: bool
-    ) -> None:
+    def run(self, *, manual: bool, pause_timeout: float) -> None:
         # Held until start returns, so that write and load_state_dict see either
         # no run or a started one, never a run in its start.
         with self._run_lock:
@@ -230,11 +226,6 @@ class Session:
                     last_update_ns=self._last_update_ns,
                     timer_state=self._timer_state,
                     pause_timeout=pause_timeout,
-                    on_exception_capture=(
-                        _weakly(self._capture_on_exception)
-                        if capture_state_on_exception
-                        else None
-                    ),
                 )
             except _core.NetworkError:
                 raise  # a node raised while starting: this run is over
@@ -369,35 +360,43 @@ class Session:
 
     def state_dict(self) -> dict[str, Any]:
         runtime = self._started()
-        return runtime.capture(
-            lambda states: self._tree(dict(enumerate(states)), runtime.last_update_ns())
+        self.check()
+        if not runtime.is_finished:
+            try:
+                return runtime.capture(
+                    lambda states: self._tree(
+                        states, runtime.last_update_ns(), _core.timer.state_dict()
+                    )
+                )
+            except _core.NetworkError:
+                raise
+            except RuntimeError:
+                # The run ended while the request waited: take the state at the
+                # end below. Anything else is a real error.
+                if not runtime.is_finished:
+                    raise
+                self.check()
+        self._settle()
+        return self._ended_tree(runtime)
+
+    def _ended_tree(self, runtime: _core.Runtime) -> dict[str, Any]:
+        """Take the state of a run that has ended normally, on this thread.
+
+        The nodes' threads are gone, so this thread calls their ``state_dict``
+        (through ``_capture_state``, which waits for a CUDA node's stream). The
+        timer reads the time of the latest update or write: the time that passed
+        after the end is not part of the run.
+        """
+        states = [capture_state(node) for node in self._nodes]
+        last_update_ns = runtime.last_update_ns()
+        latest = max(
+            [
+                *last_update_ns,
+                *(slot.read().time_ns for slot, _ in self._slots.values()),
+            ]
         )
-
-    def _capture_on_exception(
-        self, states: dict[int, object], index: int, hook: str, error: BaseException
-    ) -> object:
-        """Build the state tree when a node has raised (the runtime calls this)."""
-        runtime = cast(_core.Runtime, self._runtime)
-        try:
-            last_update_ns = runtime.last_update_ns()
-        except RuntimeError:
-            # A node raised while starting, before run had the runtime: no node
-            # has updated, so each dt starts where the run started.
-            last_update_ns = self._last_update_ns or [_core.timer.time_ns()] * len(
-                self._nodes
-            )
-        tree = self._tree(states, last_update_ns)
-        tree["exception"] = {
-            "node": self._paths[index],
-            "hook": hook,
-            "error": "".join(traceback.format_exception(error)),
-        }
-        return tree
-
-    def exception_state_dict(self) -> dict[str, Any] | None:
-        if self._runtime is None:
-            return None
-        return cast(dict[str, Any] | None, self._runtime.exception_state())
+        timer = {"time_ns": latest, "scale": _core.timer.time_scale()}
+        return self._tree(states, last_update_ns, timer)
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         with self._run_lock:
@@ -477,9 +476,13 @@ class Session:
             torch.cuda.current_stream(device).synchronize()
 
     def _tree(
-        self, states: Mapping[int, object], last_update_ns: Sequence[int]
+        self,
+        states: Sequence[object],
+        last_update_ns: Sequence[int],
+        timer: Mapping[str, int | float],
     ) -> dict[str, Any]:
-        """Copy the state of the paused network into a tree (``state_dict``).
+        """Copy the state of the paused or ended network into a tree
+        (``state_dict``).
 
         The nodes' streams are idle here (``Node._capture_state`` waited for them).
         """
@@ -489,34 +492,17 @@ class Session:
             slots[name] = (_value(spec, message, _CPU), message.time_ns)
         tree = {
             "nodes": {
-                self._paths[i]: copy.deepcopy(state)
-                for i, state in sorted(states.items())
+                path: copy.deepcopy(state)
+                for path, state in zip(self._paths, states, strict=True)
             },
             "slots": slots,
             "last_update_ns": dict(zip(self._paths, last_update_ns, strict=True)),
-            "timer": _core.timer.state_dict(),
+            "timer": dict(timer),
         }
         # The copies above queue on this thread's current streams. Finish them
         # before the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
         return tree
-
-
-def _weakly[**P, T](
-    method: Callable[P, T],
-) -> Callable[P, T | None]:
-    """Wrap a bound method so that it holds its object weakly.
-
-    The runtime is not tracked by the garbage collector, so a strong reference
-    from its callback back to the session would never be collected.
-    """
-    ref = weakref.WeakMethod(cast(Any, method))
-
-    def call(*args: P.args, **kwargs: P.kwargs) -> T | None:
-        bound = ref()
-        return None if bound is None else cast(Callable[P, T], bound)(*args, **kwargs)
-
-    return call
 
 
 def _is_int(value: object) -> bool:

@@ -215,3 +215,9 @@ def end_thread(node: Node) -> None:
     """Forget the thread of ``node`` once its network has stopped, so that a later
     thread that reuses the id is not taken for it."""
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def capture_state(node: Node) -> object:
+    """Take the state of ``node`` as the runtime does while it is paused, on the
+    calling thread (for a network that has ended)."""
+    return node._capture_state()  # pyright: ignore[reportPrivateUsage]  # Node's own module
