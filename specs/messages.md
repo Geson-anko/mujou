@@ -45,9 +45,11 @@ spec = TensorSpec((B, 256))                  # dtype は作った時点の torch
 spec = TensorSpec((B, 256), torch.bfloat16)
 ```
 
-`TensorSpec` は、その形の `torch.Tensor` を作る生成関数を持つ。`TensorSpec.zeros()` はゼロで埋めた CPU 上の値を返し、どの dtype でも使える。`TensorSpec.rand()` は一様分布 $[0, 1)$ の乱数で埋めた値を返し、浮動小数点の dtype でだけ使える。`rand` には seed か `torch.Generator` を渡せ、渡せば結果が決定的になる。テストを決定的に保つためである。正規分布が必要になったら `randn` を別に足す。
+`TensorSpec` は、その形の `torch.Tensor` を作る生成関数を持つ。`TensorSpec.zeros()` はゼロで埋めた値を返し、どの dtype でも使える。`TensorSpec.rand()` は一様分布 $[0, 1)$ の乱数で埋めた値を返し、浮動小数点の dtype でだけ使える。`rand` には seed か `torch.Generator` を渡せ、渡せば結果が決定的になる。テストを決定的に保つためである。`TensorSpec.empty()` は値を設定しない領域を返す。どれも既定では CPU 上に作り、`device` 引数で置き場所を変えられる（`spec.zeros(device="cuda")`）。正規分布が必要になったら `randn` を別に足す。
 
-spec の一致には dtype も含むので、dtype が違う Port 同士は接続できない。書き込まれた `torch.Tensor` の shape か dtype が spec と違えばエラーになる。dtype の暗黙の変換はしない。
+ゼロと乱数のほかの値で始めたいときは、生成関数の結果をその場の操作で埋める（`spec.empty().fill_(0.5)`）。値ごとの生成関数は増やさない。
+
+spec は device を持たない。spec の一致は shape と dtype だけで決まり、同じ spec のメッセージがノードごとに別のデバイスにあってよい。spec の一致には dtype も含むので、dtype が違う Port 同士は接続できない。書き込まれた `torch.Tensor` の shape か dtype が spec と違えばエラーになる。dtype の暗黙の変換はしない。
 
 ## メッセージの型
 

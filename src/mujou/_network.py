@@ -2,9 +2,10 @@
 
 A network is the structure of a run: nodes and nested networks as attributes, and
 ports connected into channels. ``Network.build`` walks the tree once, checks it,
-and freezes it (``docs/network.md``).
+and freezes it (``specs/network.md``).
 """
 
+import math
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -131,6 +132,7 @@ class Network(Component):
     4. While it runs: ``write`` inputs, ``read`` / ``subscribe`` outputs, take a
        ``state_dict``. ``read`` also works before ``run``.
     5. ``shutdown()`` to stop it, or ``join()`` to wait until it stops.
+    6. Optionally, after a normal end: take the final ``state_dict``.
 
     These methods are for the host: calling them from a node's hook raises
     ``RuntimeError``.
@@ -139,10 +141,13 @@ class Network(Component):
     starts the nodes, ``run`` raises ``NetworkError``; otherwise every later call
     of ``write``, ``read``, ``subscribe`` (and its iterator), ``state_dict``,
     ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's exception.
-    ``exception_state_dict`` does not raise it.
+    The state at the exception is not kept.
 
     A running network keeps running when the host drops it, until ``shutdown``
-    or, at the latest, the interpreter's exit (which waits for ``on_stop``).
+    or, at the latest, the interpreter's exit (which waits for ``on_stop``). At
+    the exit, the networks start stopping once the main thread has ended, before
+    the interpreter joins the non-daemon threads, and the exit waits until they
+    have stopped.
 
     Example::
 
@@ -170,6 +175,7 @@ class Network(Component):
         mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
         prediction, t = net.read(net.head.next)
         net.shutdown()
+        state = net.state_dict()  # the state at the end, to save
     """
 
     _graph: Graph | None = None
@@ -269,13 +275,7 @@ class Network(Component):
 
         self._session = Session(self._graph)
 
-    def run(
-        self,
-        *,
-        capture_state_on_exception: bool = False,
-        pause_timeout: float = 10.0,
-        _manual: bool = False,
-    ) -> None:
+    def run(self, *, pause_timeout: float = 30.0, _manual: bool = False) -> None:
         """Start running the nodes in the background and return once they started.
 
         Every node's thread is set up, ``on_start`` (and, after
@@ -283,8 +283,6 @@ class Network(Component):
         global timer runs when this returns. A network runs once.
 
         Args:
-            capture_state_on_exception: When a node raises, take the state tree
-                before stopping, for ``exception_state_dict``.
             pause_timeout: Real seconds that ``state_dict`` waits for every node
                 to pause (the end of its current ``on_update``).
             _manual: For tests: the nodes update only in ``_step``.
@@ -297,11 +295,7 @@ class Network(Component):
                 call ``run`` again.
             NetworkError: A node raised while starting; the network has stopped.
         """
-        _session(self).run(
-            manual=_manual,
-            pause_timeout=pause_timeout,
-            capture_state_on_exception=capture_state_on_exception,
-        )
+        _session(self).run(manual=_manual, pause_timeout=pause_timeout)
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
     # Port[Any, Any, Any] would reject (Mapping keys are invariant).
@@ -319,7 +313,8 @@ class Network(Component):
         the tree's time.
 
         Raises:
-            RuntimeError: The network is not built.
+            RuntimeError: The network is not built, or has stopped normally (no
+                node reads what is written then).
             ValueError: A port is outside the network, connected, takes many
                 peers, or receives nothing; or a shape or the keys differ.
             TypeError: A message or dtype differs from the spec.
@@ -343,13 +338,15 @@ class Network(Component):
         return cast(tuple[S, float], _session(self).read(port))
 
     def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, float]]:
-        """Iterate over the messages ``port`` sends from now on, with their times.
+        """Iterate over the messages ``port`` sends, with their times.
 
-        Each step waits until a newer message than the last one is sent, and
-        yields the latest; messages sent in between are skipped. Only the
-        consumer waits: the sending node never does. The iterator ends when the
-        network shuts down normally. Shut the network down before the program
-        ends: a thread iterating here ends only with the network.
+        The first step yields the latest message at the time of this call (zeros
+        or the restored value before the first ``send``) without waiting. Each
+        later step waits until a newer message is sent and yields the latest;
+        messages sent in between are skipped. Only the consumer waits: the
+        sending node never does. The iterator ends when the network shuts down
+        normally. Shut the network down before the program ends: a thread
+        iterating here ends only with the network.
 
         Raises:
             RuntimeError: The network is not built or not run yet.
@@ -360,10 +357,20 @@ class Network(Component):
         return cast(Iterator[tuple[S, float]], _session(self).subscribe(port))
 
     def state_dict(self) -> dict[str, Any]:
-        """Pause the network, copy its state at one global time, and resume.
+        """Copy the network's state at one global time, while it runs or after
+        it ended normally.
 
-        Returns once the network has resumed. The tree is a copy (later updates
-        of the nodes do not change it) and pickles; saving it is up to the host::
+        While it runs, this pauses the network, copies the state and resumes, and
+        returns once the network has resumed. After a normal end, this copies the
+        state as the nodes left it, calling each node's ``state_dict`` on this
+        thread (an exception it raises reaches the caller as it is). The tree's
+        timer holds the time at which ``shutdown`` asked the network to stop, as
+        if the network had paused then (or a later update or send of an
+        ``on_stop``), so that a restored network goes on from there without the
+        time that passed after the end.
+
+        The tree is a copy (later updates of the nodes do not change it) and
+        pickles; saving it is up to the host::
 
             {
                 "nodes": {"body.l1": ..., ...},  # each node's state_dict()
@@ -379,12 +386,12 @@ class Network(Component):
         ``/in`` what the host wrote.
 
         Raises:
-            RuntimeError: The network is not running (before ``run`` or after
-                ``shutdown``), or this is called from a node's hook.
+            RuntimeError: The network has not run (also after ``load_state_dict``
+                until ``run``), or this is called from a node's hook.
             PauseTimeoutError: A node did not pause within ``pause_timeout``; the
                 network keeps running.
-            NetworkError: The network stopped because a node raised; see
-                ``exception_state_dict``.
+            NetworkError: The network stopped because a node raised; its state is
+                not kept.
         """
         return _session(self).state_dict()
 
@@ -404,40 +411,45 @@ class Network(Component):
         """
         _session(self).load_state_dict(state)
 
-    def exception_state_dict(self) -> dict[str, Any] | None:
-        """Return the tree taken when a node raised, or ``None``.
-
-        Taken only with ``run(capture_state_on_exception=True)``. Call it after
-        catching the ``NetworkError``; it does not raise it. Besides the keys of
-        ``state_dict`` it has ``"exception": {"node": path, "hook": name,
-        "error": traceback}``. A node whose ``state_dict`` raised is missing.
-        """
-        session = self._session
-        return None if session is None else session.exception_state_dict()
-
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float = math.inf) -> None:
         """Stop every node and return once every ``on_stop`` has returned.
 
         Does nothing before ``run`` or after a normal end.
 
+        Args:
+            timeout: Real seconds to wait for the end. ``math.inf`` waits as
+                long as it takes.
+
         Raises:
             RuntimeError: The network is not built.
+            ValueError: ``timeout`` is negative or NaN; nothing was asked.
+            TimeoutError: The network did not stop within ``timeout``. The stop
+                stays asked: the nodes take no more updates and the network goes
+                on stopping in the background (an ``on_stop`` may still be
+                running). ``join`` waits for the end.
             NetworkError: The network stopped because a node raised.
         """
-        _session(self).shutdown()
+        _session(self).shutdown(timeout)
 
-    def join(self) -> None:
+    def join(self, timeout: float = math.inf) -> None:
         """Wait until the network stops, without asking it to stop.
 
         It returns once another thread called ``shutdown`` and every ``on_stop``
         has returned; if a node raises, it raises instead. If nothing stops the
-        network, it never returns.
+        network and ``timeout`` is ``math.inf``, it never returns.
+
+        Args:
+            timeout: Real seconds to wait for the end. ``math.inf`` waits as
+                long as it takes.
 
         Raises:
             RuntimeError: The network has not run.
+            ValueError: ``timeout`` is negative or NaN.
+            TimeoutError: The network did not stop within ``timeout``. Nothing
+                changes: a running network keeps running.
             NetworkError: The network stopped because a node raised.
         """
-        _session(self).join()
+        _session(self).join(timeout)
 
     def _step(self, order: Sequence[Node] | None = None) -> None:
         """For tests with ``run(_manual=True)``: update each node once, in
@@ -450,11 +462,7 @@ class Network(Component):
 
 
 def run[N: Network](
-    network: N,
-    *,
-    capture_state_on_exception: bool = False,
-    pause_timeout: float = 10.0,
-    _manual: bool = False,
+    network: N, *, pause_timeout: float = 30.0, _manual: bool = False
 ) -> N:
     """Build ``network`` unless it is built, run it, and return it.
 
@@ -467,11 +475,7 @@ def run[N: Network](
     """
     if network._graph is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
         network.build()
-    network.run(
-        capture_state_on_exception=capture_state_on_exception,
-        pause_timeout=pause_timeout,
-        _manual=_manual,
-    )
+    network.run(pause_timeout=pause_timeout, _manual=_manual)
     return network
 
 

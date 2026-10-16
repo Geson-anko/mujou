@@ -2,7 +2,7 @@
 //!
 //! Every node discretizes its dynamics with the elapsed time measured on the
 //! timer of its run, so the time can be scaled, paused and restored without
-//! changing the dynamics (`docs/execution-model.md`). A run uses the global
+//! changing the dynamics (`specs/execution-model.md`). A run uses the global
 //! timer ([`global`]) unless it is given a [`Timer`] of its own; systems that
 //! should not stop each other's time run on separate timers.
 //!

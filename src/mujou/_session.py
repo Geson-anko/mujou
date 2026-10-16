@@ -1,5 +1,5 @@
 """The run of a built network: slots for its ports, the runtime of its nodes, and the
-host's reads and writes (``docs/network.md``, ``docs/execution-model.md``).
+host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
 ``Network.build`` creates one ``Session``. It lays out the slots of every port,
 binds each port to them (``Binding``), and later starts the runtime. Values cross
@@ -8,17 +8,17 @@ one is copied into the core.
 """
 
 import atexit
+import contextlib
 import copy
+import math
 import threading
-import traceback
-import weakref
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import torch
 
 from mujou import _core
-from mujou._node import Node, end_thread, thread_ident
+from mujou._node import Node, capture_state, end_thread, thread_ident
 from mujou._port import Channel, Port, bind
 from mujou._spec import Spec, fields, join, split
 
@@ -162,6 +162,11 @@ class Session:
         self._runtime: _core.Runtime | None = None
         # Makes the check and the start of a run one step for concurrent callers.
         self._run_lock = threading.Lock()
+        # The timer when shutdown first asked the run to stop, and the thread
+        # that asks for a shutdown with a finite timeout (one per session).
+        self._stop_lock = threading.Lock()
+        self._stop_timer: dict[str, int | float] | None = None
+        self._stopper: threading.Thread | None = None
         # Restored by load_state_dict and passed to the runtime by run.
         self._states: list[object] | None = None
         self._last_update_ns: list[int] | None = None
@@ -205,9 +210,7 @@ class Session:
 
     # --- run and control
 
-    def run(
-        self, *, manual: bool, pause_timeout: float, capture_state_on_exception: bool
-    ) -> None:
+    def run(self, *, manual: bool, pause_timeout: float) -> None:
         # Held until start returns, so that write and load_state_dict see either
         # no run or a started one, never a run in its start.
         with self._run_lock:
@@ -220,6 +223,7 @@ class Session:
             for session in list(_RUNNING):
                 session._settle()
             _RUNNING.add(self)
+            _watch_exit()
             # What this thread queued for the nodes (tensors made in __init__ or
             # by load_state_dict) is done before their streams use it.
             self._synchronize_current_streams()
@@ -230,11 +234,6 @@ class Session:
                     last_update_ns=self._last_update_ns,
                     timer_state=self._timer_state,
                     pause_timeout=pause_timeout,
-                    on_exception_capture=(
-                        _weakly(self._capture_on_exception)
-                        if capture_state_on_exception
-                        else None
-                    ),
                 )
             except _core.NetworkError:
                 raise  # a node raised while starting: this run is over
@@ -255,17 +254,49 @@ class Session:
             self._settle()
             self._runtime.check()
 
-    def shutdown(self) -> None:
-        if self._runtime is not None:
-            try:
-                self._runtime.shutdown()
-            finally:
-                self._settle()
+    def shutdown(self, timeout: float) -> None:
+        wait = _wait(timeout)
+        runtime = self._runtime
+        if runtime is None:
+            return
+        try:
+            with self._stop_lock:
+                if not runtime.is_finished:
+                    # A normal end is a pause at this time that never resumes:
+                    # the state after the end is taken at it.
+                    if self._stop_timer is None:
+                        self._stop_timer = _core.timer.state_dict()
+                    # The runtime's shutdown waits without a limit, so a finite
+                    # timeout asks on another thread (one per session) and waits
+                    # here with the limit. On a timeout the request stands and
+                    # the network goes on stopping.
+                    if wait is not None and self._stopper is None:
+                        self._stopper = threading.Thread(
+                            target=_request_stop,
+                            args=(runtime,),
+                            name="mujou-shutdown",
+                            daemon=True,
+                        )
+                        self._stopper.start()
+            if wait is None:
+                runtime.shutdown()
+                return
+            if not runtime.join(wait):
+                raise TimeoutError(
+                    f"the network did not stop within {timeout} s; it goes on "
+                    "stopping, and join() waits for it"
+                )
+        finally:
+            self._settle()
 
-    def join(self) -> None:
+    def join(self, timeout: float) -> None:
+        wait = _wait(timeout)
         runtime = self._started()
         try:
-            runtime.join()
+            if not runtime.join(wait):
+                raise TimeoutError(
+                    f"the network did not stop within {timeout} s; it keeps running"
+                )
         finally:
             self._settle()
 
@@ -291,7 +322,13 @@ class Session:
     # --- host input and output
 
     def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
-        self.check()
+        runtime = self._runtime
+        finished = runtime is not None and runtime.is_finished
+        self.check()  # after is_finished: an end by an exception raises here
+        if finished:
+            raise RuntimeError(
+                "the network has stopped; no node reads what is written now"
+            )
         items: list[tuple[_core.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
@@ -323,7 +360,7 @@ class Session:
         runtime = self._started()  # a subscription before run would wait for nothing
         self.check()
         outbox, spec = self._outbox(port)
-        # Only values written after this call are new.
+        # The value at the time of this call comes first.
         return self._follow(runtime, outbox, spec, outbox.read())
 
     def _follow(
@@ -333,6 +370,8 @@ class Session:
         spec: Spec,
         last: _core.Message,
     ) -> Iterator[tuple[object, float]]:
+        self.check()
+        yield _value(spec, last, _CPU), last.time_ns / 1e9
         while True:
             self.check()
             finished = runtime.is_finished
@@ -369,35 +408,48 @@ class Session:
 
     def state_dict(self) -> dict[str, Any]:
         runtime = self._started()
-        return runtime.capture(
-            lambda states: self._tree(dict(enumerate(states)), runtime.last_update_ns())
+        finished = runtime.is_finished
+        self.check()  # after is_finished: an end by an exception raises here
+        if not finished:
+            try:
+                return runtime.capture(
+                    lambda states: self._tree(
+                        states, runtime.last_update_ns(), _core.timer.state_dict()
+                    )
+                )
+            except _core.NetworkError:
+                raise
+            except RuntimeError:
+                # The run ended while the request waited: take the state at the
+                # end below. Anything else is a real error.
+                if not runtime.is_finished:
+                    raise
+                self.check()
+        self._settle()
+        return self._ended_tree(runtime)
+
+    def _ended_tree(self, runtime: _core.Runtime) -> dict[str, Any]:
+        """Take the state of a run that has ended normally, on this thread.
+
+        The nodes' threads are gone, so this thread calls their ``state_dict``
+        (through ``_capture_state``, which waits for a CUDA node's stream). The
+        timer is the one ``shutdown`` read when it asked the run to stop, as a
+        pause would have frozen it, and not earlier than any update or slot
+        (an ``on_stop`` may still send after the request).
+        """
+        states = [capture_state(node) for node in self._nodes]
+        # Only shutdown ends a run normally, and it reads the timer first.
+        stop_timer = cast(dict[str, int | float], self._stop_timer)
+        tree = self._tree(states, runtime.last_update_ns(), stop_timer)
+        latest = max(
+            [
+                int(stop_timer["time_ns"]),
+                *tree["last_update_ns"].values(),
+                *(time_ns for _, time_ns in tree["slots"].values()),
+            ]
         )
-
-    def _capture_on_exception(
-        self, states: dict[int, object], index: int, hook: str, error: BaseException
-    ) -> object:
-        """Build the state tree when a node has raised (the runtime calls this)."""
-        runtime = cast(_core.Runtime, self._runtime)
-        try:
-            last_update_ns = runtime.last_update_ns()
-        except RuntimeError:
-            # A node raised while starting, before run had the runtime: no node
-            # has updated, so each dt starts where the run started.
-            last_update_ns = self._last_update_ns or [_core.timer.time_ns()] * len(
-                self._nodes
-            )
-        tree = self._tree(states, last_update_ns)
-        tree["exception"] = {
-            "node": self._paths[index],
-            "hook": hook,
-            "error": "".join(traceback.format_exception(error)),
-        }
+        tree["timer"]["time_ns"] = latest
         return tree
-
-    def exception_state_dict(self) -> dict[str, Any] | None:
-        if self._runtime is None:
-            return None
-        return cast(dict[str, Any] | None, self._runtime.exception_state())
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         with self._run_lock:
@@ -477,9 +529,13 @@ class Session:
             torch.cuda.current_stream(device).synchronize()
 
     def _tree(
-        self, states: Mapping[int, object], last_update_ns: Sequence[int]
+        self,
+        states: Sequence[object],
+        last_update_ns: Sequence[int],
+        timer: Mapping[str, int | float],
     ) -> dict[str, Any]:
-        """Copy the state of the paused network into a tree (``state_dict``).
+        """Copy the state of the paused or ended network into a tree
+        (``state_dict``).
 
         The nodes' streams are idle here (``Node._capture_state`` waited for them).
         """
@@ -489,12 +545,12 @@ class Session:
             slots[name] = (_value(spec, message, _CPU), message.time_ns)
         tree = {
             "nodes": {
-                self._paths[i]: copy.deepcopy(state)
-                for i, state in sorted(states.items())
+                path: copy.deepcopy(state)
+                for path, state in zip(self._paths, states, strict=True)
             },
             "slots": slots,
             "last_update_ns": dict(zip(self._paths, last_update_ns, strict=True)),
-            "timer": _core.timer.state_dict(),
+            "timer": dict(timer),
         }
         # The copies above queue on this thread's current streams. Finish them
         # before the runtime resumes the nodes, which update in place.
@@ -502,21 +558,21 @@ class Session:
         return tree
 
 
-def _weakly[**P, T](
-    method: Callable[P, T],
-) -> Callable[P, T | None]:
-    """Wrap a bound method so that it holds its object weakly.
+def _wait(timeout: float) -> float | None:
+    """Return ``timeout`` as the runtime's ``join`` takes it (``None``: no limit).
 
-    The runtime is not tracked by the garbage collector, so a strong reference
-    from its callback back to the session would never be collected.
+    Raises:
+        ValueError: ``timeout`` is negative or NaN.
     """
-    ref = weakref.WeakMethod(cast(Any, method))
+    if not timeout >= 0:
+        raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
+    return None if timeout == math.inf else timeout
 
-    def call(*args: P.args, **kwargs: P.kwargs) -> T | None:
-        bound = ref()
-        return None if bound is None else cast(Callable[P, T], bound)(*args, **kwargs)
 
-    return call
+def _request_stop(runtime: _core.Runtime) -> None:
+    # The caller's join reports how the run ended.
+    with contextlib.suppress(_core.NetworkError):
+        runtime.shutdown()
 
 
 def _is_int(value: object) -> bool:
@@ -548,7 +604,7 @@ def _shutdown_all() -> None:
     failure: BaseException | None = None
     for session in list(_RUNNING):
         try:
-            session.shutdown()
+            session.shutdown(math.inf)
         except _core.NetworkError:
             pass  # already logged, and the host has gone
         except BaseException as e:  # noqa: BLE001 - re-raised below
@@ -557,10 +613,37 @@ def _shutdown_all() -> None:
         raise failure
 
 
-# Before the interpreter joins the non-daemon threads: a thread iterating over
-# subscribe ends only when its network does. threading._register_atexit is private,
-# so fall back to atexit (after the join) where it is missing.
-_register: Callable[[Callable[[], None]], object] = getattr(
-    threading, "_register_atexit", atexit.register
-)
-_register(_shutdown_all)
+def _stop_at_exit() -> None:
+    """Stop every running network once the main thread has ended.
+
+    At the interpreter's exit, ``threading`` marks the main thread as ended
+    before it joins the non-daemon threads, so this starts stopping the networks
+    before that join and a thread iterating over ``subscribe`` ends with its
+    network. That order is CPython's implementation, not its documented
+    behavior; ``TestInterpreterExit`` in ``tests/mujou/test_network.py`` guards
+    it.
+    """
+    threading.main_thread().join()
+    # On a failure the atexit call below tries again, and raises.
+    with contextlib.suppress(Exception):
+        _shutdown_all()
+
+
+_watching = False
+_watching_lock: Final = threading.Lock()
+
+
+def _watch_exit() -> None:
+    """Start the daemon thread of ``_stop_at_exit`` once, at the first run."""
+    global _watching
+    with _watching_lock:
+        if _watching:
+            return
+        _watching = True
+    threading.Thread(target=_stop_at_exit, name="mujou-exit", daemon=True).start()
+
+
+# After the join of the non-daemon threads, wait until the networks have stopped
+# (the daemon thread may still be stopping them) and stop those that started
+# since.
+atexit.register(_shutdown_all)

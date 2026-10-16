@@ -14,6 +14,6 @@ metadata:
 
 **Why:** Rust で書く利点（並行処理の安全性）はノードの間の基盤で効くもので、ノードの内側の行列演算には要らない。
 
-**How to apply:** `mujou.pc` の中のクラス名は実装時に決める（ユーザーに確認）。`torch.compile` が 3.14t で多数のスレッドから使えるかは、使うときに確かめる。テストは `tests/mujou/pc/` に置く。仕様は `docs/update-rules.md` の「実装と公開元」。
+**How to apply:** `mujou.pc` の中のクラス名は実装時に決める（ユーザーに確認）。`torch.compile` が 3.14t で多数のスレッドから使えるかは、使うときに確かめる。テストは `tests/mujou/pc/` に置く。仕様は `specs/update-rules.md` の「実装と公開元」。
 
 関連: [[project-pluggable-update-rule]], [[project-torch-module]], [[project-node-lifecycle]]

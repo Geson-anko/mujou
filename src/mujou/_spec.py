@@ -3,7 +3,7 @@
 A message is either one ``torch.Tensor`` (``TensorSpec``) or a ``TypedDict`` whose
 values are ``torch.Tensor`` (``DictSpec``). A spec fixes the shape and the dtype of
 every value, so the slots that carry the message can be laid out when the network
-is built (``docs/messages.md``).
+is built (``specs/messages.md``).
 """
 
 import typing
@@ -37,11 +37,18 @@ class MessageSpec[M](ABC):
     """The spec of a message of type ``M``: its shape, dtype and initial value."""
 
     @abstractmethod
-    def zeros(self) -> M:
-        """Return a message filled with zeros on the CPU.
+    def zeros(self, *, device: torch.device | str = "cpu") -> M:
+        """Return a message filled with zeros on ``device``.
 
-        This is the default initial value that a port receives before the first
-        message is written.
+        On the CPU, this is the default initial value that a port receives before
+        the first message is written.
+        """
+
+    @abstractmethod
+    def empty(self, *, device: torch.device | str = "cpu") -> M:
+        """Return a message on ``device`` whose values are not set.
+
+        Set them before use, in place (``fill_`` and the like).
         """
 
 
@@ -55,7 +62,12 @@ class TensorSpec(MessageSpec[torch.Tensor]):
     is just a part of the shape.
 
     Two specs are equal when their shapes and dtypes are equal. A message whose shape
-    or dtype differs from the spec is an error; dtypes are never converted.
+    or dtype differs from the spec is an error; dtypes are never converted. A spec
+    has no device: a message of the spec may be on any device.
+
+    ``zeros``, ``rand`` and ``empty`` make a tensor of the spec, on the CPU unless
+    ``device`` says otherwise. For any other initial value, fill one of them in
+    place (``spec.empty().fill_(0.5)``).
 
     Example::
 
@@ -63,6 +75,7 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         spec = TensorSpec((32, 256), torch.bfloat16)
         x0 = spec.zeros()
         noise = TensorSpec((4,)).rand(seed=0)  # deterministic
+        ones = spec.empty(device="cuda").fill_(1.0)
 
     Raises:
         TypeError: A dimension is not an ``int``, or ``dtype`` is not supported.
@@ -103,17 +116,30 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         return self._dtype
 
     @override
-    def zeros(self) -> torch.Tensor:
-        """Return a tensor of this spec filled with zeros on the CPU."""
-        return torch.zeros(self._shape, dtype=self._dtype)
+    def zeros(self, *, device: torch.device | str = "cpu") -> torch.Tensor:
+        """Return a tensor of this spec filled with zeros on ``device``."""
+        return torch.zeros(self._shape, dtype=self._dtype, device=device)
+
+    @override
+    def empty(self, *, device: torch.device | str = "cpu") -> torch.Tensor:
+        """Return a tensor of this spec on ``device`` whose values are not set.
+
+        Set them before use, in place: ``spec.empty().fill_(0.5)``.
+        """
+        return torch.empty(self._shape, dtype=self._dtype, device=device)
 
     def rand(
-        self, seed: int | None = None, *, generator: torch.Generator | None = None
+        self,
+        seed: int | None = None,
+        *,
+        generator: torch.Generator | None = None,
+        device: torch.device | str = "cpu",
     ) -> torch.Tensor:
-        """Return a tensor of this spec drawn uniformly from [0, 1) on the CPU.
+        """Return a tensor of this spec drawn uniformly from [0, 1) on ``device``.
 
-        Pass ``seed`` or a CPU ``generator`` to make the result deterministic;
-        without either, the global torch generator is used.
+        Pass ``seed`` or a ``generator`` on ``device`` to make the result
+        deterministic; without either, the global torch generator is used. The
+        same seed draws different values on different kinds of device.
 
         Raises:
             TypeError: The dtype is not a floating point dtype.
@@ -124,8 +150,10 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         if seed is not None:
             if generator is not None:
                 raise ValueError("pass either seed or generator, not both")
-            generator = torch.Generator().manual_seed(seed)
-        return torch.rand(self._shape, dtype=self._dtype, generator=generator)
+            generator = torch.Generator(device).manual_seed(seed)
+        return torch.rand(
+            self._shape, dtype=self._dtype, generator=generator, device=device
+        )
 
     @override
     def __eq__(self, other: object) -> bool:
@@ -222,9 +250,17 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         return self._specs
 
     @override
-    def zeros(self) -> TD:
-        """Return a message whose values are all zeros on the CPU."""
-        return cast(TD, {k: s.zeros() for k, s in self._specs.items()})
+    def zeros(self, *, device: torch.device | str = "cpu") -> TD:
+        """Return a message whose values are all zeros on ``device``."""
+        return cast(TD, {k: s.zeros(device=device) for k, s in self._specs.items()})
+
+    @override
+    def empty(self, *, device: torch.device | str = "cpu") -> TD:
+        """Return a message on ``device`` whose values are not set.
+
+        Set them before use, in place: ``msg["error"].fill_(0.5)``.
+        """
+        return cast(TD, {k: s.empty(device=device) for k, s in self._specs.items()})
 
     @override
     def __eq__(self, other: object) -> bool:

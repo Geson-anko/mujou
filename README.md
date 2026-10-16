@@ -16,7 +16,16 @@ Requires [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) (>= 1.5
 
 ```sh
 just setup   # create .venv, install deps, install pre-commit hooks
-just run     # format -> test -> type
+just run     # format -> test -> type -> docs-build
+```
+
+### Documentation
+
+The user documentation (English and Japanese) is in `docs/` and built with MkDocs; the design specifications for developers (Japanese) are in `specs/`.
+
+```sh
+just docs         # serve the site at http://127.0.0.1:8000 with live reload
+just docs-build   # build it strictly into site/
 ```
 
 ### Dev container

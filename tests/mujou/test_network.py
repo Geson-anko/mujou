@@ -569,6 +569,18 @@ class TestWrite:
         with pytest.raises(RuntimeError, match="not built"):
             net.write({net.prev: u(0)})
 
+    def test_raises_after_a_normal_end(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        net.shutdown()
+        with pytest.raises(RuntimeError, match="stopped"):
+            net.write({net.prev: u(2)})
+        # Nothing was written: the tree keeps the input as it was at the end.
+        assert torch.equal(net.state_dict()["slots"]["a.prev/in"][0], u(1))
+
 
 class TestRead:
     def test_gives_the_latest_output_and_its_time_in_seconds(
@@ -601,7 +613,11 @@ class TestSubscribe:
     ):
         net = run_network(Chain(), _manual=True)
         net.write({net.prev: u(1)})
+        step(net, virtual_timer)
         values = net.subscribe(net.next)
+        # First the value at the time of the call, without waiting for a new one.
+        out, t = next(values)
+        assert torch.equal(out, net.b.x) and t == virtual_timer.time_ns() / 1e9
         for _ in range(3):
             step(net, virtual_timer)
         # The first two values were skipped: only the latest is given.
@@ -612,6 +628,22 @@ class TestSubscribe:
         net.shutdown()
         with pytest.raises(StopIteration):
             next(values)
+
+    def test_gives_the_value_before_the_first_send(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        out, _ = next(net.subscribe(net.next))
+        assert torch.equal(out, torch.zeros(2, dtype=F64))
+
+    def test_gives_the_last_value_after_a_normal_end(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        net.shutdown()
+        assert [t for _, t in net.subscribe(net.next)] == [
+            virtual_timer.time_ns() / 1e9
+        ]
 
     def test_follows_a_free_running_network(self, run_network: RunNetwork):
         net = run_network(Chain())
@@ -628,15 +660,125 @@ class TestSubscribe:
 
 
 class TestStateDict:
-    def test_needs_a_running_network(self, run_network: RunNetwork):
+    def test_needs_a_run(self, run_network: RunNetwork):
         net = Chain()
         net.build()
         with pytest.raises(RuntimeError, match="not running"):
             net.state_dict()
-        run_network(net)
+        tree = Chain()
+        tree.build()
+        tree.load_state_dict(run_network(Chain(), _manual=True).state_dict())
+        with pytest.raises(RuntimeError, match="not running"):
+            tree.state_dict()  # restored, but not run yet
+
+    def test_after_a_normal_end_is_the_state_at_the_end(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        for k in range(3):
+            net.write({net.prev: u(k)})
+            step(net, virtual_timer)
+        step(net, virtual_timer, net.a)  # b's last update is one step behind
+        net.write({net.prev: u(3)})
+        running = net.state_dict()
         net.shutdown()
-        with pytest.raises(RuntimeError):
-            net.state_dict()
+        virtual_timer.advance(100.0)  # time goes on after the end
+        ended = net.state_dict()
+        # Nothing changed after the last update: the same tree as just before the
+        # end, at the time of the latest update or write (the time after the end
+        # is not part of the run).
+        assert ended["timer"] == running["timer"]
+        assert ended["last_update_ns"] == running["last_update_ns"]
+        assert ended["slots"].keys() == running["slots"].keys()
+        for name, (value, time_ns) in running["slots"].items():
+            assert torch.equal(ended["slots"][name][0], value)
+            assert ended["slots"][name][1] == time_ns
+        for path in ("a", "b"):
+            assert torch.equal(ended["nodes"][path]["x"], running["nodes"][path]["x"])
+            assert ended["nodes"][path]["updates"] == running["nodes"][path]["updates"]
+        pickle.dumps(ended)
+
+    def test_after_a_normal_end_is_a_copy(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        net.shutdown()
+        tree = net.state_dict()
+        x = net.a.x.clone()
+        net.a.x += 1.0
+        assert torch.equal(tree["nodes"]["a"]["x"], x)
+
+    def test_after_a_normal_end_of_a_free_running_network(
+        self, run_network: RunNetwork
+    ):
+        net = run_network(Chain(tau=0.01))
+        net.write({net.prev: u(1)})
+        mujou.time.sleep(0.05)
+        asked_after = mujou.time.time_ns()
+        net.shutdown()
+        stopped_before = mujou.time.time_ns()
+        mujou.time.sleep(0.05)  # time goes on after the end
+        tree = net.state_dict()
+        frozen_at = tree["timer"]["time_ns"]
+        # As a pause at the request would: the time of the request, and nothing
+        # in the tree is later than it.
+        assert asked_after <= frozen_at <= stopped_before
+        for updated_at in tree["last_update_ns"].values():
+            assert updated_at <= frozen_at
+        for _, written_at in tree["slots"].values():
+            assert written_at <= frozen_at
+        assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
+
+    def test_after_a_normal_end_is_taken_at_the_time_of_the_shutdown(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        virtual_timer.advance(0.3)  # the input stays presented for 0.3 s more
+        virtual_timer.set_time_scale(2.0)
+        asked_at = virtual_timer.time_ns()
+        net.shutdown()
+        virtual_timer.advance(100.0)
+        virtual_timer.set_time_scale(3.0)
+        tree = net.state_dict()
+        assert tree["timer"] == {"time_ns": asked_at, "scale": 2.0}
+
+    def test_after_a_normal_end_cannot_call_the_network_in_the_node_state_dict(
+        self, run_network: RunNetwork
+    ):
+        networks: list[Network] = []
+
+        class Reading(Pair):
+            @override
+            def state_dict(self) -> object:
+                try:
+                    networks[0].read(self.out)
+                except RuntimeError as e:
+                    return str(e)
+                return None
+
+        networks.append(run_network(Solo(Reading()), _manual=True))
+        networks[0].shutdown()
+        assert "host methods" in networks[0].state_dict()["nodes"]["node"]
+
+    def test_after_a_normal_end_cannot_receive_in_the_node_state_dict(
+        self, run_network: RunNetwork
+    ):
+        class Receiving(Pair):
+            @override
+            def state_dict(self) -> object:
+                try:
+                    self.x.recv()
+                except RuntimeError as e:
+                    return str(e)
+                return None
+
+        net = run_network(Solo(Receiving()), _manual=True)
+        net.shutdown()
+        assert "only the node that owns" in net.state_dict()["nodes"]["node"]
 
     def test_is_taken_at_one_time(self, run_network: RunNetwork):
         net = run_network(Chain(tau=0.01))
@@ -822,25 +964,6 @@ class TestNodeException:
             with pytest.raises(NetworkError) as raised:
                 call()
             assert raised.value.__cause__ is error
-        assert net.exception_state_dict() is None
-
-    def test_keeps_the_state_when_asked(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
-    ):
-        net = run_network(
-            Chain(raise_in_b=2), capture_state_on_exception=True, _manual=True
-        )
-        net.write({net.prev: u(1)})
-        step(net, virtual_timer)
-        with pytest.raises(NetworkError):
-            step(net, virtual_timer)
-        tree = net.exception_state_dict()
-        assert tree is not None
-        assert tree["exception"]["node"] == "b"
-        assert tree["exception"]["hook"] == "on_update"
-        assert "boom after 2 updates" in tree["exception"]["error"]
-        assert set(tree["nodes"]) == {"a", "b"}
-        pickle.dumps(tree)
 
     def test_ends_a_subscription(self, run_network: RunNetwork):
         net = run_network(Chain())
@@ -851,6 +974,118 @@ class TestNodeException:
             for _ in values:
                 pass
         assert raised.value.__cause__ is net.b.error
+
+
+class SlowStop(Node):
+    """Waits in ``on_stop`` until ``release`` is set."""
+
+    def __init__(self) -> None:
+        self.out = Port(send=vec())
+        self.release = threading.Event()
+        self.stopped = threading.Event()
+
+    @override
+    def on_stop(self) -> None:
+        self.release.wait(10.0)
+        self.stopped.set()
+
+
+class TestShutdown:
+    def test_does_nothing_before_run_and_after_the_end(self, run_network: RunNetwork):
+        net = Chain()
+        net.build()
+        net.shutdown()
+        run_network(net)
+        net.shutdown()
+        net.shutdown(timeout=0.0)
+
+    def test_raises_after_the_timeout_and_the_network_goes_on_stopping(
+        self, run_network: RunNetwork
+    ):
+        node = SlowStop()
+        net = run_network(Solo(node), _manual=True)
+        try:
+            started = time.monotonic()
+            with pytest.raises(TimeoutError):
+                net.shutdown(timeout=0.1)
+            assert time.monotonic() - started < 5.0
+            assert not node.stopped.is_set()
+        finally:
+            node.release.set()
+        net.join()
+        assert node.stopped.is_set()
+        net.state_dict()  # a normal end
+
+    def test_rejects_a_negative_timeout(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                net.shutdown(timeout=timeout)
+        # Nothing was asked: the network still runs and updates.
+        with pytest.raises(TimeoutError):
+            net.join(timeout=0.0)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        assert net.a.updates == 1
+
+    def test_raises_what_a_node_raised(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(raise_in_b=1), _manual=True)
+        with pytest.raises(NetworkError):
+            step(net, virtual_timer)
+        with pytest.raises(NetworkError) as raised:
+            net.shutdown(timeout=1.0)
+        assert raised.value.__cause__ is net.b.error
+
+    def test_asks_on_one_thread_however_often_it_times_out(
+        self, run_network: RunNetwork
+    ):
+        def askers() -> int:
+            return sum(t.name == "mujou-shutdown" for t in threading.enumerate())
+
+        node = SlowStop()
+        net = run_network(Solo(node), _manual=True)
+        before = askers()
+        try:
+            for _ in range(5):
+                with pytest.raises(TimeoutError):
+                    net.shutdown(timeout=0.01)
+            assert askers() - before <= 1
+        finally:
+            node.release.set()
+        net.join()
+        ended = askers()
+        net.shutdown(timeout=1.0)  # after the end: nothing to ask
+        assert askers() <= ended
+
+
+class TestJoin:
+    def test_returns_once_another_thread_shuts_down(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        stopper = threading.Timer(0.1, net.shutdown)
+        stopper.start()
+        net.join()
+        stopper.join()
+        net.state_dict()  # a normal end
+
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        with pytest.raises(TimeoutError):
+            net.join(timeout=0.05)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        assert torch.equal(net.read(net.next)[0], net.b.x)
+
+    def test_rejects_a_negative_timeout(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                net.join(timeout=timeout)
 
 
 class TestEndToEnd:
@@ -934,6 +1169,43 @@ class TestEndToEnd:
         assert torch.equal(out, expected[2][0]) and t == expected[2][1]
         # The nodes got copies: their updates in place did not reach the tree.
         assert not torch.equal(tree["nodes"]["a"]["x"], restored.a.x)
+
+    @pytest.mark.parametrize("b_first", [False, True])
+    def test_a_network_restored_after_the_end_continues_the_same(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork, b_first: bool
+    ):
+        k, m, gap = 5, 7, 0.3
+
+        def present(net: Chain, steps: range) -> None:
+            order = (net.b, net.a) if b_first else (net.a, net.b)
+            for i in steps:
+                net.write({net.prev: u(i)})
+                step(net, virtual_timer, *order)
+            step(net, virtual_timer, net.a)  # b's last update is one step behind
+            net.write({net.prev: u(steps.stop)})
+            virtual_timer.advance(gap)  # the input stays presented a while
+
+        # Saved after the end.
+        ended = run_network(Chain(), _manual=True)
+        present(ended, range(k))
+        ended.shutdown()
+        virtual_timer.advance(100.0)  # time goes on after the end
+        tree = pickle.loads(pickle.dumps(ended.state_dict()))
+
+        # The same run without stopping.
+        through = run_network(Chain(), _manual=True)
+        present(through, range(k))
+        present(through, range(k + 1, k + 1 + m))
+        expected = (through.a.x.clone(), through.b.x.clone())
+        through.shutdown()
+
+        restored = Chain()
+        restored.build()
+        restored.load_state_dict(tree)
+        run_network(restored, _manual=True)
+        present(restored, range(k + 1, k + 1 + m))
+        assert torch.equal(restored.a.x, expected[0])
+        assert torch.equal(restored.b.x, expected[1])
 
 
 class TestInterpreterExit:
@@ -1136,6 +1408,27 @@ class BusyStart(Node):
         return {"w": self.w}
 
 
+class BusyStop(Node):
+    """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
+    ``on_stop``."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+
+    @override
+    def on_start(self) -> None:
+        self.w = torch.zeros(BIG, device=self.device)
+
+    @override
+    def on_stop(self) -> None:
+        for _ in range(HOST_ADDS):
+            self.w.add_(1.0)
+
+    @override
+    def state_dict(self) -> object:
+        return {"w": self.w}
+
+
 @needs_gpus(1)
 class TestCuda:
     @needs_gpus(2)
@@ -1180,6 +1473,18 @@ class TestCuda:
             net = run_network(Solo(BusyStart()), _manual=True)
             w = net.state_dict()["nodes"]["node"]["w"]
             net.shutdown()
+            captured.append((w.min().item(), w.max().item()))
+        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
+
+    @pytest.mark.slow
+    def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
+        self, run_network: RunNetwork
+    ):
+        captured: list[tuple[float, float]] = []
+        for _ in range(5):
+            net = run_network(Solo(BusyStop()), _manual=True)
+            net.shutdown()
+            w = net.state_dict()["nodes"]["node"]["w"]
             captured.append((w.min().item(), w.max().item()))
         assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
 

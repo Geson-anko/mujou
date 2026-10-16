@@ -26,6 +26,6 @@ metadata:
 - $\Delta t$ が大きすぎると陽的 Euler は不安定になる。上限で打ち切るか、内部で刻みを分割する
 - テストではタイマー（ネットワークのテストはグローバルタイマー、コアのテストは独立に作ったタイマー）を、手動で進める仮想時計のモードに切り替え、固定スケジュールで決定的に動かす。全ノードを固定の $\Delta t$ で同期的に回すと、元の離散アルゴリズムに一致することをオラクルにする
 - 既定の PC-ALM の連続時間形は skill `pc-alm` 7 節
-- グローバルタイマーは 2026-10-15 に実装した（Rust の `mujou_core::time`、Python の `mujou._core.timer`）。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで、名前は暫定。停止・状態の取得と復元・仮想時計は `mujou._core.timer` に留める（詳細は `docs/execution-model.md` のグローバルタイマー節）。2026-10-16 にコアと `mujou._core` がタイマーを実行ごとに持てるようにした（`Timer()`、各部品の `timer=`、[[project-timer-per-run]]）
+- グローバルタイマーは 2026-10-15 に実装した（Rust の `mujou_core::time`、Python の `mujou._core.timer`）。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで、名前は暫定。停止・状態の取得と復元・仮想時計は `mujou._core.timer` に留める（詳細は `specs/execution-model.md` のグローバルタイマー節）。2026-10-16 にコアと `mujou._core` がタイマーを実行ごとに持てるようにした（`Timer()`、各部品の `timer=`、[[project-timer-per-run]]）
 
 関連: [[project-core-message-framework]], [[project-compute-granularity]], [[project-open-decisions]]

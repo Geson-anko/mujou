@@ -3,17 +3,15 @@
 A port has no direction: it holds the spec of the message it sends and the spec of
 the message it receives. Two ports connect when their specs are mutually reversed,
 and each connection is one ``Channel`` registered at both ends
-(``docs/network.md``).
+(``specs/network.md``).
 """
 
 from typing import (
     TYPE_CHECKING,
     Any,
     Final,
-    Generic,
     Literal,
     Never,
-    TypeVar,
     cast,
     final,
     overload,
@@ -41,17 +39,9 @@ class Multi:
     """Type marker: the port connects to any number of peers."""
 
 
-# Old-style type variables: the pre-commit hooks parse the sources with a Python
-# older than 3.13, which cannot parse defaults in a type parameter list.
-# S: the messages a port sends. R: the messages it receives. M / MN: the peer count,
-# Single / Multi unless declared otherwise (MN is the NextPort default).
-S = TypeVar("S", infer_variance=True, default=Never)
-R = TypeVar("R", infer_variance=True, default=Never)
-M = TypeVar("M", Single, Multi, infer_variance=True, default=Single)
-MN = TypeVar("MN", Single, Multi, infer_variance=True, default=Multi)
-
-
-class Port(Generic[S, R, M]):
+# S: the messages a port sends. R: the messages it receives. M: the peer count,
+# Single unless declared otherwise (Multi for NextPort).
+class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     """A connection point that sends messages of type ``S`` and receives ``R``.
 
     Declare ports as attributes of a node (or expose a port of a child as an
@@ -290,7 +280,7 @@ class Port(Generic[S, R, M]):
         )
 
 
-class PrevPort(Port[S, R, M]):
+class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M]):
     """The previous side of a node or network: ``b`` in ``a.connect(b)``.
 
     Takes one peer by default; pass ``multi=True`` to merge several. A node or
@@ -328,7 +318,7 @@ class PrevPort(Port[S, R, M]):
         self._init(send, recv, multi)
 
 
-class NextPort(Port[S, R, MN]):
+class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     """The next side of a node or network: ``a`` in ``a.connect(b)``.
 
     Takes any number of peers by default, since branches usually start here; pass

@@ -1,0 +1,50 @@
+name: Docs
+
+# Build the user documentation strictly (broken links and missing API objects fail).
+# Deploying the site is not set up yet.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "examples/**"
+      - "src/**/*.py"
+      - "src/**/*.pyi"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "examples/**"
+      - "src/**/*.py"
+      - "src/**/*.pyi"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  build_docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14t"
+          enable-cache: true
+
+      - uses: extractions/setup-just@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build the documentation
+        run: just docs-build

@@ -14,6 +14,6 @@ metadata:
 
 **Why:** 手書きのスタブは bindings とずれる。生成なら doc comment が唯一の正になる。
 
-**How to apply:** bindings を変えたら `just stub` を回してスタブも一緒にコミットする。仕組みの詳細と制約は `docs/native-core.md` のツールチェーン節。
+**How to apply:** bindings を変えたら `just stub` を回してスタブも一緒にコミットする。仕組みの詳細と制約は `specs/native-core.md` のツールチェーン節。
 
 関連: [[project-native-core-rust]]

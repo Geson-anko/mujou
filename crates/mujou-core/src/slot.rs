@@ -1,7 +1,7 @@
 //! Slots: the latest values that nodes share without waiting for each other.
 //!
 //! A slot holds the latest [`Message`] of one writer for any number of readers
-//! (`docs/messages.md`). A message is immutable and shared as `Arc<Message>`, so a
+//! (`specs/messages.md`). A message is immutable and shared as `Arc<Message>`, so a
 //! reader that holds one sees it unchanged however often the writer writes. The
 //! writer never writes into a buffer a reader may see: it takes a buffer from a
 //! pool, fills it, and swaps the new message in. A buffer goes back to its pool
@@ -12,7 +12,7 @@
 //!   slot of each channel
 //! - [`InputGroup`] / [`InputSlot`]: the slots the host writes from outside, where
 //!   one write to several slots becomes visible to every reader at once
-//!   (`docs/network.md`)
+//!   (`specs/network.md`)
 
 use std::collections::HashSet;
 use std::fmt;
@@ -588,7 +588,7 @@ impl Outlet {
 }
 
 /// The version counter of the slots the host writes, which makes one write to
-/// several slots visible to every reader at once (`docs/network.md`).
+/// several slots visible to every reader at once (`specs/network.md`).
 ///
 /// A write places the new value of each slot as its next value tagged with
 /// version `V + 1`, then increments `V`. A reader takes the next value only if its
