@@ -7,6 +7,7 @@ import torch
 
 from mujou._core import _native
 from mujou._core.network import Component
+from mujou._core.timer import Timer
 
 
 class Node(_native.Node, Component):
@@ -24,11 +25,11 @@ class Node(_native.Node, Component):
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned.
-    - ``on_update(dt)``: repeatedly. ``dt`` is the global time in seconds since
-      the node's last update. Read the ports with ``recv``, update in proportion
+    - ``on_update(dt)``: repeatedly. ``dt`` is the time in seconds on the run's
+      ``timer`` since the node's last update. Read the ports with ``recv``, update in proportion
       to ``dt``, and write the ports with ``send``. It never waits for other nodes.
     - ``on_pause()``: when the node has stopped for a pause of the network (as
-      ``Network.state_dict`` does). ``on_resume()``: when the pause ends, before
+      ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
     - ``on_exception()``: once on every node, when a hook of any node has raised,
       before ``on_stop``.
@@ -37,14 +38,15 @@ class Node(_native.Node, Component):
       end is the state at the stop.
     - ``state_dict()``: when the network's state is taken, on the runtime's control
       thread while the node is paused (or, after a normal end, on the host's
-      thread that called ``Network.state_dict``), so ``recv`` and ``send`` raise
+      thread that called ``Run.state_dict``), so ``recv`` and ``send`` raise
       ``RuntimeError`` there. Return the node's own state as a picklable object;
       it may hold the live tensors, because the framework copies it before the
       node resumes.
 
-    If any hook raises, the whole network stops. A hook must not call the methods
-    of any ``Network`` (``write``, ``read``, ``state_dict``, ...): they raise
-    ``RuntimeError`` there, because a node talks only through its own ports.
+    If any hook raises, the whole network stops. A hook must not call
+    ``mujou.run`` or the methods of any ``Run`` (``write``, ``read``,
+    ``state_dict``, ...): they raise ``RuntimeError`` there, because a node talks
+    only through its own ports.
 
     Before ``on_start``, the framework sets up the node's thread: it turns off
     gradient recording (for backpropagation inside the node, wrap both the forward
@@ -98,6 +100,7 @@ class Node(_native.Node, Component):
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
+    _timer: Timer | None = None
 
     def __init__(
         self, *, device: torch.device | str = "cpu", seed: int | None = None
@@ -147,6 +150,26 @@ class Node(_native.Node, Component):
                 "or a later hook"
             )
         return self._generator
+
+    @property
+    def timer(self) -> Timer:
+        """The timer of the run this node is in, which measures its ``dt``.
+
+        Read the time with ``self.timer.now()``. It is the timer given to
+        ``mujou.run(..., timer=...)``, or the global timer by default.
+
+        Raises:
+            RuntimeError: The node is not in a run: before the run starts its
+                nodes (``on_start`` and later hooks can read it), or once the
+                host has seen the run end (after ``Run.shutdown`` or ``Run.join``
+                returned, also in ``state_dict`` after the end).
+        """
+        if self._timer is None:
+            raise RuntimeError(
+                "the node is not in a run; its timer is set from on_start until "
+                "the host sees the run end"
+            )
+        return self._timer
 
     @override
     def _on_thread_start(self) -> None:
@@ -218,6 +241,11 @@ def end_thread(node: Node) -> None:
     """Forget the thread of ``node`` once its network has stopped, so that a later
     thread that reuses the id is not taken for it."""
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def set_timer(node: Node, timer: Timer | None) -> None:
+    """Give ``node`` the timer of its run, or take it back with ``None``."""
+    node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
 def capture_state(node: Node) -> object:

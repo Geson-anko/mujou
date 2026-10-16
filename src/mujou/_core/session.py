@@ -1,10 +1,10 @@
 """The run of a built network: slots for its ports, the runtime of its nodes, and the
 host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
-``Network.build`` creates one ``Session``. It lays out the slots of every port,
-binds each port to them (``Binding``), and later starts the runtime. Values cross
-the boundary to the core as copies: a received message is a new tensor, and a sent
-one is copied into the core.
+``mujou.run`` creates one ``Session`` per run, on the run's timer. It lays out the
+slots of every port on that timer, binds each port to them (``Binding``), and
+starts the runtime on the same timer. Values cross the boundary to the core as
+copies: a received message is a new tensor, and a sent one is copied into the core.
 """
 
 import atexit
@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 import torch
 
 from mujou._core import _native
-from mujou._core.node import Node, capture_state, end_thread, thread_ident
+from mujou._core.network import ports
+from mujou._core.node import Node, capture_state, end_thread, set_timer, thread_ident
 from mujou._core.port import Channel, Port, bind
 from mujou._core.spec import Spec, fields, join, split
+from mujou._core.timer import Timer, native
 
 if TYPE_CHECKING:
     from mujou._core.network import Graph
@@ -93,7 +95,7 @@ class Binding:
         for channel, slot in self._sources:
             message = slot.read()
             value = _value(spec, message, device)
-            received[channel] = (value, message.time_ns) if with_time else value
+            received[channel] = (value, message.timestamp) if with_time else value
         if self._multi:
             return received
         (value,) = received.values()
@@ -132,43 +134,42 @@ class Binding:
 
 @final
 class Session:
-    """The slots and the runtime of one built network.
+    """The slots and the runtime of one run of a built network, on one timer.
 
-    Before ``run`` the host may ``write`` and ``load_state_dict``; ``run`` starts
-    the nodes once.
+    ``start`` restores the state, writes the initial inputs and starts the nodes,
+    once.
     """
 
-    def __init__(self, graph: Graph) -> None:
+    def __init__(self, graph: Graph, timer: Timer) -> None:
         self._graph = graph
         self._paths = [path for path, _ in graph.nodes]
         self._nodes = [node for _, node in graph.nodes]
+        # The one timer of the run: every slot, the host's inputs and the runtime
+        # use it, so that every time in the run is on the axis dt is measured on.
+        self._timer = timer
+        self._clock = native(timer)
         # One group for the whole network: a write switches together only within a
         # group.
-        self._group = _native.InputGroup()
+        self._group = _native.InputGroup(timer=self._clock)
         self._outlets: dict[AnyPort, _native.Outlet] = {}
         self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
-        # Every slot by name, in the order of graph.ports, for the state tree.
+        # Every slot by name, in the order of the graph's ports, for the state tree.
         self._slots: dict[str, tuple[AnySlot, Spec]] = {}
 
+        owners = ports(graph)
         # Every outlet first: a port reads the channel slots of its peers' outlets.
-        for port in graph.ports:
+        for port in owners:
             self._add_outlet(port)
-        for port, (index, _) in graph.ports.items():
+        for port, (index, _) in owners.items():
             path = graph.port_path(port)
             sources = self._sources(port, path)
             owner = graph.nodes[index][1]
             bind(port, Binding(owner, path, port, self._outlets.get(port), sources))
 
         self._runtime: _native.Runtime | None = None
-        # Makes the check and the start of a run one step for concurrent callers.
-        self._run_lock = threading.Lock()
         # The timer when shutdown first asked the run to stop.
         self._stop_lock = threading.Lock()
         self._stop_timer: dict[str, int | float] | None = None
-        # Restored by load_state_dict and passed to the runtime by run.
-        self._states: list[object] | None = None
-        self._last_update_ns: list[int] | None = None
-        self._timer_state: dict[str, int | float] | None = None
 
     def _add_outlet(self, port: AnyPort) -> None:
         spec = _spec(port.send_spec)
@@ -178,6 +179,7 @@ class Session:
             _native.Schema(fields(spec)),
             len(port.channels),
             self._graph.port_path(port),
+            timer=self._clock,
         )
         self._outlets[port] = outlet
         self._slots[outlet.outbox.name] = (outlet.outbox, spec)
@@ -210,43 +212,61 @@ class Session:
 
     # --- run and control
 
-    def run(self, *, manual: bool, pause_timeout: float) -> None:
-        # Held until start returns, so that write and load_state_dict see either
-        # no run or a started one, never a run in its start.
-        with self._run_lock:
-            if self._runtime is not None:
-                raise RuntimeError(
-                    "the network has already run; build a new instance to run again"
-                )
-            runtime = _native.Runtime(self._nodes, self._paths)
-            self._runtime = runtime
-            for session in list(_RUNNING):
-                session._settle()
-            _RUNNING.add(self)
-            _watch_exit()
-            # What this thread queued for the nodes (tensors made in __init__ or
-            # by load_state_dict) is done before their streams use it.
-            self._synchronize_current_streams()
-            try:
-                runtime.start(
-                    manual=manual,
-                    states=self._states,
-                    last_update_ns=self._last_update_ns,
-                    timer_state=self._timer_state,
-                    pause_timeout=pause_timeout,
-                )
-            except _native.NetworkError:
-                raise  # a node raised while starting: this run is over
-            except Exception:
-                # Refused before any node started (e.g. an invalid argument): the
-                # network may run once the cause is gone.
-                self._runtime = None
-                _RUNNING.discard(self)
-                raise
+    def start(
+        self,
+        *,
+        manual: bool,
+        state: Mapping[str, Any] | None,
+        inputs: Mapping[AnyPort, object] | None,
+        pause_timeout: float,
+    ) -> None:
+        """Restore ``state``, write ``inputs`` and start the nodes.
 
-    def step(self, order: Sequence[Node] | None) -> None:
+        Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
+        node started.
+        """
+        restored = None if state is None else self._restore(state)
+        if inputs:
+            items = self._items(inputs)
+            if restored is None:
+                self._group.write(items)
+            else:
+                # The values belong to the restored time T, not to the timer's
+                # time now. Nobody reads yet, so restoring each slot (after
+                # checking them all above) switches them together.
+                time_ns = int(restored["timer_state"]["time_ns"])
+                for slot, tensors in items:
+                    slot.restore(tensors, time_ns)
+        runtime = _native.Runtime(self._nodes, self._paths, timer=self._clock)
+        self._runtime = runtime
+        for session in list(_RUNNING):
+            session._settle()
+        _RUNNING.add(self)
+        _watch_exit()
+        for node in self._nodes:
+            set_timer(node, self._timer)
+        # What this thread queued for the nodes (tensors made in __init__ or by
+        # the restore) is done before their streams use it.
+        self._synchronize_current_streams()
+        try:
+            runtime.start(
+                manual=manual, pause_timeout=pause_timeout, **(restored or {})
+            )
+        except _native.NetworkError:
+            self._settle()  # a node raised while starting: this run is over
+            raise
+        except Exception:
+            # Refused before any node started (e.g. the timer cannot be set back):
+            # the network may run once the cause is gone.
+            self._runtime = None
+            _RUNNING.discard(self)
+            for node in self._nodes:
+                set_timer(node, None)
+            raise
+
+    def step(self, order: Sequence[Node]) -> None:
         runtime = self._started()
-        indices = None if order is None else [self._index(node) for node in order]
+        indices = [self._index(node) for node in order] if order else None
         runtime.step(indices)
 
     def check(self) -> None:
@@ -265,7 +285,7 @@ class Session:
                     # A normal end is a pause at this time that never resumes:
                     # the state after the end is taken at it.
                     if self._stop_timer is None:
-                        self._stop_timer = _native.timer.state_dict()
+                        self._stop_timer = self._clock.state_dict()
                     # The runtime's shutdown waits without a limit, so a finite
                     # timeout asks to stop and waits here with the limit. On a
                     # timeout the request stands and the network goes on
@@ -301,57 +321,50 @@ class Session:
             _RUNNING.discard(self)
             for node in self._nodes:
                 end_thread(node)
+                set_timer(node, None)
 
     def _started(self) -> _native.Runtime:
-        if self._runtime is None:
-            raise RuntimeError("the network is not running; call run() first")
-        return self._runtime
+        # Only a started session reaches the host (through its Run).
+        return cast(_native.Runtime, self._runtime)
 
     def _index(self, node: Node) -> int:
         for i, n in enumerate(self._nodes):
             if n is node:
                 return i
-        raise ValueError(f"{type(node).__name__} is not a node of this network")
+        raise ValueError(f"{type(node).__name__} is not a node of this run")
 
     # --- host input and output
 
     def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
-        runtime = self._runtime
-        finished = runtime is not None and runtime.is_finished
+        runtime = self._started()
+        finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
         if finished:
             raise RuntimeError(
                 "the network has stopped; no node reads what is written now"
             )
+        self._group.write(self._items(values))
+
+    def _items(
+        self, values: Mapping[Any, object]
+    ) -> list[tuple[_native.InputSlot, list[torch.Tensor]]]:
+        """Check ``values`` for the host's input slots and copy them to the host."""
         items: list[tuple[_native.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
             items.append(
                 (slot, _host_tensors(spec, value, self._graph.port_path(port)))
             )
-        # The lock only for a restored network that may be starting: a plain write
-        # never waits for run (an on_start may be waiting for it).
-        if self._timer_state is not None:
-            with self._run_lock:
-                if self._runtime is None:
-                    # Restored but not running: the values belong to the restored
-                    # time T, not to the process's time now. Nobody reads yet, so
-                    # restoring each slot (after checking them all above) switches
-                    # them together.
-                    time_ns = int(self._timer_state["time_ns"])
-                    for slot, tensors in items:
-                        slot.restore(tensors, time_ns)
-                    return
-        self._group.write(items)
+        return items
 
-    def read(self, port: AnyPort) -> tuple[object, float]:
+    def read(self, port: AnyPort) -> tuple[object, _native.Timestamp]:
         self.check()
         outbox, spec = self._outbox(port)
         message = outbox.read()
-        return _value(spec, message, _CPU), message.time_ns / 1e9
+        return _value(spec, message, _CPU), message.timestamp
 
-    def subscribe(self, port: AnyPort) -> Iterator[tuple[object, float]]:
-        runtime = self._started()  # a subscription before run would wait for nothing
+    def subscribe(self, port: AnyPort) -> Iterator[tuple[object, _native.Timestamp]]:
+        runtime = self._started()
         self.check()
         outbox, spec = self._outbox(port)
         # The value at the time of this call comes first.
@@ -363,9 +376,9 @@ class Session:
         outbox: _native.Slot,
         spec: Spec,
         last: _native.Message,
-    ) -> Iterator[tuple[object, float]]:
+    ) -> Iterator[tuple[object, _native.Timestamp]]:
         self.check()
-        yield _value(spec, last, _CPU), last.time_ns / 1e9
+        yield _value(spec, last, _CPU), last.timestamp
         while True:
             self.check()
             finished = runtime.is_finished
@@ -377,7 +390,7 @@ class Session:
                     return
                 continue
             last = message
-            yield _value(spec, message, _CPU), message.time_ns / 1e9
+            yield _value(spec, message, _CPU), message.timestamp
 
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         if port in self._inputs:
@@ -408,7 +421,7 @@ class Session:
             try:
                 return runtime.capture(
                     lambda states: self._tree(
-                        states, runtime.last_update_ns(), _native.timer.state_dict()
+                        states, runtime.last_update_ns(), self._clock.state_dict()
                     )
                 )
             except _native.NetworkError:
@@ -445,13 +458,13 @@ class Session:
         tree["timer"]["time_ns"] = latest
         return tree
 
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        with self._run_lock:
-            self._load_state_dict(state)
+    def _restore(self, state: Mapping[str, Any]) -> dict[str, Any]:
+        """Check ``state``, restore the slots and return what ``Runtime.start``
+        restores (the nodes' states, their last update times and the timer).
 
-    def _load_state_dict(self, state: Mapping[str, Any]) -> None:
-        if self._runtime is not None:
-            raise RuntimeError("load_state_dict is only possible before run()")
+        Raises:
+            ValueError: The tree does not match the network; nothing changed.
+        """
         for key in ("nodes", "slots", "last_update_ns", "timer"):
             if key not in state:
                 raise ValueError(f"the state tree has no {key!r}")
@@ -483,11 +496,13 @@ class Session:
         self._synchronize_current_streams()
         for slot, tensors, time_ns in restores:
             slot.restore(tensors, time_ns)
-        self._states = states
-        self._last_update_ns = [cast(int, last_update_ns[path]) for path in self._paths]
-        self._timer_state = {
-            "time_ns": cast(int, timer["time_ns"]),
-            "scale": timer["scale"],
+        return {
+            "states": states,
+            "last_update_ns": [cast(int, last_update_ns[path]) for path in self._paths],
+            "timer_state": {
+                "time_ns": cast(int, timer["time_ns"]),
+                "scale": cast(float, timer["scale"]),
+            },
         }
 
     def _slot_restores(
@@ -608,7 +623,7 @@ def _stop_at_exit() -> None:
     before it joins the non-daemon threads, so this starts stopping the networks
     before that join and a thread iterating over ``subscribe`` ends with its
     network. That order is CPython's implementation, not its documented
-    behavior; ``TestInterpreterExit`` in ``tests/mujou/_core/test_network.py`` guards
+    behavior; ``TestInterpreterExit`` in ``tests/mujou/_core/test_run.py`` guards
     it.
     """
     threading.main_thread().join()
