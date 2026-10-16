@@ -170,7 +170,7 @@ class Node:
 
     The runtime calls the hooks on the node's own thread (`state_dict`, through
     `_capture_state`, on the control thread while the node is paused). They do
-    nothing by default. The hooks other than `_on_thread_start`, `on_start` and
+    nothing by default. The hooks other than `on_thread_start`, `on_start` and
     `load_state_dict` are looked up once, after those three, so replacing one
     there takes effect. `state_dict` itself is looked up by the default
     `_capture_state` at each capture, so replacing it later takes effect too.
@@ -191,17 +191,18 @@ class Node:
         control thread, while the node is paused), for the framework's work
         around it. Returns `self.state_dict()` by default.
         """
-    def _on_thread_start(self, /) -> None:
-        """
-        Called on the node's thread right before `on_start`, for the framework's
-        per-thread settings (so that overriding `on_start` cannot skip them).
-        """
     def load_state_dict(self, /, state: "object") -> None: ...
     def on_exception(self, /) -> None: ...
     def on_pause(self, /) -> None: ...
     def on_resume(self, /) -> None: ...
     def on_start(self, /) -> None: ...
     def on_stop(self, /) -> None: ...
+    def on_thread_start(self, /) -> None:
+        """
+        Called on the node's thread right before `on_start`, for per-thread
+        settings. A subclass that overrides it calls the base's first, so that
+        the base's settings are not skipped.
+        """
     def on_update(self, /, dt: "float") -> None: ...
     def state_dict(self, /) -> "object": ...
 

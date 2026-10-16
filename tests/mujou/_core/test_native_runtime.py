@@ -71,8 +71,8 @@ class Recorder(Node):
             raise self.error
 
     @override
-    def _on_thread_start(self) -> None:
-        self.hook("_on_thread_start")
+    def on_thread_start(self) -> None:
+        self.hook("on_thread_start")
 
     @override
     def on_start(self) -> None:
@@ -161,7 +161,7 @@ class TestStart:
         for i, node in enumerate(nodes):
             events = log.of(node.name)
             assert events[:4] == [
-                "_on_thread_start",
+                "on_thread_start",
                 "on_start",
                 "load_state_dict",
                 "on_update",
@@ -187,9 +187,7 @@ class TestStart:
         # Only the upper bound is checked, so a loaded machine does not fail it.
         assert node.dts[0] < 0.25
 
-    @pytest.mark.parametrize(
-        "hook", ["_on_thread_start", "on_start", "load_state_dict"]
-    )
+    @pytest.mark.parametrize("hook", ["on_thread_start", "on_start", "load_state_dict"])
     def test_an_error_while_starting_stops_before_any_update(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, hook: str
     ):

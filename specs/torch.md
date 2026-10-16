@@ -52,7 +52,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ### 実行スレッドの設定
 
-フレームワークは、ノードを実行するスレッドの上で `on_start` の前に `_on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
+フレームワークは、ノードを実行するスレッドの上で `on_start` の前に `on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。`on_thread_start` は利用者も override してよいが、最初に `super().on_thread_start()` を呼ぶ。どれもスレッドごとの設定なので、ほかのノードには影響しない。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
@@ -66,9 +66,9 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 乱数生成器は `self.generator` で使う。ノードのスレッドの上で作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。生成器は起動のたびに seed から作り直すので、復元しても生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
-`_on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。
+`on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。
 
-`_on_thread_start`・`_after_update`・`_capture_state` は、コアの `Node` が持つフレームワーク用の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_start`・`on_update`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
+`_after_update`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_update`・`state_dict` を override しても、インスタンス属性で置き換えても、同期は漏れない。
 
 `state_dict()` は、ノードのスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。これらのスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
 

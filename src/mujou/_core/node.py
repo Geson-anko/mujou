@@ -16,9 +16,13 @@ class Node(_native.Node, Component):
     ports declared on the class). A node must not hold other nodes or networks as
     attributes; put them side by side in a ``Network`` instead.
 
-    Override the lifecycle hooks below; each does nothing by default. The framework
-    calls them on the node's own thread, except ``state_dict``:
+    Override the lifecycle hooks below; each does nothing by default, except
+    ``on_thread_start``. The framework calls them on the node's own thread,
+    except ``state_dict``:
 
+    - ``on_thread_start()``: once, right before ``on_start``. It sets up the
+      thread (see below); an override must call ``super().on_thread_start()``
+      first, or the node runs without those settings.
     - ``on_start()``: once, when the network runs (also when it was restored).
       Allocate and initialize the state here.
     - ``load_state_dict(state)``: only when the network was restored, after
@@ -51,11 +55,12 @@ class Node(_native.Node, Component):
     computation and ``backward`` in ``with torch.enable_grad():`` marked
     ``# mujou: local-autograd``), creates
     ``generator`` from ``seed``, and, when ``device`` is CUDA, makes the device
-    and a stream of the node's own current. When ``device`` is CUDA it also waits
-    for that stream after each ``on_update`` and around ``state_dict``. The
-    framework does this in hooks of its own, ``_on_thread_start``,
-    ``_after_update`` and ``_capture_state``, which subclasses must not override.
-    So overriding ``on_start``, ``on_update`` or ``state_dict`` does not skip it.
+    and a stream of the node's own current. It does this in ``on_thread_start``,
+    so overriding ``on_start`` does not skip it. When ``device`` is CUDA it also
+    waits for that stream after each ``on_update`` and around ``state_dict``, in
+    hooks of its own, ``_after_update`` and ``_capture_state``, which subclasses
+    must not override. So overriding ``on_update`` or ``state_dict`` does not
+    skip it.
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU and seeds its generator nondeterministically.
@@ -149,7 +154,14 @@ class Node(_native.Node, Component):
         return self._generator
 
     @override
-    def _on_thread_start(self) -> None:
+    def on_thread_start(self) -> None:
+        """Set up the node's thread: turn off gradient recording, create
+        ``generator`` and, on CUDA, make the device and the node's own stream
+        current.
+
+        An override must call ``super().on_thread_start()`` first: without it the
+        node records gradients, has no ``generator`` and cannot use its ports.
+        """
         # Every setting here is per thread, so it does not touch other nodes.
         torch.set_grad_enabled(False)
         if self._device.type == "cuda":

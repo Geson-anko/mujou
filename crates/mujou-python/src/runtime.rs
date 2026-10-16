@@ -46,7 +46,7 @@ create_exception!(
 ///
 /// The runtime calls the hooks on the node's own thread (`state_dict`, through
 /// `_capture_state`, on the control thread while the node is paused). They do
-/// nothing by default. The hooks other than `_on_thread_start`, `on_start` and
+/// nothing by default. The hooks other than `on_thread_start`, `on_start` and
 /// `load_state_dict` are looked up once, after those three, so replacing one
 /// there takes effect. `state_dict` itself is looked up by the default
 /// `_capture_state` at each capture, so replacing it later takes effect too.
@@ -63,9 +63,10 @@ impl Node {
         Self
     }
 
-    /// Called on the node's thread right before `on_start`, for the framework's
-    /// per-thread settings (so that overriding `on_start` cannot skip them).
-    fn _on_thread_start(&self) {}
+    /// Called on the node's thread right before `on_start`, for per-thread
+    /// settings. A subclass that overrides it calls the base's first, so that
+    /// the base's settings are not skipped.
+    fn on_thread_start(&self) {}
 
     fn on_start(&self) {}
 
@@ -257,14 +258,14 @@ impl NodeHooks for PyNode {
 
     fn start(&mut self) -> Result<(), HookError> {
         let state = self.state.take();
-        self.call0("_on_thread_start")?;
+        self.call0("on_thread_start")?;
         self.call0("on_start")?;
         if let Some(state) = state {
             self.call("load_state_dict", |py| {
                 PyTuple::new(py, [state]).expect("a tuple of one object")
             })?;
         }
-        // Look the hooks up last, so that `_on_thread_start`, `on_start` and
+        // Look the hooks up last, so that `on_thread_start`, `on_start` and
         // `load_state_dict` may still replace them (by instance attributes).
         let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
         self.methods =

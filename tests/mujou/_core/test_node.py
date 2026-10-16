@@ -111,6 +111,34 @@ class TestDevice:
             Node(device="meta")
 
 
+class OwnSetup(Probe):
+    """Overrides ``on_thread_start`` and calls the base first."""
+
+    @override
+    def on_thread_start(self) -> None:
+        super().on_thread_start()
+        self.grad_at_thread_start = torch.is_grad_enabled()
+        self.draws_at_thread_start = torch.rand(3, generator=self.generator)
+
+
+class TestOnThreadStart:
+    def test_an_override_that_calls_the_base_keeps_the_settings(
+        self, run_network: RunNetwork
+    ):
+        node = OwnSetup(seed=7)
+        run_network(Solo(node), _manual=True)
+        assert node.grad_at_thread_start is False
+        assert node.grad_enabled is False
+        generator = torch.Generator().manual_seed(7)
+        assert torch.equal(
+            node.draws_at_thread_start, torch.rand(3, generator=generator)
+        )
+        # on_start draws next from the same generator.
+        assert node.draws is not None
+        assert torch.equal(node.draws, torch.rand(3, generator=generator))
+        assert thread_ident(node) == node.ident
+
+
 class OnDevice(Node):
     """Records the thread's CUDA settings in ``on_update``."""
 
