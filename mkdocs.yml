@@ -5,6 +5,10 @@ repo_name: Geson-anko/mujou
 
 # User documentation. The design specifications for developers are in specs/.
 docs_dir: docs
+# Rebuild on changes to the docstrings and to the included examples too.
+watch:
+  - src
+  - examples
 
 theme:
   name: material
@@ -96,6 +100,8 @@ plugins:
             PyTorch in Nodes: ノードの中の PyTorch
             Update Rules: 更新手法
             Errors and Shutdown: 例外と終了
+            Testing: テスト
+            Errors: 例外
             Examples: サンプル
             API Reference: API リファレンス
   - mkdocstrings:
@@ -114,6 +120,9 @@ plugins:
             docstring_section_style: spacy
             members_order: source
             inherited_members: true
+            # The hooks of Node come from the stub of the native core, which has no
+            # docstrings; list every public member anyway.
+            show_if_no_docstring: true
             # Hide private names and the dunders that exceptions inherit.
             filters: ["!^_"]
 
@@ -141,6 +150,7 @@ nav:
       - PyTorch in Nodes: user-guide/torch.md
       - Update Rules: user-guide/update-rules.md
       - Errors and Shutdown: user-guide/errors.md
+      - Testing: user-guide/testing.md
   - Examples:
       - examples/index.md
   - API Reference:
@@ -150,6 +160,7 @@ nav:
       - Networks: api/network.md
       - Global Time: api/time.md
       - Errors: api/errors.md
+      - Testing: api/testing.md
 
 extra:
   social:

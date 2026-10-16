@@ -16,7 +16,7 @@ Requires [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) (>= 1.5
 
 ```sh
 just setup   # create .venv, install deps, install pre-commit hooks
-just run     # format -> test -> type
+just run     # format -> test -> type -> docs-build
 ```
 
 ### Documentation
