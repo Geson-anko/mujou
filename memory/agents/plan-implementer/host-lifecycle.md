@@ -40,3 +40,18 @@
 - 終了後の木のタイマーの時刻を「最後の更新・書き込みの最も遅い時刻」にしたが、終了した時刻（`shutdown` を要求した時刻など）のほうがよいか
 - `shutdown(timeout)` の時間切れの後、要求用の daemon スレッドが残る。Rust に「待たずに終了を要求する」API を足してよいか（Rust の worktree の作業が終わった後）
 - `DictSpec.zeros` にも `device` を足すか
+
+## レビュー対応（2026-10-16、code-reviewer / algorithm-reviewer の request-changes、orchestrator の裁定）
+
+- **終了後の `write` は `RuntimeError`**（algorithm must-fix 1）。終了後の時刻が木のタイマーに入るのを防ぐ。code should-fix 2（終了後の木でスロットとタイマーを別々に読む競合）もこれで消えるうえ、`_ended_tree` は `_tree` が読んだスロットの時刻からタイマーを決めるようにした（スロットは 1 回だけ読む）。`write` が終了の確認を通った直後に終了が完了した場合は、その値が終了後に書かれ得る（まれな競合）。そのときも max を取るので、スロットの時刻は木のタイマーを越えない
+- **木のタイマーは `max(T_req, 各 last_update_ns, 木のスロットの時刻)`**（質問 1 への裁定）。T_req は `Session.shutdown` が最初に終了を要求する直前に `timer.state_dict()` で記録する（スケールも同時に記録。algorithm nit 2）。前の「最後の更新・書き込みの最大値 M」は、最後の更新から shutdown までの時間を捨てていた。正常な終了の経路は `Session.shutdown`（ホストの shutdown と終了時の `_shutdown_all`）だけなので、終了後の取得では必ず記録されている（`cast` で前提を置いた）
+- **`state_dict()` は `is_finished` を読んでから `check()` する**（code must-fix）。`write` も同じ順序にした
+- **有限 timeout の shutdown の要求スレッドは Session ごとに 1 本**で、終了済みなら起動しない（code should-fix 1）
+- **`on_stop` は `state_dict()` が返す状態を変えない**、を `Node` の docstring と `docs/nodes.md` に書いた（algorithm should-fix 2）。on_stop が例外を投げた後は、今どおりログに出すだけで正常な終了として扱う（約束を破ったノードの責任）
+- **`DictSpec` にも `zeros(*, device)` と `empty(*, device)` を足した**（質問 3 への裁定）。`MessageSpec` の抽象メソッドも `zeros(*, device)` と `empty(*, device)` にした
+- テスト: 終了後の木から復元して続けた結果が止めずに続けた結果と一致する（`b_first` でパラメータ化、最後の入力を 0.3 s 見せてから shutdown）、木のタイマーが T_req とそのときのスケールになる、終了後の write の `RuntimeError`、負の timeout で何も要求しないこと（`join(timeout=0)` の `TimeoutError` と `_step`）、有限 timeout の shutdown が例外の終了で `NetworkError`、要求スレッドが 1 本、終了後の `state_dict()` の中から Network のメソッドを呼ぶと `RuntimeError`。自由実行のテストは実装の式の写しをやめ、「要求の前に読んだ時刻 ≤ 木のタイマー ≤ shutdown の後に読んだ時刻、木の中の時刻はすべてタイマー以下」にした
+- nit: 終了時の停止の docs と docstring を「join の前に終了を始め、atexit で終わるのを待つ」に直した。`_stop_at_exit` に CPython の実装に依存し `TestInterpreterExit` で守る旨を書いた。終了後の取得でノードの `state_dict()` の例外がそのまま伝わることを `Network.state_dict` の docstring に書いた
+- **記録だけ（対応しない）:**
+  - code nit 5: fork した子では `_watching` が True のまま残り、子に監視スレッドが無い。子でネットワークを走らせると、non-daemon の join の後の atexit でしか止まらない。今は fork 後の子で走らせる用途が無い
+  - algorithm should-fix 2 の後半: on_stop が例外を投げた後の `state_dict()` は、送出も警告もせずに木を返す
+- 実行中の取得が終了と競合する分岐（`except RuntimeError`）と `state_dict` の check の競合は、決定的に起こせないのでテストを足していない
