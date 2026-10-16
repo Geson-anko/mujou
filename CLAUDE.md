@@ -10,6 +10,7 @@
 - コード・コマンド・ファイルパス・識別子・ログ/エラーの引用は原語のまま残す
 - コミットメッセージ・PR タイトルは「Git 運用」の規約に従い、日本語化しない
 - 仕様書・計画書・skill・memory は日本語で書く
+- ユーザー向けドキュメント（`docs/`）は英語（`docs/en/`）と日本語（`docs/ja/`）の両方で書く。docstring は英語
 
 ## プロジェクト概要
 
@@ -61,6 +62,12 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - 乱数とスケジュールを固定して決定的に保つ。`class TestXxx` に集約し、`tests/mujou/` は `src/mujou/` をミラーする
 - 詳細: skill `testing-strategy`
 
+### ドキュメント
+
+- `specs/` は開発者向けの設計仕様（日本語）。設計判断とその理由を書き、まだ実装していない仕様も含む
+- `docs/` は利用者向けのドキュメント（mkdocs、英語と日本語）。実装済みの公開 API の使い方を書く。API リファレンスは docstring から生成する
+- 利用者向けのサンプルは `examples/` に置き、ページには snippets（`--8<--`）で取り込む。`tests/test_examples.py` が全部を実行する
+
 ### カプセル化
 
 - 内部実装と `__init__` で設定する属性は原則 `_` prefix。外部から必要なものだけ public にする
@@ -85,7 +92,9 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 | `just test`            | cargo test と pytest（slow を含む全テスト、coverage 付き）                                                    |
 | `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                              |
 | `just type`            | pyright strict                                                                                                |
-| `just run`             | format → test → type。**コミット前の検証はこれ**                                                              |
+| `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |
+| `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                   |
+| `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                  |
 | `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run` |
 
 単一テスト: `uv run pytest tests/mujou/test_x.py -v` / キーワード: `uv run pytest -k "<expr>"`
