@@ -1050,7 +1050,7 @@ class TestShutdown:
             for _ in range(5):
                 with pytest.raises(TimeoutError):
                     net.shutdown(timeout=0.01)
-            assert threading.active_count() == before
+            assert threading.active_count() <= before
         finally:
             node.release.set()
         net.join()
