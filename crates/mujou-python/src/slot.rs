@@ -242,7 +242,7 @@ type DLDataType = (u8, u8, u16);
 /// Raises:
 ///     ValueError: No fields, duplicate names, an extent below 1, a dtype that
 ///         is not a scalar of whole bytes, or a field too large to allocate.
-#[pyclass(frozen, module = "mujou._core", name = "Schema")]
+#[pyclass(frozen, module = "mujou._core._native", name = "Schema")]
 pub struct PySchema(Arc<Schema>);
 
 #[pymethods]
@@ -266,7 +266,7 @@ impl PySchema {
 /// Read it with `torch.from_dlpack(view)` and copy the result at once: the
 /// memory belongs to the core and must not be written. `__dlpack__` raises
 /// `BufferError` for `copy=True` or a `dl_device` other than the CPU.
-#[pyclass(frozen, module = "mujou._core")]
+#[pyclass(frozen, module = "mujou._core._native")]
 pub struct BufferView {
     message: Arc<Message>,
     index: usize,
@@ -354,7 +354,7 @@ unsafe extern "C" fn destroy_legacy(capsule: *mut ffi::PyObject) {
 
 /// An immutable value of a slot, and the time it was written at on the
 /// writer's timer.
-#[pyclass(frozen, module = "mujou._core", name = "Message")]
+#[pyclass(frozen, module = "mujou._core._native", name = "Message")]
 pub struct PyMessage(Arc<Message>);
 
 #[pymethods]
@@ -383,7 +383,7 @@ impl PyMessage {
 }
 
 /// The latest value of one writer, read by any number of readers.
-#[pyclass(frozen, module = "mujou._core", name = "Slot")]
+#[pyclass(frozen, module = "mujou._core._native", name = "Slot")]
 pub struct PySlot(Arc<core::Slot>);
 
 #[pymethods]
@@ -468,7 +468,7 @@ impl PySlot {
 ///         Pinned memory is read without synchronizing any CUDA stream, so
 ///         synchronize the copy that filled it before sending.
 ///     IndexError: No such channel.
-#[pyclass(frozen, module = "mujou._core", name = "Outlet")]
+#[pyclass(frozen, module = "mujou._core._native", name = "Outlet")]
 pub struct PyOutlet(core::Outlet);
 
 impl PyOutlet {
@@ -534,7 +534,7 @@ impl PyOutlet {
 }
 
 /// The slots the host writes, switched together by one version counter.
-#[pyclass(frozen, module = "mujou._core", name = "InputGroup")]
+#[pyclass(frozen, module = "mujou._core._native", name = "InputGroup")]
 pub struct PyInputGroup(Arc<core::InputGroup>);
 
 #[pymethods]
@@ -599,7 +599,7 @@ impl PyInputGroup {
 }
 
 /// A slot the host writes through its `InputGroup`.
-#[pyclass(frozen, module = "mujou._core", name = "InputSlot")]
+#[pyclass(frozen, module = "mujou._core._native", name = "InputSlot")]
 pub struct PyInputSlot(Arc<core::InputSlot>);
 
 #[pymethods]

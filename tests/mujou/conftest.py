@@ -6,7 +6,7 @@ import pytest
 
 import mujou
 from mujou import Network, NetworkError
-from mujou._core import GlobalTimer, timer
+from mujou._core._native import GlobalTimer, timer
 
 
 @pytest.fixture

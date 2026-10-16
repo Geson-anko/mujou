@@ -16,18 +16,18 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import torch
-from mujou._node import Node, capture_state, end_thread, thread_ident
-from mujou._port import Channel, Port, bind
-from mujou._spec import Spec, fields, join, split
 
-from mujou import _core
+from mujou._core import _native
+from mujou._core.node import Node, capture_state, end_thread, thread_ident
+from mujou._core.port import Channel, Port, bind
+from mujou._core.spec import Spec, fields, join, split
 
 if TYPE_CHECKING:
-    from mujou._network import Graph
+    from mujou._core.network import Graph
 
 # Any (here and below): ports and messages of every type are handled alike.
 type AnyPort = Port[Any, Any, Any]
-type AnySlot = _core.Slot | _core.InputSlot
+type AnySlot = _native.Slot | _native.InputSlot
 
 # Real seconds between the checks of `subscribe` for the end of the run.
 _POLL: Final = 0.05
@@ -50,7 +50,7 @@ def _host_tensors(spec: Spec, msg: object, where: str) -> list[torch.Tensor]:
     return [t.detach().cpu() for t in split(spec, msg, where=where)]
 
 
-def _value(spec: Spec, message: _core.Message, device: torch.device) -> object:
+def _value(spec: Spec, message: _native.Message, device: torch.device) -> object:
     """Copy ``message`` into new tensors on ``device`` and build the message."""
     return join(
         spec, [torch.from_dlpack(b).to(device, copy=True) for b in message.buffers]
@@ -69,7 +69,7 @@ class Binding:
         owner: Node,
         path: str,
         port: AnyPort,
-        outlet: _core.Outlet | None,
+        outlet: _native.Outlet | None,
         sources: Sequence[tuple[Channel | None, AnySlot]],
     ) -> None:
         self._owner = owner
@@ -119,7 +119,7 @@ class Binding:
                 "own hooks while the network runs (state_dict runs on another thread)"
             )
 
-    def _sending(self) -> _core.Outlet:
+    def _sending(self) -> _native.Outlet:
         self._check_owner("sends on")
         if self._outlet is None:
             raise TypeError(f"the port {self._path!r} sends no messages")
@@ -144,9 +144,9 @@ class Session:
         self._nodes = [node for _, node in graph.nodes]
         # One group for the whole network: a write switches together only within a
         # group.
-        self._group = _core.InputGroup()
-        self._outlets: dict[AnyPort, _core.Outlet] = {}
-        self._inputs: dict[AnyPort, tuple[_core.InputSlot, Spec]] = {}
+        self._group = _native.InputGroup()
+        self._outlets: dict[AnyPort, _native.Outlet] = {}
+        self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
         # Every slot by name, in the order of graph.ports, for the state tree.
         self._slots: dict[str, tuple[AnySlot, Spec]] = {}
 
@@ -159,7 +159,7 @@ class Session:
             owner = graph.nodes[index][1]
             bind(port, Binding(owner, path, port, self._outlets.get(port), sources))
 
-        self._runtime: _core.Runtime | None = None
+        self._runtime: _native.Runtime | None = None
         # Makes the check and the start of a run one step for concurrent callers.
         self._run_lock = threading.Lock()
         # The timer when shutdown first asked the run to stop, and the thread
@@ -176,8 +176,10 @@ class Session:
         spec = _spec(port.send_spec)
         if spec is None:
             return
-        outlet = _core.Outlet(
-            _core.Schema(fields(spec)), len(port.channels), self._graph.port_path(port)
+        outlet = _native.Outlet(
+            _native.Schema(fields(spec)),
+            len(port.channels),
+            self._graph.port_path(port),
         )
         self._outlets[port] = outlet
         self._slots[outlet.outbox.name] = (outlet.outbox, spec)
@@ -203,7 +205,7 @@ class Session:
         if port.multi:
             return []
         # An unconnected single-peer port reads what the host writes.
-        slot = self._group.input(_core.Schema(fields(spec)), path)
+        slot = self._group.input(_native.Schema(fields(spec)), path)
         self._inputs[port] = (slot, spec)
         self._slots[slot.name] = (slot, spec)
         return [(None, slot)]
@@ -218,7 +220,7 @@ class Session:
                 raise RuntimeError(
                     "the network has already run; build a new instance to run again"
                 )
-            runtime = _core.Runtime(self._nodes, self._paths)
+            runtime = _native.Runtime(self._nodes, self._paths)
             self._runtime = runtime
             for session in list(_RUNNING):
                 session._settle()
@@ -235,7 +237,7 @@ class Session:
                     timer_state=self._timer_state,
                     pause_timeout=pause_timeout,
                 )
-            except _core.NetworkError:
+            except _native.NetworkError:
                 raise  # a node raised while starting: this run is over
             except Exception:
                 # Refused before any node started (e.g. an invalid argument): the
@@ -265,7 +267,7 @@ class Session:
                     # A normal end is a pause at this time that never resumes:
                     # the state after the end is taken at it.
                     if self._stop_timer is None:
-                        self._stop_timer = _core.timer.state_dict()
+                        self._stop_timer = _native.timer.state_dict()
                     # The runtime's shutdown waits without a limit, so a finite
                     # timeout asks on another thread (one per session) and waits
                     # here with the limit. On a timeout the request stands and
@@ -308,7 +310,7 @@ class Session:
             for node in self._nodes:
                 end_thread(node)
 
-    def _started(self) -> _core.Runtime:
+    def _started(self) -> _native.Runtime:
         if self._runtime is None:
             raise RuntimeError("the network is not running; call run() first")
         return self._runtime
@@ -329,7 +331,7 @@ class Session:
             raise RuntimeError(
                 "the network has stopped; no node reads what is written now"
             )
-        items: list[tuple[_core.InputSlot, list[torch.Tensor]]] = []
+        items: list[tuple[_native.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
             items.append(
@@ -365,10 +367,10 @@ class Session:
 
     def _follow(
         self,
-        runtime: _core.Runtime,
-        outbox: _core.Slot,
+        runtime: _native.Runtime,
+        outbox: _native.Slot,
         spec: Spec,
-        last: _core.Message,
+        last: _native.Message,
     ) -> Iterator[tuple[object, float]]:
         self.check()
         yield _value(spec, last, _CPU), last.time_ns / 1e9
@@ -385,7 +387,7 @@ class Session:
             last = message
             yield _value(spec, message, _CPU), message.time_ns / 1e9
 
-    def _writable(self, port: AnyPort) -> tuple[_core.InputSlot, Spec]:
+    def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         if port in self._inputs:
             return self._inputs[port]
         path = self._graph.port_path(port)  # ValueError for a port outside the tree
@@ -397,7 +399,7 @@ class Session:
             reason = "takes many peers (only single-peer ports can be written)"
         raise ValueError(f"cannot write the port {path!r}: it {reason}")
 
-    def _outbox(self, port: AnyPort) -> tuple[_core.Slot, Spec]:
+    def _outbox(self, port: AnyPort) -> tuple[_native.Slot, Spec]:
         path = self._graph.port_path(port)  # ValueError for a port outside the tree
         outlet = self._outlets.get(port)
         if outlet is None:
@@ -414,10 +416,10 @@ class Session:
             try:
                 return runtime.capture(
                     lambda states: self._tree(
-                        states, runtime.last_update_ns(), _core.timer.state_dict()
+                        states, runtime.last_update_ns(), _native.timer.state_dict()
                     )
                 )
-            except _core.NetworkError:
+            except _native.NetworkError:
                 raise
             except RuntimeError:
                 # The run ended while the request waited: take the state at the
@@ -428,7 +430,7 @@ class Session:
         self._settle()
         return self._ended_tree(runtime)
 
-    def _ended_tree(self, runtime: _core.Runtime) -> dict[str, Any]:
+    def _ended_tree(self, runtime: _native.Runtime) -> dict[str, Any]:
         """Take the state of a run that has ended normally, on this thread.
 
         The nodes' threads are gone, so this thread calls their ``state_dict``
@@ -569,9 +571,9 @@ def _wait(timeout: float) -> float | None:
     return None if timeout == math.inf else timeout
 
 
-def _request_stop(runtime: _core.Runtime) -> None:
+def _request_stop(runtime: _native.Runtime) -> None:
     # The caller's join reports how the run ended.
-    with contextlib.suppress(_core.NetworkError):
+    with contextlib.suppress(_native.NetworkError):
         runtime.shutdown()
 
 
@@ -605,7 +607,7 @@ def _shutdown_all() -> None:
     for session in list(_RUNNING):
         try:
             session.shutdown(math.inf)
-        except _core.NetworkError:
+        except _native.NetworkError:
             pass  # already logged, and the host has gone
         except BaseException as e:  # noqa: BLE001 - re-raised below
             failure = failure or e

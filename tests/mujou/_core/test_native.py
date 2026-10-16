@@ -8,8 +8,8 @@ import time
 
 import pytest
 
-from mujou import _core
-from mujou._core import GlobalTimer, Timer, Timestamp, timer
+from mujou._core import _native
+from mujou._core._native import GlobalTimer, Timer, Timestamp, timer
 
 
 class TestCoreModule:
@@ -23,7 +23,7 @@ class TestCoreModule:
             [
                 sys.executable,
                 "-c",
-                "import sys, mujou._core; print(sys._is_gil_enabled())",
+                "import sys, mujou._core._native; print(sys._is_gil_enabled())",
             ],
             capture_output=True,
             text=True,
@@ -53,12 +53,12 @@ class TestCoreModule:
         ],
     )
     def test_every_class_belongs_to_this_module(self, name: str):
-        assert getattr(_core, name).__module__ == _core.__name__
+        assert getattr(_native, name).__module__ == _native.__name__
 
     def test_exceptions_keep_their_builtin_bases(self):
-        assert issubclass(_core.NetworkError, RuntimeError)
-        assert issubclass(_core.PauseTimeoutError, TimeoutError)
-        assert str(_core.NetworkError("message")) == "message"
+        assert issubclass(_native.NetworkError, RuntimeError)
+        assert issubclass(_native.PauseTimeoutError, TimeoutError)
+        assert str(_native.NetworkError("message")) == "message"
 
 
 class TestGlobalTimer:

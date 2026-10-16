@@ -18,7 +18,7 @@ use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
 /// everything not given a timer runs on the global one, `timer`.
 ///
 /// The time is held in nanoseconds and saturates at about 584 years.
-#[pyclass(subclass, frozen, module = "mujou._core", name = "Timer")]
+#[pyclass(subclass, frozen, module = "mujou._core._native", name = "Timer")]
 pub struct PyTimer(Arc<Timer>);
 
 impl PyTimer {
@@ -151,7 +151,7 @@ pub fn extract_state(state: &Bound<'_, PyAny>) -> PyResult<TimerState> {
 
 /// The global timer, which every run not given a timer of its own uses. The
 /// only instance is `timer`.
-#[pyclass(extends = PyTimer, frozen, module = "mujou._core")]
+#[pyclass(extends = PyTimer, frozen, module = "mujou._core._native")]
 pub struct GlobalTimer;
 
 // `#[pyclass]` does not implement this for a subclass of another pyclass,
@@ -174,7 +174,14 @@ impl<'py> IntoPyObject<'py> for GlobalTimer {
 /// is the exact time in nanoseconds. Timestamps compare and hash by time, so
 /// compare only those of one timer. `later - earlier` is the time between them,
 /// as a `Timestamp`.
-#[pyclass(frozen, eq, ord, hash, module = "mujou._core", name = "Timestamp")]
+#[pyclass(
+    frozen,
+    eq,
+    ord,
+    hash,
+    module = "mujou._core._native",
+    name = "Timestamp"
+)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PyTimestamp(pub Timestamp);
 

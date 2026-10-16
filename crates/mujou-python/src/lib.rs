@@ -1,7 +1,7 @@
-//! Python bindings of the native core, imported as the private module `mujou._core`.
+//! Python bindings of the native core, imported as the private module `mujou._core._native`.
 //!
 //! The module is declared inline (`#[pymodule] mod`) so that pyo3 can introspect
-//! it: `just stub` writes `src/mujou/_core.pyi` from the signatures and doc
+//! it: `just stub` writes `src/mujou/_core/_native.pyi` from the signatures and doc
 //! comments here. Its full name is set once, in the `#[pymodule]` attribute
 //! below; the classes repeat it in their `module = "..."` (pyo3 takes only a
 //! literal there), and `pyproject.toml` (`module-name`) must match.
@@ -33,7 +33,7 @@ fn timer_error(err: TimerError) -> PyErr {
 ///
 /// Private: the framework wraps it. Values go in and out as tensors over DLPack,
 /// always copied.
-#[pymodule(module = "mujou", name = "_core", gil_used = false)]
+#[pymodule(module = "mujou._core", name = "_native", gil_used = false)]
 // The constants take their Python names, `__version__` and `timer`.
 #[allow(non_upper_case_globals)]
 mod core_module {

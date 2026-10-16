@@ -5,7 +5,7 @@ from types import CapsuleType
 import pytest
 import torch
 
-from mujou._core import (
+from mujou._core._native import (
     GlobalTimer,
     InputGroup,
     Message,

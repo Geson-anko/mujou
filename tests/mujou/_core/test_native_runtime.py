@@ -7,7 +7,7 @@ from typing import override
 
 import pytest
 
-from mujou._core import (
+from mujou._core._native import (
     GlobalTimer,
     NetworkError,
     Node,

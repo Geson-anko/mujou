@@ -30,13 +30,13 @@ use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
 // `PyTimeoutError` with the layout of `BaseException`, smaller than that of
 // `TimeoutError`, so a class extending it fails to initialize.
 create_exception!(
-    mujou._core,
+    mujou._core._native,
     NetworkError,
     PyRuntimeError,
     "The network stopped because a node raised. `__cause__` is the first exception."
 );
 create_exception!(
-    mujou._core,
+    mujou._core._native,
     PauseTimeoutError,
     PyTimeoutError,
     "Some nodes did not pause in time, so the state was not taken. The network keeps running."
@@ -50,7 +50,7 @@ create_exception!(
 /// `load_state_dict` are looked up once, after those three, so replacing one
 /// there takes effect. `state_dict` itself is looked up by the default
 /// `_capture_state` at each capture, so replacing it later takes effect too.
-#[pyclass(subclass, frozen, module = "mujou._core")]
+#[pyclass(subclass, frozen, module = "mujou._core._native")]
 pub struct Node;
 
 #[pymethods]
@@ -335,7 +335,7 @@ fn duration(seconds: f64) -> PyResult<Duration> {
 }
 
 /// Runs nodes, each on its own thread, under one control thread.
-#[pyclass(frozen, module = "mujou._core")]
+#[pyclass(frozen, module = "mujou._core._native")]
 pub struct Runtime {
     /// The nodes before `start`.
     pending: Mutex<Option<Vec<Py<PyAny>>>>,

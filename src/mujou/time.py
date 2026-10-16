@@ -13,7 +13,7 @@ The time starts at 0 when the process first uses it.
   real second (finite and > 0)
 """
 
-from mujou._core import timer as _timer
+from mujou._core._native import timer as _timer
 
 time = _timer.time
 time_ns = _timer.time_ns

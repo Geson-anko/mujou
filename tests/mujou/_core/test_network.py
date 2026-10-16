@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
-from mujou._network import Graph, Network, graph
-from mujou._node import Node
-from mujou._port import NextPort, Port, PrevPort
-from mujou._spec import TensorSpec
 
 import mujou
 from mujou import NetworkError
-from mujou._core import GlobalTimer
+from mujou._core._native import GlobalTimer
+from mujou._core.network import Graph, Network, graph
+from mujou._core.node import Node
+from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.spec import TensorSpec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork

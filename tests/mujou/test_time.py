@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 
 import mujou.time
-from mujou._core import GlobalTimer
+from mujou._core._native import GlobalTimer
 
 
 def measure_sleep(
