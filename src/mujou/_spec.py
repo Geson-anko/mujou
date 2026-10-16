@@ -37,11 +37,18 @@ class MessageSpec[M](ABC):
     """The spec of a message of type ``M``: its shape, dtype and initial value."""
 
     @abstractmethod
-    def zeros(self) -> M:
-        """Return a message filled with zeros on the CPU.
+    def zeros(self, *, device: torch.device | str = "cpu") -> M:
+        """Return a message filled with zeros on ``device``.
 
-        This is the default initial value that a port receives before the first
-        message is written.
+        On the CPU, this is the default initial value that a port receives before
+        the first message is written.
+        """
+
+    @abstractmethod
+    def empty(self, *, device: torch.device | str = "cpu") -> M:
+        """Return a message on ``device`` whose values are not set.
+
+        Set them before use, in place (``fill_`` and the like).
         """
 
 
@@ -113,6 +120,7 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         """Return a tensor of this spec filled with zeros on ``device``."""
         return torch.zeros(self._shape, dtype=self._dtype, device=device)
 
+    @override
     def empty(self, *, device: torch.device | str = "cpu") -> torch.Tensor:
         """Return a tensor of this spec on ``device`` whose values are not set.
 
@@ -242,9 +250,17 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         return self._specs
 
     @override
-    def zeros(self) -> TD:
-        """Return a message whose values are all zeros on the CPU."""
-        return cast(TD, {k: s.zeros() for k, s in self._specs.items()})
+    def zeros(self, *, device: torch.device | str = "cpu") -> TD:
+        """Return a message whose values are all zeros on ``device``."""
+        return cast(TD, {k: s.zeros(device=device) for k, s in self._specs.items()})
+
+    @override
+    def empty(self, *, device: torch.device | str = "cpu") -> TD:
+        """Return a message on ``device`` whose values are not set.
+
+        Set them before use, in place: ``msg["error"].fill_(0.5)``.
+        """
+        return cast(TD, {k: s.empty(device=device) for k, s in self._specs.items()})
 
     @override
     def __eq__(self, other: object) -> bool:

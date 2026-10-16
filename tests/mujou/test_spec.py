@@ -163,6 +163,22 @@ class TestDictSpec:
         assert msg["target"].shape == (2,)
         assert not msg["error"].any() and not msg["target"].any()
 
+    def test_empty_has_the_keys_shapes_and_dtypes_on_the_cpu(self):
+        spec = feedback_spec()
+        msg = spec.empty()
+        assert list(msg) == ["error", "target"]
+        for key, value in cast(dict[str, torch.Tensor], msg).items():
+            assert value.shape == spec.specs[key].shape
+            assert value.dtype == spec.specs[key].dtype
+            assert value.device == torch.device("cpu")
+
+    @pytest.mark.parametrize("make", ["zeros", "empty"])
+    def test_makes_the_message_on_the_given_device(self, make: str):
+        msg = cast(
+            dict[str, torch.Tensor], getattr(feedback_spec(), make)(device="meta")
+        )
+        assert all(v.device == torch.device("meta") for v in msg.values())
+
     def test_missing_key(self):
         with pytest.raises(ValueError, match="missing \\['target'\\]"):
             DictSpec(Feedback, error=TensorSpec((2,)))
