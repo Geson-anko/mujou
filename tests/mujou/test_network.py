@@ -904,6 +904,80 @@ class TestNodeException:
         assert raised.value.__cause__ is net.b.error
 
 
+class SlowStop(Node):
+    """Waits in ``on_stop`` until ``release`` is set."""
+
+    def __init__(self) -> None:
+        self.out = Port(send=vec())
+        self.release = threading.Event()
+        self.stopped = threading.Event()
+
+    @override
+    def on_stop(self) -> None:
+        self.release.wait(10.0)
+        self.stopped.set()
+
+
+class TestShutdown:
+    def test_does_nothing_before_run_and_after_the_end(self, run_network: RunNetwork):
+        net = Chain()
+        net.build()
+        net.shutdown()
+        run_network(net)
+        net.shutdown()
+        net.shutdown(timeout=0.0)
+
+    def test_raises_after_the_timeout_and_the_network_goes_on_stopping(
+        self, run_network: RunNetwork
+    ):
+        node = SlowStop()
+        net = run_network(Solo(node), _manual=True)
+        try:
+            started = time.monotonic()
+            with pytest.raises(TimeoutError):
+                net.shutdown(timeout=0.1)
+            assert time.monotonic() - started < 5.0
+            assert not node.stopped.is_set()
+        finally:
+            node.release.set()
+        net.join()
+        assert node.stopped.is_set()
+        net.state_dict()  # a normal end
+
+    def test_rejects_a_negative_timeout(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                net.shutdown(timeout=timeout)
+        net.read(net.next)  # still running
+
+
+class TestJoin:
+    def test_returns_once_another_thread_shuts_down(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        stopper = threading.Timer(0.1, net.shutdown)
+        stopper.start()
+        net.join()
+        stopper.join()
+        net.state_dict()  # a normal end
+
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        with pytest.raises(TimeoutError):
+            net.join(timeout=0.05)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        assert torch.equal(net.read(net.next)[0], net.b.x)
+
+    def test_rejects_a_negative_timeout(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                net.join(timeout=timeout)
+
+
 class TestEndToEnd:
     @pytest.mark.slow
     def test_approaches_the_equilibrium_in_real_time(self, run_network: RunNetwork):

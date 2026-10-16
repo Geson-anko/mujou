@@ -8,7 +8,9 @@ one is copied into the core.
 """
 
 import atexit
+import contextlib
 import copy
+import math
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
@@ -246,17 +248,40 @@ class Session:
             self._settle()
             self._runtime.check()
 
-    def shutdown(self) -> None:
-        if self._runtime is not None:
-            try:
-                self._runtime.shutdown()
-            finally:
-                self._settle()
+    def shutdown(self, timeout: float) -> None:
+        wait = _wait(timeout)
+        runtime = self._runtime
+        if runtime is None:
+            return
+        try:
+            if wait is None:
+                runtime.shutdown()
+                return
+            # The runtime's shutdown waits without a limit, so it asks on another
+            # thread and this one waits for the end with the limit. On a timeout
+            # the request stands and the network goes on stopping.
+            threading.Thread(
+                target=_request_stop,
+                args=(runtime,),
+                name="mujou-shutdown",
+                daemon=True,
+            ).start()
+            if not runtime.join(wait):
+                raise TimeoutError(
+                    f"the network did not stop within {timeout} s; it goes on "
+                    "stopping, and join() waits for it"
+                )
+        finally:
+            self._settle()
 
-    def join(self) -> None:
+    def join(self, timeout: float) -> None:
+        wait = _wait(timeout)
         runtime = self._started()
         try:
-            runtime.join()
+            if not runtime.join(wait):
+                raise TimeoutError(
+                    f"the network did not stop within {timeout} s; it keeps running"
+                )
         finally:
             self._settle()
 
@@ -505,6 +530,23 @@ class Session:
         return tree
 
 
+def _wait(timeout: float) -> float | None:
+    """Return ``timeout`` as the runtime's ``join`` takes it (``None``: no limit).
+
+    Raises:
+        ValueError: ``timeout`` is negative or NaN.
+    """
+    if not timeout >= 0:
+        raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
+    return None if timeout == math.inf else timeout
+
+
+def _request_stop(runtime: _core.Runtime) -> None:
+    # The caller's join reports how the run ended.
+    with contextlib.suppress(_core.NetworkError):
+        runtime.shutdown()
+
+
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -534,7 +576,7 @@ def _shutdown_all() -> None:
     failure: BaseException | None = None
     for session in list(_RUNNING):
         try:
-            session.shutdown()
+            session.shutdown(math.inf)
         except _core.NetworkError:
             pass  # already logged, and the host has gone
         except BaseException as e:  # noqa: BLE001 - re-raised below

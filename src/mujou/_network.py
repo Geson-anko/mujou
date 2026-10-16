@@ -5,6 +5,7 @@ ports connected into channels. ``Network.build`` walks the tree once, checks it,
 and freezes it (``docs/network.md``).
 """
 
+import math
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -402,29 +403,45 @@ class Network(Component):
         """
         _session(self).load_state_dict(state)
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float = math.inf) -> None:
         """Stop every node and return once every ``on_stop`` has returned.
 
         Does nothing before ``run`` or after a normal end.
 
+        Args:
+            timeout: Real seconds to wait for the end. ``math.inf`` waits as
+                long as it takes.
+
         Raises:
             RuntimeError: The network is not built.
+            ValueError: ``timeout`` is negative or NaN; nothing was asked.
+            TimeoutError: The network did not stop within ``timeout``. The stop
+                stays asked: the nodes take no more updates and the network goes
+                on stopping in the background (an ``on_stop`` may still be
+                running). ``join`` waits for the end.
             NetworkError: The network stopped because a node raised.
         """
-        _session(self).shutdown()
+        _session(self).shutdown(timeout)
 
-    def join(self) -> None:
+    def join(self, timeout: float = math.inf) -> None:
         """Wait until the network stops, without asking it to stop.
 
         It returns once another thread called ``shutdown`` and every ``on_stop``
         has returned; if a node raises, it raises instead. If nothing stops the
-        network, it never returns.
+        network and ``timeout`` is ``math.inf``, it never returns.
+
+        Args:
+            timeout: Real seconds to wait for the end. ``math.inf`` waits as
+                long as it takes.
 
         Raises:
             RuntimeError: The network has not run.
+            ValueError: ``timeout`` is negative or NaN.
+            TimeoutError: The network did not stop within ``timeout``. Nothing
+                changes: a running network keeps running.
             NetworkError: The network stopped because a node raised.
         """
-        _session(self).join()
+        _session(self).join(timeout)
 
     def _step(self, order: Sequence[Node] | None = None) -> None:
         """For tests with ``run(_manual=True)``: update each node once, in
