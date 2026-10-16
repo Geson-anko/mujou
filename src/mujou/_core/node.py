@@ -4,9 +4,9 @@ import threading
 from typing import cast, override
 
 import torch
+from mujou._network import Component
 
 from mujou import _core
-from mujou._network import Component
 
 
 class Node(_core.Node, Component):

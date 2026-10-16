@@ -16,11 +16,11 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import torch
-
-from mujou import _core
 from mujou._node import Node, capture_state, end_thread, thread_ident
 from mujou._port import Channel, Port, bind
 from mujou._spec import Spec, fields, join, split
+
+from mujou import _core
 
 if TYPE_CHECKING:
     from mujou._network import Graph

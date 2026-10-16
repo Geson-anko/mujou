@@ -12,7 +12,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
-
 from mujou._port import Channel, NextPort, Port, PrevPort, freeze, is_frozen
 
 if TYPE_CHECKING:
