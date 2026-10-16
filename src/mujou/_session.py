@@ -339,7 +339,7 @@ class Session:
         runtime = self._started()  # a subscription before run would wait for nothing
         self.check()
         outbox, spec = self._outbox(port)
-        # Only values written after this call are new.
+        # The value at the time of this call comes first.
         return self._follow(runtime, outbox, spec, outbox.read())
 
     def _follow(
@@ -349,6 +349,8 @@ class Session:
         spec: Spec,
         last: _core.Message,
     ) -> Iterator[tuple[object, float]]:
+        self.check()
+        yield _value(spec, last, _CPU), last.time_ns / 1e9
         while True:
             self.check()
             finished = runtime.is_finished

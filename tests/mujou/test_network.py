@@ -601,7 +601,11 @@ class TestSubscribe:
     ):
         net = run_network(Chain(), _manual=True)
         net.write({net.prev: u(1)})
+        step(net, virtual_timer)
         values = net.subscribe(net.next)
+        # First the value at the time of the call, without waiting for a new one.
+        out, t = next(values)
+        assert torch.equal(out, net.b.x) and t == virtual_timer.time_ns() / 1e9
         for _ in range(3):
             step(net, virtual_timer)
         # The first two values were skipped: only the latest is given.
@@ -612,6 +616,22 @@ class TestSubscribe:
         net.shutdown()
         with pytest.raises(StopIteration):
             next(values)
+
+    def test_gives_the_value_before_the_first_send(self, run_network: RunNetwork):
+        net = run_network(Chain(), _manual=True)
+        out, _ = next(net.subscribe(net.next))
+        assert torch.equal(out, torch.zeros(2, dtype=F64))
+
+    def test_gives_the_last_value_after_a_normal_end(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Chain(), _manual=True)
+        net.write({net.prev: u(1)})
+        step(net, virtual_timer)
+        net.shutdown()
+        assert [t for _, t in net.subscribe(net.next)] == [
+            virtual_timer.time_ns() / 1e9
+        ]
 
     def test_follows_a_free_running_network(self, run_network: RunNetwork):
         net = run_network(Chain())

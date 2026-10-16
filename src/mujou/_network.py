@@ -334,13 +334,15 @@ class Network(Component):
         return cast(tuple[S, float], _session(self).read(port))
 
     def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, float]]:
-        """Iterate over the messages ``port`` sends from now on, with their times.
+        """Iterate over the messages ``port`` sends, with their times.
 
-        Each step waits until a newer message than the last one is sent, and
-        yields the latest; messages sent in between are skipped. Only the
-        consumer waits: the sending node never does. The iterator ends when the
-        network shuts down normally. Shut the network down before the program
-        ends: a thread iterating here ends only with the network.
+        The first step yields the latest message at the time of this call (zeros
+        or the restored value before the first ``send``) without waiting. Each
+        later step waits until a newer message is sent and yields the latest;
+        messages sent in between are skipped. Only the consumer waits: the
+        sending node never does. The iterator ends when the network shuts down
+        normally. Shut the network down before the program ends: a thread
+        iterating here ends only with the network.
 
         Raises:
             RuntimeError: The network is not built or not run yet.
