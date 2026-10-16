@@ -144,7 +144,9 @@ class Network(Component):
     The state at the exception is not kept.
 
     A running network keeps running when the host drops it, until ``shutdown``
-    or, at the latest, the interpreter's exit (which waits for ``on_stop``).
+    or, at the latest, the interpreter's exit (which waits for ``on_stop``). At
+    the exit, the networks stop once the main thread has ended, before the
+    interpreter joins the non-daemon threads.
 
     Example::
 

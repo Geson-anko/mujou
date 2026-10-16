@@ -12,7 +12,7 @@ import contextlib
 import copy
 import math
 import threading
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import torch
@@ -218,6 +218,7 @@ class Session:
             for session in list(_RUNNING):
                 session._settle()
             _RUNNING.add(self)
+            _watch_exit()
             # What this thread queued for the nodes (tensors made in __init__ or
             # by load_state_dict) is done before their streams use it.
             self._synchronize_current_streams()
@@ -587,10 +588,34 @@ def _shutdown_all() -> None:
         raise failure
 
 
-# Before the interpreter joins the non-daemon threads: a thread iterating over
-# subscribe ends only when its network does. threading._register_atexit is private,
-# so fall back to atexit (after the join) where it is missing.
-_register: Callable[[Callable[[], None]], object] = getattr(
-    threading, "_register_atexit", atexit.register
-)
-_register(_shutdown_all)
+def _stop_at_exit() -> None:
+    """Stop every running network once the main thread has ended.
+
+    At the interpreter's exit, ``threading`` marks the main thread as ended
+    before it joins the non-daemon threads, so this wakes up before that join
+    and a thread iterating over ``subscribe`` ends with its network.
+    """
+    threading.main_thread().join()
+    # On a failure the atexit call below tries again, and raises.
+    with contextlib.suppress(Exception):
+        _shutdown_all()
+
+
+_watching = False
+_watching_lock: Final = threading.Lock()
+
+
+def _watch_exit() -> None:
+    """Start the daemon thread of ``_stop_at_exit`` once, at the first run."""
+    global _watching
+    with _watching_lock:
+        if _watching:
+            return
+        _watching = True
+    threading.Thread(target=_stop_at_exit, name="mujou-exit", daemon=True).start()
+
+
+# After the join of the non-daemon threads, wait until the networks have stopped
+# (the daemon thread may still be stopping them) and stop those that started
+# since.
+atexit.register(_shutdown_all)
