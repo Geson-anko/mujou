@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/**/*.py"
+      - "src/**/*.pyi"
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - "src/**/*.py"
+      - "src/**/*.pyi"
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
