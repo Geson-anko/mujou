@@ -1,5 +1,5 @@
 """The run of a built network: slots for its ports, the runtime of its nodes, and the
-host's reads and writes (``docs/network.md``, ``docs/execution-model.md``).
+host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
 ``Network.build`` creates one ``Session``. It lays out the slots of every port,
 binds each port to them (``Binding``), and later starts the runtime. Values cross

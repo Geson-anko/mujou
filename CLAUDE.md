@@ -47,7 +47,7 @@
 
 ### ノード間の局所性・非同期性を壊さない
 
-mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`docs/execution-model.md`）。
+mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`specs/execution-model.md`）。
 
 - ノードの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
 - 更新手法は差し替え可能にする。ノード・メッセージ・スケジューラに特定の学習則を焼き付けない
@@ -73,7 +73,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock、cargo fmt、cargo clippy ほか
-- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`docs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
 - torch に依存しないのは private な `mujou._core` だけで、それ以外はノード内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド

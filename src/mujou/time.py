@@ -2,7 +2,7 @@
 
 All nodes share one time axis, which can be scaled and paused. Use these functions
 instead of the standard ``time`` module wherever a duration should follow the
-global time, e.g. to present an input for a while (``docs/execution-model.md``).
+global time, e.g. to present an input for a while (``specs/execution-model.md``).
 The time starts at 0 when the process first uses it.
 
 - ``time()``: the global time in seconds

@@ -2,7 +2,7 @@
 
 A network is the structure of a run: nodes and nested networks as attributes, and
 ports connected into channels. ``Network.build`` walks the tree once, checks it,
-and freezes it (``docs/network.md``).
+and freezes it (``specs/network.md``).
 """
 
 import math

@@ -4,7 +4,7 @@
 //! are copied into pooled buffers; they go out as `BufferView`s, which torch reads
 //! with `torch.from_dlpack(view)` and then copies. Copying on both sides keeps every
 //! message immutable however the caller later changes its tensors
-//! (`docs/messages.md`).
+//! (`specs/messages.md`).
 
 use std::ffi::{CStr, c_void};
 use std::sync::Arc;

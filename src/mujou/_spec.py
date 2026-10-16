@@ -3,7 +3,7 @@
 A message is either one ``torch.Tensor`` (``TensorSpec``) or a ``TypedDict`` whose
 values are ``torch.Tensor`` (``DictSpec``). A spec fixes the shape and the dtype of
 every value, so the slots that carry the message can be laid out when the network
-is built (``docs/messages.md``).
+is built (``specs/messages.md``).
 """
 
 import typing

@@ -2,7 +2,7 @@
 //!
 //! The core has no tensor type or dtype of its own. Values cross the boundary as
 //! DLPack tensors (<https://dmlc.github.io/dlpack/latest/>), and are always copied:
-//! into a pooled buffer when written, and out of it by the reader (`docs/messages.md`).
+//! into a pooled buffer when written, and out of it by the reader (`specs/messages.md`).
 //! The structs here mirror `dlpack.h` (version 1.x) field by field.
 
 use std::ffi::c_void;

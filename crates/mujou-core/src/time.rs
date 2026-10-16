@@ -2,7 +2,7 @@
 //!
 //! Every node discretizes its dynamics with the elapsed time measured on this
 //! timer, so the time can be scaled, paused and restored without changing the
-//! dynamics (`docs/execution-model.md`). The time is held as nanoseconds (`u64`);
+//! dynamics (`specs/execution-model.md`). The time is held as nanoseconds (`u64`);
 //! seconds (`f64`) are derived from it. It starts at 0 when the timer is created
 //! and saturates at `u64::MAX` (about 584 years).
 //!

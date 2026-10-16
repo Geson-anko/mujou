@@ -3,7 +3,7 @@
 //! Each node runs on a dedicated thread that loops over its update hook. The
 //! nodes never wait for each other; the only barriers are the control operations
 //! (pausing to capture the state, stepping by hand, and stopping), which
-//! `docs/execution-model.md` allows because the global time stands still while
+//! `specs/execution-model.md` allows because the global time stands still while
 //! they hold.
 //!
 //! All control goes through a single control thread, as in pamiq-core's
@@ -168,7 +168,7 @@ impl Error for RuntimeError {
     }
 }
 
-/// A hook panicked. Treated like an exception (`docs/execution-model.md`).
+/// A hook panicked. Treated like an exception (`specs/execution-model.md`).
 #[derive(Debug)]
 struct Panicked(String);
 

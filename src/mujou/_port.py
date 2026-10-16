@@ -3,7 +3,7 @@
 A port has no direction: it holds the spec of the message it sends and the spec of
 the message it receives. Two ports connect when their specs are mutually reversed,
 and each connection is one ``Channel`` registered at both ends
-(``docs/network.md``).
+(``specs/network.md``).
 """
 
 from typing import (

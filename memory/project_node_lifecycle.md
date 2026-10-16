@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-2026-10-14 決定。詳細は `docs/nodes.md` のライフサイクル hook の節。
+2026-10-14 決定。詳細は `specs/nodes.md` のライフサイクル hook の節。
 
 - **ノードが実行時に存在する分散処理の最小単位。** ネットワークは構築時だけの構造で hook を持たない。Node と Network の共通基底が持つのは Port と connect だけ（[[project-network-ports]]）
 - **hook を override する方式。手本は Unity の `Update(deltaTime)`。** Lightning ではない（エポック・バッチ前提の hook が不変の原則に反する）
@@ -18,6 +18,6 @@ metadata:
 
 **Why:** ループをフレームワークが持たないと、M:N のワーカープールに載せられず、仮想時計で決定的に回すテストのオラクルも書けない。hook は Rust（trait）と Python（専用スレッド）の境界も兼ねる。
 
-**How to apply:** ノードの API を実装・変更するときはこの hook 構成に合わせる。名前やシグネチャは docs ではイメージ扱いなので、確定させる前にユーザーに確認する。hook が例外を投げたらシステム全体を終了する（[[project-shutdown-on-exception]]）。
+**How to apply:** ノードの API を実装・変更するときはこの hook 構成に合わせる。名前やシグネチャは specs ではイメージ扱いなので、確定させる前にユーザーに確認する。hook が例外を投げたらシステム全体を終了する（[[project-shutdown-on-exception]]）。
 
 関連: [[project-pause-and-state]], [[project-compute-granularity]], [[project-native-core-rust]]
