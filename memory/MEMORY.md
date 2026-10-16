@@ -26,11 +26,13 @@
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — torch 非依存は private な mujou._core だけ、それ以外は PyTorch を全面採用（mujou.torch に分けない）。利用者が継承する mujou.Node が on_start で勾配停止・ノードごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA のみ、MPS は考えない。JAX は多数スレッドで伸びず不採用
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
+- [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語）。サンプルは examples/ でテストが実行。今は公開しない
+- [テスト用の公開の口](project_testing_api.md) — 仮想時計と手動ステップを mujou.testing などで公開し、mujou 自身と利用者のテストが同じ口を使う。実装は後
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback
 
-- [文書の言語](feedback_doc_language.md) — 仕様書・計画書・CLAUDE.md・skill・memory は日本語。コミットと PR タイトルは英語の規約形式
+- [文書の言語](feedback_doc_language.md) — 仕様書（specs/）・計画書・CLAUDE.md・skill・memory は日本語、docs/ の本文は英語と日本語、docstring とコメントは英語。コミットと PR タイトルは英語の規約形式
 
 ## reference
 
