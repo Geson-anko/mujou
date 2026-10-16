@@ -552,6 +552,14 @@ impl Runtime {
         self.wait(py, reply)
     }
 
+    /// Asks every node to stop and returns without waiting; `join` waits for
+    /// the end. Does nothing before `start` or once the network has stopped.
+    fn request_stop(&self) {
+        if let Some(runtime) = self.inner.get() {
+            runtime.request_stop();
+        }
+    }
+
     /// Waits until the network has stopped, for at most `timeout` seconds, and
     /// returns whether it has.
     #[pyo3(signature = (timeout = None))]

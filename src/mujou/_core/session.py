@@ -162,11 +162,9 @@ class Session:
         self._runtime: _native.Runtime | None = None
         # Makes the check and the start of a run one step for concurrent callers.
         self._run_lock = threading.Lock()
-        # The timer when shutdown first asked the run to stop, and the thread
-        # that asks for a shutdown with a finite timeout (one per session).
+        # The timer when shutdown first asked the run to stop.
         self._stop_lock = threading.Lock()
         self._stop_timer: dict[str, int | float] | None = None
-        self._stopper: threading.Thread | None = None
         # Restored by load_state_dict and passed to the runtime by run.
         self._states: list[object] | None = None
         self._last_update_ns: list[int] | None = None
@@ -269,17 +267,11 @@ class Session:
                     if self._stop_timer is None:
                         self._stop_timer = _native.timer.state_dict()
                     # The runtime's shutdown waits without a limit, so a finite
-                    # timeout asks on another thread (one per session) and waits
-                    # here with the limit. On a timeout the request stands and
-                    # the network goes on stopping.
-                    if wait is not None and self._stopper is None:
-                        self._stopper = threading.Thread(
-                            target=_request_stop,
-                            args=(runtime,),
-                            name="mujou-shutdown",
-                            daemon=True,
-                        )
-                        self._stopper.start()
+                    # timeout asks to stop and waits here with the limit. On a
+                    # timeout the request stands and the network goes on
+                    # stopping.
+                    if wait is not None:
+                        runtime.request_stop()
             if wait is None:
                 runtime.shutdown()
                 return
@@ -569,12 +561,6 @@ def _wait(timeout: float) -> float | None:
     if not timeout >= 0:
         raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
     return None if timeout == math.inf else timeout
-
-
-def _request_stop(runtime: _native.Runtime) -> None:
-    # The caller's join reports how the run ended.
-    with contextlib.suppress(_native.NetworkError):
-        runtime.shutdown()
 
 
 def _is_int(value: object) -> bool:

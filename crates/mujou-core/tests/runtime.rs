@@ -490,3 +490,102 @@ mod separate_timers {
         restored.shutdown().wait().unwrap();
     }
 }
+
+mod stop_request {
+    use std::sync::mpsc::{self, Receiver, Sender};
+
+    use super::*;
+
+    /// Tells when it enters an update, then blocks there until released.
+    struct Gate {
+        entered: Sender<()>,
+        release: Receiver<()>,
+        stopped: Arc<Mutex<bool>>,
+    }
+
+    impl NodeHooks for Gate {
+        type State = ();
+
+        fn start(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn update(&mut self, _dt: f64) -> Result<(), HookError> {
+            let _ = self.entered.send(());
+            let _ = self.release.recv();
+            Ok(())
+        }
+
+        fn pause(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn resume(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn exception(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<(), HookError> {
+            *self.stopped.lock().unwrap() = true;
+            Ok(())
+        }
+
+        fn state_dict(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn returns_while_a_node_is_still_updating_and_join_sees_the_end() {
+        let timer = virtual_timer();
+        let (entered_tx, entered) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        let stopped = Arc::new(Mutex::new(false));
+        let gate = Gate {
+            entered: entered_tx,
+            release: release_rx,
+            stopped: Arc::clone(&stopped),
+        };
+        let config = RuntimeConfig::default();
+        let (rt, started) = Runtime::start(
+            vec![gate],
+            vec!["gate".to_owned()],
+            Arc::clone(&timer),
+            config,
+            None,
+        )
+        .unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        // The node is blocked in its update, so a waiting stop would not return.
+        rt.request_stop();
+        assert!(!rt.join(Some(Duration::from_millis(50))).unwrap());
+        assert!(!*stopped.lock().unwrap());
+
+        release.send(()).unwrap();
+        assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
+        assert!(*stopped.lock().unwrap());
+        assert!(rt.is_finished());
+    }
+
+    #[test]
+    fn does_nothing_once_the_system_has_ended() {
+        let timer = virtual_timer();
+        let Setup { log, nodes, names } = recorders(2);
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        started.wait().unwrap();
+        rt.request_stop();
+        assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
+        rt.request_stop();
+        rt.shutdown().wait().unwrap();
+        for id in 0..2 {
+            assert_eq!(events_of(&log, id), [Event::Start, Event::Stop]);
+        }
+    }
+}
