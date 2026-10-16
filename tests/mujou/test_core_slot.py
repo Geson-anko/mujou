@@ -11,6 +11,8 @@ from mujou._core import (
     Message,
     Outlet,
     Schema,
+    Timer,
+    Timestamp,
 )
 
 # `mujou._core.DLDataType` exists only in the stub.
@@ -386,3 +388,52 @@ class TestInputGroup:
         msg = x.read()
         assert msg.time_ns == 42
         assert torch.equal(values(msg)[0], torch.tensor([5.0, 6.0]))
+
+
+class TestTimers:
+    """Slots stamp their messages with the timer they are given, or the global one."""
+
+    @staticmethod
+    def own_timer(seconds: float) -> Timer:
+        t = Timer()
+        t.use_virtual_clock(True)
+        t.load_state_dict({"time_ns": 0, "scale": 1.0})
+        t.advance(seconds)
+        return t
+
+    def test_outlet_stamps_with_its_own_timer(self, virtual_timer: GlobalTimer):
+        own = self.own_timer(3.0)
+        virtual_timer.advance(1.0)
+        outlet = Outlet(tensor_schema((1,)), 1, "p", timer=own)
+        assert outlet.outbox.read().time_ns == 3_000_000_000
+        own.advance(1.0)
+        outlet.send([torch.ones(1)])
+        assert outlet.channel(0).read().time_ns == 4_000_000_000
+
+    def test_input_group_stamps_with_its_own_timer(self, virtual_timer: GlobalTimer):
+        own = self.own_timer(2.0)
+        virtual_timer.advance(5.0)
+        group = InputGroup(timer=own)
+        x = group.input(tensor_schema((1,)), "x")
+        assert x.read().time_ns == 2_000_000_000
+        own.advance(0.5)
+        group.write([(x, [torch.ones(1)])])
+        assert x.read().time_ns == 2_500_000_000
+
+    def test_without_a_timer_they_use_the_global_one(self, virtual_timer: GlobalTimer):
+        virtual_timer.advance(0.75)
+        outlet = Outlet(tensor_schema((1,)), 0, "p")
+        x = InputGroup().input(tensor_schema((1,)), "x")
+        assert outlet.outbox.read().time_ns == x.read().time_ns == 750_000_000
+
+    def test_message_timestamp_is_its_time(self, virtual_timer: GlobalTimer):
+        outlet = Outlet(tensor_schema((1,)), 0, "p")
+        virtual_timer.advance(1.5)
+        outlet.send([torch.ones(1)])
+        first = outlet.outbox.read()
+        virtual_timer.advance(0.5)
+        outlet.send([torch.ones(1)])
+        second = outlet.outbox.read()
+        assert first.timestamp == Timestamp(ns=first.time_ns)
+        assert float(first.timestamp) == 1.5
+        assert first.timestamp < second.timestamp
