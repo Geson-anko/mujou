@@ -10,7 +10,7 @@ use std::ffi::{CStr, c_void};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::hint::Views;
+use crate::hint::{Values, Views};
 use crate::time::{PyTimer, PyTimestamp, timer_or_global};
 use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
 use mujou_core::slot::{self as core, DType, FieldSpec, Message, Schema, SlotError, Target};
@@ -442,9 +442,9 @@ impl PySlot {
     /// Call it only while no node runs (before the start, or while every node
     /// is paused): it writes beside the slot's own writer. Raises as
     /// `Outlet.send` does.
-    fn restore(&self, values: &Bound<'_, PyAny>, time_ns: u64) -> PyResult<()> {
+    fn restore(&self, values: Values<'_>, time_ns: u64) -> PyResult<()> {
         let slot = &self.0;
-        write_values(values, slot.schema(), slot.name(), |fill| {
+        write_values(&values.0, slot.schema(), slot.name(), |fill| {
             slot.restore(time_ns, fill)
         })
     }
@@ -489,6 +489,11 @@ impl PyOutlet {
     /// Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
     /// Every message is stamped with the time on `timer` (the global timer if
     /// `None`).
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     #[new]
     #[pyo3(signature = (schema, channels, name, *, timer = None))]
     fn new(
@@ -517,14 +522,14 @@ impl PyOutlet {
     }
 
     /// Writes one message to the outward slot and every channel.
-    fn send(&self, values: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.send_with(Target::All, values)
+    fn send(&self, values: Values<'_>) -> PyResult<()> {
+        self.send_with(Target::All, &values.0)
     }
 
     /// Writes one message to channel `index` only.
-    fn send_to(&self, index: isize, values: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn send_to(&self, index: isize, values: Values<'_>) -> PyResult<()> {
         let k = check_index(index, self.0.channels().len())?;
-        self.send_with(Target::Channel(k), values)
+        self.send_with(Target::Channel(k), &values.0)
     }
 }
 
@@ -536,6 +541,11 @@ pub struct PyInputGroup(Arc<core::InputGroup>);
 impl PyInputGroup {
     /// Every write is stamped with the time on `timer` (the global timer if
     /// `None`).
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     #[new]
     #[pyo3(signature = (*, timer = None))]
     fn new(timer: Option<PyRef<'_, PyTimer>>) -> Self {
@@ -557,7 +567,7 @@ impl PyInputGroup {
     fn write(
         &self,
         py: Python<'_>,
-        items: Vec<(PyRef<'_, PyInputSlot>, Bound<'_, PyAny>)>,
+        items: Vec<(PyRef<'_, PyInputSlot>, Values<'_>)>,
     ) -> PyResult<()> {
         let mut slots: Vec<&core::InputSlot> = Vec::with_capacity(items.len());
         let mut borrowed = Vec::with_capacity(items.len());
@@ -575,7 +585,7 @@ impl PyInputGroup {
                     slot.name()
                 )));
             }
-            borrowed.push(borrow_values(values, slot.schema(), slot.name())?);
+            borrowed.push(borrow_values(&values.0, slot.schema(), slot.name())?);
             slots.push(slot);
         }
         let tensors: Vec<&[TensorPtr]> = borrowed.iter().map(|b| b.tensors.as_slice()).collect();
@@ -607,9 +617,9 @@ impl PyInputSlot {
     ///
     /// Call it only while no node runs (before the start, or while every node
     /// is paused). Raises as `Outlet.send` does.
-    fn restore(&self, values: &Bound<'_, PyAny>, time_ns: u64) -> PyResult<()> {
+    fn restore(&self, values: Values<'_>, time_ns: u64) -> PyResult<()> {
         let slot = &self.0;
-        write_values(values, slot.schema(), slot.name(), |fill| {
+        write_values(&values.0, slot.schema(), slot.name(), |fill| {
             slot.restore(time_ns, fill)
         })
     }

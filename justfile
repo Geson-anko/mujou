@@ -53,15 +53,17 @@ container *args:
 # Generate the type stub of the native extension (src/mujou/_core.pyi) from its
 # signatures and doc comments. Commit the result; pre-commit regenerates it.
 stub:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # `uv run` rebuilds the extension first if the Rust sources changed.
-    read -r library module output < <(uv run --quiet python -c '
-    import importlib.util, tomllib
+    #!/usr/bin/env -S uv run --quiet python
+    import importlib.util, re, subprocess, tomllib
     with open("pyproject.toml", "rb") as f:
         module = tomllib.load(f)["tool"]["maturin"]["module-name"]
-    print(importlib.util.find_spec(module).origin, module, "src/" + module.replace(".", "/") + ".pyi")
-    ')
-    cargo run --quiet -p mujou-stubgen -- "$library" "$module" "$output"
-    uv run --quiet ruff check --quiet --fix "$output"
-    uv run --quiet ruff format --quiet "$output"
+    # `uv run` rebuilt the extension first if the Rust sources changed.
+    library = importlib.util.find_spec(module).origin
+    output = "src/" + module.replace(".", "/") + ".pyi"
+    subprocess.run(["cargo", "run", "--quiet", "-p", "mujou-stubgen", "--", library, module, output], check=True)
+    # Format with the ruff of the pre-commit hook, so that the two agree.
+    with open(".pre-commit-config.yaml") as f:
+        version = re.search(r"ruff-pre-commit\n\s+rev: v(\S+)", f.read()).group(1)
+    ruff = ["uv", "tool", "run", "--quiet", f"ruff@{version}"]
+    subprocess.run([*ruff, "check", "--quiet", "--fix", output], check=True)
+    subprocess.run([*ruff, "format", "--quiet", output], check=True)

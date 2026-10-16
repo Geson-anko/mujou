@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use mujou_core::time::{self as core, Timer, TimerState, Timestamp, seconds_to_ns};
+use pyo3::exceptions::PyValueError;
 use pyo3::inspect::PyStaticExpr;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -46,6 +47,11 @@ impl PyTimer {
     /// The time in nanoseconds.
     fn time_ns(&self) -> u64 {
         self.0.time_ns()
+    }
+
+    /// The time as a `Timestamp`.
+    fn now(&self) -> PyTimestamp {
+        PyTimestamp(self.0.now())
     }
 
     /// Blocks for `seconds` of this timer's time, following the scale and
@@ -166,7 +172,8 @@ impl<'py> IntoPyObject<'py> for GlobalTimer {
 ///
 /// `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
 /// is the exact time in nanoseconds. Timestamps compare and hash by time, so
-/// compare only those of one timer.
+/// compare only those of one timer. `later - earlier` is the time between them,
+/// as a `Timestamp`.
 #[pyclass(frozen, eq, ord, hash, module = "mujou._core", name = "Timestamp")]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PyTimestamp(pub Timestamp);
@@ -175,10 +182,18 @@ pub struct PyTimestamp(pub Timestamp);
 impl PyTimestamp {
     /// Takes the time in nanoseconds, by keyword only: a bare number could
     /// mean seconds.
+    ///
+    /// Raises:
+    ///     ValueError: `ns` is negative or does not fit in 64 bits.
     #[new]
     #[pyo3(signature = (*, ns))]
-    fn new(ns: u64) -> Self {
-        Self(Timestamp::from_ns(ns))
+    fn new(ns: i128) -> PyResult<Self> {
+        let ns = u64::try_from(ns).map_err(|_| {
+            PyValueError::new_err(format!(
+                "a timestamp is from 0 to 2**64 - 1 nanoseconds, got {ns}"
+            ))
+        })?;
+        Ok(Self(Timestamp::from_ns(ns)))
     }
 
     /// The time in nanoseconds.
@@ -193,6 +208,20 @@ impl PyTimestamp {
 
     fn __int__(&self) -> u64 {
         self.0.whole_secs()
+    }
+
+    /// The time from `earlier` to this one.
+    ///
+    /// Raises:
+    ///     ValueError: `earlier` is later than this one.
+    fn __sub__(&self, earlier: PyRef<'_, Self>) -> PyResult<Self> {
+        self.0.checked_sub(earlier.0).map(Self).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "cannot subtract the later {:?} from {:?}",
+                earlier.__repr__(),
+                self.__repr__()
+            ))
+        })
     }
 
     fn __repr__(&self) -> String {

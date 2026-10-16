@@ -44,6 +44,14 @@ impl Timestamp {
     pub const fn whole_secs(self) -> u64 {
         self.0 / 1_000_000_000
     }
+
+    /// `self - earlier`, or `None` if `earlier` is later.
+    pub const fn checked_sub(self, earlier: Self) -> Option<Self> {
+        match self.0.checked_sub(earlier.0) {
+            Some(ns) => Some(Self(ns)),
+            None => None,
+        }
+    }
 }
 
 /// What is needed to continue the time from where it was taken.
@@ -192,6 +200,10 @@ impl Timer {
 
     pub fn time_ns(&self) -> u64 {
         self.lock().now_ns()
+    }
+
+    pub fn now(&self) -> Timestamp {
+        Timestamp(self.time_ns())
     }
 
     pub fn time(&self) -> f64 {

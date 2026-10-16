@@ -5,8 +5,17 @@ Private: the framework wraps it. Values go in and out as tensors over DLPack,
 always copied.
 """
 
-from collections.abc import Callable
-from typing import Any, Final, Self, SupportsFloat, SupportsIndex, final, override
+from collections.abc import Callable, Sequence
+from typing import (
+    Any,
+    Final,
+    NoReturn,
+    Self,
+    SupportsFloat,
+    SupportsIndex,
+    final,
+    override,
+)
 
 from _typeshed import SupportsGetItem
 from typing_extensions import disjoint_base
@@ -56,6 +65,10 @@ class BufferView:
         copy: bool | None = None,
     ) -> Any: ...
     def __dlpack_device__(self, /) -> tuple[int, int]: ...
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
+        """
 
 @final
 class GlobalTimer(Timer):
@@ -63,6 +76,10 @@ class GlobalTimer(Timer):
     The global timer, which every run not given a timer of its own uses. The
     only instance is `timer`.
     """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
+        """
 
 @final
 class InputGroup:
@@ -73,12 +90,19 @@ class InputGroup:
         """
         Every write is stamped with the time on `timer` (the global timer if
         `None`).
+
+        The slots and the host's inputs of one run must use the timer of its
+        runtime: on another timer, the times of the messages would not be on
+        the axis the nodes' Δt is measured on, and a pause of the run would not
+        stop them, so a state taken at T could hold later messages.
         """
     def input(self, /, schema: Schema, name: str) -> InputSlot:
         """
         Creates the slot `"{name}/in"` holding zeros.
         """
-    def write(self, /, items: SupportsGetItem[int, tuple[InputSlot, Any]]) -> None:
+    def write(
+        self, /, items: SupportsGetItem[int, tuple[InputSlot, Sequence[Any]]]
+    ) -> None:
         """
         Writes every item at once, all stamped with the same time.
 
@@ -97,12 +121,16 @@ class InputSlot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(self, /, values: Any, time_ns: SupportsIndex) -> None:
+    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex) -> None:
         """
         Sets the value and its time, dropping any pending write.
 
         Call it only while no node runs (before the start, or while every node
         is paused). Raises as `Outlet.send` does.
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
         """
 
 @final
@@ -125,6 +153,10 @@ class Message:
     def timestamp(self, /) -> Timestamp:
         """
         The time it was written at.
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
         """
 
 class NetworkError(RuntimeError):
@@ -208,6 +240,11 @@ class Outlet:
         Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
         Every message is stamped with the time on `timer` (the global timer if
         `None`).
+
+        The slots and the host's inputs of one run must use the timer of its
+        runtime: on another timer, the times of the messages would not be on
+        the axis the nodes' Δt is measured on, and a pause of the run would not
+        stop them, so a state taken at T could hold later messages.
         """
     def channel(self, /, index: SupportsIndex) -> Slot: ...
     @property
@@ -215,11 +252,11 @@ class Outlet:
         """
         The outward slot, which every `send` writes.
         """
-    def send(self, /, values: Any) -> None:
+    def send(self, /, values: Sequence[Any]) -> None:
         """
         Writes one message to the outward slot and every channel.
         """
-    def send_to(self, /, index: SupportsIndex, values: Any) -> None:
+    def send_to(self, /, index: SupportsIndex, values: Sequence[Any]) -> None:
         """
         Writes one message to channel `index` only.
         """
@@ -245,7 +282,8 @@ class Runtime:
         """
         The nodes run on `timer` (the global timer if `None`): it measures their
         Δt, and the runtime freezes it to start, to take the state, and on an
-        exception.
+        exception. Create the `Outlet`s and the `InputGroup` of this run with
+        the same timer.
         """
     def capture(
         self,
@@ -362,7 +400,7 @@ class Slot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(self, /, values: Any, time_ns: SupportsIndex) -> None:
+    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex) -> None:
         """
         Sets the value and its time as they were when the state was taken.
 
@@ -384,6 +422,10 @@ class Slot:
 
         Raises:
             ValueError: `timeout` is negative or not finite.
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
         """
 
 @disjoint_base
@@ -417,6 +459,10 @@ class Timer:
 
         Raises:
             ValueError: The scale is not finite and > 0.
+        """
+    def now(self, /) -> Timestamp:
+        """
+        The time as a `Timestamp`.
         """
     def pause(self, /) -> None:
         """
@@ -476,27 +522,38 @@ class Timestamp:
 
     `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
     is the exact time in nanoseconds. Timestamps compare and hash by time, so
-    compare only those of one timer.
+    compare only those of one timer. `later - earlier` is the time between them,
+    as a `Timestamp`.
     """
     @override
     def __eq__(self, value: object, /) -> bool: ...
     def __float__(self, /) -> float: ...
-    def __ge__(self, value: object, /) -> bool: ...
-    def __gt__(self, value: object, /) -> bool: ...
+    def __ge__(self, value: Timestamp, /) -> bool: ...
+    def __gt__(self, value: Timestamp, /) -> bool: ...
     @override
     def __hash__(self, /) -> int: ...
     def __int__(self, /) -> int: ...
-    def __le__(self, value: object, /) -> bool: ...
-    def __lt__(self, value: object, /) -> bool: ...
+    def __le__(self, value: Timestamp, /) -> bool: ...
+    def __lt__(self, value: Timestamp, /) -> bool: ...
     @override
     def __ne__(self, value: object, /) -> bool: ...
     def __new__(cls, /, *, ns: SupportsIndex) -> Self:
         """
         Takes the time in nanoseconds, by keyword only: a bare number could
         mean seconds.
+
+        Raises:
+            ValueError: `ns` is negative or does not fit in 64 bits.
         """
     @override
     def __repr__(self, /) -> str: ...
+    def __sub__(self, earlier: Timestamp, /) -> Timestamp:
+        """
+        The time from `earlier` to this one.
+
+        Raises:
+            ValueError: `earlier` is later than this one.
+        """
     @property
     def ns(self, /) -> int:
         """

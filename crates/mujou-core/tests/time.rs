@@ -468,6 +468,21 @@ mod timestamp {
     }
 
     #[test]
+    fn subtracts_an_earlier_timestamp() {
+        let (early, late) = (Timestamp::from_ns(3), Timestamp::from_ns(10));
+        assert_eq!(late.checked_sub(early), Some(Timestamp::from_ns(7)));
+        assert_eq!(early.checked_sub(late), None);
+    }
+
+    #[test]
+    fn now_is_the_time_of_the_timer() {
+        let timer = Timer::new();
+        timer.use_virtual_clock(true);
+        let ns = timer.time_ns();
+        assert_eq!(timer.now(), Timestamp::from_ns(ns));
+    }
+
+    #[test]
     fn orders_by_time() {
         let (early, late) = (Timestamp::from_ns(1), Timestamp::from_ns(2));
         assert!(early < late);

@@ -148,6 +148,11 @@ class TestTimer:
         assert target.time_ns() == 3_000_000_000
         assert target.time_scale() == 2.0
 
+    def test_now_is_a_timestamp_of_the_time(self):
+        t = virtual(Timer())
+        t.advance(1.25)
+        assert t.now() == Timestamp(ns=1_250_000_000)
+
     def test_the_global_timer_is_a_timer_without_a_constructor(self):
         assert isinstance(timer, Timer)
         assert isinstance(timer, GlobalTimer)
@@ -169,6 +174,16 @@ class TestTimestamp:
         assert early == Timestamp(ns=1)
         assert early != late
         assert len({early, Timestamp(ns=1), late}) == 2
+
+    def test_difference_is_the_time_between(self):
+        assert Timestamp(ns=10) - Timestamp(ns=3) == Timestamp(ns=7)
+        with pytest.raises(ValueError, match="later"):
+            _ = Timestamp(ns=3) - Timestamp(ns=10)
+
+    @pytest.mark.parametrize("ns", [-1, 2**64])
+    def test_rejects_nanoseconds_out_of_range(self, ns: int):
+        with pytest.raises(ValueError, match="2\\*\\*64"):
+            Timestamp(ns=ns)
 
     def test_repr_rebuilds_it(self):
         ts = Timestamp(ns=123)

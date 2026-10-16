@@ -941,17 +941,28 @@ class TestOwnTimer:
             runtime.shutdown()
         assert node.dts == [2 * H_NS / 1e9]
 
-    def test_a_capture_does_not_pause_another_timer(self, virtual_timer: GlobalTimer):
+    def test_a_capture_does_not_pause_another_timer(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
         own = self.own_timer()
         runtime = Runtime(recorders(Log(), "a"), ["a"], timer=own)
+        other_node = Recorder("b", Log())
+        other = make_runtime([other_node])
+        other.start(manual=True)
+
+        def build(states: list[object]) -> tuple[bool, bool]:
+            # The runtime on the global timer keeps updating meanwhile.
+            virtual_timer.advance(H)
+            other.step()
+            return own.is_paused(), virtual_timer.is_paused()
+
         try:
             runtime.start()
-            paused = runtime.capture(
-                lambda states: (own.is_paused(), virtual_timer.is_paused())
-            )
+            paused = runtime.capture(build)
         finally:
             runtime.shutdown()
         assert paused == (True, False)
+        assert other_node.dts == [H]
 
     def test_another_timer_can_be_restored_while_the_global_one_runs(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime

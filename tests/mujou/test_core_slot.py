@@ -15,7 +15,7 @@ from mujou._core import (
     Timestamp,
 )
 
-# `mujou._core.DLDataType` exists only in the stub.
+# The DLPack dtype `(code, bits, lanes)` that `Schema` takes.
 type DLDataType = tuple[int, int, int]
 
 # The DLPack dtypes of the supported torch dtypes. `mujou._spec` owns this table;
@@ -425,6 +425,16 @@ class TestTimers:
         outlet = Outlet(tensor_schema((1,)), 0, "p")
         x = InputGroup().input(tensor_schema((1,)), "x")
         assert outlet.outbox.read().time_ns == x.read().time_ns == 750_000_000
+
+    def test_the_global_timer_given_explicitly_is_the_default(
+        self, virtual_timer: GlobalTimer
+    ):
+        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=virtual_timer)
+        x = InputGroup(timer=virtual_timer).input(tensor_schema((1,)), "x")
+        virtual_timer.advance(0.5)
+        outlet.send([torch.ones(1)])
+        assert outlet.outbox.read().time_ns == 500_000_000
+        assert x.read().time_ns == 0
 
     def test_message_timestamp_is_its_time(self, virtual_timer: GlobalTimer):
         outlet = Outlet(tensor_schema((1,)), 0, "p")

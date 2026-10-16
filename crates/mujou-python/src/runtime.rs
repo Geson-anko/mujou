@@ -398,7 +398,8 @@ impl Runtime {
 impl Runtime {
     /// The nodes run on `timer` (the global timer if `None`): it measures their
     /// Δt, and the runtime freezes it to start, to take the state, and on an
-    /// exception.
+    /// exception. Create the `Outlet`s and the `InputGroup` of this run with
+    /// the same timer.
     #[new]
     #[pyo3(signature = (nodes, names, *, timer = None))]
     fn new(

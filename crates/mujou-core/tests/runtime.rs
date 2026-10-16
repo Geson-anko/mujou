@@ -410,14 +410,30 @@ mod separate_timers {
         let Setup { nodes, names, .. } = recorders(1);
         let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
         started.wait().unwrap();
-        let (own, other) = (Arc::clone(&ta), Arc::clone(&tb));
+        let Setup {
+            log: lb,
+            nodes,
+            names,
+        } = recorders(1);
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        started.wait().unwrap();
+        let b = Arc::new(b);
+
+        // While `a` is paused, the runtime on the other timer keeps updating.
+        let (own, other, other_rt) = (Arc::clone(&ta), Arc::clone(&tb), Arc::clone(&b));
         let (own_paused, other_paused) = a
-            .capture(None, move |_| (own.is_paused(), other.is_paused()))
+            .capture(None, move |_| {
+                other.advance_ns(H_NS).unwrap();
+                other_rt.step(None).wait().unwrap();
+                (own.is_paused(), other.is_paused())
+            })
             .wait()
             .unwrap();
         assert!(own_paused);
         assert!(!other_paused);
+        assert_eq!(events_of(&lb, 0)[1], Event::Update(H_NS as f64 / 1e9));
         a.shutdown().wait().unwrap();
+        b.shutdown().wait().unwrap();
     }
 
     #[test]

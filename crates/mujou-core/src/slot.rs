@@ -528,6 +528,11 @@ impl Outlet {
     /// Creates the outward slot `"{name}/out"` and the channel slots
     /// `"{name}/ch{k}"`, all holding zeros stamped with the current time.
     /// Every message is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     pub fn new(schema: Arc<Schema>, channels: usize, name: &str, timer: Arc<Timer>) -> Self {
         let messages = Messages::new(schema);
         let zeros = messages.zeros(timer.time_ns());
@@ -623,6 +628,11 @@ pub struct InputSlot {
 
 impl InputGroup {
     /// Every write is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     pub fn new(timer: Arc<Timer>) -> Arc<Self> {
         Arc::new(Self {
             version: AtomicU64::new(0),

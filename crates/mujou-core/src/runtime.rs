@@ -939,6 +939,10 @@ impl<N: NodeHooks> Runtime<N> {
     /// The timer is frozen first and then loaded from `config.timer_state`, so
     /// that the time is restored before the nodes restore their states and
     /// does not run while they start.
+    ///
+    /// The nodes run on `timer`: it measures their Δt and is the one frozen.
+    /// Create the slots and the host's inputs of this run with the same timer
+    /// ([`crate::slot::Outlet::new`]).
     pub fn start(
         nodes: Vec<N>,
         names: Vec<String>,
