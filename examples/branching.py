@@ -95,11 +95,8 @@ with mujou.run(net, inputs={net.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given
     # time depends on how the threads get scheduled: follow the output until y
     # arrives (TimeoutError after 5 s).
-    for y, _ in run.subscribe(net.next, timeout=5.0):
-        if torch.equal(y, 2 * x + (-x) ** 2):
-            break
-    else:  # the run stopped before y arrived
-        raise RuntimeError("the run stopped before the output arrived")
+    want = 2 * x + (-x) ** 2
+    y, _ = run.wait_for(net.next, lambda y: torch.equal(y, want), timeout=5.0)
 
 print(f"x = {x}, y = {y}")
 assert torch.equal(y, 2 * x + (-x) ** 2)

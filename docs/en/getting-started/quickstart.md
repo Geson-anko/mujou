@@ -59,11 +59,10 @@ The host part runs from `with mujou.run(net) as run:` to the final `assert`.
 
 1. `mujou.run(net)` runs the network. Each node repeats `on_update` on a thread of its own. Once the nodes are running, `mujou.run` returns and the host program moves on
 2. `run.write({net.prev: x})` writes `x` to `prev` of `scale`, an input port that is not connected to anything. The written value stays on that port until you write again
-3. `run.subscribe(net.next, timeout=5.0)` follows the values that `next` of `shift` sends. Each turn of the `for` loop gives the pair `(y, t)`: a value and the time it was sent. The first turn gives the latest value at once; each later turn waits until a newer value is sent
-4. When `y` is $2x + 1$, `break` ends the loop. If `y` has not arrived after 5 seconds of real time, the loop raises `TimeoutError` and the program fails. The `else` block runs only when the loop ends without `break`, which happens if the run stops before `y` arrives
-5. Leaving the `with` block stops the network
+3. `x` takes a few updates to pass through the two nodes. `run.wait_for(net.next, condition, timeout=5.0)` waits until `next` of `shift` sends a value that meets the condition ($y = 2x + 1$), and returns it with the time it was sent, as `(y, t)`. If it has not arrived after 5 seconds of real time, it raises `TimeoutError` and the program fails
+4. Leaving the `with` block stops the network
 
-The `timeout` of `subscribe` counts real seconds. To wait on Mujou's time instead, for example to show an input for a while, use `mujou.time.sleep`, not the standard `time.sleep`. `mujou.time.sleep` waits on Mujou's global time, so it still waits correctly when you change the speed of time or when the run is paused (see [Global Time](../concepts/time.md)).
+The `timeout` of `wait_for` counts real seconds. To wait on Mujou's time instead, for example to show an input for a while, use `mujou.time.sleep`, not the standard `time.sleep`. `mujou.time.sleep` waits on Mujou's global time, so it still waits correctly when you change the speed of time or when the run is paused (see [Global Time](../concepts/time.md)).
 
 ## Read the output
 

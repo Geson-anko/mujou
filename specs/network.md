@@ -278,6 +278,7 @@ A.next ──┼─ Channel ─ C.prev
 | `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかは `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
 | `read(port)`                     | 送る spec を持つ Port の外向きのスロットの値と、時刻（`Timestamp`）を返す。値は CPU 上の新しい Tensor。最初に送られるまではゼロ（復元したなら木の値） |
 | `subscribe(port, *, timeout=math.inf)` | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまではゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる）。`timeout` は反復全体にかける実時間の秒で、`subscribe` を呼んだときから数え、ループの本体にかかった時間も含む。2 つ目以降の値を返す前にこれを過ぎると、イテレータが `TimeoutError` を送出して終わり、実行は走り続ける。負か NaN なら呼んだ時点で `ValueError` |
+| `wait_for(port, condition, *, timeout=math.inf)` | `subscribe` で最新値から順に確かめ、`condition` を満たした最初の値と時刻を返す。`timeout` を過ぎると `TimeoutError`（実行は走り続ける）、先に実行が正常に終了すると `RuntimeError`。期待した出力が届くまで待つホストの書き方を 1 行にするため（2026-10-17、例の読み直しループを置き換えた） |
 | `state_dict()`                   | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError` |
 | `shutdown(timeout=math.inf)` / `join(timeout=math.inf)` | 終了を要求して待つ／終了を要求せずに待つ。`shutdown` は終了の後は何もしない。`timeout` は実時間の秒で、負か NaN なら `ValueError` |
 | `with mujou.run(...) as run:`    | 抜けるときに `shutdown()` を呼ぶ。本体が例外で抜けたときは本体の例外を優先し、`shutdown()` の `NetworkError` は捨てる（ノードの例外はログに出ている） |

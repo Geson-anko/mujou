@@ -46,11 +46,8 @@ with mujou.run(Compose(enc=enc, dec=dec), inputs={enc.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given
     # time depends on how the threads get scheduled: follow the output until y
     # arrives (TimeoutError after 5 s).
-    for y, _ in run.subscribe(dec.next, timeout=5.0):  # the ports of the networks
-        if torch.equal(y, 6 * x):
-            break
-    else:  # the run stopped before y arrived
-        raise RuntimeError("the run stopped before the output arrived")
+    # The ports are those of the networks given.
+    y, _ = run.wait_for(dec.next, lambda y: torch.equal(y, 6 * x), timeout=5.0)
     nodes = list(run.state_dict()["nodes"])
 print(f"keyword: nodes {nodes}, y = {y}")
 assert nodes == ["enc.scale", "dec.scale"]
@@ -59,13 +56,8 @@ assert torch.equal(y, 6 * x)
 # By position: two independent networks in one run.
 first, second = Stage(2.0), Stage(3.0)
 with mujou.run(first, second, inputs={first.prev: x, second.prev: x}) as run:
-    # Follow one output and read the other at each of its messages.
-    for y2, _ in run.subscribe(second.next, timeout=5.0):
-        y1, _ = run.read(first.next)
-        if torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x):
-            break
-    else:
-        raise RuntimeError("the run stopped before the outputs arrived")
+    y1, _ = run.wait_for(first.next, lambda y: torch.equal(y, 2 * x), timeout=5.0)
+    y2, _ = run.wait_for(second.next, lambda y: torch.equal(y, 3 * x), timeout=5.0)
     nodes = list(run.state_dict()["nodes"])
 print(f"position: nodes {nodes}, y1 = {y1}, y2 = {y2}")
 assert nodes == ["0.scale", "1.scale"]

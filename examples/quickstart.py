@@ -61,14 +61,9 @@ x = torch.tensor([1.0, 2.0, 3.0])
 # The nodes run on threads of their own until the end of the `with` block.
 with mujou.run(net) as run:
     run.write({net.prev: x})  # the unconnected input port of scale
-    # x takes a few updates to pass through the nodes, and how many fit in a given
-    # time depends on how the threads get scheduled: follow the output until y
-    # arrives. After 5 s of real time the loop raises TimeoutError instead.
-    for y, t in run.subscribe(net.next, timeout=5.0):  # each message, with its time
-        if torch.equal(y, 2 * x + 1):
-            break
-    else:  # the loop ended without break: the run stopped before y arrived
-        raise RuntimeError("the run stopped before the output arrived")
+    # x takes a few updates to pass through the nodes: wait until y arrives, with
+    # the time it was sent (TimeoutError after 5 s of real time).
+    y, t = run.wait_for(net.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
 
 print(f"y = {y} at t = {float(t):.3f} s")
 assert torch.equal(y, 2 * x + 1)

@@ -5,12 +5,12 @@
 ## The basic form
 
 ```python
---8<-- "examples/quickstart.py:59:73"
+--8<-- "examples/quickstart.py:59:68"
 ```
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
 2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
-3. The host writes input with `write` and reads output with `read` or `subscribe`. The example above follows the output with `subscribe` until the expected value arrives, and gives up with `TimeoutError` after 5 seconds of real time (see "Reading output" below). To show an input for a set time, write it as in "Showing an input for a set time" below
+3. The host writes input with `write` and reads output with `read` or `subscribe`. The example above waits with `wait_for` until the expected value arrives, and gives up with `TimeoutError` after 5 seconds of real time (see "Reading output" below). To show an input for a set time, write it as in "Showing an input for a set time" below
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
 `mujou.run` takes the following arguments.
@@ -62,12 +62,13 @@ The output catches up with a change of input after a delay. The network's dynami
 
 There are two ways to read output.
 
-| Way                   | What it returns                                                                | Suited for                                  |
-| --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
-| `run.read(port)`      | The latest value at that moment and the time it was sent, `(value, Timestamp)` | The host reads whenever it suits it         |
-| `run.subscribe(port)` | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
+| Way                             | What it returns                                                                | Suited for                                  |
+| ------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
+| `run.read(port)`                | The latest value at that moment and the time it was sent, `(value, Timestamp)` | The host reads whenever it suits it         |
+| `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
+| `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-Both read from any port that has a send type. Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
+All of them read from any port that has a send type. Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
 `read` behaves as follows.
 
@@ -83,14 +84,10 @@ Both read from any port that has a send type. Reading an unconnected port gives 
 
 Only the host waits; the sending node does not wait for the host. Without a `timeout`, the iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it.
 
-To wait until an output arrives, give a `timeout` and `break` when the value has arrived. After the loop, the variables hold the value that arrived. The `else` block runs only if the loop ends without `break`, that is, if the run stops first.
+To wait until an expected output arrives, use `wait_for`. It checks the latest value first, then each newer one, and returns the first that meets the condition. After `timeout` seconds of real time it raises `TimeoutError` (the run keeps running); if the run stops first, it raises `RuntimeError`.
 
 ```python
-for y, t in run.subscribe(net.next, timeout=5.0):
-    if torch.equal(y, expected):
-        break                   # y has arrived
-else:
-    raise RuntimeError("the run stopped before y arrived")
+y, t = run.wait_for(net.next, lambda y: torch.equal(y, expected), timeout=5.0)
 ```
 
 ```python

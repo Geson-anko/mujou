@@ -1,7 +1,7 @@
 """Running networks: ``mujou.run`` and the ``Run`` it returns (``specs/network.md``)."""
 
 import math
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Never, Self, cast
 
@@ -148,18 +148,7 @@ class Run:
         normally. Shut the run down before the program ends: a thread iterating
         here ends only with the run.
 
-        To wait until an output arrives, iterate with a ``timeout`` and break
-        when it has arrived (here with the node ``Error`` of the example of
-        ``Run``)::
-
-            node = Error()
-            x = torch.ones(2)
-            with mujou.run(node, inputs={node.prev: x}) as run:
-                for error, t in run.subscribe(node.next, timeout=5.0):
-                    if torch.equal(error, x):
-                        break  # TimeoutError instead if it takes over 5 s
-                else:  # the loop ended without break: the run stopped first
-                    raise RuntimeError("the run stopped before the output")
+        To wait for one message that meets a condition, use ``wait_for``.
 
         Args:
             port: The port to follow.
@@ -177,6 +166,48 @@ class Run:
                 iterator).
         """
         return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port, timeout))
+
+    def wait_for[S](
+        self,
+        port: Port[S, Any, Any],
+        condition: Callable[[S], bool],
+        *,
+        timeout: float = math.inf,
+    ) -> tuple[S, Timestamp]:
+        """Wait until ``port`` sends a message that meets ``condition``, and return
+        it with its time.
+
+        Checks the latest message first, then each newer one as ``subscribe``
+        yields them (messages sent in between are skipped). Only the host waits:
+        the nodes never do. Here with the node ``Error`` of the example of
+        ``Run``::
+
+            node = Error()
+            x = torch.ones(2)
+            with mujou.run(node, inputs={node.prev: x}) as run:
+                error, t = run.wait_for(
+                    node.next, lambda e: torch.equal(e, x), timeout=5.0
+                )
+
+        Args:
+            port: The port to follow.
+            condition: Called on each message on the host's thread; ``True``
+                ends the wait.
+            timeout: Real seconds, counted from this call, to wait at most.
+                ``math.inf`` waits as long as the run runs.
+
+        Raises:
+            ValueError: As ``subscribe`` raises.
+            TimeoutError: ``timeout`` passed first. The run keeps running.
+            RuntimeError: The run shut down normally first.
+            NetworkError: The run stopped because a node raised.
+        """
+        for message, time in self.subscribe(port, timeout=timeout):
+            if condition(message):
+                return message, time
+        raise RuntimeError(
+            "the run shut down before the port sent a message that meets the condition"
+        )
 
     def state_dict(self) -> dict[str, Any]:
         """Copy the state of the run at one time, while it runs or after it ended

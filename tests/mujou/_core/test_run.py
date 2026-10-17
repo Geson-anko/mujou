@@ -808,6 +808,49 @@ class TestSubscribe:
                 run.subscribe(net.next, timeout=timeout)
 
 
+class TestWaitFor:
+    def test_returns_the_first_message_that_meets_the_condition(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        run.write({net.prev: u(1)})
+        seen: list[torch.Tensor] = []
+
+        def condition(out: torch.Tensor) -> bool:
+            seen.append(out)
+            if len(seen) < 3:
+                step(run, virtual)  # a newer message for the next check
+                return False
+            return True
+
+        out, t = run.wait_for(net.next, condition, timeout=60.0)
+        # The latest message first (zeros), then each newer one.
+        assert torch.equal(seen[0], torch.zeros(2, dtype=F64))
+        assert len(seen) == 3
+        assert torch.equal(out, net.b.x) and t == virtual.now()
+
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(TimeoutError):
+            run.wait_for(net.next, lambda _: False, timeout=0.05)
+        run.write({net.prev: u(1)})
+        step(run, virtual)
+        assert torch.equal(run.read(net.next)[0], net.b.x)
+
+    def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        stopper = threading.Timer(0.05, run.shutdown)
+        stopper.start()
+        with pytest.raises(RuntimeError, match="shut down before"):
+            run.wait_for(net.next, lambda _: False)
+        stopper.join()
+
+
 class TestStateDict:
     def test_after_a_normal_end_is_the_state_at_the_end(
         self, virtual: VirtualTimer, start_manual: StartManual
