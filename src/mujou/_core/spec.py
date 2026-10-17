@@ -36,14 +36,14 @@ DLPACK_DTYPES: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyT
 # The message type, declared invariant: the inferred variance of a PEP 695
 # parameter would be covariant, and a port's ``initial`` (of type ``S``) could then
 # widen the message type solved from its ``send`` spec.
-M = TypeVar("M")
+_M = TypeVar("_M")
 
 
-class MessageSpec(ABC, Generic[M]):
-    """The spec of a message of type ``M``: its shape, dtype and initial value."""
+class MessageSpec(ABC, Generic[_M]):
+    """The spec of a message of type ``_M``: its shape, dtype and initial value."""
 
     @abstractmethod
-    def zeros(self, *, device: torch.device | str = "cpu") -> M:
+    def zeros(self, *, device: torch.device | str = "cpu") -> _M:
         """Return a message filled with zeros on ``device``.
 
         On the CPU, this is the default initial value that a port receives before
@@ -51,7 +51,7 @@ class MessageSpec(ABC, Generic[M]):
         """
 
     @abstractmethod
-    def empty(self, *, device: torch.device | str = "cpu") -> M:
+    def empty(self, *, device: torch.device | str = "cpu") -> _M:
         """Return a message on ``device`` whose values are not set.
 
         Set them before use, in place (``fill_`` and the like).
@@ -350,6 +350,22 @@ def split(spec: Spec, msg: object, *, where: str) -> list[torch.Tensor]:
     return [
         _check_tensor(s, values[k], f"{where}[{k!r}]") for k, s in spec.specs.items()
     ]
+
+
+def host_tensors(
+    spec: Spec, msg: object, *, where: str, copy: bool = False
+) -> list[torch.Tensor]:
+    """Check ``msg`` against ``spec`` (as ``split``), cut the gradients and return
+    its tensors in host memory, for the core to copy.
+
+    ``copy`` makes new tensors even of those already in host memory, for a value
+    kept beyond the call. A CUDA tensor is copied on the calling thread's current
+    stream (a node's own, in its hooks), and only that stream is synchronized.
+
+    Raises:
+        TypeError, ValueError: As ``split``.
+    """
+    return [t.detach().to("cpu", copy=copy) for t in split(spec, msg, where=where)]
 
 
 def join(
