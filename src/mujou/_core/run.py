@@ -256,11 +256,6 @@ class Run:
         ``/in`` what the host wrote. A node run alone is the root: it is keyed
         ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
-        The tensors of the tree stay on their nodes' devices. MPS cannot be used
-        from two threads at once: use MPS tensors of the tree on the host only
-        while no node on MPS runs, and call this after the end only while no
-        other run's node on MPS runs (it copies on this thread then).
-
         Raises:
             RuntimeError: This is called from a node's hook.
             PauseTimeoutError: A node did not pause within ``pause_timeout``; the
@@ -421,9 +416,8 @@ def run[P: Port[Any, Any, Any]](
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) raise; ``pause_timeout`` is not finite
             and > 0; ``state`` does not match the networks, or the timer it would
-            set back has another run on it; or the run would have a second node
-            on MPS, counting the runs still running. Nothing has started: the
-            same networks, given the same way, may run once the cause is gone.
+            set back has another run on it. Nothing has started: the same
+            networks, given the same way, may run once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(
