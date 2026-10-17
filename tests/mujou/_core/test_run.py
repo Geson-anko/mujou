@@ -321,8 +321,9 @@ class TestRunANode:
         with pytest.raises(ValueError, match="shape"):
             start_manual(node, inputs={node.prev: torch.zeros(3, dtype=F64)})
         assert not node.started
-        start_manual(node, inputs={node.prev: u(1)})
+        run = start_manual(Solo(node), inputs={node.prev: u(1)})  # in another way
         assert node.started
+        assert set(run.state_dict()["nodes"]) == {"node"}
 
     def test_mixes_with_networks(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -331,10 +332,15 @@ class TestRunANode:
         net.connect(node)
         run = start_manual(net, node, inputs={net.prev: u(1)})
         assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1"}
+        a = b = n = torch.zeros(2, dtype=F64)
         for _ in range(3):
             step(run, virtual, net.a, net.b, node)
+            # In the order of the steps, each reads the value just sent before it.
+            a = euler(a, u(1))
+            b = euler(b, a)
+            n = euler(n, b)
         y, _ = run.read(node.next)
-        assert not torch.equal(y, torch.zeros(2, dtype=F64))
+        assert torch.equal(y, n)
 
 
 class TestWith:
@@ -500,6 +506,16 @@ class TestWrite:
         step(run, virtual)
         (received_ns, _) = run.read(echo.next)
         assert int(received_ns) == written_at.ns
+
+    def test_of_nothing_returns_the_time_and_changes_nothing(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Pair()
+        run = start_manual(node, inputs={node.x: u(1)})
+        virtual.advance(H)
+        assert run.write({}) == Timestamp(ns=H_NS)
+        slot = run.state_dict()["slots"]["0.x/in"]
+        assert torch.equal(slot[0], u(1)) and slot[1] == 0
 
     def test_is_stamped_after_the_inputs(
         self, virtual: VirtualTimer, start_manual: StartManual
