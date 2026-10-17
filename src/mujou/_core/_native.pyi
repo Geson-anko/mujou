@@ -170,10 +170,11 @@ class Node:
 
     The runtime calls the hooks on the node's own thread (`state_dict`, through
     `_capture_state`, on the control thread while the node is paused). They do
-    nothing by default. The hooks other than `on_thread_start`, `on_start` and
-    `load_state_dict` are looked up once, after those three, so replacing one
-    there takes effect. `state_dict` itself is looked up by the default
-    `_capture_state` at each capture, so replacing it later takes effect too.
+    nothing by default. The hooks other than `_on_thread_start`,
+    `on_thread_start`, `on_start` and `load_state_dict` are looked up once, after
+    those four, so replacing one there takes effect. `state_dict` itself is
+    looked up by the default `_capture_state` at each capture, so replacing it
+    later takes effect too.
     """
     def __new__(cls, /, *_args: Any, **_kwargs: Any) -> Self:
         """
@@ -191,6 +192,18 @@ class Node:
         control thread, while the node is paused), for the framework's work
         around it. Returns `self.state_dict()` by default.
         """
+    def _on_thread_start(self, /) -> None:
+        """
+        Called on the node's thread first, before `on_thread_start`, for the
+        framework's per-thread settings (so that no override of a public hook
+        can skip them).
+        """
+    def _restore_state(self, /, state: "object") -> None:
+        """
+        Called instead of `load_state_dict` when the runtime restores the state
+        (on the node's thread, after `on_start`), for the framework's work around
+        it. Calls `self.load_state_dict(state)` by default.
+        """
     def load_state_dict(self, /, state: "object") -> None: ...
     def on_exception(self, /) -> None: ...
     def on_pause(self, /) -> None: ...
@@ -199,9 +212,8 @@ class Node:
     def on_stop(self, /) -> None: ...
     def on_thread_start(self, /) -> None:
         """
-        Called on the node's thread right before `on_start`, for per-thread
-        settings. A subclass that overrides it calls the base's first, so that
-        the base's settings are not skipped.
+        Called on the node's thread right before `on_start`, after the
+        framework's own per-thread settings, for the node's per-thread settings.
         """
     def on_update(self, /, dt: "float") -> None: ...
     def state_dict(self, /) -> "object": ...

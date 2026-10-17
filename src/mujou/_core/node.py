@@ -19,18 +19,19 @@ class Node(_native.Node, Component):
     attributes; put them side by side in a ``Network`` instead.
 
     Override the lifecycle hooks below; each does nothing by default, except
-    ``on_thread_start``, ``state_dict`` and ``load_state_dict``. The framework
-    calls them on the node's own thread, except ``state_dict``:
+    ``state_dict`` and ``load_state_dict``. The framework calls them on the
+    node's own thread, except ``state_dict``:
 
-    - ``on_thread_start()``: once, right before ``on_start``. It sets up the
-      thread (see below); an override must call ``super().on_thread_start()``
-      first, or the node runs without those settings.
+    - ``on_thread_start()``: once, right before ``on_start``, after the
+      framework has set up the thread (see below). Make the node's own
+      per-thread settings here; there is no need to call ``super()``.
     - ``on_start()``: once, when the network runs (also when it was restored).
       Allocate and initialize the state here.
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned. By default it copies the state into the
-      collected tensors and modules (see below).
+      collected tensors and modules (see below). When ``device`` is CUDA, the
+      framework waits for the node's stream after it.
     - ``on_update(dt)``: repeatedly. ``dt`` is the global time in seconds since
       the node's last update. Read the ports with ``recv``, update in proportion
       to ``dt``, and write the ports with ``send``. It never waits for other nodes.
@@ -67,12 +68,12 @@ class Node(_native.Node, Component):
     computation and ``backward`` in ``with torch.enable_grad():`` marked
     ``# mujou: local-autograd``), creates
     ``generator`` from ``seed``, and, when ``device`` is CUDA, makes the device
-    and a stream of the node's own current. It does this in ``on_thread_start``,
-    so overriding ``on_start`` does not skip it. When ``device`` is CUDA it also
-    waits for that stream after each ``on_update`` and around ``state_dict``, in
-    hooks of its own, ``_after_update`` and ``_capture_state``, which subclasses
-    must not override. So overriding ``on_update`` or ``state_dict`` does not
-    skip it.
+    and a stream of the node's own current. When ``device`` is CUDA it also
+    waits for that stream after each ``on_update``, after ``load_state_dict`` and
+    around ``state_dict``. It does all this in hooks of its own,
+    ``_on_thread_start``, ``_after_update``, ``_restore_state`` and
+    ``_capture_state``, which subclasses must not override. So overriding a
+    public hook never skips it.
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU and seeds its generator nondeterministically.
@@ -254,14 +255,7 @@ class Node(_native.Node, Component):
                     value.load_state_dict(cast(Mapping[str, object], tree[name]))
 
     @override
-    def on_thread_start(self) -> None:
-        """Set up the node's thread: turn off gradient recording, create
-        ``generator`` and, on CUDA, make the device and the node's own stream
-        current.
-
-        An override must call ``super().on_thread_start()`` first: without it the
-        node records gradients, has no ``generator`` and cannot use its ports.
-        """
+    def _on_thread_start(self) -> None:
         # Every setting here is per thread, so it does not touch other nodes.
         torch.set_grad_enabled(False)
         if self._device.type == "cuda":
@@ -283,6 +277,14 @@ class Node(_native.Node, Component):
     def _after_update(self) -> None:
         # The CPU never runs ahead of the GPU. (Other hooks may still leave work on
         # the stream; _capture_state waits for it before taking the state.)
+        if self._stream is not None:
+            self._stream.synchronize()
+
+    @override
+    def _restore_state(self, state: object) -> None:
+        self.load_state_dict(state)
+        # The copies queue on the node's stream; wait for them, so that the host
+        # may drop the tree it passed (whose memory they read) once run returns.
         if self._stream is not None:
             self._stream.synchronize()
 

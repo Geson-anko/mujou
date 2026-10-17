@@ -235,6 +235,9 @@ class Session:
                     timer_state=self._timer_state,
                     pause_timeout=pause_timeout,
                 )
+                # Every node has copied its state in (and waited for its stream),
+                # so the tree need not stay in memory for the run.
+                self._states = None
             except _native.NetworkError:
                 raise  # a node raised while starting: this run is over
             except Exception:

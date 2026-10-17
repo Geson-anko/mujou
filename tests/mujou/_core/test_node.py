@@ -116,31 +116,44 @@ class TestDevice:
 
 
 class OwnSetup(Probe):
-    """Overrides ``on_thread_start`` and calls the base first."""
+    """Overrides ``on_thread_start`` without calling the base, and tries a host
+    method of its network there."""
+
+    def __init__(self, seed: int) -> None:
+        super().__init__(seed=seed)
+        self.networks: list[Network] = []  # A list: build does not walk it.
+        self.host_error: str | None = None
 
     @override
     def on_thread_start(self) -> None:
-        super().on_thread_start()
         self.grad_at_thread_start = torch.is_grad_enabled()
         self.draws_at_thread_start = torch.rand(3, generator=self.generator)
+        self.ident_at_thread_start = thread_ident(self)
+        try:
+            self.networks[0].read(self.out)
+        except RuntimeError as e:
+            self.host_error = str(e)
 
 
 class TestOnThreadStart:
-    def test_an_override_that_calls_the_base_keeps_the_settings(
+    def test_runs_after_the_settings_without_calling_the_base(
         self, run_network: RunNetwork
     ):
         node = OwnSetup(seed=7)
-        run_network(Solo(node), _manual=True)
+        net = Solo(node)
+        node.networks.append(net)
+        run_network(net, _manual=True)
         assert node.grad_at_thread_start is False
         assert node.grad_enabled is False
         generator = torch.Generator().manual_seed(7)
-        assert torch.equal(
-            node.draws_at_thread_start, torch.rand(3, generator=generator)
-        )
+        expected = torch.rand(3, generator=generator)
+        assert torch.equal(node.draws_at_thread_start, expected)
         # on_start draws next from the same generator.
         assert node.draws is not None
         assert torch.equal(node.draws, torch.rand(3, generator=generator))
-        assert thread_ident(node) == node.ident
+        assert node.ident_at_thread_start == node.ident == thread_ident(node)
+        # The guard against the host methods holds in it too.
+        assert node.host_error is not None and "host methods" in node.host_error
 
 
 class Stateful(Node):

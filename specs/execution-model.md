@@ -213,7 +213,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 ノードの実行と制御はコア（Rust の `mujou_core::runtime`、Python からは private な `mujou._core._native.Runtime`）にあり、`mujou.Network` がそれを使う。ネットワークのメソッドの一覧は [ネットワーク](network.md#実装) にある。
 
 - ノードはそれぞれ専用のスレッドで動く。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
-- `run()` は、タイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
+- `run()` は、タイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `_on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_thread_start` → `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
 - `Network.state_dict()` が返す木は次の形で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする
 
 ```python
