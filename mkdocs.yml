@@ -25,23 +25,31 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: indigo
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: indigo
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   icon:
+    logo: material/infinity
     repo: fontawesome/brands/github
+  favicon: assets/favicon.svg
 
 markdown_extensions:
   - admonition
+  # Grid cards on the landing pages: <div class="grid cards" markdown>.
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.details
   - pymdownx.superfences:
       custom_fences:
@@ -178,6 +186,9 @@ nav:
       - Types: api/typing.md
       - Errors: api/errors.md
       - Testing: api/testing.md
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - javascripts/mathjax.js
