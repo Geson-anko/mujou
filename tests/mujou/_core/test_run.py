@@ -829,6 +829,12 @@ class TestWaitFor:
         assert len(seen) == 3
         assert torch.equal(out, net.b.x) and t == virtual.now()
 
+    def test_names_itself_when_it_times_out(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(TimeoutError, match="condition of wait_for within 0.05 s"):
+            run.wait_for(net.next, lambda _: False, timeout=0.05)
+
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
