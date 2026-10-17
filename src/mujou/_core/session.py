@@ -140,31 +140,34 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
-        self._check_one_node_devices()
-        periods = [checked_period(node) for node in self._nodes]
-        restored = None if state is None else self._restore(state)
-        if inputs:
-            items = self._items(inputs)
-            if restored is None:
-                self._group.write(items)
-            else:
-                # The values belong to the restored time T, not to the timer's
-                # time now. Nobody reads yet, so restoring each slot (after
-                # checking them all above) switches them together.
-                time_ns = int(restored["timer_state"]["time_ns"])
-                for slot, tensors in items:
-                    slot.restore(tensors, time_ns)
-        runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
-        self._runtime = runtime
-        for session in lifetime.running(Session):
-            session._settle()
-        lifetime.add(self)
-        for node in self._nodes:
-            set_timer(node, self._view)
-        # What this thread queued for the nodes (tensors made in __init__ or by
-        # the restore) is done before their streams use it.
-        self._synchronize_current_streams()
+        # Count and register under one lock: two runs started at once on other
+        # threads must not both pass the check before either counts.
+        with _START_LOCK:
+            for session in lifetime.running(Session):
+                session._settle()  # a run that has ended no longer counts
+            self._check_one_node_devices()
+            lifetime.add(self)
         try:
+            periods = [checked_period(node) for node in self._nodes]
+            restored = None if state is None else self._restore(state)
+            if inputs:
+                items = self._items(inputs)
+                if restored is None:
+                    self._group.write(items)
+                else:
+                    # The values belong to the restored time T, not to the timer's
+                    # time now. Nobody reads yet, so restoring each slot (after
+                    # checking them all above) switches them together.
+                    time_ns = int(restored["timer_state"]["time_ns"])
+                    for slot, tensors in items:
+                        slot.restore(tensors, time_ns)
+            runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
+            self._runtime = runtime
+            for node in self._nodes:
+                set_timer(node, self._view)
+            # What this thread queued for the nodes (tensors made in __init__ or by
+            # the restore) is done before their streams use it.
+            self._synchronize_current_streams()
             runtime.start(
                 manual=manual,
                 pause_timeout=pause_timeout,
@@ -193,9 +196,7 @@ class Session:
 
     def _check_one_node_devices(self) -> None:
         """Refuse a second node on a device type of ``_ONE_NODE_DEVICES``, counting
-        the nodes of this run and of every run still running."""
-        for session in lifetime.running(Session):
-            session._settle()  # a run that has ended no longer counts
+        the nodes of this run and of every run kept (started, or starting)."""
         for kind in _ONE_NODE_DEVICES:
             users = [
                 f"{name!r}"
@@ -510,3 +511,5 @@ def _wait(timeout: float) -> float | None:
 # node computes on its own thread, so at most one node of all the running runs may
 # compute on such a device.
 _ONE_NODE_DEVICES: Final = ("mps",)
+# Held while a run is counted on _ONE_NODE_DEVICES and registered in lifetime.
+_START_LOCK: Final = threading.Lock()
