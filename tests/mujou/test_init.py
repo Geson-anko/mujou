@@ -18,6 +18,7 @@ class TestPublicNames:
             "Port",
             "PrevPort",
             "Run",
+            "StateDict",
             "TensorSpec",
             "__version__",
             "run",

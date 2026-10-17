@@ -27,7 +27,7 @@ from mujou._core.node import (
 )
 from mujou._core.port import Channel, bind, initial, label
 from mujou._core.spec import Spec, fields, host_tensors
-from mujou._core.state import make_tree, read_tree
+from mujou._core.state import StateDict, make_tree, read_tree
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
 
 # Real seconds between the checks of `subscribe` for the end of the run.
@@ -433,7 +433,7 @@ class Session:
 
     # --- state
 
-    def state_dict(self) -> dict[str, Any]:
+    def state_dict(self) -> StateDict:
         runtime = self._started()
         finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
@@ -455,7 +455,7 @@ class Session:
         self._settle()
         return self._ended_tree(runtime)
 
-    def _ended_tree(self, runtime: _native.Runtime) -> dict[str, Any]:
+    def _ended_tree(self, runtime: _native.Runtime) -> StateDict:
         """Take the state of a run that has ended normally, on this thread.
 
         The nodes' threads are gone, so this thread calls their ``state_dict``
@@ -497,7 +497,7 @@ class Session:
         states: Sequence[object],
         last_update_ns: Sequence[int],
         timer: Mapping[str, int | float],
-    ) -> dict[str, Any]:
+    ) -> StateDict:
         """Copy the state of the paused or ended network into a tree
         (``state_dict``).
 
