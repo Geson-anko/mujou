@@ -1,0 +1,11 @@
+[package]
+name = "mujou-stubgen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+# Must match the pyo3 version of mujou-python, which writes the data it reads.
+pyo3-introspection = "=0.30.1"

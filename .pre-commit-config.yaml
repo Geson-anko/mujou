@@ -107,3 +107,14 @@ repos:
       - id: python-check-blanket-type-ignore
       - id: python-no-log-warn
       - id: python-use-type-annotations
+
+  # The type stub of the native extension, generated from the Rust sources.
+  # Fails (as a hook that changed files) when the committed stub is stale.
+  - repo: local
+    hooks:
+      - id: mujou-stub
+        name: just stub (src/mujou/_core.pyi)
+        entry: just stub
+        language: system
+        files: ^(Cargo\.(toml|lock)|crates/|pyproject\.toml$|src/mujou/_core\.pyi$)
+        pass_filenames: false

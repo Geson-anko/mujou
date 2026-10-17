@@ -13,6 +13,7 @@ from mujou._core import (
     Node,
     PauseTimeoutError,
     Runtime,
+    Timer,
     timer,
 )
 
@@ -915,3 +916,65 @@ class TestWaiting:
         thread.join(WAIT)
         assert runtime.is_finished
         assert not runtime.is_running
+
+
+class TestOwnTimer:
+    """A runtime given a timer measures Δt on it and freezes only it."""
+
+    @staticmethod
+    def own_timer() -> Timer:
+        t = Timer()
+        t.use_virtual_clock(True)
+        t.load_state_dict({"time_ns": 0, "scale": 1.0})
+        return t
+
+    def test_dt_is_measured_on_the_runtime_timer(self, virtual_timer: GlobalTimer):
+        own = self.own_timer()
+        node = Recorder("a", Log())
+        runtime = Runtime([node], ["a"], timer=own)
+        try:
+            runtime.start(manual=True)
+            virtual_timer.advance(5 * H)
+            own.advance(2 * H)
+            runtime.step()
+        finally:
+            runtime.shutdown()
+        assert node.dts == [2 * H_NS / 1e9]
+
+    def test_a_capture_does_not_pause_another_timer(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        own = self.own_timer()
+        runtime = Runtime(recorders(Log(), "a"), ["a"], timer=own)
+        other_node = Recorder("b", Log())
+        other = make_runtime([other_node])
+        other.start(manual=True)
+
+        def build(states: list[object]) -> tuple[bool, bool]:
+            # The runtime on the global timer keeps updating meanwhile.
+            virtual_timer.advance(H)
+            other.step()
+            return own.is_paused(), virtual_timer.is_paused()
+
+        try:
+            runtime.start()
+            paused = runtime.capture(build)
+        finally:
+            runtime.shutdown()
+        assert paused == (True, False)
+        assert other_node.dts == [H]
+
+    def test_another_timer_can_be_restored_while_the_global_one_runs(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        running = make_runtime(recorders(Log(), "a"))
+        running.start()
+        before = virtual_timer.time_ns()
+        own = self.own_timer()
+        restored = Runtime(recorders(Log(), "b"), ["b"], timer=own)
+        try:
+            restored.start(timer_state={"time_ns": 7 * H_NS, "scale": 1.0})
+        finally:
+            restored.shutdown()
+        assert own.time_ns() == 7 * H_NS
+        assert virtual_timer.time_ns() == before

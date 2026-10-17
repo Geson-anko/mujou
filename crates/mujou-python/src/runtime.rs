@@ -15,14 +15,20 @@ use mujou_core::runtime::{
     self as core, ExceptionCapture, HookError, NodeFailure, NodeHooks, Reply, RuntimeConfig,
     RuntimeError,
 };
-use mujou_core::time::{self, TimerState, seconds_to_ns};
+use mujou_core::time::{Timer, seconds_to_ns};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTimeoutError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
-use crate::{SIGNAL_CHECK_INTERVAL, to_py_err as timer_error};
+use crate::hint::Build;
+use crate::time::{PyTimer, extract_state, timer_or_global};
+use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
 
+// pyo3 does not introspect these, so `crates/mujou-stubgen` adds them to the
+// stub with the same docstrings. They cannot be classes: pyo3 0.30 declares
+// `PyTimeoutError` with the layout of `BaseException`, smaller than that of
+// `TimeoutError`, so a class extending it fails to initialize.
 create_exception!(
     mujou._core,
     NetworkError,
@@ -36,8 +42,14 @@ create_exception!(
     "Some nodes did not pause in time, so the state was not taken. The network keeps running."
 );
 
-/// The base of every node. The hooks do nothing by default; the runtime calls
-/// them by name, so a subclass overrides the ones it needs.
+/// The base of every node.
+///
+/// The runtime calls the hooks on the node's own thread (`state_dict`, through
+/// `_capture_state`, on the control thread while the node is paused). They do
+/// nothing by default. The hooks other than `_on_thread_start`, `on_start` and
+/// `load_state_dict` are looked up once, after those three, so replacing one
+/// there takes effect. `state_dict` itself is looked up by the default
+/// `_capture_state` at each capture, so replacing it later takes effect too.
 #[pyclass(subclass, frozen, module = "mujou._core")]
 pub struct Node;
 
@@ -57,7 +69,10 @@ impl Node {
 
     fn on_start(&self) {}
 
-    fn on_update(&self, _dt: f64) {}
+    #[pyo3(signature = (dt: "float"))]
+    fn on_update(&self, dt: f64) {
+        let _ = dt;
+    }
 
     /// Called on the node's thread right after each `on_update`, for the
     /// framework's per-step work (so that overriding `on_update` cannot skip it).
@@ -71,15 +86,20 @@ impl Node {
 
     fn on_stop(&self) {}
 
+    #[pyo3(signature = () -> "object")]
     fn state_dict(&self, py: Python<'_>) -> Py<PyAny> {
         py.None()
     }
 
-    fn load_state_dict(&self, _state: &Bound<'_, PyAny>) {}
+    #[pyo3(signature = (state: "object"))]
+    fn load_state_dict(&self, state: &Bound<'_, PyAny>) {
+        let _ = state;
+    }
 
     /// Called instead of `state_dict` when the runtime takes the state (on the
     /// control thread, while the node is paused), for the framework's work
     /// around it. Returns `self.state_dict()` by default.
+    #[pyo3(signature = () -> "object")]
     fn _capture_state(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
         slf.call_method0("state_dict").map(Bound::unbind)
     }
@@ -320,6 +340,7 @@ pub struct Runtime {
     /// The nodes before `start`.
     pending: Mutex<Option<Vec<Py<PyAny>>>>,
     names: Vec<String>,
+    timer: Arc<Timer>,
     inner: OnceLock<core::Runtime<PyNode>>,
     exception_state: Arc<OnceLock<Py<PyAny>>>,
 }
@@ -375,8 +396,17 @@ impl Runtime {
 
 #[pymethods]
 impl Runtime {
+    /// The nodes run on `timer` (the global timer if `None`): it measures their
+    /// Δt, and the runtime freezes it to start, to take the state, and on an
+    /// exception. Create the `Outlet`s and the `InputGroup` of this run with
+    /// the same timer.
     #[new]
-    fn new(nodes: Vec<Bound<'_, Node>>, names: Vec<String>) -> PyResult<Self> {
+    #[pyo3(signature = (nodes, names, *, timer = None))]
+    fn new(
+        nodes: Vec<Bound<'_, Node>>,
+        names: Vec<String>,
+        timer: Option<PyRef<'_, PyTimer>>,
+    ) -> PyResult<Self> {
         if nodes.len() != names.len() {
             return Err(PyValueError::new_err(format!(
                 "got {} nodes but {} names",
@@ -388,6 +418,7 @@ impl Runtime {
         Ok(Self {
             pending: Mutex::new(Some(nodes)),
             names,
+            timer: timer_or_global(timer),
             inner: OnceLock::new(),
             exception_state: Arc::new(OnceLock::new()),
         })
@@ -399,6 +430,15 @@ impl Runtime {
     /// If an argument is invalid, raises `ValueError` and nothing starts, so
     /// `start` can be called again.
     ///
+    /// The timer is frozen first and loaded from `timer_state`
+    /// (`Timer.state_dict()`), so the time does not run while the nodes start.
+    /// Loading it raises `ValueError` while another runtime runs on the same
+    /// timer, whose time would jump. `last_update_ns` is where each node's
+    /// first Δt starts (the time at the start by default).
+    /// `on_exception_capture(states, node, hook, exception)` takes the states
+    /// (by node index, without those whose `state_dict` failed) when a node
+    /// raises.
+    ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
     #[pyo3(signature = (
@@ -406,7 +446,7 @@ impl Runtime {
         manual = false,
         states = None,
         last_update_ns = None,
-        timer_state = None,
+        timer_state: "dict[str, int | float] | None" = None,
         pause_timeout = 10.0,
         on_exception_capture = None,
     ))]
@@ -430,14 +470,7 @@ impl Runtime {
                 )));
             }
         }
-        let timer_state = timer_state
-            .map(|state| -> PyResult<TimerState> {
-                Ok(TimerState {
-                    time_ns: state.get_item("time_ns")?.extract()?,
-                    scale: state.get_item("scale")?.extract()?,
-                })
-            })
-            .transpose()?;
+        let timer_state = timer_state.as_ref().map(extract_state).transpose()?;
         let config = RuntimeConfig {
             manual,
             pause_timeout: duration(pause_timeout)?,
@@ -463,7 +496,7 @@ impl Runtime {
         let (runtime, started) = match core::Runtime::start(
             hooks,
             self.names.clone(),
-            time::global(),
+            Arc::clone(&self.timer),
             config,
             capture,
         ) {
@@ -497,13 +530,9 @@ impl Runtime {
     /// threads cannot see Ctrl-C. If `build` raises, the exception propagates
     /// and the network keeps running.
     #[pyo3(signature = (build, *, timeout = None))]
-    fn capture(
-        &self,
-        py: Python<'_>,
-        build: Py<PyAny>,
-        timeout: Option<f64>,
-    ) -> PyResult<Py<PyAny>> {
+    fn capture(&self, py: Python<'_>, build: Build, timeout: Option<f64>) -> PyResult<Py<PyAny>> {
         let timeout = timeout.map(duration).transpose()?;
+        let Build(build) = build;
         let reply = self.core()?.capture(timeout, move |states| {
             Python::attach(|py| {
                 let states = PyList::new(py, states)?;
@@ -566,7 +595,8 @@ impl Runtime {
         self.inner.get().is_some_and(core::Runtime::is_finished)
     }
 
-    /// The global time of each node's last update, in nanoseconds.
+    /// The time of each node's last update on the runtime's timer, in
+    /// nanoseconds.
     fn last_update_ns(&self) -> PyResult<Vec<u64>> {
         Ok(self.core()?.last_update_ns())
     }
@@ -575,13 +605,4 @@ impl Runtime {
     fn exception_state(&self, py: Python<'_>) -> Option<Py<PyAny>> {
         self.exception_state.get().map(|state| state.clone_ref(py))
     }
-}
-
-pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let py = m.py();
-    m.add_class::<Node>()?;
-    m.add_class::<Runtime>()?;
-    m.add("NetworkError", py.get_type::<NetworkError>())?;
-    m.add("PauseTimeoutError", py.get_type::<PauseTimeoutError>())?;
-    Ok(())
 }

@@ -1,22 +1,57 @@
-//! The global timer: the single time axis of the whole system.
+//! Timers: the time axes the nodes run on.
 //!
-//! Every node discretizes its dynamics with the elapsed time measured on this
-//! timer, so the time can be scaled, paused and restored without changing the
-//! dynamics (`specs/execution-model.md`). The time is held as nanoseconds (`u64`);
-//! seconds (`f64`) are derived from it. It starts at 0 when the timer is created
-//! and saturates at `u64::MAX` (about 584 years).
+//! Every node discretizes its dynamics with the elapsed time measured on the
+//! timer of its run, so the time can be scaled, paused and restored without
+//! changing the dynamics (`specs/execution-model.md`). A run uses the global
+//! timer ([`global`]) unless it is given a [`Timer`] of its own; systems that
+//! should not stop each other's time run on separate timers.
+//!
+//! The time is held as nanoseconds (`u64`); seconds (`f64`) are derived from it.
+//! It starts at 0 when the timer is created and saturates at `u64::MAX` (about
+//! 584 years).
 //!
 //! For deterministic tests the time source can be switched to a virtual clock
-//! that only moves when [`GlobalTimer::advance_ns`] is called.
+//! that only moves when [`Timer::advance_ns`] is called.
 
 use std::fmt;
-use std::sync::{Condvar, LazyLock, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-/// The process-wide timer.
-pub fn global() -> &'static GlobalTimer {
-    static TIMER: LazyLock<GlobalTimer> = LazyLock::new(GlobalTimer::new);
+/// The process-wide default timer, used by every run not given its own.
+pub fn global() -> &'static Arc<Timer> {
+    static TIMER: LazyLock<Arc<Timer>> = LazyLock::new(|| Arc::new(Timer::new()));
     &TIMER
+}
+
+/// A time on a timer, in nanoseconds since the timer's 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub const fn from_ns(ns: u64) -> Self {
+        Self(ns)
+    }
+
+    pub const fn as_ns(self) -> u64 {
+        self.0
+    }
+
+    pub fn as_secs_f64(self) -> f64 {
+        self.0 as f64 / 1e9
+    }
+
+    /// The whole seconds, rounded down.
+    pub const fn whole_secs(self) -> u64 {
+        self.0 / 1_000_000_000
+    }
+
+    /// `self - earlier`, or `None` if `earlier` is later.
+    pub const fn checked_sub(self, earlier: Self) -> Option<Self> {
+        match self.0.checked_sub(earlier.0) {
+            Some(ns) => Some(Self(ns)),
+            None => None,
+        }
+    }
 }
 
 /// What is needed to continue the time from where it was taken.
@@ -55,7 +90,7 @@ impl fmt::Display for TimerError {
 
 impl std::error::Error for TimerError {}
 
-/// How [`GlobalTimer::wait_until_ns_or`] returned.
+/// How [`Timer::wait_until_ns_or`] returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Wait {
     Reached,
@@ -79,7 +114,9 @@ fn check_scale(scale: f64) -> Result<(), TimerError> {
     }
 }
 
-pub struct GlobalTimer {
+/// A time axis that can be scaled, paused and restored. Shared as
+/// `Arc<Timer>` by everything that runs on it.
+pub struct Timer {
     state: Mutex<State>,
     /// Notified whenever the time may have jumped or its rate changed.
     changed: Condvar,
@@ -91,7 +128,7 @@ struct State {
     anchor_ns: u64,
     anchor_instant: Instant,
     scale: f64,
-    /// Paused by [`GlobalTimer::pause`].
+    /// Paused by [`Timer::pause`].
     paused: bool,
     /// The number of live [`PauseHold`]s.
     holds: usize,
@@ -127,13 +164,13 @@ impl State {
     }
 }
 
-impl Default for GlobalTimer {
+impl Default for Timer {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl GlobalTimer {
+impl Timer {
     /// A running timer on the real clock at time 0 and scale 1.
     pub fn new() -> Self {
         Self {
@@ -165,6 +202,10 @@ impl GlobalTimer {
         self.lock().now_ns()
     }
 
+    pub fn now(&self) -> Timestamp {
+        Timestamp(self.time_ns())
+    }
+
     pub fn time(&self) -> f64 {
         self.time_ns() as f64 / 1e9
     }
@@ -173,7 +214,7 @@ impl GlobalTimer {
         self.lock().scale
     }
 
-    /// Sets how many global seconds pass per real second.
+    /// Sets how many seconds of this timer pass per real second.
     pub fn set_scale(&self, scale: f64) -> Result<(), TimerError> {
         check_scale(scale)?;
         self.update(|s| {
@@ -183,7 +224,7 @@ impl GlobalTimer {
         Ok(())
     }
 
-    /// Freezes the time until [`GlobalTimer::resume`]. For the host and tests.
+    /// Freezes the time until [`Timer::resume`]. For the host and tests.
     ///
     /// This is one switch, not a count: pausing twice needs one resume. It is
     /// independent of the [`PauseHold`]s, so the time stays frozen while this
@@ -196,7 +237,7 @@ impl GlobalTimer {
         });
     }
 
-    /// Turns off the switch of [`GlobalTimer::pause`]. The time runs again from
+    /// Turns off the switch of [`Timer::pause`]. The time runs again from
     /// where it was frozen if no [`PauseHold`] is left.
     pub fn resume(&self) {
         self.update(|s| {
@@ -206,21 +247,23 @@ impl GlobalTimer {
     }
 
     /// Freezes the time until every hold taken so far is dropped (and the
-    /// switch of [`GlobalTimer::pause`] is off).
+    /// switch of [`Timer::pause`] is off).
     ///
     /// Each controller of a running system (a runtime pausing to take the state,
     /// or stopping on an exception) takes its own hold, so that ending one
-    /// freeze cannot let the time run during another one: the timer is a
-    /// singleton shared by every system in the process.
-    pub fn hold(&self) -> PauseHold<'_> {
+    /// freeze cannot let the time run during another one: several systems may
+    /// run on one timer (all on the global one by default).
+    pub fn hold(self: &Arc<Self>) -> PauseHold {
         self.update(|s| {
             s.reanchor();
             s.holds += 1;
         });
-        PauseHold { timer: self }
+        PauseHold {
+            timer: Arc::clone(self),
+        }
     }
 
-    /// Whether the time is frozen by [`GlobalTimer::pause`] or a hold. The
+    /// Whether the time is frozen by [`Timer::pause`] or a hold. The
     /// virtual clock alone does not count as paused.
     pub fn is_paused(&self) -> bool {
         self.lock().is_paused()
@@ -281,7 +324,7 @@ impl GlobalTimer {
     /// `timeout` of real time passes.
     ///
     /// `interrupted` is checked under the timer's lock, before every wait. A
-    /// waker that makes it true and then calls [`GlobalTimer::interrupt_waiters`]
+    /// waker that makes it true and then calls [`Timer::interrupt_waiters`]
     /// is therefore never missed: either the waiter sees the condition before it
     /// sleeps, or it is already sleeping when the notification comes. Because it
     /// runs under the timer's lock, `interrupted` must not take a lock that is
@@ -322,7 +365,7 @@ impl GlobalTimer {
         }
     }
 
-    /// Wakes every [`GlobalTimer::wait_until_ns_or`] so that it checks its
+    /// Wakes every [`Timer::wait_until_ns_or`] so that it checks its
     /// `interrupted` condition again.
     pub fn interrupt_waiters(&self) {
         // Taking the lock orders this after any waiter's check of its condition.
@@ -330,7 +373,7 @@ impl GlobalTimer {
         self.changed.notify_all();
     }
 
-    /// Blocks for `dt_ns` of global time. Waits through pauses.
+    /// Blocks for `dt_ns` of this timer's time. Waits through pauses.
     pub fn sleep_ns(&self, dt_ns: u64) {
         let target_ns = self.time_ns().saturating_add(dt_ns);
         while !self.wait_until_ns(target_ns, Duration::MAX) {}
@@ -339,11 +382,11 @@ impl GlobalTimer {
 
 /// A reason to keep the time frozen; dropping it removes the reason.
 #[must_use = "the time runs again as soon as the hold is dropped"]
-pub struct PauseHold<'a> {
-    timer: &'a GlobalTimer,
+pub struct PauseHold {
+    timer: Arc<Timer>,
 }
 
-impl Drop for PauseHold<'_> {
+impl Drop for PauseHold {
     fn drop(&mut self) {
         self.timer.update(|s| {
             s.reanchor();

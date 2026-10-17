@@ -24,7 +24,7 @@ use arc_swap::ArcSwap;
 
 pub use crate::dlpack::DLDataType as DType;
 use crate::dlpack::{format_dtype, format_shape};
-use crate::time::GlobalTimer;
+use crate::time::{Timer, Timestamp};
 
 /// One named tensor of a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -299,7 +299,7 @@ impl fmt::Debug for Buffer {
 }
 
 /// An immutable value of a slot: one buffer per field, in schema order, and the
-/// global time it was written at.
+/// time it was written at on the writer's timer.
 #[derive(Debug)]
 pub struct Message {
     buffers: Vec<Buffer>,
@@ -313,6 +313,10 @@ impl Message {
 
     pub fn time_ns(&self) -> u64 {
         self.time_ns
+    }
+
+    pub fn timestamp(&self) -> Timestamp {
+        Timestamp::from_ns(self.time_ns)
     }
 }
 
@@ -517,18 +521,19 @@ pub struct Outlet {
     messages: Arc<Messages>,
     outbox: Arc<Slot>,
     channels: Vec<Arc<Slot>>,
-    timer: &'static GlobalTimer,
+    timer: Arc<Timer>,
 }
 
 impl Outlet {
     /// Creates the outward slot `"{name}/out"` and the channel slots
     /// `"{name}/ch{k}"`, all holding zeros stamped with the current time.
-    pub fn new(
-        schema: Arc<Schema>,
-        channels: usize,
-        name: &str,
-        timer: &'static GlobalTimer,
-    ) -> Self {
+    /// Every message is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
+    pub fn new(schema: Arc<Schema>, channels: usize, name: &str, timer: Arc<Timer>) -> Self {
         let messages = Messages::new(schema);
         let zeros = messages.zeros(timer.time_ns());
         let slot =
@@ -594,7 +599,7 @@ pub struct InputGroup {
     /// Serializes writers (the host may write from several threads). Readers never
     /// take it.
     write_lock: Mutex<()>,
-    timer: &'static GlobalTimer,
+    timer: Arc<Timer>,
 }
 
 /// The value of an [`InputSlot`]: the current value, and the next value once its
@@ -622,7 +627,13 @@ pub struct InputSlot {
 }
 
 impl InputGroup {
-    pub fn new(timer: &'static GlobalTimer) -> Arc<Self> {
+    /// Every write is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
+    pub fn new(timer: Arc<Timer>) -> Arc<Self> {
         Arc::new(Self {
             version: AtomicU64::new(0),
             write_lock: Mutex::new(()),
@@ -746,8 +757,8 @@ mod tests {
         lanes: 1,
     };
 
-    fn timer() -> &'static GlobalTimer {
-        let timer = Box::leak(Box::new(GlobalTimer::new()));
+    fn timer() -> Arc<Timer> {
+        let timer = Arc::new(Timer::new());
         timer.use_virtual_clock(true);
         timer
             .load_state(TimerState {
@@ -828,7 +839,7 @@ mod tests {
     fn starts_with_zeros_at_creation_time() {
         let timer = timer();
         timer.advance_ns(5).unwrap();
-        let outlet = Outlet::new(pair_schema(), 1, "n.p", timer);
+        let outlet = Outlet::new(pair_schema(), 1, "n.p", Arc::clone(&timer));
         let msg = outlet.channel(0).load();
         assert_eq!(values(&msg), [0, 0]);
         assert_eq!(msg.time_ns(), 5);
@@ -839,7 +850,7 @@ mod tests {
     #[test]
     fn send_to_all_shares_one_message() {
         let timer = timer();
-        let outlet = Outlet::new(scalar_schema(), 3, "p", timer);
+        let outlet = Outlet::new(scalar_schema(), 3, "p", Arc::clone(&timer));
         timer.advance_ns(42).unwrap();
         outlet.send_with(Target::All, fill_k(7)).unwrap();
         let out = outlet.outbox().load();
@@ -973,7 +984,7 @@ mod tests {
     #[test]
     fn input_group_write_stamps_one_time() {
         let timer = timer();
-        let group = InputGroup::new(timer);
+        let group = InputGroup::new(Arc::clone(&timer));
         let (a, b) = (
             group.input(scalar_schema(), "a"),
             group.input(scalar_schema(), "b"),

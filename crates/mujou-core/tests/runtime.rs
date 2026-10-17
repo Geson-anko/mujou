@@ -6,7 +6,7 @@ use std::time::Duration;
 use mujou_core::runtime::{
     HookError, NodeFailure, NodeHooks, Runtime, RuntimeConfig, RuntimeError,
 };
-use mujou_core::time::GlobalTimer;
+use mujou_core::time::Timer;
 
 const H_NS: u64 = 1_000_000;
 
@@ -97,8 +97,8 @@ impl NodeHooks for Recorder {
 }
 
 /// A virtual timer of its own: `cargo test` runs the tests in parallel threads.
-fn virtual_timer() -> &'static GlobalTimer {
-    let timer = Box::leak(Box::new(GlobalTimer::new()));
+fn virtual_timer() -> Arc<Timer> {
+    let timer = Arc::new(Timer::new());
     timer.use_virtual_clock(true);
     timer
 }
@@ -147,7 +147,8 @@ mod manual_mode {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(3);
         let t0 = timer.time_ns();
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         for _ in 0..2 {
             timer.advance_ns(H_NS).unwrap();
@@ -175,7 +176,8 @@ mod manual_mode {
     fn a_step_without_time_passing_does_not_update() {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(1);
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         rt.step(None).wait().unwrap();
         rt.shutdown().wait().unwrap();
@@ -187,7 +189,7 @@ mod manual_mode {
         let timer = virtual_timer();
         let Setup { nodes, names, .. } = recorders(1);
         let config = RuntimeConfig::default();
-        let (rt, started) = Runtime::start(nodes, names, timer, config, None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config, None).unwrap();
         started.wait().unwrap();
         assert!(matches!(rt.step(None).wait(), Err(RuntimeError::NotManual)));
         rt.shutdown().wait().unwrap();
@@ -201,12 +203,14 @@ mod capture {
     fn builds_from_every_state_while_the_time_is_frozen() {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(2);
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         timer.advance_ns(H_NS).unwrap();
         rt.step(None).wait().unwrap();
+        let frozen = Arc::clone(&timer);
         let (states, paused) = rt
-            .capture(None, move |states| (states, timer.is_paused()))
+            .capture(None, move |states| (states, frozen.is_paused()))
             .wait()
             .unwrap();
         assert_eq!(states, vec![1, 1]);
@@ -246,7 +250,8 @@ mod failure {
             names,
         } = recorders(3);
         nodes[1].fail_on_update = Some(3);
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         let mut result = Ok(());
         for _ in 0..3 {
@@ -278,7 +283,8 @@ mod failure {
             names,
         } = recorders(2);
         nodes[0].panic_on_update = Some(1);
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         timer.advance_ns(H_NS).unwrap();
         let result = rt.step(None).wait();
@@ -303,11 +309,13 @@ mod failure {
         let captured: Arc<Mutex<Option<Captured>>> = Arc::default();
         let capture = {
             let captured = Arc::clone(&captured);
+            let frozen = Arc::clone(&timer);
             Box::new(move |states, failure: &NodeFailure| {
-                *captured.lock().unwrap() = Some((states, failure.node, timer.is_paused()));
+                *captured.lock().unwrap() = Some((states, failure.node, frozen.is_paused()));
             })
         };
-        let (rt, started) = Runtime::start(nodes, names, timer, manual(), Some(capture)).unwrap();
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), Some(capture)).unwrap();
         started.wait().unwrap();
         for _ in 0..2 {
             timer.advance_ns(H_NS).unwrap();
@@ -340,12 +348,13 @@ mod restore {
     fn the_time_is_not_restored_under_a_running_runtime() {
         let timer = virtual_timer();
         let Setup { nodes, names, .. } = recorders(1);
-        let (running, started) = Runtime::start(nodes, names, timer, manual(), None).unwrap();
+        let (running, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
         started.wait().unwrap();
         let before = timer.time_ns();
 
         let Setup { log, nodes, names } = recorders(1);
-        let result = Runtime::start(nodes, names, timer, restoring(), None);
+        let result = Runtime::start(nodes, names, Arc::clone(&timer), restoring(), None);
         assert!(matches!(result, Err(RuntimeError::InvalidArgument(_))));
         // Nothing started, and the running runtime's time did not move.
         assert!(log.lock().unwrap().is_empty());
@@ -355,9 +364,129 @@ mod restore {
         // Once it has finished, the time can be restored.
         running.shutdown().wait().unwrap();
         let Setup { nodes, names, .. } = recorders(1);
-        let (restored, started) = Runtime::start(nodes, names, timer, restoring(), None).unwrap();
+        let (restored, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), restoring(), None).unwrap();
         started.wait().unwrap();
         assert_eq!(timer.time_ns(), 7 * H_NS);
+        restored.shutdown().wait().unwrap();
+    }
+}
+
+mod separate_timers {
+    use super::*;
+    use mujou_core::time::TimerState;
+
+    #[test]
+    fn each_runtime_measures_dt_on_its_own_timer() {
+        let (ta, tb) = (virtual_timer(), virtual_timer());
+        let Setup {
+            log: la,
+            nodes,
+            names,
+        } = recorders(1);
+        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        started.wait().unwrap();
+        let Setup {
+            log: lb,
+            nodes,
+            names,
+        } = recorders(1);
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        started.wait().unwrap();
+
+        ta.advance_ns(2 * H_NS).unwrap();
+        tb.advance_ns(5 * H_NS).unwrap();
+        a.step(None).wait().unwrap();
+        b.step(None).wait().unwrap();
+        a.shutdown().wait().unwrap();
+        b.shutdown().wait().unwrap();
+        assert_eq!(events_of(&la, 0)[1], Event::Update(2.0 * H_NS as f64 / 1e9));
+        assert_eq!(events_of(&lb, 0)[1], Event::Update(5.0 * H_NS as f64 / 1e9));
+    }
+
+    #[test]
+    fn a_capture_freezes_only_its_own_timer() {
+        let (ta, tb) = (virtual_timer(), virtual_timer());
+        let Setup { nodes, names, .. } = recorders(1);
+        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        started.wait().unwrap();
+        let Setup {
+            log: lb,
+            nodes,
+            names,
+        } = recorders(1);
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        started.wait().unwrap();
+        let b = Arc::new(b);
+
+        // While `a` is paused, the runtime on the other timer keeps updating.
+        let (own, other, other_rt) = (Arc::clone(&ta), Arc::clone(&tb), Arc::clone(&b));
+        let (own_paused, other_paused) = a
+            .capture(None, move |_| {
+                other.advance_ns(H_NS).unwrap();
+                other_rt.step(None).wait().unwrap();
+                (own.is_paused(), other.is_paused())
+            })
+            .wait()
+            .unwrap();
+        assert!(own_paused);
+        assert!(!other_paused);
+        assert_eq!(events_of(&lb, 0)[1], Event::Update(H_NS as f64 / 1e9));
+        a.shutdown().wait().unwrap();
+        b.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn a_failure_freezes_only_its_own_timer() {
+        let (ta, tb) = (virtual_timer(), virtual_timer());
+        let Setup {
+            mut nodes, names, ..
+        } = recorders(1);
+        nodes[0].fail_on_update = Some(1);
+        let other_paused: Arc<Mutex<Option<bool>>> = Arc::default();
+        let capture = {
+            let other_paused = Arc::clone(&other_paused);
+            let other = Arc::clone(&tb);
+            Box::new(move |_, _: &NodeFailure| {
+                *other_paused.lock().unwrap() = Some(other.is_paused());
+            })
+        };
+        let (a, started) =
+            Runtime::start(nodes, names, Arc::clone(&ta), manual(), Some(capture)).unwrap();
+        started.wait().unwrap();
+        ta.advance_ns(H_NS).unwrap();
+        assert!(matches!(a.step(None).wait(), Err(RuntimeError::Failed(_))));
+        assert!(a.is_finished());
+        assert_eq!(*other_paused.lock().unwrap(), Some(false));
+        // The other timer still moves.
+        let before = tb.time_ns();
+        tb.advance_ns(H_NS).unwrap();
+        assert_eq!(tb.time_ns(), before + H_NS);
+    }
+
+    #[test]
+    fn a_runtime_on_another_timer_does_not_block_a_restore() {
+        let (ta, tb) = (virtual_timer(), virtual_timer());
+        let Setup { nodes, names, .. } = recorders(1);
+        let (running, started) =
+            Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        started.wait().unwrap();
+        let before = ta.time_ns();
+
+        let config = RuntimeConfig {
+            timer_state: Some(TimerState {
+                time_ns: 7 * H_NS,
+                scale: 1.0,
+            }),
+            ..manual()
+        };
+        let Setup { nodes, names, .. } = recorders(1);
+        let (restored, started) =
+            Runtime::start(nodes, names, Arc::clone(&tb), config, None).unwrap();
+        started.wait().unwrap();
+        assert_eq!(tb.time_ns(), 7 * H_NS);
+        assert_eq!(ta.time_ns(), before);
+        running.shutdown().wait().unwrap();
         restored.shutdown().wait().unwrap();
     }
 }

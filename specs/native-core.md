@@ -64,8 +64,14 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | `crates/mujou-core`    | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る           |
 | `crates/mujou-python`  | PyO3 の bindings。拡張モジュール `mujou._core` になる。free-threaded 対応を明示する（`gil_used = false`） |
+| `crates/mujou-stubgen` | `mujou._core` の型スタブの生成器（`just stub` が使う）                                    |
 
 - Python のパッケージのビルドバックエンドは maturin にする。`uv sync` が拡張モジュールをビルドし、`src/mujou/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
 - 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `mujou._core.__version__` を再 export する
 - `just test` は `cargo test --workspace` と pytest を回す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で回す
-- 型スタブ `src/mujou/_core.pyi` は手で書く。公開する名前が増えたら `pyo3-stub-gen` での生成を検討する
+- 型スタブ `src/mujou/_core.pyi` は `just stub` で生成し、生成物をコミットする。pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring は Rust の doc comment から出るので、説明はそこに書く。pre-commit の `mujou-stub` が毎回生成し直し、コミットしたスタブが古ければ「ファイルを変更した」として失敗する（`just run` の `format` でも走る）
+  - `pyo3-stub-gen` は pyo3 0.30 に対応していない（0.23.1 時点で `<0.30`）ので使わない
+  - introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou", name = "_core")]` で決まり、各クラスの `module = "mujou._core"` と `pyproject.toml` の `module-name` もそろえる（pyo3 はクラスの `module` に文字列リテラルしか取らない）。`just stub` は `module-name` から拡張モジュールとスタブの置き場所を決める
+  - 生成器は pyo3 の足りない所を補う。`create_exception!` の例外（`NetworkError` / `PauseTimeoutError`）は introspection に出ないので、生成器が同じ docstring で足す。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける。`tests/mujou/test_core_stub.py` がスタブと実行時のモジュールの名前・docstring・基底クラスのずれを検出する
+  - `PauseTimeoutError` をクラスにできないのは、pyo3 0.30 が `PyTimeoutError` を `BaseException` のレイアウトで宣言しており、継承するとクラスの初期化に失敗するからである
+  - `#[pyo3(signature = ...)]` の文字列の注釈は import を伴わないので、組み込みとモジュール内の名前だけを書く。`collections.abc.Callable` などが要る型は、`IntoPyObject::OUTPUT_TYPE` / `FromPyObject::INPUT_TYPE` を持つ小さな型で表す（`crates/mujou-python/src/hint.rs`）
