@@ -77,9 +77,13 @@ def _side(
     """Return the only direct attribute of ``component`` that is a ``kind``."""
     found = _sides(component, kind)
     if len(found) != 1:
+        hint = ""
+        if not found and isinstance(component, Network):
+            side = "next" if kind is NextPort else "prev"
+            hint = f"; expose one, e.g. self.{side} = self.<child>.{side}"
         raise ValueError(
             f"{type(component).__name__} must have exactly one {kind.__name__} as a "
-            f"direct attribute to connect, found {len(found)}"
+            f"direct attribute to connect, found {len(found)}{hint}"
         )
     return found[0]
 
