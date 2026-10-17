@@ -39,8 +39,8 @@ src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 
 例外:
 
-- 拡張モジュール `mujou._core._native` は bindings の Rust ソースをミラーする。`crates/mujou-python/src/<mod>.rs ↔ tests/mujou/_core/test_native_<mod>.py`、`lib.rs` ↔ `test_native.py`、生成した stub ↔ `test_native_stub.py`
-- `src/mujou/_core/session.py` は `Run` 経由で `test_run.py` が検証する
+- 拡張モジュール `mujou._core._native` は bindings の Rust ソースをミラーする。`crates/mujou-python/src/<mod>.rs ↔ tests/mujou/_core/test_native_<mod>.py`、`lib.rs` ↔ `test_native.py`、生成した stub ↔ `test_native_stub.py`。ただし `dlpack.rs` は対になるファイルを持たず、`test_native_slot.py` が検証する
+- 公開 API の裏方として単独のテストファイルを持たない `src/mujou/_core/` のモジュールは、使う側のテストで検証する。`session.py`・`state.py`・`lifetime.py`・`hooks.py` は `Run` 経由で `test_run.py` が、`graph.py`・`component.py` は `test_network.py` が、`binding.py` は `test_port.py` が検証する
 - `test_node_typing.py` は pyright にかけて型を検証するファイルで、ミラー元を持たない
 
 ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`test_native_*` は bindings 固有のこと（dtype・DLPack の変換、例外の型とメッセージ、GIL とスレッド状態、pickle、Python の hook、ログ）、公開 API の振る舞いは `test_run.py` / `test_port.py` などが持つ。

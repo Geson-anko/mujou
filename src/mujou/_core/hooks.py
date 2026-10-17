@@ -1,8 +1,9 @@
 """Whether the calling thread runs a node's hook, for the host-only operations to
 refuse a node (``specs/execution-model.md``).
 
-A node's own thread is inside a hook from its first hook on; the control thread
-is inside one only while it calls a node's ``state_dict``.
+A node's own thread is inside a hook from its first hook on; the control thread,
+or after a normal end the host's thread that called ``Run.state_dict``, is inside
+one only while it calls a node's ``state_dict``.
 """
 
 import contextlib
