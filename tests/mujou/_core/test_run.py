@@ -640,7 +640,7 @@ class TestWrite:
             (chain, net.b.prev, "is connected"),
             (solo, pair.many, "many peers"),
             (solo, pair.out, "receives no messages"),
-            (chain, pair.x, "not a port of this network"),
+            (chain, pair.x, "not a port of this graph"),
         ]
         for run, port, match in cases:
             with pytest.raises(ValueError, match=match):
