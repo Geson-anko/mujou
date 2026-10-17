@@ -1,0 +1,66 @@
+"""Save the state of a run, and restore it in a new run that goes on from there.
+
+A node collects its state by itself: every attribute that holds a
+``torch.Tensor`` or an ``nn.Module``. ``Run.state_dict`` gathers the states of all
+nodes, the latest messages and the time into one tree, which pickles.
+"""
+
+import pickle
+from typing import override
+
+import torch
+from torch import nn
+
+import mujou
+from mujou import NextPort, Node, PrevPort, TensorSpec
+
+SCALAR = TensorSpec((1,))
+
+
+class Integrator(Node):
+    """Integrates its input over time (dx/dt = u) and sends ``readout(x)``."""
+
+    def __init__(self) -> None:
+        self.prev = PrevPort(recv=SCALAR)
+        self.next = NextPort(send=SCALAR)
+        self.readout = nn.Linear(1, 1)  # a module: part of the state
+
+    @override
+    def on_start(self) -> None:
+        self.x = SCALAR.zeros()  # a tensor: part of the state
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.x += dt * self.prev.recv()  # in place, so that a restore copies into it
+        self.next.send(self.readout(self.x))
+
+
+class Model(mujou.Network):
+    def __init__(self) -> None:
+        self.integrator = Integrator()
+        self.prev = self.integrator.prev
+        self.next = self.integrator.next
+
+
+one = torch.ones(1)
+
+# Run for a while, then stop and take the state at the end.
+net = Model()
+with mujou.run(net, inputs={net.prev: one}) as run:
+    mujou.time.sleep(0.2)
+tree = run.state_dict()  # after a normal end: the state at the stop
+saved = tree["nodes"]["integrator"]  # this node's state_dict()
+print("state of the node:", {k: type(v).__name__ for k, v in saved.items()})
+data = pickle.dumps(tree)  # save it as you like: a file, a database, ...
+
+# A new instance of the same network goes on from the saved state and time.
+restored = Model()
+with mujou.run(restored, inputs={restored.prev: one}, state=pickle.loads(data)) as run:
+    mujou.time.sleep(0.1)
+after = run.state_dict()["nodes"]["integrator"]
+
+x0, x1 = saved["x"].item(), after["x"].item()
+print(f"x = {x0:.3f} at the save, {x1:.3f} after 0.1 s more")
+assert 0.2 <= x0 and x1 - x0 >= 0.1  # the integral went on from the saved value
+# The module was restored too: the new instance had other random weights.
+assert torch.equal(after["readout"]["weight"], saved["readout"]["weight"])
