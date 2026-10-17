@@ -73,3 +73,49 @@
 - `specs/torch.md`: 実行スレッドの設定の hook 名、「状態」の節（nn.Module / requires_grad を許し、自動で集まる）
 - `specs/execution-model.md` / `specs/open-decisions.md` / `memory/project_open_decisions.md`: hook 名だけ
 - `docs/en/api/node.md` は `::: mujou.Node` のままで `on_thread_start` が出る（dunder は filter で隠れる）ので変更なし。ユーザー向けの本文は別の工程
+
+## レビュー対応（2026-10-17）
+
+レビュー: `memory/agents/code-reviewer/node-state.md`（request-changes）、`memory/agents/algorithm-reviewer/node-state.md`（approve、should-fix あり）。ユーザーの決定と orchestrator の裁定に沿って直した。
+
+### hook の作り直し（ユーザーの決定、algorithm should-fix 1）
+
+- Rust の `PyNode::start` は `_on_thread_start`（内部）→ `on_thread_start`（公開、既定は何もしない）→ `on_start` →（復元なら）`load_state_dict` の順に呼ぶ。外せない設定（grad の無効化・CUDA のデバイスとストリーム・乱数生成器・`_thread_ident`・`_hooks.inside`）は `mujou.Node._on_thread_start` に戻した。`super()` を呼ぶ規約はなくなった
+- 回帰テスト `TestOnThreadStart.test_runs_after_the_settings_without_calling_the_base`: `super()` を呼ばない override の中で、grad が無効・generator が seed どおり・所有スレッドが記録済み・`Network.read` が "host methods" の `RuntimeError` になることを確かめる
+- 内部の hook の例外は `raised in _on_thread_start` と出る（利用者のコードではないことが分かるので、名前を公開の hook に読み替えない）
+
+### 復元の後の同期と木の解放（algorithm should-fix 3）
+
+- Rust に内部の hook `_restore_state(state)` を足した（既定は `self.load_state_dict(state)`。`_capture_state` と対称）。ランタイムは復元で `load_state_dict` の代わりにこれを呼び、例外は `load_state_dict` と出る（`attribute()` の対応表）
+- `mujou.Node._restore_state` は `load_state_dict` の後に自分のストリームを同期する。利用者が `load_state_dict` を override しても同期は漏れない
+- **`session.py` の変更は 1 か所だけ**: `Session.run` の `runtime.start(...)` が成功した直後に `self._states = None`（try の中、`except _native.NetworkError:` の直前）。run-handle と merge するときは、その版の「start の成功の直後」に同じ 1 行を置く。Rust 側は `PyNode.state` を `start` で `take()` して `load_state_dict` の呼び出しの後に手放すので、これで木への参照は残らない
+- CUDA は手元に無いので、既定の state_dict / load_state_dict の CUDA のテストは `TestRestore` を `cuda:0` でも回す形にした（GPU の無い環境では skip）
+
+### 自動の状態収集の修正
+
+- code M1 / algorithm should-fix 2（裁定）: 木にあって登録に無い Tensor は、木の値の `clone()` を新しい属性として置く（`setattr` なので登録される）。登録に無いキーの値が Tensor でなければ `ValueError`。登録済みで木に無いものは今どおり `ValueError`。`specs/nodes.md` は裁定の文言に直した。`TestRestore` の `Learner` は `on_update` で初めて `_last` を代入し、運動量としてダイナミクスに効かせたので、復元できなければ一致しない
+- S1: `type(self)` の MRO にデータ記述子（property など。`__slots__` の member は除く）がある名前は登録しない。setter が別の名前に Tensor を置けば、そちらが登録される
+- S2: `__setattr__` / `__delattr__` を `if not TYPE_CHECKING:` の下で定義した。未宣言の属性への代入が pyright strict で再びエラーになることを、一時ファイルで確かめた
+- S3: 登録表は書き換えずに作り直す（copy-on-write）。`copy.copy` したノードとは変更を共有しない。`__copy__` を定義するより短く、登録済みの名前に入れ直す毎ステップの代入では作り直さない
+- S4: 不一致のテストは登録順で後ろの `p` やモジュールを崩し、前の `w` が書き換わっていないことを確かめる。`TypeError` の経路も足した
+- S5: `state_items` → `_state_items`。専用のテストと specs の記述を外した（下の救済のメモは残す）
+- N1: エラーメッセージは空でない分だけ出す
+- N2: nn.Module の状態も、キーと shape をコピーの前に `module.state_dict()` と照合する。例外の型はユーザーの決定（torch の例外のまま）に合わせて `RuntimeError` にした（strict な `nn.Module.load_state_dict` と同じ型、メッセージは mujou のもの）。これで、どの不一致でも何も書き換えない
+- N5: stride が 0 で大きさが 2 以上の次元を持つ Tensor（`expand` など）は、コピーの前に `ValueError`。それ以外の内部の重なり（`as_strided` で作るもの）は検出しない（torch の公開 API に判定が無い。`copy_` の `RuntimeError` になる）
+- N6: 登録表の属性名を `_mujou_state_names` にした
+- algorithm nit 1: `.grad` が状態に入らないことを `specs/torch.md` に書いた。nit 2: `on_stop` で `None` にするとキーが消えることを `specs/nodes.md` に書いた。nit 4: 上の CUDA のテスト
+
+### 記録だけ（対応しない）
+
+- code N3: 同じ Tensor を 2 つの名前で持つと状態に 2 回入る。害はない（同じ値を 2 回コピーする）
+- code N4: `copy_` は dtype を黙って変換する（`nn.Module.load_state_dict` と同じ）
+- algorithm nit 3: `TestRestore` の pickle がコピーの役を兼ねる。deepcopy は `test_network.py` の既存のテストが見ている
+- algorithm nit 5: 2 つのノードが同じ Tensor / nn.Module を持つと状態の所有に反する。build で storage の重複を検出する余地がある
+- code S8: run-handle を merge した後、`TestOnThreadStart` / `TestRestore` を新しい口（`mujou.testing`、`Run`、`state=`）に書き直す
+
+### 救済措置のメモへの追記（algorithm の指摘）
+
+- 関数名は `_state_items(node)` になった
+- CUDA の sticky なエラー（device-side assert など）で止まったときは、コンテキストが使えず、CUDA のテンソルは救済できないことがある
+- 救済した木はノードごとに時刻が揃っておらず、`on_exception` / `on_stop` の後の値でもある。通常の復元に渡せる木と型で区別するか、印を付ける
+- どのスレッドで読むか、全ノードのスレッドの終了を待つかを決めておく
