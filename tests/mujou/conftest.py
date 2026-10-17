@@ -16,6 +16,9 @@ from mujou.time import Timer
 # Port[Any, Any, Any] would reject (Mapping keys are invariant).
 type Inputs[P] = Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
 
+H_NS = 1_000_000
+H = H_NS / 1e9  # The step of the virtual clock the `step` fixture advances, in seconds.
+
 
 @pytest.fixture
 def virtual_timer() -> Iterator[GlobalTimer]:
@@ -122,6 +125,24 @@ def start(started: list[Run]) -> Start:
     return start
 
 
+class Step(Protocol):
+    def __call__(self, run: ManualRun[Any], *order: Node) -> None: ...
+
+
+@pytest.fixture
+def step() -> Step:
+    """Advance the run's ``VirtualTimer`` by ``H`` and update the nodes once, in
+    ``order`` (every node, in the order of the tree, if none is given)."""
+
+    def step(run: ManualRun[Any], *order: Node) -> None:
+        timer = run.timer
+        assert isinstance(timer, VirtualTimer)
+        timer.advance(H)
+        run.step(*order)
+
+    return step
+
+
 @pytest.fixture
 def accelerator() -> torch.device:
     """Device 0 of torch's current accelerator (CUDA, MPS, ...); skips the test
@@ -130,3 +151,14 @@ def accelerator() -> torch.device:
     if found is None:
         pytest.skip("needs an accelerator")
     return torch.device(found.type, 0)
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Skip a test marked ``cuda(n)`` (``n`` defaults to 1) unless ``n`` CUDA
+    devices are available; the largest ``n`` of its marks counts."""
+    needed = max(
+        (mark.args[0] if mark.args else 1 for mark in item.iter_markers("cuda")),
+        default=0,
+    )
+    if needed and (not torch.cuda.is_available() or torch.cuda.device_count() < needed):
+        pytest.skip(f"needs {needed} CUDA device(s)")
