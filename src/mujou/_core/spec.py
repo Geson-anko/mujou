@@ -10,7 +10,7 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final, cast, final, override
+from typing import Any, Final, Generic, TypeVar, cast, final, override
 
 import torch
 
@@ -33,7 +33,13 @@ DLPACK_DTYPES: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyT
 )
 
 
-class MessageSpec[M](ABC):
+# The message type, declared invariant: the inferred variance of a PEP 695
+# parameter would be covariant, and a port's ``initial`` (of type ``S``) could then
+# widen the message type solved from its ``send`` spec.
+M = TypeVar("M")
+
+
+class MessageSpec(ABC, Generic[M]):
     """The spec of a message of type ``M``: its shape, dtype and initial value."""
 
     @abstractmethod

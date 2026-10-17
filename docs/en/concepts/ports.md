@@ -38,7 +38,7 @@ A node writes with `send(value)` and reads with `recv()`.
 
 - The reader gets the latest value at that moment. There is no way to wait for a new value
 - Old values do not pile up. Some values are overwritten without ever being read, and the same value may be read many times. Both are normal
-- If the peer has not written yet, the reader gets the initial value: zeros of the shape and dtype in the receive spec (for a `DictSpec`, a zero tensor for each key). A port that takes one peer but is not connected also reads the initial value
+- If the peer has not written yet, the reader gets the initial value. It is the value that the peer's port declares with `initial=`, or zeros of the shape and dtype in the spec if it declares none (for a `DictSpec`, a zero tensor for each key). A port that takes one peer but is not connected reads zeros, or the value given in `inputs` (see [Unconnected ports](#unconnected-ports))
 - A port that takes many peers but is not connected has no channel, so it reads an empty dict
 - The value is a `torch.Tensor` (for a `DictSpec` port, a dict of tensors, one per key). It is copied on every read and write, so changing a received tensor affects no other node
 - A sent value is detached from the computation graph. Gradients never pass through a port

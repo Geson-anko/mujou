@@ -45,6 +45,12 @@ self.next = NextPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # 
 
 A value you send must match the spec in both shape and dtype. The dtype is not converted automatically. The `Leaky` above uses a `torch.float64` spec, so it also creates the values it sends as `float64`.
 
+Until a port first sends, its peers receive zeros, and so does the host that reads it. To start from another value, give the port an initial value with `initial=`. It must match `send` in shape and dtype, and it is copied when the port is made. A restored run (see [State](state.md)) starts from the values in the state instead.
+
+```python
+self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
+```
+
 ## 2. Set up the state in `on_start`
 
 Create the state tensors in `on_start`. In `on_update`, do not assign a new tensor to the attribute; update the tensor in place with `+=`, `copy_` and the like.

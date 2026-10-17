@@ -45,6 +45,12 @@ self.next = NextPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # 
 
 送る値は spec と shape も dtype も一致しなければならない。dtype は自動で変換されない。上の `Leaky` が `torch.float64` の spec を使っているので、送る値も `float64` で作っている。
 
+Port が最初に送るまで、相手が受け取る値と、ホストがその Port から読む値はゼロである。別の値から始めたいときは、`initial=` で初期値を与える。初期値は `send` と shape も dtype も一致しなければならず、Port を作った時点でコピーされる。状態を復元した実行（[状態](state.md)）は、初期値ではなく状態の中の値から始まる。
+
+```python
+self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
+```
+
 ## 2. `on_start` で状態を確保する
 
 状態のテンソルは `on_start` で作る。`on_update` では新しいテンソルを代入し直さず、`+=` や `copy_` などでその場で更新する。

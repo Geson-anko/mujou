@@ -361,6 +361,111 @@ class TestSend:
             out.send(torch.ones(2, 3))
 
 
+class TestInitial:
+    def test_every_peer_and_the_host_read_it_until_the_first_send(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        twos = torch.full((2, 3), 2.0)
+        out = NextPort(send=h(), initial=twos)
+        a, b = PrevPort(recv=h()), PrevPort(recv=h())
+        out.connect(a)
+        out.connect(b)
+        sink_a, sink_b = Probe(a.recv_with_time, prev=a), Probe(b.recv, prev=b)
+        run = start_manual(Net(source=Probe(next=out), a=sink_a, b=sink_b))
+        step(run, virtual, sink_a, sink_b)  # the source does not send
+        ((value, written_at),) = cast(
+            list[tuple[torch.Tensor, Timestamp]], sink_a.results
+        )
+        assert torch.equal(value, twos)
+        assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
+        # Stamped as the zeros would be: with the time the run started (0).
+        assert written_at.ns == 0
+        assert torch.equal(run.read(out)[0], twos)
+
+    def test_send_to_replaces_it_for_that_peer_only(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        twos = torch.full((2, 3), 2.0)
+        out = NextPort(send=h(), initial=twos)
+        a, b = PrevPort(recv=h()), PrevPort(recv=h())
+        to_a = out.connect(a)
+        out.connect(b)
+        source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
+        sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
+        run = start_manual(Net(source=source, a=sink_a, b=sink_b))
+        step(run, virtual, source, sink_a, sink_b)
+        assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
+        assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
+        assert torch.equal(run.read(out)[0], twos)
+
+    def test_of_a_dict_message(self, virtual: VirtualTimer, start_manual: StartManual):
+        out = Port(send=fb(), initial={"error": torch.ones(2, 3)})
+        inp = Port(recv=fb())
+        out.connect(inp)
+        sink = Probe(inp.recv, inp=inp)
+        run = start_manual(Net(source=Probe(out=out), sink=sink))
+        step(run, virtual, sink)
+        received = cast(Feedback, sink.results[0])
+        assert torch.equal(received["error"], torch.ones(2, 3))
+
+    def test_is_copied_when_the_port_is_made(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        value = torch.ones(2, 3, requires_grad=True)
+        out = Port(send=h(), initial=value)
+        with torch.no_grad():
+            value.add_(1.0)  # after the declaration: must not reach the slots
+        run = start_manual(Net(node=Probe(out=out)))
+        received = run.read(out)[0]
+        assert torch.equal(received, torch.ones(2, 3))
+        assert not received.requires_grad
+
+    def test_a_restored_run_takes_the_value_from_the_state(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        def build(initial: float) -> tuple[Net, Probe, Probe]:
+            out = NextPort(send=h(), initial=torch.full((2, 3), initial))
+            inp = PrevPort(recv=h())
+            out.connect(inp)
+            source = Probe(lambda: out.send(torch.full((2, 3), 5.0)), next=out)
+            sink = Probe(inp.recv, prev=inp)
+            return Net(source=source, sink=sink), source, sink
+
+        net, source, _ = build(2.0)
+        run = start_manual(net)
+        step(run, virtual, source)  # the source sends 5
+        tree = run.state_dict()
+        run.shutdown()
+
+        restored, _, sink = build(7.0)
+        timer = VirtualTimer()
+        run = start_manual(restored, timer=timer, state=tree)
+        step(run, timer, sink)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.full((2, 3), 5.0))
+
+    def test_rejects_a_port_that_sends_nothing(self):
+        with pytest.raises(TypeError, match="sends no messages"):
+            Port(recv=h(), initial=torch.zeros(2, 3))  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize(
+        ("value", "error"),
+        [
+            (torch.zeros(3, 2), ValueError),
+            (torch.zeros(2, 3, dtype=torch.float64), TypeError),
+            ([[0.0] * 3] * 2, TypeError),
+        ],
+    )
+    def test_rejects_a_value_that_does_not_match_the_send_spec(
+        self, value: object, error: type[Exception]
+    ):
+        with pytest.raises(error, match="initial"):
+            NextPort(send=h(), initial=value)  # pyright: ignore[reportArgumentType]
+
+    def test_rejects_a_dict_with_other_keys(self):
+        with pytest.raises(ValueError, match="keys do not match"):
+            Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
+
+
 class TestAccelerator:
     def test_receives_on_the_device_and_sends_to_the_host(
         self,
@@ -393,3 +498,17 @@ class TestAccelerator:
         sent, _ = run.read(back)
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
+
+    def test_takes_an_initial_value_on_the_device(
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        accelerator: torch.device,
+    ):
+        out = Port(send=h(), initial=torch.ones(2, 3, device=accelerator))
+        inp = Port(recv=h())
+        out.connect(inp)
+        sink = Probe(inp.recv, inp=inp)
+        run = start_manual(Net(source=Probe(out=out), sink=sink))
+        step(run, virtual, sink)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.ones(2, 3))
