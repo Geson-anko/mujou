@@ -119,6 +119,19 @@ class Pair(Node):
         self.seen.append((self.x.recv_with_time(), self.y.recv_with_time()))
 
 
+class Echo(Node):
+    """Sends the time of the message it receives, in nanoseconds."""
+
+    def __init__(self) -> None:
+        self.prev = PrevPort(recv=vec())
+        self.next = NextPort(send=TensorSpec((), torch.int64))
+
+    @override
+    def on_update(self, dt: float) -> None:
+        _, t = self.prev.recv_with_time()
+        self.next.send(torch.tensor(t.ns))
+
+
 class Solo(Network):
     def __init__(self, node: Node) -> None:
         self.node = node
@@ -442,6 +455,59 @@ class TestWrite:
         ((x, tx), (y, ty)) = node.seen[0]
         assert torch.equal(x, u(1)) and torch.equal(y, u(2))
         assert tx == ty == written_at
+
+    def test_returns_the_time_every_value_carries(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Pair()
+        run = start_manual(Solo(node))
+        virtual.advance(H)
+        written_at = run.write({node.x: u(1), node.y: u(2)})
+        assert written_at == virtual.now()
+        step(run, virtual)
+        ((_, tx), (_, ty)) = node.seen[0]
+        assert tx == ty == written_at
+        slots = run.state_dict()["slots"]
+        assert slots["node.x/in"][1] == slots["node.y/in"][1] == written_at.ns
+
+    def test_returns_the_time_a_node_reads_and_sends_on(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        echo = Echo()
+        run = start_manual(echo)
+        virtual.advance(H)
+        written_at = run.write({echo.prev: u(1)})
+        step(run, virtual)
+        (received_ns, _) = run.read(echo.next)
+        assert int(received_ns) == written_at.ns
+
+    def test_is_stamped_after_the_inputs(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Pair()
+        virtual.advance(H)
+        run = start_manual(node, inputs={node.x: u(1)})
+        step(run, virtual)
+        assert node.seen[0][0][1] == Timestamp(ns=H_NS)  # the time of the start
+        written_at = run.write({node.x: u(2)})
+        assert written_at == Timestamp(ns=2 * H_NS) > node.seen[0][0][1]
+
+    def test_after_a_restore_continues_from_the_time_of_the_tree(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        first = Pair()
+        run = start_manual(first)
+        step(run, virtual)
+        tree = run.state_dict()
+        run.shutdown()
+
+        node, timer = Pair(), VirtualTimer()
+        timer.advance(100.0)  # far from the tree's time
+        restored = start_manual(node, timer=timer, state=tree, inputs={node.x: u(3)})
+        written_at = restored.write({node.y: u(4)})
+        # The inputs carry the tree's time T and the timer goes on from T.
+        assert written_at == Timestamp(ns=tree["timer"]["time_ns"])
+        assert restored.state_dict()["slots"]["0.x/in"][1] == written_at.ns
 
     def test_rejects_ports_it_cannot_write(self, start_manual: StartManual):
         net = Chain()

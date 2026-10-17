@@ -103,9 +103,10 @@ class InputGroup:
         """
     def write(
         self, /, items: SupportsGetItem[int, tuple[InputSlot, Sequence[Any]]]
-    ) -> None:
+    ) -> Timestamp:
         """
-        Writes every item at once, all stamped with the same time.
+        Writes every item at once, all stamped with the same time, and returns
+        that time.
 
         No reader sees some of the slots new and others old at any one moment;
         a reader that reads two slots one after the other may still see a write

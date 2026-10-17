@@ -353,9 +353,11 @@ class TestInputGroup:
         y = group.input(schema(("t", (), torch.int64)), "net.y")
         assert x.name == "net.x/in"
         virtual_timer.advance(2.0)
-        group.write([(x, [torch.tensor([1.0, 2.0])]), (y, [torch.tensor(3)])])
+        written_at = group.write(
+            [(x, [torch.tensor([1.0, 2.0])]), (y, [torch.tensor(3)])]
+        )
         mx, my = x.read(), y.read()
-        assert mx.time_ns == my.time_ns == 2_000_000_000
+        assert mx.time_ns == my.time_ns == written_at.ns == 2_000_000_000
         assert torch.equal(values(mx)[0], torch.tensor([1.0, 2.0]))
         assert torch.equal(values(my)[0], torch.tensor(3))
 

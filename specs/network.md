@@ -117,7 +117,7 @@ stack.build()                            # ルートで構築する
 | ------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
 | `net.build()`                         | 何度でも                   | 構造と型を確定して `Graph` を返す。2 回目からは同じ `Graph` を返す       |
 | `mujou.run(*networks, timer=None, inputs=None, state=None, pause_timeout=30.0)` | ネットワーク・ノードごとに 1 回 | 構築し、`state` を戻し、`inputs` を書き、バックグラウンドで実行を始め、全ノードの起動が終わったら `Run` を返す |
-| `run.write(...)`                      | 正常な終了まで             | 未接続の Port に書く                                                     |
+| `run.write(...)`                      | 正常な終了まで             | 未接続の Port に書き、書いた値に付いた時刻（`Timestamp`）を返す          |
 | `run.read(port)`                      | いつでも                   | Port に送られた最新の値と時刻（`Timestamp`）の組を返す                   |
 | `run.subscribe(port)`                 | いつでも                   | 呼んだ時点の最新の値と時刻を返し、以後は新しい値が書かれるたびに最新の値と時刻を返すイテレータ |
 | `run.state_dict()`                    | 実行中と、正常に終了した後 | 時刻のそろった状態の木のコピーを返す                                     |
@@ -167,6 +167,8 @@ state = run.state_dict()                             # 終了した時点の状�
 | 走り出した後の `run.write`             | そのまま入力になる             | 書いたときのその実行のタイマーの時刻 |
 
 復元した系は時刻 $T$ から始まる。そのため、起動の前に書く値に起動の前のタイマーの時刻を付けると、スロットの時刻が復元した時間軸から外れる。
+
+`run.write` は、書いた値に付いた時刻を返す。ノードが `recv_with_time` で見る時刻、状態の木の `/in` のスロットの時刻と同じ値である。`run.read` が返すのは送った時刻で、書いた時刻ではない。`inputs` に付く時刻は、`state` がなければ `mujou.run` が書いたときのタイマーの時刻で、走り出した後の `write` の時刻はそれ以上になる。`state` があれば $T$ で、タイマーも $T$ から進むので、その後の `write` の時刻も $T$ 以上になる。空の `write` は何も変えず、そのときの時刻を返す。
 
 1 回の `write` で複数の Port に書いた値は、ある瞬間に読むどのノードから見ても一斉に切り替わる。1 つの Port に書くのは、要素が 1 つの場合として同じ仕組みで扱う。一斉の切り替えについて、保証すること・しないことは次のとおりである。
 
@@ -243,7 +245,7 @@ A.next ──┼─ Channel ─ C.prev
 
 ## 実装
 
-> 状態: 実装済み（2026-10-16）。実行の API を作り直した（2026-10-16、ハンドル・`Compose`・実行ごとのタイマー・`Timestamp`・`mujou.testing`）。`mujou.run` と `Compose` がノードを受け付けるようにした（2026-10-17）。
+> 状態: 実装済み（2026-10-16）。実行の API を作り直した（2026-10-16、ハンドル・`Compose`・実行ごとのタイマー・`Timestamp`・`mujou.testing`）。`run.write` が時刻を返し、`mujou.run` と `Compose` がノードを受け付けるようにした（2026-10-17）。
 
 `mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` / `Timer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
 
@@ -271,7 +273,7 @@ A.next ──┼─ Channel ─ C.prev
 
 | メソッド                         | 振る舞い                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `write({port: value, ...})`      | 木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかは `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
+| `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかは `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
 | `read(port)`                     | 送る spec を持つ Port の外向きのスロットの値と、時刻（`Timestamp`）を返す。値は CPU 上の新しい Tensor。最初に送られるまではゼロ（復元したなら木の値） |
 | `subscribe(port)`                | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまではゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる） |
 | `state_dict()`                   | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError` |

@@ -60,14 +60,20 @@ class Run:
     # Port[Any, Any, Any] would reject (Mapping keys are invariant).
     def write[P: Port[Any, Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
-    ) -> None:
-        """Write messages to unconnected single-peer ports that receive.
+    ) -> _native.Timestamp:
+        """Write messages to unconnected single-peer ports that receive, and
+        return the time they carry.
 
         The values are detached and copied. All of them switch together and carry
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Any port of the tree can be
         written, exposed by the root or not.
+
+        The time is the run's timer at the write, as a node's ``recv_with_time``
+        and the ``/in`` slots of ``state_dict`` show it; ``read`` shows the times
+        of sends, not of writes. An empty ``values`` changes nothing and returns
+        the time all the same.
 
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
@@ -77,7 +83,7 @@ class Run:
             TypeError: A message or dtype differs from the spec.
             NetworkError: The run stopped because a node raised.
         """
-        _host(self).write(values)
+        return _host(self).write(values)
 
     def read[S](self, port: Port[S, Any, Any]) -> tuple[S, _native.Timestamp]:
         """Return the latest message ``port`` sent and the time it was sent at.

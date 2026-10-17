@@ -557,7 +557,8 @@ impl PyInputGroup {
         PyInputSlot(self.0.input(Arc::clone(&schema.0), name))
     }
 
-    /// Writes every item at once, all stamped with the same time.
+    /// Writes every item at once, all stamped with the same time, and returns
+    /// that time.
     ///
     /// No reader sees some of the slots new and others old at any one moment;
     /// a reader that reads two slots one after the other may still see a write
@@ -568,7 +569,7 @@ impl PyInputGroup {
         &self,
         py: Python<'_>,
         items: Vec<(PyRef<'_, PyInputSlot>, Values<'_>)>,
-    ) -> PyResult<()> {
+    ) -> PyResult<PyTimestamp> {
         let mut slots: Vec<&core::InputSlot> = Vec::with_capacity(items.len());
         let mut borrowed = Vec::with_capacity(items.len());
         for (slot, values) in &items {
@@ -594,6 +595,7 @@ impl PyInputGroup {
                 copy_into(tensors[i], slots[i].schema(), slots[i].name(), bytes)
             })
         })
+        .map(PyTimestamp)
         .map_err(to_py_err)
     }
 }

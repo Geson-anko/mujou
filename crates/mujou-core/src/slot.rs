@@ -642,16 +642,17 @@ impl InputGroup {
         })
     }
 
-    /// Writes one message to each of `slots`, all stamped with the same time.
-    /// `fill(i, bytes)` fills the message of `slots[i]`. Every message is filled
-    /// before any is placed, so if one `fill` fails no slot changes.
+    /// Writes one message to each of `slots`, all stamped with the same time,
+    /// and returns that time. `fill(i, bytes)` fills the message of `slots[i]`.
+    /// Every message is filled before any is placed, so if one `fill` fails no
+    /// slot changes.
     ///
     /// Panics if a slot belongs to another group or appears more than once.
     pub fn write<E>(
         &self,
         slots: &[&InputSlot],
         mut fill: impl FnMut(usize, &mut [&mut [u8]]) -> Result<(), E>,
-    ) -> Result<(), E> {
+    ) -> Result<Timestamp, E> {
         assert!(
             slots.iter().all(|s| std::ptr::eq(&*s.group, self)),
             "every slot must belong to this input group"
@@ -683,7 +684,7 @@ impl InputGroup {
         }
         // Release: a reader that sees the new version also sees every pair above.
         self.version.store(version + 1, Ordering::Release);
-        Ok(())
+        Ok(Timestamp::from_ns(time_ns))
     }
 }
 
@@ -1015,12 +1016,13 @@ mod tests {
         );
         assert_eq!(a.name(), "a/in");
         timer.advance_ns(77).unwrap();
-        group
+        let written_at = group
             .write(&[&a, &b], |i, bytes| fill_k(i as i64 + 1)(bytes))
             .unwrap();
         let (ma, mb) = (a.load(), b.load());
         assert_eq!((values(&ma), values(&mb)), (vec![1], vec![2]));
         assert_eq!((ma.time_ns(), mb.time_ns()), (77, 77));
+        assert_eq!(written_at, Timestamp::from_ns(77));
     }
 
     #[test]

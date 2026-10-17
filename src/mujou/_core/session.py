@@ -389,7 +389,7 @@ class Session:
 
     # --- host input and output
 
-    def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
+    def write[P: AnyPort](self, values: Mapping[P, object]) -> _native.Timestamp:
         runtime = self._started()
         finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
@@ -397,7 +397,7 @@ class Session:
             raise RuntimeError(
                 "the network has stopped; no node reads what is written now"
             )
-        self._group.write(self._items(values))
+        return self._group.write(self._items(values))
 
     def _items(
         self, values: Mapping[Any, object]
