@@ -27,7 +27,7 @@ An invalid keyword (such as an empty name or one containing `.`) raises `ValueEr
 
 ## Connect before grouping
 
-Networks that you connect with `connect` before grouping them run connected. `Group` itself connects nothing. The example above groups them with `Group(enc=enc, dec=dec)` after `enc.connect(dec)`.
+Networks whose ports you connect with `connect` before grouping them run connected. `Group` itself connects nothing. The example above groups them with `Group(enc=enc, dec=dec)` after `enc.next.connect(dec.prev)`.
 
 To write input and read output, use the ports of the networks you passed as they are (`enc.prev`, `dec.next`). You do not have to go through the attributes of the `Group`.
 

@@ -49,6 +49,7 @@ class Leaky(Node):
     """
 
     def __init__(self, tau: float = 1.0, raise_at: int | None = None) -> None:
+        super().__init__()
         self.prev = PrevPort(recv=vec())
         self.next = NextPort(send=vec())
         self.tau = tau
@@ -98,9 +99,10 @@ class Chain(Network):
         raise_in_a: int | None = None,
         raise_in_b: int | None = None,
     ) -> None:
+        super().__init__()
         self.a = Leaky(tau, raise_in_a)
         self.b = Leaky(tau, raise_in_b)
-        self.a.connect(self.b)
+        self.a.next.connect(self.b.prev)
         self.prev = self.a.prev
         self.next = self.b.next
 
@@ -109,6 +111,7 @@ class Pair(Node):
     """Receives two inputs from the host and keeps them with their times."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.x = Port(recv=vec())
         self.y = Port(recv=vec())
         self.many = Port(recv=vec(), multi=True)
@@ -126,6 +129,7 @@ class Echo(Node):
     """Sends the time of the message it receives, in nanoseconds."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(recv=vec())
         self.next = NextPort(send=TensorSpec((), torch.int64))
 
@@ -139,6 +143,7 @@ class Calls(Node):
     """Calls ``action`` in ``on_update`` and keeps the exception it raises."""
 
     def __init__(self, action: Callable[[], object]) -> None:
+        super().__init__()
         self.action = action
         self.errors: list[Exception] = []
 
@@ -402,7 +407,7 @@ class TestRunANode:
 
     def test_mixes_with_networks(self, step: Step, start_manual: StartManual):
         net, node = Chain(), Leaky()
-        net.connect(node)
+        net.next.connect(node.prev)
         run = start_manual(net, node, inputs={net.prev: u(1)})
         assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1"}
         a = b = n = torch.zeros(2, dtype=F64)
@@ -1190,6 +1195,7 @@ class SlowStop(Node):
     """Waits in ``on_stop`` until ``release`` is set."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.out = Port(send=vec())
         self.release = threading.Event()
         self.stopped = threading.Event()
@@ -1371,7 +1377,7 @@ class TestEndToEnd:
             # The same two nodes as two networks: a network is no boundary of the
             # asynchrony, and both run on the one timer of the run.
             first, second = Group(node=a), Group(node=b)
-            a.connect(b)
+            a.next.connect(b.prev)
             run = start_manual(first, second)
             assert set(run.state_dict()["last_update_ns"]) == {"0.node", "1.node"}
         else:
@@ -1489,6 +1495,7 @@ from mujou import Network, NextPort, Node, Port, TensorSpec
 
 class Slow(Node):
     def __init__(self) -> None:
+        super().__init__()
         self.out = NextPort(send=TensorSpec((2,)))
 
     def on_update(self, dt: float) -> None:
@@ -1500,6 +1507,7 @@ class Slow(Node):
 
 class Net(Network):
     def __init__(self) -> None:
+        super().__init__()
         self.node = Slow()
         self.out = self.node.out
 """
@@ -1562,9 +1570,10 @@ class DeviceLeaky(Node):
 
 class DeviceChain(Network):
     def __init__(self, device: torch.device) -> None:
+        super().__init__()
         self.a = DeviceLeaky(device)
         self.b = DeviceLeaky(device)
-        self.a.connect(self.b)
+        self.a.next.connect(self.b.prev)
         self.prev = self.a.prev
         self.next = self.b.next
 
@@ -1591,10 +1600,11 @@ class CudaSink(Node):
 
 
 class SourceToSink(Network):
-    def __init__(self, source: Node, sink: Node) -> None:
+    def __init__(self, source: CudaSource, sink: CudaSink) -> None:
+        super().__init__()
         self.source = source
         self.sink = sink
-        source.connect(sink)
+        source.next.connect(sink.prev)
 
 
 class Counter(Node):
@@ -1860,6 +1870,7 @@ class Hooks(Node):
 
 class ThreeHooks(Network):
     def __init__(self, log: list[tuple[str, str]]) -> None:
+        super().__init__()
         self.a = Hooks("a", log)
         self.b = Hooks("b", log)
         self.c = Hooks("c", log)

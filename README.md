@@ -60,7 +60,7 @@ class Affine(Node):
 
 
 double, shift = Affine(2.0, 0.0), Affine(1.0, 1.0)
-double.connect(shift)  # double.next <-> shift.prev
+double.next.connect(shift.prev)
 x = torch.tensor([1.0, 2.0, 3.0])
 # Each node updates on a thread of its own until the `with` block ends.
 with mujou.run(double, shift, inputs={double.prev: x}) as run:

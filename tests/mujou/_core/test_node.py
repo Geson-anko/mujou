@@ -29,7 +29,7 @@ class Probe(Node):
     def __init__(self, seed: int | None = None, *, init_base: bool = True) -> None:
         if init_base:
             super().__init__(seed=seed)
-        self.out = Port(send=TensorSpec((3,)))
+            self.out = Port(send=TensorSpec((3,)))
         self.grad_enabled: bool | None = None
         self.draws: torch.Tensor | None = None
         self.ident: int | None = None
@@ -107,6 +107,7 @@ class Timed(Node):
     """Keeps the time of its run's timer in each hook."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.out = Port(send=TensorSpec((3,)))
         self.timers: list[ReadOnlyTimer] = []
         self.times: list[Timestamp] = []
@@ -383,6 +384,7 @@ class Stateful(Node):
     module and values that are not state."""
 
     def __init__(self, fill: float) -> None:
+        super().__init__()
         self.out = Port(send=TensorSpec((3,)))
         self.w = torch.full((2, 3), fill)
         self._h = torch.full((3,), fill + 1)
@@ -529,6 +531,7 @@ class TestStateCollection:
     def test_does_not_collect_a_property(self):
         class WithProperty(Node):
             def __init__(self) -> None:
+                super().__init__()
                 self.w = torch.ones(2)
 
             @property

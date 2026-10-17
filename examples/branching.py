@@ -78,10 +78,10 @@ class Diamond(mujou.Network):
         self.square = Apply(lambda x: x**2)
         self.sum = Sum()
         # Hand split the channels it sends on: the order of connect does not matter.
-        self.split.plus = self.split.connect(self.double)
-        self.split.minus = self.split.connect(self.square)
-        self.double.connect(self.sum)
-        self.square.connect(self.sum)
+        self.split.plus = self.split.next.connect(self.double.prev)
+        self.split.minus = self.split.next.connect(self.square.prev)
+        self.double.next.connect(self.sum.prev)
+        self.square.next.connect(self.sum.prev)
         self.prev = self.split.prev
         self.next = self.sum.next
 

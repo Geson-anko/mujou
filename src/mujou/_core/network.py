@@ -16,13 +16,15 @@ from mujou._core.node import Node
 class Network(Component):
     """A composite of nodes and other networks, declared as attributes.
 
-    Assign nodes and networks as attributes, connect their ports, and expose the
-    ports the outside should reach as attributes of the network. An exposed
-    ``PrevPort`` / ``NextPort`` becomes the previous / next side of the network, so
-    networks connect just like nodes. Only direct attributes are walked (not lists
-    or dicts). A network is a build-time structure: its nodes still run
-    independently and asynchronously.
+    Assign nodes and networks as attributes, connect their ports with
+    ``Port.connect``, and expose the ports the outside should reach as attributes
+    of the network (by convention ``prev`` and ``next`` for the previous and the
+    next side, e.g. ``self.prev = self.l1.prev``). The network registers what is
+    assigned, as ``nn.Module`` registers submodules, so nodes and networks in
+    lists or dicts are not part of it. A network is a build-time
+    structure: its nodes still run independently and asynchronously.
 
+    Call ``super().__init__()`` before assigning a node, a network or a port.
     Declare ports as instance attributes (in ``__init__``), not class attributes,
     and do not use the names of the methods below for attributes.
 
@@ -36,7 +38,7 @@ class Network(Component):
                 super().__init__()
                 self.l1 = Hidden(784, 256)
                 self.l2 = Hidden(256, 256)
-                self.l1.connect(self.l2)  # l1.next <-> l2.prev
+                self.l1.next.connect(self.l2.prev)
                 self.prev = self.l1.prev  # expose the previous side
                 self.next = self.l2.next  # expose the next side
 
@@ -46,7 +48,7 @@ class Network(Component):
                 super().__init__()
                 self.body = Stack()
                 self.head = Head()  # a node with prev, next and teacher ports
-                self.body.connect(self.head)  # body.next (l2.next) <-> head.prev
+                self.body.next.connect(self.head.prev)  # l2.next <-> head.prev
                 self.prev = self.body.prev  # the input
                 self.teacher = self.head.teacher  # the target, a port of head
 
@@ -76,11 +78,9 @@ class Network(Component):
                 one.
             ValueError: The structure is invalid: the tree has no node; a component
                 appears at two paths; a port is owned by two nodes (or under two
-                names); a port is declared as a class attribute; a node holds a
-                node or network as an attribute; a network exposes a port that no
-                node inside it owns; a channel leads to a port outside the tree; or
-                a component has more than one ``PrevPort`` or ``NextPort`` as
-                direct attributes.
+                names); a port is declared as a class attribute; a network exposes
+                a port that no node inside it owns; or a channel leads to a port
+                outside the tree.
         """
         # One build at a time: two threads building one tree would each make a
         # graph, and both would run.
@@ -123,7 +123,7 @@ class Group(Network):
     Example::
 
         enc, dec = Encoder(), Decoder()
-        enc.connect(dec)
+        enc.next.connect(dec.prev)
         with mujou.run(Group(enc=enc, dec=dec)) as run:
             state = run.state_dict()  # nodes "enc.l1", ..., "dec.l1", ...
 

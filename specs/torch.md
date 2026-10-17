@@ -24,8 +24,8 @@ torch は mujou の必須の依存である。実装は private な `mujou._core
 | `timer` | `Timer` / `ReadOnlyTimer` / `VirtualTimer`、ホスト専用の操作の検査 | `hooks` |
 | `spec` | `TensorSpec` / `DictSpec`、メッセージとテンソルの分解・組み立て、ホストのメモリへのコピー（`host_tensors`） | なし |
 | `port` | Port と `Channel` | `spec` |
-| `component` | `Node` と `Network` の共通の基底 `Component`（`connect`）と、属性の Port の列挙 | `port` |
-| `node` | `mujou.Node` | `component` / `hooks` / `port` / `timer` |
+| `component` | `Node` と `Network` の共通の基底 `Component` と、代入した Port と子の登録 | `port`（構築済みかを確かめる `graph` は、循環 import を避けて関数の中で import する） |
+| `node` | `mujou.Node` | `component` / `hooks` / `timer` |
 | `graph` | ネットワークの構築（木の走査・検査・凍結・構築済みの印）と `Graph`、1 回だけの起動（`start_once`） | `component` / `node` / `port` |
 | `network` | `Network` / `Group` / `RunGroup` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
 | `binding` | 動いている実行での Port の読み書き（`Binding`） | `node` / `port` / `spec` |

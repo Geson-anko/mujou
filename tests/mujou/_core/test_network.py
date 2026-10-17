@@ -1,7 +1,4 @@
-import dataclasses
-import inspect
 import threading
-import typing
 from typing import Any, override
 
 import pytest
@@ -19,106 +16,42 @@ def h(n: int = 3) -> TensorSpec:
 
 class Hidden(Node):
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(send=h(), recv=h())
         self.next = NextPort(send=h(), recv=h())
 
 
 class Source(Node):
     def __init__(self) -> None:
+        super().__init__()
         self.next = NextPort(send=h(), recv=h())
 
 
 class Sink(Node):
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(send=h(), recv=h())
         self.teacher = Port(recv=h(5))
 
 
 class Stack(Network):
     def __init__(self) -> None:
+        super().__init__()
         self.l1 = Hidden()
         self.l2 = Hidden()
-        self.l1.connect(self.l2)
+        self.l1.next.connect(self.l2.prev)
         self.prev = self.l1.prev
         self.next = self.l2.next
 
 
 class Classifier(Network):
     def __init__(self) -> None:
+        super().__init__()
         self.body = Stack()
         self.head = Sink()
-        self.body.connect(self.head)
+        self.body.next.connect(self.head.prev)
         self.prev = self.body.prev
         self.teacher = self.head.teacher
-
-
-class TestComponentConnect:
-    def test_joins_next_to_prev(self):
-        a, b = Hidden(), Hidden()
-        ch = a.connect(b)
-        assert ch.ends == (a.next, b.prev)
-        assert a.prev.channels == () and b.next.channels == ()
-
-    def test_reverse_is_a_different_connection(self):
-        a, b = Hidden(), Hidden()
-        ab, ba = a.connect(b), b.connect(a)
-        assert ab.ends == (a.next, b.prev)
-        assert ba.ends == (b.next, a.prev)
-
-    def test_uses_the_ports_a_nested_network_exposes(self):
-        stack, sink = Stack(), Sink()
-        ch = stack.connect(sink)
-        assert ch.ends == (stack.l2.next, sink.prev)
-        source = Source()
-        ch = source.connect(stack)
-        assert ch.ends == (source.next, stack.l1.prev)
-
-    def test_missing_side(self):
-        with pytest.raises(ValueError, match="NextPort"):
-            Sink().connect(Hidden())
-        with pytest.raises(ValueError, match="PrevPort"):
-            Hidden().connect(Source())
-
-    def test_a_network_without_a_side_is_told_how_to_expose_one(self):
-        with pytest.raises(
-            ValueError,
-            match=r"found 0; expose one, e\.g\. self\.next = self\.<child>\.next",
-        ):
-            Classifier().connect(Hidden())
-        with pytest.raises(ValueError, match=r"self\.prev = self\.<child>\.prev"):
-            Hidden().connect(Group(Hidden()))
-
-    def test_the_same_port_under_two_names_is_one_side(self):
-        class Aliased(Network):
-            def __init__(self) -> None:
-                self.node = Hidden()
-                self.next = self.node.next
-                self.out = self.node.next
-
-        net, sink = Aliased(), Sink()
-        ch = net.connect(sink)
-        assert ch.ends == (net.node.next, sink.prev)
-
-    def test_two_sides(self):
-        class TwoNext(Node):
-            def __init__(self) -> None:
-                self.a = NextPort(send=h(), recv=h())
-                self.b = NextPort(send=h(), recv=h())
-
-        with pytest.raises(ValueError, match="found 2"):
-            TwoNext().connect(Hidden())
-
-    def test_branches_from_a_next_port(self):
-        a, b, c = Hidden(), Hidden(), Hidden()
-        ab, ac = a.connect(b), a.connect(c)
-        assert a.next.channels == (ab, ac)
-
-    @pytest.mark.parametrize("kind", [Node, Network])
-    def test_annotations_resolve(self, kind: type[Node | Network]):
-        # component.py imports Node and Network only for the type checker.
-        other = inspect.signature(kind.connect).parameters["other"].annotation
-        assert other == Node | Network
-        assert typing.get_type_hints(kind.connect)["other"] == Node | Network
 
 
 class TestBuild:
@@ -152,6 +85,7 @@ class TestBuild:
     def test_unconnected_ports_are_allowed(self):
         class Single(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.node = Hidden()
 
         Single().build()
@@ -162,12 +96,13 @@ class TestBuild:
         with pytest.raises(RuntimeError, match="already built"):
             net.body.next.connect(Sink().prev)
         with pytest.raises(RuntimeError, match="already built"):
-            Source().connect(net)
+            Source().next.connect(net.prev)
         assert len(net.body.next.channels) == 1
 
     def test_rejects_a_tree_that_contains_a_built_network(self):
         class Outer(Network):
             def __init__(self, inner: Network) -> None:
+                super().__init__()
                 self.inner = inner
 
         inner = Stack()
@@ -178,6 +113,7 @@ class TestBuild:
     def test_rejects_the_same_node_at_two_paths(self):
         class Twice(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.a = Hidden()
                 self.b = self.a
 
@@ -186,31 +122,21 @@ class TestBuild:
 
     def test_rejects_a_connection_out_of_the_tree(self):
         net = Classifier()
-        Source().connect(net)
+        Source().next.connect(net.prev)
         with pytest.raises(
             ValueError, match="'body.l1.prev' is connected to a port outside"
         ):
             net.build()
 
-    def test_rejects_a_node_holding_a_component(self):
-        class Holder(Node):
-            def __init__(self) -> None:
-                self.inner = Hidden()
-
-        class Net(Network):
-            def __init__(self) -> None:
-                self.holder = Holder()
-
-        with pytest.raises(ValueError, match="node 'holder' holds a Hidden"):
-            Net().build()
-
     def test_rejects_a_port_owned_by_two_nodes(self):
         class Borrower(Node):
             def __init__(self, port: Port[Any, Any, Any]) -> None:
+                super().__init__()
                 self.port = port
 
         class Net(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.a = Hidden()
                 self.b = Borrower(self.a.next)
 
@@ -220,6 +146,7 @@ class TestBuild:
     def test_rejects_exposing_a_port_outside_the_tree(self):
         class Net(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.a = Hidden()
                 self.out = Port(send=h())
 
@@ -229,11 +156,13 @@ class TestBuild:
     def test_rejects_exposing_a_port_of_a_sibling(self):
         class Inner(Network):
             def __init__(self, node: Hidden) -> None:
+                super().__init__()
                 self.own = Hidden()
                 self.prev = node.prev
 
         class Outer(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.node = Hidden()
                 self.inner = Inner(self.node)
 
@@ -246,32 +175,10 @@ class TestBuild:
 
         class Net(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.node = ClassPort()
 
         with pytest.raises(ValueError, match="'port' on the class ClassPort"):
-            Net().build()
-
-    def test_rejects_two_prev_ports_on_a_network(self):
-        class Net(Network):
-            def __init__(self) -> None:
-                self.a, self.b = Hidden(), Hidden()
-                self.prev_a = self.a.prev
-                self.prev_b = self.b.prev
-
-        with pytest.raises(ValueError, match="2 PrevPort"):
-            Net().build()
-
-    def test_rejects_two_next_ports_on_a_node(self):
-        class TwoNext(Node):
-            def __init__(self) -> None:
-                self.a = NextPort(send=h())
-                self.b = NextPort(send=h())
-
-        class Net(Network):
-            def __init__(self) -> None:
-                self.node = TwoNext()
-
-        with pytest.raises(ValueError, match="'node' has 2 NextPort"):
             Net().build()
 
     def test_rejects_a_node_of_another_built_network(self):
@@ -281,6 +188,7 @@ class TestBuild:
 
         class Net(Network):
             def __init__(self, node: Node) -> None:
+                super().__init__()
                 self.node = node
 
         lone = Lone()
@@ -289,11 +197,18 @@ class TestBuild:
             Net(lone).build()
 
     def test_ignores_the_equality_of_the_components(self):
-        # The marks follow identity: a dataclass network (unhashable) builds, and
-        # an equal but distinct node is not taken for a built one.
-        @dataclasses.dataclass
-        class DataNet(Network):
-            node: Node
+        # The marks follow identity: an unhashable network builds, and an equal
+        # but distinct node is not taken for a built one.
+        class Unhashable(Network):
+            def __init__(self, node: Node) -> None:
+                super().__init__()
+                self.node = node
+
+            @override
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, Unhashable)
+
+            __hash__ = None  # pyright: ignore[reportAssignmentType]
 
         class EqualNode(Node):
             @override
@@ -306,9 +221,10 @@ class TestBuild:
 
         class Net(Network):
             def __init__(self, node: Node) -> None:
+                super().__init__()
                 self.node = node
 
-        DataNet(Hidden()).build()
+        Unhashable(Hidden()).build()
         Net(EqualNode()).build()
         Net(EqualNode()).build()
 
@@ -332,6 +248,7 @@ class TestBuild:
     def test_rejects_a_network_without_nodes(self):
         class Empty(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.inner = Network()
 
         with pytest.raises(ValueError, match="no node"):
@@ -360,7 +277,7 @@ class TestGroup:
 
     def test_the_networks_may_be_connected(self):
         source, sink = Stack(), Stack()
-        source.connect(sink)
+        source.next.connect(sink.prev)
         graph = Group(source, sink).build()
         assert graph.port_path(sink.prev) == "1.l1.prev"
 
@@ -377,7 +294,7 @@ class TestGroup:
         with pytest.raises(TypeError, match="'x'"):
             Group(x=1)  # pyright: ignore[reportArgumentType]
 
-    @pytest.mark.parametrize("name", ["build", "connect", "_private", "", "a.b"])
+    @pytest.mark.parametrize("name", ["build", "_private", "", "a.b"])
     def test_rejects_names_that_would_hide_its_own(self, name: str):
         with pytest.raises(ValueError, match=repr(name)):
             Group(**{name: Stack()})

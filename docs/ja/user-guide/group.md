@@ -27,7 +27,7 @@
 
 ## 束ねる前につなぐ
 
-束ねたネットワーク同士は、束ねる前に `connect` でつないでおけば、つながったまま走る。`Group` 自体は何もつながない。上の例では `enc.connect(dec)` の後に `Group(enc=enc, dec=dec)` で束ねている。
+束ねたネットワーク同士は、束ねる前に Port を `connect` でつないでおけば、つながったまま走る。`Group` 自体は何もつながない。上の例では `enc.next.connect(dec.prev)` の後に `Group(enc=enc, dec=dec)` で束ねている。
 
 入力を書く Port と出力を読む Port は、渡したネットワークの Port をそのまま使う（`enc.prev`、`dec.next`）。`Group` の属性を経由しなくてよい。
 

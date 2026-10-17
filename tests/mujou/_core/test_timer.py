@@ -239,6 +239,7 @@ class Calls(Node):
     each ``dt``."""
 
     def __init__(self, action: Callable[[], object] = lambda: None) -> None:
+        super().__init__()
         self.action = action
         self.errors: list[Exception] = []
         self.dts: list[float] = []

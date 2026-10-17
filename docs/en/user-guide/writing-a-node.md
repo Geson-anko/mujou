@@ -22,17 +22,17 @@ As in any subclass, `__init__` first calls `super().__init__()`, and each overri
 
 ## 1. Declare the ports in `__init__`
 
-Assign ports as instance attributes inside `__init__`. A port declared as a class attribute makes building the network (`build()`) raise `ValueError`.
+Assign ports as instance attributes inside `__init__`, after `super().__init__()`: the node registers each port as it is assigned, and assigning one before `super().__init__()` raises `AttributeError`. A port declared as a class attribute makes building the network (`build()`) raise `ValueError`.
 
-Choose the kind of port by its role in the network.
+Choose the kind of port by its role in the network. By convention, name the port on the side of the previous node `prev` and the one on the side of the next node `next`, so that a chain reads `a.next.connect(b.prev)`.
 
-| Role                                                                   | Declaration |
-| ---------------------------------------------------------------------- | ----------- |
-| The side that receives from the previous node (`b` in `a.connect(b)`)  | `PrevPort`  |
-| The side that sends to the next node (`a` in `a.connect(b)`)           | `NextPort`  |
-| Anything else (a teacher signal input, an output for observation, ...) | `Port`      |
+| Role                                                                   | Declaration | Name by convention |
+| ---------------------------------------------------------------------- | ----------- | ------------------ |
+| The side that receives from the previous node                          | `PrevPort`  | `prev`             |
+| The side that sends to the next node                                   | `NextPort`  | `next`             |
+| Anything else (a teacher signal input, an output for observation, ...) | `Port`      | any                |
 
-A node can have at most one `PrevPort` and at most one `NextPort`. It can have any number of `Port`s.
+The kinds differ only in the number of peers they take by default (below). A node can have any number of ports of each kind.
 
 Give each port the type of the values it sends as `send=`, and the type of the values it receives as `recv=`. Write a type as `TensorSpec(shape, dtype)`. If you leave out the dtype, it is `torch.get_default_dtype()` at the time the spec is created (usually `float32`). On a one-way port, leave out the argument you do not use (do not pass `None`).
 

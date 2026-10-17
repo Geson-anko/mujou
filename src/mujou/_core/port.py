@@ -69,9 +69,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
     ``repr``; the first assignment names it.
 
-    ``Port`` is neither the previous nor the next side of its owner; use
-    ``PrevPort`` and ``NextPort`` for the sides that ``a.connect(b)`` between two
-    nodes (or networks) joins.
+    ``PrevPort`` and ``NextPort`` are ports with other defaults for the number of
+    peers, for the previous and the next side of a node by convention.
 
     Example::
 
@@ -360,10 +359,11 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
 
 class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M]):
-    """The previous side of a node or network: ``b`` in ``a.connect(b)``.
+    """A port for the previous side of a node or network: ``b.prev`` in
+    ``a.next.connect(b.prev)``.
 
-    Takes one peer by default; pass ``multi=True`` to merge several. A node or
-    network has at most one ``PrevPort`` as a direct attribute.
+    It differs from ``Port`` only in its default: one peer, as ``Port``; pass
+    ``multi=True`` to merge several. It is usually named ``prev``.
 
     Example::
 
@@ -401,11 +401,12 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
 
 
 class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
-    """The next side of a node or network: ``a`` in ``a.connect(b)``.
+    """A port for the next side of a node or network: ``a.next`` in
+    ``a.next.connect(b.prev)``.
 
-    Takes any number of peers by default, since branches usually start here; pass
-    ``multi=False`` for one. A node or network has at most one ``NextPort`` as a
-    direct attribute.
+    It differs from ``Port`` only in its default: any number of peers, since
+    branches usually start here; pass ``multi=False`` for one. It is usually named
+    ``next``.
 
     Example::
 
@@ -498,7 +499,7 @@ def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
 
 def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
     """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
-    (``Node.__setattr__`` calls this; the first assignment wins, so a second name
+    (a node calls this as the port is assigned; the first assignment wins, so a second name
     does not rename the port, and networks never do)."""
     if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
         port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]

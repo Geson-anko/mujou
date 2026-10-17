@@ -32,7 +32,7 @@ y = tensor([3., 5., 7.]) at t = 0.017 s
 ## 何が起きたか
 
 - `Scale` と `Shift` はノードで、`mujou.Node` を継承したクラスである。それぞれ `__init__` で Port を宣言し、1 回分の処理を `on_update(dt)` に書く。どのサブクラスでもするように、最初に `super().__init__()` と `super().on_update(dt)` を呼ぶ
-- `Affine` はネットワークである。ノードを属性として持ち、`connect` でつなぐ。どこにもつながっていない `scale` の `prev` を入力として、`shift` の `next` を出力として公開する
+- `Affine` はネットワークである。ノードを属性として持ち、その Port 同士を `connect` でつなぐ。どこにもつながっていない `scale` の `prev` を入力として、`shift` の `next` を出力として公開する
 - `mujou.run(net)` はノードを動かし始める。各ノードは自分のスレッドで `on_update` を繰り返す。ノードが動き出すと `mujou.run` は戻る。`on_update` の中の `recv()` は待たずに最新の値を読むので、`x` が `scale` を通り抜けるまで、`shift` は前の入力（最初はゼロ）から計算した値を送り続ける
 - そのため、`run.write` の直後に読んだ出力は、まだ古いことがある。`run.write` で `x` を書き、`run.wait_for` で出力が条件を満たすまで待つ。実時間で 5 秒たっても満たさなければ `TimeoutError` になる。`with` ブロックを抜けると、ネットワークが止まる
 

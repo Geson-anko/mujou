@@ -22,7 +22,7 @@ class LeakyChain(mujou.Network):
         super().__init__()
         self.a = Leaky(TAU)
         self.b = Leaky(TAU)
-        self.a.connect(self.b)
+        self.a.next.connect(self.b.prev)
         self.prev = self.a.prev
         self.next = self.b.next
 

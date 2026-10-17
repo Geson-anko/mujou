@@ -24,7 +24,7 @@
 - [ノードのライフサイクル](project_node_lifecycle.md) — ノードが分散処理の最小単位。on_thread_start / on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → 木をコピー → 再開 → ホストに返す。正常終了後も取得できる。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_exception → on_stop、ホストへ最初の例外を送出。例外時の state tree は取得しない。部分停止・再起動・スキップはしない
-- [ネットワークと Port](project_network_ports.md) — Node と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
+- [ネットワークと Port](project_network_ports.md) — Node と Network は Composite、接続は Port 同士（a.next.connect(b.prev)）、NextPort は既定で複数・PrevPort は 1 つ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
 - [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、mujou.run が返す Run ハンドルの write / read / subscribe / wait_for / state_dict / shutdown / join。初期値と復元は inputs= / state=。複数 Port の write は版番号で一斉切り替え。入力はその実行のタイマー上の信号
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由。ノードのデバイスは CPU と CUDA だけ（MPS などは 2026-10-17 に取りやめ）
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — 実装は private な mujou._core パッケージ、PyTorch を必須の依存として全面採用（mujou.torch に分けない）、torch を使わないのは拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node が内部の hook _on_thread_start で勾配停止・ノードごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA だけ。JAX は多数スレッドで伸びず不採用
@@ -35,6 +35,7 @@
 - [ノードの実行周期](project_node_period.md) — `Node(period=0.01)` が既定、`0.0` は明示したときだけ、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す（平均 1/P、まとめて回らない）。Δt は実経過。`period` は予約名。手動モードは周期を無視
 - [run がノードを受け付け、write が時刻を返す](project_run_node_and_write_time.md) — 2026-10-17。`Run.write` が `Timestamp` を返す。`mujou.run(component, *components)` / `Group(*components)` がノードを受け付け混在可。1 つだけなら包まず根にする（ノードのパス `""`、ユーザーの決定）
 - [Compose を Group に、型は mujou.typing に](project_group_and_typing.md) — 2026-10-17 のユーザーの決定。並べるだけなので直列の合成に読める名前を避けた。`Single` / `Multi` / `MessageSpec` を `mujou.typing` から公開
+- [接続は Port 同士だけ、Port と子は代入時に登録](project_port_registry.md) — 2026-10-17。Component.connect と PrevPort / NextPort を 1 つずつに限る制約を廃止。nn.Module と同じく __setattr__ で登録し build は vars() を探索しない。init 前の代入は AttributeError、構築後の変更は RuntimeError
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback

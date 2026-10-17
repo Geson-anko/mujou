@@ -41,7 +41,7 @@ class Stage(mujou.Network):
 # --8<-- [start:group]
 # By keyword: two networks connected before they are grouped.
 enc, dec = Stage(2.0), Stage(3.0)
-enc.connect(dec)  # enc.next <-> dec.prev, as for nodes
+enc.next.connect(dec.prev)  # the ports a network exposes, as for nodes
 x = torch.tensor([1.0, -1.0])
 with mujou.run(Group(enc=enc, dec=dec), inputs={enc.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given

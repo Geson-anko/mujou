@@ -51,6 +51,7 @@ class Recorder(Node):
     def __init__(
         self, name: str, log: Log, raise_in: str | None = None, at: int = 1
     ) -> None:
+        super().__init__()
         self.name = name
         self.log = log
         self.raise_in = raise_in
