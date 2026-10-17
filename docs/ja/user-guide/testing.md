@@ -1,5 +1,87 @@
 # テスト
 
-!!! note "書く内容"
+ふつうに走らせたネットワークでは、`dt` は実時間の経過で決まり、ノードが更新する順序も毎回違う。そのため結果は毎回わずかに変わる。このページでは、`mujou.testing` を使って、ノードとネットワークを毎回同じ結果になるように走らせ、テストする手順を書く。mujou 自身のテストも同じ API を使う。
 
-    公開のテスト用の API（`mujou.testing`）で、ノードとネットワークを決定的にテストする方法を書く。仮想時計と、ノードを手で 1 ステップずつ進める方法を扱う。mujou 自身も、既定のノードを含めて同じ API でテストする。
+## 道具
+
+| 名前                                     | 役割                                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `mujou.testing.VirtualTimer()`           | 仮想のタイマー。時刻 0 から始まり、`advance(秒)` で進めた分だけ進む                      |
+| `mujou.testing.run(net, timer=..., ...)` | `mujou.run` と同じ引数で走らせ、`ManualRun` を返す。ノードは `step` で許すまで更新しない |
+| `ManualRun.step(*nodes)`                 | 渡したノードを、渡した順に 1 回ずつ更新し、全部終わってから戻る                          |
+
+`ManualRun` は `Run` の派生なので、`write`・`read`・`state_dict` なども `mujou.run` と同じように使える。
+
+## 手順
+
+次のテストでは、リーク積分器を 2 つ並べたネットワークを、ノードと同じ厳密な係数 `1 - exp(-h / tau)` で書いた離散アルゴリズムと比べる。
+
+```python
+--8<-- "examples/testing_a_node.py"
+```
+
+1. 比べる相手（参照）を、ノードと同じ演算で書く。ここでは `a` を更新してから、その新しい値で `b` を更新する
+2. `VirtualTimer()` を作り、`mujou.testing.run(net, timer=timer, inputs=...)` に渡す
+3. 各ステップで、まず `timer.advance(h)` で時間を `h` 秒進め、次に `run.step(...)` でノードを更新する。各ノードの `dt` はちょうど `h` になる
+4. `run.read` で出力を読み、参照と比べる
+
+参照とノードが同じ演算を同じ順に行えば、結果はビット単位で一致するので、`torch.equal` で比べられる。演算の順序が違うときは `torch.testing.assert_close` で比べる。
+
+## step の決まり
+
+- `step()` を引数なしで呼ぶと、ネットワークの木の順に全ノードを 1 回ずつ更新する
+- 順序で結果が変わる。上の例の `step(net.a, net.b)` では、`b` は `a` がこのステップで送った値を読む。`step(net.b, net.a)` なら、`b` は `a` の前のステップの値を読む
+- 前回の更新からタイマーの時刻が進んでいないノードは、更新されない。`advance` を忘れると何も起きず、同じ `step` の中で同じノードを 2 回渡しても 2 回目は飛ばされる
+- ノードの周期（`period`）は、手動の実行では使われない
+- `step` は時刻を進めない。時刻を進めるのは `advance` だけである
+
+## VirtualTimer を渡し忘れない
+
+`mujou.testing.run` の `timer` の既定は、`mujou.run` と同じくグローバルタイマーである。`VirtualTimer` を渡さないと、時計はひとりでに進み、各 `dt` は `step` の間に経った実時間になる。そのテストは決定的にならない。直すには、`VirtualTimer()` を渡し、各ステップで `advance` してから `step` する（上の「手順」の 2 と 3）。
+
+## 決定的にするためのほかの条件
+
+- 乱数を使うノードには `seed` を渡す（[ノードの中の PyTorch](torch.md)）。`seed` を渡さないと、生成器は毎回違う seed で作られる
+- テストの中でも、ホストは `time.sleep` で待って結果を決めない。時間は `advance` で進める
+
+## 保存と復元のテスト
+
+途中で状態を取り、新しいインスタンスに復元して続けた結果が、止めずに続けた結果と一致するかを確かめられる。`VirtualTimer` の上なら、両者はビット単位で一致する。次の例は、上のサンプルの `Chain` クラスを使う。後半の復元では前半と同じ `timer` を使う。前半の実行はもう終わっているので、同じタイマーで復元してよい。
+
+```python
+import torch
+
+import mujou.testing
+from mujou.testing import VirtualTimer
+
+u = torch.tensor([1.0, -2.0], dtype=torch.float64)
+
+
+def steps(net, timer, n, state=None):
+    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}, state=state) as run:
+        for _ in range(n):
+            timer.advance(0.001)
+            run.step()
+    return run.state_dict()
+
+
+straight = steps(Chain(0.01), VirtualTimer(), 20)
+timer = VirtualTimer()
+half = steps(Chain(0.01), timer, 10)
+resumed = steps(Chain(0.01), timer, 10, state=half)
+assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
+```
+
+## 例外のテスト
+
+ノードが例外を投げると、その例外は `step` から `NetworkError` として届く。`__cause__` がノードの例外である（[例外と終了](errors.md)）。
+
+```python
+import pytest
+
+from mujou import NetworkError
+
+with pytest.raises(NetworkError) as info:
+    run.step()
+assert isinstance(info.value.__cause__, ValueError)
+```
