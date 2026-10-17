@@ -2,10 +2,11 @@
 
 A node collects its state by itself: every attribute that holds a
 ``torch.Tensor`` or an ``nn.Module``. ``Run.state_dict`` gathers the states of all
-nodes, the latest messages and the time into one tree, which pickles.
+nodes, the latest messages and the time into one tree, a ``mujou.StateDict``.
+Save it with ``torch.save`` (or pickle), and read it back with ``torch.load``.
 """
 
-import pickle
+import io
 from typing import override
 
 import torch
@@ -55,11 +56,15 @@ with mujou.run(net, inputs={net.prev: one}) as run:
 tree = run.state_dict()  # after a normal end: the state at the stop
 saved = tree["nodes"]["integrator"]  # this node's state_dict()
 print("state of the node:", {k: type(v).__name__ for k, v in saved.items()})
-data = pickle.dumps(tree)  # save it as you like: a file, a database, ...
+file = io.BytesIO()  # or a path, such as "state.pt"
+# .cpu(): every tensor on the CPU, so that a machine without the GPU reads it too.
+torch.save(tree.cpu(), file)
 
 # A new instance of the same network goes on from the saved state and time.
 restored = Model()
-with mujou.run(restored, inputs={restored.prev: one}, state=pickle.loads(data)) as run:
+file.seek(0)
+loaded = torch.load(file)  # the default weights_only=True reads a StateDict
+with mujou.run(restored, inputs={restored.prev: one}, state=loaded) as run:
     mujou.time.sleep(0.1)
 after = run.state_dict()["nodes"]["integrator"]
 
