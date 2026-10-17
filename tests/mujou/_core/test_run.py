@@ -1,3 +1,4 @@
+import io
 import math
 import pickle
 import re
@@ -973,6 +974,13 @@ class TestStateDict:
         assert again["timer"] == tree["timer"]
 
     @pytest.mark.parametrize("ended", [False, True])
+    def test_is_a_state_dict(self, start_manual: StartManual, ended: bool):
+        run = start_manual(Chain())
+        if ended:
+            run.shutdown()
+        assert isinstance(run.state_dict(), mujou.StateDict)
+
+    @pytest.mark.parametrize("ended", [False, True])
     def test_cannot_receive_in_the_node_state_dict(
         self, start_manual: StartManual, ended: bool
     ):
@@ -1074,6 +1082,28 @@ class TestState:
         assert restored is not None
         net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
+
+    @pytest.mark.parametrize("saved_as", ["torch.save", "dict"])
+    def test_restores_a_saved_tree(
+        self, step: Step, start_manual: StartManual, saved_as: str
+    ):
+        source = Chain()
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run)
+        tree = run.state_dict()
+        run.shutdown()
+        if saved_as == "torch.save":
+            buffer = io.BytesIO()
+            torch.save(tree, buffer)
+            buffer.seek(0)
+            loaded = torch.load(buffer)  # weights_only=True by default
+            assert isinstance(loaded, mujou.StateDict)
+        else:
+            loaded = dict(tree)  # any mapping of the same items
+        net = Chain()
+        start_manual(net, timer=VirtualTimer(), state=loaded)
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+        assert torch.equal(net.b.x, tree["nodes"]["b"]["x"])
 
 
 class TestNodeException:
@@ -1637,6 +1667,22 @@ class TestCuda:
         assert received is not None
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
+
+    def test_the_state_moved_to_the_cpu_restores(
+        self, step: Step, start_manual: StartManual
+    ):
+        source = DeviceChain(CUDA0)
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run, source.a, source.b)
+        tree = run.state_dict()
+        run.shutdown()
+        assert tree["nodes"]["a"]["x"].device == CUDA0
+        on_cpu = tree.cpu()
+        assert on_cpu["nodes"]["a"]["x"].device == torch.device("cpu")
+        net = DeviceChain(CUDA0)
+        start_manual(net, timer=VirtualTimer(), state=on_cpu)
+        assert net.a.x.device == CUDA0
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
 
     def test_manual_steps_match_the_discrete_algorithm(
         self, step: Step, start_manual: StartManual

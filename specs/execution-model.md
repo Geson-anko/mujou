@@ -128,8 +128,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 ```python
 state = run.state_dict()         # 停止 → コピー → 再開 → 木を返す
-with open("state.pkl", "wb") as f:
-    pickle.dump(state, f)        # 保存の方法はユーザーが決める
+torch.save(state.cpu(), "state.pt")  # 保存の方法はユーザーが決める。cpu() で GPU のテンソルも CPU へ
 
 run.shutdown()
 state = run.state_dict()         # 正常に終了した後は、終了した時点の木を返す
@@ -147,6 +146,16 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 システムの状態は、ノードの状態とスロットの中身を合わせたものである。スロットを初期値に戻して再開すると、隣のノードが再開直後に初期値を読み、平衡から外れる。そのためスロットも木に入れる。ホストが外から書き込む入力のスロットも含む。バッファプールは含めない。
 
 各ノードの状態は、ネットワークの木の中の属性のパス（`body.l1` など）で識別する。
+
+### `StateDict`
+
+`Run.state_dict()` は木を `mujou.StateDict` で返す。木の構造は変えず、木の中のテンソルをまとめてデバイスへ移す `to(device)` と `cpu()` を足すためのクラスである（2026-10-17、ユーザーの決定）。木のテンソルは各ノードのデバイスに置いたままにし、常に CPU に移すことはしない。GPU のノードの状態を CPU のテンソルで保存したいときに、利用者が `tree.cpu()` を呼ぶ。
+
+- `dict` の派生にした。`tree["nodes"]["x"]`・pickle・`mujou.run(state=)` への受け渡しなど、素の dict の木での使い方がそのまま動くからである
+- `to(device)` は、木の中の dict（`OrderedDict` など派生も含む。`copy.copy` で同じ型と属性（`nn.Module.state_dict` の `_metadata`）を保つ）・list・tuple を再帰的に辿り、テンソルを `Tensor.to(device)` で移した新しい木を返す。元の木は変えない。入れ物は新しく作り、それ以外の値は共有する。すでに `device` にあるテンソルは、`Tensor.to` と同じくコピーせず共有する。木の中で同じテンソルを 2 か所が指していれば、移した木でも 1 つのテンソルを指す（`id` の memo）。`list` / `tuple` の派生（`torch.Size` など）は入れ物として辿らず、そのまま共有する。`dtype` は扱わない（要求されていない）
+- `torch.load` の既定 `weights_only=True` の unpickler は、`SETITEMS` を素の `dict` と `OrderedDict` などにしか許さない。dict の派生を普通に pickle すると、`torch.save` した木を既定の `torch.load` で読めなくなる。そこで `__reduce__` で `(StateDict, (dict(self),))` を返し、中身は素の dict として pickle し、`StateDict` はそれを引数に呼ぶ。`StateDict` は `mujou` を import したときに `torch.serialization.add_safe_globals` に登録する。こうすると、`torch.save` した木は既定の `torch.load` で `StateDict` に戻る。素の dict として保存する案（`__reduce__` で `dict` を返す）も試したが、`weights_only=True` は `builtins.dict` の呼び出しも許さず読めなかった。登録はプロセス全体の torch の設定を変えるが、`StateDict` の構築は dict を作るだけで、任意のコードを実行する経路にならない
+- pickle には `mujou.StateDict` の名前で入れる（`__module__ = "mujou"`）。実装のモジュールを移しても、保存したファイルが読めるようにするためである
+- `torch.load` で読むには、先に `import mujou` していなければならない。mujou の木を使うのは mujou を使うプロセスなので、制約にならないと判断した
 
 ### コピーを取る理由
 
@@ -218,7 +227,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 
 - ノードはそれぞれ専用のスレッドで動く。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
 - `mujou.run` は、その実行のタイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `_on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_thread_start` → `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
-- `Run.state_dict()` が返す木は次の形で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする
+- `Run.state_dict()` が返す木は次の形の `mujou.StateDict`（`dict` の派生）で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする。`mujou.run(..., state=)` は `StateDict` でも、同じ中身の素の `Mapping` でも受け付ける
 
 ```python
 {

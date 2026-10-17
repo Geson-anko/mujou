@@ -72,6 +72,12 @@ So the node's author does not have to write any synchronization. If you synchron
 
 Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
 
+In the tree `run.state_dict()` returns, the state of a CUDA node stays in CUDA tensors. Move every tensor of the tree to the CPU with `cpu()` before saving it, and a machine without a GPU can read it too. On a restore, the default `load_state_dict` copies the tensors back to the node's device (see [Saving and restoring state](state.md#formats)).
+
+```python
+torch.save(run.state_dict().cpu(), "state.pt")
+```
+
 ## Settings of the whole process
 
 The following settings are shared by the whole process. Do not change them in a node. If needed, the host sets them once, before `mujou.run`.
