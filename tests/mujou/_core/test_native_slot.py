@@ -306,6 +306,28 @@ class TestInputGroup:
             InputGroup(timer=global_timer).write([(other, [torch.ones(2)])])
 
 
+class TestSent:
+    def test_marks_what_the_writers_wrote(self):
+        outlet = Outlet(tensor_schema((2,)), 1, "p", timer=global_timer)
+        group = InputGroup(timer=global_timer)
+        x = group.input(tensor_schema((2,)), "x")
+        assert not outlet.outbox.read().sent and not outlet.channel(0).read().sent
+        assert not x.read().sent
+        outlet.send([torch.ones(2)])
+        group.write([(x, [torch.ones(2)])])
+        assert outlet.outbox.read().sent and outlet.channel(0).read().sent
+        assert x.read().sent
+
+    @pytest.mark.parametrize("sent", [False, True])
+    def test_restore_sets_it(self, sent: bool):
+        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        x = InputGroup(timer=global_timer).input(tensor_schema((2,)), "x")
+        outlet.outbox.restore([torch.ones(2)], 5, sent=sent)
+        x.restore([torch.ones(2)], 5, sent=sent)
+        assert outlet.outbox.read().sent is sent
+        assert x.read().sent is sent
+
+
 class TestTimers:
     @pytest.mark.parametrize("own", [False, True], ids=["global", "own"])
     def test_slots_stamp_with_the_timer_they_are_given(

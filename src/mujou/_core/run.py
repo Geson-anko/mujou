@@ -266,7 +266,7 @@ class Run:
 
             {
                 "nodes": {"body.l1": ..., ...},  # each node's state_dict()
-                "slots": {"body.l1.next/out": (value, time_ns), ...},
+                "slots": {"body.l1.next/out": (value, time_ns, sent), ...},
                 "last_update_ns": {"body.l1": int, ...},
                 "timer": {"time_ns": int, "scale": float},
             }

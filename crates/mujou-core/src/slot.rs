@@ -302,12 +302,13 @@ impl fmt::Debug for Buffer {
     }
 }
 
-/// An immutable value of a slot: one buffer per field, in schema order, and the
-/// time it was written at on the writer's timer.
+/// An immutable value of a slot: one buffer per field, in schema order, the
+/// time it was written at on the writer's timer, and whether its writer sent it.
 #[derive(Debug)]
 pub struct Message {
     buffers: Vec<Buffer>,
     time_ns: u64,
+    sent: bool,
 }
 
 impl Message {
@@ -321,6 +322,12 @@ impl Message {
 
     pub fn timestamp(&self) -> Timestamp {
         Timestamp::from_ns(self.time_ns)
+    }
+
+    /// Whether the slot's writer sent it (or a restore said so), rather than it
+    /// being the value the slot was created or initialized with.
+    pub fn sent(&self) -> bool {
+        self.sent
     }
 }
 
@@ -362,9 +369,13 @@ impl Messages {
         Ok(buffers)
     }
 
-    fn build<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<Arc<Message>, E> {
+    fn build<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<Arc<Message>, E> {
         let buffers = self.fill(fill)?;
-        Ok(Arc::new(Message { buffers, time_ns }))
+        Ok(Arc::new(Message {
+            buffers,
+            time_ns,
+            sent,
+        }))
     }
 
     fn zeros(&self, time_ns: u64) -> Arc<Message> {
@@ -372,7 +383,7 @@ impl Messages {
             bytes.iter_mut().for_each(|b| b.fill(0));
             Ok::<_, std::convert::Infallible>(())
         };
-        let Ok(msg) = self.build(time_ns, zero);
+        let Ok(msg) = self.build(time_ns, false, zero);
         msg
     }
 }
@@ -453,13 +464,14 @@ impl Slot {
         newer
     }
 
-    /// Sets the value and its time as they were when the state was taken.
+    /// Sets the value, its time and whether it was sent as they were when the
+    /// state was taken (`sent` is false for an initial value).
     ///
     /// Call it only while no node runs (before the start, or while every node is
     /// paused with the timer frozen): it is a second way to write the slot, beside
     /// its writer, and the readers' handles reach it too.
-    pub fn restore<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<(), E> {
-        let msg = self.messages.build(time_ns, fill)?;
+    pub fn restore<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<(), E> {
+        let msg = self.messages.build(time_ns, sent, fill)?;
         self.publish(msg);
         Ok(())
     }
@@ -548,6 +560,7 @@ impl Outlet {
         let msg = Arc::new(Message {
             buffers,
             time_ns: self.timer.time_ns(),
+            sent: true,
         });
         match target {
             Target::All => {
@@ -666,7 +679,14 @@ impl InputGroup {
         // published (its version is at most `version`) and becomes current.
         let version = self.version.load(Ordering::Relaxed);
         for (slot, buffers) in slots.iter().zip(filled) {
-            let next = Some((version + 1, Arc::new(Message { buffers, time_ns })));
+            let next = Some((
+                version + 1,
+                Arc::new(Message {
+                    buffers,
+                    time_ns,
+                    sent: true,
+                }),
+            ));
             let mut pair = lock(&slot.pair);
             let current = Arc::clone(pair.resolve(version));
             let old = std::mem::replace(&mut *pair, Pair { current, next });
@@ -703,13 +723,14 @@ impl InputSlot {
         Arc::clone(pair.resolve(version))
     }
 
-    /// Sets the value and its time as they were when the state was taken.
+    /// Sets the value, its time and whether it was sent as they were when the
+    /// state was taken (`sent` is false for an initial value).
     ///
     /// Call it only while no node runs (before the start, or while every node is
     /// paused with the timer frozen): it is a second way to write the slot, beside
     /// its writer, and the readers' handles reach it too.
-    pub fn restore<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<(), E> {
-        let current = self.messages.build(time_ns, fill)?;
+    pub fn restore<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<(), E> {
+        let current = self.messages.build(time_ns, sent, fill)?;
         let _guard = lock(&self.group.write_lock);
         let old = std::mem::replace(
             &mut *lock(&self.pair),
@@ -841,6 +862,39 @@ mod tests {
         for slot in outlet.channels() {
             assert!(Arc::ptr_eq(&slot.load(), &out));
         }
+    }
+
+    #[test]
+    fn only_written_messages_are_sent() {
+        let outlet = Outlet::new(scalar_schema(), 2, "p", timer());
+        assert!(!outlet.outbox().load().sent());
+        outlet.send_with(Target::Channel(1), fill_k(1)).unwrap();
+        assert!(outlet.channel(1).load().sent());
+        assert!(!outlet.channel(0).load().sent());
+        outlet.send_with(Target::All, fill_k(2)).unwrap();
+        assert!(outlet.outbox().load().sent() && outlet.channel(0).load().sent());
+
+        let group = InputGroup::new(timer());
+        let input = group.input(scalar_schema(), "i");
+        assert!(!input.load().sent());
+        group.write(&[&input], |_, bytes| fill_k(3)(bytes)).unwrap();
+        assert!(input.load().sent());
+    }
+
+    #[test]
+    fn restore_sets_whether_sent() {
+        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
+        outlet.channel(0).restore(1, true, fill_k(4)).unwrap();
+        assert!(outlet.channel(0).load().sent());
+        outlet.channel(0).restore(1, false, fill_k(4)).unwrap();
+        assert!(!outlet.channel(0).load().sent());
+
+        let group = InputGroup::new(timer());
+        let input = group.input(scalar_schema(), "i");
+        input.restore(1, true, fill_k(5)).unwrap();
+        assert!(input.load().sent());
+        input.restore(1, false, fill_k(5)).unwrap();
+        assert!(!input.load().sent());
     }
 
     #[test]
@@ -984,7 +1038,7 @@ mod tests {
     #[test]
     fn restore_sets_value_and_time() {
         let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
-        outlet.channel(0).restore(123, fill_k(4)).unwrap();
+        outlet.channel(0).restore(123, true, fill_k(4)).unwrap();
         let msg = outlet.channel(0).load();
         assert_eq!((values(&msg), msg.time_ns()), (vec![4], 123));
         assert_eq!(values(&outlet.outbox().load()), [0]);
@@ -1032,7 +1086,7 @@ mod tests {
         let group = InputGroup::new(timer());
         let a = group.input(scalar_schema(), "a");
         group.write(&[&a], |_, bytes| fill_k(1)(bytes)).unwrap();
-        a.restore(9, fill_k(2)).unwrap();
+        a.restore(9, true, fill_k(2)).unwrap();
         let msg = a.load();
         assert_eq!((values(&msg), msg.time_ns()), (vec![2], 9));
     }

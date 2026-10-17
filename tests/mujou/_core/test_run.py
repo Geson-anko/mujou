@@ -940,9 +940,9 @@ class TestStateDict:
         assert ended["timer"] == {"time_ns": asked_at, "scale": 2.0}
         assert ended["last_update_ns"] == running["last_update_ns"]
         assert ended["slots"].keys() == running["slots"].keys()
-        for name, (value, time_ns) in running["slots"].items():
+        for name, (value, time_ns, sent) in running["slots"].items():
             assert torch.equal(ended["slots"][name][0], value)
-            assert ended["slots"][name][1] == time_ns
+            assert ended["slots"][name][1:] == (time_ns, sent)
         for path in ("a", "b"):
             assert torch.equal(ended["nodes"][path]["x"], running["nodes"][path]["x"])
             assert ended["nodes"][path]["updates"] == running["nodes"][path]["updates"]
@@ -964,7 +964,7 @@ class TestStateDict:
         assert asked_after <= frozen_at <= stopped_before
         for updated_at in tree["last_update_ns"].values():
             assert updated_at <= frozen_at
-        for _, written_at in tree["slots"].values():
+        for _, written_at, _ in tree["slots"].values():
             assert written_at <= frozen_at
         assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
 
@@ -982,7 +982,7 @@ class TestStateDict:
             "b.next/out",
             "a.prev/in",
         }
-        for _, written_at in tree["slots"].values():
+        for _, written_at, _ in tree["slots"].values():
             assert written_at <= frozen_at
         for updated_at in tree["last_update_ns"].values():
             assert 0 < updated_at <= frozen_at
@@ -1095,11 +1095,17 @@ class TestState:
         other = Group(node=Pair())
         with pytest.raises(ValueError, match="do not match"):
             start_manual(other, state=tree)
+
+        def slot(name: str, entry: object) -> dict[str, Any]:
+            return {**tree, "slots": {**tree["slots"], name: entry}}
+
         broken: list[tuple[dict[str, Any], str]] = [
             ({k: v for k, v in tree.items() if k != "timer"}, "no 'timer'"),
             ({**tree, "timer": {"time_ns": 0}}, "timer do not match"),
             ({**tree, "timer": {"time_ns": "0", "scale": 1.0}}, "int time_ns"),
             ({**tree, "last_update_ns": {"a": 0.5, "b": 0}}, "is not an int"),
+            (slot("a.prev/in", (u(0), 0)), r"is not \(value, time_ns, sent\)"),
+            (slot("a.prev/in", (u(0), 0, 1)), "sent flag that is not a bool"),
         ]
         for wrong, match in broken:
             with pytest.raises(ValueError, match=match):
@@ -1414,9 +1420,9 @@ class TestEndToEnd:
         again = again_run.state_dict()
         assert again["last_update_ns"] == tree["last_update_ns"]
         assert again["timer"] == tree["timer"]
-        for name, (value, time_ns) in tree["slots"].items():
+        for name, (value, time_ns, sent) in tree["slots"].items():
             assert torch.equal(again["slots"][name][0], value)
-            assert again["slots"][name][1] == time_ns
+            assert again["slots"][name][1:] == (time_ns, sent)
         restored_order = (
             (restored.b, restored.a) if b_first else (restored.a, restored.b)
         )

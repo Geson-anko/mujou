@@ -42,7 +42,7 @@ Reading and writing work like this.
 
 - A reader gets the latest value at that moment. It never waits for a new value
 - Values do not queue up. A value may be overwritten before anyone reads it, and the same value may be read many times. Both are normal
-- Before the sender has written, the reader gets the initial value of the sender's port (zeros by default)
+- Before the sender has written, the reader gets the initial value of the sender's port (zeros by default). `has_received()` tells whether the sender has written yet
 - Every value is a copy of a `torch.Tensor`, detached from the computation graph. Changing a received tensor affects no other node
 - Every value carries the time it was sent. To tell whether a value is new, read it with its time (`recv_with_time()`) and compare that time with the last one
 
@@ -70,7 +70,7 @@ Mujou treats a learning network as a system that changes continuously over time.
 
 Nodes update at different rates, and their rates vary with the load. If the update size were fixed per iteration, a faster node would change its state more. With updates proportional to `dt`, every node follows the same dynamics on the same flow of time; a higher load only makes `dt` longer. Do not cap `dt`, because a capped `dt` drops time that really passed. If a large `dt` makes the update unstable, split it into smaller steps inside one `on_update`.
 
-A node can have a period. It then updates once every period on average, instead of as fast as it can. Even so, `dt` is the time that actually passed, so update in proportion to `dt` in every case.
+Every node has a period, 0.01 s by default, and updates once every period on average. Even so, `dt` is the time that actually passed, so update in proportion to `dt` in every case.
 
 Each run has one timer, and every node of the run and the host use it. By default, it is the global timer, one per process. The host can make the time run faster or slower than real time. To wait on that time, for example to show an input for two seconds, the host uses `mujou.time.sleep`, not the standard `time.sleep`, which waits in real time. Nodes only read the time.
 

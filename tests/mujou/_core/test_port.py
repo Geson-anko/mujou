@@ -53,6 +53,8 @@ class TestPortTypes:
             assert_type(multi.recv(), dict[Channel, Feedback])
             assert_type(nxt.recv_with_time(), dict[Channel, tuple[Feedback, Timestamp]])
             assert_type(prev.recv_with_time(), tuple[torch.Tensor, Timestamp])
+            assert_type(single.has_received(), bool)
+            assert_type(multi.has_received(), dict[Channel, bool])
 
         assert not single.multi and not prev.multi and not nxt_single.multi
         assert multi.multi and prev_multi.multi and nxt.multi
@@ -343,6 +345,112 @@ class TestRecv:
         run = start_manual(Group(node=node))
         step(run)
         assert isinstance(node.results[0], TypeError)
+
+
+class TestHasReceived:
+    def test_is_false_for_the_initial_value_and_true_once_sent(
+        self, step: Step, start_manual: StartManual
+    ):
+        out = NextPort(send=h(), initial=torch.ones(2, 3))
+        inp = PrevPort(recv=h())
+        out.connect(inp)
+        source = Probe(lambda: out.send(torch.zeros(2, 3)), next=out)
+        sink = Probe(inp.has_received, prev=inp)
+        run = start_manual(Group(source=source, sink=sink))
+        step(run, sink)
+        step(run, source, sink)  # sends the zeros: a value equal to the initial one
+        assert sink.results == [False, True]
+
+    def test_many_peers_are_keyed_by_channel_as_recv_is(
+        self, step: Step, start_manual: StartManual
+    ):
+        merge = PrevPort(recv=h(), multi=True)
+        quiet, talker = NextPort(send=h()), NextPort(send=h())
+        to_quiet = quiet.connect(merge)
+        to_talker = talker.connect(merge)
+        nodes = {
+            "quiet": Probe(next=quiet),
+            "talker": Probe(lambda: talker.send(torch.ones(2, 3)), next=talker),
+        }
+        sink = Probe(merge.has_received, prev=merge)
+        unconnected = Port(recv=h(), multi=True)
+        lonely = Probe(unconnected.has_received, prev=unconnected)
+        run = start_manual(Group(**nodes, sink=sink, lonely=lonely))
+        step(run, *nodes.values(), sink, lonely)
+        assert sink.results == [{to_quiet: False, to_talker: True}]
+        assert lonely.results == [{}]
+
+    def test_send_to_counts_only_for_that_peer(
+        self, step: Step, start_manual: StartManual
+    ):
+        out = NextPort(send=h())
+        a, b = PrevPort(recv=h()), PrevPort(recv=h())
+        to_a = out.connect(a)
+        out.connect(b)
+        source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
+        sink_a, sink_b = Probe(a.has_received, prev=a), Probe(b.has_received, prev=b)
+        run = start_manual(Group(source=source, a=sink_a, b=sink_b))
+        step(run, source, sink_a, sink_b)
+        assert (sink_a.results, sink_b.results) == ([True], [False])
+
+    def test_counts_what_the_host_writes(self, step: Step, start_manual: StartManual):
+        given, written = Port(recv=h()), Port(recv=h())
+        node = Probe(
+            lambda: (given.has_received(), written.has_received()),
+            given=given,
+            written=written,
+        )
+        run = start_manual(Group(node=node), inputs={given: torch.ones(2, 3)})
+        step(run)
+        run.write({written: torch.ones(2, 3)})
+        step(run)
+        assert node.results == [(True, False), (True, True)]
+
+    @pytest.mark.parametrize("with_inputs", [False, True])
+    def test_a_restored_run_keeps_what_was_sent(
+        self, step: Step, start_manual: StartManual, with_inputs: bool
+    ):
+        def build() -> tuple[Group, Probe, Probe, Port[Never, torch.Tensor]]:
+            out = NextPort(send=h(), initial=torch.ones(2, 3))
+            a, b = Port(recv=h()), Port(recv=h())
+            to_a = out.connect(a)
+            out.connect(b)
+            host = Port(recv=h())
+            source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
+            sink = Probe(
+                lambda: (a.has_received(), b.has_received(), host.has_received()),
+                a=a,
+                b=b,
+                host=host,
+            )
+            return Group(source=source, sink=sink), source, sink, host
+
+        net, source, _, _ = build()
+        run = start_manual(net)
+        step(run, source)  # sends to a only; nothing is written to host
+        tree = run.state_dict()
+        run.shutdown()
+
+        restored, _, sink, host = build()
+        inputs = {host: torch.ones(2, 3)} if with_inputs else None
+        run = start_manual(restored, timer=VirtualTimer(), state=tree, inputs=inputs)
+        step(run, sink)
+        assert sink.results == [(True, False, with_inputs)]
+
+    def test_rejects_a_port_that_receives_nothing(
+        self, step: Step, start_manual: StartManual
+    ):
+        out = Port(send=h())
+        node = Probe(out.has_received, out=out)
+        run = start_manual(Group(node=node))
+        step(run)
+        assert isinstance(node.results[0], TypeError)
+
+    def test_only_the_owning_node_asks(self, start_manual: StartManual):
+        inp = Port(recv=h())
+        start_manual(Group(node=Probe(inp=inp)))
+        with pytest.raises(RuntimeError, match="only the node that owns"):
+            inp.has_received()  # from the host
 
 
 class TestSend:

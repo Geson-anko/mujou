@@ -15,6 +15,7 @@ from torch import nn
 
 import mujou
 from mujou import DictSpec, NextPort, Node, Port, PrevPort, TensorSpec
+from mujou.time import Timestamp
 
 BATCH = 8
 A_BEFORE, A_AFTER, B = 2.0, -1.0, 0.5
@@ -61,13 +62,15 @@ class Learner(Node):
         self.model = nn.Linear(1, 1, device=self.device)
         nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
         nn.init.zeros_(self.model.bias)
-        _, self.last = self.prev.recv_with_time()  # skip the value there before
+        self.last: Timestamp | None = None  # the time of the last batch learned from
         self.elapsed = 0.0  # seconds since the last batch learned from
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         self.elapsed += dt
+        if not self.prev.has_received():  # zeros: the teacher has not sent yet
+            return
         sample, t = self.prev.recv_with_time()
         if t == self.last:  # nothing new since the last update
             return

@@ -122,9 +122,12 @@ class InputSlot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex) -> None:
+    def restore(
+        self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
+    ) -> None:
         """
-        Sets the value and its time, dropping any pending write.
+        Sets the value, its time and whether it was sent, dropping any pending
+        write.
 
         Call it only while no node runs (before the start, or while every node
         is paused). Raises as `Outlet.send` does.
@@ -137,13 +140,19 @@ class InputSlot:
 @final
 class Message:
     """
-    An immutable value of a slot, and the time it was written at on the
-    writer's timer.
+    An immutable value of a slot, the time it was written at on the writer's
+    timer, and whether the writer sent it.
     """
     @property
     def buffers(self, /) -> tuple[BufferView, ...]:
         """
         One view per field, in key order.
+        """
+    @property
+    def sent(self, /) -> bool:
+        """
+        Whether the slot's writer sent it (or a restore said so), rather than it
+        being the value the slot was created or initialized with.
         """
     @property
     def timestamp(self, /) -> Timestamp:
@@ -434,9 +443,12 @@ class Slot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex) -> None:
+    def restore(
+        self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
+    ) -> None:
         """
-        Sets the value and its time as they were when the state was taken.
+        Sets the value, its time and whether it was sent as they were when the
+        state was taken (`sent` is false for an initial value).
 
         Call it only while no node runs (before the start, or while every node
         is paused): it writes beside the slot's own writer. Raises as

@@ -85,14 +85,18 @@ class Node(_native.Node, Component):
     ``on_update``, after ``load_state_dict`` and around ``state_dict``. It does this in hooks of its own, whose names start with
     ``_``: do not override those, and overriding a public hook never skips them.
 
-    Without a ``period``, the node updates as fast as it can. With one, it updates
-    once every ``period`` of the run's timer on average: the time an update takes
+    The node updates once every ``period`` (0.01 s by default) of the run's timer
+    on average: the time an update takes
     counts toward the period, and a node that falls a whole ``period`` behind does
     not update several times in a row to catch up. A pause does not count. ``dt``
     is still the time that actually passed since the last update, longer than
     ``period`` when the node is late, so keep updating in proportion to it and
     stay stable for the longest ``dt`` it can get. A manual run
     (``ManualRun.step``) ignores the period.
+
+    ``period=0.0`` updates as soon as any time has passed since the last update.
+    Set it only when the node must: such a node keeps a CPU core busy, and takes
+    time from the other nodes, whose ``dt`` it makes irregular.
 
     ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
     run's timer) are reserved names: do not assign attributes of those names
@@ -129,19 +133,19 @@ class Node(_native.Node, Component):
             device.
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
         period: The time between two updates on average, in seconds of the
-            run's timer. ``None`` updates as fast as possible.
+            run's timer. ``0.0`` updates as soon as any time has passed.
 
     Raises:
-        TypeError: ``period`` is a ``bool``.
+        TypeError: ``period`` is ``None`` or a ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
-            while CUDA is not available, or ``period`` is not finite and
-            positive.
+            while CUDA is not available, or ``period`` is negative or not
+            finite.
     """
 
     # Class-level defaults, for a subclass that does not call super().__init__().
     _device: torch.device = torch.device("cpu")
     _seed: int | None = None
-    _period: float | None = None
+    _period: float = 0.01
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
@@ -152,12 +156,17 @@ class Node(_native.Node, Component):
         *,
         device: torch.device | str = "cpu",
         seed: int | None = None,
-        period: float | None = None,
+        period: float = 0.01,
     ) -> None:
+        if period is None:  # pyright: ignore[reportUnnecessaryComparison]
+            raise TypeError(
+                "the period must be a number of seconds, got None; pass period=0.0 "
+                "to update as soon as any time has passed"
+            )
         if isinstance(period, bool):
             raise TypeError(f"the period must be a number of seconds, got {period}")
-        if period is not None and not (math.isfinite(period) and period > 0):
-            raise ValueError(f"the period must be finite and > 0, got {period}")
+        if not (math.isfinite(period) and period >= 0):
+            raise ValueError(f"the period must be finite and >= 0, got {period}")
         self._device = _check_device(torch.device(device))
         self._seed = seed
         self._period = period
@@ -172,9 +181,9 @@ class Node(_native.Node, Component):
         return self._device
 
     @property
-    def period(self) -> float | None:
+    def period(self) -> float:
         """The time between two updates on average, in seconds of the run's
-        timer, or ``None`` to update as fast as possible."""
+        timer. ``0.0`` updates as soon as any time has passed."""
         return self._period
 
     @property
@@ -516,7 +525,7 @@ def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
 
 def checked_period(node: Node) -> float | None:
     """Return the period of ``node`` in seconds for the runtime, which rounds it
-    to ns.
+    to ns, or ``None`` for ``0.0`` (no wait between updates).
 
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved ``period``.
@@ -526,7 +535,8 @@ def checked_period(node: Node) -> float | None:
             f"{type(node).__qualname__} replaces period, a reserved name of Node: "
             "pass the period to Node.__init__ instead"
         )
-    return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
+    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
+    return period if period > 0 else None
 
 
 def capture_state(node: Node) -> object:

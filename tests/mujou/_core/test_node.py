@@ -272,7 +272,7 @@ class TestDevice:
 class Ticker(Node):
     """Puts each ``dt`` it updates with into ``dts``."""
 
-    def __init__(self, period: float | None) -> None:
+    def __init__(self, period: float) -> None:
         super().__init__(period=period)
         self.out = Port(send=TensorSpec((1,)))
         self.dts: queue.Queue[float] = queue.Queue()
@@ -283,15 +283,16 @@ class Ticker(Node):
 
 
 class TestPeriod:
-    def test_defaults_to_none(self):
-        assert Probe().period is None
-        assert Probe(init_base=False).period is None
+    def test_defaults_to_ten_milliseconds(self):
+        assert Probe().period == 0.01
+        assert Probe(init_base=False).period == 0.01
 
-    def test_is_kept(self):
-        assert Node(period=0.01).period == 0.01
+    @pytest.mark.parametrize("period", [0.0, 0.5])
+    def test_is_kept(self, period: float):
+        assert Node(period=period).period == period
 
-    @pytest.mark.parametrize("period", [0.0, -0.01, math.inf, math.nan])
-    def test_rejects_what_is_not_finite_and_positive(self, period: float):
+    @pytest.mark.parametrize("period", [-0.01, math.inf, math.nan])
+    def test_rejects_what_is_negative_or_not_finite(self, period: float):
         with pytest.raises(ValueError, match="period"):
             Node(period=period)
 
@@ -299,12 +300,16 @@ class TestPeriod:
         with pytest.raises(TypeError, match="period"):
             Node(period=True)
 
+    def test_rejects_none_and_points_to_zero(self):
+        with pytest.raises(TypeError, match="period=0.0"):
+            Node(period=None)  # pyright: ignore[reportArgumentType]
+
     def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
         class OnTheClass(Ticker):
             period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
 
         with pytest.raises(TypeError, match="reserved"):
-            start(Group(node=OnTheClass(period=None)), timer=virtual)
+            start(Group(node=OnTheClass(period=0.0)), timer=virtual)
 
     def test_the_node_waits_for_its_period_on_the_timer(
         self, virtual: VirtualTimer, start: Start
@@ -317,6 +322,14 @@ class TestPeriod:
             node.dts.get(timeout=0.05)
         virtual.advance(0.005)
         assert node.dts.get(timeout=5.0) == 0.01
+
+    def test_a_period_of_zero_updates_as_soon_as_the_time_moves(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        node = Ticker(period=0.0)
+        start(Group(node=node), timer=virtual)
+        virtual.advance(1e-9)
+        assert node.dts.get(timeout=5.0) == 1e-9
 
     def test_a_period_below_a_nanosecond_is_one_nanosecond(
         self, virtual: VirtualTimer, start: Start

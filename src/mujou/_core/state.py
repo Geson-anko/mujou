@@ -5,7 +5,7 @@ This module is the one place that defines the tree::
 
     {
         "nodes": {path: the node's state_dict(), ...},
-        "slots": {slot name: (value, time_ns), ...},
+        "slots": {slot name: (value, time_ns, sent), ...},
         "last_update_ns": {path: int, ...},
         "timer": {"time_ns": int, "scale": float},
     }
@@ -119,10 +119,14 @@ def make_tree(
     copies queue on the calling thread's current streams; synchronize them before
     the nodes update in place again.
     """
-    values: dict[str, tuple[object, int]] = {}
+    values: dict[str, tuple[object, int, bool]] = {}
     for name, (slot, spec) in slots.items():
         message = slot.read()
-        values[name] = (message_value(spec, message, _CPU), message.timestamp.ns)
+        values[name] = (
+            message_value(spec, message, _CPU),
+            message.timestamp.ns,
+            message.sent,
+        )
     return StateDict(
         {
             "nodes": {
@@ -140,11 +144,12 @@ def read_tree(
     state: Mapping[str, Any],
     paths: Sequence[str],
     slots: Mapping[str, tuple[AnySlot, Spec]],
-) -> tuple[list[tuple[AnySlot, list[torch.Tensor], int]], dict[str, Any]]:
+) -> tuple[list[tuple[AnySlot, list[torch.Tensor], int, bool]], dict[str, Any]]:
     """Check ``state`` against a run of the nodes at ``paths`` with ``slots``, and
     copy it, changing nothing.
 
-    Returns ``(slot, tensors in host memory, time_ns)`` for each slot to restore,
+    Returns ``(slot, tensors in host memory, time_ns, sent)`` for each slot to
+    restore,
     and what ``Runtime.start`` restores: the nodes' states (copies, so that the
     nodes' updates in place never reach ``state``), their last update times and
     the timer. The copies queue on the calling thread's current streams.
@@ -182,21 +187,27 @@ def read_tree(
 
 def _slot_restores(
     entries: Mapping[str, object], slots: Mapping[str, tuple[AnySlot, Spec]]
-) -> list[tuple[AnySlot, list[torch.Tensor], int]]:
-    """Check each slot's ``(value, time_ns)`` in the tree and copy the value to
-    the host, without restoring anything yet."""
-    restores: list[tuple[AnySlot, list[torch.Tensor], int]] = []
+) -> list[tuple[AnySlot, list[torch.Tensor], int, bool]]:
+    """Check each slot's ``(value, time_ns, sent)`` in the tree and copy the value
+    to the host, without restoring anything yet."""
+    restores: list[tuple[AnySlot, list[torch.Tensor], int, bool]] = []
     for name, (slot, spec) in slots.items():
         entry = entries[name]
-        if not isinstance(entry, tuple) or len(cast(tuple[object, ...], entry)) != 2:
-            raise ValueError(f"the state tree's slot {name!r} is not (value, time_ns)")
-        value, time_ns = cast(tuple[object, object], entry)
+        if not isinstance(entry, tuple) or len(cast(tuple[object, ...], entry)) != 3:
+            raise ValueError(
+                f"the state tree's slot {name!r} is not (value, time_ns, sent)"
+            )
+        value, time_ns, sent = cast(tuple[object, object, object], entry)
         if not _is_int(time_ns):
             raise ValueError(
                 f"the state tree's slot {name!r} has a time that is not an int"
             )
+        if not isinstance(sent, bool):
+            raise ValueError(
+                f"the state tree's slot {name!r} has a sent flag that is not a bool"
+            )
         restores.append(
-            (slot, host_tensors(spec, value, where=name), cast(int, time_ns))
+            (slot, host_tensors(spec, value, where=name), cast(int, time_ns), sent)
         )
     return restores
 
