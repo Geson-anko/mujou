@@ -31,10 +31,13 @@ class Node(_core.Node, Component):
       ``Network.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
     - ``on_exception()``: once on every node, when a hook of any node has raised,
-      before ``on_stop``. It must not change what ``state_dict`` returns.
-    - ``on_stop()``: once, when the network stops, also after an exception.
+      before ``on_stop``.
+    - ``on_stop()``: once, when the network stops, also after an exception. It
+      must not change what ``state_dict`` returns: the state taken after a normal
+      end is the state at the stop.
     - ``state_dict()``: when the network's state is taken, on the runtime's control
-      thread while the node is paused, so ``recv`` and ``send`` raise
+      thread while the node is paused (or, after a normal end, on the host's
+      thread that called ``Network.state_dict``), so ``recv`` and ``send`` raise
       ``RuntimeError`` there. Return the node's own state as a picklable object;
       it may hold the live tensors, because the framework copies it before the
       node resumes.
@@ -215,3 +218,9 @@ def end_thread(node: Node) -> None:
     """Forget the thread of ``node`` once its network has stopped, so that a later
     thread that reuses the id is not taken for it."""
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def capture_state(node: Node) -> object:
+    """Take the state of ``node`` as the runtime does while it is paused, on the
+    calling thread (for a network that has ended)."""
+    return node._capture_state()  # pyright: ignore[reportPrivateUsage]  # Node's own module
