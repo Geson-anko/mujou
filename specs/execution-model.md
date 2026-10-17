@@ -164,7 +164,7 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 
 ### 停止のタイムアウト
 
-`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。
+`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。待つ長さは取得ごとに `run.state_dict(timeout)` で渡す。
 
 ## 終了と例外
 
@@ -229,7 +229,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 }
 ```
 
-- 停止のタイムアウトの既定値は実時間 30 秒で、`mujou.run(..., pause_timeout=...)` で変える。`pause_timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `pause_timeout` を入れる）。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
+- 停止のタイムアウトは `Run.state_dict(timeout=30.0)` の引数で、既定は実時間 30 秒である。取得のたびに決められるよう、実行の起動時ではなく取得の呼び出しで渡す（2026-10-17、ユーザーの決定。以前は `mujou.run(..., pause_timeout=...)` だった）。ホストは native の `Runtime.capture(build, timeout)` に渡し、コアの `Runtime::capture(build, timeout)` が待つ。`timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `timeout` を入れる）。正常に終了した後は待つものが無いので使わないが、同じく検査する。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
 - 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。`shutdown` に有限の `timeout` を渡すと、コアに待たずに終了を要求し（`Runtime.request_stop`）、呼んだスレッドはコアの `join` で時間を区切って待つ。時間切れでも要求は残り、ネットワークは止まりに向かう
 - 正常に終了した後の `state_dict()` は、ホストのスレッドで各ノードの `_capture_state()` を呼ぶ。CUDA のノードの同期は、制御スレッドで呼ぶときと同じである
 - 例外は時間を止めない。ランタイムは例外で状態を取得しないので、例外の記録から終了処理の完了まで、タイマーは保持されずに進む。起動中や状態の取得中に例外が起きたときは、その保持を終了処理の最後に解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである
@@ -247,8 +247,8 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 テスト用の口は `mujou.testing` に公開する。mujou 自身のテスト（既定のノードのテストを含む）と利用者のテストは、同じ口を使う。
 
 - `VirtualTimer()`: 時刻 0 の仮想時計のタイマー。`advance(seconds)` で進めた分だけ進む
-- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数とその制約（`pause_timeout` は有限の正の秒数）は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
-- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
+- `run(component, *components, timer=None, inputs=None, state=None)`: 引数とその制約は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
+- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。`Run.timer` を override し、型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
 - `ManualRun.step(*nodes)`: 渡した順に各ノードを 1 回ずつ更新し、終わってから戻る。引数なしなら木の順に全ノード。時計は進めないので、`run.timer.advance(dt)` と組み合わせる。前回の更新から時刻が進んでいないノードは飛ばす（$\Delta t = 0$ になるため）
 
 ```python
