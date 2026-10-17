@@ -18,7 +18,7 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 
 ## Timestamp
 
-The times that `run.write`, `run.read`, `run.subscribe` and `run.wait_for` return, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()`, are all `mujou.time.Timestamp`.
+The times that `run.write`, `run.read_with_time`, `run.subscribe` and `run.wait_for` return, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()`, are all `mujou.time.Timestamp`.
 
 | Form              | Value                                                                           |
 | ----------------- | ------------------------------------------------------------------------------- |
@@ -29,12 +29,12 @@ The times that `run.write`, `run.read`, `run.subscribe` and `run.wait_for` retur
 
 A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer.
 
-Comparing the time that `write` returns with the time that `read` returns tells whether an output was sent after the input was switched.
+Comparing the time that `write` returns with the time that `read_with_time` returns tells whether an output was sent after the input was switched.
 
 ```python
 t_in = run.write({net.prev: x})
 mujou.time.sleep(0.1)
-y, t_out = run.read(net.next)
+y, t_out = run.read_with_time(net.next)
 if t_out >= t_in:               # y was sent after x was written
     print(t_out - t_in)  # seconds from writing x until y was sent
 ```
@@ -53,7 +53,7 @@ Give a run its own timer in these cases.
 - You want to restore a state while another run is running on the global timer (see [Saving and restoring state](state.md))
 - You run several networks in separate runs that should not stop each other (see [Composing networks](compose.md))
 
-The host then waits on that run with `timer.sleep`, and compares the times from `run.read` with `timer.now()`. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.now()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
+The host then waits on that run with `timer.sleep`, and compares the times from `run.read_with_time` with `timer.now()`. `run.timer` returns the timer of a run, the global timer if you passed none. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.now()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
 
 ## Changing the speed of the global timer
 

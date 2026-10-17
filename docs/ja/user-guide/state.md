@@ -4,7 +4,7 @@
 
 ## 基本の手順
 
-次のサンプルは、ネットワークを 0.2 秒走らせて状態を取り、pickle で保存し、新しいインスタンスに復元して続きを走らせる。
+次のサンプルは、ネットワークを 0.2 秒走らせて状態を取り、`torch.save` で保存し、新しいインスタンスに復元して続きを走らせる。
 
 ```python
 --8<-- "examples/save_and_restore.py"
@@ -15,7 +15,7 @@
 1. ノードは、状態にする値を `torch.Tensor` か `nn.Module` の属性に持つ。`mujou.Node` が自動で状態に集める（サンプルの `self.x` と `self.readout`）
 2. 状態のテンソルは `on_start` で作り、`on_update` ではその場で更新する（`+=`、`add_`、`copy_` など）
 3. ホストが `run.state_dict()` で状態の木を取る。実行中でも、with 文を抜けた後（正常に終了した後）でも取れる
-4. 木を pickle などで保存する。保存の方法はホストが決める
+4. 木を `torch.save` などで保存する。保存の方法はホストが決める
 5. 復元するときは、同じ構成の**新しいインスタンス**を作り、`mujou.run(net, state=tree)` に渡す
 
 手順 2 でその場で更新するのは、既定の `load_state_dict` が、`on_start` で作ったテンソルにその場でコピーして状態を戻すからである。その場で更新すれば、ほかの属性やローカル変数に取っておいた同じテンソルへの参照も、復元した値を指す。
@@ -89,10 +89,17 @@ override するときは次を守る。
 
 ## 保存の形式
 
-木は入れ子の dict で、pickle でも `torch.save` でも保存できる。自分で使うファイルなら、どちらでもよい（上の例は pickle を使っている）。木を他人と共有するなら `torch.save` で保存し、相手が既定の `torch.load` で読めるようにする。
+`run.state_dict()` が返す木は `mujou.StateDict` である。`dict` の派生なので、dict と同じようにキーで引け、pickle でも `torch.save` でも保存できる。読み込んだ木も `mujou.StateDict` に戻る。自分で使うファイルなら、どちらでもよい。木を他人と共有するなら `torch.save` で保存し、相手が既定の `torch.load` で読めるようにする。`mujou.run(..., state=)` には、`mujou.StateDict` のほか、同じ中身の素の dict も渡せる。
 
 読むときは、保存したときと同じ方法を使う（`pickle.dumps` なら `pickle.loads`、`torch.save` なら `torch.load`）。保存の方法が分からないファイルは、まず既定の `torch.load` で読む。それが失敗したら、送り手を信頼できるときだけ pickle で読む。
 
-- `torch.load` は既定（`weights_only=True`）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。`state_dict` を override して独自のクラスのオブジェクトを木に入れると、既定の `torch.load` では読めない
+- `torch.load` は既定（`weights_only=True`）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。`mujou.StateDict` も、`import mujou` した後なら読める。`state_dict` を override して独自のクラスのオブジェクトを木に入れると、既定の `torch.load` では読めない
 - `pickle.load` と `torch.load(..., weights_only=False)` は、読むときにファイルの中のコードを実行できる。信頼できないファイルをこれらで読まない
-- CUDA で計算するノードの状態は、CUDA のテンソルのまま木に入る。GPU の無いマシンで読むときは `torch.load(..., map_location="cpu")` を使う。既定の `load_state_dict` はノードのデバイスへコピーするので、CPU のテンソルのまま `state=` に渡してよい
+- CUDA で計算するノードの状態は、CUDA のテンソルのまま木に入る。`tree.cpu()` は、木の中のテンソルをすべて CPU に移した新しい木を返す（元の木は変えない）。保存する前に CPU に移せば、GPU の無いマシンでも読める。CUDA のまま保存したファイルは、`torch.load(..., map_location="cpu")` で読む。既定の `load_state_dict` はノードのデバイスへコピーするので、CPU のテンソルのまま `state=` に渡してよい
+
+```python
+torch.save(run.state_dict().cpu(), "state.pt")  # GPU のノードの状態も CPU のテンソルで保存する
+tree = torch.load("state.pt")  # mujou.StateDict
+```
+
+`tree.to(device)` は、木のテンソルをすべて `device` に移す。`cpu()` は `to("cpu")` と同じである。辿るのは木の中の dict（`nn.Module` の `state_dict` の `OrderedDict` も含む）・list・tuple で、これらの入れ物は新しく作る。テンソル以外の値は元の木と共有する。`torch.Tensor.to` と同じく、すでに `device` にあるテンソルはコピーせず、元の木と共有する

@@ -18,8 +18,8 @@ The global time starts at 0 when the process first uses it.
 - ``Timer``: a time axis of its own for a run
 - ``ReadOnlyTimer``: the reading side of a timer, as a node sees its run's timer
   (``Node.timer``)
-- ``Timestamp``: a time on a timer, as ``Run.read`` and ``Port.recv_with_time``
-  give it
+- ``Timestamp``: a time on a timer, as ``Run.read_with_time`` and
+  ``Port.recv_with_time`` give it
 
 Only the host controls the time: ``sleep``, ``set_time_scale``, ``pause`` and
 ``resume`` raise ``RuntimeError`` in a node's hook.
@@ -42,7 +42,7 @@ def now() -> Timestamp:
     """Return the global time now, as ``Timer.now`` returns a timer's.
 
     Compare it with the times of runs on the global timer, such as those that
-    ``Run.read`` and ``Run.write`` return.
+    ``Run.read_with_time`` and ``Run.write`` return.
     """
     return _timer.now()
 

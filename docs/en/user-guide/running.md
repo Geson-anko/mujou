@@ -10,7 +10,7 @@
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
 2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
-3. The host writes input with `write` and reads output with `read`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
+3. The host writes input with `write` and reads output with `read`, `read_with_time`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
 `mujou.run` takes the following arguments.
@@ -21,7 +21,8 @@
 | `timer`                  | The run's timer (see [Controlling time](time.md))                                                          | `None` (the global timer) |
 | `inputs`                 | The initial values of the input. `{port: value}`                                                           | `None`                    |
 | `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                     | `None`                    |
-| `pause_timeout`          | The real time in seconds that `state_dict` waits for every node to pause                                   | `30.0`                    |
+
+`run.timer` returns the run's timer: the `timer` you passed, or the global timer that `mujou.time` reads.
 
 To run a single node, pass it as `mujou.run(node)` without wrapping it in a network. The path of the node is then `""`, and the paths of its ports are `"prev"` and so on (see [Composing networks](compose.md)).
 
@@ -53,24 +54,25 @@ Decide how long to show an input by waiting on the run's timer. If the run is on
 for x in stream:
     run.write({net.prev: x})
     mujou.time.sleep(0.1)          # show x for 0.1 seconds
-    y, t = run.read(net.next)      # take the output at the end of showing as the response to x
+    y = run.read(net.next)         # take the output at the end of showing as the response to x
 ```
 
 The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time. If you know the output to expect, wait for it with `wait_for` instead (see "Reading output" below).
 
 ## Reading output
 
-There are three ways to read output.
+There are four ways to read output.
 
 | Way                             | What it returns                                                                | Suited for                                  |
 | ------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
-| `run.read(port)`                | The latest value at that moment and the time it was sent, `(value, Timestamp)` | The host reads whenever it suits it         |
+| `run.read(port)`                | The latest value at that moment                                                | The host reads whenever it suits it         |
+| `run.read_with_time(port)`      | The latest value at that moment and the time it was sent, `(value, Timestamp)` | Reading the value with its time             |
 | `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
 | `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-All of them read from any port that has a send type, and return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)). Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
+All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)). Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
-`read` behaves as follows.
+`read` and `read_with_time` behave as follows.
 
 - It returns the value that the node holding the port last sent with `send`. If the node has not sent yet, it returns the port's initial value (`initial`, or zeros). Values sent with `send_to` are not reflected in `read`
 - The value is a new copy on the CPU

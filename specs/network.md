@@ -118,12 +118,14 @@ run = mujou.run(stack, head)             # 2 つをまとめて構築して走�
 | 操作                                  | 呼べるとき                 | 内容                                                                     |
 | ------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
 | `net.build()`                         | 何度でも                   | 構造と型を確定して `Graph` を返す。2 回目からは同じ `Graph` を返す       |
-| `mujou.run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)` | ネットワーク・ノードごとに 1 回 | 構築し、`state` を戻し、`inputs` を書き、バックグラウンドで実行を始め、全ノードの起動が終わったら `Run` を返す |
+| `mujou.run(component, *components, timer=None, inputs=None, state=None)` | ネットワーク・ノードごとに 1 回 | 構築し、`state` を戻し、`inputs` を書き、バックグラウンドで実行を始め、全ノードの起動が終わったら `Run` を返す |
 | `run.write(...)`                      | 正常な終了まで             | 未接続の Port に書き、書いた値に付いた時刻（`Timestamp`）を返す          |
-| `run.read(port)`                      | いつでも                   | Port に送られた最新の値と時刻（`Timestamp`）の組を返す                   |
-| `run.subscribe(port, *, timeout=math.inf)` | いつでも              | 呼んだ時点の最新の値と時刻を返し、以後は新しい値が書かれるたびに最新の値と時刻を返すイテレータ。`timeout` を過ぎると `TimeoutError` |
-| `run.wait_for(port, condition, *, timeout=math.inf)` | いつでも | `condition` を満たす値が送られるまで待ち、その値と時刻の組を返す |
-| `run.state_dict()`                    | 実行中と、正常に終了した後 | 時刻のそろった状態の木のコピーを返す                                     |
+| `run.read(port)`                      | いつでも                   | Port に送られた最新の値を返す                                            |
+| `run.read_with_time(port)`            | いつでも                   | Port に送られた最新の値と時刻（`Timestamp`）の組を返す                   |
+| `run.subscribe(port, timeout=math.inf)` | いつでも              | 呼んだ時点の最新の値と時刻を返し、以後は新しい値が書かれるたびに最新の値と時刻を返すイテレータ。`timeout` を過ぎると `TimeoutError` |
+| `run.wait_for(port, condition, timeout=math.inf)` | いつでも | `condition` を満たす値が送られるまで待ち、その値と時刻の組を返す |
+| `run.state_dict(timeout=30.0)`        | 実行中と、正常に終了した後 | 時刻のそろった状態の木のコピーを返す                                     |
+| `run.timer`                           | いつでも                   | 実行のタイマー（渡した `timer`、無ければグローバルタイマー）を返す       |
 | `run.shutdown(timeout)`               | いつでも                   | 終了を要求し、終了するまで待つ                                           |
 | `run.join(timeout)`                   | いつでも                   | 終了するまで待つ                                                         |
 
@@ -135,8 +137,8 @@ with mujou.run(net, inputs={net.prev: x0, net.teacher: y0}) as run:  # 初期値
     for x, y in dataset:
         run.write({net.prev: x, net.teacher: y})     # 複数の Port に同時に書く
         mujou.time.sleep(0.1)                        # 実行のタイマー（ここではグローバル）で提示時間だけ待つ
-        pred, t = run.read(net.head.next)            # 最新値と時刻の組
-        h1, t1 = run.read(net.body.l1.next)          # 中間層を観測する
+        pred, t = run.read_with_time(net.head.next)  # 最新値と時刻の組
+        h1 = run.read(net.body.l1.next)              # 中間層を観測する
 
     for y, t in run.subscribe(net.head.next):        # 今の値の後、新しい値が来るたびに最新値を受け取る
         actuator.send(y)
@@ -171,7 +173,7 @@ state = run.state_dict()                             # 終了した時点の状�
 
 復元した系は時刻 $T$ から始まる。そのため、起動の前に書く値に起動の前のタイマーの時刻を付けると、スロットの時刻が復元した時間軸から外れる。
 
-`run.write` は、書いた値に付いた時刻を返す。ノードが `recv_with_time` で見る時刻、状態の木の `/in` のスロットの時刻と同じ値である。`run.read` が返すのは送った時刻で、書いた時刻ではない。`inputs` に付く時刻は、`state` がなければ `mujou.run` が書いたときのタイマーの時刻で、走り出した後の `write` の時刻はそれ以上になる。`state` があれば $T$ で、タイマーも $T$ から進むので、その後の `write` の時刻も $T$ 以上になる。空の `write` は何も変えず、そのときの時刻を返す。
+`run.write` は、書いた値に付いた時刻を返す。ノードが `recv_with_time` で見る時刻、状態の木の `/in` のスロットの時刻と同じ値である。`run.read_with_time` が返すのは送った時刻で、書いた時刻ではない。`inputs` に付く時刻は、`state` がなければ `mujou.run` が書いたときのタイマーの時刻で、走り出した後の `write` の時刻はそれ以上になる。`state` があれば $T$ で、タイマーも $T$ から進むので、その後の `write` の時刻も $T$ 以上になる。空の `write` は何も変えず、そのときの時刻を返す。
 
 1 回の `write` で複数の Port に書いた値は、ある瞬間に読むどのノードから見ても一斉に切り替わる。1 つの Port に書くのは、要素が 1 つの場合として同じ仕組みで扱う。一斉の切り替えについて、保証すること・しないことは次のとおりである。
 
@@ -199,7 +201,7 @@ $V$ を進める 1 回の atomic な操作で、すべてのスロットが同�
 
 | 方法                       | 返すもの                                                                       | 向いている用途                                 |
 | -------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `read(port)`               | その時点の最新値と時刻                                                         | 消費者が自分の周期で最新値を読む（制御ループなど） |
+| `read(port)` / `read_with_time(port)` | その時点の最新値（`read_with_time` は時刻との組）                     | 消費者が自分の周期で最新値を読む（制御ループなど） |
 | `subscribe(port)`          | 最初に呼んだ時点の最新値と時刻を返し、以後は新しい値が書かれるたびに、その時点の最新値と時刻を返すイテレータ | 出力が更新されるたびに処理したい                 |
 
 どちらも、外の消費者がどれだけ遅くてもノードを待たせない。`subscribe` で待つのは消費者だけで、書き手は通知するだけで消費者を待たない（待つのは、消費者が値を確かめる間にスロットの lock を持つ短い区間だけである）。消費者が遅いと途中の値は飛ばされ、最新値だけが返る。最初の値は待たずに返すので、出力がしばらく変わらなくても、消費者はすぐに今の値を受け取れる。ネットワークが正常に終了すると、`subscribe` のイテレータは終わる。
@@ -250,14 +252,14 @@ A.next ──┼─ Channel ─ C.prev
 
 > 状態: 実装済み（2026-10-16）。実行の API を作り直した（2026-10-16、ハンドル・`Compose`・実行ごとのタイマー・`Timestamp`・`mujou.testing`）。`run.write` が時刻を返し、`mujou.run` と `Compose` がノードを受け付けるようにした（2026-10-17）。
 
-`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`now` / `sleep` / `get_time_scale` / `set_time_scale` / `pause` / `resume` / `is_paused` / `Timer` / `ReadOnlyTimer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
+`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`StateDict`、`run` がある。時間は `mujou.time` にある（`now` / `sleep` / `get_time_scale` / `set_time_scale` / `pause` / `resume` / `is_paused` / `Timer` / `ReadOnlyTimer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
 
 ### 構築と実行
 
 - `Network.build()` が構造を検査して凍結し、`Graph` を返す。何度呼んでも同じ `Graph` を返し、別々のスレッドから同時に呼んでも構築は 1 回だけ行う（構築は lock の下で 1 つずつ）。以後の `connect` は `RuntimeError` になる。構築した木のノード・ネットワーク・Port には構築済みの印が付き、印の付いたものを含む木の `build` は `RuntimeError` になる（Port を持たないノードも、ほかの実行に入れられない）。`Graph` は `nodes`（パスとノードの組）と `port_path(port)` だけを公開し、直接は作れない（`TypeError`）
 - `Channel` を作るのは `Port.connect` だけである。`Channel()` を直接呼ぶと `TypeError` になる。両端の Port に登録されない Channel は何も運ばないからである
 - Port は、ノードの属性に初めて代入されたときに `<ノードのクラス名>.<属性名>`（例: `Shift.next`）という名前を持つ。`connect` のエラー、実行していないときの `recv` / `send` のエラー、`repr` はこの名前で Port を示す。名前は最初の代入で決まり、別名での代入やネットワークでの公開では変わらない。ノードに代入する前の Port は spec で示す。`initial` の検査は Port を作る時点で行うので、そのエラーには名前が無い（`"PrevPort initial"`）
-- `mujou.run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)` は、ネットワーク 1 つならそれを `build()` し、ノード 1 つならそれを根にした木を構築し、2 つ以上（ノードとネットワークを混ぜてよい）なら `Compose(component, *components)` を `build()` して、その `Graph` を走らせて `Run` を返す。何も渡さないと `TypeError`（型検査でも引数が足りないと分かる）。`Node` でも `Network` でもない値があっても `TypeError`。1 つの `Graph` が走るのは 1 回で、2 回目は `RuntimeError`（同時に呼んでも走るのは 1 回）。ただし、何も起動せずに `ValueError` などで終わった `run` は数えないので、原因を取り除けば同じネットワークを同じ形で（単独なら単独で、まとめてなら同じ順にまとめて）走らせ直せる。複数のネットワークやノード 1 つを渡した `run` が断られたときは、`mujou.run` が自分で構築した木（`Compose` かノードを根にした木）の構築を取り消すので、同じ形で走らせ直せる（ノードは、1 つで渡しても他と一緒に渡しても、断られた後どの形でも走らせ直せる）。ノードを 2 回走らせると、2 回目は構築がノードの構築済みの印に当たり、`RuntimeError` になる。走った（または走らせるために `mujou.run` が構築した）木の一部をもう一度構築したときの文言は、ネットワークでもノードでも `"<クラス名> has already run; create a new instance to run again"` にそろえる。利用者が `mujou.run` に渡したものは、`mujou.run` が作った `Compose` のパス（`'0'` など）や根の空のパスを付けずにクラス名だけで呼ぶ。利用者が作った木の中にあるものは `"Leaky at 'node' has already run; ..."` のようにそのパスを付ける。走っていない構築済みの木（`build()` だけ呼んだネットワーク）の一部なら、従来どおり `"... belongs to a network that is already built"` である。付けるパスは `mujou.run` が作る木でのパスで、状態の木のキーと一致する（複数渡したときは `"Chain at '0.x' has already run; ..."` のように位置が付く）。並行に呼ばれた `run` のうち断られた側の文言は、`"... has already run; ..."` か `"... belongs to a network that is already built"` のどちらかになる（相手の起動が終わる前は、相手の木がまだ走ったと記録されていない）。どちらの場合も走るのは 1 回だけである。また並行の `run` では、相手が後で断られても、こちらが断られることがある。断られた `run` は走らせ直せる。単独の `build` は取り消さないので、単独で断られたネットワークは、ほかのネットワークとまとめては走らせられない。`KeyboardInterrupt` を受けた `run` は、どこで受けても走ったものとして数える。起動を待つ間ならバックグラウンドで起動が続き、インタプリタの終了時に止める。起動の前（状態の復元や入力の書き込みの途中）に受けた場合も、安全側に倒して数える。もう一度動かすには、ノードも含めて新しいインスタンスを作る（構築済みのネットワークのノードは、別のネットワークで `build` できない）
+- `mujou.run(component, *components, timer=None, inputs=None, state=None)` は、ネットワーク 1 つならそれを `build()` し、ノード 1 つならそれを根にした木を構築し、2 つ以上（ノードとネットワークを混ぜてよい）なら `Compose(component, *components)` を `build()` して、その `Graph` を走らせて `Run` を返す。何も渡さないと `TypeError`（型検査でも引数が足りないと分かる）。`Node` でも `Network` でもない値があっても `TypeError`。1 つの `Graph` が走るのは 1 回で、2 回目は `RuntimeError`（同時に呼んでも走るのは 1 回）。ただし、何も起動せずに `ValueError` などで終わった `run` は数えないので、原因を取り除けば同じネットワークを同じ形で（単独なら単独で、まとめてなら同じ順にまとめて）走らせ直せる。複数のネットワークやノード 1 つを渡した `run` が断られたときは、`mujou.run` が自分で構築した木（`Compose` かノードを根にした木）の構築を取り消すので、同じ形で走らせ直せる（ノードは、1 つで渡しても他と一緒に渡しても、断られた後どの形でも走らせ直せる）。ノードを 2 回走らせると、2 回目は構築がノードの構築済みの印に当たり、`RuntimeError` になる。走った（または走らせるために `mujou.run` が構築した）木の一部をもう一度構築したときの文言は、ネットワークでもノードでも `"<クラス名> has already run; create a new instance to run again"` にそろえる。利用者が `mujou.run` に渡したものは、`mujou.run` が作った `Compose` のパス（`'0'` など）や根の空のパスを付けずにクラス名だけで呼ぶ。利用者が作った木の中にあるものは `"Leaky at 'node' has already run; ..."` のようにそのパスを付ける。走っていない構築済みの木（`build()` だけ呼んだネットワーク）の一部なら、従来どおり `"... belongs to a network that is already built"` である。付けるパスは `mujou.run` が作る木でのパスで、状態の木のキーと一致する（複数渡したときは `"Chain at '0.x' has already run; ..."` のように位置が付く）。並行に呼ばれた `run` のうち断られた側の文言は、`"... has already run; ..."` か `"... belongs to a network that is already built"` のどちらかになる（相手の起動が終わる前は、相手の木がまだ走ったと記録されていない）。どちらの場合も走るのは 1 回だけである。また並行の `run` では、相手が後で断られても、こちらが断られることがある。断られた `run` は走らせ直せる。単独の `build` は取り消さないので、単独で断られたネットワークは、ほかのネットワークとまとめては走らせられない。`KeyboardInterrupt` を受けた `run` は、どこで受けても走ったものとして数える。起動を待つ間ならバックグラウンドで起動が続き、インタプリタの終了時に止める。起動の前（状態の復元や入力の書き込みの途中）に受けた場合も、安全側に倒して数える。もう一度動かすには、ノードも含めて新しいインスタンスを作る（構築済みのネットワークのノードは、別のネットワークで `build` できない）
 - スロットとランタイムは `build` ではなく `mujou.run` の時点で、その実行のタイマーで作る。`Session` が `Timer` を 1 つ持ち、`InputGroup`・`Outlet`・`Runtime` に同じものを渡す。正常な終了の時刻の記録もそのタイマーから読む。こうしてスロットの時刻と $\Delta t$ の時間軸が必ずそろう
 - `mujou.run` の中の順序は、スロットを作り Port に結び付ける → `state` を戻す（スロットはその場で、ノードの状態・最後の更新の時刻・タイマーは起動で）→ `inputs` を書く → 各ノードに `timer` を付ける → 起動、である
 - `Compose(*components, **named)` は位置のノードとネットワークを `"0"`, `"1"`, ... の属性に、キーワードのものをその名前の属性にする。`Node` でも `Network` でもない値は `TypeError`。空の名前、`.` を含む名前（パスが曖昧になる）、`_` で始まる名前、`Network` の属性名（`build` / `connect`）、位置と同じ名前は `ValueError`
@@ -279,16 +281,17 @@ A.next ──┼─ Channel ─ C.prev
 | メソッド                         | 振る舞い                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかは `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
-| `read(port)`                     | 送る spec を持つ Port の外向きのスロットの値と、時刻（`Timestamp`）を返す。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
-| `subscribe(port, *, timeout=math.inf)` | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまでは Port の `initial` かゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる）。`timeout` は反復全体にかける実時間の秒で、`subscribe` を呼んだときから数え、ループの本体にかかった時間も含む。2 つ目以降の値を返す前にこれを過ぎると、イテレータが `TimeoutError` を送出して終わり、実行は走り続ける。負か NaN なら呼んだ時点で `ValueError` |
-| `wait_for(port, condition, *, timeout=math.inf)` | `subscribe` で最新値から順に確かめ、`condition` を満たした最初の値と時刻を返す。`timeout` を過ぎると `TimeoutError`（実行は走り続ける）、先に実行が正常に終了すると `RuntimeError`。期待した出力が届くまで待つホストの書き方を 1 行にするため（2026-10-17、例の読み直しループを置き換えた） |
-| `state_dict()`                   | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError` |
+| `read(port)` / `read_with_time(port)` | 送る spec を持つ Port の外向きのスロットの値を返す。`read_with_time` は時刻（`Timestamp`）との組を返す。Port の `recv` / `recv_with_time` と同じ分け方である（2026-10-17、ユーザーの決定。時刻を使わない読み出しが多く、`y, _ =` と書かずに済む）。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
+| `subscribe(port, timeout=math.inf)` | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまでは Port の `initial` かゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる）。`timeout` は反復全体にかける実時間の秒で、`subscribe` を呼んだときから数え、ループの本体にかかった時間も含む。2 つ目以降の値を返す前にこれを過ぎると、イテレータが `TimeoutError` を送出して終わり、実行は走り続ける。負か NaN なら呼んだ時点で `ValueError` |
+| `wait_for(port, condition, timeout=math.inf)` | `subscribe` で最新値から順に確かめ、`condition` を満たした最初の値と時刻を返す。`timeout` を過ぎると `TimeoutError`（実行は走り続ける）、先に実行が正常に終了すると `RuntimeError`。期待した出力が届くまで待つホストの書き方を 1 行にするため（2026-10-17、例の読み直しループを置き換えた） |
+| `state_dict(timeout=30.0)`       | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError`。`timeout` は全ノードの停止を待つ実時間の秒で、有限の正の数（ほかは `ValueError`）。終了した後は待たず、検査だけする（[実行モデル](execution-model.md#実装-1)） |
+| `timer`                          | 実行のタイマー。`mujou.run(..., timer=t)` の `t`、渡さなければグローバルタイマー（`mujou.time` が読むもの）。`ManualRun.timer` は渡したタイマーの型を保つ（2026-10-17、ユーザーの決定。自由実行でも、ホストがその実行のタイマーで待ち、時刻を比べられるように） |
 | `shutdown(timeout=math.inf)` / `join(timeout=math.inf)` | 終了を要求して待つ／終了を要求せずに待つ。`shutdown` は終了の後は何もしない。`timeout` は実時間の秒で、負か NaN なら `ValueError` |
 | `with mujou.run(...) as run:`    | 抜けるときに `shutdown()` を呼ぶ。本体が例外で抜けたときは本体の例外を優先し、`shutdown()` の `NetworkError` は捨てる（ノードの例外はログに出ている） |
 
 - `mujou.run(..., state=tree)` で復元するネットワークは、木を取ったネットワークと同じノードのパスとスロット名を持たなければならない。違えば `mujou.run` は `ValueError` を送出し、何も起動しない。属性名や接続を変えると、パスとスロット名が変わる。同じタイマーでほかの実行が走っている間は、復元する `mujou.run` が `ValueError` になる。このとき何も起動しないので、ほかの実行を終了させるか別のタイマーを渡して走らせ直せる（[実行モデル](execution-model.md#復元)）
 - `shutdown(timeout)` が時間内に終わらなければ `TimeoutError` を送出する。終了の要求は取り消さないので、ノードはもう更新せず、ネットワークはバックグラウンドで終了を続ける（`on_stop` がまだ走っているかもしれない）。終了を待つには `join()` を呼ぶ。`join(timeout)` が時間内に終わらなければ `TimeoutError` を送出し、ネットワークには何もしない。走っていれば走り続ける
-- 例外で終了した後は、`write`・`read`・`subscribe`（とそのイテレータ）・`state_dict`・`shutdown`・`join` が `NetworkError` を送出する。`__cause__` は最初にノードが投げた例外である。例外で終了したときの状態の木は取得しない
+- 例外で終了した後は、`write`・`read`・`read_with_time`・`subscribe`（とそのイテレータ）・`state_dict`・`shutdown`・`join` が `NetworkError` を送出する。`__cause__` は最初にノードが投げた例外である。例外で終了したときの状態の木は取得しない
 - `mujou.run` と `Run` のメソッドはホストのためのもので、ノードの hook の中（ノードのスレッド、`state_dict()` を呼んでいる制御スレッド）から呼ぶと `RuntimeError` になる。ほかの実行のメソッドも同じである。ノードは自分の Port だけでやり取りする（局所性）。待つメソッドの場合は、待ち合いでデッドロックする代わりに `RuntimeError` になるという意味もある
 - ネットワークの間の橋渡しは、ホストのスレッドで書くか、外界とやり取りする I/O のノードとして書く
 - 走っている実行は、ホストが `Run` を手放しても止まらない。フレームワークは、ホストが終了を見るまで（`shutdown`・`join` など、またはほかの実行の `mujou.run`）参照を持ち、遅くともインタプリタの終了時に実行を終了させて `on_stop` を待つ。フレームワークは、non-daemon のスレッドを join するより前に実行の終了を始め、`atexit` の処理で終了が済むまで待つ。最初の `mujou.run` で daemon の監視スレッドを 1 本立て、`threading.main_thread().join()` で主スレッドの終わりを待つ。CPython はインタプリタの終了時に、主スレッドを終わった扱いにしてから non-daemon のスレッドを join するので、監視スレッドはその join より前に目を覚まし、走っている実行の終了を始める。終了は join と並行に進む。この順序は CPython の実装によるもので、文書で保証されてはいない（テストで確かめている）。そのため、`subscribe` を回すスレッドが残っていても、実行の終了とともにイテレータが終わり、プロセスは終われる。それでも、使い終わったら `shutdown()` を呼ぶ（with 文が呼ぶ）

@@ -320,7 +320,12 @@ class Runtime:
         it to start and to take the state. Create the `Outlet`s and the
         `InputGroup` of this run with the same timer.
         """
-    def capture(self, /, build: Callable[[list[object]], Any]) -> Any:
+    def capture(
+        self,
+        /,
+        build: Callable[[list[object]], Any],
+        timeout: SupportsFloat | SupportsIndex,
+    ) -> Any:
         """
         Pauses every node, calls `build` with their `state_dict()` in node
         order while paused, resumes, and returns what `build` returned.
@@ -330,7 +335,7 @@ class Runtime:
         not wait for each other's runtime: that cycle deadlocks, and the control
         threads cannot see Ctrl-C. If `build` raises, the exception propagates
         and the network keeps running. Gives up with `PauseTimeoutError` after
-        the `pause_timeout` given to `start`.
+        `timeout` real seconds if some node has not paused.
         """
     def check(self, /) -> None:
         """
@@ -368,7 +373,6 @@ class Runtime:
         periods: SupportsGetItem[int, SupportsFloat | SupportsIndex | None]
         | None = None,
         timer_state: "dict[str, int | float] | None" = None,
-        pause_timeout: SupportsFloat | SupportsIndex = 30.0,
     ) -> None:
         """
         Starts every node on its own thread and returns once all of them have
@@ -384,8 +388,7 @@ class Runtime:
         first Δt starts (the time at the start by default). `periods` is each
         node's period on the timer in seconds (> 0), rounded to the nearest ns
         and at least 1 ns, or `None` to update as soon as any time has passed;
-        the manual mode ignores it. `pause_timeout` is how many real seconds
-        `capture` waits for every node to pause.
+        the manual mode ignores it.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

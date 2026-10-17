@@ -4,7 +4,7 @@ This page shows how to take the state of a running network, save it, and later r
 
 ## The basic steps
 
-The following example runs a network for 0.2 seconds, takes its state, saves it with pickle, restores it into a new instance, and goes on running.
+The following example runs a network for 0.2 seconds, takes its state, saves it with `torch.save`, restores it into a new instance, and goes on running.
 
 ```python
 --8<-- "examples/save_and_restore.py"
@@ -15,7 +15,7 @@ The steps are as follows.
 1. The node keeps the values of its state in attributes that hold a `torch.Tensor` or an `nn.Module`. `mujou.Node` collects them into the state automatically (`self.x` and `self.readout` in the example)
 2. The node creates the state tensors in `on_start`, and updates them in place in `on_update` (`+=`, `add_`, `copy_`, ...)
 3. The host takes the state tree with `run.state_dict()`. It works while the network runs, and also after the `with` statement exits (after a normal end)
-4. The host saves the tree with pickle or the like. How to save it is up to the host
+4. The host saves the tree with `torch.save` or the like. How to save it is up to the host
 5. To restore, create a **new instance** of the same network and pass it as `mujou.run(net, state=tree)`
 
 Step 2 updates in place because the default `load_state_dict` restores the state by copying into the tensors created in `on_start`. With in-place updates, any other attribute or local variable that refers to the same tensor also sees the restored values.
@@ -89,10 +89,17 @@ Do not change the state in `on_stop`. After a normal end, `run.state_dict()` cop
 
 ## Formats
 
-The tree is nested dicts, and you can save it with pickle or with `torch.save`. For your own files, either will do (the example above uses pickle). To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`.
+The tree `run.state_dict()` returns is a `mujou.StateDict`. It is a subclass of `dict`: you index it as a dict, and you can save it with pickle or with `torch.save`. A tree read back is a `mujou.StateDict` again. For your own files, either will do. To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`. `mujou.run(..., state=)` takes a `mujou.StateDict`, or a plain dict of the same items.
 
 Read a file back the same way it was saved (`pickle.loads` for `pickle.dumps`, `torch.load` for `torch.save`). If you do not know how a file was saved, read it first with the default `torch.load`. If that fails, read it with pickle only when you trust the sender.
 
-- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. If you override `state_dict` to put objects of your own classes in the tree, the default `torch.load` cannot read it
+- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a `mujou.StateDict` too, once `mujou` is imported. If you override `state_dict` to put objects of your own classes in the tree, the default `torch.load` cannot read it
 - `pickle.load` and `torch.load(..., weights_only=False)` can run code from the file while reading it. Do not read files you do not trust with them
-- The state of a node that computes on CUDA goes into the tree as CUDA tensors. To read it on a machine without a GPU, use `torch.load(..., map_location="cpu")`. The default `load_state_dict` copies to the node's device, so you can pass the CPU tensors to `state=` as they are
+- The state of a node that computes on CUDA goes into the tree as CUDA tensors. `tree.cpu()` returns a new tree with every tensor of the tree on the CPU (the tree itself is not changed). Move the tree to the CPU before saving it, and a machine without a GPU can read it too. To read a file saved with CUDA tensors, use `torch.load(..., map_location="cpu")`. The default `load_state_dict` copies to the node's device, so you can pass the CPU tensors to `state=` as they are
+
+```python
+torch.save(run.state_dict().cpu(), "state.pt")  # the state of GPU nodes as CPU tensors
+tree = torch.load("state.pt")  # a mujou.StateDict
+```
+
+`tree.to(device)` moves every tensor of the tree to `device`, and `cpu()` is `to("cpu")`. It looks into the dicts (including the `OrderedDict` of the `state_dict` of an `nn.Module`), lists and tuples of the tree, and makes these containers anew. Other values are shared with the original tree. As with `torch.Tensor.to`, a tensor already on `device` is not copied but shared with the original tree

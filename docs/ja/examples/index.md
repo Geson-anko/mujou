@@ -27,7 +27,7 @@ mujou の使い方を示す、動くプログラムの一覧である。プロ�
 - `leaky_chain/`: 連続時間で定義したノード（リーク積分器）。厳密解の係数で更新するので、どんな `dt` でも安定する。`run.write` が返す書き込みの時刻から出力の時刻までの経過時間を使って、出力を厳密解と比べる
 - `branching.py`: 1 つの `NextPort` から複数のノードへ送り、`PrevPort(multi=True)` で合流して受け取る。`send_to` で、`connect` が返した Channel の相手にだけ送る
 - `compose.py`: `Compose(enc=..., dec=...)` と `mujou.run(a, b)`。ノードのパス（`"enc.scale"`、`"0.scale"`）の付き方
-- `save_and_restore.py`: `run.state_dict()` で状態を取り、pickle で保存し、`mujou.run(..., state=...)` で復元して続ける
+- `save_and_restore.py`: `run.state_dict()` で状態を取り、テンソルを CPU に移して `torch.save` で保存し、`mujou.run(..., state=...)` で復元して続ける
 - `pause.py`: `mujou.time.pause()` でグローバルタイマーを止め、そこで走る 2 つの実行の状態を同じ時刻で取り、`mujou.time.resume()` で再開する。一方の状態から復元した実行は、その時刻から続く
 - `subscribe.py`: `run.subscribe` で、まずその時点の最新の出力を受け取り、その後はより新しい出力が送られるたびに最新の 1 つを受け取る。受け取る前に次の値が送られると、途中の値は飛ばされる。20 個受け取ったら `break` でループを抜ける
 - `online_learning.py`: 教師のノードが、ホストの書く `a` で y = a x + b のバッチを 10 ms ごとに送る。ホストは、走らせている途中で `a` を変える。学習するノードは、新しいバッチごとに 1 回学ぶ。学習と推論の段階を分けない。ホストは学習するノードの損失を `run.wait_for` で追う。損失は下がり、目標が変わると跳ね上がり、学習するノードが追いつくとまた下がる

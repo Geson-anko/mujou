@@ -43,7 +43,7 @@ class Timer:
         with mujou.run(node, timer=timer) as run:
             run.write({node.prev: torch.ones(2)})
             timer.sleep(0.1)  # 0.1 s of the run's time
-            error, t = run.read(node.next)  # t is on this timer
+            error, t = run.read_with_time(node.next)  # t is on this timer
             assert t <= timer.now()
     """
 

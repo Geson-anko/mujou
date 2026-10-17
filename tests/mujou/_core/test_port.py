@@ -308,7 +308,7 @@ class TestRecv:
         assert first.device == torch.device("cpu")
         assert torch.equal(again, torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, neighbour.results[0]), torch.ones(2, 3))
-        assert torch.equal(run.read(out)[0], torch.ones(2, 3))
+        assert torch.equal(run.read(out), torch.ones(2, 3))
 
     def test_with_time_gives_the_time_of_the_write(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
@@ -356,7 +356,7 @@ class TestSend:
 
         run = start_manual(Compose(node=Probe(send_then_change, out=out)))
         step(run)
-        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
 
     def test_to_one_channel_changes_only_that_peer(
         self, step: Step, start_manual: StartManual
@@ -371,7 +371,7 @@ class TestSend:
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), torch.zeros(2, 3))
         # The output the host reads changes only with send to every peer.
-        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
 
     def test_to_a_channel_of_another_port(self, step: Step, start_manual: StartManual):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
@@ -418,7 +418,7 @@ class TestInitial:
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
         # Stamped as the zeros would be: with the time the run started (0).
         assert written_at.ns == 0
-        assert torch.equal(run.read(out)[0], twos)
+        assert torch.equal(run.read(out), twos)
 
     def test_send_to_replaces_it_for_that_peer_only(
         self, step: Step, start_manual: StartManual
@@ -434,7 +434,7 @@ class TestInitial:
         step(run, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
-        assert torch.equal(run.read(out)[0], twos)
+        assert torch.equal(run.read(out), twos)
 
     def test_of_a_dict_message(self, step: Step, start_manual: StartManual):
         out = Port(send=fb(), initial={"error": torch.ones(2, 3)})
@@ -454,7 +454,7 @@ class TestInitial:
         with torch.no_grad():
             value.add_(1.0)  # after the declaration: must not reach the slots
         run = start_manual(Compose(node=Probe(out=out)))
-        received = run.read(out)[0]
+        received = run.read(out)
         assert torch.equal(received, torch.ones(2, 3))
         assert not received.requires_grad
 
@@ -504,46 +504,40 @@ class TestInitial:
             Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
 
 
-class TestAccelerator:
+@pytest.mark.cuda
+class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self,
-        step: Step,
-        start_manual: StartManual,
-        accelerator: torch.device,
+        self, step: Step, start_manual: StartManual
     ):
         out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
 
-        class OnAccelerator(Probe):
+        class OnCuda(Probe):
             def __init__(self, update: Callable[[], object], **ports: Any) -> None:
                 super().__init__(update, **ports)
-                Node.__init__(self, device=accelerator.type)
+                Node.__init__(self, device="cuda")
 
         def update() -> torch.Tensor:
             x = inp.recv()
             back.send(2 * x)
             return x
 
-        # The source stays on the CPU: MPS takes one node at most.
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
-        sink = OnAccelerator(update, prev=inp, back=back)
+        sink = OnCuda(update, prev=inp, back=back)
         run = start_manual(Compose(source=source, sink=sink))
         step(run, source, sink)
         received = cast(torch.Tensor, sink.results[0])
         # The index-less device is fixed, so the message compares equal to it.
-        assert received.device == sink.device == accelerator
+        assert received.device == sink.device == torch.device("cuda", 0)
         assert torch.equal(received.cpu(), torch.ones(2, 3))
-        sent, _ = run.read(back)
+        sent = run.read(back)
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
 
     def test_takes_an_initial_value_on_the_device(
-        self,
-        step: Step,
-        start_manual: StartManual,
-        accelerator: torch.device,
+        self, step: Step, start_manual: StartManual
     ):
-        out = Port(send=h(), initial=torch.ones(2, 3, device=accelerator))
+        out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))
         inp = Port(recv=h())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)

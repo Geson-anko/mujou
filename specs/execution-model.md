@@ -129,8 +129,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 ```python
 state = run.state_dict()         # 停止 → コピー → 再開 → 木を返す
-with open("state.pkl", "wb") as f:
-    pickle.dump(state, f)        # 保存の方法はユーザーが決める
+torch.save(state.cpu(), "state.pt")  # 保存の方法はユーザーが決める。cpu() で GPU のテンソルも CPU へ
 
 run.shutdown()
 state = run.state_dict()         # 正常に終了した後は、終了した時点の木を返す
@@ -149,6 +148,16 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 
 各ノードの状態は、ネットワークの木の中の属性のパス（`body.l1` など）で識別する。
 
+### `StateDict`
+
+`Run.state_dict()` は木を `mujou.StateDict` で返す。木の構造は変えず、木の中のテンソルをまとめてデバイスへ移す `to(device)` と `cpu()` を足すためのクラスである（2026-10-17、ユーザーの決定）。木のテンソルは各ノードのデバイスに置いたままにし、常に CPU に移すことはしない。GPU のノードの状態を CPU のテンソルで保存したいときに、利用者が `tree.cpu()` を呼ぶ。
+
+- `dict` の派生にした。`tree["nodes"]["x"]`・pickle・`mujou.run(state=)` への受け渡しなど、素の dict の木での使い方がそのまま動くからである
+- `to(device)` は、木の中の dict（`OrderedDict` など派生も含む。`copy.copy` で同じ型と属性（`nn.Module.state_dict` の `_metadata`）を保つ）・list・tuple を再帰的に辿り、テンソルを `Tensor.to(device)` で移した新しい木を返す。元の木は変えない。入れ物は新しく作り、それ以外の値は共有する。すでに `device` にあるテンソルは、`Tensor.to` と同じくコピーせず共有する。木の中で同じテンソルを 2 か所が指していれば、移した木でも 1 つのテンソルを指す（`id` の memo）。`list` / `tuple` の派生（`torch.Size` など）は入れ物として辿らず、そのまま共有する。`dtype` は扱わない（要求されていない）
+- `torch.load` の既定 `weights_only=True` の unpickler は、`SETITEMS` を素の `dict` と `OrderedDict` などにしか許さない。dict の派生を普通に pickle すると、`torch.save` した木を既定の `torch.load` で読めなくなる。そこで `__reduce__` で `(StateDict, (dict(self),))` を返し、中身は素の dict として pickle し、`StateDict` はそれを引数に呼ぶ。`StateDict` は `mujou` を import したときに `torch.serialization.add_safe_globals` に登録する。こうすると、`torch.save` した木は既定の `torch.load` で `StateDict` に戻る。素の dict として保存する案（`__reduce__` で `dict` を返す）も試したが、`weights_only=True` は `builtins.dict` の呼び出しも許さず読めなかった。登録はプロセス全体の torch の設定を変えるが、`StateDict` の構築は dict を作るだけで、任意のコードを実行する経路にならない
+- pickle には `mujou.StateDict` の名前で入れる（`__module__ = "mujou"`）。実装のモジュールを移しても、保存したファイルが読めるようにするためである
+- `torch.load` で読むには、先に `import mujou` していなければならない。mujou の木を使うのは mujou を使うプロセスなので、制約にならないと判断した
+
 ### コピーを取る理由
 
 ノードの `state_dict()` は、PyTorch のテンソルのように、ノードが更新し続ける値への参照を返すことがある。参照のままホストに返すと、再開した後のノードの更新で、ホストの手元の木が書き換わってしまう。そこでフレームワークは、停止している間に木のコピーを作ってから再開する。スロットの値は、`mujou._core._native` の外の torch に依存する層が `torch.Tensor` にコピーして木に入れる。
@@ -165,7 +174,7 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 
 ### 停止のタイムアウト
 
-`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。
+`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。待つ長さは取得ごとに `run.state_dict(timeout)` で渡す。
 
 ## 終了と例外
 
@@ -219,7 +228,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 
 - ノードはそれぞれ専用のスレッドで動く。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
 - `mujou.run` は、その実行のタイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `_on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_thread_start` → `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
-- `Run.state_dict()` が返す木は次の形で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする
+- `Run.state_dict()` が返す木は次の形の `mujou.StateDict`（`dict` の派生）で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする。`mujou.run(..., state=)` は `StateDict` でも、同じ中身の素の `Mapping` でも受け付ける
 
 ```python
 {
@@ -230,7 +239,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 }
 ```
 
-- 停止のタイムアウトの既定値は実時間 30 秒で、`mujou.run(..., pause_timeout=...)` で変える。`pause_timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `pause_timeout` を入れる）。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
+- 停止のタイムアウトは `Run.state_dict(timeout=30.0)` の引数で、既定は実時間 30 秒である。取得のたびに決められるよう、実行の起動時ではなく取得の呼び出しで渡す（2026-10-17、ユーザーの決定。以前は `mujou.run(..., pause_timeout=...)` だった）。ホストは native の `Runtime.capture(build, timeout)` に渡し、コアの `Runtime::capture(build, timeout)` が待つ。`timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `timeout` を入れる）。正常に終了した後は待つものが無いので使わないが、同じく検査する。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
 - 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。`shutdown` に有限の `timeout` を渡すと、コアに待たずに終了を要求し（`Runtime.request_stop`）、呼んだスレッドはコアの `join` で時間を区切って待つ。時間切れでも要求は残り、ネットワークは止まりに向かう
 - 正常に終了した後の `state_dict()` は、ホストのスレッドで各ノードの `_capture_state()` を呼ぶ。CUDA のノードの同期は、制御スレッドで呼ぶときと同じである
 - 例外は時間を止めない。ランタイムは例外で状態を取得しないので、例外の記録から終了処理の完了まで、タイマーは保持されずに進む。起動中や状態の取得中に例外が起きたときは、その保持を終了処理の最後に解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである
@@ -248,8 +257,8 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 テスト用の口は `mujou.testing` に公開する。mujou 自身のテスト（既定のノードのテストを含む）と利用者のテストは、同じ口を使う。
 
 - `VirtualTimer()`: 時刻 0 の仮想時計のタイマー。`advance(seconds)` で進めた分だけ進む
-- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数とその制約（`pause_timeout` は有限の正の秒数）は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
-- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
+- `run(component, *components, timer=None, inputs=None, state=None)`: 引数とその制約は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
+- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。`Run.timer` を override し、型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
 - `ManualRun.step(*nodes)`: 渡した順に各ノードを 1 回ずつ更新し、終わってから戻る。引数なしなら木の順に全ノード。時計は進めないので、`run.timer.advance(dt)` と組み合わせる。前回の更新から時刻が進んでいないノードは飛ばす（$\Delta t = 0$ になるため）
 
 ```python

@@ -78,7 +78,7 @@ with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as ru
     # How far the node has learned by a given time depends on how its thread gets
     # scheduled: read every 0.1 s until the loss has fallen, giving up after 5 s.
     for _ in range(50):
-        prediction, t = run.read(regressor.next)
+        prediction, t = run.read_with_time(regressor.next)
         losses.append(nn.functional.mse_loss(prediction, y).item())
         print(f"t = {float(t):.2f} s: loss = {losses[-1]:.5f}")
         if losses[-1] < 1e-2 * losses[0]:

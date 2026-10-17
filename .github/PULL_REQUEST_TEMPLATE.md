@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What changes, and why. Link the issue it closes, if any. -->
+<!-- What changes, and why, in English or Japanese. Link the issue it closes, if any; a large change needs an agreed issue first (CONTRIBUTING.md). -->
 
 ## Test plan
 
