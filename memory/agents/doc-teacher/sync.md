@@ -53,3 +53,9 @@
 ### R4（改題 Q3）
 - ja/en とも `""` は正解、`Compose(node)` の `"0"` は推測止まり → 欠落（Compose がノードを受け付けることを networks.md が書いていない）
 - 直した: 「パス」節に Compose はノードも受け、`Compose(node)` は `"0"` と 1 文。「構築と実行」の「ノード 1 つも渡せる」を「ネットワークの代わりにノードを渡してよい。1 つだけなら包まずに走らせる」に（曖昧）
+
+### R5（状態の木の構造をフックとして追記）
+- 置き場所: concepts/state.md「状態の木」の表にキー列（nodes / slots / last_update_ns / timer）を足し、取り出し例 1 文（`tree["nodes"]["l1"]`、単独ノードは `tree["nodes"][""]`）。user-guide/state.md は既に concepts へリンクしているので触らない
+- 確認元: src/mujou/_core/session.py `_tree` / `_restore`、run.py `state_dict` docstring
+- 但し書き（形は変わりうる・書き換えて復元は想定外）は specs/実装に根拠が無いので書かなかった
+- 問題 S1: `mujou.run(net)` で走らせた `l1` の状態を木から取り出す書き方（concepts/state.md）
