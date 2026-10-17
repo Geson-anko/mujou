@@ -395,23 +395,17 @@ def run[P: Port[Any, Any, Any]](
             error, t = run.read(node.next)
 
     Raises:
-        RuntimeError: A network or node has already run, or belongs to a tree
-            that has (``"Leaky has already run; create a new instance to run
-            again"``); part of a network belongs to another built network that
-            has not run (e.g. a network that was only built, or one whose run
-            alone was refused and is now given with others); or this is called
-            from a node's hook. Of runs called at once that share a part, the
-            refused ones may give either message.
-        TypeError: A value is neither a ``Node`` nor a ``Network`` (or none
-            is given).
+        RuntimeError: A network or node has already run (``"Leaky has already
+            run; create a new instance to run again"``), or part of one belongs
+            to another network that was built but has not run; or this is called
+            from a node's hook.
+        TypeError: A value is neither a ``Node`` nor a ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
-            ``Run.write`` (for ``inputs``) do; ``pause_timeout`` is not finite
-            and > 0 (``ValueError``); or ``state`` does not match the
-            networks, or it cannot set the timer back because another run is
-            running on it. Nothing started: the same networks, given the same
-            way (alone, or together in the same order), may run once the cause
-            is gone; a node given alone, or with others, may run once the cause
-            is gone, given any way.
+            ``Run.write`` (for ``inputs``) raise; ``pause_timeout`` is not finite
+            and > 0; ``state`` does not match the networks, or the timer it would
+            set back has another run on it; or the run would have a second node
+            on MPS, counting the runs still running. Nothing has started: the
+            same networks, given the same way, may run once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(
