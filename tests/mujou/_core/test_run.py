@@ -537,9 +537,12 @@ class TestTimer:
         assert start(Chain(), timer=timer).timer is timer
         # By default the global timer, which mujou.time reads.
         default = start(Chain()).timer
-        before = mujou.time.time_ns()
-        on_default = default.now().ns
-        assert before <= on_default <= mujou.time.time_ns()
+        assert not default.is_paused()
+        mujou.time.pause()
+        try:
+            assert default.is_paused()
+        finally:
+            mujou.time.resume()
 
     def test_a_manual_run_gives_its_virtual_timer(
         self, virtual: VirtualTimer, start_manual: StartManual
