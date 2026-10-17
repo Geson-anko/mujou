@@ -7,7 +7,7 @@ import torch
 
 import mujou
 import mujou.testing
-from mujou import Network, NetworkError, Port, Run
+from mujou import Network, NetworkError, Node, Port, Run
 from mujou._core._native import GlobalTimer, timer
 from mujou.testing import ManualRun, VirtualTimer
 from mujou.time import Timer
@@ -43,7 +43,7 @@ def virtual() -> VirtualTimer:
 class StartManual(Protocol):
     def __call__[P: Port[Any, Any, Any]](
         self,
-        *networks: Network,
+        *networks: Node | Network,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
@@ -53,7 +53,7 @@ class StartManual(Protocol):
 class Start(Protocol):
     def __call__[P: Port[Any, Any, Any]](
         self,
-        *networks: Network,
+        *networks: Node | Network,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
@@ -82,7 +82,7 @@ def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
     shut down at the end of the test."""
 
     def start[P: Port[Any, Any, Any]](
-        *networks: Network,
+        *networks: Node | Network,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
@@ -105,7 +105,7 @@ def start(started: list[Run]) -> Start:
     down at the end of the test."""
 
     def start[P: Port[Any, Any, Any]](
-        *networks: Network,
+        *networks: Node | Network,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,

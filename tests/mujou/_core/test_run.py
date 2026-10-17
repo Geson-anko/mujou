@@ -14,7 +14,7 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
-from mujou._core.network import Network
+from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
@@ -176,13 +176,18 @@ class TestRun:
         assert raised.value.__cause__ is net.b.error
         assert net.a.updates == 0 and net.b.updates == 0
 
-    def test_runs_once_under_concurrent_calls(self, started: list[Run]):
+    @pytest.mark.parametrize("make", [Chain, Leaky])
+    def test_runs_once_under_concurrent_calls(
+        self, started: list[Run], make: Callable[[], Node | Network]
+    ):
         for _ in range(20):
-            net = Chain()
+            net = make()
             barrier = threading.Barrier(2)
             outcomes: list[object] = []
 
-            def run(net: Chain = net, barrier: threading.Barrier = barrier) -> None:
+            def run(
+                net: Node | Network = net, barrier: threading.Barrier = barrier
+            ) -> None:
                 barrier.wait()
                 try:
                     handle = mujou.testing.run(net, timer=VirtualTimer())
@@ -199,7 +204,9 @@ class TestRun:
                 thread.join()
             assert sum(isinstance(o, Run) for o in outcomes) == 1
             (error,) = (o for o in outcomes if not isinstance(o, Run))
-            assert "already run" in str(error)
+            # A node is wrapped in a new Compose for each call: the second finds
+            # it built rather than run.
+            assert "already run" in str(error) or "already built" in str(error)
 
     def test_a_refused_run_of_several_networks_can_be_retried(
         self, start_manual: StartManual
@@ -222,11 +229,11 @@ class TestRun:
         with pytest.raises(RuntimeError, match="already built"):
             start_manual(composed)
 
-    def test_takes_only_networks(self, start: Start):
-        with pytest.raises(TypeError, match="at least one network"):
+    def test_takes_only_nodes_and_networks(self, start: Start):
+        with pytest.raises(TypeError, match="at least one"):
             start()
-        for given in ((Leaky(),), (Chain(), Leaky())):
-            with pytest.raises(TypeError, match="Leaky"):
+        for given in ((object(),), (Chain(), object())):
+            with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
 
     def test_a_run_is_made_only_by_mujou_run(self):
@@ -241,6 +248,60 @@ class TestRun:
         step(run, virtual)
         assert len(node.errors) == 1
         assert "host methods" in str(node.errors[0])
+
+
+class TestRunANode:
+    def test_runs_as_a_network_holding_it_at_0(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Leaky()
+        run = start_manual(node, inputs={node.prev: u(1)})
+        step(run, virtual, node)
+        y, _ = run.read(node.next)
+        assert torch.equal(y, euler(torch.zeros(2, dtype=F64), u(1)))
+        tree = run.state_dict()
+        assert set(tree["nodes"]) == {"0"}
+        assert set(tree["slots"]) == {"0.prev/in", "0.next/out"}
+        assert set(tree["last_update_ns"]) == {"0"}
+
+    def test_restores_a_tree_of_the_same_node_class(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        first = Leaky()
+        run = start_manual(first, inputs={first.prev: u(1)})
+        step(run, virtual)
+        tree = run.state_dict()
+        run.shutdown()
+        again = Leaky()
+        start_manual(again, timer=VirtualTimer(), state=tree)
+        assert torch.equal(again.x, first.x) and again.updates == 1
+
+    def test_runs_once(self, start: Start):
+        node = Leaky()
+        start(node).shutdown()
+        for given in (node, Solo(node), Compose(node)):
+            with pytest.raises(RuntimeError, match="already built"):
+                start(given)
+
+    def test_a_refused_run_can_be_retried(self, start_manual: StartManual):
+        node = Leaky()
+        with pytest.raises(ValueError, match="shape"):
+            start_manual(node, inputs={node.prev: torch.zeros(3, dtype=F64)})
+        assert not node.started
+        start_manual(node, inputs={node.prev: u(1)})
+        assert node.started
+
+    def test_mixes_with_networks(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net, node = Chain(), Leaky()
+        net.connect(node)
+        run = start_manual(net, node, inputs={net.prev: u(1)})
+        assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1"}
+        for _ in range(3):
+            step(run, virtual, net.a, net.b, node)
+        y, _ = run.read(node.next)
+        assert not torch.equal(y, torch.zeros(2, dtype=F64))
 
 
 class TestWith:

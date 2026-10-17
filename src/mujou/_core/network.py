@@ -10,7 +10,7 @@ import threading
 import weakref
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, Never, cast, final
+from typing import Any, Final, Never, cast, final
 
 from mujou._core import _native
 from mujou._core.port import (
@@ -22,9 +22,6 @@ from mujou._core.port import (
     is_frozen,
     thaw,
 )
-
-if TYPE_CHECKING:
-    from mujou._core.node import Node
 
 
 class Component:
@@ -223,9 +220,6 @@ class Network(Component):
             return self._graph
 
     def _build(self) -> Graph:
-        # Imported here: _node imports Component from this module.
-        from mujou._core.node import Node
-
         members: list[Component] = []
         nodes: list[tuple[str, Node]] = []
         ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
@@ -344,13 +338,15 @@ def _mark_built(component: Component) -> None:
 
 
 class Compose(Network):
-    """A network of the given networks side by side, unconnected unless they were
-    connected before.
+    """A network of the given nodes and networks side by side, unconnected unless
+    they were connected before.
 
-    A network given by position is at the path of its position (``"0"``,
-    ``"1"``, ...) and one given by keyword at its keyword, so the node ``l1`` of
+    One given by position is at the path of its position (``"0"``, ``"1"``, ...)
+    and one given by keyword at its keyword, so the node ``l1`` of
     ``Compose(a, b)`` is ``"1.l1"`` in ``b`` and that of ``Compose(enc=a)`` is
-    ``"enc.l1"``. ``mujou.run(a, b)`` runs ``Compose(a, b)``.
+    ``"enc.l1"``; a node ``n`` in ``Compose(n, a)`` is ``"0"``, as if it were an
+    attribute ``"0"`` of a network. ``mujou.run(a, b)`` runs ``Compose(a, b)``,
+    and ``mujou.run(n)`` runs ``Compose(n)``.
 
     Example::
 
@@ -360,13 +356,13 @@ class Compose(Network):
             state = run.state_dict()  # nodes "enc.l1", ..., "dec.l1", ...
 
     Raises:
-        TypeError: A value is not a ``Network``.
+        TypeError: A value is neither a ``Node`` nor a ``Network``.
         ValueError: A keyword is empty, holds a ``.`` (a path would be
             ambiguous), starts with ``_``, is the name of an attribute of
             ``Network`` (such as ``build``), or is the path of a position.
     """
 
-    def __init__(self, *networks: Network, **named: Network) -> None:
+    def __init__(self, *networks: Node | Network, **named: Node | Network) -> None:
         children = {str(i): network for i, network in enumerate(networks)}
         for name, network in named.items():
             if (
@@ -383,11 +379,11 @@ class Compose(Network):
                 )
             children[name] = network
         for name, network in children.items():
-            # The annotation is not checked at runtime; a node here would be walked
-            # as a child, not composed.
-            if not isinstance(network, Network):  # pyright: ignore[reportUnnecessaryIsInstance]
+            # The annotation is not checked at runtime.
+            if not isinstance(network, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise TypeError(
-                    f"Compose takes networks, got {type(network).__name__} at {name!r}"
+                    "Compose takes nodes and networks, got "
+                    f"{type(network).__name__} at {name!r}"
                 )
             setattr(self, name, network)
 
@@ -453,3 +449,9 @@ def _check_declarations(component: Component, where: str) -> None:
                 f"{type(component).__name__} at {where} has {n} {kind.__name__} "
                 "attributes; at most one is allowed"
             )
+
+
+# Last: node imports Component from this module, which is defined by now. Imported
+# at run time, not only for the type checker, so that the annotations naming Node
+# (e.g. of Compose.__init__, which inspect.signature evaluates) resolve.
+from mujou._core.node import Node  # noqa: E402
