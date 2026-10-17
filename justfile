@@ -19,8 +19,14 @@ format:
     uv run pre-commit run -a
 
 # Run cargo test and pytest (all tests, including slow ones)
-test:
+test: test-rs test-py
+
+# Run cargo test over the Rust workspace
+test-rs:
     cargo test --workspace
+
+# Run pytest (all tests, including slow ones) with coverage
+test-py:
     uv run pytest -v --cov
 
 # Run cargo test and pytest without slow convergence / training checks
