@@ -21,22 +21,26 @@ class Integrator(Node):
     """Integrates its input over time (dx/dt = u) and sends ``readout(x)``."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(recv=VECTOR1)
         self.next = NextPort(send=VECTOR1)
         self.readout = nn.Linear(1, 1)  # a module: part of the state
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         self.x = VECTOR1.zeros()  # a tensor: part of the state
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         self.x += dt * self.prev.recv()  # in place, so that a restore copies into it
         self.next.send(self.readout(self.x))
 
 
 class Model(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.integrator = Integrator()
         self.prev = self.integrator.prev
         self.next = self.integrator.next

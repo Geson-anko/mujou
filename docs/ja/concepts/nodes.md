@@ -48,6 +48,8 @@ hook は次の順に呼ばれる。
 
 どのノードのどの hook が例外を投げても、ネットワーク全体が終了する。例外を投げたノードだけを止めて、ほかのノードを動かし続けることはない。
 
+継承したクラスの常として、`__init__` では最初に `super().__init__()` を、override した hook では最初に `super()` を呼ぶ。
+
 `__init__` では Port を宣言する。状態のテンソルは `on_start` で作り、その後は同じテンソルをその場で更新するのが基本である。
 
 ## 持たない hook
@@ -68,18 +70,21 @@ import mujou
 
 class Leaky(mujou.Node):
     def __init__(self, n_in: int, n_out: int) -> None:
+        super().__init__()
         self.prev = mujou.PrevPort(recv=mujou.TensorSpec((32, n_in)))   # 受け取るだけ
         self.next = mujou.NextPort(send=mujou.TensorSpec((32, n_out)))  # 送るだけ
         self.n_in, self.n_out = n_in, n_out
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         # 状態のテンソルは on_start で作る。Tensor の属性は状態として自動で集まる
         self.w = torch.randn(self.n_in, self.n_out, generator=self.generator) * 0.1
         self.h = torch.zeros(32, self.n_out)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()                  # 前のノードの最新値。待たない
         self.h += dt * (x @ self.w - self.h)  # dt に比例して、その場で更新する
         self.next.send(self.h)

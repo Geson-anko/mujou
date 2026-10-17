@@ -28,8 +28,7 @@ class Component:
     """The common base of ``Node`` and ``Network``: something with ports that
     connects.
 
-    A component has no state of its own, so subclasses need not call
-    ``super().__init__()``.
+    A component has no state of its own: its ``__init__`` is ``object``'s.
     """
 
     def connect(self, other: Node | Network) -> Channel:
@@ -187,6 +186,7 @@ class Network(Component):
 
         class Stack(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.l1 = Hidden(784, 256)
                 self.l2 = Hidden(256, 256)
                 self.l1.connect(self.l2)  # l1.next <-> l2.prev
@@ -196,6 +196,7 @@ class Network(Component):
 
         class Classifier(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.body = Stack()
                 self.head = Head()
                 self.body.connect(self.head)  # body.next (l2.next) <-> head.prev
@@ -409,6 +410,7 @@ class Compose(Network):
     """
 
     def __init__(self, *components: Node | Network, **named: Node | Network) -> None:
+        super().__init__()
         children = {str(i): component for i, component in enumerate(components)}
         for name, component in named.items():
             if (

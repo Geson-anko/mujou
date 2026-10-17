@@ -7,7 +7,7 @@ A node computes with PyTorch inside. This page covers devices and random numbers
 The following node learns a linear map from its input to the target online, and sends its prediction. BP stays inside the one node.
 
 ```python
---8<-- "examples/torch_node.py:19:55"
+--8<-- "examples/torch_node.py:19:57"
 ```
 
 ## Device and seed
@@ -17,7 +17,6 @@ Pass the device and the random seed in `__init__`, with `super().__init__(device
 - `device` is a CPU or CUDA device (the default is `"cpu"`). Any other device (such as MPS), and CUDA where CUDA is not available, raise `ValueError`
 - Received messages (the values of `recv()`) arrive on the node's device
 - Allocate tensors with `device=self.device`
-- You do not have to call `super().__init__()`. The node then computes on the CPU, and its seed is not deterministic
 
 ## Random number generator
 
@@ -77,7 +76,7 @@ A node may change only per-thread settings. Write them in `on_thread_start`, a h
 Each node computes on its own thread. On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down. Mujou does not set the number of internal threads, so the host decides it before `mujou.run`.
 
 ```python
---8<-- "examples/torch_node.py:58:60"
+--8<-- "examples/torch_node.py:60:62"
 ```
 
 As a rule of thumb, the number of nodes that compute on the CPU times the `n` of `torch.set_num_threads(n)` should not exceed the number of physical cores. With many nodes on small matrices, `n = 1` is enough.

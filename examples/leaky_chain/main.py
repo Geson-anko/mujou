@@ -19,6 +19,7 @@ class LeakyChain(mujou.Network):
     """``u -> a -> b ->``: two leaky integrators with the time constant ``TAU``."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.a = Leaky(TAU)
         self.b = Leaky(TAU)
         self.a.connect(self.b)

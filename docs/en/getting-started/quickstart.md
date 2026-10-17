@@ -34,6 +34,7 @@ y = tensor([3., 5., 7.]) at t = 0.017 s
 | Code                                | Meaning                                                                                                                                               |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VECTOR = TensorSpec((3,))`         | Declares the shape and dtype of the messages: here, a float32 vector of length 3                                                                      |
+| `super().__init__()`                | Calls the `__init__` of `mujou.Node` first, as in any subclass. Each overridden hook calls `super()` the same way (`super().on_update(dt)`)           |
 | `self.prev = PrevPort(recv=VECTOR)` | The port on the previous side. It receives `VECTOR` messages                                                                                          |
 | `self.next = NextPort(send=VECTOR)` | The port on the next side. It sends `VECTOR` messages                                                                                                 |
 | `def on_update(self, dt)`           | The method Mujou calls over and over. Write one step of work in it. `dt` is the time in seconds since the previous call; this program does not use it |
@@ -85,9 +86,9 @@ If any node raises an exception, the whole network stops. Any later call to `wri
 
 ## Update period
 
-The nodes in this program do not call `super().__init__()`, so they have no update period. A node without a period repeats `on_update` without waiting and uses up a whole CPU core.
+The nodes in this program pass no `period` to `super().__init__()`, so they have no update period. A node without a period repeats `on_update` without waiting and uses up a whole CPU core.
 
-To update at a regular interval, call `super().__init__(period=seconds)` at the start of the node's `__init__`.
+To update at a regular interval, pass the period in seconds: `super().__init__(period=seconds)`.
 
 ```python
 class Scale(Node):

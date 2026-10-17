@@ -21,10 +21,12 @@ class Clock(Node):
     """Sends the time of its run's timer, in seconds."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.next = NextPort(send=SCALAR)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         self.next.send(torch.tensor(float(self.timer.now()), dtype=torch.float64))
 
 

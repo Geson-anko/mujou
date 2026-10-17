@@ -33,6 +33,7 @@ class Regressor(Node):
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         self.model = nn.Linear(N_IN, N_OUT, device=self.device)
         # The node's own generator, not the global one that all nodes share.
         nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
@@ -40,6 +41,7 @@ class Regressor(Node):
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x, y = self.prev.recv(), self.target.recv()
         params = list(self.model.parameters())
         # Split a long dt into n equal steps instead of clipping it: none of the

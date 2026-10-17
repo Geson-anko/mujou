@@ -23,16 +23,19 @@ class Leaky(Node):
     """
 
     def __init__(self, tau: float) -> None:
+        super().__init__()
         self.tau = tau
         self.prev = PrevPort(recv=SCALAR)
         self.next = NextPort(send=SCALAR)
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         self.x = SCALAR.zeros()  # the state: collected by the node automatically
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         u = self.prev.recv()
         self.x += (1 - math.exp(-dt / self.tau)) * (u - self.x)  # in place
         self.next.send(self.x)

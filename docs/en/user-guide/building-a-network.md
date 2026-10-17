@@ -11,7 +11,7 @@ In `__init__`, write these three things in order.
 3. Expose the ports that should connect from outside, or that the host reads and writes, by assigning them to attributes of the network
 
 ```python
---8<-- "examples/quickstart.py:43:51"
+--8<-- "examples/quickstart.py:47:56"
 ```
 
 A network follows only its direct attributes. Nodes put in a list or a dict do not become part of the network.
@@ -50,6 +50,7 @@ A network can hold another network as an attribute. If the child network exposes
 ```python
 class Stack(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.l1 = Hidden(784, 256)
         self.l2 = Hidden(256, 256)
         self.l1.connect(self.l2)
@@ -59,6 +60,7 @@ class Stack(mujou.Network):
 
 class Classifier(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.body = Stack()
         self.head = Head()
         self.body.connect(self.head)   # connects body.next (in fact l2.next) and head.prev
@@ -77,7 +79,7 @@ A node cannot hold other nodes or networks as attributes. If it does, building r
 Connecting several channels to one port makes a branch or a merge. The following example splits the output of `split` into two and joins them in `sum`.
 
 ```python
---8<-- "examples/branching.py:19:78"
+--8<-- "examples/branching.py:19:85"
 ```
 
 ### Branching: the sending side
@@ -106,7 +108,7 @@ A `NextPort` also takes many peers by default, so its `recv()` returns a dict. I
 `net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you do not need to call it just to run. Call it when you want to check the structure before running.
 
 ```python
---8<-- "examples/branching.py:81:84"
+--8<-- "examples/branching.py:88:91"
 ```
 
 | `Graph` API             | What it returns                                                                 |

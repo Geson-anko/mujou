@@ -23,12 +23,14 @@ class Node(_native.Node, Component):
     attributes; put them side by side in a ``Network`` instead.
 
     Override the lifecycle hooks below; each does nothing by default, except
-    ``state_dict`` and ``load_state_dict``. The framework calls them on the
-    node's own thread, except ``state_dict``:
+    ``state_dict`` and ``load_state_dict``. As in any subclass, call
+    ``super().__init__()`` first in ``__init__`` and the same hook of ``super()``
+    first in each override. The framework calls the hooks on the node's own
+    thread, except ``state_dict``:
 
     - ``on_thread_start()``: once, right before ``on_start``, after the
       framework has set up the thread (see below). Make the node's own
-      per-thread settings here; there is no need to call ``super()``.
+      per-thread settings here.
     - ``on_start()``: once, when the network runs (also when it was restored).
       Allocate and initialize the state here.
     - ``load_state_dict(state)``: only when the network was restored, after
@@ -106,9 +108,6 @@ class Node(_native.Node, Component):
     needed (cutting ``dt`` would lose time). A manual run
     (``mujou.testing.run``, stepped by ``ManualRun.step``) ignores the period.
 
-    Calling ``super().__init__()`` is optional: without it the node computes on
-    the CPU, seeds its generator nondeterministically and has no period.
-
     ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
     run's timer) are reserved names: do not assign attributes of those names
     (a class attribute ``period`` makes the run raise ``TypeError``).
@@ -125,6 +124,7 @@ class Node(_native.Node, Component):
                 self.next = NextPort(send=h, recv=h)
 
             def on_update(self, dt: float) -> None:
+                super().on_update(dt)
                 x = self.prev.recv()  # torch.Tensor
                 feedback = self.next.recv()  # dict[Channel, torch.Tensor]
                 ...
@@ -149,7 +149,7 @@ class Node(_native.Node, Component):
             positive.
     """
 
-    # Class-level defaults, so that subclasses need not call super().__init__().
+    # Class-level defaults, for a subclass that does not call super().__init__().
     _device: torch.device = torch.device("cpu")
     _seed: int | None = None
     _period: float | None = None

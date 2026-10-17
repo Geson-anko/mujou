@@ -18,6 +18,8 @@ The node writes three things.
 
 The sections below follow this order.
 
+As in any subclass, `__init__` first calls `super().__init__()`, and each overridden hook first calls the same hook of `super()`. The hooks of `mujou.Node` do nothing, except `state_dict` and `load_state_dict` (see [State](state.md)). Calling them still keeps the node right when it inherits from a node class of your own that does something there.
+
 ## 1. Declare the ports in `__init__`
 
 Assign ports as instance attributes inside `__init__`. A port declared as a class attribute makes building the network (`build()`) raise `ValueError`.
@@ -108,8 +110,6 @@ Pass `period` only as an argument of `super().__init__`. Setting a default with 
 | `device` | The device the node computes on. `"cpu"` or a CUDA device           | `"cpu"`                       |
 | `seed`   | The seed of the node's own random number generator `self.generator` | `None` (different every time) |
 | `period` | The period of updates, in seconds                                   | `None` (as fast as it can)    |
-
-If you do not call `super().__init__()`, all three take their defaults.
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share. `self.generator` can be used in the hooks from `on_start` on. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 

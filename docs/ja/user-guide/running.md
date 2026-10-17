@@ -5,7 +5,7 @@
 ## 基本の形
 
 ```python
---8<-- "examples/quickstart.py:54:68"
+--8<-- "examples/quickstart.py:59:73"
 ```
 
 1. `mujou.run(net)` が、ネットワークを構築し、全ノードを起動する。全ノードの `on_start` が終わってから戻る
@@ -83,7 +83,7 @@ for x in stream:
 待つのはホストの側だけで、送るノードはホストを待たない。反復は実行が終わるまで終わらず、その間は反復しているスレッドがふさがる。止めるには、別のスレッドから `shutdown()` を呼ぶ。
 
 ```python
---8<-- "examples/subscribe.py:31:41"
+--8<-- "examples/subscribe.py:33:43"
 ```
 
 ## 時刻 `Timestamp`
