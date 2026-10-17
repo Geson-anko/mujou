@@ -11,6 +11,7 @@ from typing import Final, final, override
 
 from mujou._core import _native
 from mujou._core._native import Timestamp  # by name: the API reference shows it
+from mujou._core.hooks import in_hook
 
 
 class Timer:
@@ -179,9 +180,6 @@ def host_only(what: str) -> None:
     Raises:
         RuntimeError: The calling thread is running a node's hook.
     """
-    # Imported here: node imports this module.
-    from mujou._core.node import in_hook
-
     if in_hook():
         raise RuntimeError(
             f"a node's hook cannot call {what}: only the host controls the time; "

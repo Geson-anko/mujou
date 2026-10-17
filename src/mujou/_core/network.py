@@ -1,4 +1,4 @@
-"""Components (nodes and networks), how they connect, and how a network is built.
+"""Networks, the composites of nodes and networks, and how a network is built.
 
 A network is the structure of a run: nodes and nested networks as attributes, and
 ports connected into channels. ``Network.build`` walks the tree once, checks it,
@@ -10,11 +10,12 @@ import threading
 import weakref
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final, Never, cast, final
+from typing import Any, Final, Never, final
 
 from mujou._core import _native
+from mujou._core.component import Component, attribute_ports, sides
+from mujou._core.node import Node
 from mujou._core.port import (
-    Channel,
     NextPort,
     Port,
     PrevPort,
@@ -22,70 +23,6 @@ from mujou._core.port import (
     is_frozen,
     thaw,
 )
-
-
-class Component:
-    """The common base of ``Node`` and ``Network``: something with ports that
-    connects.
-
-    A component has no state of its own: its ``__init__`` is ``object``'s.
-    """
-
-    def connect(self, other: Node | Network) -> Channel:
-        """Connect this component's ``NextPort`` to ``other``'s ``PrevPort``.
-
-        ``a.connect(b)`` is ``a.next.connect(b.prev)`` with the ports found by their
-        declarations, so ``a.connect(b)`` and ``b.connect(a)`` are different
-        connections. Connect other ports with ``Port.connect``.
-
-        Raises:
-            ValueError: This component has no ``NextPort`` or ``other`` has no
-                ``PrevPort`` as a direct attribute, or has more than one.
-            TypeError, RuntimeError: As ``Port.connect``.
-        """
-        return _side(self, NextPort).connect(_side(other, PrevPort))
-
-
-def _ports(component: Component) -> list[tuple[str, Port[Any, Any, Any]]]:
-    """Return ``(attribute name, port)`` for the direct attributes that are ports."""
-    # Any: ports of every message type are handled alike.
-    return [
-        (name, cast(Port[Any, Any, Any], value))
-        for name, value in vars(component).items()
-        if isinstance(value, Port)
-    ]
-
-
-def _sides(
-    component: Component, kind: type[PrevPort[Any, Any, Any] | NextPort[Any, Any, Any]]
-) -> list[Port[Any, Any, Any]]:
-    """Return the distinct direct attributes of ``component`` that are ``kind``.
-
-    The same port under two names counts once.
-    """
-    found: list[Port[Any, Any, Any]] = []
-    for _, port in _ports(component):
-        # Ports compare by identity, so `in` finds the same port.
-        if isinstance(port, kind) and port not in found:
-            found.append(port)
-    return found
-
-
-def _side(
-    component: Component, kind: type[PrevPort[Any, Any, Any] | NextPort[Any, Any, Any]]
-) -> Port[Any, Any, Any]:
-    """Return the only direct attribute of ``component`` that is a ``kind``."""
-    found = _sides(component, kind)
-    if len(found) != 1:
-        hint = ""
-        if not found and isinstance(component, Network):
-            side = "next" if kind is NextPort else "prev"
-            hint = f"; expose one, e.g. self.{side} = self.<child>.{side}"
-        raise ValueError(
-            f"{type(component).__name__} must have exactly one {kind.__name__} as a "
-            f"direct attribute to connect, found {len(found)}{hint}"
-        )
-    return found[0]
 
 
 @final
@@ -292,7 +229,7 @@ def _build(root: Component, by_run: bool) -> Graph:
                         f"{holder} holds a {type(value).__name__} at {name!r}; "
                         "only networks hold nodes and networks"
                     )
-            for name, port in _ports(component):
+            for name, port in attribute_ports(component):
                 owner = (index, name)
                 if port in ports:
                     raise ValueError(
@@ -305,7 +242,7 @@ def _build(root: Component, by_run: bool) -> Graph:
         for name, value in vars(component).items():
             if isinstance(value, Component):
                 visit(value, _child(path, name))
-        for name, port in _ports(component):
+        for name, port in attribute_ports(component):
             exposed.append((_child(path, name), port, range(first, len(nodes))))
 
     visit(root, "")
@@ -514,19 +451,9 @@ def _check_declarations(component: Component, path: str) -> None:
                     "instance attributes in __init__"
                 )
     for kind in (PrevPort, NextPort):
-        n = len(_sides(component, kind))
+        n = len(sides(component, kind))
         if n > 1:
             raise ValueError(
                 f"{_named(component, path)} has {n} {kind.__name__} "
                 "attributes; at most one is allowed"
             )
-
-
-# Last: node imports Component from this module, which is defined by now. Imported
-# at run time, not only for the type checker, so that the annotations naming Node
-# (e.g. of Compose.__init__, which inspect.signature evaluates) resolve. This
-# assumes that this module is imported before node (mujou/__init__.py imports it
-# before node; mujou.time, imported earlier, imports node only lazily): imported
-# the other way round, node would be only partly initialized here, without Node,
-# and the import would fail.
-from mujou._core.node import Node  # noqa: E402

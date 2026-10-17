@@ -11,7 +11,8 @@ import torch
 from torch import nn
 
 from mujou._core import _native
-from mujou._core.network import Component
+from mujou._core.component import Component
+from mujou._core.hooks import enter_node_thread, running_hook
 from mujou._core.port import Port, assign_owner
 from mujou._core.timer import ReadOnlyTimer
 
@@ -369,7 +370,7 @@ class Node(_native.Node, Component):
         self._generator = generator
         # The OS thread id: the Python thread object may differ between hooks.
         self._thread_ident = threading.get_ident()
-        _hooks.inside = True
+        enter_node_thread()
 
     @override
     def _after_update(self) -> None:
@@ -387,9 +388,7 @@ class Node(_native.Node, Component):
     @override
     def _capture_state(self) -> object:
         # On the control thread: mark it as inside a hook for the call.
-        outer = _hooks.inside
-        _hooks.inside = True
-        try:
+        with running_hook():
             if self._device.type == "cpu":
                 return self.state_dict()
             stream = self._stream
@@ -408,8 +407,6 @@ class Node(_native.Node, Component):
                 state = self.state_dict()
                 stream.synchronize()
             return state
-        finally:
-            _hooks.inside = outer
 
     def _synchronize(self) -> None:
         """Wait for the node's work on its device: its own stream on CUDA, the
@@ -544,19 +541,6 @@ def _check_module(name: str, module: nn.Module, source: object) -> None:
             f"the state's {name!r} does not match the module: missing {missing}, "
             f"unexpected {unexpected}, other shapes {shapes}"
         )
-
-
-class _Hooks(threading.local):
-    # Whether this thread is running a node's hook (a node's own thread always is).
-    inside = False
-
-
-_hooks = _Hooks()
-
-
-def in_hook() -> bool:
-    """Whether the calling thread is running a node's hook."""
-    return _hooks.inside
 
 
 def thread_ident(node: Node) -> int | None:

@@ -9,6 +9,7 @@ import torch
 
 from mujou._core import _native
 from mujou._core._native import Timestamp  # by name: the API reference shows it
+from mujou._core.hooks import in_hook
 from mujou._core.network import (
     Network,
     RunCompose,
@@ -16,7 +17,7 @@ from mujou._core.network import (
     start_once,
     unbuild,
 )
-from mujou._core.node import Node, in_hook
+from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
 from mujou._core.timer import GLOBAL, Timer, VirtualTimer

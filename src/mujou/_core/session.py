@@ -14,12 +14,12 @@ import math
 import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Final, cast, final
+from typing import Any, Final, cast, final
 
 import torch
 
 from mujou._core import _native
-from mujou._core.network import ports
+from mujou._core.network import Graph, ports
 from mujou._core.node import (
     Node,
     capture_state,
@@ -31,9 +31,6 @@ from mujou._core.node import (
 from mujou._core.port import Channel, Port, bind, initial
 from mujou._core.spec import Spec, fields, join, split
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
-
-if TYPE_CHECKING:
-    from mujou._core.network import Graph
 
 # Any (here and below): ports and messages of every type are handled alike.
 type AnyPort = Port[Any, Any, Any]
