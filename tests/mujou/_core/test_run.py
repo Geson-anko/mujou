@@ -806,13 +806,6 @@ class TestSubscribe:
         with pytest.raises(StopIteration):
             next(values)
 
-    def test_rejects_a_negative_timeout(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        for timeout in (-1.0, math.nan):
-            with pytest.raises(ValueError, match="timeout"):
-                run.subscribe(net.next, timeout=timeout)
-
 
 class TestWaitFor:
     def test_returns_the_first_message_that_meets_the_condition(
@@ -835,17 +828,6 @@ class TestWaitFor:
         assert torch.equal(seen[0], torch.zeros(2, dtype=F64))
         assert len(seen) == 3
         assert torch.equal(out, net.b.x) and t == virtual.now()
-
-    def test_raises_after_the_timeout_and_the_network_keeps_running(
-        self, step: Step, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        with pytest.raises(TimeoutError):
-            run.wait_for(net.next, lambda _: False, timeout=0.05)
-        run.write({net.prev: u(1)})
-        step(run)
-        assert torch.equal(run.read(net.next)[0], net.b.x)
 
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
         net = Chain()
@@ -1118,30 +1100,20 @@ class TestShutdown:
         node = SlowStop()
         net = Compose(node=node)
         run = start_manual(net)
+        before = threading.active_count()
         try:
             started = time.monotonic()
-            with pytest.raises(TimeoutError):
-                run.shutdown(timeout=0.1)
+            for _ in range(5):  # asked again without a thread for each ask
+                with pytest.raises(TimeoutError):
+                    run.shutdown(timeout=0.02)
             assert time.monotonic() - started < 5.0
             assert not node.stopped.is_set()
+            assert threading.active_count() <= before
         finally:
             node.release.set()
         run.join()
         assert node.stopped.is_set()
         run.state_dict()  # a normal end
-
-    def test_rejects_a_negative_timeout(self, step: Step, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        for timeout in (-1.0, math.nan):
-            with pytest.raises(ValueError, match="timeout"):
-                run.shutdown(timeout=timeout)
-        # Nothing was asked: the network still runs and updates.
-        with pytest.raises(TimeoutError):
-            run.join(timeout=0.0)
-        run.write({net.prev: u(1)})
-        step(run)
-        assert net.a.updates == 1
 
     def test_raises_what_a_node_raised(self, step: Step, start_manual: StartManual):
         net = Chain(raise_in_b=1)
@@ -1151,23 +1123,6 @@ class TestShutdown:
         with pytest.raises(NetworkError) as raised:
             run.shutdown(timeout=1.0)
         assert raised.value.__cause__ is net.b.error
-
-    def test_asks_without_a_thread_however_often_it_times_out(
-        self, start_manual: StartManual
-    ):
-        node = SlowStop()
-        net = Compose(node=node)
-        run = start_manual(net)
-        before = threading.active_count()
-        try:
-            for _ in range(5):
-                with pytest.raises(TimeoutError):
-                    run.shutdown(timeout=0.01)
-            assert threading.active_count() <= before
-        finally:
-            node.release.set()
-        run.join()
-        assert node.stopped.is_set()
 
 
 class TestJoin:
@@ -1180,23 +1135,41 @@ class TestJoin:
         stopper.join()
         run.state_dict()  # a normal end
 
+
+class TestTimeout:
+    @pytest.mark.parametrize("method", ["shutdown", "join", "subscribe"])
+    def test_rejects_a_negative_timeout(
+        self, step: Step, start_manual: StartManual, method: str
+    ):
+        net = Chain()
+        run = start_manual(net)
+        call: Callable[[float], object] = {
+            "shutdown": lambda t: run.shutdown(timeout=t),
+            "join": lambda t: run.join(timeout=t),
+            "subscribe": lambda t: run.subscribe(net.next, timeout=t),
+        }[method]
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                call(timeout)
+        # Nothing was asked: the network still runs and updates.
+        run.write({net.prev: u(1)})
+        step(run)
+        assert net.a.updates == 1
+
+    @pytest.mark.parametrize("method", ["join", "wait_for"])
     def test_raises_after_the_timeout_and_the_network_keeps_running(
-        self, step: Step, start_manual: StartManual
+        self, step: Step, start_manual: StartManual, method: str
     ):
         net = Chain()
         run = start_manual(net)
         with pytest.raises(TimeoutError):
-            run.join(timeout=0.05)
+            if method == "join":
+                run.join(timeout=0.05)
+            else:
+                run.wait_for(net.next, lambda _: False, timeout=0.05)
         run.write({net.prev: u(1)})
         step(run)
         assert torch.equal(run.read(net.next)[0], net.b.x)
-
-    def test_rejects_a_negative_timeout(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        for timeout in (-1.0, math.nan):
-            with pytest.raises(ValueError, match="timeout"):
-                run.join(timeout=timeout)
 
 
 class TestManualRun:
