@@ -141,8 +141,10 @@ class Run:
         later step waits until a newer message is sent and yields the latest;
         messages sent in between are skipped. Only the consumer waits: the
         sending node never does. The iterator ends when the run shuts down
-        normally. Shut the run down before the program ends: a thread iterating
-        here ends only with the run.
+        normally. Shut the run down before the program ends: without a
+        ``timeout``, a thread iterating here ends only with the run. In a
+        ``ManualRun`` nothing is sent unless ``step`` is called, so a wait here
+        without a ``timeout`` on the thread that steps never ends.
 
         To wait for one message that meets a condition, use ``wait_for``.
 
@@ -175,7 +177,9 @@ class Run:
 
         Checks the latest message first, then each newer one as ``subscribe``
         yields them (messages sent in between are skipped). Only the host waits:
-        the nodes never do. Here with the node ``Error`` of the example of
+        the nodes never do. In a ``ManualRun`` nothing is sent unless ``step`` is
+        called, so a wait without a ``timeout`` on the thread that steps never
+        ends. Here with the node ``Error`` of the example of
         ``Run``::
 
             node = Error()

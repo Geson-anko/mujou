@@ -15,10 +15,10 @@ Mujou never stops only the node that raised and keeps the others running. Its ne
 
 ## Where the host receives it
 
-| The exception happens                    | What raises `NetworkError`                                                                                  |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| While starting (`on_start` and the like) | `mujou.run` itself. It finishes the ending work (`on_exception`, `on_stop`) before it raises                |
-| After the start                          | The next `write`, `read`, `subscribe` (and its iterator), `state_dict`, `shutdown` or `join` the host calls |
+| The exception happens                    | What raises `NetworkError`                                                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| While starting (`on_start` and the like) | `mujou.run` itself. It finishes the ending work (`on_exception`, `on_stop`) before it raises                                                                              |
+| After the start                          | The next `write`, `read`, `subscribe` (and its iterator), `wait_for`, `state_dict`, `shutdown` or `join` the host calls, or `step` of a `ManualRun` (`mujou.testing.run`) |
 
 An exception after the start does not reach the host until it next calls a method of `Run`. If the host waits without calling anything, it does not notice the exception. To wait until the run stops, use `run.join(timeout)`, not `mujou.time.sleep`.
 
@@ -62,12 +62,14 @@ To run again, create new instances, nodes included. A network can run only once.
 
 ## Timeouts
 
-`shutdown` and `join` take an argument `timeout` in seconds of real time. The default is `math.inf` (wait forever).
+`shutdown`, `join`, `subscribe` and `wait_for` take an argument `timeout` in seconds of real time. The default is `math.inf` (wait forever).
 
-| Call                    | When the time runs out                                                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run.shutdown(timeout)` | `TimeoutError`. The request to stop is not withdrawn, and the nodes update no more. The ending goes on in the background; wait for it with `join` |
-| `run.join(timeout)`     | `TimeoutError`. Nothing changes, and the run keeps running                                                                                        |
+| Call                                         | When the time runs out                                                                                                                                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.shutdown(timeout)`                      | `TimeoutError`. The request to stop is not withdrawn, and the nodes update no more. The ending goes on in the background; wait for it with `join`                                                                          |
+| `run.join(timeout)`                          | `TimeoutError`. Nothing changes, and the run keeps running                                                                                                                                                                 |
+| `run.subscribe(port, timeout=...)`           | `TimeoutError` from the iterator, at a step that begins after the time has run out or would wait past it. The time counts the whole iteration, the body of the loop included. The iterator ends, and the run keeps running |
+| `run.wait_for(port, condition, timeout=...)` | `TimeoutError`. The run keeps running                                                                                                                                                                                      |
 
 `run.state_dict()` on a running network waits until every node has paused. You set this wait for each run when you start it, with `mujou.run(..., pause_timeout=seconds)` (seconds of real time, 30 by default). You cannot change it while the run is running. If some node does not pause in time, `run.state_dict()` raises `PauseTimeoutError` (a subclass of `TimeoutError`). The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
 
