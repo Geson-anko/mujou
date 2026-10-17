@@ -86,7 +86,7 @@ def on_start(self) -> None:
 
 ## 実行の周期を決める
 
-既定では、ノードは `on_update` が戻るとすぐ次の `on_update` を呼ばれ、できるだけ速く回る。このとき、ノード 1 つが CPU のコアを 1 つ使い切る。センサーの周期に合わせたいときや、CPU を空けたいときは、周期 `period`（秒）を渡す。周期は平均の間隔で、毎回ちょうどその間隔で更新されるわけではない。
+既定では、ノードは `on_update` が戻るとすぐ次の `on_update` を呼ばれ、できるだけ速く回る。このとき、ノード 1 つが CPU のコアを 1 つ使い切る。センサーの周期に合わせたいときや、CPU を空けたいときは、周期 `period`（秒）を渡す。
 
 ```python
 class Sensor(mujou.Node):
@@ -95,11 +95,7 @@ class Sensor(mujou.Node):
         self.next = mujou.NextPort(send=mujou.TensorSpec((3,)))
 ```
 
-周期は次のように数える。
-
-1. 1 回目の更新の目標の時刻は、実行の開始から `period` 後である
-2. 更新したら、次の目標を「前回の目標 + `period`」にする。更新が実際に起きた時刻からは数えない。そのため、`on_update` にかかった時間も、起床の少しの遅れも周期の中に入り、平均すると `period` に 1 回の頻度になる
-3. ただし、更新が自分の目標より `period` 以上遅れたら（更新した時点で次の目標をすでに過ぎていたら）、次の目標を「その更新が実際に起きた時刻 + `period`」に数え直す。遅れを取り戻すために続けて何回も更新することはない
+周期は、更新と更新の間の平均の間隔である。`on_update` にかかった時間も周期に含まれる。遅れたノードが、取り戻すために続けて何回も更新することはない。
 
 待つ時間は実行のタイマーで測る。時間の速さを変えると、周期も実時間に対して同じ比で変わる。
 
@@ -120,6 +116,18 @@ class Sensor(mujou.Node):
 乱数は `self.generator` から引く（`torch.randn(..., generator=self.generator)`）。`torch.manual_seed` はノードの中で呼ばない。全ノードが共有する乱数生成器を変えてしまうからである。`self.generator` は `on_start` 以降の hook で使える。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)にある。
 
 `device`・`generator`・`period`・`timer` は予約された名前である。これらの名前の属性を代入しない。
+
+## hook とその順序
+
+mujou は、ノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。
+
+1. `on_thread_start()`: `on_start` の前に 1 回。スレッドごとの設定を書く（[ノードの中の PyTorch](torch.md)）
+2. `on_start()`: 1 回。状態を作る
+3. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
+4. `on_update(dt)`: 実行が終わるまで繰り返し
+5. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる
+6. `on_exception()`: どれかのノードのどれかの hook が例外を投げたとき、全ノードで 1 回（[例外と終了](errors.md)）
+7. `on_stop()`: 終了のときに 1 回。正常な終了でも例外による終了でも呼ばれる
 
 ## hook の中でしてはいけないこと
 

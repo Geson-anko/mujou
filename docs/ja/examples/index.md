@@ -28,7 +28,7 @@ mujou の使い方を示す、動くプログラムの一覧である。プロ�
 - `save_and_restore.py`: `run.state_dict()` で状態を取り、pickle で保存し、`mujou.run(..., state=...)` で復元して続ける
 - `subscribe.py`: `run.subscribe` で、まずその時点の最新の出力を受け取り、その後はより新しい出力が送られるたびに最新の 1 つを受け取る。受け取る前に次の値が送られると、途中の値は飛ばされる。別のスレッドから `shutdown` すると受け取りの反復が終わる
 - `torch_node.py`: ノードの中の `nn.Module` を、ノードの内側に閉じた BP で学習させる。シードの指定と、`dt` を刻みに分けて進める更新
-- `testing_a_node.py`: `mujou.testing` の仮想タイマーと手動の更新で、ノードを決まった `dt` と順序で動かし、結果を参照の計算とビット単位で比べる
+- `testing_a_node.py`: `mujou.testing` の仮想タイマーと手動の更新で、ノードを決まった `dt` と順序で動かし、結果を参照の計算とビット単位で比べる。途中で取った状態から復元した実行が、止めずに続けた実行と一致することも確かめる
 - `timers.py`: 時刻 `Timestamp`、実行ごとのタイマー `Timer`、時間の速さ（実行のタイマーとグローバルタイマー）
 - `errors.py`: ホストが受け取る `NetworkError` とその `__cause__`、`on_exception` → `on_stop` の順、`on_start` の例外は `mujou.run` が送出する
 

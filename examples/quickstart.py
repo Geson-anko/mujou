@@ -44,6 +44,7 @@ class Shift(Node):
         self.next.send(self.prev.recv() + self.offset)
 
 
+# --8<-- [start:network]
 class Affine(mujou.Network):
     """``x -> scale -> shift ->``: y = 2 x + 1."""
 
@@ -56,6 +57,10 @@ class Affine(mujou.Network):
         self.next = self.shift.next  # the output of the network
 
 
+# --8<-- [end:network]
+
+
+# --8<-- [start:run]
 net = Affine()
 x = torch.tensor([1.0, 2.0, 3.0])
 # The nodes run on threads of their own until the end of the `with` block.
@@ -66,4 +71,5 @@ with mujou.run(net) as run:
     y, t = run.wait_for(net.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
 
 print(f"y = {y} at t = {float(t):.3f} s")
+# --8<-- [end:run]
 assert torch.equal(y, 2 * x + 1)

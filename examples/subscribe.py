@@ -30,6 +30,7 @@ class Clock(Node):
         self.next.send(torch.tensor(float(now), dtype=torch.float64))
 
 
+# --8<-- [start:subscribe]
 clock = Clock()  # a node runs by itself, without a network
 with mujou.run(clock) as run:
 
@@ -41,6 +42,7 @@ with mujou.run(clock) as run:
     stopper.start()
     received = [(value.item(), float(t)) for value, t in run.subscribe(clock.next)]
     stopper.join()
+# --8<-- [end:subscribe]
 
 print(f"received {len(received)} messages, the last at t = {received[-1][1]:.3f} s")
 # Each message is newer than the one before, and was sent after the clock read.
