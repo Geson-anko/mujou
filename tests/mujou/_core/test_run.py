@@ -189,9 +189,15 @@ class TestRun:
         assert raised.value.__cause__ is net.b.error
         assert net.a.updates == 0 and net.b.updates == 0
 
-    @pytest.mark.parametrize("make", [Chain, Leaky])
+    @pytest.mark.parametrize(
+        ("make", "message"),
+        [
+            (Chain, "Chain has already run; create a new instance to run again"),
+            (Leaky, "Leaky has already run; create a new instance to run again"),
+        ],
+    )
     def test_runs_once_under_concurrent_calls(
-        self, started: list[Run], make: Callable[[], Node | Network]
+        self, started: list[Run], make: Callable[[], Node | Network], message: str
     ):
         for _ in range(20):
             net = make()
@@ -217,9 +223,7 @@ class TestRun:
                 thread.join()
             assert sum(isinstance(o, Run) for o in outcomes) == 1
             (error,) = (o for o in outcomes if not isinstance(o, Run))
-            # A node is wrapped in a new Compose for each call: the second finds
-            # it built rather than run.
-            assert "already run" in str(error) or "already built" in str(error)
+            assert str(error) == message
 
     def test_a_refused_run_of_several_networks_can_be_retried(
         self, start_manual: StartManual
@@ -235,11 +239,11 @@ class TestRun:
     def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
         alone, other = Chain(), Chain()
         start_manual(alone)
-        with pytest.raises(RuntimeError, match="already built"):
+        with pytest.raises(RuntimeError, match="^Chain has already run"):
             start_manual(alone, other)
         composed, other = Chain(), Chain()
         start_manual(composed, other)
-        with pytest.raises(RuntimeError, match="already built"):
+        with pytest.raises(RuntimeError, match="^Chain has already run"):
             start_manual(composed)
 
     def test_takes_only_nodes_and_networks(self, start: Start):
@@ -292,9 +296,25 @@ class TestRunANode:
     def test_runs_once(self, start: Start):
         node = Leaky()
         start(node).shutdown()
-        for given in (node, Solo(node), Compose(node)):
-            with pytest.raises(RuntimeError, match="already built"):
+        again = "has already run; create a new instance to run again"
+        cases: list[tuple[Node | Network, str]] = [
+            (node, f"Leaky {again}"),  # not the path "0" of mujou.run's Compose
+            (Solo(node), f"Leaky at 'node' {again}"),
+            (Compose(node), f"Leaky at '0' {again}"),
+        ]
+        for given, message in cases:
+            with pytest.raises(RuntimeError) as raised:
                 start(given)
+            assert str(raised.value) == message
+
+    def test_a_node_of_a_built_network_is_named_without_the_path_of_mujou_run(
+        self, start: Start
+    ):
+        net = Chain()
+        net.build()
+        with pytest.raises(RuntimeError) as raised:
+            start(net.a)
+        assert str(raised.value) == "Leaky belongs to a network that is already built"
 
     def test_a_refused_run_can_be_retried(self, start_manual: StartManual):
         node = Leaky()

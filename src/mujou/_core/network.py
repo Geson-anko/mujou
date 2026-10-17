@@ -99,11 +99,11 @@ class Graph:
     # Any: ports of every message type are handled alike.
     _nodes: tuple[tuple[str, Node], ...]
     _ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
-    # Every node and network of the tree, marked as built.
+    # Every node and network of the tree, marked as built with _tree.
     _members: tuple[Component, ...]
-    # Whether a run has started (or tried to start and failed in a node), and the
-    # lock that makes the check and the start one step for concurrent callers.
-    _ran: bool
+    _tree: _Tree
+    # The lock that makes the check of _tree.ran and the start one step for
+    # concurrent callers.
     _lock: threading.Lock
 
     def __init__(self) -> Never:
@@ -129,16 +129,31 @@ class Graph:
         return _path(self._nodes, self._ports[port])
 
 
+@final
+class _Tree:
+    """What the members of one built tree share: how it was built and whether it
+    ran, for the error when one of them is built again."""
+
+    __slots__ = ("by_run", "ran")
+
+    def __init__(self, by_run: bool) -> None:
+        # Built by mujou.run for its own Compose: built only to run.
+        self.by_run = by_run
+        # A run has started (or tried to start and failed in a node).
+        self.ran = False
+
+
 def _make_graph(
     nodes: tuple[tuple[str, Node], ...],
     ports: Mapping[Port[Any, Any, Any], tuple[int, str]],
     members: tuple[Component, ...],
+    tree: _Tree,
 ) -> Graph:
     graph = object.__new__(Graph)
     graph._nodes = nodes  # pyright: ignore[reportPrivateUsage]  # Graph's own module
     graph._ports = ports  # pyright: ignore[reportPrivateUsage]
     graph._members = members  # pyright: ignore[reportPrivateUsage]
-    graph._ran = False  # pyright: ignore[reportPrivateUsage]
+    graph._tree = tree  # pyright: ignore[reportPrivateUsage]
     graph._lock = threading.Lock()  # pyright: ignore[reportPrivateUsage]
     return graph
 
@@ -220,6 +235,7 @@ class Network(Component):
             return self._graph
 
     def _build(self) -> Graph:
+        by_run = isinstance(self, RunCompose)
         members: list[Component] = []
         nodes: list[tuple[str, Node]] = []
         ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
@@ -234,10 +250,21 @@ class Network(Component):
                     f"{_where(seen[id(component)])} and {_where(path)}"
                 )
             seen[id(component)] = path
-            if _is_built(component):
+            tree = _tree_of(component)
+            if tree is not None:
+                # What mujou.run was given is named without the path of its
+                # own Compose.
+                given = path == "" or (by_run and "." not in path)
+                name = type(component).__name__
+                if tree.ran or tree.by_run:
+                    at = "" if given else f" at {path!r}"
+                    raise RuntimeError(
+                        f"{name}{at} has already run; create a new instance to "
+                        "run again"
+                    )
+                at = "" if by_run and given else f" at {_where(path)}"
                 raise RuntimeError(
-                    f"{type(component).__name__} at {_where(path)} belongs to a "
-                    "network that is already built"
+                    f"{name}{at} belongs to a network that is already built"
                 )
             members.append(component)
             _check_declarations(component, _where(path))
@@ -293,9 +320,10 @@ class Network(Component):
                     )
         for port in ports:
             freeze(port)
+        built = _Tree(by_run)
         for member in members:
-            _mark_built(member)
-        return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members))
+            _mark_built(member, built)
+        return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members), built)
 
 
 def unbuild(network: Network) -> None:
@@ -317,24 +345,28 @@ def unbuild(network: Network) -> None:
 # Ports are marked too (frozen), but a node without ports has only this mark.
 # Keyed by id and checked by identity, so that a component's own __eq__ / __hash__
 # (e.g. a dataclass, which is unhashable) plays no part.
-_BUILT: Final[dict[int, weakref.ref[Component]]] = {}
+_BUILT: Final[dict[int, tuple[weakref.ref[Component], _Tree]]] = {}
 _BUILD_LOCK: Final = threading.Lock()
 
 
-def _is_built(component: Component) -> bool:
-    ref = _BUILT.get(id(component))
-    return ref is not None and ref() is component
+def _tree_of(component: Component) -> _Tree | None:
+    """The tree ``component`` is built in, or ``None`` if it is not built."""
+    mark = _BUILT.get(id(component))
+    if mark is None or mark[0]() is not component:
+        return None
+    return mark[1]
 
 
-def _mark_built(component: Component) -> None:
+def _mark_built(component: Component, tree: _Tree) -> None:
     key = id(component)
 
     def forget(ref: weakref.ref[Component]) -> None:
         # Only this mark: a later component may have reused the id.
-        if _BUILT.get(key) is ref:
+        mark = _BUILT.get(key)
+        if mark is not None and mark[0] is ref:
             _BUILT.pop(key, None)
 
-    _BUILT[key] = weakref.ref(component, forget)
+    _BUILT[key] = (weakref.ref(component, forget), tree)
 
 
 class Compose(Network):
@@ -388,6 +420,12 @@ class Compose(Network):
             setattr(self, name, network)
 
 
+@final
+class RunCompose(Compose):
+    """The ``Compose`` that ``mujou.run`` makes of what it was given: built only to
+    run, and named in errors by what was given rather than by its paths."""
+
+
 def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
     """Call ``start`` to run ``graph`` unless it has run, and mark it as run.
 
@@ -400,21 +438,24 @@ def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
     Raises:
         RuntimeError: ``graph`` has already run.
     """
-    with graph._lock:  # pyright: ignore[reportPrivateUsage]  # Graph's own module
-        if graph._ran:  # pyright: ignore[reportPrivateUsage]
+    tree = graph._tree  # pyright: ignore[reportPrivateUsage]  # Graph's own module
+    with graph._lock:  # pyright: ignore[reportPrivateUsage]
+        if tree.ran:
+            root = graph._members[0]  # pyright: ignore[reportPrivateUsage]
             raise RuntimeError(
-                "the network has already run; build a new instance to run again"
+                f"{type(root).__name__} has already run; create a new instance to "
+                "run again"
             )
         try:
             started = start()
         except Exception as e:
             if isinstance(e, _native.NetworkError):
-                graph._ran = True  # pyright: ignore[reportPrivateUsage]
+                tree.ran = True
             raise
         except BaseException:
-            graph._ran = True  # pyright: ignore[reportPrivateUsage]
+            tree.ran = True
             raise
-        graph._ran = True  # pyright: ignore[reportPrivateUsage]
+        tree.ran = True
         return started
 
 
@@ -453,5 +494,8 @@ def _check_declarations(component: Component, where: str) -> None:
 
 # Last: node imports Component from this module, which is defined by now. Imported
 # at run time, not only for the type checker, so that the annotations naming Node
-# (e.g. of Compose.__init__, which inspect.signature evaluates) resolve.
+# (e.g. of Compose.__init__, which inspect.signature evaluates) resolve. This
+# assumes that this module is imported before node (mujou/__init__.py imports it
+# first): imported the other way round, node would be only partly initialized
+# here, without Node, and the import would fail.
 from mujou._core.node import Node  # noqa: E402

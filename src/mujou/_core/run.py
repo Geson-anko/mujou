@@ -8,7 +8,7 @@ from typing import Any, Never, Self, cast
 import torch
 
 from mujou._core import _native
-from mujou._core.network import Compose, Network, start_once, unbuild
+from mujou._core.network import Network, RunCompose, start_once, unbuild
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
@@ -344,7 +344,7 @@ def start[R: Run](
         case [Network() as network]:
             composed = False
         case _:
-            network = Compose(*networks)
+            network = RunCompose(*networks)
             composed = True
     graph = network.build()
 
