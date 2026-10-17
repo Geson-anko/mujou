@@ -804,21 +804,22 @@ mod period {
         assert!(dts.try_recv().is_err());
     }
 
-    /// The period of the real-clock tests, on the timer: long next to how late
-    /// a loaded runner (e.g. GitHub's macOS) wakes a thread, tens of ms, so the
-    /// lower bounds below hold however the wake-ups are delayed up to that.
-    const REAL_P_NS: u64 = 200 * H_NS;
     /// How long the real-clock tests run, in real time.
     const RUN: Duration = Duration::from_secs(1);
 
-    /// Runs a ticker of period `REAL_P_NS` on the real clock at `scale` for
-    /// `RUN` and returns its Δts and the real time from before its start to
-    /// after its end.
-    fn tick_for(scale: f64) -> (Vec<u64>, Duration) {
+    /// Runs a ticker of period `period_ns` (on the timer) on the real clock at
+    /// `scale` for `RUN` and returns its Δts and the real time from before its
+    /// start to after its end.
+    ///
+    /// The real-clock tests keep the period at 200 ms of real time: a loaded
+    /// runner (e.g. GitHub's macOS) may wake a thread about 100 ms late every
+    /// time, and only a wake-up less than a period late keeps the targets from
+    /// slipping (a later one counts again from itself).
+    fn tick_for(period_ns: u64, scale: f64) -> (Vec<u64>, Duration) {
         let timer = Arc::new(Timer::new());
         timer.set_scale(scale).unwrap();
         let begin = Instant::now();
-        let (rt, dts) = start_ticker(&timer, with_period(Some(REAL_P_NS), false), None);
+        let (rt, dts) = start_ticker(&timer, with_period(Some(period_ns), false), None);
         thread::sleep(RUN);
         rt.shutdown().wait().unwrap();
         let elapsed = begin.elapsed();
@@ -829,36 +830,29 @@ mod period {
     /// running would update far more often) nor drifting behind.
     #[test]
     fn on_the_real_clock_it_updates_about_once_per_period() {
-        let (dts, elapsed) = tick_for(1.0);
+        let period_ns = 200 * H_NS;
+        let (dts, elapsed) = tick_for(period_ns, 1.0);
         // The targets are P apart, so the updates cannot outnumber them.
-        let at_most = elapsed.as_nanos() as f64 / REAL_P_NS as f64;
+        let at_most = elapsed.as_nanos() as f64 / period_ns as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
         // The targets at 200, 400, 600 and 800 ms come before the end at 1 s
-        // even if each wake-up is up to 200 ms late (a wake-up less than a
-        // period late does not delay the next target).
+        // as long as each wake-up is less than 200 ms late.
         assert!(dts.len() >= 4, "{} updates", dts.len());
     }
 
     /// The period is on the timer, so the time scale changes the updates per
-    /// real second: at scale 4 the period is 50 ms of real time.
+    /// real second: a period of 800 ms at scale 4 is 200 ms of real time.
     #[test]
     fn the_time_scale_scales_the_updates_per_real_second() {
-        let scale = 4.0;
-        let (dts, elapsed) = tick_for(scale);
-        let at_most = elapsed.as_nanos() as f64 * scale / REAL_P_NS as f64;
+        let (period_ns, scale) = (800 * H_NS, 4.0);
+        let (dts, elapsed) = tick_for(period_ns, scale);
+        let at_most = elapsed.as_nanos() as f64 * scale / period_ns as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // 1 s of real time is 4 s on the timer, 20 targets. While each wake-up
-        // is less than a period (50 ms real) late, the targets do not slip, and
-        // the targets up to 3 s on the timer (15) come before the end even if
-        // each wake-up is late by up to 250 ms on the timer.
-        assert!(dts.len() >= 15, "{} updates", dts.len());
-        // At least twice what scale 1 could give in the same real time.
-        let unscaled = elapsed.as_nanos() as f64 / REAL_P_NS as f64;
-        assert!(
-            (dts.len() as f64) >= 2.0 * unscaled,
-            "{} updates",
-            dts.len()
-        );
+        // 1 s of real time is 4 s on the timer: targets at 0.8, 1.6, 2.4, 3.2
+        // and 4 s. The first four come before the end as long as each wake-up
+        // is less than 200 ms (a period) of real time late. At scale 1 the same
+        // second would hold one target, so 4 shows that the scale applies.
+        assert!(dts.len() >= 4, "{} updates", dts.len());
     }
 
     #[test]
