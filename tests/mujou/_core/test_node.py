@@ -5,9 +5,10 @@ import pytest
 import torch
 
 from mujou import Network, Node, Port, TensorSpec
+from mujou._core import _native
 from mujou._core.node import thread_ident
 from mujou.testing import VirtualTimer
-from mujou.time import Clock, Timestamp
+from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -87,12 +88,31 @@ class TestThreadSetup:
             _ = Probe(seed=0).generator
 
 
-class Clocked(Node):
+def reachable(root: object) -> list[object]:
+    """Every object reached from ``root`` through instance attributes, the
+    object a builtin or bound method is bound to, and closure cells."""
+    found: list[object] = []
+    todo = [root]
+    while todo:
+        obj = todo.pop()
+        if any(obj is f for f in found) or isinstance(obj, type):
+            continue
+        found.append(obj)
+        todo.extend(getattr(obj, "__dict__", {}).values())
+        for name in ("__self__", "__func__", "__wrapped__"):
+            if hasattr(obj, name):
+                todo.append(getattr(obj, name))
+        for cell in getattr(obj, "__closure__", None) or ():
+            todo.append(cell.cell_contents)
+    return found
+
+
+class Timed(Node):
     """Keeps the time of its run's timer in each hook."""
 
     def __init__(self) -> None:
         self.out = Port(send=TensorSpec((3,)))
-        self.timers: list[Clock] = []
+        self.timers: list[ReadOnlyTimer] = []
         self.times: list[Timestamp] = []
 
     def keep(self) -> None:
@@ -120,31 +140,45 @@ class TestTimer:
     def test_is_the_timer_of_the_run_from_on_start_to_on_stop(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
-        node = Clocked()
+        node = Timed()
         virtual.advance(1.0)
         run = start_manual(Solo(node), timer=virtual)
         virtual.advance(0.5)
         run.step()
         run.shutdown()
-        assert all(isinstance(timer, Clock) for timer in node.timers)
+        assert all(isinstance(timer, ReadOnlyTimer) for timer in node.timers)
         assert node.times == [
             Timestamp(ns=1_000_000_000),
             Timestamp(ns=1_500_000_000),
             Timestamp(ns=1_500_000_000),
         ]
 
-    def test_is_a_view_that_only_reads(self, start_manual: StartManual):
-        node = Clocked()
-        start_manual(Solo(node))
-        public = {name for name in dir(node.timer) if not name.startswith("_")}
-        assert public == {"now"}
-        with pytest.raises(TypeError, match="Node.timer"):
-            Clock()
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_reaches_nothing_that_changes_the_timer(
+        self, virtual: VirtualTimer, start_manual: StartManual, ended: bool
+    ):
+        node = Timed()
+        seen: list[ReadOnlyTimer] = []
+        node.state_dict = lambda: seen.append(node.timer)  # type: ignore[method-assign]
+        run = start_manual(Solo(node), timer=virtual)
+        if ended:
+            run.shutdown()  # the state_dict after the end sees a stopped timer
+        run.state_dict()
+        (timer,) = seen
+        # Only the reading methods, public or private, on the instance.
+        assert set(vars(timer)) == {"now", "get_time_scale"}
+        assert timer.now() == virtual.now()
+        assert timer.get_time_scale() == 1.0
+        # Nothing reached from them (bound objects, closures) is a timer. The
+        # class's own functions still lead to module globals, as any class's do.
+        for obj in reachable(timer):
+            assert not isinstance(obj, Timer | _native.Timer), obj
+            assert not hasattr(obj, "set_time_scale"), obj
 
     def test_holds_the_time_of_the_state_in_state_dict_after_the_end(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
-        node = Clocked()
+        node = Timed()
         run = start_manual(Solo(node), timer=virtual)
         virtual.advance(0.5)
         run.step()
@@ -157,7 +191,7 @@ class TestTimer:
             _ = node.timer
 
     def test_raises_outside_a_run(self, start_manual: StartManual):
-        node = Clocked()
+        node = Timed()
         with pytest.raises(RuntimeError, match="run"):
             _ = node.timer
         start_manual(Solo(node)).shutdown()
@@ -165,8 +199,8 @@ class TestTimer:
             _ = node.timer
 
     def test_is_released_when_a_run_is_refused(self, start_manual: StartManual):
-        tree = start_manual(Solo(Clocked())).state_dict()
-        node = Clocked()
+        tree = start_manual(Solo(Timed())).state_dict()
+        node = Timed()
         with pytest.raises(ValueError):
             # Refused at the start: the timer of the run that is still running
             # cannot be set back.

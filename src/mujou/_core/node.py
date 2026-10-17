@@ -7,7 +7,7 @@ import torch
 
 from mujou._core import _native
 from mujou._core.network import Component
-from mujou._core.timer import Clock
+from mujou._core.timer import ReadOnlyTimer
 
 
 class Node(_native.Node, Component):
@@ -63,7 +63,7 @@ class Node(_native.Node, Component):
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU and seeds its generator nondeterministically.
 
-    ``device``, ``generator`` and ``timer`` (a read-only view of the run's timer)
+    ``device``, ``generator`` and ``timer`` (the reading side of the run's timer)
     are reserved names: do not assign attributes of those names.
 
     Example::
@@ -104,7 +104,7 @@ class Node(_native.Node, Component):
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
-    _timer: Clock | None = None
+    _timer: ReadOnlyTimer | None = None
 
     def __init__(
         self, *, device: torch.device | str = "cpu", seed: int | None = None
@@ -156,15 +156,15 @@ class Node(_native.Node, Component):
         return self._generator
 
     @property
-    def timer(self) -> Clock:
-        """A read-only view of the timer of the run this node is in, which
+    def timer(self) -> ReadOnlyTimer:
+        """The reading side of the timer of the run this node is in, which
         measures its ``dt``.
 
         Read the time with ``self.timer.now()``. The timer is the one given to
-        ``mujou.run(..., timer=...)``, or the global timer by default. The view
-        only reads: a node does not change the time of its run (``Timer.sleep``,
-        ``set_time_scale`` and ``VirtualTimer.advance`` raise ``RuntimeError`` in
-        a hook). ``timer`` is a reserved name: do not assign an attribute of
+        ``mujou.run(..., timer=...)``, or the global timer by default. A
+        ``ReadOnlyTimer`` only reads and does not hold the timer: a node does not
+        change the time of its run (``Timer.sleep``, ``set_time_scale`` and
+        ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a reserved name: do not assign an attribute of
         that name.
 
         It can be read from the start of the run (also in ``on_thread_start``
@@ -256,7 +256,7 @@ def end_thread(node: Node) -> None:
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
-def set_timer(node: Node, timer: Clock | None) -> None:
+def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     """Give ``node`` the view of its run's timer, or take it back with ``None``."""
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 

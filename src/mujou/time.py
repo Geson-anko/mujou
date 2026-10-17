@@ -14,7 +14,8 @@ The global time starts at 0 when the process first uses it.
 - ``get_time_scale()`` / ``set_time_scale(scale)``: how many global seconds pass per
   real second (finite and > 0)
 - ``Timer``: a time axis of its own for a run
-- ``Clock``: a read-only view of a run's timer, as a node sees it (``Node.timer``)
+- ``ReadOnlyTimer``: the reading side of a timer, as a node sees its run's timer
+  (``Node.timer``)
 - ``Timestamp``: a time on a timer, as ``Run.read`` and ``Port.recv_with_time``
   give it
 
@@ -23,7 +24,11 @@ Only the host controls the time: ``sleep`` and ``set_time_scale`` raise
 """
 
 from mujou._core._native import Timestamp as Timestamp, timer as _timer
-from mujou._core.timer import Clock as Clock, Timer as Timer, host_only as _host_only
+from mujou._core.timer import (
+    ReadOnlyTimer as ReadOnlyTimer,
+    Timer as Timer,
+    host_only as _host_only,
+)
 
 time = _timer.time
 time_ns = _timer.time_ns

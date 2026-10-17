@@ -2,10 +2,12 @@
 
 ``Timer`` wraps the native timer and shows only what the host needs; the framework
 reaches the native one through ``native``. A node sees its run's timer only
-through a ``Clock``, which reads the time and changes nothing.
+through a ``ReadOnlyTimer``, which reads the time and changes nothing.
 """
 
-from typing import Final, Never, cast, final, override
+import itertools
+from collections.abc import Callable
+from typing import Final, final, override
 
 from mujou._core import _native
 
@@ -17,7 +19,7 @@ class Timer:
     Give it to ``mujou.run(..., timer=...)`` to run a network on a time of its
     own: a pause of that run (as ``Run.state_dict`` takes) then stops only this
     timer, not the global one that every other run uses by default. The nodes of
-    the run read its time through ``Node.timer``, a read-only ``Clock``.
+    the run read its time through ``Node.timer``, a ``ReadOnlyTimer``.
 
     Times are ``Timestamp``. Use ``sleep`` instead of the standard
     ``time.sleep`` wherever a duration should follow this time, e.g. to present
@@ -110,46 +112,51 @@ class VirtualTimer(Timer):
 
 
 @final
-class Clock:
-    """A read-only view of a run's timer: what a node sees as ``Node.timer``.
+class ReadOnlyTimer:
+    """The reading side of a ``Timer``: what a node sees of its run's timer as
+    ``Node.timer``.
 
-    It reads the time and changes nothing, so a node cannot change the ``dt`` of
-    the other nodes nor wait on the time. After the run has ended normally (in
-    the ``state_dict`` that the host takes then), it holds the time at which the
-    run stopped, the time of the state.
+    ``ReadOnlyTimer(timer)`` takes the reading methods of ``timer`` (``now``
+    and ``get_time_scale``) and nothing else: it does not hold ``timer``, so
+    nothing reached from it sets the scale, advances the clock or waits on the
+    time. A node thus cannot change the ``dt`` of the other nodes.
+
+    In the ``state_dict`` that the host takes after a run has ended normally,
+    a node's ``timer`` holds the time and the scale at which the run stopped,
+    the time of the state.
+
+    Example::
+
+        def on_update(self, dt: float) -> None:
+            t = self.timer.now()
     """
 
-    _timer: _native.Timer | None
-    _stopped_at: _native.Timestamp | None
+    now: Callable[[], _native.Timestamp]
+    """Return the time now on the timer."""
 
-    def __init__(self) -> Never:
-        raise TypeError("a Clock is made by mujou.run; read it as Node.timer")
+    get_time_scale: Callable[[], float]
+    """Return how many seconds of the timer pass per real second."""
 
-    def now(self) -> _native.Timestamp:
-        """Return the time now on the run's timer."""
-        # A clock holds either the run's timer or the time the run stopped at.
-        if self._stopped_at is not None:
-            return self._stopped_at
-        return cast(_native.Timer, self._timer).now()
+    def __init__(self, timer: Timer) -> None:
+        # The native reader has no method that changes the timer, and no way to
+        # reach one: the bound methods below lead only to it.
+        reader = timer._timer.reader()  # pyright: ignore[reportPrivateUsage]  # this module's own
+        self.now = reader.now
+        self.get_time_scale = reader.time_scale
 
     @override
     def __repr__(self) -> str:
-        return f"Clock(now={self.now()!r})"
+        return f"ReadOnlyTimer(now={self.now()!r})"
 
 
-def clock(timer: Timer) -> Clock:
-    """Return a read-only view of ``timer``."""
-    view = object.__new__(Clock)
-    view._timer = timer._timer  # pyright: ignore[reportPrivateUsage]  # this module's own
-    view._stopped_at = None  # pyright: ignore[reportPrivateUsage]
-    return view
-
-
-def stopped_clock(at: _native.Timestamp) -> Clock:
-    """Return a view whose time stays at ``at`` (a run that has ended)."""
-    view = object.__new__(Clock)
-    view._timer = None  # pyright: ignore[reportPrivateUsage]  # this module's own
-    view._stopped_at = at  # pyright: ignore[reportPrivateUsage]
+def stopped(at: _native.Timestamp, scale: float) -> ReadOnlyTimer:
+    """Return a ``ReadOnlyTimer`` whose time stays at ``at`` and scale at
+    ``scale`` (a run that has ended)."""
+    view = object.__new__(ReadOnlyTimer)
+    # Methods of iterators that repeat the two values: nothing of the timer is
+    # kept, and (unlike a Python function) no module globals hang on them.
+    view.now = itertools.repeat(at).__next__
+    view.get_time_scale = itertools.repeat(scale).__next__
     return view
 
 

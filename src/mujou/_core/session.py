@@ -22,7 +22,7 @@ from mujou._core.network import ports
 from mujou._core.node import Node, capture_state, end_thread, set_timer, thread_ident
 from mujou._core.port import Channel, Port, bind
 from mujou._core.spec import Spec, fields, join, split
-from mujou._core.timer import Timer, clock, native, stopped_clock
+from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
 
 if TYPE_CHECKING:
     from mujou._core.network import Graph
@@ -148,7 +148,7 @@ class Session:
         # use it, so that every time in the run is on the axis dt is measured on.
         self._clock = native(timer)
         # What the nodes see of it: they read the time and change nothing.
-        self._view = clock(timer)
+        self._view = ReadOnlyTimer(timer)
         # One group for the whole network: a write switches together only within a
         # group.
         self._group = _native.InputGroup(timer=self._clock)
@@ -456,9 +456,9 @@ class Session:
                 *(slot.read().time_ns for slot, _ in self._slots.values()),
             ]
         )
-        stopped = stopped_clock(_native.Timestamp(ns=latest))
+        ended = stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
         for node in self._nodes:
-            set_timer(node, stopped)
+            set_timer(node, ended)
         try:
             states = [capture_state(node) for node in self._nodes]
         finally:

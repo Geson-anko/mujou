@@ -19,7 +19,7 @@ from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
 from mujou.testing import ManualRun, VirtualTimer
-from mujou.time import Clock, Timer, Timestamp
+from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -307,7 +307,7 @@ class TestTimer:
 
     def test_the_global_timer_by_default(self, start: Start):
         class ReadsTimer(Node):
-            seen: Clock | None = None
+            seen: ReadOnlyTimer | None = None
 
             @override
             def on_start(self) -> None:
