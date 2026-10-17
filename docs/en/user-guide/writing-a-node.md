@@ -102,7 +102,7 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 
 `recv()` always returns a value, and `on_update` usually runs more often than the peer sends, so the same message is read many times. That is right for a value that holds over time (a sensor reading, an activity): update toward it by `dt` each time. For noise in a continuous-time update, scale its standard deviation by $\sqrt{dt}$, not by `dt`, so that the result does not depend on how often the node updates.
 
-When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed. Reading the time in `on_start` skips the value that is there before the peer's first send: the port's initial value (zeros unless the sender declares `initial=`), or the value of a restored state, which was already handled before the state was taken. (A port the host writes gets its `inputs=` value at that same time, so this skips it too.)
+When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed. Reading the time in `on_start` skips the value that is there before the peer's first send: the port's initial value (zeros unless the sender declares `initial=`), or the value of a restored state. A restored value was usually handled before the state was taken, but one the peer sent after the node's last update was not: a restored run may skip that one message. (A port the host writes gets its `inputs=` value at that same time, so this skips it too.)
 
 ```python
 @override

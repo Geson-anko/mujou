@@ -210,12 +210,13 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
             )
         if other is self:
             raise ValueError(f"cannot connect a port to itself: {self._label()}")
-        mismatches = [
+        # dict.fromkeys: ports of two instances of one class can read the same.
+        mismatches = dict.fromkeys(
             f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
             f"receives {_or_nothing(b._recv_spec)}"
             for a, b in ((self, other), (other, self))
             if a._send_spec != b._recv_spec
-        ]
+        )
         if mismatches:
             raise TypeError("port specs do not match: " + "; ".join(mismatches))
         if self._send_spec is None and self._recv_spec is None:

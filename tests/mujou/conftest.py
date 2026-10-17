@@ -157,7 +157,10 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     """Skip a test marked ``cuda(n)`` (``n`` defaults to 1) unless ``n`` CUDA
     devices are available; the largest ``n`` of its marks counts."""
     needed = max(
-        (mark.args[0] if mark.args else 1 for mark in item.iter_markers("cuda")),
+        (
+            mark.args[0] if mark.args else mark.kwargs.get("n", 1)
+            for mark in item.iter_markers("cuda")
+        ),
         default=0,
     )
     if needed and (not torch.cuda.is_available() or torch.cuda.device_count() < needed):

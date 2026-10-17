@@ -49,7 +49,8 @@ class Learner(Node):
     """Learns once from each new batch, and sends its loss on it before learning."""
 
     def __init__(self, rate: float) -> None:
-        super().__init__(seed=0)
+        # Updating more often than the teacher sends would only re-read its batch.
+        super().__init__(seed=0, period=0.005)
         self.rate = rate
         self.prev = PrevPort(recv=SAMPLE)
         self.loss = Port(send=SCALAR, initial=torch.tensor(math.inf))  # no batch yet
@@ -104,7 +105,7 @@ with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
     print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_BEFORE})")
     # The world changes: the same learner keeps learning, with no new phase.
     changed_at = run.write({teacher.a: torch.tensor(A_AFTER)})
-    loss, t = run.wait_for(learner.loss, lambda loss: loss.item() > 1.0, timeout=5.0)
+    loss, t = run.wait_for(learner.loss, lambda loss: loss.item() > 1e-2, timeout=5.0)
     print(
         f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (a changed at {float(changed_at):.2f} s)"
     )

@@ -202,16 +202,20 @@ class Run:
         messages = self.subscribe(port, timeout=timeout)
         # Valid: subscribe has checked the port.
         name = _host(self).label(port)
-        try:
-            for message, time in messages:
-                if condition(message):
-                    return message, time
-        except TimeoutError:
-            # Name this call, not the subscribe it is built on.
-            raise TimeoutError(
-                f"no message of the port {name!r} met the condition of wait_for "
-                f"within {timeout} s; the run keeps running"
-            ) from None
+        while True:
+            try:
+                message, time = next(messages)
+            except StopIteration:
+                break
+            except TimeoutError:
+                # Name this call, not the subscribe it is built on. Only the
+                # iteration's own timeout: one that condition raises goes as it is.
+                raise TimeoutError(
+                    f"no message of the port {name!r} met the condition of "
+                    f"wait_for within {timeout} s; the run keeps running"
+                ) from None
+            if condition(message):
+                return message, time
         raise RuntimeError(
             f"the run shut down before the port {name!r} sent a message that meets "
             "the condition"
