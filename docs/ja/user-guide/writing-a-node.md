@@ -51,6 +51,20 @@ Port が最初に送るまで、相手が受け取る値と、ホストがその
 self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
 ```
 
+2 つの Port の値は別々に届く。読む側は、一方の Port の新しい値と、もう一方の Port の古い値を同時に読むことがある。組になる値（入力とその教師など）は 1 つのメッセージにして送る。`TypedDict` と、キーごとの `TensorSpec` を持つ `DictSpec` で型を書く。dict 全体が一度に届き、型検査器もキーごとの型を知っている。
+
+```python
+class Sample(TypedDict):
+    x: torch.Tensor
+    y: torch.Tensor
+
+
+SAMPLE = DictSpec(Sample, x=TensorSpec((32, 4)), y=TensorSpec((32, 2)))
+
+self.next = NextPort(send=SAMPLE)  # 送る側: self.next.send({"x": x, "y": y})
+self.prev = PrevPort(recv=SAMPLE)  # 受け取る側: sample = self.prev.recv(); sample["x"]
+```
+
 ## 2. `on_start` で状態を確保する
 
 状態のテンソルは `on_start` で作る。`on_update` では新しいテンソルを代入し直さず、`+=` や `copy_` などでその場で更新する。
@@ -69,6 +83,8 @@ def on_start(self) -> None:
 
 設定値（時定数、層の大きさなど）は `__init__` で数値として持たせてよい。数値は状態に集まらない。
 
+`nn.Module` は `__init__` で作っても `on_start` で作ってもよく、どちらでも状態に集まる。乱数による初期化は、`on_start` 以降に使える `self.generator` で行う。そうして初期化するモジュールは `on_start` で作る。
+
 ## 3. `on_update(dt)` で `dt` に比例して更新する
 
 `on_update(dt)` は、mujou が繰り返し呼ぶ。ノードの作者はループを書かず、1 回分の処理だけを書く。1 回の中でする処理は次の順である。
@@ -83,6 +99,27 @@ def on_start(self) -> None:
 
 - 厳密解がある系では、厳密解で `dt` だけ進める。上の `Leaky` は陽的 Euler 法ではなく、$x$ を $u$ までの距離の `1 - exp(-dt / tau)` 倍だけ動かす。この係数は、入力が一定の間は厳密である。どんな `dt` でも 1 未満なので、$x$ は $u$ を行き過ぎない
 - 厳密解がない系では、1 回の `on_update` の中で刻みを分割する。1 回の刻み `dt / n` が安定に更新できる長さ以下になるように `n` を決め、`for` ループで `n` 回更新する（[ノードの中の PyTorch](torch.md) の例）
+
+`recv()` は必ず値を返す。`on_update` はたいてい相手が送るより頻繁に呼ばれるので、同じメッセージを何度も読む。時間にわたって続く値（センサーの読み、活動など）ならそれでよく、そのたびに `dt` だけその値へ向けて更新する。連続時間の更新に雑音を足すときは、標準偏差を `dt` ではなく $\sqrt{dt}$ に比例させる。そうすれば、結果がノードの更新の頻度によらない。
+
+メッセージが 1 回だけ扱う出来事（学習のサンプルなど）のときは、`recv_with_time()` で時刻も読み、時刻が変わっていなければ更新を飛ばす。`on_start` で時刻を読んでおけば、相手が最初に送る前からある値を飛ばせる。その値は、Port の初期値（送る側が `initial=` を宣言していなければゼロ）か、復元した状態の値である。復元した値は、状態を取る前にすでに扱っている。（ホストが書く Port の `inputs=` の値も同じ時刻を持つので、これも飛ばされる。）
+
+```python
+@override
+def on_start(self) -> None:
+    super().on_start()
+    _, self.last = self.prev.recv_with_time()  # いま届いている値の時刻
+
+
+@override
+def on_update(self, dt: float) -> None:
+    super().on_update(dt)
+    sample, t = self.prev.recv_with_time()
+    if t == self.last:  # 前回の更新から新しいメッセージが無い
+        return
+    self.last = t
+    ...  # サンプルから 1 回だけ学習する
+```
 
 ## 実行の周期を決める
 
