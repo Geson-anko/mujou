@@ -138,7 +138,6 @@ class Session:
         manual: bool,
         state: Mapping[str, Any] | None,
         inputs: Mapping[AnyPort, object] | None,
-        pause_timeout: float,
     ) -> None:
         """Restore ``state``, write ``inputs`` and start the nodes.
 
@@ -175,7 +174,6 @@ class Session:
             self._synchronize_current_streams()
             runtime.start(
                 manual=manual,
-                pause_timeout=pause_timeout,
                 periods=periods,
                 **(restored or {}),
             )
@@ -433,7 +431,7 @@ class Session:
 
     # --- state
 
-    def state_dict(self) -> dict[str, Any]:
+    def state_dict(self, timeout: float) -> dict[str, Any]:
         runtime = self._started()
         finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
@@ -442,7 +440,8 @@ class Session:
                 return runtime.capture(
                     lambda states: self._tree(
                         states, runtime.last_update_ns(), self._clock.state_dict()
-                    )
+                    ),
+                    timeout,
                 )
             except _native.NetworkError:
                 raise

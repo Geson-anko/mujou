@@ -454,8 +454,7 @@ impl Runtime {
     /// first Δt starts (the time at the start by default). `periods` is each
     /// node's period on the timer in seconds (> 0), rounded to the nearest ns
     /// and at least 1 ns, or `None` to update as soon as any time has passed;
-    /// the manual mode ignores it. `pause_timeout` is how many real seconds
-    /// `capture` waits for every node to pause.
+    /// the manual mode ignores it.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -466,9 +465,7 @@ impl Runtime {
         last_update_ns = None,
         periods = None,
         timer_state: "dict[str, int | float] | None" = None,
-        pause_timeout = 30.0,
     ))]
-    #[allow(clippy::too_many_arguments)]
     fn start(
         &self,
         py: Python<'_>,
@@ -477,7 +474,6 @@ impl Runtime {
         last_update_ns: Option<Vec<u64>>,
         periods: Option<Vec<Option<f64>>>,
         timer_state: Option<Bound<'_, PyAny>>,
-        pause_timeout: f64,
     ) -> PyResult<()> {
         let n = self.names.len();
         if let Some(states) = &states {
@@ -499,7 +495,6 @@ impl Runtime {
             .transpose()?;
         let config = RuntimeConfig {
             manual,
-            pause_timeout: duration(pause_timeout)?,
             last_update_ns,
             period_ns,
             timer_state,
@@ -554,15 +549,19 @@ impl Runtime {
     /// not wait for each other's runtime: that cycle deadlocks, and the control
     /// threads cannot see Ctrl-C. If `build` raises, the exception propagates
     /// and the network keeps running. Gives up with `PauseTimeoutError` after
-    /// the `pause_timeout` given to `start`.
-    fn capture(&self, py: Python<'_>, build: Build) -> PyResult<Py<PyAny>> {
+    /// `timeout` real seconds if some node has not paused.
+    fn capture(&self, py: Python<'_>, build: Build, timeout: f64) -> PyResult<Py<PyAny>> {
         let Build(build) = build;
-        let reply = self.core()?.capture(move |states| {
-            Python::attach(|py| {
-                let states = PyList::new(py, states)?;
-                build.call1(py, (states,))
-            })
-        });
+        let timeout = duration(timeout)?;
+        let reply = self.core()?.capture(
+            move |states| {
+                Python::attach(|py| {
+                    let states = PyList::new(py, states)?;
+                    build.call1(py, (states,))
+                })
+            },
+            timeout,
+        );
         self.wait(py, reply)?
     }
 

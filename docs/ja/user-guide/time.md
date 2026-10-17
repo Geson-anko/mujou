@@ -16,7 +16,7 @@
 
 ## Timestamp
 
-`run.write`・`run.read`・`run.subscribe`・`run.wait_for` が返す時刻と、`mujou.time.now()`・`timer.now()`・`self.timer.now()` の値は、どれも `mujou.time.Timestamp` である。
+`run.write`・`run.read_with_time`・`run.subscribe`・`run.wait_for` が返す時刻と、`mujou.time.now()`・`timer.now()`・`self.timer.now()` の値は、どれも `mujou.time.Timestamp` である。
 
 | 書き方            | 値                                 |
 | ----------------- | ---------------------------------- |
@@ -27,12 +27,12 @@
 
 `Timestamp` は、どのタイマーの時刻かを持たない。比べてよいのは同じタイマーの時刻同士だけである。`mujou.time.now()` と比べてよいのは、グローバルタイマーで走らせた実行の時刻だけである。
 
-`write` が返す時刻と `read` が返す時刻を比べると、ある出力が入力を切り替えた後に送られたかを判断できる。
+`write` が返す時刻と `read_with_time` が返す時刻を比べると、ある出力が入力を切り替えた後に送られたかを判断できる。
 
 ```python
 t_in = run.write({net.prev: x})
 mujou.time.sleep(0.1)
-y, t_out = run.read(net.next)
+y, t_out = run.read_with_time(net.next)
 if t_out >= t_in:               # y は x を書いた後に送られた
     print(float(t_out - t_in))  # x を書いてから y が送られるまでの秒数
 ```
@@ -51,7 +51,7 @@ if t_out >= t_in:               # y は x を書いた後に送られた
 - 状態から復元したいが、同じグローバルタイマーでほかの実行が走っている（[状態の保存と復元](state.md)）
 - 互いに止め合わない別々の実行で、複数のネットワークを走らせる（[ネットワークを束ねる](compose.md)）
 
-このとき、ホストはその実行を `timer.sleep` で待ち、`run.read` の時刻は `timer.now()` と比べる。`mujou.time` の関数（`mujou.time.sleep`、`mujou.time.time()` など）が扱うのはグローバルタイマーで、この実行のタイマーではない。そのため、この実行には使わない。
+このとき、ホストはその実行を `timer.sleep` で待ち、`run.read_with_time` の時刻は `timer.now()` と比べる。実行のタイマーは `run.timer` でも取れる（渡さなかった実行ではグローバルタイマー）。`mujou.time` の関数（`mujou.time.sleep`、`mujou.time.time()` など）が扱うのはグローバルタイマーで、この実行のタイマーではない。そのため、この実行には使わない。
 
 ## グローバルタイマーの速さを変える
 

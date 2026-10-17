@@ -312,18 +312,6 @@ class TestRun:
             with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
 
-    @pytest.mark.parametrize("pause_timeout", [0.0, -1.0, math.nan, math.inf])
-    def test_rejects_a_pause_timeout_that_is_not_finite_and_positive(
-        self, pause_timeout: float, start_manual: StartManual
-    ):
-        net = Chain()
-        for run in (mujou.run, mujou.testing.run):
-            with pytest.raises(ValueError, match="^pause_timeout must be"):
-                run(net, pause_timeout=pause_timeout)
-        # Refused before the build: the network is not marked as built, so it can
-        # still run with others (a network built alone could not).
-        start_manual(net, Chain())
-
     def test_a_run_is_made_only_by_mujou_run(self):
         with pytest.raises(TypeError, match=r"mujou\.run"):
             Run()
@@ -334,7 +322,7 @@ class TestRunANode:
         node = Leaky()
         run = start_manual(node, inputs={node.prev: u(1)})
         step(run, node)
-        y, _ = run.read(node.next)
+        y = run.read(node.next)
         assert torch.equal(y, euler(torch.zeros(2, dtype=F64), u(1)))
         tree = run.state_dict()
         assert set(tree["nodes"]) == {""}
@@ -424,7 +412,7 @@ class TestRunANode:
             a = euler(a, u(1))
             b = euler(b, a)
             n = euler(n, b)
-        y, _ = run.read(node.next)
+        y = run.read(node.next)
         assert torch.equal(y, n)
 
 
@@ -544,6 +532,20 @@ class TestTimer:
         assert on_held == Timestamp(ns=0)
         assert on_free > Timestamp(ns=0) and on_global > 0
 
+    def test_gives_the_timer_it_runs_on(self, start: Start):
+        timer = Timer()
+        assert start(Chain(), timer=timer).timer is timer
+        # By default the global timer, which mujou.time reads.
+        default = start(Chain()).timer
+        before = mujou.time.time_ns()
+        on_default = default.now().ns
+        assert before <= on_default <= mujou.time.time_ns()
+
+    def test_a_manual_run_gives_its_virtual_timer(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        assert start_manual(Chain(), timer=virtual).timer is virtual
+
     def test_the_global_timer_by_default(self, start: Start):
         class ReadsTimer(Node):
             seen: ReadOnlyTimer | None = None
@@ -635,7 +637,7 @@ class TestWrite:
         virtual.advance(H)
         written_at = run.write({echo.prev: u(1)})
         step(run)
-        (received_ns, _) = run.read(echo.next)
+        received_ns = run.read(echo.next)
         assert int(received_ns) == written_at.ns
 
     def test_of_nothing_returns_the_time_and_changes_nothing(
@@ -711,23 +713,30 @@ class TestWrite:
 
 
 class TestRead:
-    def test_gives_the_latest_output_and_its_time(
+    def test_gives_the_latest_output(self, step: Step, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        run.write({net.prev: u(1)})
+        step(run)
+        assert torch.equal(run.read(net.next), net.b.x)
+        inner = run.read(net.a.next)  # a connected port shows an inner node
+        assert torch.equal(inner, net.a.x)
+
+    def test_with_time_gives_the_latest_output_and_its_time(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
         net = Chain()
         run = start_manual(net)
         run.write({net.prev: u(1)})
         step(run)
-        out, t = run.read(net.next)
+        out, t = run.read_with_time(net.next)
         assert torch.equal(out, net.b.x)
         assert isinstance(t, Timestamp) and t == virtual.now()
-        inner, _ = run.read(net.a.next)  # a connected port shows an inner node
-        assert torch.equal(inner, net.a.x)
 
     def test_gives_zeros_before_the_first_send(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        out, t = run.read(net.next)
+        out, t = run.read_with_time(net.next)
         assert torch.equal(out, torch.zeros(2, dtype=F64))
         assert t == Timestamp(ns=0)
 
@@ -741,6 +750,12 @@ class TestRead:
         run = start_manual(Chain())
         with pytest.raises(ValueError, match="is not a port of a node in this run$"):
             run.read(Chain().next)
+
+    def test_with_time_rejects_what_read_rejects(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match="sends no messages"):
+            run.read_with_time(net.prev)
 
 
 class TestSubscribe:
@@ -810,7 +825,7 @@ class TestSubscribe:
             next(values)
         run.write({net.prev: u(1)})
         step(run)
-        assert torch.equal(run.read(net.next)[0], net.b.x)
+        assert torch.equal(run.read(net.next), net.b.x)
 
     def test_the_timeout_counts_the_whole_iteration(
         self, step: Step, start_manual: StartManual
@@ -881,6 +896,23 @@ class TestWaitFor:
 
 
 class TestStateDict:
+    @pytest.mark.parametrize("timeout", [0.0, -1.0, math.nan, math.inf])
+    def test_rejects_a_timeout_that_is_not_finite_and_positive(
+        self, timeout: float, step: Step, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
+            run.state_dict(timeout)
+        # Nothing was taken or paused: the run goes on.
+        run.write({net.prev: u(1)})
+        step(run)
+        assert net.a.updates == 1
+        run.shutdown()
+        # After the end there is nothing to wait for, but it is checked all the same.
+        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
+            run.state_dict(timeout)
+
     def test_after_a_normal_end_is_the_state_at_the_end(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
@@ -1192,7 +1224,7 @@ class TestTimeout:
         call: Callable[[float], object] = {
             "shutdown": lambda t: run.shutdown(timeout=t),
             "join": lambda t: run.join(timeout=t),
-            "subscribe": lambda t: run.subscribe(net.next, timeout=t),
+            "subscribe": lambda t: run.subscribe(net.next, t),
         }[method]
         for timeout in (-1.0, math.nan):
             with pytest.raises(ValueError, match="timeout"):
@@ -1212,10 +1244,10 @@ class TestTimeout:
             if method == "join":
                 run.join(timeout=0.05)
             else:
-                run.wait_for(net.next, lambda _: False, timeout=0.05)
+                run.wait_for(net.next, lambda _: False, 0.05)
         run.write({net.prev: u(1)})
         step(run)
-        assert torch.equal(run.read(net.next)[0], net.b.x)
+        assert torch.equal(run.read(net.next), net.b.x)
 
 
 class TestManualRun:
@@ -1248,7 +1280,7 @@ class TestManualRun:
             for _ in range(3):
                 timer.advance(H)  # the clock moves only here
                 run.step()
-            out, t = run.read(net.next)
+            out, t = run.read_with_time(net.next)
         x = torch.zeros(2, dtype=F64)
         for _ in range(3):
             x = euler(x, u(1))
@@ -1278,7 +1310,7 @@ class TestEndToEnd:
         for k in (1, 2):
             run.write({net.prev: u(k)})
             mujou.time.sleep(presented)
-            out, _ = run.read(net.next)
+            out = run.read(net.next)
             # After a step of the input by d, the error of two leaky stages in a
             # row is d (1 + t/tau) exp(-t/tau). Allow the nodes to have run for
             # only a third of the time (scheduling under load): t = 10 tau.
@@ -1321,7 +1353,7 @@ class TestEndToEnd:
                 xb = euler(xb, sent_a)
         assert torch.equal(a.x, xa)
         assert torch.equal(b.x, xb)
-        assert torch.equal(run.read(b.next)[0], xb)
+        assert torch.equal(run.read(b.next), xb)
 
     @pytest.mark.parametrize("b_first", [False, True])
     def test_a_restored_network_continues_the_same(
@@ -1340,7 +1372,7 @@ class TestEndToEnd:
         for i in range(k, k + m):
             step(run, *order)
             run.write({net.prev: u(i + 1)})
-        expected = (net.a.x.clone(), net.b.x.clone(), run.read(net.next))
+        expected = (net.a.x.clone(), net.b.x.clone(), run.read_with_time(net.next))
         run.shutdown()
 
         restored = Chain()
@@ -1361,7 +1393,7 @@ class TestEndToEnd:
             again_run.write({restored.prev: u(i + 1)})
         assert torch.equal(restored.a.x, expected[0])
         assert torch.equal(restored.b.x, expected[1])
-        out, t = again_run.read(restored.next)
+        out, t = again_run.read_with_time(restored.next)
         assert torch.equal(out, expected[2][0]) and t == expected[2][1]
         # The nodes got copies: their updates in place did not reach the tree.
         assert not torch.equal(tree["nodes"]["a"]["x"], restored.a.x)
@@ -1654,7 +1686,7 @@ class TestCuda:
             step(run, net.a, net.b)
             xa = euler(xa, u(k).to(CUDA0))
             xb = euler(xb, xa)
-        assert torch.equal(run.read(net.next)[0], xb.cpu())
+        assert torch.equal(run.read(net.next), xb.cpu())
 
     @pytest.mark.slow
     def test_state_dict_is_whole_while_a_node_updates_in_place(self, start: Start):
@@ -1970,12 +2002,12 @@ class TestPauseTimeout:
         self, started: list[Run]
     ):
         node = Blocks()
-        run = mujou.run(node, pause_timeout=0.05)
+        run = mujou.run(node)
         started.append(run)
         try:
             assert node.entered.wait(10.0)
             with pytest.raises(mujou.PauseTimeoutError):
-                run.state_dict()
+                run.state_dict(0.05)
         finally:
             node.release.set()
 

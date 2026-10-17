@@ -64,18 +64,18 @@ To run again, create new instances, nodes included. A network can run only once.
 
 `shutdown`, `join`, `subscribe` and `wait_for` take an argument `timeout` in seconds of real time. The default is `math.inf` (wait forever).
 
-| Call                                         | When the time runs out                                                                                                                                                                                                     |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run.shutdown(timeout)`                      | `TimeoutError`. The request to stop is not withdrawn, and the nodes update no more. The ending goes on in the background; wait for it with `join`                                                                          |
-| `run.join(timeout)`                          | `TimeoutError`. Nothing changes, and the run keeps running                                                                                                                                                                 |
-| `run.subscribe(port, timeout=...)`           | `TimeoutError` from the iterator, at a step that begins after the time has run out or would wait past it. The time counts the whole iteration, the body of the loop included. The iterator ends, and the run keeps running |
-| `run.wait_for(port, condition, timeout=...)` | `TimeoutError`. The run keeps running                                                                                                                                                                                      |
+| Call                                     | When the time runs out                                                                                                                                                                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.shutdown(timeout)`                  | `TimeoutError`. The request to stop is not withdrawn, and the nodes update no more. The ending goes on in the background; wait for it with `join`                                                                          |
+| `run.join(timeout)`                      | `TimeoutError`. Nothing changes, and the run keeps running                                                                                                                                                                 |
+| `run.subscribe(port, timeout)`           | `TimeoutError` from the iterator, at a step that begins after the time has run out or would wait past it. The time counts the whole iteration, the body of the loop included. The iterator ends, and the run keeps running |
+| `run.wait_for(port, condition, timeout)` | `TimeoutError`. The run keeps running                                                                                                                                                                                      |
 
-`run.state_dict()` on a running network waits until every node has paused. You set this wait for each run when you start it, with `mujou.run(..., pause_timeout=seconds)` (seconds of real time, 30 by default). You cannot change it while the run is running. If some node does not pause in time, `run.state_dict()` raises `PauseTimeoutError` (a subclass of `TimeoutError`). The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
+`run.state_dict(timeout)` on a running network waits until every node has paused, at most `timeout` seconds of real time (30 by default). This `timeout` must be finite and greater than 0. After the run has ended there is nothing to wait for, and `timeout` is only checked. If some node does not pause in time, `run.state_dict()` raises `PauseTimeoutError` (a subclass of `TimeoutError`). The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
 
 A `state_dict` timeout is likely with a node whose single `on_update` is long (heavy BP, for example), because a node finishes the running `on_update` before it pauses.
 
-Passing a negative number or NaN as `timeout` raises `ValueError`.
+Passing a negative number or NaN as `timeout` raises `ValueError`; for `state_dict`, so do 0 and `math.inf`.
 
 ## Interpreter exit
 
