@@ -32,6 +32,7 @@
 - [テスト用の公開の口](project_testing_api.md) — 仮想時計と手動ステップを mujou.testing などで公開し、mujou 自身と利用者のテストが同じ口を使う。2026-10-16 実装（run / ManualRun / VirtualTimer）
 - [実行の API とモジュール構成の見直し](project_runtime_api_revision.md) — 2026-10-16 の決定。実装は mujou._core パッケージ、Rust は _core._native。build が Graph、mujou.run がハンドル、Compose、自動の状態収集、hook の名前など
 - [ノードの実行周期](project_node_period.md) — `Node(period=...)`、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す（平均 1/P、まとめて回らない）。Δt は実経過。`period` は予約名。手動モードは周期を無視
+- [run がノードを受け付け、write が時刻を返す](project_run_node_and_write_time.md) — 2026-10-17。`Run.write` が `Timestamp` を返す。`mujou.run` / `Compose` がノードを受け付け混在可、ノード 1 つは `Compose(node)` としてパス `"0"`
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback

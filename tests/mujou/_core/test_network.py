@@ -348,11 +348,18 @@ class TestCompose:
         graph = Compose(source, sink).build()
         assert graph.port_path(sink.prev) == "1.l1.prev"
 
-    def test_rejects_what_is_not_a_network(self):
-        with pytest.raises(TypeError, match="Hidden"):
-            Compose(Hidden())  # pyright: ignore[reportArgumentType]
+    def test_takes_nodes_and_networks_alike(self):
+        node, named = Hidden(), Hidden()
+        graph = Compose(node, Stack(), n=named).build()
+        assert [path for path, _ in graph.nodes] == ["0", "1.l1", "1.l2", "n"]
+        assert graph.port_path(node.prev) == "0.prev"
+        assert graph.port_path(named.next) == "n.next"
+
+    def test_rejects_what_is_neither_a_node_nor_a_network(self):
+        with pytest.raises(TypeError, match="object"):
+            Compose(object())  # pyright: ignore[reportArgumentType]
         with pytest.raises(TypeError, match="'x'"):
-            Compose(x=Hidden())  # pyright: ignore[reportArgumentType]
+            Compose(x=1)  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.parametrize("name", ["build", "connect", "_private", "", "a.b"])
     def test_rejects_names_that_would_hide_its_own(self, name: str):

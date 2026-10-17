@@ -22,6 +22,7 @@ from typing import Any
 import torch
 
 from mujou._core.network import Network
+from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.run import ManualRun, start
 from mujou._core.timer import Timer, VirtualTimer
@@ -31,7 +32,7 @@ __all__ = ["ManualRun", "VirtualTimer", "run"]
 
 # P: as in Run.write.
 def run[P: Port[Any, Any, Any]](
-    *networks: Network,
+    *networks: Node | Network,
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
     state: Mapping[str, Any] | None = None,
