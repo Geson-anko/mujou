@@ -1,11 +1,11 @@
-"""Receive the outputs of a run as they are sent, and stop it from another thread.
+"""Receive the outputs of a run as they are sent.
 
 ``Run.subscribe`` yields the latest message now, then each newer one as it comes
-(skipping those sent in between). The iteration ends when the run shuts down.
+(skipping those sent in between). Leaving the loop with ``break`` stops the
+iteration; the run keeps running until it shuts down.
 """
 
 import itertools
-import threading
 from typing import override
 
 import torch
@@ -33,15 +33,12 @@ class Clock(Node):
 # --8<-- [start:subscribe]
 clock = Clock()  # a node runs by itself, without a network
 with mujou.run(clock) as run:
-
-    def stop_later() -> None:
-        mujou.time.sleep(0.1)
-        run.shutdown()  # ends the iteration below
-
-    stopper = threading.Thread(target=stop_later)
-    stopper.start()
-    received = [(value.item(), float(t)) for value, t in run.subscribe(clock.next)]
-    stopper.join()
+    received: list[tuple[float, float]] = []
+    # timeout: give up after 5 s of real time instead of waiting forever.
+    for value, t in run.subscribe(clock.next, timeout=5.0):
+        received.append((value.item(), float(t)))
+        if len(received) == 20:
+            break
 # --8<-- [end:subscribe]
 
 print(f"received {len(received)} messages, the last at t = {received[-1][1]:.3f} s")
