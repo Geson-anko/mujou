@@ -49,7 +49,7 @@ effort: medium
 
 ## 完了の定義
 
-- `just run`（format → test → type）がパス
+- `just run`（format → test → type → docs-build）がパス
 - 計画通りの公開インターフェースになっている
 
 ## 出力先（マルチエージェント時）

@@ -35,6 +35,22 @@ def measure_sleep(
     return slept[0]
 
 
+class TestPublicNames:
+    def test_exports(self):
+        # The names of mujou.time in specs/network.md (it has no __all__).
+        public = sorted(n for n in vars(mujou.time) if not n.startswith("_"))
+        assert public == [
+            "ReadOnlyTimer",
+            "Timer",
+            "Timestamp",
+            "get_time_scale",
+            "set_time_scale",
+            "sleep",
+            "time",
+            "time_ns",
+        ]
+
+
 class TestTime:
     def test_reads_the_global_timer(self, virtual_timer: GlobalTimer):
         virtual_timer.advance(1.5)

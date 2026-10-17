@@ -79,7 +79,7 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 - 利用者に公開するのは、`mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale`（グローバルタイマーを読む）と、`mujou.time.Timer` / `mujou.time.ReadOnlyTimer` / `mujou.time.Timestamp`、テスト用の `mujou.testing.VirtualTimer` である。`Timer` は native の `Timer` を包む Python のクラスで、`now()`（`Timestamp` を返す）・`sleep(seconds)`・`get_time_scale()`・`set_time_scale(scale)` だけを見せる。native の `load_state_dict`（走っているタイマーの時刻を飛ばせる）・`use_virtual_clock`・`pause` / `resume` / `is_paused` はフレームワークとテストのためのものなので見せない。`Timestamp` は native の型をそのまま公開し、pickle と deepcopy ができる（`copyreg.__newobj_ex__` で `Timestamp(ns=...)` に戻す `__reduce__`）。`VirtualTimer` は `Timer` の派生で、時刻 0 の仮想時計から始まり、`advance(seconds)` を足す。`mujou.run(..., timer=...)` に渡すと、その実行のスロット・ホストの入力・ランタイムがすべてそのタイマーを使う。`timer=None` はグローバルタイマーである
 - タイマーを動かすのはホストだけである。ノードは属性 `timer` で、タイマーの読み取り側（`ReadOnlyTimer`）を通して時刻を読む（[ノード](nodes.md#ライフサイクル-hook)）。`ReadOnlyTimer(timer)` は、native の `Timer.reader()` が返す `TimerReader`（`now()` と `time_scale()` だけを持ち、Python からは元のタイマーにたどれない）の束縛メソッドを `now` / `get_time_scale` として写し、タイマーのオブジェクトは属性に持たない。正常に終了した後の `state_dict` の中では、止まった時刻とスケールを繰り返し返すだけの関数（`itertools.repeat(...).__next__`）を写す。クラスの関数から module の globals（グローバルタイマーなど）にはたどれるが、これはどのクラスでも同じで、`import mujou.time` でも届く。実行に渡したタイマーそのものにはたどれない。`Timer.sleep` / `Timer.set_time_scale` / `VirtualTimer.advance` と `mujou.time.sleep` / `mujou.time.set_time_scale` は、ノードの hook の中から呼ぶと `RuntimeError` になる。ノードがスケールを変えると、同じ実行のほかのノードの $\Delta t$ が変わり、Port を通らない通信路になる（局所性）。ノードが仮想時計を進めると、手動ステップの $\Delta t$ がテストの進めた値からずれる。ノードがタイマーで待つと、停止はタイマーを先に凍結するので状態の取得が `PauseTimeoutError` になり、手動実行では誰も時計を進めないので `step` が戻らない
 - 仮想時計（`use_virtual_clock(True)`）では、時刻は `advance(seconds)` で進めた分だけ進み、スケールは効かない。停止中は `advance` できない
-- 停止には 2 種類ある。1 つは、ランタイムが状態の取得・起動・例外による終了（例外のときに状態を取得する設定のときだけ）の間に取る **保持** である。保持は Rust の `Timer::hold()` が返す `PauseHold` で、drop すると解ける。もう 1 つは、ホストやテストが使う **スイッチ**（`pause()` / `resume()`）である。タイマーは保持の数を数え、保持が 1 つも無く、スイッチも切れているときだけ時刻を進める。1 つのタイマーで複数のランタイムが走りうる（既定ではすべてグローバルタイマーで走る）。保持を数えないと、あるランタイムが状態の取得を終えたときに、別のランタイムの取得中の停止やホストの停止まで解いてしまう。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真になる
+- 停止には 2 種類ある。1 つは、ランタイムが状態の取得と起動の間に取る **保持** である。保持は Rust の `Timer::hold()` が返す `PauseHold` で、drop すると解ける。もう 1 つは、ホストやテストが使う **スイッチ**（`pause()` / `resume()`）である。タイマーは保持の数を数え、保持が 1 つも無く、スイッチも切れているときだけ時刻を進める。1 つのタイマーで複数のランタイムが走りうる（既定ではすべてグローバルタイマーで走る）。保持を数えないと、あるランタイムが状態の取得を終えたときに、別のランタイムの取得中の停止やホストの停止まで解いてしまう。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真になる
 - pamiq-core の `time.py` から、anchor の方式（スケールの変更・停止・再開で anchor を張り替える）を引き継いだ。次の点は意図して変えた
   - 時刻は 1 本だけで、0 から始まる。pamiq-core は `time` / `perf_counter` / `monotonic` を、それぞれ元の時計の値から始めて別々にスケールする
   - `sleep` はそのタイマーの時間で待つ。途中のスケールの変更に従い、停止中は再開まで戻らない。pamiq-core は呼んだ時点のスケールで実時間を計算して眠り、停止中ならすぐに戻る。mujou の `sleep` はホストが入力の提示時間を待つためのもので、状態の取得のための短い停止で提示が短くならないようにした。ノードのループの待ちを停止要求で起こす仕組みは、ランタイムの側に持たせた（$\Delta t = 0$ の待ちと周期の待ちは、目標の時刻か制御の要求で起きる。[実装](#実装-1)）
@@ -229,11 +229,10 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 }
 ```
 
-- 停止のタイムアウトの既定値は実時間 30 秒で、`mujou.run(..., pause_timeout=...)` で変える。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
+- 停止のタイムアウトの既定値は実時間 30 秒で、`mujou.run(..., pause_timeout=...)` で変える。`pause_timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `pause_timeout` を入れる）。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
 - 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。`shutdown` に有限の `timeout` を渡すと、コアに待たずに終了を要求し（`Runtime.request_stop`）、呼んだスレッドはコアの `join` で時間を区切って待つ。時間切れでも要求は残り、ネットワークは止まりに向かう
 - 正常に終了した後の `state_dict()` は、ホストのスレッドで各ノードの `_capture_state()` を呼ぶ。CUDA のノードの同期は、制御スレッドで呼ぶときと同じである
-- コアのランタイムには、例外のときに状態の木を取得する仕組み（`Runtime.start` の `on_exception_capture`）がまだ残っているが、Python からは使わない。後で取り除く
-- 例外による終了の最後に、ランタイムはタイマーの保持を解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである。保持している間（例外の記録から終了処理の完了まで）は、仮想時計の `advance` もできない
+- 例外は時間を止めない。ランタイムは例外で状態を取得しないので、例外の記録から終了処理の完了まで、タイマーは保持されずに進む。起動中や状態の取得中に例外が起きたときは、その保持を終了処理の最後に解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである
 - ランタイムは各 `on_update` の直後に、同じスレッドでフレームワーク用の `_after_update()` を呼ぶ。状態の取得では `state_dict()` の代わりに `_capture_state()`（既定は `state_dict()` を返す）を呼ぶ。CUDA のノードは、`_after_update()` で自分のストリームを同期し、`_capture_state()` で `state_dict()` の前後に自分のストリームを同期する。どの hook が積んだ仕事も、これらの同期で終わる。フレームワークは、制御スレッドで木をコピーした後、ノードを再開する前に、制御スレッドの現在のストリームを同期する。復元では、ホストのスレッドでコピーした後に、そのスレッドの現在のストリームを同期する（[PyTorch の利用](torch.md#実行スレッドの設定)）
 - 例外で終了したことは `NetworkError`（`RuntimeError` の派生）で伝える。メッセージにノードのパスと hook の名前を入れ、`__cause__` に最初の例外をつなぐ。hook の例外は `logging.getLogger("mujou")` にトレースバック付きで出す
 - 手動モード（`mujou.testing.run` と `ManualRun.step(*nodes)`）は、自由実行と同じノードのループを使う。違いは、区切りでステップの許可を待つことだけである。その実行のタイマーの時刻が前回の更新から進んでいないノードは更新しない。周期は使わない
@@ -248,7 +247,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 テスト用の口は `mujou.testing` に公開する。mujou 自身のテスト（既定のノードのテストを含む）と利用者のテストは、同じ口を使う。
 
 - `VirtualTimer()`: 時刻 0 の仮想時計のタイマー。`advance(seconds)` で進めた分だけ進む
-- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数は `mujou.run` と同じで、`ManualRun` を返す。仮想時計と手動のステップは独立に選べる。`timer` の既定は `mujou.run` と同じくグローバルタイマーなので、$\Delta t$ を決めたいテストは `VirtualTimer` を渡す
+- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数とその制約（`pause_timeout` は有限の正の秒数）は `mujou.run` と同じで、`ManualRun` を返す。仮想時計と手動のステップは独立に選べる。`timer` の既定は `mujou.run` と同じくグローバルタイマーなので、$\Delta t$ を決めたいテストは `VirtualTimer` を渡す
 - `ManualRun.step(*nodes)`: 渡した順に各ノードを 1 回ずつ更新し、終わってから戻る。引数なしなら木の順に全ノード。時計は進めないので、`timer.advance(dt)` と組み合わせる
 
 ```python

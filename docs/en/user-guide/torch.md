@@ -7,7 +7,7 @@ A node computes with PyTorch inside. This page covers devices and random numbers
 The following node learns a linear map from its input to the target online, and sends its prediction. BP stays inside the one node.
 
 ```python
---8<-- "examples/torch_node.py:21:55"
+--8<-- "examples/torch_node.py:19:55"
 ```
 
 ## Device and seed
@@ -34,7 +34,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## BP inside a node
 
-Mujou turns gradient recording off on every node's thread (`torch.set_grad_enabled(False)`). The default update rule computes its update equations directly, so it needs no autograd graph.
+Mujou turns gradient recording off on every node's thread (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM (planned; see [Update rules](update-rules.md)), computes its update equations directly, so it will need no autograd graph.
 
 To use autograd in a node, write it as follows.
 
@@ -60,7 +60,7 @@ So the node's author does not have to write any synchronization. If you synchron
 
 - Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created
 - PyTorch assigns streams from a pool of 32 per device. If you put more than 32 nodes on one device, some nodes share a stream. The results do not change, but a synchronization then also waits for the other node's work
-- A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names the hook `_after_update`. The cause is in `on_update`
+- A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names `_after_update`, an internal hook of Mujou. The cause is in `on_update`
 
 ## Settings of the whole process
 

@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mujou_core::runtime::{
-    HookError, NodeFailure, NodeHooks, Runtime, RuntimeConfig, RuntimeError,
-};
+use mujou_core::runtime::{HookError, NodeHooks, Runtime, RuntimeConfig, RuntimeError};
 use mujou_core::time::Timer;
 
 const H_NS: u64 = 1_000_000;
@@ -147,8 +144,7 @@ mod manual_mode {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(3);
         let t0 = timer.time_ns();
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         for _ in 0..2 {
             timer.advance_ns(H_NS).unwrap();
@@ -176,8 +172,7 @@ mod manual_mode {
     fn a_step_without_time_passing_does_not_update() {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(1);
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         rt.step(None).wait().unwrap();
         rt.shutdown().wait().unwrap();
@@ -189,7 +184,7 @@ mod manual_mode {
         let timer = virtual_timer();
         let Setup { nodes, names, .. } = recorders(1);
         let config = RuntimeConfig::default();
-        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config, None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
         started.wait().unwrap();
         assert!(matches!(rt.step(None).wait(), Err(RuntimeError::NotManual)));
         rt.shutdown().wait().unwrap();
@@ -203,8 +198,7 @@ mod capture {
     fn builds_from_every_state_while_the_time_is_frozen() {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(2);
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         timer.advance_ns(H_NS).unwrap();
         rt.step(None).wait().unwrap();
@@ -250,8 +244,7 @@ mod failure {
             names,
         } = recorders(3);
         nodes[1].fail_on_update = Some(3);
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         let mut result = Ok(());
         for _ in 0..3 {
@@ -283,8 +276,7 @@ mod failure {
             names,
         } = recorders(2);
         nodes[0].panic_on_update = Some(1);
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         timer.advance_ns(H_NS).unwrap();
         let result = rt.step(None).wait();
@@ -296,37 +288,6 @@ mod failure {
         for id in 0..2 {
             assert_exception_then_stop_once(&events_of(&log, id));
         }
-    }
-
-    #[test]
-    fn captures_the_state_on_the_frozen_timer_and_resumes_it_at_the_end() {
-        let timer = virtual_timer();
-        let Setup {
-            mut nodes, names, ..
-        } = recorders(2);
-        nodes[0].fail_on_update = Some(2);
-        type Captured = (BTreeMap<usize, usize>, usize, bool);
-        let captured: Arc<Mutex<Option<Captured>>> = Arc::default();
-        let capture = {
-            let captured = Arc::clone(&captured);
-            let frozen = Arc::clone(&timer);
-            Box::new(move |states, failure: &NodeFailure| {
-                *captured.lock().unwrap() = Some((states, failure.node, frozen.is_paused()));
-            })
-        };
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), Some(capture)).unwrap();
-        started.wait().unwrap();
-        for _ in 0..2 {
-            timer.advance_ns(H_NS).unwrap();
-            let _ = rt.step(None).wait();
-        }
-        assert!(rt.join(Some(Duration::from_secs(5))).is_err());
-        let (states, node, paused) = captured.lock().unwrap().take().unwrap();
-        assert_eq!(states, BTreeMap::from([(0, 2), (1, 1)]));
-        assert_eq!(node, 0);
-        assert!(paused);
-        assert!(!timer.is_paused());
     }
 }
 
@@ -349,12 +310,12 @@ mod restore {
         let timer = virtual_timer();
         let Setup { nodes, names, .. } = recorders(1);
         let (running, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+            Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         let before = timer.time_ns();
 
         let Setup { log, nodes, names } = recorders(1);
-        let result = Runtime::start(nodes, names, Arc::clone(&timer), restoring(), None);
+        let result = Runtime::start(nodes, names, Arc::clone(&timer), restoring());
         assert!(matches!(result, Err(RuntimeError::InvalidArgument(_))));
         // Nothing started, and the running runtime's time did not move.
         assert!(log.lock().unwrap().is_empty());
@@ -365,7 +326,7 @@ mod restore {
         running.shutdown().wait().unwrap();
         let Setup { nodes, names, .. } = recorders(1);
         let (restored, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), restoring(), None).unwrap();
+            Runtime::start(nodes, names, Arc::clone(&timer), restoring()).unwrap();
         started.wait().unwrap();
         assert_eq!(timer.time_ns(), 7 * H_NS);
         restored.shutdown().wait().unwrap();
@@ -384,14 +345,14 @@ mod separate_timers {
             nodes,
             names,
         } = recorders(1);
-        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual()).unwrap();
         started.wait().unwrap();
         let Setup {
             log: lb,
             nodes,
             names,
         } = recorders(1);
-        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual()).unwrap();
         started.wait().unwrap();
 
         ta.advance_ns(2 * H_NS).unwrap();
@@ -408,14 +369,14 @@ mod separate_timers {
     fn a_capture_freezes_only_its_own_timer() {
         let (ta, tb) = (virtual_timer(), virtual_timer());
         let Setup { nodes, names, .. } = recorders(1);
-        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual()).unwrap();
         started.wait().unwrap();
         let Setup {
             log: lb,
             nodes,
             names,
         } = recorders(1);
-        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual()).unwrap();
         started.wait().unwrap();
         let b = Arc::new(b);
 
@@ -437,39 +398,10 @@ mod separate_timers {
     }
 
     #[test]
-    fn a_failure_freezes_only_its_own_timer() {
-        let (ta, tb) = (virtual_timer(), virtual_timer());
-        let Setup {
-            mut nodes, names, ..
-        } = recorders(1);
-        nodes[0].fail_on_update = Some(1);
-        let other_paused: Arc<Mutex<Option<bool>>> = Arc::default();
-        let capture = {
-            let other_paused = Arc::clone(&other_paused);
-            let other = Arc::clone(&tb);
-            Box::new(move |_, _: &NodeFailure| {
-                *other_paused.lock().unwrap() = Some(other.is_paused());
-            })
-        };
-        let (a, started) =
-            Runtime::start(nodes, names, Arc::clone(&ta), manual(), Some(capture)).unwrap();
-        started.wait().unwrap();
-        ta.advance_ns(H_NS).unwrap();
-        assert!(matches!(a.step(None).wait(), Err(RuntimeError::Failed(_))));
-        assert!(a.is_finished());
-        assert_eq!(*other_paused.lock().unwrap(), Some(false));
-        // The other timer still moves.
-        let before = tb.time_ns();
-        tb.advance_ns(H_NS).unwrap();
-        assert_eq!(tb.time_ns(), before + H_NS);
-    }
-
-    #[test]
     fn a_runtime_on_another_timer_does_not_block_a_restore() {
         let (ta, tb) = (virtual_timer(), virtual_timer());
         let Setup { nodes, names, .. } = recorders(1);
-        let (running, started) =
-            Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
+        let (running, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual()).unwrap();
         started.wait().unwrap();
         let before = ta.time_ns();
 
@@ -481,8 +413,7 @@ mod separate_timers {
             ..manual()
         };
         let Setup { nodes, names, .. } = recorders(1);
-        let (restored, started) =
-            Runtime::start(nodes, names, Arc::clone(&tb), config, None).unwrap();
+        let (restored, started) = Runtime::start(nodes, names, Arc::clone(&tb), config).unwrap();
         started.wait().unwrap();
         assert_eq!(tb.time_ns(), 7 * H_NS);
         assert_eq!(ta.time_ns(), before);
@@ -555,7 +486,6 @@ mod stop_request {
             vec!["gate".to_owned()],
             Arc::clone(&timer),
             config,
-            None,
         )
         .unwrap();
         started.wait().unwrap();
@@ -577,8 +507,7 @@ mod stop_request {
     fn does_nothing_once_the_system_has_ended() {
         let timer = virtual_timer();
         let Setup { log, nodes, names } = recorders(2);
-        let (rt, started) =
-            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), manual()).unwrap();
         started.wait().unwrap();
         rt.request_stop();
         assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
@@ -670,8 +599,7 @@ mod period {
             })
             .unzip();
         let names = (0..n).map(|i| format!("ticker{i}")).collect();
-        let (rt, started) =
-            Runtime::start(tickers, names, Arc::clone(timer), config, None).unwrap();
+        let (rt, started) = Runtime::start(tickers, names, Arc::clone(timer), config).unwrap();
         started.wait().unwrap();
         (rt, dts)
     }
@@ -876,46 +804,55 @@ mod period {
         assert!(dts.try_recv().is_err());
     }
 
-    /// Runs a ticker of period `P_NS` on the real clock for `run` and returns
-    /// its Δts and the real time from before its start to after its end.
-    fn tick_for(scale: f64, run: Duration) -> (Vec<u64>, Duration) {
+    /// How long the real-clock tests run, in real time.
+    const RUN: Duration = Duration::from_secs(1);
+
+    /// Runs a ticker of period `period_ns` (on the timer) on the real clock at
+    /// `scale` for `RUN` and returns its Δts and the real time from before its
+    /// start to after its end.
+    ///
+    /// The real-clock tests keep the period at 200 ms of real time: a loaded
+    /// runner (e.g. GitHub's macOS) may wake a thread about 100 ms late every
+    /// time, and only a wake-up less than a period late keeps the targets from
+    /// slipping (a later one counts again from itself).
+    fn tick_for(period_ns: u64, scale: f64) -> (Vec<u64>, Duration) {
         let timer = Arc::new(Timer::new());
         timer.set_scale(scale).unwrap();
         let begin = Instant::now();
-        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
-        thread::sleep(run);
+        let (rt, dts) = start_ticker(&timer, with_period(Some(period_ns), false), None);
+        thread::sleep(RUN);
         rt.shutdown().wait().unwrap();
         let elapsed = begin.elapsed();
         (dts.try_iter().collect(), elapsed)
     }
 
-    const RUN: Duration = Duration::from_millis(500);
-
+    /// The node waits for its period on the real clock: neither faster (free
+    /// running would update far more often) nor drifting behind.
     #[test]
     fn on_the_real_clock_it_updates_about_once_per_period() {
-        let (dts, elapsed) = tick_for(1.0, RUN);
+        let period_ns = 200 * H_NS;
+        let (dts, elapsed) = tick_for(period_ns, 1.0);
         // The targets are P apart, so the updates cannot outnumber them.
-        let at_most = elapsed.as_nanos() as f64 / P_NS as f64;
+        let at_most = elapsed.as_nanos() as f64 / period_ns as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // Waking up late does not add up: on average one update per period.
-        // Loose, for a loaded machine: free running would be far more.
-        let expected = RUN.as_nanos() as f64 / P_NS as f64;
-        assert!(
-            (dts.len() as f64) >= expected / 2.0,
-            "{} updates",
-            dts.len()
-        );
+        // The targets at 200, 400, 600 and 800 ms come before the end at 1 s
+        // as long as each wake-up is less than 200 ms late.
+        assert!(dts.len() >= 4, "{} updates", dts.len());
     }
 
+    /// The period is on the timer, so the time scale changes the updates per
+    /// real second: a period of 800 ms at scale 4 is 200 ms of real time.
     #[test]
     fn the_time_scale_scales_the_updates_per_real_second() {
-        let scale = 4.0;
-        let (dts, elapsed) = tick_for(scale, RUN);
-        let at_most = elapsed.as_nanos() as f64 * scale / P_NS as f64;
+        let (period_ns, scale) = (800 * H_NS, 4.0);
+        let (dts, elapsed) = tick_for(period_ns, scale);
+        let at_most = elapsed.as_nanos() as f64 * scale / period_ns as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // More than the scale of 1 could give.
-        let unscaled = RUN.as_nanos() as f64 / P_NS as f64;
-        assert!((dts.len() as f64) > unscaled + 1.0, "{} updates", dts.len());
+        // 1 s of real time is 4 s on the timer: targets at 0.8, 1.6, 2.4, 3.2
+        // and 4 s. The first four come before the end as long as each wake-up
+        // is less than 200 ms (a period) of real time late. At scale 1 the same
+        // second would hold one target, so 4 shows that the scale applies.
+        assert!(dts.len() >= 4, "{} updates", dts.len());
     }
 
     #[test]
@@ -932,7 +869,6 @@ mod period {
                 vec!["ticker".to_owned()],
                 Arc::clone(&timer),
                 config,
-                None,
             );
             assert!(matches!(started, Err(RuntimeError::InvalidArgument(_))));
         }

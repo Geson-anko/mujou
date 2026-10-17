@@ -14,20 +14,20 @@ from torch import nn
 import mujou
 from mujou import NextPort, Node, PrevPort, TensorSpec
 
-SCALAR = TensorSpec((1,))
+VECTOR1 = TensorSpec((1,))
 
 
 class Integrator(Node):
     """Integrates its input over time (dx/dt = u) and sends ``readout(x)``."""
 
     def __init__(self) -> None:
-        self.prev = PrevPort(recv=SCALAR)
-        self.next = NextPort(send=SCALAR)
+        self.prev = PrevPort(recv=VECTOR1)
+        self.next = NextPort(send=VECTOR1)
         self.readout = nn.Linear(1, 1)  # a module: part of the state
 
     @override
     def on_start(self) -> None:
-        self.x = SCALAR.zeros()  # a tensor: part of the state
+        self.x = VECTOR1.zeros()  # a tensor: part of the state
 
     @override
     def on_update(self, dt: float) -> None:

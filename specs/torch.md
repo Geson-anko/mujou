@@ -9,8 +9,8 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | モジュール | torch への依存 | 中身 |
 | --- | --- | --- |
 | `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
-| `mujou._core` のほか（`spec` / `port` / `network` / `node` / `session`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
-| `mujou` / `mujou.time` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
+| `mujou._core` のほか（`spec` / `port` / `network` / `node` / `session` / `run` / `timer`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
+| `mujou` / `mujou.time` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
 | `mujou.pc`（予定） | する | PC-ALM のノード |
 
 torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
@@ -44,7 +44,7 @@ mujou のコアとメッセージは GPU をサポートしない。コアはス
 
 GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノードで取り合う。これは CPU のコアの取り合いと同じで、各ノードの $\Delta t$ の伸びとして連続時間の定式化が吸収する（[実行モデル](execution-model.md)）。
 
-各ステップの終わりに自分のストリームを同期するので、CPU が GPU を追い越してカーネルを積み続けることはない。グローバルタイマーで測る $\Delta t$ と、実際に計算した時間がずれない。
+各ステップの終わりに自分のストリームを同期するので、CPU が GPU を追い越してカーネルを積み続けることはない。その実行のタイマーで測る $\Delta t$ と、実際に計算した時間がずれない。
 
 ## mujou.Node
 
@@ -93,7 +93,7 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 `device="cuda"` のように添字の無いデバイスを渡すと、構築したときのホストの現在のデバイスに決まる。CUDA が使えない環境で CUDA のデバイスを渡すと、構築時に `ValueError` になる。
 
-> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py` と `test_network.py` の `TestCuda` で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる。
+> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestCuda` で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる。
 
 ### 境界の変換
 

@@ -8,6 +8,7 @@ from typing import Any, Never, Self, cast
 import torch
 
 from mujou._core import _native
+from mujou._core._native import Timestamp  # by name: the API reference shows it
 from mujou._core.network import (
     Network,
     RunCompose,
@@ -60,13 +61,13 @@ class Run:
     _session: Session
 
     def __init__(self) -> Never:
-        raise TypeError("a Run is made by mujou.run()")
+        raise TypeError("a Run is made by mujou.run() or mujou.testing.run()")
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
     # Port[Any, Any, Any] would reject (Mapping keys are invariant).
     def write[P: Port[Any, Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
-    ) -> _native.Timestamp:
+    ) -> Timestamp:
         """Write messages to unconnected single-peer ports that receive, and
         return the time they carry.
 
@@ -91,7 +92,7 @@ class Run:
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any]) -> tuple[S, _native.Timestamp]:
+    def read[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
         """Return the latest message ``port`` sent and the time it was sent at.
 
         Any port that sends can be read, so a connected port shows an inner
@@ -107,11 +108,9 @@ class Run:
             ValueError: ``port`` is outside the run or sends nothing.
             NetworkError: The run stopped because a node raised.
         """
-        return cast(tuple[S, _native.Timestamp], _host(self).read(port))
+        return cast(tuple[S, Timestamp], _host(self).read(port))
 
-    def subscribe[S](
-        self, port: Port[S, Any, Any]
-    ) -> Iterator[tuple[S, _native.Timestamp]]:
+    def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
         The first step yields the latest message at the time of this call (zeros
@@ -127,7 +126,7 @@ class Run:
             NetworkError: The run stopped because a node raised (also from the
                 iterator).
         """
-        return cast(Iterator[tuple[S, _native.Timestamp]], _host(self).subscribe(port))
+        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port))
 
     def state_dict(self) -> dict[str, Any]:
         """Copy the state of the run at one time, while it runs or after it ended
@@ -293,7 +292,7 @@ def run[P: Port[Any, Any, Any]](
             the time the tree was taken. Build the networks as the ones the tree
             came from: the same node paths and slots.
         pause_timeout: Real seconds that ``Run.state_dict`` waits for every node
-            to pause (the end of its current ``on_update``).
+            to pause (the end of its current ``on_update``): finite and > 0.
 
     Example::
 
@@ -313,7 +312,8 @@ def run[P: Port[Any, Any, Any]](
         TypeError: A value is neither a ``Node`` nor a ``Network`` (or none
             is given).
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
-            ``Run.write`` (for ``inputs``) do; or ``state`` does not match the
+            ``Run.write`` (for ``inputs``) do; ``pause_timeout`` is not finite
+            and > 0 (``ValueError``); or ``state`` does not match the
             networks, or it cannot set the timer back because another run is
             running on it. Nothing started: the same networks, given the same
             way (alone, or together in the same order), may run once the cause
@@ -351,6 +351,10 @@ def start[R: Run](
             raise TypeError(
                 f"mujou.run() takes nodes and networks, got {type(given).__name__}"
             )
+    if not (math.isfinite(pause_timeout) and pause_timeout > 0):
+        raise ValueError(
+            f"pause_timeout must be finite and > 0 seconds, got {pause_timeout}"
+        )
     # ours: a tree mujou.run built only for this run, undone if the run is refused.
     match components:
         case [Network() as network]:

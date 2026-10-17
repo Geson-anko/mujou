@@ -1,6 +1,6 @@
 # 未決定事項
 
-2026-10-14 時点で、次の設計判断はまだ決まっていない。これらに関わる実装は、決定を待ってから進める。
+2026-10-17 時点で、次の設計判断はまだ決まっていない。これらに関わる実装は、決定を待ってから進める。
 
 ## ネットワークスキーマの API
 
@@ -18,7 +18,7 @@ shape の決め方は未決定。すべての値を記録する読み出しは f
 
 ## ライフサイクルの細部
 
-hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・状態の取得・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、全ノードの引数なしの `on_exception()` を呼ぶことも決定済み。例外のときの状態は取得しない（2026-10-16、ユーザーの決定。当初は設定で取得できた）。状態の保存はユーザーが行う。
+hook の構成（`on_thread_start`・`on_start`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・状態の取得・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、全ノードの引数なしの `on_exception()` を呼ぶことも決定済み。例外のときの状態は取得しない（2026-10-16、ユーザーの決定。当初は設定で取得できた）。状態の保存はユーザーが行う。
 
 停止のタイムアウトの既定値は実時間 30 秒、`shutdown()` / `join()` の `timeout` は既定で `math.inf` とした（2026-10-16、ユーザーの決定）。スロットを識別する名前（`"body.l1.next/out"` など）と、例外で終了した後にタイマーを再開することは、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](execution-model.md#実装-1)）。関連: [ノード](nodes.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の取得復元)
 
@@ -34,7 +34,7 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を設定することは決定済み。
 
-次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
+次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Compose, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
 
 ## グローバルタイマーとスケジューラの境界
 
@@ -42,7 +42,7 @@ GPU をサポートしないこと、private な拡張モジュール `mujou._co
 
 残りは次の 3 点である。時刻の読み取りが Mutex を取ることによる競合（性能が問題になったら seqlock などを検討する）。スロットの読み書きがスロットごとの mutex を取ることによる競合（[スロットの実装](native-core.md#スロットの実装)。lock を持つスレッドが横取りされるとその間は待つ。問題になったら RwLock や parking_lot などを検討する）。実経過を f64 で扱うことによる、長時間の実行での分解能の低下。
 
-同じタイマーで動くネットワーク同士が停止で時間を止め合う点は、2026-10-16 にユーザーが決めた。時間軸は実行ごとに 1 本で、既定はグローバルタイマーである。止め合いたくないネットワークは別のタイマーで動かす（[複数のネットワーク](execution-model.md#複数のネットワーク)）。コアと `mujou._core._native` は実装済みで、`mujou.run(..., timer=...)` はホスト側の作業で入れる。
+同じタイマーで動くネットワーク同士が停止で時間を止め合う点は、2026-10-16 にユーザーが決めた。時間軸は実行ごとに 1 本で、既定はグローバルタイマーである。止め合いたくないネットワークは別のタイマーで動かす（[複数のネットワーク](execution-model.md#複数のネットワーク)）。コアと `mujou._core._native` は実装済みで、`mujou.run(..., timer=...)` で実行ごとに渡す（実装済み）。
 
 ## ライセンス
 

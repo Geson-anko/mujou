@@ -206,19 +206,53 @@ class Node:
         (on the node's thread, after `on_start`), for the framework's work around
         it. Calls `self.load_state_dict(state)` by default.
         """
-    def load_state_dict(self, /, state: "object") -> None: ...
-    def on_exception(self, /) -> None: ...
-    def on_pause(self, /) -> None: ...
-    def on_resume(self, /) -> None: ...
-    def on_start(self, /) -> None: ...
-    def on_stop(self, /) -> None: ...
+    def load_state_dict(self, /, state: "object") -> None:
+        """
+        Restores `state`, a copy of what `state_dict` returned, on the node's
+        thread after `on_start` when the run is restored. Does nothing by default.
+        """
+    def on_exception(self, /) -> None:
+        """
+        Called once on every node when a hook of any node has raised, before
+        `on_stop`. What it raises is logged and ignored.
+        """
+    def on_pause(self, /) -> None:
+        """
+        Called when the node has stopped for a pause of the run (to take the
+        state), at the end of its current `on_update`.
+        """
+    def on_resume(self, /) -> None:
+        """
+        Called when the pause ends, before the next `on_update`.
+        """
+    def on_start(self, /) -> None:
+        """
+        Called once on the node's thread when the run starts (also when it is
+        restored), before any other public hook but `on_thread_start`. Allocate
+        and initialize the state here.
+        """
+    def on_stop(self, /) -> None:
+        """
+        Called once on the node's thread when the run stops, also after an
+        exception. It must not change what `state_dict` returns. What it raises
+        is logged and ignored.
+        """
     def on_thread_start(self, /) -> None:
         """
         Called on the node's thread right before `on_start`, after the
         framework's own per-thread settings, for the node's per-thread settings.
         """
-    def on_update(self, /, dt: "float") -> None: ...
-    def state_dict(self, /) -> "object": ...
+    def on_update(self, /, dt: "float") -> None:
+        """
+        Called repeatedly on the node's thread with `dt`, the seconds on the
+        run's timer since the node's last update (always > 0). Read the ports,
+        update in proportion to `dt` and send.
+        """
+    def state_dict(self, /) -> "object":
+        """
+        Returns the node's own state as a picklable object, when the run's state
+        is taken (the node is paused or the run has ended). `None` by default.
+        """
 
 @final
 class Outlet:
@@ -296,9 +330,8 @@ class Runtime:
     ) -> Self:
         """
         The nodes run on `timer` (the global timer if `None`): it measures their
-        Δt, and the runtime freezes it to start, to take the state, and on an
-        exception. Create the `Outlet`s and the `InputGroup` of this run with
-        the same timer.
+        Δt, and the runtime freezes it to start and to take the state. Create
+        the `Outlet`s and the `InputGroup` of this run with the same timer.
         """
     def capture(
         self,
@@ -320,10 +353,6 @@ class Runtime:
     def check(self, /) -> None:
         """
         Raises `NetworkError` if a node has raised.
-        """
-    def exception_state(self, /) -> Any | None:
-        """
-        What `on_exception_capture` returned, if it was called and returned.
         """
     @property
     def is_finished(self, /) -> bool: ...
@@ -358,8 +387,7 @@ class Runtime:
         last_update_ns: SupportsGetItem[int, SupportsIndex] | None = None,
         period_ns: SupportsGetItem[int, SupportsIndex | None] | None = None,
         timer_state: "dict[str, int | float] | None" = None,
-        pause_timeout: SupportsFloat | SupportsIndex = 10.0,
-        on_exception_capture: Any | None = None,
+        pause_timeout: SupportsFloat | SupportsIndex = 30.0,
     ) -> None:
         """
         Starts every node on its own thread and returns once all of them have
@@ -374,10 +402,8 @@ class Runtime:
         timer, whose time would jump. `last_update_ns` is where each node's
         first Δt starts (the time at the start by default). `period_ns` is each
         node's period on the timer in ns (> 0), or `None` to update as soon as
-        any time has passed; the manual mode ignores it.
-        `on_exception_capture(states, node, hook, exception)` takes the states
-        (by node index, without those whose `state_dict` failed) when a node
-        raises.
+        any time has passed; the manual mode ignores it. `pause_timeout` is how
+        many real seconds `capture` waits for every node to pause by default.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

@@ -38,7 +38,7 @@ skills:
 ## 進め方
 
 1. **入力読込** — マルチエージェント時は `memory/agents/implementation-planner/<task>.md` を読む
-2. **既存把握** — 対象モジュール、既存テスト、`tests/conftest.py` を読む
+2. **既存把握** — 対象モジュール、既存テスト、`tests/mujou/conftest.py` を読む
 3. **観点整理** — 計画書の「テスト観点」を起点に、各観点を 1〜複数のテスト関数へ分解する
 4. **テスト記述** — 実装が未完成でもよい。テストが赤い状態で `plan-implementer` に引き継ぐのが仕様 first の基本
 5. **整形** — `just format` を実行する

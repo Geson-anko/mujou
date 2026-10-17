@@ -14,11 +14,11 @@ The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as i
 
 ## The design in short
 
-| Point                                | What it means                                                                                                                                                                                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Synchronous inside, asynchronous out | The unit of computation is the node. Inside a node, you compute synchronously in ordinary PyTorch code. Nodes never wait for each other; a node only reads the last value its peer sent                                                  |
-| One global time                      | A node updates by an amount proportional to `dt`, the time since its last update. Nodes that update at different rates still run on the same flow of time                                                                                |
-| Swappable update rules               | The default update rule is [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding), where each node learns with local updates. You can swap in other rules, including backpropagation (BP) kept inside one node |
+| Point                                | What it means                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Synchronous inside, asynchronous out | The unit of computation is the node. Inside a node, you compute synchronously in ordinary PyTorch code. Nodes never wait for each other; a node only reads the last value its peer sent                                                                            |
+| One global time                      | A node updates by an amount proportional to `dt`, the time since its last update. Nodes that update at different rates still run on the same flow of time                                                                                                          |
+| Swappable update rules               | The default update rule will be [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding; not implemented yet), where each node learns with local updates. You can swap in other rules, including backpropagation (BP) kept inside one node |
 
 ```mermaid
 flowchart LR
@@ -47,3 +47,4 @@ The program below runs a network of two nodes that computes $y = 2x + 1$ and rea
 | [Concepts](concepts/index.md)               | How to think about nodes, ports, networks, global time, and state |
 | [User Guide](user-guide/index.md)           | Tasks: writing nodes, building and running networks, and more     |
 | [Examples](examples/index.md)               | A list of working programs                                        |
+| [API Reference](api/index.md)               | The classes and functions of Mujou, generated from the docstrings |

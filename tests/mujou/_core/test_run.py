@@ -255,13 +255,13 @@ class TestRun:
             outcomes: list[object] = []
 
             def run(
-                networks: tuple[Node | Network, ...],
+                components: tuple[Node | Network, ...],
                 barrier: threading.Barrier = barrier,
                 outcomes: list[object] = outcomes,
             ) -> None:
                 barrier.wait()
                 try:
-                    handle = mujou.testing.run(*networks, timer=VirtualTimer())
+                    handle = mujou.testing.run(*components, timer=VirtualTimer())
                 except RuntimeError as e:
                     outcomes.append(e)
                     return
@@ -312,6 +312,18 @@ class TestRun:
         for given in ((object(),), (Chain(), object())):
             with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize("pause_timeout", [0.0, -1.0, math.nan, math.inf])
+    def test_rejects_a_pause_timeout_that_is_not_finite_and_positive(
+        self, pause_timeout: float, start_manual: StartManual
+    ):
+        net = Chain()
+        for run in (mujou.run, mujou.testing.run):
+            with pytest.raises(ValueError, match="^pause_timeout must be"):
+                run(net, pause_timeout=pause_timeout)
+        # Refused before the build: the network is not marked as built, so it can
+        # still run with others (a network built alone could not).
+        start_manual(net, Chain())
 
     def test_a_run_is_made_only_by_mujou_run(self):
         with pytest.raises(TypeError, match=r"mujou\.run"):

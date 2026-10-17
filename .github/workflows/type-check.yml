@@ -6,6 +6,9 @@ on:
     paths:
       - "src/**/*.py"
       - "src/**/*.pyi"
+      - "tests/**/*.py"
+      - "examples/**/*.py"
+      - "hooks/**"
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
@@ -18,6 +21,9 @@ on:
     paths:
       - "src/**/*.py"
       - "src/**/*.pyi"
+      - "tests/**/*.py"
+      - "examples/**/*.py"
+      - "hooks/**"
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"

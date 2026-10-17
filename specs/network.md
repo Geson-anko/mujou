@@ -91,7 +91,7 @@ class Stack(Network):
 
 stack, head = Stack(), Head()
 stack.connect(head)                      # stack.next（= l2.next） <-> head.prev
-stack.build()                            # ルートで構築する
+run = mujou.run(stack, head)             # 2 つをまとめて構築して走らせる
 ```
 
 入れ子は構築時の構造にとどまる。ネットワークの中のノードは、実行時もそれぞれ独立に非同期で動き、ネットワークの境界は非同期の境界を変えない。複数の層を 1 つの非同期処理の単位にしたいときは、スタックの大きさのノードとして書く（[ノード](nodes.md#ノードの大きさ)）。複数のノードを同じワーカーで決まった順に回すのは実行の配置の話で、ネットワークの構造とは別に扱う（[ノード](nodes.md#非同期の境界と実行の配置)）。
@@ -102,7 +102,7 @@ stack.build()                            # ルートで構築する
 
 ネットワークの入力と出力は、未接続の Port である。外からの入出力には 2 つの方法があり、両方を使える。どちらの方法でも、書く値と読む値は `torch.Tensor` である（[メッセージ](messages.md#値の型)）。
 
-1. ホスト（ネットワークを動かす Python のコード）が、ネットワークの公開インターフェイスで Port を読み書きする
+1. ホスト（ネットワークを動かす Python のコード）が、`mujou.run` の返す `Run` で Port を読み書きする
 2. 入出力を普通のノードとして書き、ネットワークの中に置く。カメラやセンサのドライバのように、自分の周期で動いて外界と値をやり取りしたい入出力に向く。スケジューラの上で動くので、決定的なテストにも載せやすい
 
 ### 実行はバックグラウンドで行う
@@ -247,7 +247,7 @@ A.next ──┼─ Channel ─ C.prev
 
 > 状態: 実装済み（2026-10-16）。実行の API を作り直した（2026-10-16、ハンドル・`Compose`・実行ごとのタイマー・`Timestamp`・`mujou.testing`）。`run.write` が時刻を返し、`mujou.run` と `Compose` がノードを受け付けるようにした（2026-10-17）。
 
-`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` / `Timer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
+`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` / `Timer` / `ReadOnlyTimer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
 
 ### 構築と実行
 

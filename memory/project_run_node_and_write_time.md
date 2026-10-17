@@ -17,3 +17,5 @@ metadata:
 **Why:** ノード 1 つを試すのに包むネットワークを書かせない。write の時刻をホストが受け取り、ノードが見た時刻と突き合わせられるようにする。
 
 **How to apply:** パスの規則は `network._child`（根が空なら `.` を入れない）。仕様は `specs/network.md`。
+
+関連: [[project-runtime-api-revision]], [[project-host-io]], [[project-timer-per-run]]

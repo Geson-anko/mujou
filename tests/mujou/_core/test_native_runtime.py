@@ -136,13 +136,13 @@ def recorders(log: Log, *names: str) -> list[Recorder]:
 
 
 def assert_ended_by_exception(log: Log, name: str) -> None:
-    """``on_exception`` then ``on_stop``, once each, with nothing in between but
-    the state capture on the exception."""
+    """``on_exception`` then ``on_stop``, once each, with nothing in between: the
+    state is not taken on an exception."""
     events = log.of(name)
     assert events.count("on_exception") == 1
     assert events.count("on_stop") == 1
     after = events[events.index("on_exception") + 1 :]
-    assert [e for e in after if e != "state_dict"] == ["on_stop"]
+    assert after == ["on_stop"]
 
 
 class TestStart:
@@ -374,16 +374,11 @@ class TestStart:
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         virtual_timer.advance(1.0)
-        seen: list[tuple[int, list[int]]] = []
+        start_ns = timer.time_ns()
         runtime = make_runtime([Recorder("a", Log(), "on_start"), Recorder("b", Log())])
         with pytest.raises(NetworkError):
-            runtime.start(
-                on_exception_capture=lambda states, node, hook, exc: seen.append(
-                    (timer.time_ns(), runtime.last_update_ns())
-                )
-            )
-        [(frozen_ns, last_ns)] = seen
-        assert last_ns == [frozen_ns, frozen_ns]
+            runtime.start()
+        assert runtime.last_update_ns() == [start_ns, start_ns]
 
     def test_starts_only_once(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -835,68 +830,13 @@ class TestException:
             runtime.capture(lambda states: None)
             runtime.join(WAIT)
         assert exc_info.value.__cause__ is nodes[1].error
+        # The hold of the capture is released at the end.
+        assert not virtual_timer.is_paused()
         for node in nodes:
             assert_ended_by_exception(log, node.name)
             if hook != "on_resume":
                 # Stopping while paused does not resume.
                 assert "on_resume" not in log.of(node.name)
-
-    def test_the_state_is_captured_at_the_exception(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        log = Log()
-        nodes = [Recorder("x", log, "on_update", 2), Recorder("b", log)]
-        runtime = make_runtime(nodes)
-        seen: list[tuple[dict[int, object], int, str, BaseException, int, bool]] = []
-        last_ns: list[int] = []
-
-        def capture(
-            states: dict[int, object], node: int, hook: str, exc: BaseException
-        ) -> str:
-            seen.append((states, node, hook, exc, timer.time_ns(), timer.is_paused()))
-            last_ns.extend(runtime.last_update_ns())
-            return "tree"
-
-        runtime.start(manual=True, on_exception_capture=capture)
-        virtual_timer.advance(H)
-        runtime.step()
-        virtual_timer.advance(H)
-        with pytest.raises(NetworkError):
-            runtime.step()
-
-        [(states, node, hook, exc, frozen_ns, paused)] = seen
-        # The failing node's state is in it too; "b" did not get its second step.
-        assert states == {
-            0: {"name": "x", "updates": 2},
-            1: {"name": "b", "updates": 1},
-        }
-        assert (node, hook) == (0, "on_update")
-        assert exc is nodes[0].error
-        assert paused
-        assert all(ns <= frozen_ns for ns in last_ns)
-        assert runtime.exception_state() == "tree"
-        assert not virtual_timer.is_paused()
-
-    def test_a_state_that_fails_at_the_exception_is_left_out(
-        self,
-        virtual_timer: GlobalTimer,
-        make_runtime: MakeRuntime,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        log = Log()
-        nodes = [Recorder("x", log, "on_update"), Recorder("b", log, "state_dict")]
-        runtime = make_runtime(nodes)
-        runtime.start(
-            manual=True,
-            on_exception_capture=lambda states, node, hook, exc: sorted(states),
-        )
-        virtual_timer.advance(H)
-        with pytest.raises(NetworkError):
-            runtime.step()
-        assert runtime.exception_state() == [0]
-        assert "node 'b' raised in state_dict" in caplog.text
-        for node in nodes:
-            assert_ended_by_exception(log, node.name)
 
     def test_only_the_first_of_two_exceptions_is_the_cause(
         self,

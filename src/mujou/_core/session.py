@@ -322,7 +322,7 @@ class Session:
                 return
             if not runtime.join(wait):
                 raise TimeoutError(
-                    f"the network did not stop within {timeout} s; it goes on "
+                    f"the run did not stop within {timeout} s; it goes on "
                     "stopping, and join() waits for it"
                 )
         finally:
@@ -334,7 +334,7 @@ class Session:
         try:
             if not runtime.join(wait):
                 raise TimeoutError(
-                    f"the network did not stop within {timeout} s; it keeps running"
+                    f"the run did not stop within {timeout} s; it keeps running"
                 )
         finally:
             self._settle()
@@ -400,9 +400,7 @@ class Session:
         finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
         if finished:
-            raise RuntimeError(
-                "the network has stopped; no node reads what is written now"
-            )
+            raise RuntimeError("the run has stopped; no node reads what is written now")
         return self._group.write(self._items(values))
 
     def _items(

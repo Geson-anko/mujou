@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Final, final, override
 
 from mujou._core import _native
+from mujou._core._native import Timestamp  # by name: the API reference shows it
 
 
 class Timer:
@@ -43,7 +44,7 @@ class Timer:
     def __init__(self) -> None:
         self._timer = _native.Timer()
 
-    def now(self) -> _native.Timestamp:
+    def now(self) -> Timestamp:
         """Return the time now."""
         return self._timer.now()
 
@@ -132,7 +133,7 @@ class ReadOnlyTimer:
             t = self.timer.now()
     """
 
-    now: Callable[[], _native.Timestamp]
+    now: Callable[[], Timestamp]
     """Return the time now on the timer."""
 
     get_time_scale: Callable[[], float]
@@ -150,7 +151,7 @@ class ReadOnlyTimer:
         return f"ReadOnlyTimer(now={self.now()!r})"
 
 
-def stopped(at: _native.Timestamp, scale: float) -> ReadOnlyTimer:
+def stopped(at: Timestamp, scale: float) -> ReadOnlyTimer:
     """Return a ``ReadOnlyTimer`` whose time stays at ``at`` and scale at
     ``scale`` (a run that has ended)."""
     view = object.__new__(ReadOnlyTimer)

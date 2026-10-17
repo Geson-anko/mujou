@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """PostToolUse hook (matcher: Edit|Write|MultiEdit): warn on global backprop in src/.
 
+対象は ``src/mujou/`` 配下の ``.py``。``.claude/worktrees/<name>/src/mujou/`` も含む。
+
 mujou はノード（内側は同期、ノード間は非同期のメッセージ）単位で計算し、
 ノードをまたぐ誤差逆伝播（``loss.backward()`` 等）を ``src/mujou/`` に持ち込まない。
 ノード内に閉じた autograd（ローカルエネルギーの勾配やノード内の BP）は許容される
@@ -28,10 +30,13 @@ _ALLOW_MARKER = "# mujou: local-autograd"
 
 def _is_library_source(path: Path, project_dir: Path) -> bool:
     try:
-        relative = path.resolve().relative_to(project_dir.resolve())
+        parts = path.resolve().relative_to(project_dir.resolve()).parts
     except ValueError:
         return False
-    return relative.parts[:2] == ("src", "mujou") and path.suffix == ".py"
+    # A worktree (.claude/worktrees/<name>/) is a checkout of its own.
+    if parts[:2] == (".claude", "worktrees"):
+        parts = parts[3:]
+    return parts[:2] == ("src", "mujou") and path.suffix == ".py"
 
 
 def _find_hits(text: str) -> list[str]:

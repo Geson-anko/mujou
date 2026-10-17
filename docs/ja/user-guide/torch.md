@@ -7,7 +7,7 @@
 次のノードは、入力から目標への線形写像をオンラインで学び、予測を送る。BP は 1 つのノードの中に閉じている。
 
 ```python
---8<-- "examples/torch_node.py:21:55"
+--8<-- "examples/torch_node.py:19:55"
 ```
 
 ## デバイスと seed
@@ -34,7 +34,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## ノードの中の BP
 
-mujou は、ノードのスレッドで勾配の記録を切っている（`torch.set_grad_enabled(False)`）。既定の更新手法は更新式を直接計算するので、autograd のグラフは要らないからである。
+mujou は、ノードのスレッドで勾配の記録を切っている（`torch.set_grad_enabled(False)`）。既定の更新手法 PC-ALM（実装予定。[更新手法](update-rules.md)）は更新式を直接計算するので、autograd のグラフは要らないからである。
 
 ノードの中で autograd を使うときは、次のように書く。
 
@@ -60,7 +60,7 @@ BP はノードの中に閉じる。ほかのノードへ勾配を流すこと�
 
 - `device="cuda"` のように番号を付けないと、ノードを作ったときのホストの現在のデバイスに決まる
 - PyTorch はストリームをデバイスごとに 32 本のプールから割り当てる。1 つのデバイスに 32 を超えるノードを置くと、ストリームを共有するノードが出る。結果は変わらないが、同期でほかのノードの仕事も待つ
-- `on_update` で起きた CUDA のエラー（device-side assert など）は、直後の同期で表に出る。そのため `NetworkError` のメッセージには hook の名前として `_after_update` が出る。原因は `on_update` の中にある
+- `on_update` で起きた CUDA のエラー（device-side assert など）は、直後の同期で表に出る。そのため `NetworkError` のメッセージには、mujou の内部の hook の名前 `_after_update` が出る。原因は `on_update` の中にある
 
 ## プロセス全体に効く設定
 

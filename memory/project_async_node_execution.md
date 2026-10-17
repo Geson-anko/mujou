@@ -12,7 +12,7 @@ metadata:
 - **システムはグローバルタイマーの上の連続時間系として定義する。** 各ノードの計算は離散時間のステップで行うが、ステップの間隔はノードごとに異なり揺らぐ。そのため、ダイナミクスはステップ数ではなく、グローバルな時間 $t$ に対して定義する
 - **更新則は微分方程式として扱い直す。** 各ノードは、前回の更新からグローバルタイマーで測った経過時間 $\Delta t$ を使って微分方程式を離散化する（例: 陽的 Euler で $x \leftarrow x + \Delta t \cdot f(x)$）
 - **グローバルタイマーは pamiq-core の `TimeController` を参考に実装する**（<https://github.com/MLShukai/pamiq-core/blob/main/src/pamiq_core/time.py>）。時間のスケール（加速・減速）、一時停止・再開、スレッドセーフ、状態の保存・復元を持つ
-- **時間軸は実行ごとに 1 本にする。** 1 つの実行の全ノード・全スロット・ホストの入力は、その実行のタイマーを使う。既定は全実行が共有するグローバルタイマー。2026-10-11 の決定は「グローバルタイマーはシングルトン（システム全体で時間は 1 つ）」だったが、2026-10-16 にユーザーが改めた（[[project-timer-per-run]]）。テストでは、タイマーの時刻の源を仮想時計に切り替える
+- **時間軸は実行ごとに 1 本にする。** 1 つの実行の全ノード・全スロット・ホストの入力は、その実行のタイマーを使う。既定は全実行が共有するグローバルタイマー。2026-10-11 の決定は「グローバルタイマーはシングルトン（システム全体で時間は 1 つ）」だったが、2026-10-16 にユーザーが改めた（[[project-timer-per-run]]）。テストでは仮想時計のタイマーを使う（下の How to apply）
 
 **Why:** queue でメッセージを溜めると、送り手と受け手の速度差でバックログが生じ、実質的にノード同士の歩調が結合する。最新値の読み書きだけにすれば、各ノードは互いを待たずに動ける。一方、ノードごとに周期が違うと「1 ステップ分の更新」の意味がノードごとに変わってしまう。グローバルな時間に対する微分方程式として定義すれば、周期が違っても同じダイナミクスを近似できる。
 
@@ -24,8 +24,8 @@ metadata:
 - 書き込みには、書いた時点のその実行のタイマーの時刻をスロットが自動で添える（読み手が値の古さを判断できる。2026-10-13 決定、[[project-message-types]]）
 - 更新量は経過時間 $\Delta t$ に比例させる。ステップ数で更新量を決めない
 - $\Delta t$ が大きすぎると陽的 Euler は不安定になる。上限で打ち切るか、内部で刻みを分割する
-- テストではタイマー（ネットワークのテストはグローバルタイマー、コアのテストは独立に作ったタイマー）を、手動で進める仮想時計のモードに切り替え、固定スケジュールで決定的に動かす。全ノードを固定の $\Delta t$ で同期的に回すと、元の離散アルゴリズムに一致することをオラクルにする
+- テストでは手動で進める仮想時計のタイマーを使い、固定スケジュールで決定的に動かす。ネットワークのテストは実行ごとに渡す `mujou.testing.VirtualTimer`、コアのテストは独立に作ったタイマー。グローバルタイマーを仮想時計に切り替えるのは、グローバルタイマー自体のテストだけ（2026-10-16 から。[[project-timer-per-run]]、[[project-testing-api]]）。全ノードを固定の $\Delta t$ で同期的に回すと、元の離散アルゴリズムに一致することをオラクルにする
 - 既定の PC-ALM の連続時間形は skill `pc-alm` 7 節
-- グローバルタイマーは 2026-10-15 に実装した（Rust の `mujou_core::time`、Python の `mujou._core._native.timer`）。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで、名前は暫定。停止・状態の取得と復元・仮想時計は `mujou._core._native.timer` に留める（詳細は `specs/execution-model.md` のグローバルタイマー節）。2026-10-16 にコアと `mujou._core._native` がタイマーを実行ごとに持てるようにした（`Timer()`、各部品の `timer=`、[[project-timer-per-run]]）
+- グローバルタイマーは 2026-10-15 に実装した（Rust の `mujou_core::time`、Python の `mujou._core._native.timer`）。~~利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで、名前は暫定。停止・状態の取得と復元・仮想時計は `mujou._core._native.timer` に留める~~（2026-10-16 に公開範囲を広げた: `mujou.time.Timer` / `ReadOnlyTimer` / `Timestamp` と `mujou.testing.VirtualTimer`。[[project-timer-per-run]]）（詳細は `specs/execution-model.md` のグローバルタイマー節）。2026-10-16 にコアと `mujou._core._native` がタイマーを実行ごとに持てるようにした（`Timer()`、各部品の `timer=`、[[project-timer-per-run]]）
 
 関連: [[project-core-message-framework]], [[project-compute-granularity]], [[project-open-decisions]]

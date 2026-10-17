@@ -32,7 +32,7 @@ class Component:
     ``super().__init__()``.
     """
 
-    def connect(self, other: Component) -> Channel:
+    def connect(self, other: Node | Network) -> Channel:
         """Connect this component's ``NextPort`` to ``other``'s ``PrevPort``.
 
         ``a.connect(b)`` is ``a.next.connect(b.prev)`` with the ports found by their
@@ -108,7 +108,7 @@ class Graph:
     _lock: threading.Lock
 
     def __init__(self) -> Never:
-        raise TypeError("a Graph is made by Network.build()")
+        raise TypeError("a Graph is made by Network.build() or mujou.run()")
 
     @property
     def nodes(self) -> tuple[tuple[str, Node], ...]:
@@ -410,7 +410,7 @@ class Compose(Network):
 
     def __init__(self, *components: Node | Network, **named: Node | Network) -> None:
         children = {str(i): component for i, component in enumerate(components)}
-        for name, network in named.items():
+        for name, component in named.items():
             if (
                 not name
                 or "." in name
@@ -419,19 +419,19 @@ class Compose(Network):
                 or name in children
             ):
                 raise ValueError(
-                    f"cannot compose a network as {name!r}: the name is empty, "
+                    f"cannot compose a component as {name!r}: the name is empty, "
                     "holds a '.', is private, is an attribute of Network, or is a "
                     "position"
                 )
-            children[name] = network
-        for name, network in children.items():
+            children[name] = component
+        for name, component in children.items():
             # The annotation is not checked at runtime.
-            if not isinstance(network, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
+            if not isinstance(component, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise TypeError(
                     "Compose takes nodes and networks, got "
-                    f"{type(network).__name__} at {name!r}"
+                    f"{type(component).__name__} at {name!r}"
                 )
-            setattr(self, name, network)
+            setattr(self, name, component)
 
 
 @final
@@ -516,6 +516,7 @@ def _check_declarations(component: Component, path: str) -> None:
 # at run time, not only for the type checker, so that the annotations naming Node
 # (e.g. of Compose.__init__, which inspect.signature evaluates) resolve. This
 # assumes that this module is imported before node (mujou/__init__.py imports it
-# first): imported the other way round, node would be only partly initialized
-# here, without Node, and the import would fail.
+# before node; mujou.time, imported earlier, imports node only lazily): imported
+# the other way round, node would be only partly initialized here, without Node,
+# and the import would fail.
 from mujou._core.node import Node  # noqa: E402

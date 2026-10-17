@@ -46,7 +46,8 @@ def run[P: Port[Any, Any, Any]](
     timer the clock runs by itself, and each ``dt`` is whatever real time passed
     between the steps. The default is the global timer, as in ``mujou.run``.
 
-    The arguments and the errors are those of ``mujou.run``.
+    The arguments and the errors are those of ``mujou.run``: ``pause_timeout``
+    too is in real seconds, finite and > 0 (``ValueError`` otherwise).
     """
     return start(
         ManualRun,

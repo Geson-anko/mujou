@@ -5,15 +5,13 @@
 //! attach to call the hooks, so a host that kept the GIL while waiting for them
 //! would deadlock on a GIL build.
 
-use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use mujou_core::runtime::{
-    self as core, ExceptionCapture, HookError, NodeFailure, NodeHooks, Reply, RuntimeConfig,
-    RuntimeError,
+    self as core, HookError, NodeFailure, NodeHooks, Reply, RuntimeConfig, RuntimeError,
 };
 use mujou_core::time::{Timer, seconds_to_ns};
 use pyo3::create_exception;
@@ -73,8 +71,14 @@ impl Node {
     /// framework's own per-thread settings, for the node's per-thread settings.
     fn on_thread_start(&self) {}
 
+    /// Called once on the node's thread when the run starts (also when it is
+    /// restored), before any other public hook but `on_thread_start`. Allocate
+    /// and initialize the state here.
     fn on_start(&self) {}
 
+    /// Called repeatedly on the node's thread with `dt`, the seconds on the
+    /// run's timer since the node's last update (always > 0). Read the ports,
+    /// update in proportion to `dt` and send.
     #[pyo3(signature = (dt: "float"))]
     fn on_update(&self, dt: f64) {
         let _ = dt;
@@ -84,19 +88,31 @@ impl Node {
     /// framework's per-step work (so that overriding `on_update` cannot skip it).
     fn _after_update(&self) {}
 
+    /// Called when the node has stopped for a pause of the run (to take the
+    /// state), at the end of its current `on_update`.
     fn on_pause(&self) {}
 
+    /// Called when the pause ends, before the next `on_update`.
     fn on_resume(&self) {}
 
+    /// Called once on every node when a hook of any node has raised, before
+    /// `on_stop`. What it raises is logged and ignored.
     fn on_exception(&self) {}
 
+    /// Called once on the node's thread when the run stops, also after an
+    /// exception. It must not change what `state_dict` returns. What it raises
+    /// is logged and ignored.
     fn on_stop(&self) {}
 
+    /// Returns the node's own state as a picklable object, when the run's state
+    /// is taken (the node is paused or the run has ended). `None` by default.
     #[pyo3(signature = () -> "object")]
     fn state_dict(&self, py: Python<'_>) -> Py<PyAny> {
         py.None()
     }
 
+    /// Restores `state`, a copy of what `state_dict` returned, on the node's
+    /// thread after `on_start` when the run is restored. Does nothing by default.
     #[pyo3(signature = (state: "object"))]
     fn load_state_dict(&self, state: &Bound<'_, PyAny>) {
         let _ = state;
@@ -360,7 +376,6 @@ pub struct Runtime {
     names: Vec<String>,
     timer: Arc<Timer>,
     inner: OnceLock<core::Runtime<PyNode>>,
-    exception_state: Arc<OnceLock<Py<PyAny>>>,
 }
 
 impl Runtime {
@@ -386,38 +401,13 @@ impl Runtime {
             py.check_signals()?;
         }
     }
-
-    fn exception_capture(&self, callback: Py<PyAny>) -> ExceptionCapture<Py<PyAny>> {
-        let store = Arc::clone(&self.exception_state);
-        Box::new(
-            move |states: BTreeMap<usize, Py<PyAny>>, failure: &NodeFailure| {
-                Python::attach(|py| {
-                    let result = (|| -> PyResult<Py<PyAny>> {
-                        let dict = PyDict::new(py);
-                        for (i, state) in states {
-                            dict.set_item(i, state)?;
-                        }
-                        let exc = cause(py, failure).into_value(py);
-                        callback.call1(py, (dict, failure.node, failure.hook, exc))
-                    })();
-                    match result {
-                        Ok(value) => {
-                            let _ = store.set(value);
-                        }
-                        Err(e) => log_error(py, "on_exception_capture raised", &e),
-                    }
-                });
-            },
-        )
-    }
 }
 
 #[pymethods]
 impl Runtime {
     /// The nodes run on `timer` (the global timer if `None`): it measures their
-    /// Δt, and the runtime freezes it to start, to take the state, and on an
-    /// exception. Create the `Outlet`s and the `InputGroup` of this run with
-    /// the same timer.
+    /// Δt, and the runtime freezes it to start and to take the state. Create
+    /// the `Outlet`s and the `InputGroup` of this run with the same timer.
     #[new]
     #[pyo3(signature = (nodes, names, *, timer = None))]
     fn new(
@@ -438,7 +428,6 @@ impl Runtime {
             names,
             timer: timer_or_global(timer),
             inner: OnceLock::new(),
-            exception_state: Arc::new(OnceLock::new()),
         })
     }
 
@@ -454,10 +443,8 @@ impl Runtime {
     /// timer, whose time would jump. `last_update_ns` is where each node's
     /// first Δt starts (the time at the start by default). `period_ns` is each
     /// node's period on the timer in ns (> 0), or `None` to update as soon as
-    /// any time has passed; the manual mode ignores it.
-    /// `on_exception_capture(states, node, hook, exception)` takes the states
-    /// (by node index, without those whose `state_dict` failed) when a node
-    /// raises.
+    /// any time has passed; the manual mode ignores it. `pause_timeout` is how
+    /// many real seconds `capture` waits for every node to pause by default.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -468,8 +455,7 @@ impl Runtime {
         last_update_ns = None,
         period_ns = None,
         timer_state: "dict[str, int | float] | None" = None,
-        pause_timeout = 10.0,
-        on_exception_capture = None,
+        pause_timeout = 30.0,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn start(
@@ -481,7 +467,6 @@ impl Runtime {
         period_ns: Option<Vec<Option<u64>>>,
         timer_state: Option<Bound<'_, PyAny>>,
         pause_timeout: f64,
-        on_exception_capture: Option<Py<PyAny>>,
     ) -> PyResult<()> {
         let n = self.names.len();
         if let Some(states) = &states {
@@ -515,13 +500,11 @@ impl Runtime {
                 methods: None,
             })
             .collect();
-        let capture = on_exception_capture.map(|callback| self.exception_capture(callback));
         let (runtime, started) = match core::Runtime::start(
             hooks,
             self.names.clone(),
             Arc::clone(&self.timer),
             config,
-            capture,
         ) {
             Ok(started) => started,
             Err(e) => {
@@ -630,10 +613,5 @@ impl Runtime {
     /// nanoseconds.
     fn last_update_ns(&self) -> PyResult<Vec<u64>> {
         Ok(self.core()?.last_update_ns())
-    }
-
-    /// What `on_exception_capture` returned, if it was called and returned.
-    fn exception_state(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.exception_state.get().map(|state| state.clone_ref(py))
     }
 }

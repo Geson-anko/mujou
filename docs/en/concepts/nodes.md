@@ -31,7 +31,7 @@ You write a node by overriding the methods that Mujou calls (hooks). Mujou owns 
 
 The hooks are called in this order.
 
-1. `on_thread_start()`: once, when the run starts. Make settings that apply only to this node's own thread (see [PyTorch in Nodes](../user-guide/torch.md))
+1. `on_thread_start()`: once, when the run starts. Make settings that apply only to this node's own thread, such as torch's per-thread settings (see [PyTorch in Nodes](../user-guide/torch.md))
 2. `on_start()`: once, when the run starts. Allocate and initialize the state tensors
 3. `load_state_dict(state)`: only when the run restores a state, once, after `on_start` (see [State](state.md))
 4. `on_update(dt)`: called repeatedly. Read the neighbors' latest values from the ports, update the state by `dt` seconds, and write the results to the ports
@@ -59,6 +59,8 @@ There is no hook for the start or end of an epoch, and no hook that switches bet
 This node receives `x` from the previous node, moves its state `h` towards `x @ w` over time, and sends `h` to the next node.
 
 ```python
+from typing import override
+
 import torch
 
 import mujou
@@ -70,11 +72,13 @@ class Leaky(mujou.Node):
         self.next = mujou.NextPort(send=mujou.TensorSpec((32, n_out)))  # send only
         self.n_in, self.n_out = n_in, n_out
 
+    @override
     def on_start(self) -> None:
         # Create the state tensors in on_start. Tensor attributes are collected as state
-        self.w = torch.randn(self.n_in, self.n_out) * 0.1
+        self.w = torch.randn(self.n_in, self.n_out, generator=self.generator) * 0.1
         self.h = torch.zeros(32, self.n_out)
 
+    @override
     def on_update(self, dt: float) -> None:
         x = self.prev.recv()                  # the previous node's latest value; no waiting
         self.h += dt * (x @ self.w - self.h)  # in proportion to dt, in place

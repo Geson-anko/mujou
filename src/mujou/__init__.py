@@ -1,5 +1,4 @@
-"""Mujou: asynchronous, continually learning deep learning trained with PC-
-ALM."""
+"""Mujou: Asynchronous Distributed Deep Learning Library for Continuous Learning."""
 
 # The submodule, so that `import mujou` is enough for `mujou.time.sleep`. Not in
 # __all__: a star import would shadow the standard `time`.

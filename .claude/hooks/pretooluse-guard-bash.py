@@ -2,14 +2,17 @@
 """PreToolUse hook (matcher: Bash): block commands that bypass project tooling.
 
 - ``pip install`` 系: 依存は uv で管理する（``uv add`` / ``uv sync``）。venv 外への
-  install や ``uv.lock`` とのずれを防ぐ
-- ``git commit --no-verify`` / ``-n``: pre-commit を飛ばしたコミットを防ぐ
+  install や ``uv.lock`` とのずれを防ぐ。``.venv/bin/pip``・``python3.14t -m pip``・
+  ``uv run pip`` の形も含む
+- ``git commit --no-verify`` / ``-n``: pre-commit を飛ばしたコミットを防ぐ。
+  ``git -c k=v commit -n`` のようにグローバルオプションを挟んだ形も含む
 
 ブロック時は exit 2 + stderr で理由を Claude に返す。解析に失敗したら fail-open
 （exit 0）。依存は標準ライブラリのみ。
 """
 
 import json
+import os
 import re
 import shlex
 import sys
@@ -51,18 +54,42 @@ def _strip_env_prefix(tokens: list[str]) -> list[str]:
     return tokens[index:]
 
 
+def _strip_uv_run(tokens: list[str]) -> list[str]:
+    """Drop a leading ``uv run`` and its flags (``uv run --frozen pip ...``)."""
+    if tokens[:2] != ["uv", "run"]:
+        return tokens
+    index = 2
+    while index < len(tokens) and tokens[index].startswith("-"):
+        index += 1
+    return tokens[index:]
+
+
 def _is_pip_install(tokens: list[str]) -> bool:
-    if len(tokens) >= 2 and re.fullmatch(r"pip3?(\.\d+)?", tokens[0]):
+    # Compare basenames so that `.venv/bin/pip` and `/usr/bin/python3` count.
+    program = os.path.basename(tokens[0]) if tokens else ""
+    if len(tokens) >= 2 and re.fullmatch(r"pip3?(\.\d+)?", program):
         return tokens[1] == "install"
-    if len(tokens) >= 3 and tokens[0] == "uv" and tokens[1] == "pip":
+    if len(tokens) >= 3 and program == "uv" and tokens[1] == "pip":
         return tokens[2] == "install"
-    if len(tokens) >= 4 and re.fullmatch(r"python3?(\.\d+)?", tokens[0]):
+    if len(tokens) >= 4 and re.fullmatch(r"python3?(\.\d+)?t?", program):
         return tokens[1:4] == ["-m", "pip", "install"]
     return False
 
 
+def _strip_git_options(tokens: list[str]) -> list[str]:
+    """Drop the global options between ``git`` and the subcommand."""
+    index = 1
+    while index < len(tokens) and tokens[index].startswith("-"):
+        # These take their value as the next token.
+        index += 2 if tokens[index] in ("-c", "-C") else 1
+    return ["git", *tokens[index:]]
+
+
 def _is_commit_no_verify(tokens: list[str]) -> bool:
-    if len(tokens) < 2 or tokens[0] != "git" or tokens[1] != "commit":
+    if not tokens or tokens[0] != "git":
+        return False
+    tokens = _strip_git_options(tokens)
+    if len(tokens) < 2 or tokens[1] != "commit":
         return False
     for token in tokens[2:]:
         if token == "--no-verify":
@@ -82,7 +109,7 @@ def main() -> int:
         return 0
 
     for raw in commands:
-        tokens = _strip_env_prefix(raw)
+        tokens = _strip_uv_run(_strip_env_prefix(raw))
         if _is_pip_install(tokens):
             print(_PIP_HINT, file=sys.stderr)
             return 2

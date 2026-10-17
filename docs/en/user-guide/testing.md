@@ -4,6 +4,8 @@ In a network run the usual way, `dt` follows the real time that passes, and the 
 
 ## Tools
 
+Import `mujou.testing` with `import mujou.testing`. `import mujou` alone does not import it.
+
 | Name                                     | Role                                                                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `mujou.testing.VirtualTimer()`           | A virtual timer. It starts at time 0 and moves only by what you pass to `advance(seconds)`                              |
