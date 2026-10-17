@@ -73,3 +73,10 @@
 - 記録は部品を参照しない小さなオブジェクトにした（Graph への強参照を `_BUILT` に置くと、部品が解放されなくなる）
 - テスト: 並行の run の文言をパラメタで厳密に、`TestRunANode.test_runs_once` を 3 形の文言で、走っていない構築済みのネットワークのノードは "belongs ..."、`write({})`、`Solo(node)` での走らせ直し、混在の euler のオラクル
 - nit 6（引数名）は変えない
+
+## 再レビュー後（approve、orchestrator の裁定）
+
+- 並行の run の窓（should-fix 1）は実装で塞がず、仕様を挙動に合わせた: 断られた側の文言は "has already run" か "belongs to a network that is already built" のどちらか、走るのは 1 回だけ。並行のテストに `run(net) | run(net, Chain())` と `run(node) | run(Solo(node))` を追加
+- nit 1: 並行の run では、相手が後で断られてもこちらが断られることがある（走らせ直せる）と仕様に追記
+- nit 2: 文言のパスは mujou.run が作る木でのパス（`'0.x'`）を正とし、仕様とテストを追加
+- nit 4: `mujou.run` の Raises を今の文言に合わせた
