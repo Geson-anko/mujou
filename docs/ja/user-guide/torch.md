@@ -21,6 +21,8 @@
 --8<-- "examples/torch_node.py:node"
 ```
 
+[サンプル](../examples/index.md)の `online_learning.py` では、同じようなノードが、走らせている途中で目標の変わるストリームから学び、その変化に追従する。
+
 ## デバイスと seed
 
 デバイスと乱数の seed は、`__init__` で `super().__init__(device=..., seed=...)` に渡す。
