@@ -12,14 +12,14 @@ import torch
 from torch import nn
 
 import mujou
-from mujou import Network, NetworkError, Node, Port, TensorSpec
+from mujou import Compose, NetworkError, Node, Port, TensorSpec
 from mujou._core import _native
 from mujou._core.node import thread_ident
-from mujou.testing import ManualRun, VirtualTimer
+from mujou.testing import VirtualTimer
 from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import Start, StartManual
+    from tests.mujou.conftest import Start, StartManual, Step
 
 
 class Probe(Node):
@@ -41,11 +41,6 @@ class Probe(Node):
         self.ident = threading.get_ident()
 
 
-class Solo(Network):
-    def __init__(self, node: Node) -> None:
-        self.node = node
-
-
 # The tests run the networks in manual mode only so that idle nodes do not spin:
 # on_start runs either way.
 
@@ -55,7 +50,7 @@ class TestThreadSetup:
         self, start_manual: StartManual
     ):
         node = Probe(seed=0)
-        start_manual(Solo(node))
+        start_manual(Compose(node=node))
         assert node.grad_enabled is False
         assert node.ident not in (None, threading.get_ident())
         # The setting is per thread: the host still records gradients.
@@ -64,7 +59,7 @@ class TestThreadSetup:
     def test_the_generator_follows_the_seed(self, start_manual: StartManual):
         a, b, c = Probe(seed=7), Probe(seed=7), Probe(seed=8)
         for node in (a, b, c):
-            start_manual(Solo(node))
+            start_manual(Compose(node=node))
         assert a.draws is not None and b.draws is not None and c.draws is not None
         expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
         assert torch.equal(a.draws, expected)
@@ -73,21 +68,21 @@ class TestThreadSetup:
 
     def test_works_without_calling_the_base_init(self, start_manual: StartManual):
         node = Probe(init_base=False)
-        start_manual(Solo(node))
+        start_manual(Compose(node=node))
         assert node.device == torch.device("cpu")
         assert node.grad_enabled is False
         assert node.draws is not None
 
     def test_the_thread_is_forgotten_after_the_end(self, start_manual: StartManual):
         node = Probe()
-        run = start_manual(Solo(node))
+        run = start_manual(Compose(node=node))
         assert thread_ident(node) == node.ident
         run.shutdown()
         assert thread_ident(node) is None
 
     def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
         node = Probe(seed=0)
-        run = start_manual(Solo(node))
+        run = start_manual(Compose(node=node))
         run.state_dict()
         assert not {"on_update", "state_dict"} & set(vars(node))
 
@@ -150,7 +145,7 @@ class TestTimer:
     ):
         node = Timed()
         virtual.advance(1.0)
-        run = start_manual(Solo(node), timer=virtual)
+        run = start_manual(Compose(node=node), timer=virtual)
         virtual.advance(0.5)
         run.step()
         run.shutdown()
@@ -168,7 +163,7 @@ class TestTimer:
         node = Timed()
         seen: list[ReadOnlyTimer] = []
         node.state_dict = lambda: seen.append(node.timer)  # type: ignore[method-assign]
-        run = start_manual(Solo(node), timer=virtual)
+        run = start_manual(Compose(node=node), timer=virtual)
         if ended:
             run.shutdown()  # the state_dict after the end sees a stopped timer
         run.state_dict()
@@ -187,7 +182,7 @@ class TestTimer:
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Timed()
-        run = start_manual(Solo(node), timer=virtual)
+        run = start_manual(Compose(node=node), timer=virtual)
         virtual.advance(0.5)
         run.step()
         run.shutdown()
@@ -207,7 +202,7 @@ class TestTimer:
                 return self.timer.now()
 
         node = Slow()
-        run = start_manual(Solo(node), timer=virtual)
+        run = start_manual(Compose(node=node), timer=virtual)
         run.shutdown()
         done = threading.Event()
 
@@ -235,7 +230,7 @@ class TestTimer:
         node = Fails()
         with pytest.raises(RuntimeError, match="run"):
             _ = node.timer
-        run = start_manual(Solo(node), timer=virtual)
+        run = start_manual(Compose(node=node), timer=virtual)
         virtual.advance(0.001)
         with pytest.raises(NetworkError):
             run.step()
@@ -243,12 +238,12 @@ class TestTimer:
             _ = node.timer
 
     def test_is_released_when_a_run_is_refused(self, start_manual: StartManual):
-        tree = start_manual(Solo(Timed())).state_dict()
+        tree = start_manual(Compose(node=Timed())).state_dict()
         node = Timed()
         with pytest.raises(ValueError):
             # Refused at the start: the timer of the run that is still running
             # cannot be set back.
-            start_manual(Solo(node), state=tree)
+            start_manual(Compose(node=node), state=tree)
         with pytest.raises(RuntimeError, match="run"):
             _ = node.timer
 
@@ -275,7 +270,7 @@ class TestDevice:
         with pytest.raises(ValueError, match="CUDA is not available"):
             Node(device="cuda")
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.cuda
     def test_fixes_the_cuda_index(self):
         assert Node(device="cuda").device.index == torch.cuda.current_device()
 
@@ -332,14 +327,14 @@ class TestPeriod:
             period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
 
         with pytest.raises(TypeError, match="reserved"):
-            start(Solo(OnTheClass(period=None)), timer=virtual)
+            start(Compose(node=OnTheClass(period=None)), timer=virtual)
 
     def test_the_node_waits_for_its_period_on_the_timer(
         self, virtual: VirtualTimer, start: Start
     ):
         # Free running: a manual run (mujou.testing.run) ignores the period.
         node = Ticker(period=0.01)
-        start(Solo(node), timer=virtual)
+        start(Compose(node=node), timer=virtual)
         virtual.advance(0.005)
         with pytest.raises(queue.Empty):
             node.dts.get(timeout=0.05)
@@ -350,7 +345,7 @@ class TestPeriod:
         self, virtual: VirtualTimer, start: Start
     ):
         node = Ticker(period=1e-10)
-        start(Solo(node), timer=virtual)
+        start(Compose(node=node), timer=virtual)
         virtual.advance(1e-9)
         assert node.dts.get(timeout=5.0) == 1e-9
 
@@ -369,7 +364,7 @@ class OwnSetup(Probe):
         self.draws_at_thread_start = torch.rand(3, generator=self.generator)
         self.ident_at_thread_start = thread_ident(self)
         try:
-            mujou.run(Solo(Probe()))
+            mujou.run(Compose(node=Probe()))
         except RuntimeError as e:
             self.host_error = str(e)
 
@@ -379,7 +374,7 @@ class TestOnThreadStart:
         self, start_manual: StartManual
     ):
         node = OwnSetup(seed=7)
-        start_manual(Solo(node))
+        start_manual(Compose(node=node))
         assert node.grad_at_thread_start is False
         assert node.grad_enabled is False
         generator = torch.Generator().manual_seed(7)
@@ -607,17 +602,11 @@ class Learner(Node):
         self.steps.add_(1)
 
 
-def steps(run: ManualRun, timer: VirtualTimer, n: int) -> None:
-    for _ in range(n):
-        timer.advance(0.001)
-        run.step()
-
-
 class TestRestore:
     @pytest.mark.parametrize("kind", ["cpu", "accelerator"])
     def test_a_restored_node_continues_the_same(
         self,
-        virtual: VirtualTimer,
+        step: Step,
         start_manual: StartManual,
         request: pytest.FixtureRequest,
         kind: str,
@@ -625,10 +614,12 @@ class TestRestore:
         device = "cpu" if kind == "cpu" else str(request.getfixturevalue(kind))
         k, m = 4, 6
         node = Learner(0.0, device)
-        run = start_manual(Solo(node))
-        steps(run, virtual, k)
+        run = start_manual(Compose(node=node))
+        for _ in range(k):
+            step(run)
         tree = pickle.loads(pickle.dumps(run.state_dict()))
-        steps(run, virtual, m)
+        for _ in range(m):
+            step(run)
         expected = copy.deepcopy(node.state_dict())
         run.shutdown()
         assert int(at(expected, "steps")) == k + m
@@ -637,9 +628,10 @@ class TestRestore:
         weight = restored_node.linear.weight
         timer = VirtualTimer()  # the first run's timer cannot be set back
         timer.advance(100.0)  # far from the tree's time
-        restored = start_manual(Solo(restored_node), timer=timer, state=tree)
+        restored = start_manual(Compose(node=restored_node), timer=timer, state=tree)
         x = restored_node._x  # pyright: ignore[reportPrivateUsage]  # made in on_start
-        steps(restored, timer, m)
+        for _ in range(m):
+            step(restored)
         actual = restored_node.state_dict()
         assert torch.equal(at(actual, "_x"), at(expected, "_x"))
         assert torch.equal(at(actual, "_last"), at(expected, "_last"))
@@ -694,7 +686,7 @@ class TestAccelerator:
         self, start_manual: StartManual, accelerator: torch.device
     ):
         node = OnAccelerator(accelerator, seed=0)
-        start_manual(Solo(node))
+        start_manual(Compose(node=node))
         assert node.current_device == accelerator.index
         assert node.grad_enabled is False
         # Only CUDA gives a node a stream of its own.
@@ -707,7 +699,7 @@ class TestAccelerator:
         a, b = OnAccelerator(accelerator, seed=7), OnAccelerator(accelerator, seed=7)
         for node in (a, b):
             # One at a time: MPS takes one node at most.
-            start_manual(Solo(node)).shutdown()
+            start_manual(Compose(node=node)).shutdown()
         generator = torch.Generator(accelerator).manual_seed(7)
         expected = torch.rand(3, generator=generator, device=accelerator)
         assert a.draws is not None and b.draws is not None
@@ -736,35 +728,26 @@ class Busy(Node):
             self.w.add_(1.0)
 
 
-def needs_gpus(n: int) -> pytest.MarkDecorator:
-    return pytest.mark.skipif(
-        not torch.cuda.is_available() or torch.cuda.device_count() < n,
-        reason=f"needs {n} CUDA device(s)",
-    )
-
-
-@needs_gpus(1)
+@pytest.mark.cuda
 class TestCuda:
-    @pytest.mark.parametrize("index", [0, pytest.param(1, marks=needs_gpus(2))])
+    @pytest.mark.parametrize("index", [0, pytest.param(1, marks=pytest.mark.cuda(2))])
     def test_hooks_run_on_the_device_on_a_stream_of_their_own(
-        self, virtual: VirtualTimer, start_manual: StartManual, index: int
+        self, step: Step, start_manual: StartManual, index: int
     ):
         node = OnDevice(f"cuda:{index}")
-        run = start_manual(Solo(node))
-        virtual.advance(0.001)
-        run.step()
+        run = start_manual(Compose(node=node))
+        step(run)
         assert node.current_device == index
         assert node.own_stream is True
         assert node.grad_enabled is False
 
     @pytest.mark.slow
     def test_waits_for_its_stream_after_each_update(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self, step: Step, start_manual: StartManual
     ):
         node = Busy()
-        run = start_manual(Solo(node))
+        run = start_manual(Compose(node=node))
         for _ in range(5):
-            virtual.advance(0.001)
-            run.step()
+            step(run)
         # The first update follows on_start, after which nothing waits.
         assert node.idle_at_update[1:] == [True] * 4
