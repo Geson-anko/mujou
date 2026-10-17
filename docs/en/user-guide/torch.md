@@ -21,6 +21,8 @@ The following node learns a linear map from its input to the target online, and 
 --8<-- "examples/torch_node.py:node"
 ```
 
+In `online_learning.py` in [Examples](../examples/index.md), a node like this learns from a stream whose target changes partway through the run, and keeps up with the change.
+
 ## Device and seed
 
 Pass the device and the random seed in `__init__`, with `super().__init__(device=..., seed=...)`.
