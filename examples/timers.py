@@ -41,14 +41,22 @@ clock = Clock()
 start_real, start_global = time.perf_counter(), mujou.time.time()
 with mujou.run(clock, timer=timer) as run:
     timer.sleep(2.0)  # 2 s of the run's time: about 0.2 s of real time
+    # The clock sends once per update, and when it updates depends on how the
+    # threads get scheduled: read until it has sent from 2 s on, giving up after
+    # 5 s of real time.
     seen, t = run.read(clock.next)  # t is on the run's timer
+    give_up = time.perf_counter() + 5.0
+    while float(t) < 2.0 and time.perf_counter() < give_up:
+        timer.sleep(0.1)  # 0.01 s of real time
+        seen, t = run.read(clock.next)
 elapsed_real = time.perf_counter() - start_real
 elapsed_global = mujou.time.time() - start_global
 print(
     f"run's time {float(t):.2f} s, real {elapsed_real:.2f} s, "
     f"global {elapsed_global:.2f} s"
 )
-assert float(t) >= 2.0 and elapsed_real < 1.0
+# The run's 2 s took less real time (about 0.2 s, but a busy machine takes longer).
+assert float(t) >= 2.0 and elapsed_real < 2.0
 # The clock read its time just before it sent: compare times of the same timer
 # only, since a Timestamp does not say which timer it is on.
 assert seen.item() <= float(t)

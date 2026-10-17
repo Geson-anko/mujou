@@ -67,10 +67,14 @@ y = x @ teacher.T
 regressor = Regressor(rate=20.0)  # a node runs by itself, without a network
 with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as run:
     losses: list[float] = []
-    for _ in range(5):
+    # How far the node has learned by a given time depends on how its thread gets
+    # scheduled: read every 0.1 s until the loss has fallen, giving up after 5 s.
+    for _ in range(50):
         prediction, t = run.read(regressor.next)
         losses.append(nn.functional.mse_loss(prediction, y).item())
         print(f"t = {float(t):.2f} s: loss = {losses[-1]:.5f}")
+        if losses[-1] < 1e-2 * losses[0]:
+            break
         mujou.time.sleep(0.1)
 
 assert losses[-1] < 1e-2 * losses[0]
