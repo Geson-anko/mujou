@@ -5,6 +5,7 @@ import pytest
 
 import mujou.time
 from mujou._core._native import GlobalTimer
+from mujou.time import Timestamp
 
 
 def measure_sleep(
@@ -44,6 +45,7 @@ class TestPublicNames:
             "Timer",
             "Timestamp",
             "get_time_scale",
+            "now",
             "set_time_scale",
             "sleep",
             "time",
@@ -57,6 +59,11 @@ class TestTime:
         assert mujou.time.time_ns() == 1_500_000_000
         virtual_timer.advance(1e-9)
         assert mujou.time.time() == 1_500_000_001 / 1e9
+
+    def test_now_is_the_global_time_as_a_timestamp(self, virtual_timer: GlobalTimer):
+        virtual_timer.advance(1.5)
+        assert mujou.time.now() == Timestamp(ns=1_500_000_000)
+        assert mujou.time.now().ns == mujou.time.time_ns()
 
     def test_sleep_waits_in_global_time_without_holding_the_gil(
         self, virtual_timer: GlobalTimer

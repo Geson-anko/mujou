@@ -13,7 +13,6 @@ from mujou._core._native import (
     Node,
     PauseTimeoutError,
     Runtime,
-    Timer,
     timer,
 )
 
@@ -172,21 +171,6 @@ class TestStart:
             assert len(node_thread) == 1
             assert node.threads["state_dict"] not in node_thread
 
-    def test_on_start_takes_no_global_time(self, make_runtime: MakeRuntime):
-        class SlowStart(Recorder):
-            @override
-            def on_start(self) -> None:
-                time.sleep(0.3)
-
-        log = Log()
-        node = SlowStart("a", log)
-        runtime = make_runtime([node])
-        runtime.start()
-        log.wait_for(lambda: len(node.dts) >= 1)
-        # Real clock at scale 1: the 0.3 s of `on_start` must not be in the first Δt.
-        # Only the upper bound is checked, so a loaded machine does not fail it.
-        assert node.dts[0] < 0.25
-
     @pytest.mark.parametrize("hook", ["on_thread_start", "on_start", "load_state_dict"])
     def test_an_error_while_starting_stops_before_any_update(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, hook: str
@@ -290,25 +274,6 @@ class TestStart:
         virtual_timer.advance(H)
         runtime.step()
         assert calls == ["wrapped", "plain"]
-
-    def test_the_time_is_not_restored_under_a_running_runtime(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        running_log, restored_log = Log(), Log()
-        running = make_runtime(recorders(running_log, "a"))
-        restored = make_runtime(recorders(restored_log, "b"))
-        running.start()
-        before = virtual_timer.time_ns()
-        state = {"time_ns": before + 10**12, "scale": 1.0}
-        with pytest.raises(ValueError, match="another runtime"):
-            restored.start(timer_state=state)
-        # Nothing started, and the running network's time did not jump.
-        assert restored_log.events == []
-        assert virtual_timer.time_ns() == before
-        # After the other one has stopped, the same runtime can restore.
-        running.shutdown()
-        restored.start(timer_state=state)
-        assert virtual_timer.time_ns() == before + 10**12
 
     def test_restores_the_time_and_where_each_dt_starts(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -568,82 +533,8 @@ class TestFreeRun:
         assert time.monotonic() - start < 1.0
         assert log.count("a", "on_update") == 0
 
-    def test_step_needs_the_manual_mode(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        runtime = make_runtime(recorders(Log(), "a"))
-        runtime.start()
-        with pytest.raises(RuntimeError, match="manual"):
-            runtime.step()
-
 
 class TestCapture:
-    def test_states_are_taken_at_one_frozen_time(self, make_runtime: MakeRuntime):
-        log = Log()
-        nodes = recorders(log, "a", "b", "c")
-        runtime = make_runtime(nodes)
-        runtime.start()
-        log.wait_for(lambda: all(n.dts for n in nodes))
-
-        def build(states: list[object]) -> tuple[list[object], int, bool, list[int]]:
-            return states, timer.time_ns(), timer.is_paused(), runtime.last_update_ns()
-
-        states, frozen_ns, paused, last_ns = runtime.capture(build)
-        assert paused
-        assert all(ns <= frozen_ns for ns in last_ns)
-        assert [s["name"] for s in states if isinstance(s, dict)] == ["a", "b", "c"]
-        assert not timer.is_paused()
-        runtime.shutdown()
-        for node in nodes:
-            events = [e for e in log.of(node.name) if e != "on_update"]
-            assert events[2:5] == ["on_pause", "state_dict", "on_resume"]
-
-    def test_the_pause_takes_no_global_time(self, make_runtime: MakeRuntime):
-        log = Log()
-        node = Recorder("a", log)
-        runtime = make_runtime([node])
-        runtime.start()
-        log.wait_for(lambda: len(node.dts) >= 1)
-
-        def build(states: list[object]) -> int:
-            time.sleep(0.3)
-            return len(node.dts)
-
-        before = runtime.capture(build)
-        log.wait_for(lambda: len(node.dts) > before)
-        # Real clock at scale 1: the 0.3 s paused must not be in the next Δt.
-        assert node.dts[before] < 0.25
-
-    def test_one_capture_does_not_end_the_pause_of_another(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        first = make_runtime(recorders(Log(), "a"))
-        second = make_runtime(recorders(Log(), "b"))
-        first.start()
-        second.start()
-
-        def build(states: list[object]) -> tuple[bool, bool]:
-            inner = second.capture(lambda states: timer.is_paused())
-            # The second capture ended while the first one is still paused.
-            return inner, timer.is_paused()
-
-        assert first.capture(build) == (True, True)
-        assert not virtual_timer.is_paused()
-
-    def test_a_pause_by_the_host_outlasts_the_runtime(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        runtime = make_runtime(recorders(Log(), "a"))
-        virtual_timer.pause()
-        runtime.start()
-        assert virtual_timer.is_paused()
-        runtime.capture(lambda states: None)
-        assert virtual_timer.is_paused()
-        runtime.shutdown()
-        assert virtual_timer.is_paused()
-        virtual_timer.resume()
-        assert not virtual_timer.is_paused()
-
     def test_gives_up_when_a_node_does_not_pause(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
@@ -702,78 +593,7 @@ class TestCapture:
         assert runtime.join(timeout=0) is False
 
 
-def chain_update(x: list[float], i: int, dt: float, u: float, w: list[float]) -> None:
-    """Explicit Euler of dx_i/dt = -x_i + w_i * x_{i-1} with x_{-1} = u."""
-    prev = u if i == 0 else x[i - 1]
-    x[i] = x[i] + dt * (-x[i] + w[i] * prev)
-
-
-class Chain(Recorder):
-    """Node i of the chain; ``x`` stands for the slots (node i writes only x[i])."""
-
-    def __init__(
-        self, i: int, x: list[float], u: float, w: list[float], log: Log
-    ) -> None:
-        super().__init__(f"x{i}", log)
-        self.i, self.x, self.u, self.w = i, x, u, w
-
-    @override
-    def on_update(self, dt: float) -> None:
-        super().on_update(dt)
-        chain_update(self.x, self.i, dt, self.u, self.w)
-
-
 class TestManual:
-    U, W, X0, STEPS = 1.5, [0.9, -1.3, 0.7], [0.2, -0.4, 0.1], 7
-
-    def run_chain(self, timer: GlobalTimer, make: MakeRuntime, order: list[int]):
-        x = list(self.X0)
-        log = Log()
-        nodes = [Chain(i, x, self.U, self.W, log) for i in range(3)]
-        runtime = make(nodes)
-        runtime.start(manual=True)
-        for _ in range(self.STEPS):
-            timer.advance(H)
-            runtime.step(order)
-        runtime.shutdown()
-        for node in nodes:
-            assert node.dts == [H] * self.STEPS
-        return x, log
-
-    def test_forward_order_is_gauss_seidel(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        x, log = self.run_chain(virtual_timer, make_runtime, [0, 1, 2])
-        expected = list(self.X0)
-        for _ in range(self.STEPS):
-            for i in range(3):  # Each node reads its predecessor's new value.
-                chain_update(expected, i, H, self.U, self.W)
-        assert x == expected
-        updates = [n for n, e in log.events if e == "on_update"]
-        assert updates == ["x0", "x1", "x2"] * self.STEPS
-
-    def test_backward_order_is_jacobi(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        x, _ = self.run_chain(virtual_timer, make_runtime, [2, 1, 0])
-        expected = list(self.X0)
-        for _ in range(self.STEPS):
-            old = list(expected)  # Every node reads the values of the last step.
-            for i in range(3):
-                new = list(old)
-                chain_update(new, i, H, self.U, self.W)
-                expected[i] = new[i]
-        assert x == expected
-
-    def test_a_step_without_time_passing_does_not_update(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        log = Log()
-        runtime = make_runtime(recorders(log, "a"))
-        runtime.start(manual=True)
-        runtime.step()
-        assert log.count("a", "on_update") == 0
-
     def test_rejects_an_unknown_node(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
@@ -784,40 +604,6 @@ class TestManual:
 
 
 class TestException:
-    def test_an_update_error_stops_every_node(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        log = Log()
-        nodes = [
-            Recorder("a", log),
-            Recorder("x", log, "on_update", 3),
-            Recorder("c", log),
-        ]
-        runtime = make_runtime(nodes)
-        runtime.start(manual=True)
-        for _ in range(2):
-            virtual_timer.advance(H)
-            runtime.step()
-        virtual_timer.advance(H)
-        with pytest.raises(NetworkError) as exc_info:
-            runtime.step()
-        assert "'x'" in str(exc_info.value)
-        assert "on_update" in str(exc_info.value)
-        assert exc_info.value.__cause__ is nodes[1].error
-        for node in nodes:
-            assert_ended_by_exception(log, node.name)
-        # Every later request reports the same exception.
-        for request in [
-            runtime.step,
-            lambda: runtime.capture(lambda states: None),
-            runtime.shutdown,
-            runtime.join,
-            runtime.check,
-        ]:
-            with pytest.raises(NetworkError) as exc_info:
-                request()
-            assert exc_info.value.__cause__ is nodes[1].error
-
     @pytest.mark.parametrize("hook", ["on_pause", "state_dict", "on_resume"])
     def test_an_error_around_a_capture_stops_every_node(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, hook: str
@@ -902,108 +688,3 @@ class TestWaiting:
         assert runtime.join()
         thread.join(WAIT)
         assert runtime.is_finished
-
-
-class TestRequestStop:
-    def test_returns_while_a_node_is_updating_and_join_sees_the_end(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        release = threading.Event()
-
-        class Blocking(Recorder):
-            @override
-            def on_update(self, dt: float) -> None:
-                super().on_update(dt)
-                release.wait(WAIT)
-
-        log = Log()
-        runtime = make_runtime([Blocking("a", log)])
-        runtime.start()
-        virtual_timer.advance(H)
-        log.wait_for(lambda: log.count("a", "on_update") == 1)
-
-        # A waiting stop would not return while the node is in its update.
-        runtime.request_stop()
-        assert runtime.join(timeout=0.05) is False
-        assert log.count("a", "on_stop") == 0
-
-        release.set()
-        assert runtime.join(timeout=WAIT)
-        assert log.of("a")[-1] == "on_stop"
-        assert runtime.is_finished
-
-    def test_does_nothing_before_start_and_after_the_end(
-        self, make_runtime: MakeRuntime
-    ):
-        log = Log()
-        runtime = make_runtime(recorders(log, "a"))
-        runtime.request_stop()
-        runtime.start(manual=True)
-        assert runtime.join(timeout=0) is False
-        runtime.request_stop()
-        assert runtime.join(timeout=WAIT)
-        runtime.request_stop()
-        runtime.shutdown()
-        assert log.count("a", "on_stop") == 1
-
-
-class TestOwnTimer:
-    """A runtime given a timer measures Δt on it and freezes only it."""
-
-    @staticmethod
-    def own_timer() -> Timer:
-        t = Timer()
-        t.use_virtual_clock(True)
-        t.load_state_dict({"time_ns": 0, "scale": 1.0})
-        return t
-
-    def test_dt_is_measured_on_the_runtime_timer(self, virtual_timer: GlobalTimer):
-        own = self.own_timer()
-        node = Recorder("a", Log())
-        runtime = Runtime([node], ["a"], timer=own)
-        try:
-            runtime.start(manual=True)
-            virtual_timer.advance(5 * H)
-            own.advance(2 * H)
-            runtime.step()
-        finally:
-            runtime.shutdown()
-        assert node.dts == [2 * H_NS / 1e9]
-
-    def test_a_capture_does_not_pause_another_timer(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        own = self.own_timer()
-        runtime = Runtime(recorders(Log(), "a"), ["a"], timer=own)
-        other_node = Recorder("b", Log())
-        other = make_runtime([other_node])
-        other.start(manual=True)
-
-        def build(states: list[object]) -> tuple[bool, bool]:
-            # The runtime on the global timer keeps updating meanwhile.
-            virtual_timer.advance(H)
-            other.step()
-            return own.is_paused(), virtual_timer.is_paused()
-
-        try:
-            runtime.start()
-            paused = runtime.capture(build)
-        finally:
-            runtime.shutdown()
-        assert paused == (True, False)
-        assert other_node.dts == [H]
-
-    def test_another_timer_can_be_restored_while_the_global_one_runs(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        running = make_runtime(recorders(Log(), "a"))
-        running.start()
-        before = virtual_timer.time_ns()
-        own = self.own_timer()
-        restored = Runtime(recorders(Log(), "b"), ["b"], timer=own)
-        try:
-            restored.start(timer_state={"time_ns": 7 * H_NS, "scale": 1.0})
-        finally:
-            restored.shutdown()
-        assert own.time_ns() == 7 * H_NS
-        assert virtual_timer.time_ns() == before

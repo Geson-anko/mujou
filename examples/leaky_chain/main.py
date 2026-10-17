@@ -28,8 +28,9 @@ class LeakyChain(mujou.Network):
 
 
 def step_response(t: float) -> tuple[float, float]:
-    """The exact outputs of a and b at ``t`` seconds after the input steps 0 -> 1."""
-    s = t / TAU
+    """The exact outputs of a and b at ``t`` seconds after the input steps 0 -> 1
+    (both 0 before the step, at ``t < 0``)."""
+    s = max(t, 0.0) / TAU
     return 1 - math.exp(-s), 1 - math.exp(-s) * (1 + s)
 
 
@@ -41,9 +42,11 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
     for _ in range(4):
         mujou.time.sleep(TAU / 2)
         (a, t_a), (b, t_b) = run.read(net.a.next), run.read(net.b.next)
-        # Each output against the exact one at the time it was sent.
-        exact_a, _ = step_response(float(t_a - start))
-        _, exact_b = step_response(float(t_b - start))
+        # Each output against the exact one at the time it was sent. On a busy
+        # machine a node may not have sent since the step: its time is then
+        # earlier than start, and a Timestamp difference would raise.
+        exact_a, _ = step_response(float(t_a) - float(start))
+        _, exact_b = step_response(float(t_b) - float(start))
         print(
             f"a = {a.item():.3f} (exact {exact_a:.3f}), "
             f"b = {b.item():.3f} (exact {exact_b:.3f})"

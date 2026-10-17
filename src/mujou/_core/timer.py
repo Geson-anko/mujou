@@ -30,13 +30,15 @@ class Timer:
     ``RuntimeError`` in a node's hook, where a node would wait for (or change the
     ``dt`` of) the other nodes.
 
-    Example::
+    Example, with the node ``Error`` of the example of ``mujou.Run``::
 
         timer = mujou.time.Timer()
-        with mujou.run(net, timer=timer) as run:
-            run.write({net.prev: x})
+        node = Error()
+        with mujou.run(node, timer=timer) as run:
+            run.write({node.prev: torch.ones(2)})
             timer.sleep(0.1)  # 0.1 s of the run's time
-            y, t = run.read(net.next)
+            error, t = run.read(node.next)  # t is on this timer
+            assert t <= timer.now()
     """
 
     _timer: _native.Timer
@@ -82,14 +84,15 @@ class Timer:
 class VirtualTimer(Timer):
     """A timer for tests: its time moves only when ``advance`` moves it.
 
-    It starts at 0. The scale is kept but does not apply to ``advance``. Run a
-    network on it with ``mujou.testing.run`` and step the nodes by hand, so that
-    every ``dt`` is exactly what the test advanced.
+    It starts at 0. The scale is kept but does not apply to ``advance``.
+    ``mujou.testing.run`` runs a network on a new one (``ManualRun.timer``) unless
+    given a timer; step the nodes by hand, so that every ``dt`` is exactly what
+    the test advanced. Make one to share it between runs.
 
-    Example::
+    Example, with the node ``Error`` of the example of ``mujou.Run``::
 
         timer = VirtualTimer()
-        with mujou.testing.run(net, timer=timer) as run:
+        with mujou.testing.run(Error(), timer=timer) as run:
             timer.advance(0.001)
             run.step()  # every node updates once with dt = 0.001
     """
@@ -129,8 +132,16 @@ class ReadOnlyTimer:
 
     Example::
 
-        def on_update(self, dt: float) -> None:
-            t = self.timer.now()
+        class Clock(Node):  # sends the time of its run's timer, in seconds
+            def __init__(self) -> None:
+                super().__init__()
+                self.next = NextPort(send=TensorSpec((), torch.float64))
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                t = self.timer.now()  # a Timestamp on the run's timer
+                self.next.send(torch.tensor(float(t), dtype=torch.float64))
     """
 
     now: Callable[[], Timestamp]
