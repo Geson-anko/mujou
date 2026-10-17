@@ -65,6 +65,7 @@ When a node raises, the exception reaches you from `step` as a `NetworkError`. I
 ```python
 import pytest
 
+import mujou.testing
 from mujou import NetworkError
 
 with pytest.raises(NetworkError) as info, mujou.testing.run(net) as run:

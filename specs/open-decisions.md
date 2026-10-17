@@ -46,7 +46,7 @@ GPU をサポートしないこと、private な拡張モジュール `mujou._co
 
 ## 2026-10-17 の推奨案（ユーザー確認待ち）
 
-PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #30〜#44）。次は推奨案で実装し、ユーザーの確認を待っている。
+PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #30 から始まるスタック）。次は推奨案で実装し、ユーザーの確認を待っている。
 
 - ホストの待ち方: `Run.wait_for(port, condition, *, timeout=)` と `Run.subscribe(port, *, timeout=)`（[ネットワーク](network.md)）
 - テスト: `mujou.testing.run` の既定のタイマーを新しい `VirtualTimer` にし、`ManualRun.timer` で返す。`mujou.time.now()`

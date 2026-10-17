@@ -470,7 +470,9 @@ class TestRefusedRun:
                 retry = partial(start_manual, net, state=tree)
             else:
                 # The source still runs on the timer: it cannot be set back.
-                refused = [(partial(start_manual, net, state=tree), None)]
+                refused = [
+                    (partial(start_manual, net, state=tree), "a timer of its own")
+                ]
                 retry = partial(start_manual, net, timer=VirtualTimer(), state=tree)
         for call, match in refused:
             with pytest.raises(ValueError, match=match):
@@ -1171,7 +1173,8 @@ class TestJoin:
         run = start_manual(net)
         with pytest.raises(TimeoutError):
             run.join(timeout=0.0)  # still running
-        stopper = threading.Thread(target=run.shutdown)
+        # Shut down a little later, so that join is (almost always) already waiting.
+        stopper = threading.Timer(0.05, run.shutdown)
         stopper.start()
         run.join()
         stopper.join()
