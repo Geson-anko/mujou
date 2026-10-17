@@ -875,7 +875,8 @@ class TestStateDict:
     def test_after_a_normal_end_of_a_free_running_network(self, start: Start):
         net = Chain(tau=0.01)
         run = start(net, inputs={net.prev: u(1)})
-        mujou.time.sleep(0.05)
+        # Free running: both nodes have updated once b sends a value other than 0.
+        run.wait_for(net.next, lambda out: bool(out.any()), timeout=10.0)
         asked_after = mujou.time.time_ns()
         run.shutdown()
         stopped_before = mujou.time.time_ns()
@@ -894,7 +895,8 @@ class TestStateDict:
     def test_is_taken_at_one_time(self, start: Start):
         net = Chain(tau=0.01)
         run = start(net, inputs={net.prev: u(1)})
-        mujou.time.sleep(0.05)
+        # Free running: both nodes have updated once b sends a value other than 0.
+        run.wait_for(net.next, lambda out: bool(out.any()), timeout=10.0)
         tree = run.state_dict()
         frozen_at = tree["timer"]["time_ns"]
         assert set(tree["nodes"]) == set(tree["last_update_ns"]) == {"a", "b"}
@@ -1129,7 +1131,9 @@ class TestJoin:
     def test_returns_once_another_thread_shuts_down(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        stopper = threading.Timer(0.1, run.shutdown)
+        with pytest.raises(TimeoutError):
+            run.join(timeout=0.0)  # still running
+        stopper = threading.Thread(target=run.shutdown)
         stopper.start()
         run.join()
         stopper.join()
