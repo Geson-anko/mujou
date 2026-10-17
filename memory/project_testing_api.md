@@ -9,4 +9,4 @@ metadata:
 
 **Why:** 利用者も自分のノードを決定的にテストできる必要がある。mujou と利用者で別の口を持つと、片方だけが古くなる。
 
-**How to apply:** 実装済み（2026-10-16）: `mujou.testing` の `run` / `ManualRun.step(*nodes)` / `VirtualTimer`。`_manual` と `_step` は消し、mujou のテストもすべてこの口に書き換えた（`memory/agents/plan-implementer/run-handle.md`）。同じ日の決定「利用者が使うべきでないものは公開の API に見せない」の対象は、テスト以外の内部の口になる。
+**How to apply:** 実装済み（2026-10-16）: `mujou.testing` の `run` / `ManualRun.step(*nodes)` / `VirtualTimer`。2026-10-17 から `run` の `timer` の既定は実行ごとの新しい `VirtualTimer` で、`ManualRun.timer` が返す。`_manual` と `_step` は消し、mujou のテストもすべてこの口に書き換えた（`memory/agents/plan-implementer/run-handle.md`）。同じ日の決定「利用者が使うべきでないものは公開の API に見せない」の対象は、テスト以外の内部の口になる。
