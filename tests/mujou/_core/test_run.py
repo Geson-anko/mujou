@@ -758,6 +758,98 @@ class TestSubscribe:
         assert times == sorted(times)
         assert len(times) >= 5
 
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=0.05)
+        next(values)  # the first step does not wait
+        begin = time.monotonic()
+        with pytest.raises(TimeoutError):
+            next(values)  # nothing is sent: the nodes wait for step
+        assert time.monotonic() - begin < 5.0
+        with pytest.raises(StopIteration):
+            next(values)
+        run.write({net.prev: u(1)})
+        step(run, virtual)
+        assert torch.equal(run.read(net.next)[0], net.b.x)
+
+    def test_the_timeout_counts_the_whole_iteration(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=0.05)
+        next(values)
+        time.sleep(0.1)  # the body of a loop that took longer than the timeout
+        step(run, virtual)  # a newer message is there
+        with pytest.raises(TimeoutError):
+            next(values)
+
+    def test_yields_what_arrives_within_the_timeout(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=60.0)
+        next(values)
+        step(run, virtual)
+        assert next(values)[1] == virtual.now()
+        run.shutdown()
+        with pytest.raises(StopIteration):
+            next(values)
+
+    def test_rejects_a_negative_timeout(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                run.subscribe(net.next, timeout=timeout)
+
+
+class TestWaitFor:
+    def test_returns_the_first_message_that_meets_the_condition(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        run.write({net.prev: u(1)})
+        seen: list[torch.Tensor] = []
+
+        def condition(out: torch.Tensor) -> bool:
+            seen.append(out)
+            if len(seen) < 3:
+                step(run, virtual)  # a newer message for the next check
+                return False
+            return True
+
+        out, t = run.wait_for(net.next, condition, timeout=60.0)
+        # The latest message first (zeros), then each newer one.
+        assert torch.equal(seen[0], torch.zeros(2, dtype=F64))
+        assert len(seen) == 3
+        assert torch.equal(out, net.b.x) and t == virtual.now()
+
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(TimeoutError):
+            run.wait_for(net.next, lambda _: False, timeout=0.05)
+        run.write({net.prev: u(1)})
+        step(run, virtual)
+        assert torch.equal(run.read(net.next)[0], net.b.x)
+
+    def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        stopper = threading.Timer(0.05, run.shutdown)
+        stopper.start()
+        with pytest.raises(RuntimeError, match="shut down before"):
+            run.wait_for(net.next, lambda _: False)
+        stopper.join()
+
 
 class TestStateDict:
     def test_after_a_normal_end_is_the_state_at_the_end(
@@ -1209,6 +1301,34 @@ class TestManualRun:
     def test_is_what_mujou_testing_run_returns(self, virtual: VirtualTimer):
         with mujou.testing.run(Chain(), timer=virtual) as run:
             assert isinstance(run, ManualRun) and isinstance(run, Run)
+
+    def test_runs_on_a_new_virtual_timer_by_default(self):
+        net = Chain()
+        with mujou.testing.run(net, inputs={net.prev: u(1)}) as run:
+            timer = run.timer
+            assert isinstance(timer, VirtualTimer)
+            assert timer.now() == Timestamp(ns=0)
+            for _ in range(3):
+                timer.advance(H)  # the clock moves only here
+                run.step()
+            out, t = run.read(net.next)
+        x = torch.zeros(2, dtype=F64)
+        for _ in range(3):
+            x = euler(x, u(1))
+        assert torch.equal(net.a.x, x)
+        assert t == Timestamp(ns=3 * H_NS) and torch.equal(out, net.b.x)
+
+    def test_each_run_gets_its_own_timer(self):
+        with (
+            mujou.testing.run(Chain()) as first,
+            mujou.testing.run(Chain()) as second,
+        ):
+            assert first.timer is not second.timer
+
+    def test_gives_the_timer_it_was_given(self, start_manual: StartManual):
+        timer = Timer()
+        run = start_manual(Chain(), timer=timer)
+        assert run.timer is timer
 
 
 class TestEndToEnd:

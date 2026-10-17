@@ -1,7 +1,7 @@
 """Running networks: ``mujou.run`` and the ``Run`` it returns (``specs/network.md``)."""
 
 import math
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Never, Self, cast
 
@@ -19,7 +19,7 @@ from mujou._core.network import (
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
-from mujou._core.timer import GLOBAL, Timer
+from mujou._core.timer import GLOBAL, Timer, VirtualTimer
 
 
 class Run:
@@ -50,11 +50,35 @@ class Run:
 
     Example::
 
-        net = Classifier()
-        with mujou.run(net, inputs={net.prev: x0, net.teacher: y0}) as run:
-            run.write({net.prev: x, net.teacher: y})  # switch together
+        from typing import override
+
+        import torch
+
+        import mujou
+        from mujou import NextPort, Node, Port, PrevPort, TensorSpec
+
+        VECTOR = TensorSpec((2,))
+
+
+        class Error(Node):  # sends its input minus its teacher
+            def __init__(self) -> None:
+                super().__init__()
+                self.prev = PrevPort(recv=VECTOR)
+                self.teacher = Port(recv=VECTOR)
+                self.next = NextPort(send=VECTOR)
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                self.next.send(self.prev.recv() - self.teacher.recv())
+
+
+        node = Error()
+        x, y = torch.ones(2), torch.zeros(2)
+        with mujou.run(node, inputs={node.prev: x, node.teacher: y}) as run:
+            run.write({node.prev: 2 * x, node.teacher: x})  # switch together
             mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
-            prediction, t = run.read(net.head.next)
+            error, t = run.read(node.next)
         state = run.state_dict()  # the state at the end, to save
     """
 
@@ -64,9 +88,10 @@ class Run:
         raise TypeError("a Run is made by mujou.run() or mujou.testing.run()")
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any] would reject (Mapping keys are invariant).
+    # Port[Any, Any, Any] would reject (Mapping keys are invariant). A dict message
+    # is a Mapping[str, object]: a TypedDict is not a Mapping[str, torch.Tensor].
     def write[P: Port[Any, Any, Any]](
-        self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
+        self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
     ) -> Timestamp:
         """Write messages to unconnected single-peer ports that receive, and
         return the time they carry.
@@ -110,7 +135,9 @@ class Run:
         """
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
-    def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, Timestamp]]:
+    def subscribe[S](
+        self, port: Port[S, Any, Any], *, timeout: float = math.inf
+    ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
         The first step yields the latest message at the time of this call (zeros
@@ -121,12 +148,66 @@ class Run:
         normally. Shut the run down before the program ends: a thread iterating
         here ends only with the run.
 
+        To wait for one message that meets a condition, use ``wait_for``.
+
+        Args:
+            port: The port to follow.
+            timeout: Real seconds, counted from this call, that the whole
+                iteration may take, the time spent in the loop's body included.
+                ``math.inf`` iterates as long as the run runs.
+
         Raises:
-            ValueError: ``port`` is outside the run or sends nothing.
+            ValueError: ``port`` is outside the run or sends nothing; or
+                ``timeout`` is negative or NaN.
+            TimeoutError: From the iterator, at a step after the first that
+                begins once ``timeout`` has passed, or that would wait past it.
+                The iterator ends; the run keeps running.
             NetworkError: The run stopped because a node raised (also from the
                 iterator).
         """
-        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port))
+        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port, timeout))
+
+    def wait_for[S](
+        self,
+        port: Port[S, Any, Any],
+        condition: Callable[[S], bool],
+        *,
+        timeout: float = math.inf,
+    ) -> tuple[S, Timestamp]:
+        """Wait until ``port`` sends a message that meets ``condition``, and return
+        it with its time.
+
+        Checks the latest message first, then each newer one as ``subscribe``
+        yields them (messages sent in between are skipped). Only the host waits:
+        the nodes never do. Here with the node ``Error`` of the example of
+        ``Run``::
+
+            node = Error()
+            x = torch.ones(2)
+            with mujou.run(node, inputs={node.prev: x}) as run:
+                error, t = run.wait_for(
+                    node.next, lambda e: torch.equal(e, x), timeout=5.0
+                )
+
+        Args:
+            port: The port to follow.
+            condition: Called on each message on the host's thread; ``True``
+                ends the wait.
+            timeout: Real seconds, counted from this call, to wait at most.
+                ``math.inf`` waits as long as the run runs.
+
+        Raises:
+            ValueError: As ``subscribe`` raises.
+            TimeoutError: ``timeout`` passed first. The run keeps running.
+            RuntimeError: The run shut down normally first.
+            NetworkError: The run stopped because a node raised.
+        """
+        for message, time in self.subscribe(port, timeout=timeout):
+            if condition(message):
+                return message, time
+        raise RuntimeError(
+            "the run shut down before the port sent a message that meets the condition"
+        )
 
     def state_dict(self) -> dict[str, Any]:
         """Copy the state of the run at one time, while it runs or after it ended
@@ -227,22 +308,31 @@ class Run:
             pass
 
 
-class ManualRun(Run):
+class ManualRun[T: Timer = VirtualTimer](Run):
     """A run whose nodes update only when ``step`` lets them, for tests.
 
     ``mujou.testing.run`` returns it. The nodes start and stop as in any run, but
-    between updates each waits for ``step``. With a ``VirtualTimer``, every
-    ``dt`` is then exactly the time the test advanced, and the result follows
-    the discrete algorithm of the chosen order.
+    between updates each waits for ``step``. On a ``VirtualTimer`` (the default),
+    every ``dt`` is then exactly the time the test advanced with ``timer.advance``,
+    and the result follows the discrete algorithm of the chosen order.
     """
+
+    _timer: T
+
+    @property
+    def timer(self) -> T:
+        """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
+        or the timer given to it."""
+        return self._timer
 
     def step(self, *nodes: Node) -> None:
         """Update each of ``nodes`` once, one after another in the given order (by
         default every node, in the order of the tree), and return when done.
 
-        A node whose time on the run's timer has not advanced since its last
-        update is not updated. A node updated twice sees ``dt = 0`` the second
-        time and is skipped.
+        ``step`` does not move the time: advance the timer first. A node whose
+        time on the run's timer has not moved since its last update is skipped
+        (it would see ``dt = 0``): a ``step`` without an ``advance`` before it
+        updates nothing, and a node given twice in one ``step`` updates once.
 
         Raises:
             ValueError: A node is not in this run.
@@ -257,7 +347,7 @@ def run[P: Port[Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,
-    inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
+    inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> Run:
@@ -294,12 +384,12 @@ def run[P: Port[Any, Any, Any]](
         pause_timeout: Real seconds that ``Run.state_dict`` waits for every node
             to pause (the end of its current ``on_update``): finite and > 0.
 
-    Example::
+    Example, with the node ``Error`` of the example of ``Run``::
 
-        net = Classifier()
-        with mujou.run(net, inputs={net.prev: x}) as run:
+        node = Error()
+        with mujou.run(node, inputs={node.prev: torch.ones(2)}) as run:
             mujou.time.sleep(0.1)
-            y, t = run.read(net.head.next)
+            error, t = run.read(node.next)
 
     Raises:
         RuntimeError: A network or node has already run, or belongs to a tree
@@ -382,6 +472,29 @@ def start[R: Run](
         raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
+    return handle
+
+
+def start_manual[T: Timer](
+    components: Sequence[Node | Network],
+    *,
+    timer: T,
+    inputs: Mapping[Any, object] | None,
+    state: Mapping[str, Any] | None,
+    pause_timeout: float,
+) -> ManualRun[T]:
+    """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
+    # The class itself: a subscripted generic is not a class to instantiate.
+    handle = start(
+        cast(type[ManualRun[T]], ManualRun),
+        components,
+        timer=timer,
+        inputs=inputs,
+        state=state,
+        pause_timeout=pause_timeout,
+        manual=True,
+    )
+    handle._timer = timer  # pyright: ignore[reportPrivateUsage]  # ManualRun's own module
     return handle
 
 

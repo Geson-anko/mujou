@@ -1,6 +1,6 @@
 """The smallest program: two nodes in a network, run in the background.
 
-The host writes an input, waits on the global time, reads the output and stops.
+The host writes an input, follows the output until it arrives and stops.
 """
 
 from typing import override
@@ -61,14 +61,9 @@ x = torch.tensor([1.0, 2.0, 3.0])
 # The nodes run on threads of their own until the end of the `with` block.
 with mujou.run(net) as run:
     run.write({net.prev: x})  # the unconnected input port of scale
-    # x takes a few updates to pass through the nodes, and how many fit in a given
-    # time depends on how the threads get scheduled: read until the output
-    # arrives, giving up after 5 s.
-    y, t = run.read(net.next)  # the latest message and when it was sent
-    give_up = mujou.time.time() + 5.0
-    while not torch.equal(y, 2 * x + 1) and mujou.time.time() < give_up:
-        mujou.time.sleep(0.01)  # 0.01 s of the global time
-        y, t = run.read(net.next)
+    # x takes a few updates to pass through the nodes: wait until y arrives, with
+    # the time it was sent (TimeoutError after 5 s of real time).
+    y, t = run.wait_for(net.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
 
 print(f"y = {y} at t = {float(t):.3f} s")
 assert torch.equal(y, 2 * x + 1)

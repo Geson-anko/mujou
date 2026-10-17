@@ -7,6 +7,7 @@ Use these functions instead of the standard ``time`` module wherever a duration
 should follow the global time, e.g. to present an input for a while.
 The global time starts at 0 when the process first uses it.
 
+- ``now()``: the global time as a ``Timestamp``, as ``Timer.now`` gives a timer's
 - ``time()``: the global time in seconds
 - ``time_ns()``: the global time in nanoseconds
 - ``sleep(seconds)``: block for ``seconds`` of global time, following the scale and
@@ -33,6 +34,15 @@ from mujou._core.timer import (
 time = _timer.time
 time_ns = _timer.time_ns
 get_time_scale = _timer.time_scale
+
+
+def now() -> Timestamp:
+    """Return the global time now, as ``Timer.now`` returns a timer's.
+
+    Compare it with the times of runs on the global timer, such as those that
+    ``Run.read`` and ``Run.write`` return.
+    """
+    return _timer.now()
 
 
 def sleep(seconds: float) -> None:
