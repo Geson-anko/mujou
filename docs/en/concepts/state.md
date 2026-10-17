@@ -6,16 +6,16 @@ Mujou can take the state of a running network without stopping it, and later run
 
 `run.state_dict()` returns the state of the network as one tree (nested dicts). The tree holds the following.
 
-| Content                                                                          | Who puts it in             |
-| -------------------------------------------------------------------------------- | -------------------------- |
-| The state of each node (weights, activities, ...)                                | Each node's `state_dict()` |
-| The latest value of each port and its time (including the inputs the host wrote) | Mujou, automatically       |
-| The time of each node's last update (where the next `dt` starts)                 | Mujou, automatically       |
-| The time and scale of the run's timer                                            | Mujou, automatically       |
+| Key              | Content                                                                               | Who puts it in             |
+| ---------------- | ------------------------------------------------------------------------------------- | -------------------------- |
+| `nodes`          | The state of each node (weights, activities, ...), by node path                       | Each node's `state_dict()` |
+| `slots`          | The latest value of each value slot and its time (including the host's inputs)        | Mujou, automatically       |
+| `last_update_ns` | The time of each node's last update, in ns, by node path (where the next `dt` starts) | Mujou, automatically       |
+| `timer`          | The time and scale of the run's timer (`time_ns` and `scale`)                         | Mujou, automatically       |
 
 The port values are in the tree because the state of a network is the state of its nodes together with the values flowing between them. If the port values went back to their initial values on a restart, the neighbors would read initial values and leave the equilibrium they had reached.
 
-The state of each node is keyed by the node's path (such as `"body.l1"`; see [Networks](networks.md)).
+The keys of `nodes` are the node paths (such as `"body.l1"`; see [Networks](networks.md)). For example, take the state of `l1` in a run of `mujou.run(net)` with `tree["nodes"]["l1"]`. For a single node run with `mujou.run(node)`, use `tree["nodes"][""]`.
 
 ## How a node collects its state
 
