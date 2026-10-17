@@ -40,8 +40,8 @@ hook は次の順に呼ばれる。
 
 次の hook は、上の順とは別に、必要なときに呼ばれる。
 
-- `on_pause()`: ネットワークが停止したとき。実行中の `on_update` が終わった後に呼ばれる。停止は状態の取得などのときに起きる（[状態](state.md)）
-- `on_resume()`: 停止から再開したとき。次の `on_update` の前に呼ばれる
+- `on_pause()`: ネットワークが一時停止したとき。実行中の `on_update` が終わった後に呼ばれる。一時停止は状態の取得などのときに起きる（[状態](state.md)）
+- `on_resume()`: 一時停止から再開したとき。次の `on_update` の前に呼ばれる
 - `state_dict()`: 状態を取得するとき
 
 `on_update` は、既定ではできるだけ速く繰り返される。`super().__init__(period=0.01)` のように周期を渡すと、平均してその秒数に 1 回呼ばれる。周期を渡しても、`dt` は前回の更新から実際に経った時間である（[グローバル時間](time.md)）。
@@ -59,6 +59,8 @@ hook は次の順に呼ばれる。
 この例のノードは、前のノードから `x` を受け取り、状態 `h` を `x @ w` に向けて時間とともに近づけ、次のノードへ送る。
 
 ```python
+from typing import override
+
 import torch
 
 import mujou
@@ -70,11 +72,13 @@ class Leaky(mujou.Node):
         self.next = mujou.NextPort(send=mujou.TensorSpec((32, n_out)))  # 送るだけ
         self.n_in, self.n_out = n_in, n_out
 
+    @override
     def on_start(self) -> None:
         # 状態のテンソルは on_start で作る。Tensor の属性は状態として自動で集まる
-        self.w = torch.randn(self.n_in, self.n_out) * 0.1
+        self.w = torch.randn(self.n_in, self.n_out, generator=self.generator) * 0.1
         self.h = torch.zeros(32, self.n_out)
 
+    @override
     def on_update(self, dt: float) -> None:
         x = self.prev.recv()                  # 前のノードの最新値。待たない
         self.h += dt * (x @ self.w - self.h)  # dt に比例して、その場で更新する

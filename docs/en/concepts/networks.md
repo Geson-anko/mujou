@@ -46,13 +46,14 @@ You can also pass nodes to `mujou.run` in place of networks. If you pass a singl
 
 Once the network runs, the host talks to it only through the methods of `Run`.
 
-| Method                | What it does                                             |
-| --------------------- | -------------------------------------------------------- |
-| `run.write({...})`    | Writes input to unconnected ports                        |
-| `run.read(port)`      | Reads the latest value of a port and its time            |
-| `run.subscribe(port)` | Receives the latest value each time a new one is written |
-| `run.state_dict()`    | Takes the state (see [State](state.md))                  |
-| `run.shutdown()`      | Stops the run and waits until it has stopped             |
+| Method                | What it does                                                 |
+| --------------------- | ------------------------------------------------------------ |
+| `run.write({...})`    | Writes input to unconnected ports                            |
+| `run.read(port)`      | Reads the latest value of a port and its time                |
+| `run.subscribe(port)` | Receives the latest value each time the node sends a new one |
+| `run.state_dict()`    | Takes the state (see [State](state.md))                      |
+| `run.shutdown()`      | Stops the run and waits until it has stopped                 |
+| `run.join()`          | Waits until the run stops, without stopping it               |
 
 `Run` works with the `with` statement and calls `shutdown()` on exit.
 

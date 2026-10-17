@@ -12,7 +12,9 @@ Most machine learning systems are trained once and then frozen for inference. Mu
 
 ## Development
 
-Requires [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) (>= 1.58) and a Rust toolchain ([rustup](https://rustup.rs/)) for the native core `mujou._core._native`, which `uv sync` builds with maturin.
+Requires Python 3.14 or later. Development uses the free-threaded build 3.14t, set in `.python-version`; the regular build with the GIL is supported too.
+
+Also requires [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) (>= 1.58) and a Rust toolchain ([rustup](https://rustup.rs/)) for the native core `mujou._core._native`, which `uv sync` builds with maturin.
 
 ```sh
 just setup   # create .venv, install deps, install pre-commit hooks

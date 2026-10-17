@@ -23,7 +23,7 @@ The composed networks have paths under the names given by `Compose`.
 
 The paths are the keys of the state tree. To restore a saved state, compose the networks the same way as when the state was saved (the same order, the same keywords) (see [Saving and restoring state](state.md)).
 
-The following cannot be keywords: an empty name, a name containing `.`, a name starting with `_`, the name of an attribute of `Network` such as `build`, and a positional name such as `"0"`. Using one raises `ValueError`.
+The following cannot be keywords: an empty name, a name containing `.`, a name starting with `_`, the name of an attribute of `Network` such as `build`, and the name of a network passed by position (the `"0"` in `Compose(a, **{"0": b})`). Using one raises `ValueError`.
 
 ## Connect before composing
 

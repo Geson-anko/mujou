@@ -38,11 +38,12 @@ A node writes with `send(value)` and reads with `recv()`.
 
 - The reader gets the latest value at that moment. There is no way to wait for a new value
 - Old values do not pile up. Some values are overwritten without ever being read, and the same value may be read many times. Both are normal
-- If the peer has not written yet, the reader gets the initial value: zeros of the shape and dtype in the receive spec (for a `DictSpec`, a zero tensor for each key). A port that takes one peer but is not connected also reads the initial value. A port that takes many peers but is not connected has no channel, so it reads an empty dict
+- If the peer has not written yet, the reader gets the initial value: zeros of the shape and dtype in the receive spec (for a `DictSpec`, a zero tensor for each key). A port that takes one peer but is not connected also reads the initial value
+- A port that takes many peers but is not connected has no channel, so it reads an empty dict
 - The value is a `torch.Tensor` (for a `DictSpec` port, a dict of tensors, one per key). It is copied on every read and write, so changing a received tensor affects no other node
 - A sent value is detached from the computation graph. Gradients never pass through a port
 
-Each value carries the time it was written (a `Timestamp` of [global time](time.md)). Read the value and its time as a pair with `recv_with_time()` to tell how old the value is.
+Each value carries the time it was written (a `Timestamp` on the [run's timer](time.md#timers), which by default is the global timer). Read the value and its time as a pair with `recv_with_time()` to tell how old the value is.
 
 ## PrevPort, NextPort and Port
 
@@ -64,7 +65,7 @@ To send to many peers, either send the same value to all of them with `send(valu
 
 A port may stay unconnected. Unconnected ports become the inputs and outputs of the network (see [Networks](networks.md)).
 
-- The host writes input to an unconnected port with `Run.write`. The first input can be passed as `mujou.run(net, inputs={port: value})`; that value becomes the port's initial value. The host cannot write to a connected port, so that each slot keeps a single writer
+- The host writes input with `Run.write` to an unconnected port that takes one peer. The first input can be passed as `mujou.run(net, inputs={port: value})`; that value becomes the port's initial value. The host cannot write to a connected port, so that each slot keeps a single writer
 - The host reads with `Run.read` the latest value that a node sent, from any port that has a send type. Reading an unconnected port gives an output; reading a connected port observes an intermediate value
 
 How to declare and connect ports in detail is in [Building a network](../user-guide/building-a-network.md).
