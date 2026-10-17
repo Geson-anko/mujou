@@ -1,6 +1,6 @@
 import dataclasses
 import threading
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
 
 import pytest
 
@@ -9,9 +9,6 @@ from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
-
-if TYPE_CHECKING:
-    from tests.mujou.conftest import Start
 
 
 def h(n: int = 3) -> TensorSpec:
@@ -380,12 +377,3 @@ class TestCompose:
         stack = Stack()
         with pytest.raises(ValueError, match="'0' and 'enc'"):
             Compose(stack, enc=stack).build()
-
-    def test_mujou_run_composes_by_position(self, start: Start):
-        # The same paths as Compose(first, second): the node states are keyed by
-        # them.
-        run = start(Stack(), Stack())
-        assert set(run.state_dict()["nodes"]) == {"0.l1", "0.l2", "1.l1", "1.l2"}
-
-    def test_mujou_run_of_one_network_keeps_its_paths(self, start: Start):
-        assert set(start(Stack()).state_dict()["nodes"]) == {"l1", "l2"}

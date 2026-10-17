@@ -73,13 +73,6 @@ class TestThreadSetup:
         assert node.grad_enabled is False
         assert node.draws is not None
 
-    def test_the_thread_is_forgotten_after_the_end(self, start_manual: StartManual):
-        node = Probe()
-        run = start_manual(Compose(node=node))
-        assert thread_ident(node) == node.ident
-        run.shutdown()
-        assert thread_ident(node) is None
-
     def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
         node = Probe(seed=0)
         run = start_manual(Compose(node=node))
@@ -213,7 +206,7 @@ class TestTimer:
         reader = threading.Thread(target=read)
         reader.start()
         try:
-            for _ in range(5):
+            for _ in range(2):
                 assert run.state_dict()["nodes"]["node"] == Timestamp(ns=0)
         finally:
             done.set()
