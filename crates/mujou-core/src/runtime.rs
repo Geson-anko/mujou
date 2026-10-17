@@ -95,8 +95,9 @@ pub struct RuntimeConfig {
     pub last_update_ns: Option<Vec<u64>>,
     /// Each node's period on the timer, in ns (> 0): a free-running node
     /// updates at targets a period apart (see `node_loop`), so once every
-    /// period on average while its update and its wake-up fit in the period. `None` (for all nodes or one) updates as soon as any time
-    /// has passed. The manual mode ignores it.
+    /// period on average while its update and its wake-up fit in the period.
+    /// `None` (for all nodes or one) updates as soon as any time has passed.
+    /// The manual mode ignores it.
     pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
@@ -106,17 +107,13 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             manual: false,
-            pause_timeout: Duration::from_secs(10),
+            pause_timeout: Duration::from_secs(30),
             last_update_ns: None,
             period_ns: None,
             timer_state: None,
         }
     }
 }
-
-/// Takes the state when the system stops because of an exception. The map
-/// lacks the nodes whose `state_dict` failed.
-pub type ExceptionCapture<S> = Box<dyn FnOnce(BTreeMap<usize, S>, &NodeFailure) + Send>;
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
@@ -220,16 +217,14 @@ fn is_run(word: u64) -> bool {
 }
 
 /// Why the runtime holds the timer frozen. The runtime keeps one
-/// [`PauseHold`] while any reason is left, so ending one (a capture) cannot
-/// undo another (an exception).
+/// [`PauseHold`] while any reason is left, so ending one reason cannot undo
+/// another.
 #[derive(Debug, Clone, Copy)]
 enum FreezeReason {
     /// From before the nodes start until all of them are ready to update.
     Startup = 1,
     /// A capture: from the pause request until the state is built.
     Capture = 2,
-    /// An exception, when the state is captured on exceptions.
-    Failure = 4,
 }
 
 #[derive(Default)]
@@ -301,7 +296,7 @@ struct Control {
     /// Manual mode: the node allowed to run one step. The node clears it.
     grant: Option<usize>,
     nodes: Vec<Report>,
-    /// Every node may call `stop` (set after the exception capture, if any).
+    /// Every node may call `stop` (set once every node is ready to stop).
     stop_allowed: bool,
     freeze: Freeze,
     /// Counts this runtime as live on its timer until it finishes.
@@ -322,7 +317,6 @@ struct Shared<N: NodeHooks> {
     timer: Arc<Timer>,
     names: Vec<String>,
     manual: bool,
-    capture_on_failure: bool,
     control: Mutex<Control>,
     /// Notified on every change of `control`, in both directions.
     changed: Condvar,
@@ -433,11 +427,6 @@ impl<N: NodeHooks> Shared<N> {
         let mut c = self.lock();
         c.failed = true;
         self.set_command(&mut c, Command::Stop);
-        // Freeze right after raising the flag, as a pause does, so that the
-        // state captured on the exception is consistent at one time.
-        if self.capture_on_failure {
-            c.freeze.hold(FreezeReason::Failure, &self.timer);
-        }
         // Wake the nodes that already left their loops, so they call
         // `exception` too (`set_command` does not notify if already stopping).
         self.changed.notify_all();
@@ -571,15 +560,15 @@ impl<N: NodeHooks> Shared<N> {
     /// The loop boundary: the only place where the node pauses or stops, so an
     /// update always runs to its end. Returns the time for the next update.
     ///
-    /// The time read here is never later than the frozen time T of a pause (or
-    /// of a stop on an exception) whose request the node did not see. The
-    /// controller stores the new control word and only then freezes the timer,
-    /// both under the control lock. The node reads the word, then the time, then
-    /// the word again, and uses the time only if the word did not change. If the
-    /// freeze came before the time was read, the timer's lock orders the
-    /// controller's store before the node's second load, which then sees the new
-    /// word, and the node discards the time. So a time that is used was read
-    /// before the freeze, and is at most T.
+    /// The time read here is never later than the frozen time T of a pause
+    /// whose request the node did not see. The controller stores the new
+    /// control word and only then freezes the timer, both under the control
+    /// lock. The node reads the word, then the time, then the word again, and
+    /// uses the time only if the word did not change. If the freeze came before
+    /// the time was read, the timer's lock orders the controller's store before
+    /// the node's second load, which then sees the new word, and the node
+    /// discards the time. So a time that is used was read before the freeze,
+    /// and is at most T.
     fn boundary(&self, i: usize) -> Boundary {
         // Fast path for free running: no lock shared with the other nodes.
         let word = self.word.load(Ordering::SeqCst);
@@ -735,7 +724,6 @@ fn remaining(deadline: Option<Instant>) -> Duration {
 struct Controller<N: NodeHooks> {
     shared: Arc<Shared<N>>,
     threads: Vec<JoinHandle<()>>,
-    exception_capture: Option<ExceptionCapture<N::State>>,
     pause_timeout: Duration,
     done: bool,
 }
@@ -863,26 +851,6 @@ impl<N: NodeHooks> Controller<N> {
         while !c.nodes.iter().all(|r| r.ready_to_stop(c.failed)) {
             c = s.wait(c);
         }
-        let failed = c.failed;
-        drop(c);
-        if failed {
-            if let Some(capture) = self.exception_capture.take() {
-                // `exception` does not change what `state_dict` returns, so the
-                // state is still the one at the failure. A node whose
-                // `state_dict` fails is left out; the hook logged the error.
-                let states = (0..s.hooks.len())
-                    .filter_map(|i| {
-                        let state = s.invoke(i, "state_dict", N::state_dict);
-                        state.ok().map(|state| (i, state))
-                    })
-                    .collect();
-                let failure = s.failure.get().expect("a failure was recorded");
-                // A panic must not keep the system from ending (and the time
-                // frozen); the panic hook has already printed it.
-                let _ = panic::catch_unwind(AssertUnwindSafe(|| capture(states, failure)));
-            }
-        }
-        let mut c = s.lock();
         c.stop_allowed = true;
         s.changed.notify_all();
         drop(c);
@@ -977,7 +945,6 @@ impl<N: NodeHooks> Runtime<N> {
         names: Vec<String>,
         timer: Arc<Timer>,
         config: RuntimeConfig,
-        exception_capture: Option<ExceptionCapture<N::State>>,
     ) -> Result<(Self, Reply<()>), RuntimeError> {
         let n = nodes.len();
         if names.len() != n {
@@ -1018,7 +985,6 @@ impl<N: NodeHooks> Runtime<N> {
             timer,
             names,
             manual: config.manual,
-            capture_on_failure: exception_capture.is_some(),
             control: Mutex::new(Control {
                 command: Command::Run,
                 epoch: 0,
@@ -1042,8 +1008,8 @@ impl<N: NodeHooks> Runtime<N> {
         });
         shared.freeze_for_startup(config.timer_state)?;
         // Where each first Δt starts: set before any thread exists, so that it
-        // is right even if the system ends while starting (the state captured
-        // on that exception holds it), and stays right since the time is frozen.
+        // is right even if the system ends while starting, and stays right since
+        // the time is frozen.
         let now_ns = shared.timer.time_ns();
         for (i, last) in shared.last_update_ns.iter().enumerate() {
             let ns = config.last_update_ns.as_ref().map_or(now_ns, |v| v[i]);
@@ -1064,7 +1030,6 @@ impl<N: NodeHooks> Runtime<N> {
         let controller = Controller {
             shared: Arc::clone(&shared),
             threads,
-            exception_capture,
             pause_timeout: config.pause_timeout,
             done: false,
         };
@@ -1225,15 +1190,15 @@ mod tests {
     fn freeze_holds_the_timer_until_every_reason_is_released() {
         let timer = Arc::new(Timer::new());
         let mut freeze = Freeze::default();
-        freeze.hold(FreezeReason::Failure, &timer);
+        freeze.hold(FreezeReason::Startup, &timer);
         freeze.hold(FreezeReason::Capture, &timer);
-        // Ending the capture must not undo the freeze for the exception.
+        // Ending the capture must not undo the freeze for the startup.
         freeze.release(FreezeReason::Capture);
         assert!(timer.is_paused());
         // Releasing a reason that is not held changes nothing.
         freeze.release(FreezeReason::Capture);
         assert!(timer.is_paused());
-        freeze.release(FreezeReason::Failure);
+        freeze.release(FreezeReason::Startup);
         assert!(!timer.is_paused());
     }
 

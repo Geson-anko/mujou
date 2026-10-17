@@ -249,10 +249,10 @@ impl Timer {
     /// Freezes the time until every hold taken so far is dropped (and the
     /// switch of [`Timer::pause`] is off).
     ///
-    /// Each controller of a running system (a runtime pausing to take the state,
-    /// or stopping on an exception) takes its own hold, so that ending one
-    /// freeze cannot let the time run during another one: several systems may
-    /// run on one timer (all on the global one by default).
+    /// Each controller of a running system (a runtime starting, or pausing to
+    /// take the state) takes its own hold, so that ending one freeze cannot let
+    /// the time run during another one: several systems may run on one timer
+    /// (all on the global one by default).
     pub fn hold(self: &Arc<Self>) -> PauseHold {
         self.update(|s| {
             s.reanchor();
