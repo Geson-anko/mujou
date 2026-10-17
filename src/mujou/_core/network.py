@@ -240,7 +240,7 @@ class Network(Component):
                     f"{_where(seen[id(component)])} and {_where(path)}"
                 )
             seen[id(component)] = path
-            if component in _BUILT:
+            if _is_built(component):
                 raise RuntimeError(
                     f"{type(component).__name__} at {_where(path)} belongs to a "
                     "network that is already built"
@@ -299,7 +299,8 @@ class Network(Component):
                     )
         for port in ports:
             freeze(port)
-        _BUILT.update(members)
+        for member in members:
+            _mark_built(member)
         return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members))
 
 
@@ -313,14 +314,33 @@ def unbuild(network: Network) -> None:
             return
         for port in graph._ports:  # pyright: ignore[reportPrivateUsage]
             thaw(port)
-        _BUILT.difference_update(graph._members)  # pyright: ignore[reportPrivateUsage]
+        for member in graph._members:  # pyright: ignore[reportPrivateUsage]
+            _BUILT.pop(id(member), None)
         network._graph = None  # pyright: ignore[reportPrivateUsage]
 
 
 # The nodes and networks of every built tree: a part of one cannot join another.
 # Ports are marked too (frozen), but a node without ports has only this mark.
-_BUILT: Final[weakref.WeakSet[Component]] = weakref.WeakSet()
+# Keyed by id and checked by identity, so that a component's own __eq__ / __hash__
+# (e.g. a dataclass, which is unhashable) plays no part.
+_BUILT: Final[dict[int, weakref.ref[Component]]] = {}
 _BUILD_LOCK: Final = threading.Lock()
+
+
+def _is_built(component: Component) -> bool:
+    ref = _BUILT.get(id(component))
+    return ref is not None and ref() is component
+
+
+def _mark_built(component: Component) -> None:
+    key = id(component)
+
+    def forget(ref: weakref.ref[Component]) -> None:
+        # Only this mark: a later component may have reused the id.
+        if _BUILT.get(key) is ref:
+            _BUILT.pop(key, None)
+
+    _BUILT[key] = weakref.ref(component, forget)
 
 
 class Compose(Network):
@@ -377,8 +397,9 @@ def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
 
     A start refused before any node started (an ``Exception`` other than
     ``NetworkError``) does not count, so the graph may run once the cause is
-    gone. An interruption (``KeyboardInterrupt``) counts: the start may go on in
-    the background.
+    gone. An interruption (``KeyboardInterrupt``) counts, wherever it came: the
+    start may go on in the background, and a run interrupted before it started
+    the runtime is counted too, to be safe.
 
     Raises:
         RuntimeError: ``graph`` has already run.

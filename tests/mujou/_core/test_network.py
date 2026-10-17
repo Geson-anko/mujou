@@ -1,5 +1,6 @@
+import dataclasses
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 import pytest
 
@@ -270,6 +271,30 @@ class TestBuild:
         Net(lone).build()
         with pytest.raises(RuntimeError, match="'node' belongs to a network"):
             Net(lone).build()
+
+    def test_ignores_the_equality_of_the_components(self):
+        # The marks follow identity: a dataclass network (unhashable) builds, and
+        # an equal but distinct node is not taken for a built one.
+        @dataclasses.dataclass
+        class DataNet(Network):
+            node: Node
+
+        class EqualNode(Node):
+            @override
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, EqualNode)
+
+            @override
+            def __hash__(self) -> int:
+                return 0
+
+        class Net(Network):
+            def __init__(self, node: Node) -> None:
+                self.node = node
+
+        DataNet(Hidden()).build()
+        Net(EqualNode()).build()
+        Net(EqualNode()).build()
 
     def test_builds_once_under_concurrent_calls(self):
         nets = [Classifier() for _ in range(20)]
