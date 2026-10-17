@@ -1,5 +1,7 @@
 import copy
+import math
 import pickle
+import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -17,7 +19,7 @@ from mujou.testing import ManualRun, VirtualTimer
 from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import StartManual
+    from tests.mujou.conftest import Start, StartManual
 
 
 class Probe(Node):
@@ -274,6 +276,64 @@ class TestDevice:
     def test_rejects_devices_other_than_cpu_and_cuda(self):
         with pytest.raises(ValueError, match="CPU or CUDA"):
             Node(device="meta")
+
+
+class Ticker(Node):
+    """Puts each ``dt`` it updates with into ``dts``."""
+
+    def __init__(self, period: float | None) -> None:
+        super().__init__(period=period)
+        self.out = Port(send=TensorSpec((1,)))
+        self.dts: queue.Queue[float] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.dts.put(dt)
+
+
+class TestPeriod:
+    def test_defaults_to_none(self):
+        assert Probe().period is None
+        assert Probe(init_base=False).period is None
+
+    def test_is_kept(self):
+        assert Node(period=0.01).period == 0.01
+
+    @pytest.mark.parametrize("period", [0.0, -0.01, math.inf, math.nan])
+    def test_rejects_what_is_not_finite_and_positive(self, period: float):
+        with pytest.raises(ValueError, match="period"):
+            Node(period=period)
+
+    def test_rejects_a_bool(self):
+        with pytest.raises(TypeError, match="period"):
+            Node(period=True)
+
+    def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
+        class OnTheClass(Ticker):
+            period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
+
+        with pytest.raises(TypeError, match="reserved"):
+            start(Solo(OnTheClass(period=None)), timer=virtual)
+
+    def test_the_node_waits_for_its_period_on_the_timer(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # Free running: a manual run (mujou.testing.run) ignores the period.
+        node = Ticker(period=0.01)
+        start(Solo(node), timer=virtual)
+        virtual.advance(0.005)
+        with pytest.raises(queue.Empty):
+            node.dts.get(timeout=0.05)
+        virtual.advance(0.005)
+        assert node.dts.get(timeout=5.0) == 0.01
+
+    def test_a_period_below_a_nanosecond_is_one_nanosecond(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        node = Ticker(period=1e-10)
+        start(Solo(node), timer=virtual)
+        virtual.advance(1e-9)
+        assert node.dts.get(timeout=5.0) == 1e-9
 
 
 class OwnSetup(Probe):

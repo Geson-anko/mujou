@@ -19,7 +19,14 @@ import torch
 
 from mujou._core import _native
 from mujou._core.network import ports
-from mujou._core.node import Node, capture_state, end_thread, set_timer, thread_ident
+from mujou._core.node import (
+    Node,
+    capture_state,
+    end_thread,
+    period_ns,
+    set_timer,
+    thread_ident,
+)
 from mujou._core.port import Channel, Port, bind
 from mujou._core.spec import Spec, fields, join, split
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
@@ -230,6 +237,7 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
+        periods = [period_ns(node) for node in self._nodes]
         restored = None if state is None else self._restore(state)
         if inputs:
             items = self._items(inputs)
@@ -255,7 +263,10 @@ class Session:
         self._synchronize_current_streams()
         try:
             runtime.start(
-                manual=manual, pause_timeout=pause_timeout, **(restored or {})
+                manual=manual,
+                pause_timeout=pause_timeout,
+                period_ns=periods,
+                **(restored or {}),
             )
         except _native.NetworkError:
             self._settle()  # a node raised while starting: this run is over
