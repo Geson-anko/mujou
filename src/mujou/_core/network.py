@@ -220,8 +220,10 @@ class Network(Component):
         """Check the structure of this network as the root, freeze it and return
         its graph.
 
-        After ``build``, no port in the tree takes new connections. Calling it
-        again returns the same graph. ``mujou.run`` calls it.
+        After ``build``, no port in the tree takes new connections, and no part of
+        the tree, this network included, can become part of a bigger network:
+        build only the network you will run. Calling it again returns the same
+        graph. ``mujou.run`` calls it.
 
         Raises:
             RuntimeError: Part of the tree (a node, a network or a port) belongs
