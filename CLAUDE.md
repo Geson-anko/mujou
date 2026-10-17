@@ -91,7 +91,9 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `just setup`           | 開発環境のセットアップ（`uv venv` + `uv sync` + pre-commit install）                                          |
 | `just format`          | pre-commit フックを全ファイルに実行                                                                           |
-| `just test`            | cargo test と pytest（slow を含む全テスト、coverage 付き）                                                    |
+| `just test`            | `just test-rs` と `just test-py` の両方を実行する                                                             |
+| `just test-rs`         | Rust の workspace 全体に cargo test                                                                           |
+| `just test-py`         | pytest（slow を含む全テスト、coverage 付き）                                                                  |
 | `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                              |
 | `just type`            | pyright strict                                                                                                |
 | `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |

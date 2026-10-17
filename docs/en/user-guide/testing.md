@@ -37,6 +37,7 @@ If the reference and the nodes do the same operations in the same order, the res
 - A node whose timer has not moved since its last update is skipped (it would see `dt = 0`). If you forget `advance`, nothing happens, and if you pass the same node twice in one `step`, the second one is skipped
 - The period of a node (`period`) is not used in a manual run
 - `step` does not move the time. Only `advance` moves it
+- Nothing is sent unless `step` is called. So `wait_for` and `subscribe` without a `timeout` on the thread that calls `step` wait forever
 
 ## Choosing the timer
 

@@ -1,5 +1,7 @@
 import dataclasses
+import inspect
 import threading
+import typing
 from typing import Any, override
 
 import pytest
@@ -110,6 +112,13 @@ class TestComponentConnect:
         a, b, c = Hidden(), Hidden(), Hidden()
         ab, ac = a.connect(b), a.connect(c)
         assert a.next.channels == (ab, ac)
+
+    @pytest.mark.parametrize("kind", [Node, Network])
+    def test_annotations_resolve(self, kind: type[Node | Network]):
+        # component.py imports Node and Network only for the type checker.
+        other = inspect.signature(kind.connect).parameters["other"].annotation
+        assert other == Node | Network
+        assert typing.get_type_hints(kind.connect)["other"] == Node | Network
 
 
 class TestBuild:

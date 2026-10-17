@@ -16,6 +16,7 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
+from mujou._core import session as session_module
 from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
@@ -1776,6 +1777,70 @@ class TestOneNodeOnMps:
         node, net = OnMps(), Chain()
         start_manual(node, net)
         assert node.started and net.a.started
+
+
+class OnCpu(Node):
+    """Does nothing on the CPU; records whether it started."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = False
+
+    @override
+    def on_start(self) -> None:
+        super().on_start()
+        self.started = True
+
+
+@pytest.fixture
+def one_node_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Count the CPU as MPS is counted, so that the one-node rule runs without
+    MPS: ``Session.start`` reads the module's device types at each start."""
+    monkeypatch.setattr(session_module, "_ONE_NODE_DEVICES", ("cpu",))
+
+
+@pytest.mark.usefixtures("one_node_cpu")
+class TestOneNodeDevice:
+    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
+        a, b = OnCpu(), OnCpu()
+        with pytest.raises(ValueError, match=r"^CPU cannot .* but 'a', 'b' do;"):
+            start_manual(Compose(a=a, b=b))
+        assert not a.started and not b.started
+
+    def test_refuses_one_node_in_each_of_two_runs(self, start_manual: StartManual):
+        first, second = OnCpu(), OnCpu()
+        run = start_manual(first)
+        with pytest.raises(ValueError, match=r"'OnCpu' \(of a running run\)"):
+            start_manual(second)
+        assert not second.started
+        run.shutdown()
+        start_manual(second)  # the first run has ended: it no longer counts
+        assert second.started
+
+    def test_starts_one_of_two_runs_started_at_once(self):
+        # Without the lock around the count and the registration, both runs pass
+        # the count in most rounds.
+        for _ in range(50):
+            barrier = threading.Barrier(2)
+            outcomes: list[Run | ValueError] = []
+
+            def go(barrier: threading.Barrier = barrier) -> None:
+                node = OnCpu()
+                barrier.wait()
+                try:
+                    outcomes.append(mujou.run(node))
+                except ValueError as e:
+                    outcomes.append(e)
+
+            threads = [threading.Thread(target=go) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            runs = [outcome for outcome in outcomes if isinstance(outcome, Run)]
+            for run in runs:
+                run.shutdown()
+            assert len(runs) == 1
 
 
 class Hooks(Node):
