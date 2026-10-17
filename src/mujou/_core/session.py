@@ -27,7 +27,7 @@ from mujou._core.node import (
     set_timer,
     thread_ident,
 )
-from mujou._core.port import Channel, Port, bind
+from mujou._core.port import Channel, Port, bind, initial
 from mujou._core.spec import Spec, fields, join, split
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
 
@@ -194,10 +194,16 @@ class Session:
             timer=self._clock,
         )
         self._outlets[port] = outlet
-        self._slots[outlet.outbox.name] = (outlet.outbox, spec)
-        for k in range(len(port.channels)):
-            slot = outlet.channel(k)
+        slots = [outlet.outbox, *(outlet.channel(k) for k in range(len(port.channels)))]
+        for slot in slots:
             self._slots[slot.name] = (slot, spec)
+        values = initial(port)
+        if values is not None:
+            # In place of the zeros, with their time (the timer's when the run was
+            # laid out). A restore later replaces them, as it does the zeros.
+            time_ns = outlet.outbox.read().timestamp.ns
+            for slot in slots:
+                slot.restore(values, time_ns)
 
     def _sources(
         self, port: AnyPort, path: str
