@@ -75,3 +75,52 @@ Python: `Node(period=...)` の検証と property、仮想時計での 1 本の�
 
 - `just run` green
 - `cargo test --test runtime` を 10 回、`mod period` を 4 並列 × 3 回、pytest を free-threaded と `-X gil=1` で 3 回ずつ。すべて green
+
+## 6. レビュー後の作業（2026-10-17）
+
+code-reviewer・algorithm-reviewer とも approve（`memory/agents/{code,algorithm}-reviewer/node-period.md`）。
+
+### merge（`feature/2026-10-16/node-state`、run-handle を含む）
+
+- 衝突は 3 ファイル
+  - `session.py`: node-state 側の `Session.start` を採り、`period_ns` は `runtime.start(...)` の引数として渡した（`restored` の dict には入れない。復元しない実行でも周期が渡るように）
+  - `node.py`: `on_update(dt)` の行で、node-state の「the run's ``timer``」の文言に周期の記述を合わせた
+  - `specs/execution-model.md`: 手動モードの行を `mujou.testing.run` / `ManualRun.step` の表記にし、「周期は使わない」を足した
+- `TestPeriod` の結合テストを新しい口に書き直した（自由実行の `mujou.run(..., timer=VirtualTimer())` と `advance`）。手動の `mujou.testing.run` は周期を使わない
+- 文書の手動モードの表記を `mujou.testing` に合わせた
+
+### ユーザーの決定 1: 数え方を変えた
+
+- 次の目標 = 前回の目標 + P。更新の時刻が「前回の目標 + P」以上（P 以上遅れた）なら、目標をその時刻 + P に数え直す。最初の目標は最初の Δt の起点（開始 / 復元した `last_update_ns`）+ P
+- pamiq-core（起きた時刻から数え直す）からの意図した変更。理由: macOS では起床の遅れ（周期 10 ms で中央値約 2.5 ms、algorithm-reviewer の実測）が周期ごとに積もり、10 ms が約 80 Hz になった。前回の目標から数えれば平均の頻度が 1/P に保たれ、`offset` も要らない
+- 結果として Δt は P より短くなりうる（少し遅れた次の更新）。docstring・specs の「Δt ≥ period」を「おおむね P」に直した
+- 境界: 「ちょうど P 遅れ」は数え直す。`>` にすると Δt = 0 の更新が起きる（ミューテーションでテストが落ちることを確認）
+- 復元では、状態に入るのは最後の更新時刻だけで目標は入らないので、起点は最後の更新 + P になる（位相は数え直しと同じ扱い）。木の形を変えないための選択
+
+### ユーザーの決定 2: クラス属性での既定の周期は入れない
+
+- `period` を予約名の一覧（`device`・`generator`・`period`・`timer`）に足した
+- session は `node.period_ns(node)`（node.py のモジュール関数）で検証済みの `_period` を読む。サブクラスが `period` を置き換えていたら（`inspect.getattr_static` で `Node.period` の property と違う）、実行の開始の最初（復元・書き込みの前）で `TypeError` を出す。開始は何も始めずに失敗するので、置き換えを直せば同じネットワークで実行し直せる
+
+### ほかの指摘への対応
+
+| 指摘 | 対応 |
+| --- | --- |
+| code should-fix 1・3 | merge で対応（上記） |
+| code should-fix 2・4 | 予約名にした（決定 2） |
+| code should-fix 5 / algorithm should-fix 1 | Rust に `a_capture_does_not_move_the_target`・`a_restored_node_counts_its_period_from_its_last_update` を追加（仮想時計） |
+| algorithm should-fix 2 | `specs/nodes.md#実行の周期` と docstring に「長い Δt でも安定に。必要ならノードの内側で刻みを分割。打ち切ると時間が失われる」 |
+| algorithm nit 1 | 停止の時間は数えないこと、復元の起点を docstring と specs に書いた |
+| algorithm nit 3 | `each_node_keeps_its_own_period`（P と 3P） |
+| algorithm nit 4 / code nit 2 | `bool` は `TypeError` |
+| code nit 3 | docstring の起点（復元を含む）と「every period」→「once every period on average」 |
+| code nit 4 | specs を「前回の更新から合計で目標まで進めたとき（1 回の advance である必要はない）」に。Rust テストでも P/2 ずつ進めて確かめる |
+| code nit 5 | `period_ns` は 0.5 を 0 から遠い側へ丸める（コアの `seconds_to_ns` と同じ） |
+| code nit 6 | 実時計テストの下限を `RUN`（sleep の長さ）で計算 |
+| code nit 8 | Python に `test_a_period_below_a_nanosecond_is_one_nanosecond` |
+| code nit 1（584 年超で OverflowError）・nit 7（u64::MAX 付近の saturating）| 記録のみ。起こりえない範囲 |
+| algorithm nit 2（起床の遅れで頻度が下がる）| 数え方の変更で解消。実時計テストの下限を「平均で 1/P の半分以上」に上げた |
+
+### 検証
+
+- 負荷試験はしていない（coordinator の指示。CPU を埋める並列は回さない）。実時計テストの不等式は、上限が「目標は P ずつ離れているので回数 ≤ 経過/P」で負荷に依らず、下限は期待値の半分で、遅れが積もらない方式なので余裕が大きい
