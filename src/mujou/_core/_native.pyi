@@ -36,6 +36,7 @@ __all__ = [
     "Schema",
     "Slot",
     "Timer",
+    "TimerReader",
     "Timestamp",
 ]
 
@@ -475,6 +476,11 @@ class Timer:
         freezes the time with its own holds, which this switch neither ends nor
         is ended by. Pausing twice needs one resume.
         """
+    def reader(self, /) -> TimerReader:
+        """
+        A `TimerReader` of this timer: it reads the time and the scale and has
+        no way to change them.
+        """
     def resume(self, /) -> None:
         """
         Turns off the switch set by `pause`. The time runs again only when no
@@ -518,6 +524,25 @@ class Timer:
         """
         Switches to the virtual clock, which moves only by `advance`, or back to
         the real clock. The time stays continuous. For tests.
+        """
+
+@final
+class TimerReader:
+    """
+    The reading side of a `Timer`: the time and the scale, and nothing that
+    changes them. Made by `Timer.reader()`.
+    """
+    def now(self, /) -> Timestamp:
+        """
+        The time as a `Timestamp`.
+        """
+    def time_scale(self, /) -> float:
+        """
+        Seconds of the timer per real second.
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
         """
 
 @final

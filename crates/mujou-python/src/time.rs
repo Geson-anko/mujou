@@ -74,6 +74,12 @@ impl PyTimer {
         self.0.scale()
     }
 
+    /// A `TimerReader` of this timer: it reads the time and the scale and has
+    /// no way to change them.
+    fn reader(&self) -> PyTimerReader {
+        PyTimerReader(Arc::clone(&self.0))
+    }
+
     /// Sets how many seconds of this timer pass per real second.
     ///
     /// Raises:
@@ -165,6 +171,24 @@ impl<'py> IntoPyObject<'py> for GlobalTimer {
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
         let base = PyTimer(Arc::clone(core::global()));
         Bound::new(py, PyClassInitializer::from(base).add_subclass(self))
+    }
+}
+
+/// The reading side of a `Timer`: the time and the scale, and nothing that
+/// changes them. Made by `Timer.reader()`.
+#[pyclass(frozen, module = "mujou._core._native", name = "TimerReader")]
+pub struct PyTimerReader(Arc<Timer>);
+
+#[pymethods]
+impl PyTimerReader {
+    /// The time as a `Timestamp`.
+    fn now(&self) -> PyTimestamp {
+        PyTimestamp(self.0.now())
+    }
+
+    /// Seconds of the timer per real second.
+    fn time_scale(&self) -> f64 {
+        self.0.scale()
     }
 }
 

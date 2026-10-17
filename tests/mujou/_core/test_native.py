@@ -39,6 +39,7 @@ class TestCoreModule:
         [
             "Timer",
             "GlobalTimer",
+            "TimerReader",
             "Timestamp",
             "Schema",
             "BufferView",
@@ -159,6 +160,22 @@ class TestTimer:
         assert isinstance(timer, GlobalTimer)
         with pytest.raises(TypeError):
             GlobalTimer()
+
+
+class TestTimerReader:
+    def test_reads_the_time_and_the_scale_of_its_timer(self):
+        t = virtual(Timer())
+        reader = t.reader()
+        t.advance(1.5)
+        t.set_time_scale(3.0)
+        assert reader.now() == Timestamp(ns=1_500_000_000)
+        assert reader.time_scale() == 3.0
+
+    def test_has_nothing_that_changes_the_timer(self):
+        public = {n for n in dir(Timer().reader()) if not n.startswith("_")}
+        assert public == {"now", "time_scale"}
+        with pytest.raises(TypeError):
+            _native.TimerReader()
 
 
 class TestTimestamp:

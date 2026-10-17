@@ -45,7 +45,7 @@ mod core_module {
     const timer: super::time::GlobalTimer = super::time::GlobalTimer;
 
     #[pymodule_export]
-    use super::time::{GlobalTimer, PyTimer, PyTimestamp};
+    use super::time::{GlobalTimer, PyTimer, PyTimerReader, PyTimestamp};
 
     #[pymodule_export]
     use super::slot::{
