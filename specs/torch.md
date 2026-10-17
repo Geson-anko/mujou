@@ -108,7 +108,7 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 
 更新式を直接計算するノード（PC-ALM など）は、パラメータや活動を `requires_grad=False` のただのテンソルとして持つ。ノード内 BP を使うノードは、`nn.Module`（`nn.Parameter` を持つ）や `requires_grad=True` のテンソルを持ってよい。どれも属性に代入すれば、`mujou.Node` が状態として自動で集め、既定の `state_dict()` / `load_state_dict()` が保存・復元する（[状態の自動収集](nodes.md#状態の自動収集)）。
 
-`requires_grad` は状態の木に入れない。木の Tensor は `detach()` したもので、復元は `torch.no_grad()` の下でその場の `copy_` なので、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。optimizer の状態（モーメントなど）は Tensor の属性ではないので自動では集まらない。使うノードは `state_dict` を override して足す。
+`requires_grad` と `.grad` は状態の木に入れない。木の Tensor は `detach()` したもので、復元は `torch.no_grad()` の下でその場の `copy_` なので、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`.backward()` で数歩分の勾配を溜めてから更新するノードは、復元すると溜めていた勾配を失い、止めずに続けた結果と一致しない。optimizer の状態（モーメントなど）も Tensor の属性ではないので自動では集まらない。どちらも、使うノードは `state_dict` を override して足す。
 
 状態は `add_`・`sub_`・`addmm_` などでその場で更新し、ステップごとに新しいテンソルを確保しない。隣へ送る値（$W^\top\varepsilon$ など）は、重みを更新する前に計算する。大きな重みを毎ステップ確保し直すと、多数のスレッドで動かしたときにメモリの確保が律速になる（[性能の測定](#性能の測定)）。
 

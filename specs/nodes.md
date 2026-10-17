@@ -122,21 +122,23 @@ class Linear(Node):
 | ほかの値（`None` を含む）で上書き | 外す |
 | `del` | 外す |
 
-Port・数値・Tensor のリストや dict は集めない。`__init__` でも `on_start` でも、どの hook で代入してもよい。
+Port・数値・Tensor のリストや dict は集めない。property も集めない（setter が別の名前の属性に Tensor を置けば、そちらが集まる）。
+
+状態にする Tensor は `on_start` までに確保し、その後はその場で更新するのが基本である。後で初めて代入したものも復元できるが、その場の更新ではなく新しいテンソルになる。`on_stop` で GPU メモリを返すつもりで `self._w = None` とすると、そのキーは終了後の `state_dict()` から消える（`on_stop` は `state_dict()` が返すものを変えない、という規約に反する）。
 
 既定の `state_dict()` は、属性名をキーにした dict を返す。値は、Tensor なら `detach()` したもの（記憶域は共有し、コピーはフレームワークが取る）、nn.Module ならその `state_dict()` である。`requires_grad` は木に入れない（`nn.Module.state_dict` と同じ）。`detach` するので、ノード内 BP のグラフにつながったテンソルでも pickle できる。
 
-既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。
+既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。木にあって登録に無い Tensor（`on_start` の後で初めて代入したもの）は、木の値のコピーを新しい属性として置く（登録される）。
 
 | 不一致 | 例外 |
 | --- | --- |
-| `state` が mapping でない、Tensor の値が Tensor でない | `TypeError` |
-| キーの過不足、Tensor の shape の違い | `ValueError`（どれもコピーの前に確かめるので、何も書き換えない） |
-| nn.Module の中の不一致 | torch の `RuntimeError`（途中まで書き換わっていることがある） |
+| `state` や nn.Module の状態が mapping でない、登録した Tensor の値が Tensor でない | `TypeError` |
+| 登録した名前が木に無い、登録に無いキーの値が Tensor でない、Tensor の shape の違い、要素が記憶域を共有する Tensor（`expand` など） | `ValueError` |
+| nn.Module の状態のキーや shape がモジュールの `state_dict()` と違う | `RuntimeError`（strict な `nn.Module.load_state_dict` と同じ型） |
+
+どれもコピーの前に確かめるので、例外のときは何も書き換えない。
 
 自分で状態を選ぶノードは、`state_dict` と `load_state_dict` を override する。`super()` を呼んで既定の木に足してもよい（乱数生成器の状態など）。
-
-mujou は、override の有無にかかわらず、登録した状態を内部の関数 `mujou._core.node.state_items(node)` で列挙できる。例外で終了したときの mujou 管理下のオブジェクトの救済措置は、これを下地に別に設計する。
 
 ノードのインスタンスは、定義と実行の両方を担う。`__init__` で Port を宣言したインスタンスが、そのまま実行時に hook を呼ばれる。ネットワークを構築すると、Port は実際のスロットに結び付けられる。
 

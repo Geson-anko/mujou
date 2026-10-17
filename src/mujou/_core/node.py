@@ -1,8 +1,9 @@
 """The node, the unit of asynchronous computation."""
 
 import threading
+import types
 from collections.abc import Mapping
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
 from torch import nn
@@ -55,9 +56,12 @@ class Node(_native.Node, Component):
     assigned a ``torch.Tensor`` (``nn.Parameter`` included) or an ``nn.Module``,
     whether or not its name starts with ``_``, is registered under its name.
     Assigning any other value (``None`` too) under that name, or ``del``, removes
-    it. Ports, numbers, lists and dicts of tensors are not collected. The default
+    it. Ports, numbers, lists and dicts of tensors are not collected, and neither
+    are properties (what a setter stores is, under its own name). The default
     ``state_dict`` and ``load_state_dict`` save and restore what is registered;
     override both to choose the state yourself (they may call ``super()``).
+    Allocate the tensors of the state by ``on_start`` and update them in place
+    afterwards: the default ``load_state_dict`` copies into them in place.
 
     If any hook raises, the whole network stops. A hook must not call the methods
     of any ``Network`` (``write``, ``read``, ``state_dict``, ...): they raise
@@ -167,19 +171,26 @@ class Node(_native.Node, Component):
             )
         return self._generator
 
-    @override
-    def __setattr__(self, name: str, value: object) -> None:
-        super().__setattr__(name, value)
-        names = _state_names(self)
-        if isinstance(value, torch.Tensor | nn.Module):
-            names[name] = None  # A name already registered keeps its place.
-        else:
-            names.pop(name, None)
+    if not TYPE_CHECKING:
+        # Hidden from the type checker, which would otherwise accept assignments
+        # to undeclared attributes on every subclass.
 
-    @override
-    def __delattr__(self, name: str) -> None:
-        super().__delattr__(name)
-        _state_names(self).pop(name, None)
+        def __setattr__(self, name: str, value: object) -> None:
+            super().__setattr__(name, value)
+            if _is_data_descriptor(type(self), name):
+                return  # A property: what its setter stores registers itself.
+            names = _state_names(self)
+            if isinstance(value, torch.Tensor | nn.Module):
+                if name not in names:
+                    _set_state_names(self, {**names, name: None})
+            elif name in names:
+                _set_state_names(self, {k: v for k, v in names.items() if k != name})
+
+        def __delattr__(self, name: str) -> None:
+            super().__delattr__(name)
+            names = _state_names(self)
+            if name in names:
+                _set_state_names(self, {k: v for k, v in names.items() if k != name})
 
     @override
     def state_dict(self) -> Any:  # Any: an override returns any picklable object.
@@ -188,7 +199,7 @@ class Node(_native.Node, Component):
         ``state_dict()``, under the attribute's name.
 
         The tensors share memory with the attributes (the framework copies the
-        tree). ``requires_grad`` is not part of the state, as in
+        tree). ``requires_grad`` and ``.grad`` are not part of the state, as in
         ``nn.Module.state_dict``: detaching also makes a tensor that is part of an
         autograd graph picklable.
         """
@@ -196,7 +207,7 @@ class Node(_native.Node, Component):
             name: value.detach()
             if isinstance(value, torch.Tensor)
             else value.state_dict()
-            for name, value in state_items(self)
+            for name, value in _state_items(self)
         }
 
     @override
@@ -208,51 +219,56 @@ class Node(_native.Node, Component):
         The objects stay the same, so references taken in ``__init__`` or
         ``on_start`` see the restored values, and a tensor that records gradients
         stays a leaf that does. ``copy_`` casts the dtype and moves the device.
-        The keys and the shapes of the tensors are checked before anything is
-        copied.
+        A tensor in ``state`` whose name is not registered (one first assigned
+        after ``on_start``) is set as a new attribute, a copy of the value, and
+        registered. Everything is checked before anything is copied, so on an
+        error nothing has changed.
 
         Raises:
-            TypeError: ``state`` is not a mapping, or the value for a tensor is not
-                a tensor.
-            ValueError: The keys are not the names of the registered attributes,
-                or a tensor's shape differs.
-            RuntimeError: As ``nn.Module.load_state_dict`` (strict), when a
-                module's state does not match; the state may then be partly
-                copied.
+            TypeError: ``state`` or the state of a module is not a mapping, or
+                the value for a tensor is not a tensor.
+            ValueError: A registered attribute is missing from ``state``, a key
+                that is not registered holds no tensor, or a tensor's shape
+                differs or the tensor has elements that share memory.
+            RuntimeError: A module's state does not have the keys or the shapes
+                of the module's ``state_dict``, as ``nn.Module.load_state_dict``
+                (strict) raises.
         """
-        if not isinstance(state, Mapping):
-            raise TypeError(
-                f"the default load_state_dict takes a mapping, got "
-                f"{type(state).__name__}"
-            )
-        tree = cast(Mapping[str, object], state)
-        items = state_items(self)
+        tree = _mapping(state, "the default load_state_dict takes")
+        items = _state_items(self)
         missing = [name for name, _ in items if name not in tree]
-        unexpected = [key for key in tree if key not in _state_names(self)]
+        names = _state_names(self)
+        unexpected = [
+            key
+            for key, value in tree.items()
+            if key not in names and not isinstance(value, torch.Tensor)
+        ]
         if missing or unexpected:
             raise ValueError(
-                f"the state does not match the node's tensors and modules: missing "
-                f"{missing}, unexpected {unexpected}"
+                "the state does not match the node's tensors and modules: "
+                + "; ".join(
+                    f"{what} {keys}"
+                    for what, keys in (
+                        ("missing", missing),
+                        ("not tensors and not registered", unexpected),
+                    )
+                    if keys
+                )
             )
         for name, value in items:
             if isinstance(value, torch.Tensor):
-                source = tree[name]
-                if not isinstance(source, torch.Tensor):
-                    raise TypeError(
-                        f"the state's {name!r} is a {type(source).__name__}, not a "
-                        "tensor"
-                    )
-                if source.shape != value.shape:
-                    raise ValueError(
-                        f"the state's {name!r} has the shape {tuple(source.shape)}, "
-                        f"but the tensor has {tuple(value.shape)}"
-                    )
+                _check_tensor(name, value, tree[name])
+            else:
+                _check_module(name, value, tree[name])
         with torch.no_grad():
             for name, value in items:
                 if isinstance(value, torch.Tensor):
                     value.copy_(cast(torch.Tensor, tree[name]))
                 else:
-                    value.load_state_dict(cast(Mapping[str, object], tree[name]))
+                    value.load_state_dict(cast(Mapping[str, Any], tree[name]))
+            for key, value in tree.items():
+                if key not in names:
+                    setattr(self, key, cast(torch.Tensor, value).clone())
 
     @override
     def _on_thread_start(self) -> None:
@@ -309,22 +325,90 @@ class Node(_native.Node, Component):
             _hooks.inside = outer
 
 
-def _state_names(node: Node) -> dict[str, None]:
+# The attribute that holds a node's registry of state names. Long, so that it does
+# not meet a name of the user's.
+_STATE_NAMES = "_mujou_state_names"
+
+
+def _state_names(node: Node) -> Mapping[str, None]:
     """The names of the attributes of ``node`` that hold state, in the order of
-    registration (an ordered set). Made on the first assignment, so that
-    subclasses need not call ``super().__init__()``."""
-    attributes = vars(node)
-    names = attributes.get("_state_names")
-    if names is None:
-        names = attributes["_state_names"] = {}
-    return cast(dict[str, None], names)
+    registration (an ordered set).
+
+    The registry is replaced, never changed, so that a shallow copy of a node
+    (``copy.copy``) does not share changes with the original.
+    """
+    return cast(Mapping[str, None], vars(node).get(_STATE_NAMES, {}))
 
 
-def state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
+def _set_state_names(node: Node, names: dict[str, None]) -> None:
+    vars(node)[_STATE_NAMES] = names  # Not through __setattr__.
+
+
+def _state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
     """Return ``(attribute name, value)`` for the tensors and modules registered on
-    ``node``, in the order of registration: the state mujou manages for it,
-    whether or not ``state_dict`` is overridden."""
+    ``node``, in the order of registration."""
     return [(name, getattr(node, name)) for name in _state_names(node)]
+
+
+def _is_data_descriptor(klass: type, name: str) -> bool:
+    """Whether ``name`` on ``klass`` is a data descriptor other than a slot (a
+    property, say), which stores the value somewhere else."""
+    for base in klass.__mro__:
+        if name in vars(base):
+            attribute: object = vars(base)[name]
+            return hasattr(type(attribute), "__set__") and not isinstance(
+                attribute, types.MemberDescriptorType
+            )
+    return False
+
+
+def _mapping(value: object, what: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{what} a mapping, got {type(value).__name__}")
+    return cast(Mapping[str, Any], value)
+
+
+def _check_tensor(name: str, tensor: torch.Tensor, source: object) -> None:
+    """Check that ``tensor.copy_(source)`` restores ``tensor`` element by element."""
+    if not isinstance(source, torch.Tensor):
+        raise TypeError(
+            f"the state's {name!r} is a {type(source).__name__}, not a tensor"
+        )
+    if source.shape != tensor.shape:
+        raise ValueError(
+            f"the state's {name!r} has the shape {tuple(source.shape)}, but the "
+            f"tensor has {tuple(tensor.shape)}"
+        )
+    # copy_ refuses to write into elements that share memory (from expand, say).
+    if any(
+        stride == 0 and size > 1
+        for size, stride in zip(tensor.shape, tensor.stride(), strict=True)
+    ):
+        raise ValueError(
+            f"the tensor {name!r} has elements that share memory, so it cannot be "
+            "restored in place"
+        )
+
+
+def _check_module(name: str, module: nn.Module, source: object) -> None:
+    """Check ``source`` against ``module.state_dict()`` as the strict
+    ``module.load_state_dict`` would, before anything is copied."""
+    tree = _mapping(source, f"the state's {name!r} of a module must be")
+    own = module.state_dict()
+    missing = [key for key in own if key not in tree]
+    unexpected = [key for key in tree if key not in own]
+    shapes = [
+        key
+        for key, value in own.items()
+        if key in tree
+        and isinstance(tree[key], torch.Tensor)
+        and cast(torch.Tensor, tree[key]).shape != value.shape
+    ]
+    if missing or unexpected or shapes:
+        raise RuntimeError(
+            f"the state's {name!r} does not match the module: missing {missing}, "
+            f"unexpected {unexpected}, other shapes {shapes}"
+        )
 
 
 class _Hooks(threading.local):

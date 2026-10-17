@@ -10,7 +10,7 @@ from torch import nn
 
 from mujou import Network, Node, Port, TensorSpec
 from mujou._core._native import GlobalTimer
-from mujou._core.node import state_items, thread_ident
+from mujou._core.node import thread_ident
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork
@@ -243,41 +243,90 @@ class TestStateCollection:
         assert target.p.requires_grad and target.p.is_leaf
 
     @pytest.mark.parametrize(
-        ("change", "match"),
+        ("change", "error", "match"),
         [
-            (lambda s: s.pop("w"), "missing \\['w'\\]"),
-            (lambda s: s.update(extra=torch.zeros(1)), "unexpected \\['extra'\\]"),
-            (lambda s: s.update(w=torch.zeros(3)), "'w'.*shape"),
+            (lambda s: s.pop("p"), ValueError, r"missing \['p'\]$"),
+            (
+                lambda s: s.update(extra=[1.0]),
+                ValueError,
+                r"not tensors and not registered \['extra'\]$",
+            ),
+            (lambda s: s.update(p=torch.zeros(2)), ValueError, "'p'.*shape"),
+            (lambda s: s.update(p=[1.0, 2.0, 3.0]), TypeError, "'p'.*not a tensor"),
+            (
+                lambda s: cast(dict[str, object], s["linear"]).pop("bias"),
+                RuntimeError,
+                r"'linear'.*missing \['bias'\]",
+            ),
+            (
+                lambda s: cast(dict[str, object], s["linear"]).update(
+                    weight=torch.zeros(1)
+                ),
+                RuntimeError,
+                r"'linear'.*other shapes \['weight'\]",
+            ),
         ],
     )
     def test_rejects_a_tree_that_does_not_match_and_changes_nothing(
-        self, change: Callable[[dict[str, object]], object], match: str
+        self,
+        change: Callable[[dict[str, object]], object],
+        error: type[Exception],
+        match: str,
     ):
         source, target = Stateful(1.0), Stateful(-1.0)
         state = copy.deepcopy(source.state_dict())
         change(state)
-        with pytest.raises(ValueError, match=match):
+        with pytest.raises(error, match=match):
             target.load_state_dict(state)
+        # Nothing changed, also before the item that does not match.
         assert torch.equal(target.w, torch.full((2, 3), -1.0))
         assert torch.equal(target.p, torch.full((3,), 1.0))
+        assert torch.equal(target.linear.weight, torch.full((2, 3), 2.0))
+        assert "extra" not in vars(target)
 
     def test_rejects_a_tree_that_is_not_a_mapping(self):
         with pytest.raises(TypeError, match="mapping"):
             Stateful(0.0).load_state_dict([1, 2])
 
-    def test_a_module_mismatch_raises_as_torch_does(self):
+    def test_sets_a_tensor_that_is_not_registered_yet(self):
         source, target = Stateful(1.0), Stateful(-1.0)
+        setattr(source, "last", torch.arange(3.0))  # noqa: B010  # not declared
         state = copy.deepcopy(source.state_dict())
-        del cast(dict[str, torch.Tensor], state["linear"])["bias"]
-        with pytest.raises(RuntimeError, match="bias"):
-            target.load_state_dict(state)
+        target.load_state_dict(state)
+        last = getattr(target, "last")  # noqa: B009  # not declared
+        assert torch.equal(last, torch.arange(3.0))
+        assert last is not state["last"]  # a copy
+        assert list(target.state_dict()) == ["w", "_h", "p", "linear", "last"]
 
-    def test_lists_the_registered_state(self):
+    def test_rejects_a_tensor_whose_elements_share_memory(self):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        target.w = torch.zeros(3).expand(2, 3)
+        with pytest.raises(ValueError, match="'w'.*share memory"):
+            target.load_state_dict(copy.deepcopy(source.state_dict()))
+
+    def test_does_not_collect_a_property(self):
+        class WithProperty(Node):
+            def __init__(self) -> None:
+                self.w = torch.ones(2)
+
+            @property
+            def w(self) -> torch.Tensor:
+                return torch.tensor(self._w)
+
+            @w.setter
+            def w(self, value: torch.Tensor) -> None:
+                self._w = value.tolist()  # stored as a list: not state
+
+        node = WithProperty()
+        assert node.state_dict() == {}
+
+    def test_a_shallow_copy_has_its_own_registry(self):
         node = Stateful(0.0)
-        items = state_items(node)
-        assert [name for name, _ in items] == ["w", "_h", "p", "linear"]
-        attributes = [node.w, node._h, node.p, node.linear]  # pyright: ignore[reportPrivateUsage]
-        assert all(v is a for (_, v), a in zip(items, attributes, strict=True))
+        clone = copy.copy(node)
+        setattr(clone, "z", torch.zeros(1))  # noqa: B010  # not declared
+        del clone.w
+        assert list(node.state_dict()) == ["w", "_h", "p", "linear"]
+        assert list(clone.state_dict()) == ["_h", "p", "linear", "z"]
 
 
 INPUT = torch.tensor([1.0, -1.0, 0.5])
@@ -286,30 +335,38 @@ TARGET = torch.tensor([0.5, 2.0])
 
 class Learner(Node):
     """Fits ``linear`` to ``TARGET`` by backpropagation inside the node, and relaxes
-    ``_x`` toward 1, both in proportion to ``dt``."""
+    ``_x`` toward 1 with momentum, both in proportion to ``dt``. ``_last`` is first
+    assigned in ``on_update``."""
 
-    def __init__(self, fill: float) -> None:
-        super().__init__(seed=0)
+    _last: torch.Tensor | None = None
+
+    def __init__(self, fill: float, device: str = "cpu") -> None:
+        super().__init__(seed=0, device=device)
         self.out = Port(send=TensorSpec((3,)))
-        self.linear = nn.Linear(3, 2)
+        self.linear = nn.Linear(3, 2, device=self.device)
         with torch.no_grad():
             self.linear.weight.fill_(fill)
             self.linear.bias.fill_(fill)
 
     @override
     def on_start(self) -> None:
-        self._x = torch.zeros(3)
-        self.steps = torch.zeros((), dtype=torch.int64)
+        self._x = torch.zeros(3, device=self.device)
+        self.steps = torch.zeros((), dtype=torch.int64, device=self.device)
 
     @override
     def on_update(self, dt: float) -> None:
         params = list(self.linear.parameters())
         with torch.enable_grad():  # mujou: local-autograd
-            loss = (self.linear(INPUT) - TARGET).pow(2).sum()
+            output = self.linear(INPUT.to(self.device))
+            loss = (output - TARGET.to(self.device)).pow(2).sum()
             grads = torch.autograd.grad(loss, params)
         for p, g in zip(params, grads, strict=True):
             p.sub_(100.0 * dt * g)
+        x = self._x.clone()
         self._x.add_(dt * (1 - self._x))
+        if self._last is not None:
+            self._x.add_(0.5 * (x - self._last))
+        self._last = x
         self.steps.add_(1)
 
 
@@ -320,11 +377,23 @@ def steps(net: Network, timer: GlobalTimer, n: int) -> None:
 
 
 class TestRestore:
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda:0",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="needs CUDA"
+                ),
+            ),
+        ],
+    )
     def test_a_restored_node_continues_the_same(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork, device: str
     ):
         k, m = 4, 6
-        net = run_network(Solo(Learner(0.0)), _manual=True)
+        net = run_network(Solo(Learner(0.0, device)), _manual=True)
         steps(net, virtual_timer, k)
         tree = pickle.loads(pickle.dumps(net.state_dict()))
         steps(net, virtual_timer, m)
@@ -333,7 +402,7 @@ class TestRestore:
         net.shutdown()
         assert int(at(expected, "steps")) == k + m
 
-        restored_node = Learner(5.0)
+        restored_node = Learner(5.0, device)
         weight = restored_node.linear.weight
         restored = Solo(restored_node)
         restored.build()
@@ -343,6 +412,7 @@ class TestRestore:
         steps(restored, virtual_timer, m)
         actual = restored_node.state_dict()
         assert torch.equal(at(actual, "_x"), at(expected, "_x"))
+        assert torch.equal(at(actual, "_last"), at(expected, "_last"))
         assert int(at(actual, "steps")) == k + m
         for name in ("weight", "bias"):
             assert torch.equal(at(actual, "linear", name), at(expected, "linear", name))
