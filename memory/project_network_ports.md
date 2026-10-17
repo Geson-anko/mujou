@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-2026-10-13 決定。詳細は `docs/network.md`。
+2026-10-13 決定。詳細は `specs/network.md`。
 
 - **構成要素は ノード・ネットワーク・Port・Channel。** ノードは非同期処理の単位（末端）で Port を宣言する。ネットワークはノードや別のネットワークを子に持ち、内側の Port を外向きに公開する。Node と Network は共通の基底を持ち（Composite）、同じ書き方で接続できる。共通の基底は Port と connect だけを持つ。ネットワークは構築時だけの構造で hook を持たず、実行時の単位はノードだけ（2026-10-14、[[project-node-lifecycle]]）。インスタンスは定義と実行を兼ね、構築で Port が実スロットに結び付くChannel は 2 つの Port の間の接続 1 本で、向きごとのスロット 2 本からなる（[[project-message-types]]）
 - **Port は向きを持たない。** send 型と recv 型の組だけを持ち、型が互いに逆向きの Port 同士だけ接続できる。上流・下流はフレームワークで決めない
@@ -29,6 +29,6 @@ metadata:
 
 - 入れ子は構築時の構造にとどめる。ネットワークの中のノードは実行時もそれぞれ独立に非同期で動き、ネットワークの境界は非同期の境界を変えない（局所性・非同期性のため）。複数層を 1 つの非同期単位にしたいときはスタックのノードとして書く。複数ノードを同じワーカーで回すのは実行の配置の話で、ネットワーク構造とは別（[[project-compute-granularity]]）
 - 複数の相手からのメッセージの集約（PC-ALM の $\sum_k W_k^\top \varepsilon_k$ など）をフレームワークに組み込まない。受け取るノードの更新手法が行う（[[project-pluggable-update-rule]]）
-- `docs/network.md` のコード例はイメージ。クラス名・メソッド名・shape の決め方・相手を指定して送る Port を外から読んだときに何を返すかは未決定、`build` をルートで呼ぶことと実行・外からの読み書きは暫定（[[project-host-io]]）なので、勝手に確定させずにユーザーに確認する
+- `specs/network.md` のコード例はイメージ。クラス名・メソッド名・shape の決め方・相手を指定して送る Port を外から読んだときに何を返すかは未決定、`build` をルートで呼ぶことと実行・外からの読み書きは暫定（[[project-host-io]]）なので、勝手に確定させずにユーザーに確認する
 
 関連: [[project-message-types]], [[project-compute-granularity]], [[project-open-decisions]]

@@ -17,6 +17,28 @@ const ANY: PyStaticExpr = PyStaticExpr::Attribute {
     attr: "Any",
 };
 
+/// The values of one message: `Sequence[Any]` (in practice, of tensors). Not
+/// checked here: `borrow_values` rejects what it cannot read. The stub cannot
+/// say `SupportsDLPack`, which only a hand-written stub could define.
+pub struct Values<'py>(pub Bound<'py, PyAny>);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Values<'py> {
+    type Error = Infallible;
+    const INPUT_TYPE: PyStaticExpr = PyStaticExpr::Subscript {
+        value: &PyStaticExpr::Attribute {
+            value: &PyStaticExpr::Name {
+                id: "collections.abc",
+            },
+            attr: "Sequence",
+        },
+        slice: &ANY,
+    };
+
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        Ok(Self(obj.to_owned()))
+    }
+}
+
 /// The views of a message: `tuple[BufferView, ...]`.
 pub struct Views<'py>(pub Bound<'py, PyTuple>);
 

@@ -1,7 +1,7 @@
 //! Slots: the latest values that nodes share without waiting for each other.
 //!
 //! A slot holds the latest [`Message`] of one writer for any number of readers
-//! (`docs/messages.md`). A message is immutable and shared as `Arc<Message>`, so a
+//! (`specs/messages.md`). A message is immutable and shared as `Arc<Message>`, so a
 //! reader that holds one sees it unchanged however often the writer writes. The
 //! writer never writes into a buffer a reader may see: it takes a buffer from a
 //! pool, fills it, and swaps the new message in. A buffer goes back to its pool
@@ -14,13 +14,13 @@
 //! record the pointers they load in a list shared by every `ArcSwap` in the
 //! process, so once a message is freed and its address reused for a value of
 //! another slot (even of another type), a writer of that slot could hand the
-//! value to a reader of this one (`docs/native-core.md`).
+//! value to a reader of this one (`specs/native-core.md`).
 //!
 //! - [`Outlet`]: the sending side of one port, writing its outward slot and the
 //!   slot of each channel
 //! - [`InputGroup`] / [`InputSlot`]: the slots the host writes from outside, where
 //!   one write to several slots becomes visible to every reader at once
-//!   (`docs/network.md`)
+//!   (`specs/network.md`)
 
 use std::collections::HashSet;
 use std::fmt;
@@ -512,6 +512,11 @@ impl Outlet {
     /// Creates the outward slot `"{name}/out"` and the channel slots
     /// `"{name}/ch{k}"`, all holding zeros stamped with the current time.
     /// Every message is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     pub fn new(schema: Arc<Schema>, channels: usize, name: &str, timer: Arc<Timer>) -> Self {
         let messages = Messages::new(schema);
         let zeros = messages.zeros(timer.time_ns());
@@ -567,7 +572,7 @@ impl Outlet {
 }
 
 /// The version counter of the slots the host writes, which makes one write to
-/// several slots visible to every reader at once (`docs/network.md`).
+/// several slots visible to every reader at once (`specs/network.md`).
 ///
 /// A write places the new value of each slot as its next value tagged with
 /// version `V + 1`, then increments `V`. A reader takes the next value only if its
@@ -609,6 +614,11 @@ pub struct InputSlot {
 
 impl InputGroup {
     /// Every write is stamped with the time on `timer`.
+    ///
+    /// The slots and the host's inputs of one run must use the timer of its
+    /// runtime: on another timer, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, and a pause of the run would not
+    /// stop them, so a state taken at T could hold later messages.
     pub fn new(timer: Arc<Timer>) -> Arc<Self> {
         Arc::new(Self {
             version: AtomicU64::new(0),
@@ -919,7 +929,7 @@ mod tests {
     /// allocation size as messages) must still see only their own messages.
     ///
     /// Passing proves little: against `arc-swap` it failed in about half of the runs
-    /// (`docs/native-core.md`).
+    /// (`specs/native-core.md`).
     #[test]
     fn readers_never_see_a_message_of_another_slot() {
         const WRITES: i64 = 100_000;

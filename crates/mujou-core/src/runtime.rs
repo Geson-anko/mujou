@@ -3,7 +3,7 @@
 //! Each node runs on a dedicated thread that loops over its update hook. The
 //! nodes never wait for each other; the only barriers are the control operations
 //! (pausing to capture the state, stepping by hand, and stopping), which
-//! `docs/execution-model.md` allows because the time of the runtime's timer
+//! `specs/execution-model.md` allows because the time of the runtime's timer
 //! stands still while they hold.
 //!
 //! All control goes through a single control thread, as in pamiq-core's
@@ -168,7 +168,7 @@ impl Error for RuntimeError {
     }
 }
 
-/// A hook panicked. Treated like an exception (`docs/execution-model.md`).
+/// A hook panicked. Treated like an exception (`specs/execution-model.md`).
 #[derive(Debug)]
 struct Panicked(String);
 
@@ -939,6 +939,10 @@ impl<N: NodeHooks> Runtime<N> {
     /// The timer is frozen first and then loaded from `config.timer_state`, so
     /// that the time is restored before the nodes restore their states and
     /// does not run while they start.
+    ///
+    /// The nodes run on `timer`: it measures their Δt and is the one frozen.
+    /// Create the slots and the host's inputs of this run with the same timer
+    /// ([`crate::slot::Outlet::new`]).
     pub fn start(
         nodes: Vec<N>,
         names: Vec<String>,
@@ -1088,6 +1092,15 @@ impl<N: NodeHooks> Runtime<N> {
         self.submit(stopped, |controller| controller.shutdown())
     }
 
+    /// Asks every node to stop and returns without waiting; [`Runtime::join`]
+    /// waits for the end. Does nothing once the system has ended.
+    pub fn request_stop(&self) {
+        // Not through `submit`: there is no reply to wait for, so a node's own
+        // thread may ask too.
+        let job = Box::new(|controller: &mut Controller<N>| controller.finish());
+        let _ = self.shared.to_controller.send(Message::Job(job));
+    }
+
     /// Waits until the system has ended (every node thread joined), for at most
     /// `timeout`. Returns whether it has ended; fails if it ended because of an
     /// exception.
@@ -1151,8 +1164,7 @@ fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> Runt
 impl<N: NodeHooks> Drop for Runtime<N> {
     fn drop(&mut self) {
         // Do not wait: the caller may hold a lock the nodes need (the GIL).
-        let job = Box::new(|controller: &mut Controller<N>| controller.finish());
-        let _ = self.shared.to_controller.send(Message::Job(job));
+        self.request_stop();
     }
 }
 

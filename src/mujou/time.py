@@ -2,7 +2,7 @@
 
 All nodes share one time axis, which can be scaled and paused. Use these functions
 instead of the standard ``time`` module wherever a duration should follow the
-global time, e.g. to present an input for a while (``docs/execution-model.md``).
+global time, e.g. to present an input for a while.
 The time starts at 0 when the process first uses it.
 
 - ``time()``: the global time in seconds
@@ -13,7 +13,7 @@ The time starts at 0 when the process first uses it.
   real second (finite and > 0)
 """
 
-from mujou._core import timer as _timer
+from mujou._core._native import timer as _timer
 
 time = _timer.time
 time_ns = _timer.time_ns

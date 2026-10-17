@@ -6,7 +6,7 @@ import pytest
 
 import mujou
 from mujou import Network, NetworkError
-from mujou._core import GlobalTimer, timer
+from mujou._core._native import GlobalTimer, timer
 
 
 @pytest.fixture
@@ -27,7 +27,6 @@ class RunNetwork(Protocol):
         self,
         network: N,
         *,
-        capture_state_on_exception: bool = False,
         _manual: bool = False,
     ) -> N: ...
 
@@ -46,15 +45,10 @@ def run_network() -> Iterator[RunNetwork]:
     def run[N: Network](
         network: N,
         *,
-        capture_state_on_exception: bool = False,
         _manual: bool = False,
     ) -> N:
         started.append(network)
-        return mujou.run(
-            network,
-            capture_state_on_exception=capture_state_on_exception,
-            _manual=_manual,
-        )
+        return mujou.run(network, _manual=_manual)
 
     try:
         yield run

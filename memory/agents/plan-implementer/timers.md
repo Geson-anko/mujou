@@ -68,3 +68,26 @@
 ## 5. 未解決（このタスクの範囲外）
 
 - `mujou-core` の lib テスト `slot::tests::readers_see_whole_messages_in_order` が約 2% で落ちる（メッセージのフィールド数が 1 になる `index out of bounds`、まれに SIGSEGV）。ベースのコミット 0e29e6e でも 600 回中 12 回再現したので、この変更の前からある。単独では落ちず、ほかの slot テストと並行に走るときだけ落ちる。別スロットのメッセージを読んでいるように見え、use-after-free かメモリの別名を疑う。安全でないコードは `Buffer::bytes` と arc-swap の内部だけ。別タスクで調べる
+
+## 6. レビュー対応（code-reviewer / algorithm-reviewer、ともに request-changes。裁定は coordinator）
+
+- **code must-fix（CI で `mujou-stub` hook が動かない）**: pre-commit のワークフローでは `SKIP: mujou-stub` で外し、test のワークフロー（拡張をビルドする方）に `just stub && git diff --exit-code src/mujou/_core.pyi` を足した。ローカルの pre-commit は今どおり。test / type-check の paths に `*.pyi` を足した（nit 9）
+- **algorithm must-fix（シングルトンの決定を改めた記録）**: `memory/project_async_node_execution.md`・`project_native_core_rust.md`・`project_open_decisions.md`・`docs/open-decisions.md`・skill `locality-and-async`・CLAUDE.md を「時間軸は実行ごとに 1 本。1 つの実行の全ノード・全スロット・ホストの入力はその実行のタイマーを使う。既定はグローバルタイマー」に書き直した。ユーザーの決定として `memory/project_timer_per_run.md` を、スタブの規約として `memory/project_core_stub.md` を足し、`MEMORY.md` から張った
+- **should-fix（スロットとランタイムのタイマーの一致）**: `Outlet::new` / `InputGroup::new` / `Runtime::start`（コアと bindings）の doc comment と `docs/execution-model.md` に契約を書いた。一致の強制は run の API の作り直しで入れる（裁定どおり今回は入れない）
+- **algorithm should-fix 2**: `docs/execution-model.md` の停止・再開・例外・状態の木・復元の「グローバルタイマー」を「その実行のタイマー」に直した。`mujou.time.sleep` が延びるのはグローバルタイマーで動くネットワークの停止だけ、と書いた
+- **code should-fix 3（ruff が 2 か所）**: `just stub` を Python のレシピにし、`.pre-commit-config.yaml` の `ruff-pre-commit` の `rev` を読んで `uv tool run ruff@<版>` で整形する。版の正は pre-commit の設定 1 か所
+- **質問への裁定**: `Timer.now() -> Timestamp` と `Timestamp - Timestamp -> Timestamp`（後の方が前なら `ValueError`）を入れた（コアは `Timer::now` / `Timestamp::checked_sub`）
+- **nit**:
+  - code 1: `test_core_slot.py` の嘘になったコメントを直した
+  - code 2: 生成器が、コンストラクタの無いクラスに `__new__(cls) -> NoReturn` を足す（`GlobalTimer()` などが型の上でも通らない）
+  - code 4: values を `Sequence[Any]` にした（`hint.rs` の `Values`）。`SupportsDLPack` はスタブで Protocol を定義しないと書けないので、`Any` の列までに留めた。`Schema(fields)` はそのまま
+  - code 5: `just stub` を Python にしたので、空白を含むパスでも壊れない
+  - code 6: `Timestamp(ns=-1)` / `2**64` は `ValueError`。順序比較と `__sub__` の引数は、生成器が `object` から `Timestamp` に直す（pyo3 は取り出せない引数に `NotImplemented` を返すので、実際に通るのはそのクラスだけ）
+  - code 7 / algorithm nit 1: もう片方のタイマーでランタイムを走らせ、capture の `build` の中でそちらが Δt で更新を続けることを確かめるテストにした（Rust と pytest）
+  - code 10: `timer=_core.timer` を明示しても省略と同じになるテストを足した
+- **記録だけ（対応しない）**:
+  - code 3: `Timer` は `GlobalTimer` のために `subclass` にしたので Python から継承できるが、コアは `Arc<Timer>` を直接読むので override は効かない。private なモジュールなので今は問わない。`mujou._core` パッケージへの移動で公開名と合わせて見直す
+  - code 8: `mujou-stubgen` は例外を無条件に足して `incomplete` を false にする。pyo3 が将来 `create_exception!` を introspect すると重複する。ほかの見つからないメンバーは `test_lists_every_name_of_the_module` が検出する。pyo3 を上げるときに見直す
+  - algorithm nit 2: `Timestamp` はどのタイマーの時刻かを持たない。docstring に「1 つのタイマーの時刻だけを比べる」と書いてあり、実行内でタイマーが 1 本なら起きない
+  - algorithm nit 3: pytest の `test_a_new_timer_starts_at_zero_and_runs` の上限は緩いが、Rust 側が厳密に確かめている
+- **ホスト側の作業への申し送り（algorithm should-fix 1 より）**: タイマーはビルドの時点で決め、`Session` が 1 つの `Arc<Timer>` を `InputGroup` / `Outlet` / `Runtime` に渡す。グローバルタイマーを直接読む `_session.py` の `_tree` と `_capture_on_exception`、ノードとホストが時刻を読む・待つ手段もそのタイマーに替える。復元した複数のネットワークを同じタイマーで別々のランタイムとして起動すると、2 つ目で `ValueError` になる

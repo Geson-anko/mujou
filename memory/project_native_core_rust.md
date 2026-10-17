@@ -13,9 +13,9 @@ metadata:
   - **専用スレッド**: 自分の OS スレッドを持つノード（Python/PyTorch のノード、ノード内 BP、I/O、重いスタック）。Python のコードを動かすノードは GIL を要するので、タスクのプールに載せない
 - **ノードは「状態 + step 関数」。** ノードは他のノードを待たない（[[project-async-node-execution]]）ので、async/await のコルーチンにする必要はない。1 ステップ（スロットを読む → $\Delta t$ ぶん更新 → 書き込む）が協調スケジューリングの区切りになる
 - **スロットの読み書きはワーカーを止めない形にする。** バッファプールのバッファを lock の外で埋め、スロットごとの mutex の下では `Arc` の複製と差し替えだけを行う。OS の mutex で長く待たない（seqlock + copy は 2026-10-13 に不採用、[[project-message-types]]）
-- **スロットは lock-free（`arc-swap`）をやめ、スロットごとの mutex で `Arc` の複製・差し替えの短い区間だけ待つ（2026-10-17 ユーザー承認）。** 理由は arc-swap 1.9.2 のインスタンスをまたぐ ABA で、別のスロットの値（型が違えば型の取り違え）を読み手に返した（原因の要約は `docs/native-core.md` のスロットの実装）。lock を持つスレッドが横取りされると、その間は待つ。競合が問題になったら RwLock / parking_lot などを検討する（`docs/open-decisions.md`）。upstream への報告はユーザーが行う
-- **メッセージの値の型はコアが独自に持つ。** PyTorch のテンソルを直接扱えると便利だが、コア・基礎は独自の型で作る。この型は `mujou._core` の内部に閉じ、利用者には `torch.Tensor` だけを見せる。torch とは DLPack で受け渡し、読み書きとも必ずコピーする。コアは独自の dtype を持たず DLPack の dtype 表現を使う（2026-10-15、[[project-message-types]], [[project-gpu-policy]]）
-- **グローバルタイマー（シングルトン）もコア側に置く。** GIL なしでノードから参照できるようにする
+- **スロットは lock-free（`arc-swap`）をやめ、スロットごとの mutex で `Arc` の複製・差し替えの短い区間だけ待つ（2026-10-17 ユーザー承認）。** 理由は arc-swap 1.9.2 のインスタンスをまたぐ ABA で、別のスロットの値（型が違えば型の取り違え）を読み手に返した（原因の要約は `specs/native-core.md` のスロットの実装）。lock を持つスレッドが横取りされると、その間は待つ。競合が問題になったら RwLock / parking_lot などを検討する（`specs/open-decisions.md`）。upstream への報告はユーザーが行う
+- **メッセージの値の型はコアが独自に持つ。** PyTorch のテンソルを直接扱えると便利だが、コア・基礎は独自の型で作る。この型は `mujou._core._native` の内部に閉じ、利用者には `torch.Tensor` だけを見せる。torch とは DLPack で受け渡し、読み書きとも必ずコピーする。コアは独自の dtype を持たず DLPack の dtype 表現を使う（2026-10-15、[[project-message-types]], [[project-gpu-policy]]）
+- **タイマーもコア側に置く。** GIL なしでノードから参照できるようにする。既定のグローバルタイマーのほかに、実行ごとのタイマーを作れる（2026-10-16、[[project-timer-per-run]]）
 
 **Why:** asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、タスクの多くが I/O 待ちだから。mujou のノードは CPU を使い続けるので、1 スレッドでは 1 コアしか使えない。一方、ノードごとに OS スレッドを立てると、スレッド数の上限とコンテキストスイッチのコストに縛られる。M:N なら大量の小さなノードと、重い・GIL が要るノードを同じ仕組みで扱える。Rust は並行処理の安全性をコンパイラが保証し、PyO3 で Python から使える。コアの型を外部ライブラリに依存させないことで、フレームワークの基礎を自分で制御できる。
 
@@ -25,6 +25,6 @@ metadata:
 - ノードに目標周期を持たせる場合、スケジューラは期限順に実行する
 - 複数マシンにまたがる実行は、現状は想定しない（2026-10-13 決定）
 - コアとの変換（DLPack、必ずコピー）は torch に依存する側（`mujou.Node` とネットワーク）が受け持つ。ゼロコピー共有はしない（[[project-message-types]]）
-- ツールチェーンは 2026-10-15 に整えた。純 Rust の `crates/mujou-core` と PyO3 の `crates/mujou-python` に分け、maturin でビルドする。版数は Cargo workspace の version だけ（詳細は `docs/native-core.md` のツールチェーン節）
+- ツールチェーンは 2026-10-15 に整えた。純 Rust の `crates/mujou-core` と PyO3 の `crates/mujou-python` に分け、maturin でビルドする。版数は Cargo workspace の version だけ（詳細は `specs/native-core.md` のツールチェーン節）。`mujou._core._native` の型スタブは生成物（[[project-core-stub]]）
 
 関連: [[project-core-message-framework]], [[project-async-node-execution]], [[project-open-decisions]]

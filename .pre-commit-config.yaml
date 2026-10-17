@@ -1,5 +1,5 @@
 default_language_version:
-  python: python3
+  python: python3.14
 
 repos:
   # Basic file checks and formatting
@@ -66,13 +66,27 @@ repos:
       - id: mdformat
         args: ["--number"]
         # memory/ uses [[wiki-links]] between memories, which mdformat escapes
-        # into \[\[...\]\] and thereby breaks. .claude/ skills and docs/ contain
-        # LaTeX whose escaping mdformat would also alter.
-        exclude: ^(memory/|\.claude/|docs/)
+        # into \[\[...\]\] and thereby breaks. .claude/ skills and specs/ contain
+        # LaTeX whose escaping mdformat would also alter. docs/ has its own entry below.
+        exclude: ^(memory/|\.claude/|specs/|docs/)
         additional_dependencies:
           - mdformat-gfm
           - mdformat-tables
           - mdformat_frontmatter
+
+  # Markdown formatting of the user documentation (docs/). It uses the MkDocs
+  # syntax (admonitions, content tabs, snippets, mkdocstrings), which plain mdformat
+  # turns into code blocks. mdformat-mkdocs needs a newer mdformat than the entry
+  # above.
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        name: mdformat (docs)
+        args: ["--number"]
+        files: ^docs/
+        additional_dependencies:
+          - mdformat-mkdocs==5.3.0
 
   # Spell checking
   - repo: https://github.com/codespell-project/codespell
@@ -99,8 +113,8 @@ repos:
   - repo: local
     hooks:
       - id: mujou-stub
-        name: just stub (src/mujou/_core.pyi)
+        name: just stub (src/mujou/_core/_native.pyi)
         entry: just stub
         language: system
-        files: ^(Cargo\.(toml|lock)|crates/|pyproject\.toml$|src/mujou/_core\.pyi$)
+        files: ^(Cargo\.(toml|lock)|crates/|pyproject\.toml$|src/mujou/_core/_native\.pyi$)
         pass_filenames: false

@@ -3,18 +3,18 @@
 //! signatures and the doc comments of `crates/mujou-python`.
 //!
 //! Usage: `mujou-stubgen <library> <module> <output.pyi>`, where `<module>` is the
-//! full name of the module (such as `mujou._core`). Run it through `just stub`.
+//! full name of the module (such as `mujou._core._native`). Run it through `just stub`.
 
 use std::path::Path;
 use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, ensure};
-use pyo3_introspection::model::{Class, Expr, Module};
+use pyo3_introspection::model::{Argument, Arguments, Class, Expr, Function, Module};
 use pyo3_introspection::{introspect_cdylib, module_stub_files};
 
 /// The exceptions made with `create_exception!`, which pyo3 does not
 /// introspect: `(name, base, docstring)`. Keep them as in
-/// `crates/mujou-python/src/runtime.rs`; `tests/mujou/test_core_stub.py` checks
+/// `crates/mujou-python/src/runtime.rs`; `tests/mujou/_core/test_native_stub.py` checks
 /// that the stub matches the module.
 const EXCEPTIONS: &[(&str, &str, &str)] = &[
     (
@@ -65,10 +65,40 @@ fn typing(name: &str) -> Expr {
 ///   signature can only annotate them with a string of an unimported name
 /// - the overrides of `object`'s methods are marked with `typing.override`
 ///   (PEP 698), which pyo3 leaves out
+/// - the ordering operators and `__sub__` take the class itself
+/// - a class without a constructor gets `__new__(cls) -> typing.NoReturn`:
+///   calling it raises `TypeError`, but a type checker would otherwise take
+///   the constructor of `object` or of a base class
 fn fix_methods(module: &mut Module) {
     for class in &mut module.classes {
+        // pyo3's `__new__` returns the class, written as the stub refers to it.
+        let own_type = class
+            .methods
+            .iter()
+            .find(|m| m.name == "__new__")
+            .and_then(|m| m.returns.clone());
+        if own_type.is_none() {
+            class.methods.push(no_constructor());
+        }
         for method in &mut class.methods {
-            if method.name == "__new__" {
+            if let Some(own_type) = own_type
+                .as_ref()
+                .filter(|_| SAME_CLASS_OPERATORS.contains(&method.name.as_str()))
+            {
+                let object = Expr::Name {
+                    id: "object".to_owned(),
+                };
+                let arguments = &mut method.arguments;
+                for operand in arguments
+                    .positional_only_arguments
+                    .iter_mut()
+                    .chain(arguments.arguments.iter_mut())
+                    .filter(|a| a.annotation.as_ref() == Some(&object))
+                {
+                    operand.annotation = Some(own_type.clone());
+                }
+            }
+            if method.name == "__new__" && own_type.is_some() {
                 method.returns = Some(typing("Self"));
             }
             let arguments = &mut method.arguments;
@@ -85,8 +115,34 @@ fn fix_methods(module: &mut Module) {
     }
 }
 
+/// The binary operators whose operand pyo3 types as `object`: it returns
+/// `NotImplemented` for any operand it cannot extract, so in this module (where
+/// every such operand is the class itself) only the class works.
+const SAME_CLASS_OPERATORS: &[&str] = &["__lt__", "__le__", "__gt__", "__ge__", "__sub__"];
+
 /// The methods of `object` that a class may override.
 const OBJECT_METHODS: &[&str] = &["__eq__", "__ne__", "__hash__", "__repr__", "__str__"];
+
+fn no_constructor() -> Function {
+    Function {
+        name: "__new__".to_owned(),
+        decorators: Vec::new(),
+        arguments: Arguments {
+            positional_only_arguments: vec![Argument {
+                name: "cls".to_owned(),
+                default_value: None,
+                annotation: None,
+            }],
+            arguments: Vec::new(),
+            vararg: None,
+            keyword_only_arguments: Vec::new(),
+            kwarg: None,
+        },
+        returns: Some(typing("NoReturn")),
+        is_async: false,
+        docstring: Some("No constructor: calling the class raises `TypeError`.".to_owned()),
+    }
+}
 
 fn main() -> Result<()> {
     let [_, library, module, output] = <[String; 4]>::try_from(env::args().collect::<Vec<_>>())
@@ -99,8 +155,9 @@ fn main() -> Result<()> {
         introspected.modules.is_empty(),
         "{module} has submodules; write one stub per module"
     );
-    add_exceptions(&mut introspected);
+    // Before adding the exceptions, which take the constructor of their base.
     fix_methods(&mut introspected);
+    add_exceptions(&mut introspected);
     let stubs = module_stub_files(&introspected);
     let stub = stubs
         .get(Path::new("__init__.pyi"))

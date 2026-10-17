@@ -410,14 +410,30 @@ mod separate_timers {
         let Setup { nodes, names, .. } = recorders(1);
         let (a, started) = Runtime::start(nodes, names, Arc::clone(&ta), manual(), None).unwrap();
         started.wait().unwrap();
-        let (own, other) = (Arc::clone(&ta), Arc::clone(&tb));
+        let Setup {
+            log: lb,
+            nodes,
+            names,
+        } = recorders(1);
+        let (b, started) = Runtime::start(nodes, names, Arc::clone(&tb), manual(), None).unwrap();
+        started.wait().unwrap();
+        let b = Arc::new(b);
+
+        // While `a` is paused, the runtime on the other timer keeps updating.
+        let (own, other, other_rt) = (Arc::clone(&ta), Arc::clone(&tb), Arc::clone(&b));
         let (own_paused, other_paused) = a
-            .capture(None, move |_| (own.is_paused(), other.is_paused()))
+            .capture(None, move |_| {
+                other.advance_ns(H_NS).unwrap();
+                other_rt.step(None).wait().unwrap();
+                (own.is_paused(), other.is_paused())
+            })
             .wait()
             .unwrap();
         assert!(own_paused);
         assert!(!other_paused);
+        assert_eq!(events_of(&lb, 0)[1], Event::Update(H_NS as f64 / 1e9));
         a.shutdown().wait().unwrap();
+        b.shutdown().wait().unwrap();
     }
 
     #[test]
@@ -472,5 +488,104 @@ mod separate_timers {
         assert_eq!(ta.time_ns(), before);
         running.shutdown().wait().unwrap();
         restored.shutdown().wait().unwrap();
+    }
+}
+
+mod stop_request {
+    use std::sync::mpsc::{self, Receiver, Sender};
+
+    use super::*;
+
+    /// Tells when it enters an update, then blocks there until released.
+    struct Gate {
+        entered: Sender<()>,
+        release: Receiver<()>,
+        stopped: Arc<Mutex<bool>>,
+    }
+
+    impl NodeHooks for Gate {
+        type State = ();
+
+        fn start(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn update(&mut self, _dt: f64) -> Result<(), HookError> {
+            let _ = self.entered.send(());
+            let _ = self.release.recv();
+            Ok(())
+        }
+
+        fn pause(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn resume(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn exception(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<(), HookError> {
+            *self.stopped.lock().unwrap() = true;
+            Ok(())
+        }
+
+        fn state_dict(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn returns_while_a_node_is_still_updating_and_join_sees_the_end() {
+        let timer = virtual_timer();
+        let (entered_tx, entered) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        let stopped = Arc::new(Mutex::new(false));
+        let gate = Gate {
+            entered: entered_tx,
+            release: release_rx,
+            stopped: Arc::clone(&stopped),
+        };
+        let config = RuntimeConfig::default();
+        let (rt, started) = Runtime::start(
+            vec![gate],
+            vec!["gate".to_owned()],
+            Arc::clone(&timer),
+            config,
+            None,
+        )
+        .unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        // The node is blocked in its update, so a waiting stop would not return.
+        rt.request_stop();
+        assert!(!rt.join(Some(Duration::from_millis(50))).unwrap());
+        assert!(!*stopped.lock().unwrap());
+
+        release.send(()).unwrap();
+        assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
+        assert!(*stopped.lock().unwrap());
+        assert!(rt.is_finished());
+    }
+
+    #[test]
+    fn does_nothing_once_the_system_has_ended() {
+        let timer = virtual_timer();
+        let Setup { log, nodes, names } = recorders(2);
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), manual(), None).unwrap();
+        started.wait().unwrap();
+        rt.request_stop();
+        assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
+        rt.request_stop();
+        rt.shutdown().wait().unwrap();
+        for id in 0..2 {
+            assert_eq!(events_of(&log, id), [Event::Start, Event::Stop]);
+        }
     }
 }

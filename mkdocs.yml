@@ -1,0 +1,168 @@
+site_name: Mujou
+site_description: Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning
+repo_url: https://github.com/Geson-anko/mujou
+repo_name: Geson-anko/mujou
+
+# User documentation. The design specifications for developers are in specs/.
+docs_dir: docs
+# Rebuild on changes to the docstrings and to the included examples too.
+watch:
+  - src
+  - examples
+
+theme:
+  name: material
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.top
+    - navigation.sections
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  # Pages include the tested programs of examples/ with --8<-- "examples/<file>.py",
+  # so that the code on the site is the code that the tests run.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  # One folder per language (docs/en, docs/ja). A page missing from docs/ja falls
+  # back to the English one, so the API reference (English docstrings) is written
+  # only once.
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: ja
+          name: 日本語
+          build: true
+          nav_translations:
+            Home: ホーム
+            Getting Started: はじめに
+            Installation: インストール
+            Quickstart: クイックスタート
+            Concepts: 概念
+            Nodes: ノード
+            Ports and Channels: Port と Channel
+            Networks: ネットワーク
+            Global Time: グローバル時間
+            State: 状態
+            User Guide: ユーザーガイド
+            Writing a Node: ノードを書く
+            Building a Network: ネットワークを組む
+            Running a Network: ネットワークを走らせる
+            Composing Networks: ネットワークを束ねる
+            Saving and Restoring State: 状態の保存と復元
+            Controlling Time: 時間の制御
+            PyTorch in Nodes: ノードの中の PyTorch
+            Update Rules: 更新手法
+            Errors and Shutdown: 例外と終了
+            Testing: テスト
+            Errors: 例外
+            Examples: サンプル
+            API Reference: API リファレンス
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_submodules: false
+            separate_signature: true
+            line_length: 88
+            show_signature_annotations: true
+            show_root_heading: true
+            merge_init_into_class: true
+            docstring_section_style: spacy
+            members_order: source
+            inherited_members: true
+            # The hooks of Node come from the stub of the native core, which has no
+            # docstrings; list every public member anyway.
+            show_if_no_docstring: true
+            # Hide private names and the dunders that exceptions inherit.
+            filters: ["!^_"]
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Concepts:
+      - concepts/index.md
+      - Nodes: concepts/nodes.md
+      - Ports and Channels: concepts/ports.md
+      - Networks: concepts/networks.md
+      - Global Time: concepts/time.md
+      - State: concepts/state.md
+  - User Guide:
+      - user-guide/index.md
+      - Writing a Node: user-guide/writing-a-node.md
+      - Building a Network: user-guide/building-a-network.md
+      - Running a Network: user-guide/running.md
+      - Composing Networks: user-guide/compose.md
+      - Saving and Restoring State: user-guide/state.md
+      - Controlling Time: user-guide/time.md
+      - PyTorch in Nodes: user-guide/torch.md
+      - Update Rules: user-guide/update-rules.md
+      - Errors and Shutdown: user-guide/errors.md
+      - Testing: user-guide/testing.md
+  - Examples:
+      - examples/index.md
+  - API Reference:
+      - api/index.md
+      - Nodes: api/node.md
+      - Ports and Channels: api/port.md
+      - Networks: api/network.md
+      - Global Time: api/time.md
+      - Errors: api/errors.md
+      - Testing: api/testing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Geson-anko/mujou
