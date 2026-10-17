@@ -93,7 +93,7 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 2. Update the state by an amount proportional to `dt`
 3. Send the result with `send()`
 
-`dt` is the time in seconds since this node's previous update. For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts.md#global-time)).
+`dt` is the time in seconds since this node's previous update. The first `dt` counts from when the run's timer starts, after every node's `on_start` (in a restored run, from the node's last update before the state was taken). For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts.md#global-time)).
 
 `dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The time you cut off is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
 
@@ -137,6 +137,8 @@ The period is the average interval between updates. The time `on_update` takes c
 The wait is measured on the run's timer. If you change the time scale, the period changes by the same factor against real time.
 
 Even with a period, `dt` is not exactly `period`. `dt` is the time that actually passed: after a delay it is longer than `period`, and the next one is shorter. Even with a period, update in proportion to `dt`.
+
+In a pipeline fed by a node with a period (a sensor, say), the nodes after it read the same input until the next one arrives. Without a period of their own they repeat the same work and each uses up a core; give them a period too, no longer than the period of their input.
 
 Pass `period` only as an argument of `super().__init__`. Setting a default with a class attribute `period = 0.01` makes the start of the run raise `TypeError`. A manual run (see [Testing](testing.md)) does not use the period.
 

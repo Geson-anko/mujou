@@ -101,6 +101,8 @@ class Classifier(mujou.Network):
 
 複数の値をどう束ねるか（足す、平均する、相手ごとに重みを掛ける）は、受け取るノードが決める。mujou は束ねない。上の例の `Sum` は足している。
 
+相手ごとに扱いを変えるときは、`send_to` のときと同じく、相手ごとの `Channel` を受け取るノードに持たせる。`self.sum.from_double = self.double.connect(self.sum)` とし、ノードの中で `self.prev.recv()[self.from_double]` と読む。
+
 `NextPort` も既定で複数の相手を取るので、その `recv()` は dict を返す。次のノードが 1 つだけと決まっているなら、`NextPort(send=..., multi=False)` にすると `recv()` が値そのものを返す。
 
 ## 構築した構造を確かめる
