@@ -6,18 +6,18 @@ mujou の使い方を示す、動くプログラムの一覧である。プロ�
 
 やりたいことに近い行を選ぶ。「詳しい説明」のページでは、そのプログラムを取り込んで説明している。
 
-| やりたいこと                                       | プログラム            | 詳しい説明                                                                                               |
-| -------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------- |
-| とにかく 1 つ動かす                                | `quickstart.py`       | [クイックスタート](../getting-started/quickstart.md)、[ネットワークを走らせる](../user-guide/running.md) |
-| 時間とともに変わる状態を持つノードを書く           | `leaky_chain/`        | [ノードを書く](../user-guide/writing-a-node.md)、[グローバル時間](../concepts/time.md)                   |
-| ネットワークを枝分かれさせ、合流させる             | `branching.py`        | [ネットワークを組む](../user-guide/building-a-network.md)、[Port と Channel](../concepts/ports.md)       |
-| 複数のネットワークを一緒に走らせる                 | `compose.py`          | [ネットワークを束ねる](../user-guide/compose.md)、[ネットワーク](../concepts/networks.md)                |
-| 学習した状態を保存し、続きから走らせる             | `save_and_restore.py` | [状態の保存と復元](../user-guide/state.md)、[状態](../concepts/state.md)                                 |
-| 最新の出力を受け取り続ける（途中の値は飛ばしうる） | `subscribe.py`        | [ネットワークを走らせる](../user-guide/running.md)                                                       |
-| ノードの中で PyTorch のモデルを BP で学習させる    | `torch_node.py`       | [ノードの中の PyTorch](../user-guide/torch.md)                                                           |
-| ノードをテストする                                 | `testing_a_node.py`   | [テスト](../user-guide/testing.md)                                                                       |
-| 時間の進み方を変える                               | `timers.py`           | [時間の制御](../user-guide/time.md)、[グローバル時間](../concepts/time.md)                               |
-| ノードが例外を投げたときの動きを知る               | `errors.py`           | [例外と終了](../user-guide/errors.md)                                                                    |
+| やりたいこと                                       | プログラム            | 詳しい説明                                                                                                                                        |
+| -------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| とにかく 1 つ動かす                                | `quickstart.py`       | [クイックスタート](../getting-started/quickstart.md)、[ネットワークを走らせる](../user-guide/running.md)                                          |
+| 時間とともに変わる状態を持つノードを書く           | `leaky_chain/`        | [ノードを書く](../user-guide/writing-a-node.md)、[グローバル時間](../concepts.md#%E3%82%B0%E3%83%AD%E3%83%BC%E3%83%90%E3%83%AB%E6%99%82%E9%96%93) |
+| ネットワークを枝分かれさせ、合流させる             | `branching.py`        | [ネットワークを組む](../user-guide/building-a-network.md)、[Port と Channel](../concepts.md#port-%E3%81%A8-channel)                               |
+| 複数のネットワークを一緒に走らせる                 | `compose.py`          | [ネットワークを束ねる](../user-guide/compose.md)、[ネットワーク](../concepts.md#%E3%83%8D%E3%83%83%E3%83%88%E3%83%AF%E3%83%BC%E3%82%AF)           |
+| 学習した状態を保存し、続きから走らせる             | `save_and_restore.py` | [状態の保存と復元](../user-guide/state.md)、[状態](../concepts.md#%E7%8A%B6%E6%85%8B)                                                             |
+| 最新の出力を受け取り続ける（途中の値は飛ばしうる） | `subscribe.py`        | [ネットワークを走らせる](../user-guide/running.md)                                                                                                |
+| ノードの中で PyTorch のモデルを BP で学習させる    | `torch_node.py`       | [ノードの中の PyTorch](../user-guide/torch.md)                                                                                                    |
+| ノードをテストする                                 | `testing_a_node.py`   | [テスト](../user-guide/testing.md)                                                                                                                |
+| 時間の進み方を変える                               | `timers.py`           | [時間の制御](../user-guide/time.md)、[グローバル時間](../concepts.md#%E3%82%B0%E3%83%AD%E3%83%BC%E3%83%90%E3%83%AB%E6%99%82%E9%96%93)             |
+| ノードが例外を投げたときの動きを知る               | `errors.py`           | [例外と終了](../user-guide/errors.md)                                                                                                             |
 
 各プログラムが示すことは次のとおりである。
 
@@ -28,7 +28,7 @@ mujou の使い方を示す、動くプログラムの一覧である。プロ�
 - `save_and_restore.py`: `run.state_dict()` で状態を取り、pickle で保存し、`mujou.run(..., state=...)` で復元して続ける
 - `subscribe.py`: `run.subscribe` で、まずその時点の最新の出力を受け取り、その後はより新しい出力が送られるたびに最新の 1 つを受け取る。受け取る前に次の値が送られると、途中の値は飛ばされる。別のスレッドから `shutdown` すると受け取りの反復が終わる
 - `torch_node.py`: ノードの中の `nn.Module` を、ノードの内側に閉じた BP で学習させる。シードの指定と、`dt` を刻みに分けて進める更新
-- `testing_a_node.py`: `mujou.testing` の仮想タイマーと手動の更新で、ノードを決まった `dt` と順序で動かし、結果を参照の計算とビット単位で比べる
+- `testing_a_node.py`: `mujou.testing` の仮想タイマーと手動の更新で、ノードを決まった `dt` と順序で動かし、結果を参照の計算とビット単位で比べる。途中で取った状態から復元した実行が、止めずに続けた実行と一致することも確かめる
 - `timers.py`: 時刻 `Timestamp`、実行ごとのタイマー `Timer`、時間の速さ（実行のタイマーとグローバルタイマー）
 - `errors.py`: ホストが受け取る `NetworkError` とその `__cause__`、`on_exception` → `on_stop` の順、`on_start` の例外は `mujou.run` が送出する
 

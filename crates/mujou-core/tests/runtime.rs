@@ -191,6 +191,83 @@ mod manual_mode {
     }
 }
 
+mod startup {
+    use super::*;
+
+    /// Tries to move the time in `start`, as a slow start would on the real
+    /// clock, and keeps whether the timer was held and whether it moved.
+    struct Starter {
+        timer: Arc<Timer>,
+        seen: Arc<Mutex<Option<(bool, bool)>>>,
+        dts: Arc<Mutex<Vec<f64>>>,
+    }
+
+    impl NodeHooks for Starter {
+        type State = ();
+
+        fn start(&mut self) -> Result<(), HookError> {
+            let moved = self.timer.advance_ns(H_NS).is_ok();
+            *self.seen.lock().unwrap() = Some((self.timer.is_paused(), moved));
+            Ok(())
+        }
+
+        fn update(&mut self, dt: f64) -> Result<(), HookError> {
+            self.dts.lock().unwrap().push(dt);
+            Ok(())
+        }
+
+        fn pause(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn resume(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn exception(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn state_dict(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn the_time_is_held_while_the_nodes_start() {
+        let timer = virtual_timer();
+        let seen = Arc::new(Mutex::new(None));
+        let dts = Arc::new(Mutex::new(Vec::new()));
+        let node = Starter {
+            timer: Arc::clone(&timer),
+            seen: Arc::clone(&seen),
+            dts: Arc::clone(&dts),
+        };
+        let t0 = timer.time_ns();
+        let (rt, started) = Runtime::start(
+            vec![node],
+            vec!["n".to_owned()],
+            Arc::clone(&timer),
+            manual(),
+        )
+        .unwrap();
+        started.wait().unwrap();
+        // Held while starting, so the start took no time; running afterwards.
+        assert_eq!(*seen.lock().unwrap(), Some((true, false)));
+        assert!(!timer.is_paused());
+        assert_eq!(timer.time_ns(), t0);
+        timer.advance_ns(H_NS).unwrap();
+        rt.step(None).wait().unwrap();
+        rt.shutdown().wait().unwrap();
+        // The first Δt is only the time after the start.
+        assert_eq!(*dts.lock().unwrap(), [H_NS as f64 / 1e9]);
+    }
+}
+
 mod capture {
     use super::*;
 

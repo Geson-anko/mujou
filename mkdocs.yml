@@ -55,8 +55,9 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  # Pages include the tested programs of examples/ with --8<-- "examples/<file>.py",
-  # so that the code on the site is the code that the tests run.
+  # Pages include the tested programs of examples/ with --8<-- "examples/<file>.py"
+  # (or a marked section, "examples/<file>.py:<section>"), so that the code on the
+  # site is the code that the tests run.
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
@@ -102,7 +103,6 @@ plugins:
             Ports and Channels: Port と Channel
             Networks: ネットワーク
             Global Time: グローバル時間
-            State: 状態
             User Guide: ユーザーガイド
             Writing a Node: ノードを書く
             Building a Network: ネットワークを組む
@@ -111,7 +111,6 @@ plugins:
             Saving and Restoring State: 状態の保存と復元
             Controlling Time: 時間の制御
             PyTorch in Nodes: ノードの中の PyTorch
-            Update Rules: 更新手法
             Errors and Shutdown: 例外と終了
             Testing: テスト
             Errors: 例外
@@ -153,16 +152,9 @@ validation:
 nav:
   - Home: index.md
   - Getting Started:
-      - getting-started/index.md
       - Installation: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
-  - Concepts:
-      - concepts/index.md
-      - Nodes: concepts/nodes.md
-      - Ports and Channels: concepts/ports.md
-      - Networks: concepts/networks.md
-      - Global Time: concepts/time.md
-      - State: concepts/state.md
+  - Concepts: concepts.md
   - User Guide:
       - user-guide/index.md
       - Writing a Node: user-guide/writing-a-node.md
@@ -172,7 +164,6 @@ nav:
       - Saving and Restoring State: user-guide/state.md
       - Controlling Time: user-guide/time.md
       - PyTorch in Nodes: user-guide/torch.md
-      - Update Rules: user-guide/update-rules.md
       - Errors and Shutdown: user-guide/errors.md
       - Testing: user-guide/testing.md
   - Examples:

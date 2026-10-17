@@ -35,6 +35,7 @@ class Clock(Node):
 t0, t1 = Timestamp(ns=1_500_000_000), Timestamp(ns=2_000_000_000)
 assert float(t0) == 1.5 and int(t0) == 1 and (t1 - t0).ns == 500_000_000
 
+# --8<-- [start:own-timer]
 # A run on a timer of its own, ten times faster than the real time. Pausing this
 # run (to take its state, say) stops only this timer, not the global one.
 timer = Timer()  # starts at 0
@@ -58,10 +59,13 @@ assert float(t) >= 2.0 and elapsed_real < 2.0
 # The clock read its time just before it sent: compare times of the same timer
 # only, since a Timestamp does not say which timer it is on.
 assert seen.item() <= float(t)
+# --8<-- [end:own-timer]
 
+# --8<-- [start:global-scale]
 # The global timer can be scaled too; it then applies to every run on it.
 mujou.time.set_time_scale(5.0)
 start_real = time.perf_counter()
 mujou.time.sleep(0.5)  # 0.5 s of the global time: about 0.1 s of real time
 print(f"slept 0.5 s of global time in {time.perf_counter() - start_real:.2f} s real")
 mujou.time.set_time_scale(1.0)
+# --8<-- [end:global-scale]

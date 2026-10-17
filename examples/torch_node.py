@@ -16,6 +16,7 @@ from torch import nn
 import mujou
 from mujou import NextPort, Node, Port, PrevPort, TensorSpec
 
+# --8<-- [start:node]
 BATCH, N_IN, N_OUT = 16, 4, 2
 INPUT, OUTPUT = TensorSpec((BATCH, N_IN)), TensorSpec((BATCH, N_OUT))
 MAX_STEP = 0.01  # seconds: a longer explicit Euler step could diverge
@@ -57,9 +58,14 @@ class Regressor(Node):
         self.next.send(self.model(x))
 
 
+# --8<-- [end:node]
+
+
+# --8<-- [start:threads]
 # Each node computes on its own thread, and torch adds threads of its own for
 # each: keep those few (a setting of the whole process, made by the host).
 torch.set_num_threads(1)
+# --8<-- [end:threads]
 
 generator = torch.Generator().manual_seed(0)
 teacher = torch.randn(N_OUT, N_IN, generator=generator)

@@ -1,13 +1,14 @@
+# --8<-- [start:test]
 """Test a node deterministically with ``mujou.testing``.
 
 ``mujou.testing.run`` runs on a ``VirtualTimer``, whose time moves only when the
 test advances it, and ``ManualRun.step`` updates the nodes by hand in a fixed order.
 Every ``dt`` is then exactly the step, and the run can be compared with the discrete
-algorithm.
+algorithm, or with a run restored from a state taken midway.
 """
 
 import math
-from typing import override
+from typing import Any, override
 
 import torch
 
@@ -72,5 +73,40 @@ def test_chain_follows_the_discrete_algorithm() -> None:
     print(f"after {steps} steps of {h} s: y = {y}, equal to the reference")
 
 
+# --8<-- [end:test]
+
+
+# --8<-- [start:restore]
+def run_steps(
+    net: Chain,
+    timer: mujou.testing.VirtualTimer,
+    n: int,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run ``net`` for ``n`` steps of 1 ms on ``timer`` and return its state."""
+    u = torch.tensor([1.0, -2.0], dtype=torch.float64)
+    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}, state=state) as run:
+        for _ in range(n):
+            timer.advance(0.001)
+            run.step()
+    return run.state_dict()
+
+
+def test_restored_run_matches_a_straight_run() -> None:
+    straight = run_steps(Chain(0.01), mujou.testing.VirtualTimer(), 20)
+    # Ten steps, then ten more in a new instance restored from the first half. The
+    # second half runs on the timer of the first, which has ended.
+    timer = mujou.testing.VirtualTimer()
+    half = run_steps(Chain(0.01), timer, 10)
+    resumed = run_steps(Chain(0.01), timer, 10, state=half)
+
+    assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
+    print("save and restore: equal to the run that did not stop")
+
+
+# --8<-- [end:restore]
+
+
 if __name__ == "__main__":
     test_chain_follows_the_discrete_algorithm()
+    test_restored_run_matches_a_straight_run()

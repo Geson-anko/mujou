@@ -9,7 +9,7 @@
 | 名前                           | 役割                                                                                                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mujou.testing.run(net, ...)`  | `mujou.run` と同じ引数で走らせ、`ManualRun` を返す。ノードは `step` で許すまで更新しない。`timer` を渡さなければ、新しい `VirtualTimer` の上で走る |
-| `mujou.testing.VirtualTimer()` | 仮想のタイマー。時刻 0 から始まり、`advance(秒)` で進めた分だけ進む                                                                                |
+| `mujou.testing.VirtualTimer()` | 仮想のタイマー。時刻 0 から始まり、`advance(seconds)` で進めた分だけ進む                                                                           |
 | `ManualRun.timer`              | 実行のタイマー。`mujou.testing.run` が作った `VirtualTimer` か、渡した `timer`                                                                     |
 | `ManualRun.step(*nodes)`       | 渡したノードを、渡した順に 1 回ずつ更新し、全部終わってから戻る                                                                                    |
 
@@ -20,7 +20,7 @@
 次のテストでは、リーク積分器を 2 つ並べたネットワークを、ノードと同じ厳密な係数 `1 - exp(-h / tau)` で書いた離散アルゴリズムと比べる。
 
 ```python
---8<-- "examples/testing_a_node.py"
+--8<-- "examples/testing_a_node.py:test"
 ```
 
 1. 比べる相手（参照）を、ノードと同じ演算で書く。ここでは `a` を更新してから、その新しい値で `b` を更新する
@@ -52,35 +52,15 @@
 
 ## 保存と復元のテスト
 
-途中で状態を取り、新しいインスタンスに復元して続けた結果が、止めずに続けた結果と一致するかを確かめられる。`VirtualTimer` の上なら、両者はビット単位で一致する。次の例は、上のサンプルの `Chain` クラスを使う。後半の復元では前半と同じ `timer` を使う。前半の実行はもう終わっているので、同じタイマーで復元してよい。
+途中で状態を取り、新しいインスタンスに復元して続けた結果が、止めずに続けた結果と一致するかを確かめられる。`VirtualTimer` の上なら、両者はビット単位で一致する。次のテストは、上のプログラムの続きである。後半の復元では前半と同じ `timer` を使う。前半の実行はもう終わっているので、同じタイマーで復元してよい。
 
 ```python
-import torch
-
-import mujou.testing
-from mujou.testing import VirtualTimer
-
-u = torch.tensor([1.0, -2.0], dtype=torch.float64)
-
-
-def steps(net, timer, n, state=None):
-    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}, state=state) as run:
-        for _ in range(n):
-            timer.advance(0.001)
-            run.step()
-    return run.state_dict()
-
-
-straight = steps(Chain(0.01), VirtualTimer(), 20)
-timer = VirtualTimer()
-half = steps(Chain(0.01), timer, 10)
-resumed = steps(Chain(0.01), timer, 10, state=half)
-assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
+--8<-- "examples/testing_a_node.py:restore"
 ```
 
 ## 例外のテスト
 
-ノードが例外を投げると、その例外は `step` から `NetworkError` として届く。`__cause__` がノードの例外である（[例外と終了](errors.md)）。
+ノードが例外を投げると、その例外は `step` から `NetworkError` として届く。`__cause__` がノードの例外である（[例外と終了](errors.md)）。テストの `with mujou.testing.run(...) as run:` の中で、次のように確かめる。
 
 ```python
 import pytest

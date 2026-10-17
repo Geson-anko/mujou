@@ -1841,3 +1841,144 @@ class TestOneNodeOnMps:
         node, net = OnMps(), Chain()
         start_manual(node, net)
         assert node.started and net.a.started
+
+
+class Hooks(Node):
+    """Appends ``(name, hook)`` to the shared ``log`` for each hook it is called
+    in; raises in ``on_update`` once ``trigger`` is set."""
+
+    def __init__(self, name: str, log: list[tuple[str, str]]) -> None:
+        super().__init__()
+        self.name = name
+        self.log = log
+        self.trigger = threading.Event()
+        self.error: Exception | None = None
+
+    def hooks(self) -> list[str]:
+        return [hook for name, hook in self.log if name == self.name]
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.log.append((self.name, "on_update"))
+        if self.trigger.is_set():
+            self.error = ValueError(f"boom in {self.name}")
+            raise self.error
+
+    @override
+    def on_pause(self) -> None:
+        super().on_pause()
+        self.log.append((self.name, "on_pause"))
+
+    @override
+    def on_resume(self) -> None:
+        super().on_resume()
+        self.log.append((self.name, "on_resume"))
+
+    @override
+    def state_dict(self) -> object:
+        self.log.append((self.name, "state_dict"))
+        return super().state_dict()
+
+    @override
+    def on_exception(self) -> None:
+        super().on_exception()
+        self.log.append((self.name, "on_exception"))
+
+    @override
+    def on_stop(self) -> None:
+        super().on_stop()
+        self.log.append((self.name, "on_stop"))
+
+
+class ThreeHooks(Network):
+    def __init__(self, log: list[tuple[str, str]]) -> None:
+        self.a = Hooks("a", log)
+        self.b = Hooks("b", log)
+        self.c = Hooks("c", log)
+
+    def nodes(self) -> list[Hooks]:
+        return [self.a, self.b, self.c]
+
+
+class TestPauseHooks:
+    def test_state_dict_pauses_every_node_takes_the_state_then_resumes_each(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        log: list[tuple[str, str]] = []
+        net = ThreeHooks(log)
+        run = start_manual(net)
+        step(run, virtual)
+        log.clear()
+
+        run.state_dict()
+        step(run, virtual)  # on_resume comes before the next on_update
+
+        for node in net.nodes():
+            assert node.hooks() == ["on_pause", "state_dict", "on_resume", "on_update"]
+        hooks = [hook for _, hook in log]
+        last_pause = max(i for i, h in enumerate(hooks) if h == "on_pause")
+        states = [i for i, h in enumerate(hooks) if h == "state_dict"]
+        first_resume = min(i for i, h in enumerate(hooks) if h == "on_resume")
+        # The state is taken at one time: every node is paused before any state,
+        # and none resumes before every state is taken.
+        assert last_pause < min(states)
+        assert max(states) < first_resume
+
+
+class TestExceptionHooks:
+    def test_every_node_gets_on_exception_then_on_stop_and_the_host_the_error(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        log: list[tuple[str, str]] = []
+        net = ThreeHooks(log)
+        run = start_manual(net)
+        step(run, virtual)
+        net.b.trigger.set()
+
+        with pytest.raises(NetworkError) as raised:
+            step(run, virtual)
+        with pytest.raises(NetworkError):
+            run.join()  # every on_stop has returned
+
+        assert raised.value.__cause__ is net.b.error
+        for node in net.nodes():
+            hooks = node.hooks()
+            assert hooks[-2:] == ["on_exception", "on_stop"]
+            assert hooks.count("on_exception") == 1
+            assert hooks.count("on_stop") == 1
+
+
+class Blocks(Node):
+    """Blocks in its first ``on_update`` until ``release`` is set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        if not self.release.is_set():
+            self.entered.set()
+            self.release.wait(10.0)
+
+
+class TestPauseTimeout:
+    def test_state_dict_raises_when_a_node_does_not_pause_and_the_run_goes_on(
+        self, started: list[Run]
+    ):
+        node = Blocks()
+        run = mujou.run(node, pause_timeout=0.05)
+        started.append(run)
+        try:
+            assert node.entered.wait(10.0)
+            with pytest.raises(mujou.PauseTimeoutError):
+                run.state_dict()
+        finally:
+            node.release.set()
+
+        assert "nodes" in run.state_dict()  # the run kept running
+        run.shutdown()
+        run.state_dict()  # a normal end

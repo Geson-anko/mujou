@@ -5,12 +5,12 @@
 ## The basic form
 
 ```python
---8<-- "examples/quickstart.py:59:68"
+--8<-- "examples/quickstart.py:run"
 ```
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
 2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
-3. The host writes input with `write` and reads output with `read` or `subscribe`. The example above waits with `wait_for` until the expected value arrives, and gives up with `TimeoutError` after 5 seconds of real time (see "Reading output" below). To show an input for a set time, write it as in "Showing an input for a set time" below
+3. The host writes input with `write` and reads output with `read`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
 `mujou.run` takes the following arguments.
@@ -43,7 +43,7 @@ Without `inputs`, the initial value of the input is zeros. When `mujou.run` retu
 - A written value stays until the next write. Input is "a signal that changes over time", and nodes read the same input many times
 - The values of several ports written in one `write` switch at the same time. A node never reads the new value of only one of them. Put values that should switch as a pair, such as an input and its teacher signal, in one `write`
 - The values are copied. Changing the tensor after writing it does not reach the network
-- `write` returns the time the values were written (a `Timestamp`)
+- `write` returns the time the values were written
 
 ### Showing an input for a set time
 
@@ -56,11 +56,11 @@ for x in stream:
     y, t = run.read(net.next)      # take the output at the end of showing as the response to x
 ```
 
-The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time.
+The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time. If you know the output to expect, wait for it with `wait_for` instead (see "Reading output" below).
 
 ## Reading output
 
-There are two ways to read output.
+There are three ways to read output.
 
 | Way                             | What it returns                                                                | Suited for                                  |
 | ------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
@@ -68,7 +68,7 @@ There are two ways to read output.
 | `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
 | `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-All of them read from any port that has a send type. Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
+All of them read from any port that has a send type, and return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)). Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
 `read` behaves as follows.
 
@@ -82,39 +82,16 @@ All of them read from any port that has a send type. Reading an unconnected port
 3. When the run ends normally, the iteration ends. When the run ends with a node's exception, the iteration raises `NetworkError`
 4. With `timeout=seconds`, the iteration raises `TimeoutError` once that many seconds of real time have passed since the call to `subscribe`, the time spent in the body of the loop included. The run keeps running. The default is forever
 
-Only the host waits; the sending node does not wait for the host. Without a `timeout`, the iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it.
+Only the host waits; the sending node does not wait for the host. Without a `timeout`, the iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it, as in the following example.
+
+```python
+--8<-- "examples/subscribe.py:subscribe"
+```
 
 To wait until an expected output arrives, use `wait_for`. It checks the latest value first, then each newer one, and returns the first that meets the condition. After `timeout` seconds of real time it raises `TimeoutError` (the run keeps running); if the run stops first, it raises `RuntimeError`.
 
 ```python
 y, t = run.wait_for(net.next, lambda y: torch.equal(y, expected), timeout=5.0)
-```
-
-```python
---8<-- "examples/subscribe.py:33:43"
-```
-
-## Times: `Timestamp`
-
-The times that `read`, `subscribe` and `write` return are `mujou.time.Timestamp`.
-
-| Form              | Value                                           |
-| ----------------- | ----------------------------------------------- |
-| `float(ts)`       | Seconds (`float`)                               |
-| `ts.ns`           | Nanoseconds (`int`). The exact value            |
-| `later - earlier` | The difference of two times. Also a `Timestamp` |
-| `a < b` and so on | Which time is earlier                           |
-
-A time is a value on the run's timer. A `Timestamp` does not record which timer it is from, so compare only times from the same timer. If the run is on the global timer, you can also compare with `mujou.time.now()`.
-
-Comparing the time that `write` returns with the time that `read` returns tells whether an output was sent before or after the input was switched.
-
-```python
-t_in = run.write({net.prev: x})
-mujou.time.sleep(0.1)
-y, t_out = run.read(net.next)
-if t_out >= t_in:             # y was sent after x was written
-    print(float(t_out - t_in))  # seconds from writing x until y was sent
 ```
 
 ## Ending the run
@@ -125,10 +102,10 @@ if t_out >= t_in:             # y was sent after x was written
 | `run.shutdown(timeout=...)`   | Asks every node to stop, and waits until `on_stop` has finished on every node                                                      |
 | `run.join(timeout=...)`       | Waits until the run ends, without asking it to stop. Use it after another thread calls `shutdown()`, or after `shutdown` times out |
 
-`timeout` is in seconds of real time, and the default is forever. If the run does not end in time, it raises `TimeoutError`. When `shutdown` times out, the request to stop is not withdrawn, and the ending goes on in the background. To wait for that ending, call `join`. When `join` times out, nothing changes, and the run keeps running.
+`timeout` is in seconds of real time, and the default is forever. What happens when it runs out is in "Timeouts" in [Errors and shutdown](errors.md).
 
 Calling `shutdown` after a normal end does nothing. After a normal end, `run.state_dict()` still takes the last state (see [Saving and restoring state](state.md)). Calling `write` on a run that has ended raises `RuntimeError`.
 
-Letting go of `Run` does not stop the run. Call `shutdown` or use a `with` statement, and always end the run before the program ends.
+Letting go of `Run` does not stop the run. Always end the run with `shutdown` or a `with` statement.
 
 If any node raises, the whole network stops, and the later methods of `Run` raise `NetworkError`. Details are in [Errors and shutdown](errors.md).

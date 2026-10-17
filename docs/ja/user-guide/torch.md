@@ -1,13 +1,24 @@
 # ノードの中の PyTorch
 
-ノードの内側の計算には PyTorch を使う。このページでは、デバイスと乱数、ノードの中での誤差逆伝播（BP）、CUDA とほかのアクセラレータの扱い、プロセス全体に効く設定を書く。
+ノードの内側の計算には PyTorch を使う。このページでは、更新手法、デバイスと乱数、ノードの中での誤差逆伝播（BP）、CUDA とほかのアクセラレータの扱い、プロセス全体に効く設定を書く。
+
+## 更新手法
+
+ノードが `on_update(dt)` に書く更新が、そのノードの更新手法（学習則）である。mujou はノード・Port・実行の基盤に更新手法を組み込まないので、ノードごとに選び、差し替えられる。
+
+- 既定の更新手法は PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）である。局所的な更新で BP に近い性能を出せると報告されている。この選択は暫定的である
+- BP も、1 つのノードの内側に閉じていれば更新手法の 1 つとして使える（下の「ノードの中の BP」）
+
+!!! note "PC-ALM のノードは未実装"
+
+    PC-ALM のノードは、モジュール `mujou.pc` から提供する予定で、まだ実装していない。それまでは、`mujou.Node` を継承し、`on_update(dt)` に更新式を自分で書く（[ノードを書く](writing-a-node.md)）。
 
 ## 例
 
 次のノードは、入力から目標への線形写像をオンラインで学び、予測を送る。BP は 1 つのノードの中に閉じている。
 
 ```python
---8<-- "examples/torch_node.py:19:57"
+--8<-- "examples/torch_node.py:node"
 ```
 
 ## デバイスと seed
@@ -33,7 +44,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## ノードの中の BP
 
-mujou は、ノードのスレッドで勾配の記録を切っている（`torch.set_grad_enabled(False)`）。既定の更新手法 PC-ALM（実装予定。[更新手法](update-rules.md)）は更新式を直接計算するので、autograd のグラフは要らないからである。
+mujou は、ノードのスレッドで勾配の記録を切っている（`torch.set_grad_enabled(False)`）。既定の更新手法 PC-ALM は更新式を直接計算するので、autograd のグラフは要らないからである。
 
 ノードの中で autograd を使うときは、次のように書く。
 
@@ -53,13 +64,15 @@ BP はノードの中に閉じる。ほかのノードへ勾配を流すこと�
 
 - ノードのスレッドの現在のデバイスを、ノードのデバイスにする
 - ノード専用の CUDA ストリームを作り、そのスレッドの現在のストリームにする。ノードの演算はすべてこのストリームに積まれる
-- 各 `on_update` の直後、`load_state_dict` の後、`state_dict` の前後に、ノードのストリームを同期する
+- 各 `on_update` の後と、状態の取得と復元の前後に、ノードのストリームを同期する
 
 そのため、ノードの作者は同期を書かなくてよい。自分で同期するときは、自分のストリーム（`torch.cuda.current_stream().synchronize()`）だけを同期する。デバイス全体を待つ `torch.cuda.synchronize()` は、ほかのノードの仕事まで待つので使わない。
 
-- `device="cuda"` のように番号を付けないと、ノードを作ったときのホストの現在のデバイスに決まる
-- PyTorch はストリームをデバイスごとに 32 本のプールから割り当てる。1 つのデバイスに 32 を超えるノードを置くと、ストリームを共有するノードが出る。結果は変わらないが、同期でほかのノードの仕事も待つ
-- `on_update` で起きた CUDA のエラー（device-side assert など）は、直後の同期で表に出る。そのため `NetworkError` のメッセージには、mujou の内部の hook の名前 `_after_update` が出る。原因は `on_update` の中にある
+`device="cuda"` のように番号を付けないと、ノードを作ったときのホストの現在のデバイスに決まる。
+
+??? tip "CUDA のエラーに `_after_update` と出る"
+
+    `on_update` で起きた CUDA のエラー（device-side assert など）は、直後の同期で表に出る。そのため `NetworkError` のメッセージには、mujou の内部の hook の名前 `_after_update` が出る。原因は `on_update` の中にある。
 
 ## ほかのアクセラレータ（MPS など）
 
@@ -84,7 +97,7 @@ BP はノードの中に閉じる。ほかのノードへ勾配を流すこと�
 各ノードは自分のスレッドで計算する。CPU の torch の演算は、そのスレッドごとにさらに内部のスレッドを使う。内部のスレッドが多いと、ノード同士で CPU を取り合って全体が遅くなる。mujou は内部のスレッド数を設定しないので、ホストが `mujou.run` の前に決める。
 
 ```python
---8<-- "examples/torch_node.py:60:62"
+--8<-- "examples/torch_node.py:threads"
 ```
 
 目安は、CPU で計算するノードの数と `torch.set_num_threads(n)` の `n` の積が、物理コア数を超えないことである。小さな行列を扱うノードが多いときは `n = 1` でよい。

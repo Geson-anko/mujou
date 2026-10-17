@@ -1,6 +1,6 @@
 # Building a Network
 
-You write a network as a class that inherits from `mujou.Network`. This page shows how to connect nodes, expose ports to the outside, nest networks, branch and merge, and check the built structure. How to think about networks is in [Networks](../concepts/networks.md) and [Ports and channels](../concepts/ports.md).
+You write a network as a class that inherits from `mujou.Network`. This page shows how to connect nodes, expose ports to the outside, nest networks, branch and merge, and check the built structure. How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
 
 ## The basic form
 
@@ -11,7 +11,7 @@ In `__init__`, write these three things in order.
 3. Expose the ports that should connect from outside, or that the host reads and writes, by assigning them to attributes of the network
 
 ```python
---8<-- "examples/quickstart.py:47:56"
+--8<-- "examples/quickstart.py:network"
 ```
 
 A network follows only its direct attributes. Nodes put in a list or a dict do not become part of the network.
@@ -79,7 +79,7 @@ A node cannot hold other nodes or networks as attributes. If it does, building r
 Connecting several channels to one port makes a branch or a merge. The following example splits the output of `split` into two and joins them in `sum`.
 
 ```python
---8<-- "examples/branching.py:19:85"
+--8<-- "examples/branching.py:network"
 ```
 
 ### Branching: the sending side
@@ -105,21 +105,10 @@ A `NextPort` also takes many peers by default, so its `recv()` returns a dict. I
 
 ## Checking the built structure
 
-`net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you do not need to call it just to run. Call it when you want to check the structure before running. Call it only on the network you will run: a built network cannot become part of a bigger network afterwards.
+`net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you need not call it just to run. Call it to check the structure before running.
 
 ```python
---8<-- "examples/branching.py:88:91"
+--8<-- "examples/branching.py:build"
 ```
 
-| `Graph` API             | What it returns                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `graph.nodes`           | The `(path, node)` pairs. Depth first, in the order the attributes were defined |
-| `graph.port_path(port)` | The path of the port: its name through the node that holds it (`"sum.next"`)    |
-
-After `build()`, no port in the tree can `connect` any more (`RuntimeError`). However many times it is called, it returns the same `Graph`. If the structure is invalid, `build()` raises `ValueError`. The main causes are these.
-
-- A port is declared as a class attribute
-- A node holds a node or a network as an attribute
-- One node or network has two or more `PrevPort`s, or two or more `NextPort`s
-- A network exposes a port that no node inside it holds
-- The same node is placed in two places, or there are no nodes at all
+`build()` freezes the network: afterwards no port in the tree can `connect` any more (`RuntimeError`), and the network cannot become part of a bigger network. So call it only on the network you will run. If the structure is invalid, `build()` raises `ValueError` with the reason. The API reference lists `Graph` and the causes.

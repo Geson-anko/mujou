@@ -16,6 +16,7 @@ from mujou import Channel, NextPort, Node, PrevPort, TensorSpec
 VECTOR = TensorSpec((2,))
 
 
+# --8<-- [start:network]
 class Split(Node):
     """Sends ``x`` on the channel ``plus`` and ``-x`` on the channel ``minus``."""
 
@@ -85,10 +86,15 @@ class Diamond(mujou.Network):
         self.next = self.sum.next
 
 
+# --8<-- [end:network]
+
+
+# --8<-- [start:build]
 net = Diamond()
 graph = net.build()  # what mujou.run runs; mujou.run(net) builds the same graph
 print("nodes:", [path for path, _ in graph.nodes])
 print("output port:", graph.port_path(net.next))
+# --8<-- [end:build]
 
 x = torch.tensor([1.0, 3.0])
 with mujou.run(net, inputs={net.prev: x}) as run:

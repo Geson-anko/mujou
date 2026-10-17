@@ -1,6 +1,6 @@
 # Saving and Restoring State
 
-This page shows how to take the state of a running network, save it, and later run the network again from that state. What the state tree holds, and how time stops while the state is taken, is in [State](../concepts/state.md).
+This page shows how to take the state of a running network, save it, and later run the network again from that state. What the state tree holds, and how time stops while the state is taken, is in [State](../concepts.md#state).
 
 ## The basic steps
 
@@ -35,7 +35,7 @@ When a run ends with an exception, `run.state_dict()` raises `NetworkError` and 
 
 ## Putting other values in the state
 
-Only `torch.Tensor` and `nn.Module` values assigned directly to attributes are collected (the full table is in [State](../concepts/state.md)). The following are not collected.
+Only `torch.Tensor` and `nn.Module` values assigned directly to attributes are collected (see [How Mujou works](../concepts.md#state)). The following are not collected.
 
 - Number attributes (such as a step counter)
 - Lists and dicts of tensors
@@ -68,12 +68,12 @@ class Noisy(Node):
 
 When you override them, follow these rules.
 
-| Hook                     | Rules                                                                                                                                                                                                                |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state_dict()`           | Return an object that pickles. It is called on another thread, not the node's own, so do not call `recv` or `send` on a port (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
-| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                                                                              |
+| Hook                     | Rules                                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
+| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                             |
 
-Do not change the state in `on_stop`. After a normal end, `run.state_dict()` takes the state from the nodes after `on_stop` has finished (the reason is in [State](../concepts/state.md)).
+Do not change the state in `on_stop`. After a normal end, `run.state_dict()` copies the state as the nodes left it, after `on_stop`, with the time at which `shutdown` asked the run to stop. A change made in `on_stop` would go into the tree (the reason is in [State](../concepts.md#state)).
 
 ## Formats
 
