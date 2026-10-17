@@ -1,5 +1,6 @@
 import math
 import pickle
+import re
 import subprocess
 import sys
 import threading
@@ -137,6 +138,11 @@ class Solo(Network):
         self.node = node
 
 
+class Outer(Network):
+    def __init__(self, inner: Network) -> None:
+        self.x = inner
+
+
 class Calls(Node):
     """Calls ``action`` in ``on_update`` and keeps the exception it raises."""
 
@@ -224,6 +230,62 @@ class TestRun:
             assert sum(isinstance(o, Run) for o in outcomes) == 1
             (error,) = (o for o in outcomes if not isinstance(o, Run))
             assert str(error) == message
+
+    @pytest.mark.parametrize("shared", ["network", "node"])
+    def test_runs_once_when_trees_sharing_a_part_run_together(
+        self, started: list[Run], shared: str
+    ):
+        # Refused while the other run is still starting, a run may find the
+        # shared part only built rather than run: either message is right.
+        refused = (
+            r"(has already run; create a new instance to run again"
+            r"|belongs to a network that is already built)$"
+        )
+        for _ in range(5):
+            given: list[tuple[Node | Network, ...]]
+            if shared == "network":
+                net = Chain()
+                given = [(net,), (net, Chain())]
+                who = r"^Chain "
+            else:
+                node = Leaky()
+                given = [(node,), (Solo(node),)]
+                who = r"^Leaky (at 'node' )?"
+            barrier = threading.Barrier(2)
+            outcomes: list[object] = []
+
+            def run(
+                networks: tuple[Node | Network, ...],
+                barrier: threading.Barrier = barrier,
+                outcomes: list[object] = outcomes,
+            ) -> None:
+                barrier.wait()
+                try:
+                    handle = mujou.testing.run(*networks, timer=VirtualTimer())
+                except RuntimeError as e:
+                    outcomes.append(e)
+                    return
+                started.append(handle)
+                outcomes.append(handle)
+
+            threads = [threading.Thread(target=run, args=(g,)) for g in given]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            assert sum(isinstance(o, Run) for o in outcomes) == 1
+            (error,) = (o for o in outcomes if not isinstance(o, Run))
+            assert isinstance(error, RuntimeError)
+            assert re.match(who + refused, str(error)), str(error)
+
+    def test_names_a_part_by_its_path_in_the_tree_mujou_run_makes(self, start: Start):
+        net = Chain()
+        start(net).shutdown()
+        with pytest.raises(RuntimeError) as raised:
+            start(Outer(net), Chain())
+        assert str(raised.value) == (
+            "Chain at '0.x' has already run; create a new instance to run again"
+        )
 
     def test_a_refused_run_of_several_networks_can_be_retried(
         self, start_manual: StartManual
