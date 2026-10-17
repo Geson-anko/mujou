@@ -54,11 +54,12 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 
 次はまだ決めていない。
 
-- 手動の実行（`ManualRun`）で `period` を守る選択肢
-- GPU（CUDA）のテストを CI で走らせるか（今は GPU のある手元でだけ走る）
+- 手動の実行（`ManualRun`）で `period` を守る選択肢（2026-10-17 にユーザーから用途を問われた。今は守らず、テストでは `step` と `advance` で更新の順と `dt` を決める）
 
 LICENSE は MIT に決めた（2026-10-17、ユーザーの決定）。
 
 `Run` の API は次のように整理した（2026-10-17、ユーザーの決定。[ネットワーク](network.md#実装)）。停止のタイムアウトは `mujou.run(..., pause_timeout=)` から `Run.state_dict(timeout=30.0)` に移した。`subscribe` と `wait_for` の `timeout` は位置でも渡せる。`Run.timer` はすべての実行が持ち、既定はグローバルタイマーである。`Run.read(port)` は値だけを返し、時刻との組は `Run.read_with_time(port)` が返す。
 
 ノードのデバイスは CPU と CUDA だけにし、MPS など CUDA 以外のアクセラレータのサポートを取りやめた（2026-10-17、ユーザーの決定）。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、ノードごとのスレッドで計算する実行モデルと合わないためである。これに伴い、MPS のノードを 1 つに限る規則と、MPS のノードの hook をロックで直列にする案は不要になった（[PyTorch の利用](torch.md#cuda-以外のアクセラレータ)）。
+
+GPU（CUDA）のテストは、自前の GPU runner（ラベル `gpu`）で手動で起動するワークフロー `.github/workflows/gpu.yml` で走らせる（2026-10-17、ユーザーの決定）。runner はまだ無く、登録するスクリプトを `.github/runner/` に置いた。fork からの PR のコードを自前のマシンで走らせないよう、PR では起動しない。
