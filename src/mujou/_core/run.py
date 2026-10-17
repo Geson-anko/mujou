@@ -407,7 +407,7 @@ def run[P: Port[Any, Any, Any]](
             is gone, given any way.
         NetworkError: A node raised while starting; the run has stopped.
     """
-    return start(
+    return start_run(
         Run,
         (component, *components),
         timer=timer,
@@ -418,7 +418,7 @@ def run[P: Port[Any, Any, Any]](
     )
 
 
-def start[R: Run](
+def start_run[R: Run](
     kind: type[R],
     components: Sequence[Node | Network],
     *,
@@ -481,7 +481,7 @@ def start_manual[T: Timer](
 ) -> ManualRun[T]:
     """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
     # The class itself: a subscripted generic is not a class to instantiate.
-    handle = start(
+    handle = start_run(
         cast(type[ManualRun[T]], ManualRun),
         components,
         timer=timer,
