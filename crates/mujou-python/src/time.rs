@@ -2,14 +2,15 @@
 
 use std::sync::Arc;
 
+use mujou_core::time::TimerError;
 use mujou_core::time::{self as core, Timer, TimerState, Timestamp, seconds_to_ns};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::inspect::PyStaticExpr;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{PyClassInitializer, PyTypeInfo};
 
-use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
+use crate::wait_interruptibly;
 
 /// A time axis that nodes discretize their dynamics on.
 ///
@@ -58,9 +59,9 @@ impl PyTimer {
     fn sleep(&self, py: Python<'_>, seconds: f64) -> PyResult<()> {
         let dt_ns = seconds_to_ns(seconds).map_err(timer_error)?;
         let target_ns = self.0.time_ns().saturating_add(dt_ns);
-        while !py.detach(|| self.0.wait_until_ns(target_ns, SIGNAL_CHECK_INTERVAL)) {
-            py.check_signals()?;
-        }
+        wait_interruptibly(py, None, |step| {
+            self.0.wait_until_ns(target_ns, step).then_some(())
+        })?;
         Ok(())
     }
 
@@ -139,6 +140,15 @@ impl PyTimer {
     fn advance(&self, seconds: f64) -> PyResult<()> {
         let dt_ns = seconds_to_ns(seconds).map_err(timer_error)?;
         self.0.advance_ns(dt_ns).map_err(timer_error)
+    }
+}
+
+pub(crate) fn timer_error(err: TimerError) -> PyErr {
+    match err {
+        TimerError::InvalidScale(_) | TimerError::InvalidDuration(_) => {
+            PyValueError::new_err(err.to_string())
+        }
+        TimerError::NotVirtual | TimerError::Paused => PyRuntimeError::new_err(err.to_string()),
     }
 }
 

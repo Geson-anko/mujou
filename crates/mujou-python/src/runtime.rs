@@ -20,8 +20,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
 use crate::hint::Build;
-use crate::time::{PyTimer, extract_state};
-use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
+use crate::time::{PyTimer, extract_state, timer_error};
+use crate::wait_interruptibly;
 
 // pyo3 does not introspect these, so `crates/mujou-stubgen` adds them to the
 // stub with the same docstrings. They cannot be classes: pyo3 0.30 declares
@@ -392,20 +392,12 @@ impl Runtime {
     }
 
     /// Waits for a reply without the GIL, checking for signals in between.
-    fn wait<T: Send>(&self, py: Python<'_>, mut reply: Reply<T>) -> PyResult<T> {
-        loop {
-            // `Reply` is not `Sync`, so it moves in and out instead of being
-            // borrowed across the detach.
-            let (back, result) = py.detach(move || {
-                let result = reply.wait_timeout(SIGNAL_CHECK_INTERVAL);
-                (reply, result)
-            });
-            if let Some(result) = result {
-                return result.map_err(|e| runtime_error(py, &self.names, e));
-            }
-            reply = back;
-            py.check_signals()?;
-        }
+    fn wait<T: Send>(&self, py: Python<'_>, reply: Reply<T>) -> PyResult<T> {
+        // `Reply` is not `Sync`, so the closure owns it instead of borrowing it
+        // across the detach.
+        let result = wait_interruptibly(py, None, move |step| reply.wait_timeout(step))?;
+        let result = result.expect("a wait without a deadline ends only with the reply");
+        result.map_err(|e| runtime_error(py, &self.names, e))
     }
 }
 
@@ -587,17 +579,15 @@ impl Runtime {
         let runtime = self.core()?;
         let timeout = timeout.map(duration).transpose()?;
         let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
-        loop {
-            let remaining = deadline.map_or(SIGNAL_CHECK_INTERVAL, |d| {
-                d.saturating_duration_since(Instant::now())
-            });
-            let wait = remaining.min(SIGNAL_CHECK_INTERVAL);
-            match py.detach(|| runtime.join(Some(wait))) {
-                Ok(true) => return Ok(true),
-                Ok(false) if remaining.is_zero() => return Ok(false),
-                Ok(false) => py.check_signals()?,
-                Err(e) => return Err(runtime_error(py, &self.names, e)),
-            }
+        let ended = wait_interruptibly(py, deadline, |step| match runtime.join(Some(step)) {
+            Ok(true) => Some(Ok(())),
+            Ok(false) => None,
+            Err(e) => Some(Err(e)),
+        })?;
+        match ended {
+            Some(Ok(())) => Ok(true),
+            None => Ok(false),
+            Some(Err(e)) => Err(runtime_error(py, &self.names, e)),
         }
     }
 
