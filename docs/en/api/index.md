@@ -5,7 +5,7 @@ These pages are generated from the docstrings. The API may still change before t
 | Page                          | What it covers                                                               |
 | ----------------------------- | ---------------------------------------------------------------------------- |
 | [Nodes](node.md)              | `mujou.Node`, the base class of a node, and its hooks                        |
-| [Ports and Channels](port.md) | `Port`, `PrevPort`, `NextPort`, `Channel` and `TensorSpec`                   |
+| [Ports and Channels](port.md) | `Port`, `PrevPort`, `NextPort`, `Channel`, `TensorSpec` and `DictSpec`       |
 | [Networks](network.md)        | `Network`, `Compose`, `Graph`, `mujou.run` and `Run`                         |
 | [Global Time](time.md)        | The module `mujou.time`: reading and waiting on time, timers, the time scale |
 | [Errors](errors.md)           | `NetworkError` and `PauseTimeoutError`                                       |
