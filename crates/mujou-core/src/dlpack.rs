@@ -14,7 +14,7 @@ use crate::slot::{FieldSpec, Message, SlotError};
 /// `kDLCPU`: ordinary host memory.
 pub const DEVICE_CPU: i32 = 1;
 /// `kDLCUDAHost`: pinned host memory, readable from the CPU as well.
-pub const DEVICE_CUDA_HOST: i32 = 3;
+pub(crate) const DEVICE_CUDA_HOST: i32 = 3;
 
 /// The DLPack version of the tensors this module exports.
 pub const VERSION: DLPackVersion = DLPackVersion { major: 1, minor: 0 };

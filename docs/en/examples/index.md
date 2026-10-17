@@ -6,18 +6,18 @@ These are working programs that show how to use Mujou. They live in `examples/` 
 
 Pick the row closest to what you want to do. The "Explained in" pages include the program and explain it.
 
-| What you want to do                                                 | Program               | Explained in                                                                                          |
-| ------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
-| Run something, anything                                             | `quickstart.py`       | [Quickstart](../getting-started/quickstart.md), [Running a Network](../user-guide/running.md)         |
-| Write a node whose state changes over time                          | `leaky_chain/`        | [Writing a Node](../user-guide/writing-a-node.md), [Global Time](../concepts/time.md)                 |
-| Branch a network and merge it again                                 | `branching.py`        | [Building a Network](../user-guide/building-a-network.md), [Ports and Channels](../concepts/ports.md) |
-| Run several networks together                                       | `compose.py`          | [Composing Networks](../user-guide/compose.md), [Networks](../concepts/networks.md)                   |
-| Save learned state and continue from it later                       | `save_and_restore.py` | [Saving and Restoring State](../user-guide/state.md), [State](../concepts/state.md)                   |
-| Keep receiving the latest output (values in between may be skipped) | `subscribe.py`        | [Running a Network](../user-guide/running.md)                                                         |
-| Train a PyTorch model with BP inside a node                         | `torch_node.py`       | [PyTorch in Nodes](../user-guide/torch.md)                                                            |
-| Test a node                                                         | `testing_a_node.py`   | [Testing](../user-guide/testing.md)                                                                   |
-| Change how time advances                                            | `timers.py`           | [Controlling Time](../user-guide/time.md), [Global Time](../concepts/time.md)                         |
-| See what happens when a node raises an exception                    | `errors.py`           | [Errors and Shutdown](../user-guide/errors.md)                                                        |
+| What you want to do                                                 | Program               | Explained in                                                                                                       |
+| ------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Run something, anything                                             | `quickstart.py`       | [Quickstart](../getting-started/quickstart.md), [Running a Network](../user-guide/running.md)                      |
+| Write a node whose state changes over time                          | `leaky_chain/`        | [Writing a Node](../user-guide/writing-a-node.md), [Global Time](../concepts.md#global-time)                       |
+| Branch a network and merge it again                                 | `branching.py`        | [Building a Network](../user-guide/building-a-network.md), [Ports and Channels](../concepts.md#ports-and-channels) |
+| Run several networks together                                       | `compose.py`          | [Composing Networks](../user-guide/compose.md), [Networks](../concepts.md#networks)                                |
+| Save learned state and continue from it later                       | `save_and_restore.py` | [Saving and Restoring State](../user-guide/state.md), [State](../concepts.md#state)                                |
+| Keep receiving the latest output (values in between may be skipped) | `subscribe.py`        | [Running a Network](../user-guide/running.md)                                                                      |
+| Train a PyTorch model with BP inside a node                         | `torch_node.py`       | [PyTorch in Nodes](../user-guide/torch.md)                                                                         |
+| Test a node                                                         | `testing_a_node.py`   | [Testing](../user-guide/testing.md)                                                                                |
+| Change how time advances                                            | `timers.py`           | [Controlling Time](../user-guide/time.md), [Global Time](../concepts.md#global-time)                               |
+| See what happens when a node raises an exception                    | `errors.py`           | [Errors and Shutdown](../user-guide/errors.md)                                                                     |
 
 What each program shows:
 

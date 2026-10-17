@@ -6,26 +6,40 @@
 //! below; the classes repeat it in their `module = "..."` (pyo3 takes only a
 //! literal there), and `pyproject.toml` (`module-name`) must match.
 
+mod dlpack;
 mod hint;
 mod runtime;
 mod slot;
 mod time;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use mujou_core::time::TimerError;
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 /// How long a wait without the GIL lasts before checking for signals (Ctrl-C).
 const SIGNAL_CHECK_INTERVAL: Duration = Duration::from_millis(50);
 
-fn timer_error(err: TimerError) -> PyErr {
-    match err {
-        TimerError::InvalidScale(_) | TimerError::InvalidDuration(_) => {
-            PyValueError::new_err(err.to_string())
+/// Waits without the GIL until `attempt` returns `Some` or `deadline` passes
+/// (never if `None`), checking for signals in between: `attempt` is given
+/// how long it may block, at most `SIGNAL_CHECK_INTERVAL`, and returns `None`
+/// if what it waits for did not come in that time.
+fn wait_interruptibly<T: Send>(
+    py: Python<'_>,
+    deadline: Option<Instant>,
+    mut attempt: impl FnMut(Duration) -> Option<T> + Send,
+) -> PyResult<Option<T>> {
+    loop {
+        let remaining = deadline.map_or(Duration::MAX, |d| {
+            d.saturating_duration_since(Instant::now())
+        });
+        let step = remaining.min(SIGNAL_CHECK_INTERVAL);
+        if let Some(result) = py.detach(|| attempt(step)) {
+            return Ok(Some(result));
         }
-        TimerError::NotVirtual | TimerError::Paused => PyRuntimeError::new_err(err.to_string()),
+        if remaining <= SIGNAL_CHECK_INTERVAL {
+            return Ok(None);
+        }
+        py.check_signals()?;
     }
 }
 

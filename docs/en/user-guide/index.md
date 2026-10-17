@@ -1,6 +1,6 @@
 # User Guide
 
-This chapter shows how to write nodes in Mujou, put them together into networks, and run them. How to think about nodes, ports, networks, global time and state is in the [Concepts](../concepts/index.md) chapter. This chapter assumes you have read it.
+This chapter shows how to write nodes in Mujou, put them together into networks, and run them. How to think about nodes, ports, networks, global time and state is in [How Mujou works](../concepts.md). This chapter assumes you have read it.
 
 ## Map of the pages
 

@@ -1,6 +1,6 @@
 # Writing a Node
 
-You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. For what a node is, see [Nodes](../concepts/nodes.md).
+You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. For what a node is, see [How Mujou works](../concepts.md#nodes).
 
 ## Example: a leaky integrator
 
@@ -77,7 +77,7 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 2. Update the state by an amount proportional to `dt`
 3. Send the result with `send()`
 
-`dt` is the time in seconds since this node's previous update. For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts/time.md)).
+`dt` is the time in seconds since this node's previous update. For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts.md#global-time)).
 
 `dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The time you cut off is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
 

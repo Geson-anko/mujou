@@ -1,6 +1,6 @@
 # Controlling Time
 
-This page shows how to read the time, wait on it, change how fast it runs, and give a run its own timer. Why a node updates in proportion to `dt`, and why a pause does not make time jump, is in [Global time](../concepts/time.md).
+This page shows how to read the time, wait on it, change how fast it runs, and give a run its own timer. Why a node updates in proportion to `dt`, and why a pause does not make time jump, is in [Global time](../concepts.md#global-time).
 
 ## What to use where
 
