@@ -36,6 +36,7 @@ __all__ = [
     "Schema",
     "Slot",
     "Timer",
+    "TimerReader",
     "Timestamp",
 ]
 
@@ -475,6 +476,11 @@ class Timer:
         freezes the time with its own holds, which this switch neither ends nor
         is ended by. Pausing twice needs one resume.
         """
+    def reader(self, /) -> TimerReader:
+        """
+        A `TimerReader` of this timer: it reads the time and the scale and has
+        no way to change them.
+        """
     def resume(self, /) -> None:
         """
         Turns off the switch set by `pause`. The time runs again only when no
@@ -521,6 +527,25 @@ class Timer:
         """
 
 @final
+class TimerReader:
+    """
+    The reading side of a `Timer`: the time and the scale, and nothing that
+    changes them. Made by `Timer.reader()`.
+    """
+    def now(self, /) -> Timestamp:
+        """
+        The time as a `Timestamp`.
+        """
+    def time_scale(self, /) -> float:
+        """
+        Seconds of the timer per real second.
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
+        """
+
+@final
 class Timestamp:
     """
     A time on a timer.
@@ -528,7 +553,7 @@ class Timestamp:
     `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
     is the exact time in nanoseconds. Timestamps compare and hash by time, so
     compare only those of one timer. `later - earlier` is the time between them,
-    as a `Timestamp`.
+    as a `Timestamp`. Timestamps pickle and copy.
     """
     @override
     def __eq__(self, value: object, /) -> bool: ...
@@ -549,6 +574,11 @@ class Timestamp:
 
         Raises:
             ValueError: `ns` is negative or does not fit in 64 bits.
+        """
+    @override
+    def __reduce__(self, /) -> Any:
+        """
+        Pickles and copies as `Timestamp(ns=...)`.
         """
     @override
     def __repr__(self, /) -> str: ...

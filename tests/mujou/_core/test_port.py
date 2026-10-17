@@ -4,14 +4,15 @@ from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, over
 import pytest
 import torch
 
-from mujou._core._native import GlobalTimer
 from mujou._core.network import Network
 from mujou._core.node import Node
 from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
 from mujou._core.spec import DictSpec, TensorSpec
+from mujou.testing import ManualRun, VirtualTimer
+from mujou.time import Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import RunNetwork
+    from tests.mujou.conftest import StartManual
 
 
 class Feedback(TypedDict):
@@ -50,8 +51,8 @@ class TestPortTypes:
             # Only for the type checker: recv raises before a run.
             assert_type(single.recv(), torch.Tensor)
             assert_type(multi.recv(), dict[Channel, Feedback])
-            assert_type(nxt.recv_with_time(), dict[Channel, tuple[Feedback, int]])
-            assert_type(prev.recv_with_time(), tuple[torch.Tensor, int])
+            assert_type(nxt.recv_with_time(), dict[Channel, tuple[Feedback, Timestamp]])
+            assert_type(prev.recv_with_time(), tuple[torch.Tensor, Timestamp])
 
         assert not single.multi and not prev.multi and not nxt_single.multi
         assert multi.multi and prev_multi.multi and nxt.multi
@@ -205,26 +206,26 @@ class Net(Network):
             setattr(self, name, child)
 
 
-def step(net: Network, timer: GlobalTimer, *order: Node) -> None:
+def step(run: ManualRun, timer: VirtualTimer, *order: Node) -> None:
     """Advance the virtual clock by ``H`` and update every node once."""
     timer.advance(H)
-    net._step(order or None)  # pyright: ignore[reportPrivateUsage]
+    run.step(*order)
 
 
 class TestRecv:
     def test_unconnected_ports_give_zeros_or_nothing(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         single, multi = Port(recv=h()), Port(recv=h(), multi=True)
         node = Probe(lambda: (single.recv(), multi.recv()), single=single, multi=multi)
-        net = run_network(Net(node=node), _manual=True)
-        step(net, virtual_timer)
+        run = start_manual(Net(node=node))
+        step(run, virtual)
         ((value, peers),) = cast(list[tuple[torch.Tensor, object]], node.results)
         assert torch.equal(value, torch.zeros(2, 3))
         assert peers == {}
 
     def test_many_peers_are_keyed_by_channel_in_connection_order(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         merge = PrevPort(recv=h(), multi=True)
         senders = [NextPort(send=h()) for _ in range(3)]
@@ -234,8 +235,8 @@ class TestRecv:
             for k, s in enumerate(senders)
         }
         sink = Probe(merge.recv, prev=merge)
-        net = run_network(Net(**nodes, sink=sink), _manual=True)
-        step(net, virtual_timer, *nodes.values(), sink)
+        run = start_manual(Net(**nodes, sink=sink))
+        step(run, virtual, *nodes.values(), sink)
         (received,) = sink.results
         received = cast(dict[Channel, torch.Tensor], received)
         assert list(received) == channels == list(merge.channels)
@@ -243,7 +244,7 @@ class TestRecv:
             assert torch.equal(received[channel], torch.full((2, 3), float(k)))
 
     def test_gives_new_tensors_without_gradients(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, inp, other = NextPort(send=h()), PrevPort(recv=h()), PrevPort(recv=h())
         out.connect(inp)
@@ -258,56 +259,54 @@ class TestRecv:
 
         sink = Probe(change_what_was_received, prev=inp)
         neighbour = Probe(other.recv, prev=other)
-        net = run_network(Net(source=source, sink=sink, nb=neighbour), _manual=True)
-        step(net, virtual_timer, source, sink, neighbour)
+        run = start_manual(Net(source=source, sink=sink, nb=neighbour))
+        step(run, virtual, source, sink, neighbour)
         ((first, again),) = cast(list[tuple[torch.Tensor, torch.Tensor]], sink.results)
         assert not first.requires_grad and not again.requires_grad
         assert first.device == torch.device("cpu")
         assert torch.equal(again, torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, neighbour.results[0]), torch.ones(2, 3))
-        assert torch.equal(net.read(out)[0], torch.ones(2, 3))
+        assert torch.equal(run.read(out)[0], torch.ones(2, 3))
 
     def test_with_time_gives_the_time_of_the_write(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         out.connect(inp)
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
         sink = Probe(inp.recv_with_time, prev=inp)
-        net = run_network(Net(source=source, sink=sink), _manual=True)
-        step(net, virtual_timer, source, sink)
-        ((value, time_ns),) = cast(list[tuple[torch.Tensor, int]], sink.results)
+        run = start_manual(Net(source=source, sink=sink))
+        step(run, virtual, source, sink)
+        ((value, written_at),) = cast(
+            list[tuple[torch.Tensor, Timestamp]], sink.results
+        )
         assert torch.equal(value, torch.ones(2, 3))
-        assert time_ns == virtual_timer.time_ns()
+        assert written_at == virtual.now()
 
     def test_only_the_owning_node_receives(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         mine, theirs = Port(recv=h()), Port(recv=h())
         owner = Probe(mine=mine)
         other = Probe(theirs.recv, theirs=Port(recv=h()))  # reads another's port
-        net = run_network(
-            Net(owner=Probe(mine=theirs), node=owner, other=other), _manual=True
-        )
-        step(net, virtual_timer)
+        run = start_manual(Net(owner=Probe(mine=theirs), node=owner, other=other))
+        step(run, virtual)
         assert isinstance(other.results[0], RuntimeError)
         with pytest.raises(RuntimeError, match="only the node that owns"):
             mine.recv()  # from the host
 
     def test_rejects_a_port_that_receives_nothing(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out = Port(send=h())
         node = Probe(out.recv, out=out)
-        net = run_network(Net(node=node), _manual=True)
-        step(net, virtual_timer)
+        run = start_manual(Net(node=node))
+        step(run, virtual)
         assert isinstance(node.results[0], TypeError)
 
 
 class TestSend:
-    def test_copies_the_values(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
-    ):
+    def test_copies_the_values(self, virtual: VirtualTimer, start_manual: StartManual):
         out = Port(send=h())
         value = torch.zeros(2, 3)
 
@@ -315,49 +314,49 @@ class TestSend:
             out.send(value)
             value.add_(1.0)
 
-        net = run_network(Net(node=Probe(send_then_change, out=out)), _manual=True)
-        step(net, virtual_timer)
-        assert torch.equal(net.read(out)[0], torch.zeros(2, 3))
+        run = start_manual(Net(node=Probe(send_then_change, out=out)))
+        step(run, virtual)
+        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
 
     def test_to_one_channel_changes_only_that_peer(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, a, b = NextPort(send=h()), PrevPort(recv=h()), PrevPort(recv=h())
         to_a = out.connect(a)
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
-        net = run_network(Net(source=source, a=sink_a, b=sink_b), _manual=True)
-        step(net, virtual_timer, source, sink_a, sink_b)
+        run = start_manual(Net(source=source, a=sink_a, b=sink_b))
+        step(run, virtual, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), torch.zeros(2, 3))
         # The output the host reads changes only with send to every peer.
-        assert torch.equal(net.read(out)[0], torch.zeros(2, 3))
+        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
 
     def test_to_a_channel_of_another_port(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         foreign = Port(send=h()).connect(Port(recv=h()))
         out.connect(inp)
         node = Probe(lambda: out.send_to(foreign, torch.ones(2, 3)), next=out)
-        net = run_network(Net(node=node, sink=Probe(prev=inp)), _manual=True)
-        step(net, virtual_timer)
+        run = start_manual(Net(node=node, sink=Probe(prev=inp)))
+        step(run, virtual)
         assert isinstance(node.results[0], ValueError)
 
     def test_rejects_a_port_that_sends_nothing(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         inp = Port(recv=h())
         # The type checker rejects it too: the port's message type is Never.
         node = Probe(lambda: inp.send(torch.ones(2, 3)), inp=inp)  # pyright: ignore[reportArgumentType]
-        net = run_network(Net(node=node), _manual=True)
-        step(net, virtual_timer)
+        run = start_manual(Net(node=node))
+        step(run, virtual)
         assert isinstance(node.results[0], TypeError)
 
-    def test_only_the_owning_node_sends(self, run_network: RunNetwork):
+    def test_only_the_owning_node_sends(self, start_manual: StartManual):
         out = Port(send=h())
-        run_network(Net(node=Probe(out=out)), _manual=True)
+        start_manual(Net(node=Probe(out=out)))
         with pytest.raises(RuntimeError, match="only the node that owns"):
             out.send(torch.ones(2, 3))
 
@@ -365,7 +364,7 @@ class TestSend:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         out.connect(inp)
@@ -377,9 +376,9 @@ class TestCuda:
 
         source = OnCuda(lambda: out.send(torch.ones(2, 3, device="cuda")), next=out)
         sink = OnCuda(inp.recv, prev=inp)
-        net = run_network(Net(source=source, sink=sink), _manual=True)
-        step(net, virtual_timer, source, sink)
+        run = start_manual(Net(source=source, sink=sink))
+        step(run, virtual, source, sink)
         received = cast(torch.Tensor, sink.results[0])
         assert received.device.type == "cuda"
         assert torch.equal(received.cpu(), torch.ones(2, 3))
-        assert torch.equal(net.read(out)[0], torch.ones(2, 3))
+        assert torch.equal(run.read(out)[0], torch.ones(2, 3))

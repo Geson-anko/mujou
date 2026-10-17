@@ -1,17 +1,29 @@
 import contextlib
-from collections.abc import Iterator
-from typing import Protocol
+from collections.abc import Iterator, Mapping
+from typing import Any, Protocol
 
 import pytest
+import torch
 
 import mujou
-from mujou import Network, NetworkError
+import mujou.testing
+from mujou import Network, NetworkError, Port, Run
 from mujou._core._native import GlobalTimer, timer
+from mujou.testing import ManualRun, VirtualTimer
+from mujou.time import Timer
+
+# P: a dict built in a test has a precise key type, which a Mapping keyed by
+# Port[Any, Any, Any] would reject (Mapping keys are invariant).
+type Inputs[P] = Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
 
 
 @pytest.fixture
 def virtual_timer() -> Iterator[GlobalTimer]:
-    """Switch the global timer to the virtual clock at time 0 for one test."""
+    """Switch the global timer to the virtual clock at time 0 for one test.
+
+    Only for the tests of the global timer itself (``mujou.time`` and the native
+    controls): nothing public switches it. Runs take a ``virtual`` timer instead.
+    """
     timer.use_virtual_clock(True)
     timer.load_state_dict({"time_ns": 0, "scale": 1.0})
     try:
@@ -22,37 +34,84 @@ def virtual_timer() -> Iterator[GlobalTimer]:
         timer.use_virtual_clock(False)
 
 
-class RunNetwork(Protocol):
-    def __call__[N: Network](
+@pytest.fixture
+def virtual() -> VirtualTimer:
+    """A new timer on the virtual clock at time 0, for one test."""
+    return VirtualTimer()
+
+
+class StartManual(Protocol):
+    def __call__[P: Port[Any, Any, Any]](
         self,
-        network: N,
-        *,
-        _manual: bool = False,
-    ) -> N: ...
+        *networks: Network,
+        timer: Timer | None = None,
+        inputs: Inputs[P] | None = None,
+        state: Mapping[str, Any] | None = None,
+    ) -> ManualRun: ...
+
+
+class Start(Protocol):
+    def __call__[P: Port[Any, Any, Any]](
+        self,
+        *networks: Network,
+        timer: Timer | None = None,
+        inputs: Inputs[P] | None = None,
+        state: Mapping[str, Any] | None = None,
+    ) -> Run: ...
 
 
 @pytest.fixture
-def run_network() -> Iterator[RunNetwork]:
-    """``mujou.run`` that shuts the networks down at the end of the test.
+def started() -> Iterator[list[Run]]:
+    """The runs a test started, shut down at its end.
 
     A running network keeps running when dropped (until the interpreter exits), so
-    a test must stop what it starts. Request it after ``virtual_timer`` so that
-    the networks stop before the timer is reset: ``virtual_timer`` turns off the
-    host's pause switch only, and a running network may still hold the time.
+    a test must stop what it starts.
     """
-    started: list[Network] = []
-
-    def run[N: Network](
-        network: N,
-        *,
-        _manual: bool = False,
-    ) -> N:
-        started.append(network)
-        return mujou.run(network, _manual=_manual)
-
+    runs: list[Run] = []
     try:
-        yield run
+        yield runs
     finally:
-        for network in started:
+        for run in runs:
             with contextlib.suppress(NetworkError):
-                network.shutdown()
+                run.shutdown()
+
+
+@pytest.fixture
+def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
+    """``mujou.testing.run`` on the test's ``virtual`` timer unless given another,
+    shut down at the end of the test."""
+
+    def start[P: Port[Any, Any, Any]](
+        *networks: Network,
+        timer: Timer | None = None,
+        inputs: Inputs[P] | None = None,
+        state: Mapping[str, Any] | None = None,
+    ) -> ManualRun:
+        run = mujou.testing.run(
+            *networks,
+            timer=virtual if timer is None else timer,
+            inputs=inputs,
+            state=state,
+        )
+        started.append(run)
+        return run
+
+    return start
+
+
+@pytest.fixture
+def start(started: list[Run]) -> Start:
+    """``mujou.run`` (free running, on the global timer unless given another), shut
+    down at the end of the test."""
+
+    def start[P: Port[Any, Any, Any]](
+        *networks: Network,
+        timer: Timer | None = None,
+        inputs: Inputs[P] | None = None,
+        state: Mapping[str, Any] | None = None,
+    ) -> Run:
+        run = mujou.run(*networks, timer=timer, inputs=inputs, state=state)
+        started.append(run)
+        return run
+
+    return start

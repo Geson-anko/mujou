@@ -21,6 +21,7 @@ from typing import (
 from mujou._core.spec import DictSpec, MessageSpec, TensorSpec
 
 if TYPE_CHECKING:
+    from mujou._core._native import Timestamp
     from mujou._core.session import Binding
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
@@ -123,7 +124,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         self._channels: list[Channel] = []
         # Set by Network.build; a frozen port takes no more connections.
         self._frozen = False
-        # Set by Network.build: the slots recv and send use.
+        # Set by mujou.run: the slots recv and send use.
         self._binding: Binding | None = None
 
     @property
@@ -204,10 +205,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         while unconnected).
 
         The message comes from the peer's ``send`` or ``send_to``; an unconnected
-        single-peer port reads what the host writes with ``Network.write`` instead.
+        single-peer port reads what the host writes with ``Run.write`` instead.
         Until that writer first writes, the message (or that channel's entry) is
-        the initial value: the recv spec's ``zeros()``, unless the host wrote one
-        before the run or restored one with ``load_state_dict``.
+        the initial value: the recv spec's ``zeros()``, unless the run started
+        with one in ``inputs`` or restored one from ``state``.
 
         Every call copies into new tensors on the owning node's device, without
         gradients, so changing them in place changes nothing else.
@@ -215,7 +216,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not built, or the caller is not the owning
+            RuntimeError: The network is not running, or the caller is not the owning
                 node's thread (only the owner reads its port; ``state_dict`` runs
                 on another thread).
             TypeError: The port receives no messages.
@@ -223,21 +224,21 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         return self._bound().recv(with_time=False)
 
     @overload
-    def recv_with_time[R2](self: Port[Any, R2, Single]) -> tuple[R2, int]: ...
+    def recv_with_time[R2](self: Port[Any, R2, Single]) -> tuple[R2, Timestamp]: ...
     @overload
     def recv_with_time[R2](
         self: Port[Any, R2, Multi],
-    ) -> dict[Channel, tuple[R2, int]]: ...
+    ) -> dict[Channel, tuple[R2, Timestamp]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
-        """Like ``recv``, but each message comes as ``(message, time_ns)``.
+        """Like ``recv``, but each message comes as ``(message, time)``.
 
-        ``time_ns`` is the global time, in integer nanoseconds, at which the message
-        was written. Raises as ``recv`` does.
+        ``time`` is the ``Timestamp`` on the run's timer at which the message was
+        written. Raises as ``recv`` does.
         """
         return self._bound().recv(with_time=True)
 
     def send(self, msg: S) -> None:
-        """Send ``msg`` to every peer and to what the host reads (``Network.read``).
+        """Send ``msg`` to every peer and to what the host reads (``Run.read``).
 
         ``msg`` must match the send spec exactly; dtypes are never converted. The
         values are detached and copied, so changing ``msg`` afterwards changes
@@ -247,7 +248,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not built, or the caller is not the owning
+            RuntimeError: The network is not running, or the caller is not the owning
                 node's thread (only the owner writes its port).
             TypeError: The port sends no messages, a value is not a dense
                 ``torch.Tensor`` of the spec's dtype, or a ``DictSpec`` message is
@@ -260,7 +261,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         """Send ``msg`` only to the peer across ``channel``.
 
         ``channel`` is one of ``channels`` (or a key of a multi-peer ``recv``).
-        Unlike ``send``, it leaves what the host reads (``Network.read``) unchanged:
+        Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
         before the first ``send``, that is the initial value (see ``recv``).
         Copies and raises as ``send`` does, and raises ``ValueError`` when
         ``channel`` is not one of this port's.
@@ -403,13 +404,13 @@ class Channel:
 
 def _not_running() -> RuntimeError:
     return RuntimeError(
-        "the port is not bound to slots: build the network and run it, then use "
-        "recv/send from the owning node's hooks"
+        "the port is not bound to slots: run the network, then use recv/send from "
+        "the owning node's hooks"
     )
 
 
 def bind(port: Port[Any, Any, Any], binding: Binding) -> None:
-    """Bind ``port`` to its slots (the network's ``Session`` calls this)."""
+    """Bind ``port`` to its slots (the run's ``Session`` calls this)."""
     port._binding = binding  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
@@ -417,6 +418,12 @@ def bind(port: Port[Any, Any, Any], binding: Binding) -> None:
 def freeze(port: Port[Any, Any, Any]) -> None:
     """Make ``port`` reject further connections (``Network.build`` calls this)."""
     port._frozen = True  # pyright: ignore[reportPrivateUsage]  # Port's own module
+
+
+def thaw(port: Port[Any, Any, Any]) -> None:
+    """Let ``port`` take connections again (``mujou.run`` undoing a build whose run
+    was refused)."""
+    port._frozen = False  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
 def is_frozen(port: Port[Any, Any, Any]) -> bool:
