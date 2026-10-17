@@ -2,7 +2,7 @@
 
 A ``NextPort`` takes many peers, so a node can feed several branches; a
 ``PrevPort(multi=True)`` merges them, and its ``recv`` returns one message per
-channel. ``send_to`` sends to one peer only.
+channel. ``send_to`` sends on one channel only: one that ``connect`` returned.
 """
 
 from collections.abc import Callable
@@ -11,13 +11,17 @@ from typing import override
 import torch
 
 import mujou
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Channel, NextPort, Node, PrevPort, TensorSpec
 
 VECTOR = TensorSpec((2,))
 
 
 class Split(Node):
-    """Sends ``x`` to its first peer and ``-x`` to its second."""
+    """Sends ``x`` on the channel ``plus`` and ``-x`` on the channel ``minus``."""
+
+    # Channels of self.next, set by the network to the ones connect returned.
+    plus: Channel
+    minus: Channel
 
     def __init__(self) -> None:
         self.prev = PrevPort(recv=VECTOR)
@@ -26,9 +30,8 @@ class Split(Node):
     @override
     def on_update(self, dt: float) -> None:
         x = self.prev.recv()
-        first, second = self.next.channels  # in the order they were connected
-        self.next.send_to(first, x)
-        self.next.send_to(second, -x)
+        self.next.send_to(self.plus, x)
+        self.next.send_to(self.minus, -x)
 
 
 class Apply(Node):
@@ -66,8 +69,9 @@ class Diamond(mujou.Network):
         self.double = Apply(lambda x: 2 * x)
         self.square = Apply(lambda x: x**2)
         self.sum = Sum()
-        self.split.connect(self.double)  # the first channel of split.next
-        self.split.connect(self.square)  # the second
+        # Hand split the channels it sends on: the order of connect does not matter.
+        self.split.plus = self.split.connect(self.double)
+        self.split.minus = self.split.connect(self.square)
         self.double.connect(self.sum)
         self.square.connect(self.sum)
         self.prev = self.split.prev

@@ -5,6 +5,7 @@ On a ``VirtualTimer`` the time moves only when the test advances it, and
 exactly the step, and the run can be compared with the discrete algorithm.
 """
 
+import math
 from typing import override
 
 import torch
@@ -18,7 +19,7 @@ VECTOR = TensorSpec((2,), torch.float64)
 
 
 class Leaky(Node):
-    """dx/dt = (u - x) / tau, by explicit Euler."""
+    """dx/dt = (u - x) / tau, exact for an input held constant over each ``dt``."""
 
     def __init__(self, tau: float) -> None:
         self.tau = tau
@@ -31,7 +32,7 @@ class Leaky(Node):
 
     @override
     def on_update(self, dt: float) -> None:
-        self.x += min(dt / self.tau, 1.0) * (self.prev.recv() - self.x)
+        self.x += (1 - math.exp(-dt / self.tau)) * (self.prev.recv() - self.x)
         self.next.send(self.x)
 
 
@@ -44,15 +45,15 @@ class Chain(mujou.Network):
         self.next = self.b.next
 
 
-def test_chain_follows_explicit_euler() -> None:
+def test_chain_follows_the_discrete_algorithm() -> None:
     tau, h, steps = 0.01, 0.001, 50
     u = torch.tensor([1.0, -2.0], dtype=torch.float64)
 
     # The reference: the discrete algorithm, a then b at every step.
     a, b = VECTOR.zeros(), VECTOR.zeros()
     for _ in range(steps):
-        a += h / tau * (u - a)
-        b += h / tau * (a - b)  # b reads the new a
+        a += (1 - math.exp(-h / tau)) * (u - a)
+        b += (1 - math.exp(-h / tau)) * (a - b)  # b reads the new a
 
     timer = VirtualTimer()
     net = Chain(tau)
@@ -68,4 +69,4 @@ def test_chain_follows_explicit_euler() -> None:
 
 
 if __name__ == "__main__":
-    test_chain_follows_explicit_euler()
+    test_chain_follows_the_discrete_algorithm()

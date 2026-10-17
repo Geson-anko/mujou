@@ -3,9 +3,11 @@
 The framework turns gradient recording off on every node's thread. A node that
 backpropagates within itself turns it on for that part, marked
 ``# mujou: local-autograd``. The update follows the gradient flow
-dW/dt = -rate * dL/dW, so its size is proportional to ``dt``.
+dW/dt = -rate * dL/dW over the whole ``dt``, in explicit Euler steps no longer
+than ``MAX_STEP``.
 """
 
+import math
 from typing import override
 
 import torch
@@ -16,6 +18,7 @@ from mujou import NextPort, Node, Port, PrevPort, TensorSpec
 
 BATCH, N_IN, N_OUT = 16, 4, 2
 INPUT, OUTPUT = TensorSpec((BATCH, N_IN)), TensorSpec((BATCH, N_OUT))
+MAX_STEP = 0.01  # seconds: a longer explicit Euler step could diverge
 
 
 class Regressor(Node):
@@ -39,21 +42,17 @@ class Regressor(Node):
     def on_update(self, dt: float) -> None:
         x, y = self.prev.recv(), self.target.recv()
         params = list(self.model.parameters())
-        with torch.enable_grad():  # mujou: local-autograd
-            loss = nn.functional.mse_loss(self.model(x), y)
-            grads = torch.autograd.grad(loss, params)
-        step = min(dt, 0.01) * self.rate  # clip dt to keep explicit Euler stable
-        for p, g in zip(params, grads, strict=True):
-            p -= step * g  # in place; no gradient is recorded outside the block
+        # Split a long dt into n equal steps instead of clipping it: none of the
+        # elapsed time is lost.
+        n = max(1, math.ceil(dt / MAX_STEP))
+        h = dt / n
+        for _ in range(n):
+            with torch.enable_grad():  # mujou: local-autograd
+                loss = nn.functional.mse_loss(self.model(x), y)
+                grads = torch.autograd.grad(loss, params)
+            for p, g in zip(params, grads, strict=True):
+                p -= h * self.rate * g  # in place, outside the block: not recorded
         self.next.send(self.model(x))
-
-
-class Learner(mujou.Network):
-    def __init__(self) -> None:
-        self.regressor = Regressor(rate=20.0)
-        self.prev = self.regressor.prev
-        self.target = self.regressor.target
-        self.next = self.regressor.next
 
 
 # Each node computes on its own thread, and torch adds threads of its own for
@@ -65,11 +64,11 @@ teacher = torch.randn(N_OUT, N_IN, generator=generator)
 x = torch.randn(BATCH, N_IN, generator=generator)
 y = x @ teacher.T
 
-net = Learner()
-with mujou.run(net, inputs={net.prev: x, net.target: y}) as run:
+regressor = Regressor(rate=20.0)  # a node runs by itself, without a network
+with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as run:
     losses: list[float] = []
     for _ in range(5):
-        prediction, t = run.read(net.next)
+        prediction, t = run.read(regressor.next)
         losses.append(nn.functional.mse_loss(prediction, y).item())
         print(f"t = {float(t):.2f} s: loss = {losses[-1]:.5f}")
         mujou.time.sleep(0.1)

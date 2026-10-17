@@ -28,14 +28,8 @@ class Clock(Node):
         self.next.send(torch.tensor(float(now), dtype=torch.float64))
 
 
-class Clocks(mujou.Network):
-    def __init__(self) -> None:
-        self.clock = Clock()
-        self.next = self.clock.next
-
-
-net = Clocks()
-with mujou.run(net) as run:
+clock = Clock()  # a node runs by itself, without a network
+with mujou.run(clock) as run:
 
     def stop_later() -> None:
         mujou.time.sleep(0.1)
@@ -43,7 +37,7 @@ with mujou.run(net) as run:
 
     stopper = threading.Thread(target=stop_later)
     stopper.start()
-    received = [(value.item(), float(t)) for value, t in run.subscribe(net.next)]
+    received = [(value.item(), float(t)) for value, t in run.subscribe(clock.next)]
     stopper.join()
 
 print(f"received {len(received)} messages, the last at t = {received[-1][1]:.3f} s")

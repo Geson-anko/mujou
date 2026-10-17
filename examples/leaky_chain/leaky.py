@@ -1,5 +1,6 @@
 """A leaky integrator: a node whose dynamics is defined in continuous time."""
 
+import math
 from typing import override
 
 import torch
@@ -14,9 +15,11 @@ class Leaky(Node):
 
         dx/dt = (u - x) / tau
 
-    ``on_update`` takes one explicit Euler step of length ``dt``, the time that
-    passed since the last update. The rate ``dt / tau`` is clipped at 1, so that a
-    long ``dt`` (a busy machine) jumps to ``u`` instead of overshooting it.
+    ``on_update`` advances ``x`` by ``dt``, the time that passed since the last
+    update, with the exact solution for an input held constant over the step:
+    ``x`` moves the fraction ``1 - exp(-dt / tau)`` of the way to ``u``. That
+    fraction stays below 1 for any ``dt``, so a long ``dt`` (a busy machine) never
+    overshoots ``u``, and none of the elapsed time is lost.
     """
 
     def __init__(self, tau: float) -> None:
@@ -31,5 +34,5 @@ class Leaky(Node):
     @override
     def on_update(self, dt: float) -> None:
         u = self.prev.recv()
-        self.x += min(dt / self.tau, 1.0) * (u - self.x)  # in place
+        self.x += (1 - math.exp(-dt / self.tau)) * (u - self.x)  # in place
         self.next.send(self.x)
