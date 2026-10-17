@@ -103,11 +103,12 @@ plugins:
             Ports and Channels: Port と Channel
             Networks: ネットワーク
             Global Time: グローバル時間
+            Types: 型
             User Guide: ユーザーガイド
             Writing a Node: ノードを書く
             Building a Network: ネットワークを組む
             Running a Network: ネットワークを走らせる
-            Composing Networks: ネットワークを束ねる
+            Grouping Networks: ネットワークを束ねる
             Saving and Restoring State: 状態の保存と復元
             Controlling Time: 時間の制御
             PyTorch in Nodes: ノードの中の PyTorch
@@ -160,7 +161,7 @@ nav:
       - Writing a Node: user-guide/writing-a-node.md
       - Building a Network: user-guide/building-a-network.md
       - Running a Network: user-guide/running.md
-      - Composing Networks: user-guide/compose.md
+      - Grouping Networks: user-guide/group.md
       - Saving and Restoring State: user-guide/state.md
       - Controlling Time: user-guide/time.md
       - PyTorch in Nodes: user-guide/torch.md
@@ -174,6 +175,7 @@ nav:
       - Ports and Channels: api/port.md
       - Networks: api/network.md
       - Global Time: api/time.md
+      - Types: api/typing.md
       - Errors: api/errors.md
       - Testing: api/testing.md
 

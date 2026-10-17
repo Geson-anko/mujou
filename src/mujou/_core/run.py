@@ -11,7 +11,7 @@ from mujou._core import _native
 from mujou._core._native import Timestamp  # by name: the API reference shows it
 from mujou._core.graph import build_node, start_once
 from mujou._core.hooks import in_hook
-from mujou._core.network import Network, RunCompose, unbuild
+from mujou._core.network import Network, RunGroup, unbuild
 from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
@@ -405,7 +405,7 @@ def run[P: Port[Any, Any, Any]](
 
     One component alone is the root of the run: a network runs as it is (its
     nodes at ``"l1"``, ...), and a node is at the path ``""`` with its ports at
-    ``"prev"``, ``"next"``, .... Several run as ``Compose(component,
+    ``"prev"``, ``"next"``, .... Several run as ``Group(component,
     *components)``, nodes and networks mixed or not, so their paths start with
     their positions: ``"0"`` for a node given first, ``"1.l1"``, ... for the
     nodes of a network given second. Either way the host writes and reads the
@@ -445,7 +445,7 @@ def run[P: Port[Any, Any, Any]](
             to another network that was built but has not run; or this is called
             from a node's hook.
         TypeError: A value is neither a ``Node`` nor a ``Network``.
-        ValueError, TypeError: As ``Network.build``, ``Compose`` and
+        ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
             networks, or the timer it would set back has another run on it.
             Nothing has started: the same networks, given the same way, may run
@@ -488,7 +488,7 @@ def start_run[R: Run](
         case [Node() as node]:
             graph, ours = build_node(node), True
         case _:
-            graph, ours = RunCompose(*components).build(), True
+            graph, ours = RunGroup(*components).build(), True
 
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.

@@ -2,7 +2,7 @@
 
 ::: mujou.Network
 
-::: mujou.Compose
+::: mujou.Group
 
 ::: mujou.Graph
 

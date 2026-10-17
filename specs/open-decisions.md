@@ -34,7 +34,7 @@ hook の構成（`on_thread_start`・`on_start`・`on_update`・`on_pause`・`on
 
 GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を設定することは決定済み。
 
-次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Compose, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
+次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Group, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time` と `mujou.typing`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
 
 ## グローバルタイマーとスケジューラの境界
 
@@ -54,7 +54,6 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 
 次はまだ決めていない。
 
-- `Compose` の名前（torchvision の `Compose` は直列につなぐ意味で使われる）
 - 相手がまだ送っていないことを判定する API（今は `on_start` で `recv_with_time()` の時刻を読む書き方を案内している）
 - 手動の実行（`ManualRun`）で `period` を守る選択肢
 - GPU（CUDA）のテストを CI で走らせるか（今は GPU のある手元でだけ走る）

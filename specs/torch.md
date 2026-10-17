@@ -11,7 +11,7 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
 | `mujou._core` のほか（`spec` / `port` / `component` / `node` / `network` / `graph` / `binding` / `state` / `session` / `run`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
 | `mujou._core` の `timer` / `hooks` / `lifetime` | しない（import しない） | タイマー、hook の中かどうかの判定、動いている実行の登録と終了時の停止 |
-| `mujou` / `mujou.time` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
+| `mujou` / `mujou.time` / `mujou.typing` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
 | `mujou.pc`（予定） | する | PC-ALM のノード |
 
 torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
@@ -27,7 +27,7 @@ torch は mujou の必須の依存である。実装は private な `mujou._core
 | `component` | `Node` と `Network` の共通の基底 `Component`（`connect`）と、属性の Port の列挙 | `port` |
 | `node` | `mujou.Node` | `component` / `hooks` / `port` / `timer` |
 | `graph` | ネットワークの構築（木の走査・検査・凍結・構築済みの印）と `Graph`、1 回だけの起動（`start_once`） | `component` / `node` / `port` |
-| `network` | `Network` / `Compose` / `RunCompose` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
+| `network` | `Network` / `Group` / `RunGroup` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
 | `binding` | 動いている実行での Port の読み書き（`Binding`） | `node` / `port` / `spec` |
 | `state` | 状態の木（`Run.state_dict` の形）を作る・検査して読む。木の形を定めるのはここだけ | `binding` / `spec` |
 | `lifetime` | 動いている実行の登録と、インタープリタの終了時の停止。`session` を import しないように、実行を小さな Protocol で持つ | なし |

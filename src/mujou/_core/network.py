@@ -86,7 +86,7 @@ class Network(Component):
         # graph, and both would run.
         with BUILD_LOCK:
             if self._graph is None:
-                self._graph = build_tree(self, by_run=isinstance(self, RunCompose))
+                self._graph = build_tree(self, by_run=isinstance(self, RunGroup))
             return self._graph
 
 
@@ -108,23 +108,23 @@ component_module.Node = Node
 component_module.Network = Network
 
 
-class Compose(Network):
+class Group(Network):
     """A network of the given nodes and networks side by side, unconnected unless
     they were connected before.
 
     One given by position is at the path of its position (``"0"``, ``"1"``, ...)
     and one given by keyword at its keyword, so the node ``l1`` of
-    ``Compose(a, b)`` is ``"1.l1"`` in ``b`` and that of ``Compose(enc=a)`` is
-    ``"enc.l1"``; a node ``n`` in ``Compose(n, a)`` is ``"0"``, as if it were an
-    attribute ``"0"`` of a network. ``Compose(n)`` of one component still puts it
-    at ``"0"``. ``mujou.run(a, b)`` runs ``Compose(a, b)``; ``mujou.run(a)`` runs
+    ``Group(a, b)`` is ``"1.l1"`` in ``b`` and that of ``Group(enc=a)`` is
+    ``"enc.l1"``; a node ``n`` in ``Group(n, a)`` is ``"0"``, as if it were an
+    attribute ``"0"`` of a network. ``Group(n)`` of one component still puts it
+    at ``"0"``. ``mujou.run(a, b)`` runs ``Group(a, b)``; ``mujou.run(a)`` runs
     ``a`` alone as the root.
 
     Example::
 
         enc, dec = Encoder(), Decoder()
         enc.connect(dec)
-        with mujou.run(Compose(enc=enc, dec=dec)) as run:
+        with mujou.run(Group(enc=enc, dec=dec)) as run:
             state = run.state_dict()  # nodes "enc.l1", ..., "dec.l1", ...
 
     Raises:
@@ -142,11 +142,11 @@ class Compose(Network):
                 not name
                 or "." in name
                 or name.startswith("_")
-                or hasattr(Compose, name)
+                or hasattr(Group, name)
                 or name in children
             ):
                 raise ValueError(
-                    f"cannot compose a component as {name!r}: the name is empty, "
+                    f"cannot group a component as {name!r}: the name is empty, "
                     "holds a '.', is private, is an attribute of Network, or is a "
                     "position"
                 )
@@ -155,13 +155,13 @@ class Compose(Network):
             # The annotation is not checked at runtime.
             if not isinstance(component, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
                 raise TypeError(
-                    "Compose takes nodes and networks, got "
+                    "Group takes nodes and networks, got "
                     f"{type(component).__name__} at {name!r}"
                 )
             setattr(self, name, component)
 
 
 @final
-class RunCompose(Compose):
-    """The ``Compose`` that ``mujou.run`` makes of what it was given: built only to
+class RunGroup(Group):
+    """The ``Group`` that ``mujou.run`` makes of what it was given: built only to
     run, and named in errors by what was given rather than by its paths."""

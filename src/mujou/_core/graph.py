@@ -70,7 +70,7 @@ class _Tree:
     __slots__ = ("by_run", "ran")
 
     def __init__(self, by_run: bool) -> None:
-        # Built by mujou.run for its own Compose: built only to run.
+        # Built by mujou.run for its own Group: built only to run.
         self.by_run = by_run
         # A run has started (or tried to start and failed in a node).
         self.ran = False
@@ -118,7 +118,7 @@ def build_tree(root: Component, by_run: bool) -> Graph:
         tree = _tree_of(component)
         if tree is not None:
             # What mujou.run was given is named without the path of its
-            # own Compose.
+            # own Group.
             given = path == "" or (by_run and "." not in path)
             name = type(component).__name__ if given else _named(component, path)
             if tree.ran or tree.by_run:

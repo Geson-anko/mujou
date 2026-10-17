@@ -57,7 +57,7 @@ src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 
 - `virtual`: テストごとの新しい `VirtualTimer`。`start_manual` / `start` は実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
 - `step`: `step(run, *order)` で `run.timer`（`VirtualTimer`）を `H`（1 ms）進め、`run.step(*order)` を呼ぶ
-- ノードを入れるだけのネットワークは公開の `Compose(node=...)` で作る。専用のクラスを書かない
+- ノードを入れるだけのネットワークは公開の `Group(node=...)` で作る。専用のクラスを書かない
 
 ## 何をテストするか / しないか
 
