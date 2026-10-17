@@ -13,6 +13,7 @@ In the `__init__` of a network, write these three things. It works like giving a
 ```python
 class Stack(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.l1 = Hidden(784, 256)
         self.l2 = Hidden(256, 256)
         self.l1.connect(self.l2)       # connects l1.next and l2.prev

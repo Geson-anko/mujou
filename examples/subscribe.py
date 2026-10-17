@@ -20,10 +20,12 @@ class Clock(Node):
     """Sends its run's time, in seconds."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.next = NextPort(send=SCALAR)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         now = self.timer.now()  # a node reads the time, but never waits on it
         self.next.send(torch.tensor(float(now), dtype=torch.float64))
 

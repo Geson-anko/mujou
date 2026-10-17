@@ -5,7 +5,7 @@
 ## The basic form
 
 ```python
---8<-- "examples/quickstart.py:54:68"
+--8<-- "examples/quickstart.py:59:73"
 ```
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
@@ -83,7 +83,7 @@ Both read from any port that has a send type. Reading an unconnected port gives 
 Only the host waits; the sending node does not wait for the host. The iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it.
 
 ```python
---8<-- "examples/subscribe.py:31:41"
+--8<-- "examples/subscribe.py:33:43"
 ```
 
 ## Times: `Timestamp`

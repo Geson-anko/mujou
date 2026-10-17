@@ -11,7 +11,7 @@
 3. 外からつなぎたい・読み書きしたい Port を、ネットワークの属性に代入して公開する
 
 ```python
---8<-- "examples/quickstart.py:43:51"
+--8<-- "examples/quickstart.py:47:56"
 ```
 
 ネットワークがたどるのは、直接の属性だけである。ノードをリストや dict に入れて持たせても、ネットワークの一部にならない。
@@ -50,6 +50,7 @@
 ```python
 class Stack(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.l1 = Hidden(784, 256)
         self.l2 = Hidden(256, 256)
         self.l1.connect(self.l2)
@@ -59,6 +60,7 @@ class Stack(mujou.Network):
 
 class Classifier(mujou.Network):
     def __init__(self) -> None:
+        super().__init__()
         self.body = Stack()
         self.head = Head()
         self.body.connect(self.head)   # body.next（実体は l2.next）と head.prev をつなぐ
@@ -77,7 +79,7 @@ class Classifier(mujou.Network):
 1 つの Port に複数の Channel をつなぐと、分岐と合流になる。次の例は、`split` の出力を 2 つに分け、`sum` で合わせる。
 
 ```python
---8<-- "examples/branching.py:19:78"
+--8<-- "examples/branching.py:19:85"
 ```
 
 ### 分岐: 送る側
@@ -106,7 +108,7 @@ class Classifier(mujou.Network):
 `net.build()` は、構造と型を検査して凍結し、構築した構造（`Graph`）を返す。`mujou.run` も中で `build()` を呼ぶので、走らせるだけなら呼ばなくてよい。走らせる前に構造を確かめたいときに呼ぶ。
 
 ```python
---8<-- "examples/branching.py:81:84"
+--8<-- "examples/branching.py:88:91"
 ```
 
 | `Graph` の API          | 返すもの                                                |

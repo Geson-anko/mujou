@@ -17,12 +17,14 @@ VECTOR = TensorSpec((2,))
 
 class Scale(Node):
     def __init__(self, factor: float) -> None:
+        super().__init__()
         self.factor = factor
         self.prev = PrevPort(recv=VECTOR)
         self.next = NextPort(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         self.next.send(self.factor * self.prev.recv())
 
 
@@ -30,6 +32,7 @@ class Stage(mujou.Network):
     """One node, with its ports exposed as the sides of the network."""
 
     def __init__(self, factor: float) -> None:
+        super().__init__()
         self.scale = Scale(factor)
         self.prev = self.scale.prev
         self.next = self.scale.next

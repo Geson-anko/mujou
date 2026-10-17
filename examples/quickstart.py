@@ -17,12 +17,14 @@ class Scale(Node):
     """Sends its input times ``factor``."""
 
     def __init__(self, factor: float) -> None:
+        super().__init__()
         self.factor = factor
         self.prev = PrevPort(recv=VECTOR)  # receives from the previous side
         self.next = NextPort(send=VECTOR)  # sends to the next side
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()  # the latest input; never waits
         self.next.send(self.factor * x)
 
@@ -31,12 +33,14 @@ class Shift(Node):
     """Sends its input plus ``offset``."""
 
     def __init__(self, offset: float) -> None:
+        super().__init__()
         self.offset = offset
         self.prev = PrevPort(recv=VECTOR)
         self.next = NextPort(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         self.next.send(self.prev.recv() + self.offset)
 
 
@@ -44,6 +48,7 @@ class Affine(mujou.Network):
     """``x -> scale -> shift ->``: y = 2 x + 1."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.scale = Scale(2.0)
         self.shift = Shift(1.0)
         self.scale.connect(self.shift)  # scale.next <-> shift.prev

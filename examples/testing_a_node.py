@@ -22,22 +22,26 @@ class Leaky(Node):
     """dx/dt = (u - x) / tau, exact for an input held constant over each ``dt``."""
 
     def __init__(self, tau: float) -> None:
+        super().__init__()
         self.tau = tau
         self.prev = PrevPort(recv=VECTOR)
         self.next = NextPort(send=VECTOR)
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         self.x = VECTOR.zeros()
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         self.x += (1 - math.exp(-dt / self.tau)) * (self.prev.recv() - self.x)
         self.next.send(self.x)
 
 
 class Chain(mujou.Network):
     def __init__(self, tau: float) -> None:
+        super().__init__()
         self.a = Leaky(tau)
         self.b = Leaky(tau)
         self.a.connect(self.b)

@@ -65,14 +65,17 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
         class Sensor(Node):
             def __init__(self) -> None:
+                super().__init__()
                 self.out = Port(send=TensorSpec((3,)))
 
 
         class Monitor(Node):
             def __init__(self) -> None:
+                super().__init__()
                 self.inp = Port(recv=TensorSpec((3,)))
 
             def on_update(self, dt: float) -> None:
+                super().on_update(dt)
                 x = self.inp.recv()  # torch.Tensor (one peer)
 
 

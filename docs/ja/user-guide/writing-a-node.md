@@ -18,6 +18,8 @@
 
 以下、この順に説明する。
 
+継承したクラスの常として、`__init__` では最初に `super().__init__()` を呼び、override した hook でも最初に `super()` の同じ hook を呼ぶ。`mujou.Node` の hook は、`state_dict` と `load_state_dict` を除いて何もしない（[状態](state.md)）。それでも呼んでおけば、何かをする自作のノードのクラスを継承したときにも正しく動く。
+
 ## 1. `__init__` で Port を宣言する
 
 Port は `__init__` の中で、インスタンスの属性として代入する。クラス属性として宣言すると、ネットワークの構築（`build()`）で `ValueError` になる。
@@ -108,8 +110,6 @@ class Sensor(mujou.Node):
 | `device` | ノードが計算するデバイス。`"cpu"` か CUDA のデバイス | `"cpu"`                  |
 | `seed`   | ノード専用の乱数生成器 `self.generator` のシード     | `None`（毎回違う）       |
 | `period` | 実行の周期（秒）                                     | `None`（できるだけ速く） |
-
-`super().__init__()` を呼ばなければ、3 つとも既定値になる。
 
 乱数は `self.generator` から引く（`torch.randn(..., generator=self.generator)`）。`torch.manual_seed` はノードの中で呼ばない。全ノードが共有する乱数生成器を変えてしまうからである。`self.generator` は `on_start` 以降の hook で使える。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)にある。
 

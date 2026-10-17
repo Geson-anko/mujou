@@ -48,6 +48,8 @@ By default, `on_update` repeats as fast as it can. Pass a period, as in `super()
 
 If any hook of any node raises, the whole network stops. Mujou never stops only the node that raised and keeps the others running.
 
+Call `super().__init__()` first in `__init__`, and `super()` first in each hook you override, as in any subclass.
+
 Declare the ports in `__init__`. Create the state tensors in `on_start`, and from then on update those same tensors in place.
 
 ## Hooks that do not exist
@@ -68,18 +70,21 @@ import mujou
 
 class Leaky(mujou.Node):
     def __init__(self, n_in: int, n_out: int) -> None:
+        super().__init__()
         self.prev = mujou.PrevPort(recv=mujou.TensorSpec((32, n_in)))   # receive only
         self.next = mujou.NextPort(send=mujou.TensorSpec((32, n_out)))  # send only
         self.n_in, self.n_out = n_in, n_out
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         # Create the state tensors in on_start. Tensor attributes are collected as state
         self.w = torch.randn(self.n_in, self.n_out, generator=self.generator) * 0.1
         self.h = torch.zeros(32, self.n_out)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()                  # the previous node's latest value; no waiting
         self.h += dt * (x @ self.w - self.h)  # in proportion to dt, in place
         self.next.send(self.h)

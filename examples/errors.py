@@ -25,17 +25,20 @@ class Checked(Node):
     """Passes its input on, and raises once it is negative."""
 
     def __init__(self, fail_on_start: bool = False) -> None:
+        super().__init__()
         self.fail_on_start = fail_on_start
         self.prev = PrevPort(recv=SCALAR)
         self.next = NextPort(send=SCALAR)
 
     @override
     def on_start(self) -> None:
+        super().on_start()
         if self.fail_on_start:
             raise RuntimeError("cannot start")
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         u = self.prev.recv()
         if u < 0:
             raise ValueError(f"negative input: {u.item()}")
@@ -43,15 +46,18 @@ class Checked(Node):
 
     @override
     def on_exception(self) -> None:
+        super().on_exception()
         print("on_exception: called on every node")
 
     @override
     def on_stop(self) -> None:
+        super().on_stop()
         print("on_stop: called after on_exception")
 
 
 class Single(mujou.Network):
     def __init__(self, fail_on_start: bool = False) -> None:
+        super().__init__()
         self.checked = Checked(fail_on_start)
         self.prev = self.checked.prev
 

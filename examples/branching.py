@@ -24,11 +24,13 @@ class Split(Node):
     minus: Channel
 
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(recv=VECTOR)
         self.next = NextPort(send=VECTOR)  # many peers by default
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()
         self.next.send_to(self.plus, x)
         self.next.send_to(self.minus, -x)
@@ -38,12 +40,14 @@ class Apply(Node):
     """Sends ``fn(x)``."""
 
     def __init__(self, fn: Callable[[torch.Tensor], torch.Tensor]) -> None:
+        super().__init__()
         self.fn = fn
         self.prev = PrevPort(recv=VECTOR)
         self.next = NextPort(send=VECTOR, multi=False)  # exactly one peer here
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()
         self.next.send(self.fn(x))
 
@@ -52,11 +56,13 @@ class Sum(Node):
     """Sends the sum of the messages of all its peers."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.prev = PrevPort(recv=VECTOR, multi=True)  # merges any number of peers
         self.next = NextPort(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         received = self.prev.recv()  # dict[Channel, torch.Tensor]
         self.next.send(torch.stack(list(received.values())).sum(dim=0))
 
@@ -65,6 +71,7 @@ class Diamond(mujou.Network):
     """``split -> (double, square) -> sum``: y = 2 x + (-x)^2."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.split = Split()
         self.double = Apply(lambda x: 2 * x)
         self.square = Apply(lambda x: x**2)

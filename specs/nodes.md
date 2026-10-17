@@ -59,7 +59,7 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 | hook                     | 呼ばれるとき                                       | 役割                                                         |
 | ------------------------ | -------------------------------------------------- | ------------------------------------------------------------ |
-| `on_thread_start()`      | 実行開始時に 1 回。フレームワークのスレッドの設定の後、`on_start` の直前に同じスレッドで | ノード自身のスレッドごとの設定。`super()` を呼ぶ必要はない |
+| `on_thread_start()`      | 実行開始時に 1 回。フレームワークのスレッドの設定の後、`on_start` の直前に同じスレッドで | ノード自身のスレッドごとの設定 |
 | `on_start()`             | 実行開始時に 1 回。ノードを実行するスレッドの上で | 状態の確保・初期化                                           |
 | `on_update(dt)`          | 自分の周期で繰り返し（[実行の周期](#実行の周期)）  | 隣の最新値を読み、$\Delta t$ ぶん更新し、書き込む。他を待たない |
 | `on_pause()`             | 停止の要求を受けて、ループの区切りで止まったとき   | I/O の一時停止など                                           |
@@ -70,6 +70,8 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 | `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す。`mujou.Node` の既定はその場でコピーする |
 
 表の hook のほかに、フレームワークが自分のために使う内部の hook がある。`_on_thread_start()`（`on_thread_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_restore_state(state)`（状態の復元で `load_state_dict(state)` の代わりに呼び、既定は `load_state_dict(state)` を呼ぶ）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。公開の hook とは別なので、どの公開の hook を override しても、`super()` を呼ばなくても、設定と同期は漏れない。`_restore_state` の中の例外は `load_state_dict` と出る。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージには `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
+
+サブクラスは、継承の慣習どおり `__init__` の最初で `super().__init__()` を、override した hook の最初で `super()` の同じ hook を呼ぶ。ドキュメント・サンプル・docstring の例は常にそう書く（2026-10-17、ユーザーの決定）。呼ばなくても動くように、`mujou.Node` は `__init__` で設定する値の既定をクラスに置く。
 
 ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
 
@@ -98,15 +100,18 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 ```python
 class Linear(Node):
     def __init__(self, n_in: int, n_out: int) -> None:
+        super().__init__()
         # 構築時: Port を宣言するだけ
         self.prev = PrevPort(send=TensorSpec((B, n_in)), recv=TensorSpec((B, n_in)))
         self.next = NextPort(send=TensorSpec((B, n_out)), recv=TensorSpec((B, n_out)))
 
     def on_start(self) -> None:
+        super().on_start()
         self._w = ...             # Tensor を代入すると、状態として自動で集まる
         self._h = ...
 
     def on_update(self, dt: float) -> None:
+        super().on_update(dt)
         x = self.prev.recv()      # 前から受け取った最新値
         fbs = self.next.recv()    # 次の相手ごとの最新値
         ...                       # dt に比例した更新
