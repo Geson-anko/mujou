@@ -68,9 +68,6 @@ addopts = [
     "--strict-markers",
     "--doctest-modules",
 ]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-]
 markers = [
     "slow: long-running convergence / training checks (deselect with -m 'not slow')",
 ]

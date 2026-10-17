@@ -523,32 +523,46 @@ class TestInitial:
             Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-class TestCuda:
+class TestAccelerator:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        accelerator: torch.device,
     ):
-        out, inp = NextPort(send=h()), PrevPort(recv=h())
+        out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
 
-        class OnCuda(Probe):
+        class OnAccelerator(Probe):
             def __init__(self, update: Callable[[], object], **ports: Any) -> None:
                 super().__init__(update, **ports)
-                Node.__init__(self, device="cuda")
+                Node.__init__(self, device=accelerator.type)
 
-        source = OnCuda(lambda: out.send(torch.ones(2, 3, device="cuda")), next=out)
-        sink = OnCuda(inp.recv, prev=inp)
+        def update() -> torch.Tensor:
+            x = inp.recv()
+            back.send(2 * x)
+            return x
+
+        # The source stays on the CPU: MPS takes one node at most.
+        source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
+        sink = OnAccelerator(update, prev=inp, back=back)
         run = start_manual(Net(source=source, sink=sink))
         step(run, virtual, source, sink)
         received = cast(torch.Tensor, sink.results[0])
-        assert received.device.type == "cuda"
+        # The index-less device is fixed, so the message compares equal to it.
+        assert received.device == sink.device == accelerator
         assert torch.equal(received.cpu(), torch.ones(2, 3))
-        assert torch.equal(run.read(out)[0], torch.ones(2, 3))
+        sent, _ = run.read(back)
+        assert sent.device == torch.device("cpu")
+        assert torch.equal(sent, torch.full((2, 3), 2.0))
 
     def test_takes_an_initial_value_on_the_device(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        accelerator: torch.device,
     ):
-        out = Port(send=h(), initial=torch.ones(2, 3, device="cuda"))
+        out = Port(send=h(), initial=torch.ones(2, 3, device=accelerator))
         inp = Port(recv=h())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)
