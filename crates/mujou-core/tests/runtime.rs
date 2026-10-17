@@ -804,46 +804,61 @@ mod period {
         assert!(dts.try_recv().is_err());
     }
 
-    /// Runs a ticker of period `P_NS` on the real clock for `run` and returns
-    /// its Δts and the real time from before its start to after its end.
-    fn tick_for(scale: f64, run: Duration) -> (Vec<u64>, Duration) {
+    /// The period of the real-clock tests, on the timer: long next to how late
+    /// a loaded runner (e.g. GitHub's macOS) wakes a thread, tens of ms, so the
+    /// lower bounds below hold however the wake-ups are delayed up to that.
+    const REAL_P_NS: u64 = 200 * H_NS;
+    /// How long the real-clock tests run, in real time.
+    const RUN: Duration = Duration::from_secs(1);
+
+    /// Runs a ticker of period `REAL_P_NS` on the real clock at `scale` for
+    /// `RUN` and returns its Δts and the real time from before its start to
+    /// after its end.
+    fn tick_for(scale: f64) -> (Vec<u64>, Duration) {
         let timer = Arc::new(Timer::new());
         timer.set_scale(scale).unwrap();
         let begin = Instant::now();
-        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
-        thread::sleep(run);
+        let (rt, dts) = start_ticker(&timer, with_period(Some(REAL_P_NS), false), None);
+        thread::sleep(RUN);
         rt.shutdown().wait().unwrap();
         let elapsed = begin.elapsed();
         (dts.try_iter().collect(), elapsed)
     }
 
-    const RUN: Duration = Duration::from_millis(500);
-
+    /// The node waits for its period on the real clock: neither faster (free
+    /// running would update far more often) nor drifting behind.
     #[test]
     fn on_the_real_clock_it_updates_about_once_per_period() {
-        let (dts, elapsed) = tick_for(1.0, RUN);
+        let (dts, elapsed) = tick_for(1.0);
         // The targets are P apart, so the updates cannot outnumber them.
-        let at_most = elapsed.as_nanos() as f64 / P_NS as f64;
+        let at_most = elapsed.as_nanos() as f64 / REAL_P_NS as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // Waking up late does not add up: on average one update per period.
-        // Loose, for a loaded machine: free running would be far more.
-        let expected = RUN.as_nanos() as f64 / P_NS as f64;
-        assert!(
-            (dts.len() as f64) >= expected / 2.0,
-            "{} updates",
-            dts.len()
-        );
+        // The targets at 200, 400, 600 and 800 ms come before the end at 1 s
+        // even if each wake-up is up to 200 ms late (a wake-up less than a
+        // period late does not delay the next target).
+        assert!(dts.len() >= 4, "{} updates", dts.len());
     }
 
+    /// The period is on the timer, so the time scale changes the updates per
+    /// real second: at scale 4 the period is 50 ms of real time.
     #[test]
     fn the_time_scale_scales_the_updates_per_real_second() {
         let scale = 4.0;
-        let (dts, elapsed) = tick_for(scale, RUN);
-        let at_most = elapsed.as_nanos() as f64 * scale / P_NS as f64;
+        let (dts, elapsed) = tick_for(scale);
+        let at_most = elapsed.as_nanos() as f64 * scale / REAL_P_NS as f64;
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // More than the scale of 1 could give.
-        let unscaled = RUN.as_nanos() as f64 / P_NS as f64;
-        assert!((dts.len() as f64) > unscaled + 1.0, "{} updates", dts.len());
+        // 1 s of real time is 4 s on the timer, 20 targets. While each wake-up
+        // is less than a period (50 ms real) late, the targets do not slip, and
+        // the targets up to 3 s on the timer (15) come before the end even if
+        // each wake-up is late by up to 250 ms on the timer.
+        assert!(dts.len() >= 15, "{} updates", dts.len());
+        // At least twice what scale 1 could give in the same real time.
+        let unscaled = elapsed.as_nanos() as f64 / REAL_P_NS as f64;
+        assert!(
+            (dts.len() as f64) >= 2.0 * unscaled,
+            "{} updates",
+            dts.len()
+        );
     }
 
     #[test]
