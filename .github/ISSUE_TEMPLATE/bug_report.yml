@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Mujou does not work as documented.
+description: Something in Mujou does not work as documented. Write in English or Japanese.
 labels: [bug]
 body:
   - type: textarea
@@ -24,6 +24,6 @@ body:
       description: |
         The output of:
         `uv run python -c "import sys, torch, mujou; print(sys.version, torch.__version__, mujou.__version__)"`
-        and your OS. Say whether the node computes on the CPU, CUDA or MPS.
+        and your OS. Say whether the node computes on the CPU or CUDA.
     validations:
       required: true
