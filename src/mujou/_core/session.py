@@ -19,7 +19,14 @@ import torch
 
 from mujou._core import _native
 from mujou._core.network import ports
-from mujou._core.node import Node, capture_state, end_thread, set_timer, thread_ident
+from mujou._core.node import (
+    Node,
+    capture_state,
+    end_thread,
+    period_ns,
+    set_timer,
+    thread_ident,
+)
 from mujou._core.port import Channel, Port, bind
 from mujou._core.spec import Spec, fields, join, split
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
@@ -230,6 +237,7 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
+        periods = [period_ns(node) for node in self._nodes]
         restored = None if state is None else self._restore(state)
         if inputs:
             items = self._items(inputs)
@@ -257,7 +265,7 @@ class Session:
             runtime.start(
                 manual=manual,
                 pause_timeout=pause_timeout,
-                period_ns=[_period_ns(node) for node in self._nodes],
+                period_ns=periods,
                 **(restored or {}),
             )
         except _native.NetworkError:
@@ -612,12 +620,6 @@ def _wait(timeout: float) -> float | None:
     if not timeout >= 0:
         raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
     return None if timeout == math.inf else timeout
-
-
-def _period_ns(node: Node) -> int | None:
-    """The period of ``node`` in ns for the runtime, at least 1 ns."""
-    period = node.period
-    return None if period is None else max(1, round(period * 1e9))
 
 
 def _is_int(value: object) -> bool:

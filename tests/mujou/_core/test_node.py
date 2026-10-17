@@ -304,6 +304,17 @@ class TestPeriod:
         with pytest.raises(ValueError, match="period"):
             Node(period=period)
 
+    def test_rejects_a_bool(self):
+        with pytest.raises(TypeError, match="period"):
+            Node(period=True)
+
+    def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
+        class OnTheClass(Ticker):
+            period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
+
+        with pytest.raises(TypeError, match="reserved"):
+            start(Solo(OnTheClass(period=None)), timer=virtual)
+
     def test_the_node_waits_for_its_period_on_the_timer(
         self, virtual: VirtualTimer, start: Start
     ):
@@ -315,6 +326,14 @@ class TestPeriod:
             node.dts.get(timeout=0.05)
         virtual.advance(0.005)
         assert node.dts.get(timeout=5.0) == 0.01
+
+    def test_a_period_below_a_nanosecond_is_one_nanosecond(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        node = Ticker(period=1e-10)
+        start(Solo(node), timer=virtual)
+        virtual.advance(1e-9)
+        assert node.dts.get(timeout=5.0) == 1e-9
 
 
 class OwnSetup(Probe):

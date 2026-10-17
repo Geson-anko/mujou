@@ -1,5 +1,6 @@
 """The node, the unit of asynchronous computation."""
 
+import inspect
 import math
 import threading
 import types
@@ -35,7 +36,8 @@ class Node(_native.Node, Component):
       this node's ``state_dict`` returned. By default it copies the state into the
       collected tensors and modules (see below). When ``device`` is CUDA, the
       framework waits for the node's stream after it.
-    - ``on_update(dt)``: repeatedly, every ``period`` (see below). ``dt`` is the
+    - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
+      below). ``dt`` is the
       time in seconds on the run's ``timer`` since the node's last update. Read
       the ports with ``recv``, update in proportion to ``dt``, and write the
       ports with ``send``. It never waits for other nodes.
@@ -85,20 +87,28 @@ class Node(_native.Node, Component):
 
     Without a ``period``, the node updates as fast as it can: as soon as one
     ``on_update`` returns, the next one is called (once any time has passed).
-    With a ``period``, the framework waits on the run's timer until ``period``
-    seconds have passed since the start of the last update (or since the start
-    of the run), so the time an update takes counts toward the period. The wait
-    follows the time scale and the virtual clock, and ends at once on a pause or
-    a stop. ``dt`` is still the time that actually passed, so it is at least
-    ``period`` and longer when the node is late. A late node is not caught up
-    on: its next period starts at the late update. A manual run
-    (``mujou.testing.run``, stepped by ``ManualRun.step``) ignores the period.
+    With a ``period``, the framework waits on the run's timer for the next
+    target before each update. The first target is ``period`` after the start
+    of the run (after the last update before the state was taken, when the run
+    was restored), and each next one is ``period`` after the previous target, so
+    the time an update takes and a late wake-up count toward the period and the
+    node updates once every ``period`` on average. A node a whole ``period`` or
+    more late updates once and counts again from that update: it never updates
+    several times in a row to catch up. The wait follows the time scale and the
+    virtual clock, and ends at once on a pause or a stop; the time does not run
+    while paused, so a pause does not count. ``dt`` is still the time that
+    actually passed since the last update: about ``period``, longer when the
+    node is late and shorter right after. ``on_update`` must stay stable for
+    the longest ``dt`` it can get; split the step inside the node if needed
+    (cutting ``dt`` would lose time). A manual run (``mujou.testing.run``,
+    stepped by ``ManualRun.step``) ignores the period.
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU, seeds its generator nondeterministically and has no period.
 
-    ``device``, ``generator`` and ``timer`` (the reading side of the run's timer)
-    are reserved names: do not assign attributes of those names.
+    ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
+    run's timer) are reserved names: do not assign attributes of those names
+    (a class attribute ``period`` makes the run raise ``TypeError``).
 
     Example::
 
@@ -126,10 +136,11 @@ class Node(_native.Node, Component):
         device: Where the node computes: the CPU or a CUDA device. Received
             messages arrive on it.
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
-        period: The least time between two updates, in seconds of the run's
-            timer. ``None`` updates as fast as possible.
+        period: The time between two updates on average, in seconds of the
+            run's timer. ``None`` updates as fast as possible.
 
     Raises:
+        TypeError: ``period`` is a ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
             while CUDA is not available, or ``period`` is not finite and
             positive.
@@ -151,6 +162,8 @@ class Node(_native.Node, Component):
         seed: int | None = None,
         period: float | None = None,
     ) -> None:
+        if isinstance(period, bool):
+            raise TypeError(f"the period must be a number of seconds, got {period}")
         if period is not None and not (math.isfinite(period) and period > 0):
             raise ValueError(f"the period must be finite and > 0, got {period}")
         device = torch.device(device)
@@ -182,8 +195,8 @@ class Node(_native.Node, Component):
 
     @property
     def period(self) -> float | None:
-        """The least time between two updates, in seconds of the run's timer, or
-        ``None`` to update as fast as possible."""
+        """The time between two updates on average, in seconds of the run's
+        timer, or ``None`` to update as fast as possible."""
         return self._period
 
     @property
@@ -506,6 +519,26 @@ def end_thread(node: Node) -> None:
 def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     """Give ``node`` the view of its run's timer, or take it back with ``None``."""
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def period_ns(node: Node) -> int | None:
+    """Return the period of ``node`` in ns for the runtime, at least 1 ns and
+    rounded as the core rounds seconds (half away from zero).
+
+    Raises:
+        TypeError: A subclass of ``Node`` replaced the reserved ``period``.
+    """
+    if inspect.getattr_static(type(node), "period") is not vars(Node)["period"]:
+        raise TypeError(
+            f"{type(node).__qualname__} replaces period, a reserved name of Node: "
+            "pass the period to Node.__init__ instead"
+        )
+    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
+    if period is None:
+        return None
+    ns = period * 1e9
+    whole = math.floor(ns)
+    return max(1, whole + int(ns - whole >= 0.5))
 
 
 def capture_state(node: Node) -> object:
