@@ -105,11 +105,11 @@ Pass `period` only as an argument of `super().__init__`. Setting a default with 
 
 `super().__init__` takes the following arguments. All of them are keyword arguments and can be left out.
 
-| Argument | Meaning                                                             | Default                       |
-| -------- | ------------------------------------------------------------------- | ----------------------------- |
-| `device` | The device the node computes on. `"cpu"` or a CUDA device           | `"cpu"`                       |
-| `seed`   | The seed of the node's own random number generator `self.generator` | `None` (different every time) |
-| `period` | The period of updates, in seconds                                   | `None` (as fast as it can)    |
+| Argument | Meaning                                                                                         | Default                       |
+| -------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
+| `device` | The device the node computes on. `"cpu"`, a CUDA device, or another accelerator such as `"mps"` | `"cpu"`                       |
+| `seed`   | The seed of the node's own random number generator `self.generator`                             | `None` (different every time) |
+| `period` | The period of updates, in seconds                                                               | `None` (as fast as it can)    |
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share. `self.generator` can be used in the hooks from `on_start` on. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 

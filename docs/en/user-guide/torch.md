@@ -1,6 +1,6 @@
 # PyTorch in Nodes
 
-A node computes with PyTorch inside. This page covers devices and random numbers, backpropagation (BP) inside a node, CUDA, and the settings that affect the whole process.
+A node computes with PyTorch inside. This page covers devices and random numbers, backpropagation (BP) inside a node, CUDA and other accelerators, and the settings that affect the whole process.
 
 ## Example
 
@@ -14,7 +14,7 @@ The following node learns a linear map from its input to the target online, and 
 
 Pass the device and the random seed in `__init__`, with `super().__init__(device=..., seed=...)`.
 
-- `device` is a CPU or CUDA device (the default is `"cpu"`). Any other device (such as MPS), and CUDA where CUDA is not available, raise `ValueError`
+- `device` is the CPU (the default, `"cpu"`) or a device of PyTorch's current accelerator: CUDA, MPS, XPU, and so on. A device that is not available, and any other device (such as `"meta"`), raise `ValueError`
 - Received messages (the values of `recv()`) arrive on the node's device
 - Allocate tensors with `device=self.device`
 
@@ -60,6 +60,14 @@ So the node's author does not have to write any synchronization. If you synchron
 - Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created
 - PyTorch assigns streams from a pool of 32 per device. If you put more than 32 nodes on one device, some nodes share a stream. The results do not change, but a synchronization then also waits for the other node's work
 - A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names `_after_update`, an internal hook of Mujou. The cause is in `on_update`
+
+## Other accelerators (MPS, ...)
+
+A node on another accelerator, such as `device="mps"`, gets the same setup as on CUDA, except for the stream: the node computes on the device's current stream, with no stream of its own. Mujou synchronizes the whole device where it would synchronize the node's stream on CUDA.
+
+- Without an index, as in `device="mps"`, the device is the host's current device (`mps:0`)
+- PyTorch's MPS cannot be used from two threads at once: the process crashes. Put at most one node on MPS, and do not compute on MPS on the host while the network runs
+- MPS has no float64. A node on MPS cannot receive a message of a float64 spec
 
 ## Settings of the whole process
 

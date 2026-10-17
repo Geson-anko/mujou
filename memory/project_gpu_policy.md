@@ -19,4 +19,14 @@ metadata:
 - コア・スロット・バッファプールに device・stream・event の概念を入れない
 - GPU を使うノードは、ステップごとに自分のストリームを同期してからホストへ書き出す。ノードごとにストリームを分ければ、正しさや順序の面ではノード間で影響しない（SM・帯域・メモリといった資源の取り合いは、CPU のコアの取り合いと同じく $\Delta t$ の伸びとして吸収する）
 
+## 2026-10-17 追記: CUDA 以外のアクセラレータ
+
+ユーザーの判断で、ノードが MPS など CUDA 以外のアクセラレータでも計算できるようにした（`specs/torch.md` の「CUDA 以外のアクセラレータ」）。
+
+- 受け付けるのは CPU と、torch の現在のアクセラレータ（`torch.accelerator.current_accelerator(check_available=True)`）と同じ種類のデバイス。添字の無いデバイスは `current_device_index()` で固定する（`mps` と `mps:0` は等しくない）
+- ノードごとのストリームは CUDA だけ。ほかのアクセラレータはデバイスの現在のストリームで計算し、CUDA でストリームを同期する箇所で `torch.accelerator.synchronize(device)` を呼ぶ
+- **制約（未決定の対処）**: PyTorch の MPS は 2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1 で確認）。MPS のノードは 1 つまで、実行中にホストで MPS を使わない、と利用者向けの文書に書いた。ロックで直列にするか、構築時に拒むかは未決定
+
+**Why:** 開発機が Apple Silicon の Mac で、手元で GPU の経路を試したい。ストリームを分けるのは CUDA でしか意味と性能を確かめていないので、ほかのバックエンドには広げない。
+
 関連: [[project-native-core-rust]], [[project-message-types]], [[project-compute-granularity]]
