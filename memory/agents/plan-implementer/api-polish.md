@@ -65,3 +65,11 @@
 
 - `mujou.run(*networks)` / `Compose(*networks)` の引数名: ノードも受けるようになったが `networks` のまま
 - ノードの 2 回目の run のエラーは "already built"（ネットワークの "already run" と文言が違う）
+
+## レビュー後の修正（code-reviewer: approve、should-fix 2 件と nit 1-5）
+
+- 2 回目の run の文言: 構築済みの印（`_BUILT`）に、木ごとに共有する記録 `_Tree(by_run, ran)` を持たせた。Graph の `_ran` もこれに移した。`mujou.run` が作る Compose は private な `RunCompose` にして、`by_run` を立てる。印に当たった部品の木が走った、または `by_run` なら `"<クラス名>[ at '<path>'] has already run; create a new instance to run again"`。ネットワーク 1 つの 2 回目（`start_once`）も同じ文言にそろえた（旧 "the network has already run; build a new instance to run again"）。`mujou.run` に渡したもの（`RunCompose` の直下）にはパスを付けない
+- `by_run` も見るのは、並行の run(node) で、片方の Compose の build から `start_once` までの間に、もう片方が印に当たる窓があるため。`RunCompose` は断られたら unbuild されるので、印が残っていれば走らせるために構築されている
+- 記録は部品を参照しない小さなオブジェクトにした（Graph への強参照を `_BUILT` に置くと、部品が解放されなくなる）
+- テスト: 並行の run の文言をパラメタで厳密に、`TestRunANode.test_runs_once` を 3 形の文言で、走っていない構築済みのネットワークのノードは "belongs ..."、`write({})`、`Solo(node)` での走らせ直し、混在の euler のオラクル
+- nit 6（引数名）は変えない
