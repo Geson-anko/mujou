@@ -19,7 +19,7 @@ The two arrows together are one channel.
 
 ## Port types
 
-A port holds a pair of types: the type of what it sends (`send`) and the type of what it receives (`recv`). Two ports connect only when the `send` of each matches the `recv` of the other. If they do not match, the call to `connect` raises an error.
+A port holds a pair of types: the type of what it sends (`send`) and the type of what it receives (`recv`). Two ports connect only when the `send` of each matches the `recv` of the other. If they do not match, the call to `connect` raises an error. Once a port is assigned to a node, errors and `repr` name it by the node's class and the attribute, such as `Shift.next`.
 
 A port may have only `send` or only `recv`. Use such ports for a node that only sends input, or a node that only observes.
 

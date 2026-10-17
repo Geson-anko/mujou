@@ -64,6 +64,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     and is copied when the port is made. Without it, that is the ``zeros()`` of
     ``send``. A restored run takes the values from the state instead.
 
+    Once assigned as an attribute of a node, the port is named
+    ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
+    ``repr``; the first assignment names it.
+
     ``Port`` is neither the previous nor the next side of its owner; use
     ``PrevPort`` and ``NextPort`` for the sides that ``a.connect(b)`` between two
     nodes (or networks) joins.
@@ -151,6 +155,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         self._recv_spec = recv
         self._multi = multi
         self._channels: list[Channel] = []
+        # "<owner class>.<attribute>", set when the port is first assigned as an
+        # attribute of a node; names the port in errors and its repr.
+        self._name: str | None = None
         # Set by Network.build; a frozen port takes no more connections.
         self._frozen = False
         # Set by mujou.run: the slots recv and send use.
@@ -199,23 +206,24 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                 "Network.build() or mujou.run())"
             )
         if other is self:
-            raise ValueError(f"cannot connect a port to itself: {self!r}")
+            raise ValueError(f"cannot connect a port to itself: {self._label()}")
         if self._send_spec != other._recv_spec or self._recv_spec != other._send_spec:
             raise TypeError(
                 "port specs do not match: "
-                f"{self!r} sends {self._send_spec!r} and receives {self._recv_spec!r}, "
-                f"but {other!r} receives {other._recv_spec!r} and sends "
-                f"{other._send_spec!r}"
+                f"{self._label()} sends {self._send_spec!r} and receives "
+                f"{self._recv_spec!r}, but {other._label()} receives "
+                f"{other._recv_spec!r} and sends {other._send_spec!r}"
             )
         if self._send_spec is None and self._recv_spec is None:
             raise TypeError(
-                f"neither {self!r} nor {other!r} has a spec, so nothing would flow"
+                f"neither {self._label()} nor {other._label()} has a spec, so nothing "
+                "would flow"
             )
         for port in (self, other):
             if not port._multi and port._channels:
                 raise ValueError(
-                    f"{port!r} takes one peer and is already connected; declare it "
-                    "with multi=True to take more"
+                    f"{port._label()} takes one peer and is already connected; "
+                    "declare it with multi=True to take more"
                 )
         channel = Channel(self, other)
         self._channels.append(channel)
@@ -304,13 +312,22 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
     def _bound(self) -> Binding:
         if self._binding is None:
-            raise _not_running()
+            raise RuntimeError(
+                f"{self._label()} can only send and receive in its owning node's "
+                "hooks while the network runs (not in __init__)"
+            )
         return self._binding
+
+    def _label(self) -> str:
+        """Name this port in an error: by its owner and attribute (e.g.
+        ``"Shift.next"``) once assigned to a node, else by its repr."""
+        return self._name if self._name is not None else repr(self)
 
     @override
     def __repr__(self) -> str:
+        name = "" if self._name is None else f"{self._name}, "
         return (
-            f"{type(self).__name__}(send={self._send_spec!r}, "
+            f"{type(self).__name__}({name}send={self._send_spec!r}, "
             f"recv={self._recv_spec!r}, multi={self._multi})"
         )
 
@@ -442,11 +459,12 @@ class Channel:
         return f"Channel({a!r} <-> {b!r})"
 
 
-def _not_running() -> RuntimeError:
-    return RuntimeError(
-        "the port is not bound to slots: run the network, then use recv/send from "
-        "the owning node's hooks"
-    )
+def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
+    """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
+    (``Node.__setattr__`` calls this; the first assignment wins, so a second name
+    does not rename the port, and networks never do)."""
+    if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
+        port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
 
 
 def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:
