@@ -4,11 +4,11 @@
 
 Mujou (無常, "impermanence") is a deep learning framework where inference and learning happen at the same time. Computation is split into nodes: each node computes synchronously inside, and nodes exchange messages asynchronously. A node can be a layer (the default) or a stack of layers up to the whole model; single-neuron nodes are future work.
 
-The default update rule is [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding), whose updates are local to each layer and neuron. The update rule is pluggable: other rules, including backpropagation confined to a single node, can be used instead.
+The default update rule will be [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding, not implemented yet), whose updates are local to each layer and neuron. The update rule is pluggable: other rules, including backpropagation confined to a single node, can be used instead.
 
 Most machine learning systems are trained once and then frozen for inference. Mujou aims for machines that keep learning from a stream and never stop changing: real-time systems, robotics, lifelong learning.
 
-> Status: early development. The API does not exist yet.
+> Status: early development. The API works but may still change. Read the documentation (English and Japanese) with `just docs`; the programs in `examples/` are run by the tests.
 
 ## Development
 
