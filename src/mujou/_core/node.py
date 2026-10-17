@@ -5,7 +5,7 @@ import math
 import threading
 import types
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, Final, cast, override
 
 import torch
 from torch import nn
@@ -36,8 +36,8 @@ class Node(_native.Node, Component):
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned. By default it copies the state into the
-      collected tensors and modules (see below). When ``device`` is CUDA, the
-      framework waits for the node's stream after it.
+      collected tensors and modules (see below). When ``device`` is an
+      accelerator, the framework waits for the node's work after it.
     - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
       below). ``dt`` is the time in seconds on the run's ``timer`` since the
       node's last update. Read the ports with ``recv``, update in proportion to
@@ -78,9 +78,12 @@ class Node(_native.Node, Component):
     gradient recording (for backpropagation inside the node, wrap both the forward
     computation and ``backward`` in ``with torch.enable_grad():`` marked
     ``# mujou: local-autograd``), creates
-    ``generator`` from ``seed``, and, when ``device`` is CUDA, makes the device
-    and a stream of the node's own current. When ``device`` is CUDA it also
-    waits for that stream after each ``on_update``, after ``load_state_dict`` and
+    ``generator`` from ``seed`` on ``device``, and, when ``device`` is an
+    accelerator, makes it the thread's current device. On CUDA it also makes a
+    stream of the node's own current; another accelerator (MPS, ...) computes
+    on its current stream, with no stream of the node's own. On an accelerator
+    the framework waits for the node's work (its stream on CUDA, the whole
+    device otherwise) after each ``on_update``, after ``load_state_dict`` and
     around ``state_dict``. It does all this in hooks of its own,
     ``_on_thread_start``, ``_after_update``, ``_restore_state`` and
     ``_capture_state``, which subclasses must not override. So overriding a
@@ -136,16 +139,18 @@ class Node(_native.Node, Component):
         l1.connect(l2)  # l1.next <-> l2.prev
 
     Args:
-        device: Where the node computes: the CPU or a CUDA device. Received
-            messages arrive on it.
+        device: Where the node computes: the CPU or a device of torch's current
+            accelerator (CUDA, MPS, ...). Received messages arrive on it. A
+            device without an index (``"cuda"``, ``"mps"``) is fixed to the
+            host's current device.
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
         period: The time between two updates on average, in seconds of the
             run's timer. ``None`` updates as fast as possible.
 
     Raises:
         TypeError: ``period`` is a ``bool``.
-        ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
-            while CUDA is not available, or ``period`` is not finite and
+        ValueError: ``device`` is neither the CPU nor an accelerator, or is an
+            accelerator that is not available, or ``period`` is not finite and
             positive.
     """
 
@@ -169,21 +174,7 @@ class Node(_native.Node, Component):
             raise TypeError(f"the period must be a number of seconds, got {period}")
         if period is not None and not (math.isfinite(period) and period > 0):
             raise ValueError(f"the period must be finite and > 0, got {period}")
-        device = torch.device(device)
-        if device.type not in ("cpu", "cuda"):
-            raise ValueError(f"a node computes on the CPU or CUDA, got {device}")
-        if device.type == "cuda":
-            if not torch.cuda.is_available():
-                raise ValueError(
-                    f"the node's device is {device}, but CUDA is not available"
-                )
-            # torch's stub types the index as int, but it is None for "cuda".
-            index = cast(int | None, device.index)
-            if index is None:
-                # Fix the device now: "cuda" means the host's current device, and
-                # set_device needs an index.
-                device = torch.device("cuda", torch.cuda.current_device())
-        self._device = device
+        self._device = _check_device(torch.device(device))
         self._seed = seed
         self._period = period
 
@@ -362,6 +353,10 @@ class Node(_native.Node, Component):
             stream = torch.cuda.Stream(self._device)
             torch.cuda.set_stream(stream)
             self._stream = stream
+        elif self._device.type != "cpu":
+            # Another accelerator computes on its current stream: no stream of the
+            # node's own.
+            torch.accelerator.set_device_index(self._device)
         generator = torch.Generator(self._device)
         if self._seed is None:
             generator.seed()
@@ -376,16 +371,14 @@ class Node(_native.Node, Component):
     def _after_update(self) -> None:
         # The CPU never runs ahead of the GPU. (Other hooks may still leave work on
         # the stream; _capture_state waits for it before taking the state.)
-        if self._stream is not None:
-            self._stream.synchronize()
+        self._synchronize()
 
     @override
     def _restore_state(self, state: object) -> None:
         self.load_state_dict(state)
         # The copies queue on the node's stream; wait for them, so that the host
         # may drop the tree it passed (whose memory they read) once run returns.
-        if self._stream is not None:
-            self._stream.synchronize()
+        self._synchronize()
 
     @override
     def _capture_state(self) -> object:
@@ -393,9 +386,16 @@ class Node(_native.Node, Component):
         outer = _hooks.inside
         _hooks.inside = True
         try:
+            if self._device.type == "cpu":
+                return self.state_dict()
             stream = self._stream
             if stream is None:
-                return self.state_dict()
+                # Another accelerator: the copies queue on the device's current
+                # stream; wait for the device around them instead.
+                self._synchronize()
+                state = self.state_dict()
+                self._synchronize()
+                return state
             # Copies that state_dict makes queue on the node's stream, after the
             # work of every hook (not only on_update); wait for them before the
             # framework copies the tree on its own stream.
@@ -406,6 +406,54 @@ class Node(_native.Node, Component):
             return state
         finally:
             _hooks.inside = outer
+
+    def _synchronize(self) -> None:
+        """Wait for the node's work on its device: its own stream on CUDA, the
+        whole device on another accelerator, nothing on the CPU."""
+        if self._stream is not None:
+            self._stream.synchronize()
+        elif self._device.type != "cpu":
+            # Without a stream of its own the node cannot wait for its work alone:
+            # this also waits for other nodes on the device, which is still correct.
+            torch.accelerator.synchronize(self._device)
+
+
+# The device types of torch's accelerators, for the message of an unavailable one.
+# torch has no public list of them; a type not here (e.g. a private-use backend) is
+# still accepted when it is the current accelerator.
+_ACCELERATORS: Final = ("cuda", "mps", "xpu", "mtia", "hpu")
+
+
+def _check_device(device: torch.device) -> torch.device:
+    """Check that a node can compute on ``device`` and fix its index.
+
+    A node computes on the CPU or on torch's current accelerator (CUDA, MPS,
+    ...) while it is available.
+
+    Raises:
+        ValueError: ``device`` is neither the CPU nor the current accelerator,
+            or the accelerator is not available.
+    """
+    if device.type == "cpu":
+        return device
+    accelerator = torch.accelerator.current_accelerator(check_available=True)
+    if accelerator is None or device.type != accelerator.type:
+        if device.type in _ACCELERATORS:
+            raise ValueError(
+                f"the node's device is {device}, but {device.type.upper()} is not "
+                "available"
+            )
+        raise ValueError(
+            "a node computes on the CPU or an available accelerator (cuda, mps, "
+            f"...), got {device}"
+        )
+    # torch's stub types the index as int, but it is None for "cuda" or "mps".
+    if cast(int | None, device.index) is None:
+        # Fix the device now: an index-less device means the host's current one,
+        # setting the thread's device needs an index, and received tensors carry
+        # one ("mps:0" != "mps").
+        device = torch.device(device.type, torch.accelerator.current_device_index())
+    return device
 
 
 # The attribute that holds a node's registry of state names. Long, so that it does
