@@ -156,3 +156,20 @@ class ManualRun(Run):
 2. `Timestamp` を pickle / deepcopy できるようにするか（推奨: Rust の bindings に `__reduce__` を足す。別タスク）
 3. `Run.timer`（実行のタイマーをハンドルから読む property）を足すか（推奨: 今は足さない。`timer=` に渡したものを持っていれば足りる）
 4. `mujou.testing.run` の `timer` の既定をグローバルタイマーのままにするか（推奨: そのまま。`mujou.run` と同じ意味に保つ）
+
+## レビュー対応（2026-10-17）
+
+レビュー: `memory/agents/code-reviewer/run-handle.md`・`memory/agents/algorithm-reviewer/run-handle.md`（どちらも request-changes）。ユーザーの決定（ハンドル名 `Run` で確定、`Node.timer` は読み取り専用の view、hook から時間を動かす操作は `RuntimeError`）と orchestrator の裁定に従って直した。
+
+- **algorithm must-fix（`Node.timer` がタイマーの制御を渡していた）:** `Node.timer` の型を `mujou.time.Clock`（`now()` だけの読み取り専用の view。直接は作れない）にした。名前は「時刻を読むもの」の意で、ホストが動かす `Timer` と分けた。`Timer.sleep` / `set_time_scale`、`VirtualTimer.advance`、`mujou.time.sleep` / `set_time_scale` は hook の中で `RuntimeError`（`timer.host_only`。`node.in_hook` は循環 import を避けて関数の中で import）。再現 (a) スケールの変更、(b) 仮想時計の前進（後のノードの dt が H のまま）、(c) タイマーで待つ（`step` も `state_dict` も戻る）を `tests/mujou/_core/test_timer.py` の `TestOnlyTheHostControlsTheTime` にした
+- **M1:** `mujou.run(a, b)` が断られたら、`mujou.run` が作った `Compose` の構築を取り消す（`network.unbuild`、`port.thaw`）。1 つのネットワークの build は取り消さない（同じ Graph を返す約束のため）
+- **M2:** `build` を module の lock の下で 1 つずつ行う。並行の `mujou.run` は同じ Graph を得て、`start_once` の Graph の lock で 1 回だけ走る
+- **algorithm should-fix 2:** 構築した木のノードとネットワークを `WeakSet`（`_BUILT`）で印付けし、`build` で検査する。Port を持たないノードも 2 つの実行に入らない
+- **S1 / nit:** `mujou.run()` と `Network` でない値は `TypeError`。`Compose` は空の名前と `.` を含む名前も `ValueError`
+- **S4:** `Timestamp` に `__reduce__`（`copyreg.__newobj_ex__(Timestamp, (), {"ns": ...})`）を足し、`just stub` で stub を更新。テストの `.ns` の回避を外した
+- **S5:** 正常に終了した後の `state_dict` の中では、ノードの `timer` が状態の時刻で止まった `Clock` になる（`stopped_clock`）。終わったら外す
+- **S2 / S3 / S6 / nit:** docstring（`ManualRun.step` の `RuntimeError`、`mujou.run` の Raises、`timer` が予約名、`Graph` は `mujou.run` に渡せないこと、`Run.read` の `Timestamp` の軸、`mujou.testing.run` で `VirtualTimer` を強く勧める）
+- **KeyboardInterrupt:** `start_once` は `Exception` 以外の `BaseException` でも Graph を走ったものとして数える（起動はバックグラウンドで続き、インタプリタの終了時に止まる）
+- **algorithm should-fix 1:** `test_manual_steps_match_the_discrete_algorithm` を `Compose` でもパラメタライズ
+- **S8:** node-state 側が書き直すので対応しない。`Node.timer` の docstring と `specs/nodes.md` に「公開の `on_thread_start` でも読める」を書いた
+- specs: `nodes.md`（view・予約名・終了後の時刻）、`network.md`（構築の lock と印、断られた Compose、`TypeError`、名前の検査、`Timestamp` を状態に入れてよいこと、「グローバル時間」を「その実行のタイマー」に。見出しを「入力は実行の時間上の信号」に変え、リンクを直した）、`execution-model.md`（`Clock`、ホストだけが時間を動かす理由、`Timestamp` の pickle）
