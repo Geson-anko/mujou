@@ -37,6 +37,14 @@ src/mujou/<module>.py        ↔ tests/mujou/test_<module>.py
 src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 ```
 
+例外:
+
+- 拡張モジュール `mujou._core._native` は bindings の Rust ソースをミラーする。`crates/mujou-python/src/<mod>.rs ↔ tests/mujou/_core/test_native_<mod>.py`、`lib.rs` ↔ `test_native.py`、生成した stub ↔ `test_native_stub.py`
+- `src/mujou/_core/session.py` は `Run` 経由で `test_run.py` が検証する
+- `test_node_typing.py` は pyright にかけて型を検証するファイルで、ミラー元を持たない
+
+ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`test_native_*` は bindings 固有のこと（dtype・DLPack の変換、例外の型とメッセージ、GIL とスレッド状態、pickle、Python の hook、ログ）、公開 API の振る舞いは `test_run.py` / `test_port.py` などが持つ。
+
 `tests/` 直下に置けるのは共通資産（`conftest.py`）と、`src/` 側にミラー元が無いリポジトリ資産のテストだけ（例: `test_claude_hooks.py` は `.claude/hooks/` を検証する）。
 
 ## マーカー
