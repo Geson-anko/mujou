@@ -91,13 +91,13 @@ A `NextPort` takes many peers by default, so writing `a.connect(b)` and then `a.
 | `send(value)`             | The same value to every peer             | Updated                  |
 | `send_to(channel, value)` | Only to the peer at the end of `channel` | Not updated              |
 
-If the host reads with `Run.read` a port that only uses `send_to`, it gets the initial value (zeros). The host has no way to read the values sent with `send_to` themselves. `Run.read` reads only ports that have a send type, so it cannot read the receive-only ports of the branches (each branch's `prev`) either. What the host can read is the result that a branch's node computed from the received value and sent with `send` (in the example above, `2 x` at `net.double.next`).
+If the host reads with `Run.read` a port that only uses `send_to`, it gets the port's initial value (`initial`, or zeros). The host has no way to read the values sent with `send_to` themselves. `Run.read` reads only ports that have a send type, so it cannot read the receive-only ports of the branches (each branch's `prev`) either. What the host can read is the result that a branch's node computed from the received value and sent with `send` (in the example above, `2 x` at `net.double.next`).
 
 Keep the `Channel` passed to `send_to` apart for each destination. As in the example above, the network assigns the `Channel` that `connect` returns to an attribute of the sending node. If the node takes them from `self.next.channels` (in the order of connection) instead, swapping the order of `connect` swaps the destinations without any error. Attributes that hold a `Channel` are not collected into the state.
 
 ### Merging: the receiving side
 
-`PrevPort(multi=True)` receives from many peers. On a port with many peers, `recv()` returns a dict keyed by `Channel`, in the order of connection. The value for the channel of a peer that has never sent is zeros.
+`PrevPort(multi=True)` receives from many peers. On a port with many peers, `recv()` returns a dict keyed by `Channel`, in the order of connection. The value for the channel of a peer that has never sent is the initial value of the peer's port (zeros unless it declares `initial`).
 
 The receiving node decides how to combine the values (sum them, average them, weight each peer, ...). Mujou does not combine them. `Sum` in the example above sums them.
 
