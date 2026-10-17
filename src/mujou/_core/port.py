@@ -18,9 +18,11 @@ from typing import (
     override,
 )
 
-from mujou._core.spec import DictSpec, MessageSpec, TensorSpec
+from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec, split
 
 if TYPE_CHECKING:
+    import torch
+
     from mujou._core._native import Timestamp
     from mujou._core.session import Binding
 
@@ -57,6 +59,11 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     Two ports connect when the ``send`` of each equals the ``recv`` of the other
     (an omitted spec matches an omitted spec). A port may stay unconnected.
 
+    ``initial`` is what the port has sent before its first ``send``: what its
+    peers receive and the host reads until then. It must match ``send`` exactly,
+    and is copied when the port is made. Without it, that is the ``zeros()`` of
+    ``send``. A restored run takes the values from the state instead.
+
     ``Port`` is neither the previous nor the next side of its owner; use
     ``PrevPort`` and ``NextPort`` for the sides that ``a.connect(b)`` between two
     nodes (or networks) joins.
@@ -66,7 +73,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         class Sensor(Node):
             def __init__(self) -> None:
                 super().__init__()
-                self.out = Port(send=TensorSpec((3,)))
+                self.out = Port(send=TensorSpec((3,)), initial=torch.ones(3))
 
 
         class Monitor(Node):
@@ -76,7 +83,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
-                x = self.inp.recv()  # torch.Tensor (one peer)
+                x = self.inp.recv()  # torch.Tensor (one peer); ones until out sends
 
 
         sensor, monitor = Sensor(), Monitor()
@@ -84,7 +91,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
     Raises:
         TypeError: ``send`` or ``recv`` is not a ``TensorSpec``, a ``DictSpec`` or
-            ``None``.
+            ``None``; ``initial`` is given to a port without ``send``; or
+            ``initial`` does not match ``send`` (as ``send`` raises).
+        ValueError: A shape, or the keys of a dict, in ``initial`` differ from
+            ``send``.
     """
 
     @overload
@@ -94,6 +104,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[False] = False,
+        initial: S2 | None = None,
     ) -> None: ...
     @overload
     def __init__[S2, R2](
@@ -102,6 +113,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[True],
+        initial: S2 | None = None,
     ) -> None: ...
     def __init__(
         self,
@@ -109,18 +121,32 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         recv: MessageSpec[R] | None = None,
         *,
         multi: bool = False,
+        initial: S | None = None,
     ) -> None:
-        self._init(send, recv, multi)
+        self._init(send, recv, multi, initial)
 
     def _init(
-        self, send: MessageSpec[S] | None, recv: MessageSpec[R] | None, multi: bool
+        self,
+        send: MessageSpec[S] | None,
+        recv: MessageSpec[R] | None,
+        multi: bool,
+        initial: S | None,
     ) -> None:
+        name = type(self).__name__
         for direction, spec in (("send", send), ("recv", recv)):
             if spec is not None and not isinstance(spec, TensorSpec | DictSpec):
                 raise TypeError(
-                    f"{type(self).__name__} {direction} must be a TensorSpec, a "
-                    f"DictSpec or None, got {type(spec).__name__}"
+                    f"{name} {direction} must be a TensorSpec, a DictSpec or None, "
+                    f"got {type(spec).__name__}"
                 )
+        # The tensors of the initial value in field order, copied to the host now
+        # so that changing the value later changes nothing.
+        self._initial: list[torch.Tensor] | None = None
+        if initial is not None:
+            if send is None:
+                raise TypeError(f"{name} sends no messages, so it takes no initial")
+            tensors = split(cast(Spec, send), initial, where=f"{name} initial")
+            self._initial = [t.detach().to("cpu", copy=True) for t in tensors]
         self._send_spec = send
         self._recv_spec = recv
         self._multi = multi
@@ -212,8 +238,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         The message comes from the peer's ``send`` or ``send_to``; an unconnected
         single-peer port reads what the host writes with ``Run.write`` instead.
         Until that writer first writes, the message (or that channel's entry) is
-        the initial value: the recv spec's ``zeros()``, unless the run started
-        with one in ``inputs`` or restored one from ``state``.
+        the initial value: the peer port's ``initial``, or else the recv spec's
+        ``zeros()``. For a port the host writes, it is the value in ``inputs`` of
+        ``mujou.run``, or else the ``zeros()``. A restored run takes it from
+        ``state``.
 
         Every call copies into new tensors on the owning node's device, without
         gradients, so changing them in place changes nothing else.
@@ -267,7 +295,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
         ``channel`` is one of ``channels`` (or a key of a multi-peer ``recv``).
         Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
-        before the first ``send``, that is the initial value (see ``recv``).
+        before the first ``send``, that is this port's ``initial`` (or the
+        ``zeros()`` of its send spec).
         Copies and raises as ``send`` does, and raises ``ValueError`` when
         ``channel`` is not one of this port's.
         """
@@ -305,6 +334,7 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[False] = False,
+        initial: S2 | None = None,
     ) -> None: ...
     @overload
     def __init__[S2, R2](
@@ -313,6 +343,7 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[True],
+        initial: S2 | None = None,
     ) -> None: ...
     def __init__(
         self,
@@ -320,8 +351,9 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
         recv: MessageSpec[R] | None = None,
         *,
         multi: bool = False,
+        initial: S | None = None,
     ) -> None:
-        self._init(send, recv, multi)
+        self._init(send, recv, multi, initial)
 
 
 class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
@@ -345,6 +377,7 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[True] = True,
+        initial: S2 | None = None,
     ) -> None: ...
     @overload
     def __init__[S2, R2](
@@ -353,6 +386,7 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
         recv: MessageSpec[R2] | None = _NO_SPEC,
         *,
         multi: Literal[False],
+        initial: S2 | None = None,
     ) -> None: ...
     def __init__(
         self,
@@ -360,8 +394,9 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
         recv: MessageSpec[R] | None = None,
         *,
         multi: bool = True,
+        initial: S | None = None,
     ) -> None:
-        self._init(send, recv, multi)
+        self._init(send, recv, multi, initial)
 
 
 @final
@@ -412,6 +447,12 @@ def _not_running() -> RuntimeError:
         "the port is not bound to slots: run the network, then use recv/send from "
         "the owning node's hooks"
     )
+
+
+def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:
+    """The tensors of ``port``'s initial value in field order, or ``None`` (the
+    run's ``Session`` writes them in place of the zeros)."""
+    return port._initial  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
 def bind(port: Port[Any, Any, Any], binding: Binding) -> None:

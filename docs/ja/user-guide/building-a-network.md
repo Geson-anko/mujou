@@ -91,13 +91,13 @@ class Classifier(mujou.Network):
 | `send(値)`             | すべての相手に同じ値     | 更新される            |
 | `send_to(channel, 値)` | `channel` の先の相手だけ | 更新されない          |
 
-`send_to` だけを使う Port をホストが `Run.read` で読むと、初期値（ゼロ）が返る。`send_to` で送った値そのものをホストが読む方法は無い。`Run.read` は送る型を持つ Port しか読まないので、受け取るだけの Port（各枝の `prev`）も読めない。ホストに読めるのは、枝のノードが受け取った値から計算して `send` した結果（上の例なら `net.double.next` の `2 x`）である。
+`send_to` だけを使う Port をホストが `Run.read` で読むと、その Port の初期値（`initial`。無ければゼロ）が返る。`send_to` で送った値そのものをホストが読む方法は無い。`Run.read` は送る型を持つ Port しか読まないので、受け取るだけの Port（各枝の `prev`）も読めない。ホストに読めるのは、枝のノードが受け取った値から計算して `send` した結果（上の例なら `net.double.next` の `2 x`）である。
 
 `send_to` に渡す `Channel` は、送り先ごとに区別して持つ。上の例のように、ネットワークで `connect` が返す `Channel` を、送る側のノードの属性に代入する。`self.next.channels`（つないだ順に並ぶ）から取り出すと、`connect` を書く順を入れ替えたときに、値の送り先が気づかないうちに入れ替わる。`Channel` を代入した属性は状態に集まらない。
 
 ### 合流: 受け取る側
 
-`PrevPort(multi=True)` は複数の相手から受け取る。相手が複数の Port の `recv()` は、`Channel` をキーにした dict を、つないだ順に返す。まだ一度も送っていない相手の Channel の値はゼロである。
+`PrevPort(multi=True)` は複数の相手から受け取る。相手が複数の Port の `recv()` は、`Channel` をキーにした dict を、つないだ順に返す。まだ一度も送っていない相手の Channel の値は、相手の Port の初期値である（`initial` を宣言していなければゼロ）。
 
 複数の値をどう束ねるか（足す、平均する、相手ごとに重みを掛ける）は、受け取るノードが決める。mujou は束ねない。上の例の `Sum` は足している。
 

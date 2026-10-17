@@ -71,12 +71,12 @@ Both read from any port that has a send type. Reading an unconnected port gives 
 
 `read` behaves as follows.
 
-- It returns the value that the node holding the port last sent with `send`. If the node has not sent yet, it returns zeros. Values sent with `send_to` are not reflected in `read`
+- It returns the value that the node holding the port last sent with `send`. If the node has not sent yet, it returns the port's initial value (`initial`, or zeros). Values sent with `send_to` are not reflected in `read`
 - The value is a new copy on the CPU
 
 `subscribe` goes as follows.
 
-1. The first item is the latest value at the time of the call, returned without waiting. If nothing has been sent yet, it is zeros
+1. The first item is the latest value at the time of the call, returned without waiting. If nothing has been sent yet, it is the port's initial value
 2. After that, it waits until a new value is sent, and returns the latest value at that moment. If you read slowly, the values in between are skipped
 3. When the run ends normally, the iteration ends. When the run ends with a node's exception, the iteration raises `NetworkError`
 
