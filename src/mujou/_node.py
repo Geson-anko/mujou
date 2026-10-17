@@ -13,22 +13,46 @@ class Node(_core.Node, Component):
     """A unit of asynchronous computation: the leaf of a network.
 
     Declare the ports as instance attributes in ``__init__`` (``build`` rejects
-    ports declared on the class). When the network runs, the framework calls
-    the node's lifecycle hooks (``on_start``, ``on_update(dt)``, ...) on a thread of
-    its own; in the hooks the node reads its ports with ``recv`` and writes them
-    with ``send``. A node must not hold other nodes or networks as attributes; put
-    them side by side in a ``Network`` instead.
+    ports declared on the class). A node must not hold other nodes or networks as
+    attributes; put them side by side in a ``Network`` instead.
 
-    Before ``on_start``, the framework sets up the node's thread
-    (``_on_thread_start``): it turns off gradient recording, creates ``generator``
-    from ``seed``, and, when ``device`` is CUDA, makes the device and a stream of
-    the node's own current. When ``device`` is CUDA it also waits for that stream
-    after each ``on_update`` (``_after_update``) and around ``state_dict``
-    (``_capture_state``). These are hooks of their own, so overriding (or
-    replacing) ``on_start``, ``on_update`` or ``state_dict`` does not skip them.
+    Override the lifecycle hooks below; each does nothing by default. The framework
+    calls them on the node's own thread, except ``state_dict``:
 
-    ``state_dict`` runs on the runtime's control thread while the node is paused,
-    so it cannot ``recv`` or ``send``; return the node's own state from it.
+    - ``on_start()``: once, when the network runs (also when it was restored).
+      Allocate and initialize the state here.
+    - ``load_state_dict(state)``: only when the network was restored, after
+      ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
+      this node's ``state_dict`` returned.
+    - ``on_update(dt)``: repeatedly. ``dt`` is the global time in seconds since
+      the node's last update. Read the ports with ``recv``, update in proportion
+      to ``dt``, and write the ports with ``send``. It never waits for other nodes.
+    - ``on_pause()``: when the node has stopped for a pause of the network (as
+      ``Network.state_dict`` does). ``on_resume()``: when the pause ends, before
+      the next ``on_update``.
+    - ``on_exception()``: once on every node, when a hook of any node has raised,
+      before ``on_stop``. It must not change what ``state_dict`` returns.
+    - ``on_stop()``: once, when the network stops, also after an exception.
+    - ``state_dict()``: when the network's state is taken, on the runtime's control
+      thread while the node is paused, so ``recv`` and ``send`` raise
+      ``RuntimeError`` there. Return the node's own state as a picklable object;
+      it may hold the live tensors, because the framework copies it before the
+      node resumes.
+
+    If any hook raises, the whole network stops. A hook must not call the methods
+    of any ``Network`` (``write``, ``read``, ``state_dict``, ...): they raise
+    ``RuntimeError`` there, because a node talks only through its own ports.
+
+    Before ``on_start``, the framework sets up the node's thread: it turns off
+    gradient recording (for backpropagation inside the node, wrap both the forward
+    computation and ``backward`` in ``with torch.enable_grad():`` marked
+    ``# mujou: local-autograd``), creates
+    ``generator`` from ``seed``, and, when ``device`` is CUDA, makes the device
+    and a stream of the node's own current. When ``device`` is CUDA it also waits
+    for that stream after each ``on_update`` and around ``state_dict``. The
+    framework does this in hooks of its own, ``_on_thread_start``,
+    ``_after_update`` and ``_capture_state``, which subclasses must not override.
+    So overriding ``on_start``, ``on_update`` or ``state_dict`` does not skip it.
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU and seeds its generator nondeterministically.
@@ -105,11 +129,11 @@ class Node(_core.Node, Component):
     def generator(self) -> torch.Generator:
         """The node's own random generator on ``device``, seeded with ``seed``.
 
-        Use it instead of the global generator, which all nodes share. It is
-        created anew from ``seed`` whenever the network starts, also when it is
-        restored; to continue the same sequence after a restore, put
-        ``self.generator.get_state()`` in ``state_dict`` and ``set_state`` it in
-        ``load_state_dict``.
+        Use it instead of the global generator, which all nodes share (do not
+        call ``torch.manual_seed`` in a node). It is created anew from ``seed``
+        whenever the network starts, also when it is restored; to continue the
+        same sequence after a restore, put ``self.generator.get_state()`` in
+        ``state_dict`` and ``set_state`` it in ``load_state_dict``.
 
         Raises:
             RuntimeError: The node's thread has not started yet.

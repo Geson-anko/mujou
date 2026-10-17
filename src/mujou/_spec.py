@@ -38,7 +38,11 @@ class MessageSpec[M](ABC):
 
     @abstractmethod
     def zeros(self) -> M:
-        """Return a message filled with zeros on the CPU."""
+        """Return a message filled with zeros on the CPU.
+
+        This is the default initial value that a port receives before the first
+        message is written.
+        """
 
 
 @final

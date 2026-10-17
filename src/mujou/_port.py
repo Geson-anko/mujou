@@ -58,14 +58,17 @@ class Port(Generic[S, R, M]):
     attribute of a network). ``send`` is the spec of what this port sends and
     ``recv`` the spec of what it receives; either may be omitted for a one-way port
     (omit it rather than pass ``None``, so that type checkers infer ``Never``).
-    ``multi`` says whether the port takes any number of peers (``Multi``) or at most
-    one (``Single``); it fixes the return type of ``recv`` statically.
+    ``multi=True`` lets the port take any number of peers (``Multi``) and
+    ``multi=False`` at most one (``Single``). The default is one peer for ``Port``
+    and ``PrevPort``, and many for ``NextPort``. ``multi`` fixes what ``recv``
+    returns: the message for one peer, a dict keyed by ``Channel`` for many.
 
     Two ports connect when the ``send`` of each equals the ``recv`` of the other
     (an omitted spec matches an omitted spec). A port may stay unconnected.
 
     ``Port`` is neither the previous nor the next side of its owner; use
-    ``PrevPort`` and ``NextPort`` for the sides that ``Component.connect`` joins.
+    ``PrevPort`` and ``NextPort`` for the sides that ``a.connect(b)`` between two
+    nodes (or networks) joins.
 
     Example::
 
@@ -204,15 +207,22 @@ class Port(Generic[S, R, M]):
     @overload
     def recv[R2](self: Port[Any, R2, Multi]) -> dict[Channel, R2]: ...
     def recv(self) -> Any:  # Any: the overloads above give the precise types
-        """Return the latest message received.
+        """Return the latest message received, without waiting for a new one.
 
-        A single-peer port returns the message itself; until the peer (or, for an
-        unconnected port, the host) first writes, that is the initial value, zeros.
-        A multi-peer port returns ``{channel: message}`` in connection order (``{}``
-        while unconnected). Every call returns new tensors on the owning node's
-        device, so changing them in place changes nothing else. It never waits.
+        A single-peer port returns the message itself. A multi-peer port returns
+        ``{channel: message}``, one entry per channel in connection order (``{}``
+        while unconnected).
 
-        Call it from the owning node's hooks while the network runs.
+        The message comes from the peer's ``send`` or ``send_to``; an unconnected
+        single-peer port reads what the host writes with ``Network.write`` instead.
+        Until that writer first writes, the message (or that channel's entry) is
+        the initial value: the recv spec's ``zeros()``, unless the host wrote one
+        before the run or restored one with ``load_state_dict``.
+
+        Every call copies into new tensors on the owning node's device, without
+        gradients, so changing them in place changes nothing else.
+
+        Call it only from the owning node's hooks while the network runs.
 
         Raises:
             RuntimeError: The network is not built, or the caller is not the owning
@@ -229,30 +239,41 @@ class Port(Generic[S, R, M]):
         self: Port[Any, R2, Multi],
     ) -> dict[Channel, tuple[R2, int]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
-        """Like ``recv``, but pair each message with the global time in nanoseconds
-        at which it was written. Raises as ``recv`` does."""
+        """Like ``recv``, but each message comes as ``(message, time_ns)``.
+
+        ``time_ns`` is the global time, in integer nanoseconds, at which the message
+        was written. Raises as ``recv`` does.
+        """
         return self._bound().recv(with_time=True)
 
     def send(self, msg: S) -> None:
-        """Send ``msg`` to every peer (and to readers of this port's output).
+        """Send ``msg`` to every peer and to what the host reads (``Network.read``).
 
-        The values are detached and copied, so later changes to them are not seen.
-        A CUDA tensor is copied to the host on the node's stream.
+        ``msg`` must match the send spec exactly; dtypes are never converted. The
+        values are detached and copied, so changing ``msg`` afterwards changes
+        nothing that was sent. A CUDA tensor is copied to the host on the node's
+        stream. It never waits for the peers to read.
+
+        Call it only from the owning node's hooks while the network runs.
 
         Raises:
             RuntimeError: The network is not built, or the caller is not the owning
                 node's thread (only the owner writes its port).
-            TypeError, ValueError: ``msg`` does not match the send spec, or the
-                port sends no messages.
+            TypeError: The port sends no messages, a value is not a dense
+                ``torch.Tensor`` of the spec's dtype, or a ``DictSpec`` message is
+                not a dict.
+            ValueError: A shape, or the keys of a dict message, differ from the spec.
         """
         self._bound().send(msg)
 
     def send_to(self, channel: Channel, msg: S) -> None:
         """Send ``msg`` only to the peer across ``channel``.
 
-        The output that the host reads (``Network.read``) changes only with
-        ``send``. Raises as ``send`` does, and ``ValueError`` when ``channel`` is
-        not one of this port's.
+        ``channel`` is one of ``channels`` (or a key of a multi-peer ``recv``).
+        Unlike ``send``, it leaves what the host reads (``Network.read``) unchanged:
+        before the first ``send``, that is the initial value (see ``recv``).
+        Copies and raises as ``send`` does, and raises ``ValueError`` when
+        ``channel`` is not one of this port's.
         """
         self._bound().send_to(channel, msg)
 
