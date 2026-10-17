@@ -474,10 +474,17 @@ mod timestamp {
     }
 
     #[test]
-    fn subtracts_an_earlier_timestamp() {
-        let (early, late) = (Timestamp::from_ns(3), Timestamp::from_ns(10));
-        assert_eq!(late.checked_sub(early), Some(Timestamp::from_ns(7)));
-        assert_eq!(early.checked_sub(late), None);
+    fn the_time_between_two_is_signed_seconds() {
+        let (early, late) = (Timestamp::from_ns(3), Timestamp::from_ns(2_500_000_010));
+        assert_eq!(late.secs_since(early), 2_500_000_007.0 / 1e9);
+        assert_eq!(early.secs_since(late), -2_500_000_007.0 / 1e9);
+        assert_eq!(late.secs_since(late), 0.0);
+        // The difference is taken in nanoseconds before it becomes a float, so
+        // the far ends of the range differ by their exact count.
+        let max = Timestamp::from_ns(u64::MAX);
+        let zero = Timestamp::from_ns(0);
+        assert_eq!(max.secs_since(zero), u64::MAX as f64 / 1e9);
+        assert_eq!(zero.secs_since(max), -(u64::MAX as f64) / 1e9);
     }
 
     #[test]

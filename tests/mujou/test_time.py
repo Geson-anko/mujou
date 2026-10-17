@@ -45,25 +45,21 @@ class TestPublicNames:
             "Timer",
             "Timestamp",
             "get_time_scale",
+            "is_paused",
             "now",
+            "pause",
+            "resume",
             "set_time_scale",
             "sleep",
-            "time",
-            "time_ns",
         ]
 
 
 class TestTime:
-    def test_reads_the_global_timer(self, virtual_timer: GlobalTimer):
-        virtual_timer.advance(1.5)
-        assert mujou.time.time_ns() == 1_500_000_000
-        virtual_timer.advance(1e-9)
-        assert mujou.time.time() == 1_500_000_001 / 1e9
-
     def test_now_is_the_global_time_as_a_timestamp(self, virtual_timer: GlobalTimer):
         virtual_timer.advance(1.5)
         assert mujou.time.now() == Timestamp(ns=1_500_000_000)
-        assert mujou.time.now().ns == mujou.time.time_ns()
+        virtual_timer.advance(1e-9)
+        assert mujou.time.now().float() == 1_500_000_001 / 1e9
 
     def test_sleep_waits_in_global_time_without_holding_the_gil(
         self, virtual_timer: GlobalTimer
@@ -82,3 +78,17 @@ class TestTime:
         with pytest.raises(ValueError, match="scale"):
             mujou.time.set_time_scale(scale)
         assert mujou.time.get_time_scale() == 1.0
+
+
+class TestPause:
+    def test_stops_the_global_time_until_resume(self, virtual_timer: GlobalTimer):
+        assert not mujou.time.is_paused()
+        mujou.time.pause()
+        mujou.time.pause()  # a switch: one resume undoes both
+        assert mujou.time.is_paused()
+        with pytest.raises(RuntimeError, match="paused"):
+            virtual_timer.advance(1.0)
+        mujou.time.resume()
+        assert not mujou.time.is_paused()
+        virtual_timer.advance(1.0)
+        assert mujou.time.now() == Timestamp(ns=1_000_000_000)

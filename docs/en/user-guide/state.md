@@ -4,7 +4,7 @@ This page shows how to take the state of a running network, save it, and later r
 
 ## The basic steps
 
-The following example runs a network for 0.2 seconds, takes its state, saves it with pickle, restores it into a new instance, and goes on running.
+The following example runs a network for 0.2 seconds, takes its state, saves it with `torch.save`, restores it into a new instance, and goes on running.
 
 ```python
 --8<-- "examples/save_and_restore.py"
@@ -15,7 +15,7 @@ The steps are as follows.
 1. The node keeps the values of its state in attributes that hold a `torch.Tensor` or an `nn.Module`. `mujou.Node` collects them into the state automatically (`self.x` and `self.readout` in the example)
 2. The node creates the state tensors in `on_start`, and updates them in place in `on_update` (`+=`, `add_`, `copy_`, ...)
 3. The host takes the state tree with `run.state_dict()`. It works while the network runs, and also after the `with` statement exits (after a normal end)
-4. The host saves the tree with pickle or the like. How to save it is up to the host
+4. The host saves the tree with `torch.save` or the like. How to save it is up to the host
 5. To restore, create a **new instance** of the same network and pass it as `mujou.run(net, state=tree)`
 
 Step 2 updates in place because the default `load_state_dict` restores the state by copying into the tensors created in `on_start`. With in-place updates, any other attribute or local variable that refers to the same tensor also sees the restored values.
@@ -24,10 +24,22 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 
 ## When you restore
 
-- **The timer goes back to the time of the tree.** On the default global timer, restoring sets the global time (`mujou.time.time()`) back to the time the tree was taken. When `mujou.run(..., state=tree)` returns, the time has already gone back. Do not compare a `mujou.time.time()` read before the restore with a time read after it. Measure elapsed time as the difference between two times read after the restore
+- **The timer goes back to the time of the tree.** On the default global timer, restoring sets the global time (`mujou.time.now()`) back to the time the tree was taken. When `mujou.run(..., state=tree)` returns, the time has already gone back. Do not compare a `mujou.time.now()` read before the restore with a time read after it. Measure elapsed time as the difference between two times read after the restore
 - **You cannot restore while another run is running on the same timer.** In that case `mujou.run` raises `ValueError` and starts nothing. End the other run first, or give the restored run a timer of its own, `mujou.time.Timer()` (see [Controlling time](time.md))
 - The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise `mujou.run` raises `ValueError`
 - If you pass both `state=` and `inputs=`, the values in `inputs` override the input values in the tree
+
+## Taking the states of several runs at one time
+
+`run.state_dict()` takes the state of one run at one time. When several runs share a timer (by default, all of them run on the global timer) and you take their states one after another, each state is of a later time than the one before, because the time goes on in between. To take them all at one time, pause the timer first, take the states, and resume it.
+
+```python
+--8<-- "examples/pause.py:pause"
+```
+
+`run.state_dict()` works while the timer is paused, and every tree then holds the time of the pause. While paused, the nodes do not update, and the paused time does not enter the `dt` after `resume` (see [Pausing the time](time.md#pausing-the-time)). Put the `resume` in `finally`, so that an exception does not leave the time stopped.
+
+To restore the trees, note that a run cannot restore while another run is running on the same timer. Restore them one after another once the previous run has ended, or give each restored run a timer of its own; each timer then starts from the same time of the trees.
 
 ## The state is not saved after an exception
 
@@ -77,10 +89,17 @@ Do not change the state in `on_stop`. After a normal end, `run.state_dict()` cop
 
 ## Formats
 
-The tree is nested dicts, and you can save it with pickle or with `torch.save`. For your own files, either will do (the example above uses pickle). To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`.
+The tree `run.state_dict()` returns is a `mujou.StateDict`. It is a subclass of `dict`: you index it as a dict, and you can save it with pickle or with `torch.save`. A tree read back is a `mujou.StateDict` again. For your own files, either will do. To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`. `mujou.run(..., state=)` takes a `mujou.StateDict`, or a plain dict of the same items.
 
 Read a file back the same way it was saved (`pickle.loads` for `pickle.dumps`, `torch.load` for `torch.save`). If you do not know how a file was saved, read it first with the default `torch.load`. If that fails, read it with pickle only when you trust the sender.
 
-- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. If you override `state_dict` to put objects of your own classes in the tree, the default `torch.load` cannot read it
+- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a `mujou.StateDict` too, once `mujou` is imported. If you override `state_dict` to put objects of your own classes in the tree, the default `torch.load` cannot read it
 - `pickle.load` and `torch.load(..., weights_only=False)` can run code from the file while reading it. Do not read files you do not trust with them
-- The state of a node that computes on CUDA goes into the tree as CUDA tensors. To read it on a machine without a GPU, use `torch.load(..., map_location="cpu")`. The default `load_state_dict` copies to the node's device, so you can pass the CPU tensors to `state=` as they are
+- The state of a node that computes on CUDA goes into the tree as CUDA tensors. `tree.cpu()` returns a new tree with every tensor of the tree on the CPU (the tree itself is not changed). Move the tree to the CPU before saving it, and a machine without a GPU can read it too. To read a file saved with CUDA tensors, use `torch.load(..., map_location="cpu")`. The default `load_state_dict` copies to the node's device, so you can pass the CPU tensors to `state=` as they are
+
+```python
+torch.save(run.state_dict().cpu(), "state.pt")  # the state of GPU nodes as CPU tensors
+tree = torch.load("state.pt")  # a mujou.StateDict
+```
+
+`tree.to(device)` moves every tensor of the tree to `device`, and `cpu()` is `to("cpu")`. It looks into the dicts (including the `OrderedDict` of the `state_dict` of an `nn.Module`), lists and tuples of the tree, and makes these containers anew. Other values are shared with the original tree. As with `torch.Tensor.to`, a tensor already on `device` is not copied but shared with the original tree

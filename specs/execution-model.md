@@ -75,11 +75,12 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 - 時刻は「anchor の時刻 + anchor からの実経過 × スケール」で求める。スケールの変更・停止・再開・時計の切り替えでは、先に anchor を今の時刻へ張り替えるので、時刻は飛ばない
 - タイマーの時間で待つ処理は、条件変数で状態の変化を待つ。停止中は時刻が進まないので、停止中の `sleep` は再開まで戻らない
 - 状態の木に入れるのは時刻（ns）とスケールだけである。状態は必ず停止中に取得するので、停止中かどうかは入れない。時計の種類はテストの設定なので入れない
-- Python からは private な `mujou._core._native` で使う。`Timer()` が新しいタイマー、`mujou._core._native.timer`（`GlobalTimer` 型、`Timer` の派生）がグローバルタイマーで、どちらも全機能を持つ。`Outlet` / `InputGroup` / `Runtime` は `timer=` を必須の引数として受け取る（グローバルタイマーを使うときも `timer` を明示する）。`Timestamp` は `float(ts)` が秒、`int(ts)` が秒の整数部、`ts.ns` がナノ秒で、比較と hash ができる。`Message.timestamp` が返す。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる
-- 利用者に公開するのは、`mujou.time` の `now` / `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale`（グローバルタイマーを読む）と、`mujou.time.Timer` / `mujou.time.ReadOnlyTimer` / `mujou.time.Timestamp`、テスト用の `mujou.testing.VirtualTimer` である。`Timer` は native の `Timer` を包む Python のクラスで、`now()`（`Timestamp` を返す）・`sleep(seconds)`・`get_time_scale()`・`set_time_scale(scale)` だけを見せる。native の `load_state_dict`（走っているタイマーの時刻を飛ばせる）・`use_virtual_clock`・`pause` / `resume` / `is_paused` はフレームワークとテストのためのものなので見せない。`Timestamp` は native の型をそのまま公開し、pickle と deepcopy ができる（`copyreg.__newobj_ex__` で `Timestamp(ns=...)` に戻す `__reduce__`）。`VirtualTimer` は `Timer` の派生で、時刻 0 の仮想時計から始まり、`advance(seconds)` を足す。`mujou.run(..., timer=...)` に渡すと、その実行のスロット・ホストの入力・ランタイムがすべてそのタイマーを使う。`timer=None` はグローバルタイマーである
-- タイマーを動かすのはホストだけである。ノードは属性 `timer` で、タイマーの読み取り側（`ReadOnlyTimer`）を通して時刻を読む（[ノード](nodes.md#ライフサイクル-hook)）。`ReadOnlyTimer(timer)` は、native の `Timer.reader()` が返す `TimerReader`（`now()` と `time_scale()` だけを持ち、Python からは元のタイマーにたどれない）の束縛メソッドを `now` / `get_time_scale` として写し、タイマーのオブジェクトは属性に持たない。正常に終了した後の `state_dict` の中では、止まった時刻とスケールを繰り返し返すだけの関数（`itertools.repeat(...).__next__`）を写す。クラスの関数から module の globals（グローバルタイマーなど）にはたどれるが、これはどのクラスでも同じで、`import mujou.time` でも届く。実行に渡したタイマーそのものにはたどれない。`Timer.sleep` / `Timer.set_time_scale` / `VirtualTimer.advance` と `mujou.time.sleep` / `mujou.time.set_time_scale` は、ノードの hook の中から呼ぶと `RuntimeError` になる。ノードがスケールを変えると、同じ実行のほかのノードの $\Delta t$ が変わり、Port を通らない通信路になる（局所性）。ノードが仮想時計を進めると、手動ステップの $\Delta t$ がテストの進めた値からずれる。ノードがタイマーで待つと、停止はタイマーを先に凍結するので状態の取得が `PauseTimeoutError` になり、手動実行では誰も時計を進めないので `step` が戻らない
+- Python からは private な `mujou._core._native` で使う。`Timer()` が新しいタイマー、`mujou._core._native.timer`（`GlobalTimer` 型、`Timer` の派生）がグローバルタイマーで、どちらも全機能を持つ。`Outlet` / `InputGroup` / `Runtime` は `timer=` を必須の引数として受け取る（グローバルタイマーを使うときも `timer` を明示する）。`Timestamp` は `ts.float()`（と `float(ts)`）が秒、`int(ts)` が秒の整数部、`ts.ns` がナノ秒で、比較と hash ができる。`a - b` は `b` から `a` までの秒を符号付きの `float` で返す（`(a.ns - b.ns) / 1e9` と同じ丸め。ナノ秒の差を i128 で正確に取ってから f64 にする）。`Timestamp` を返すと、`b` の方が遅いときに例外か飽和のどちらかになり、テストやホストで経過秒を出すたびに `float(...)` で包む必要があった。時刻差を秒で使う場面がほとんどなので、差は秒にした。`Message.timestamp` が返す。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる
+- 利用者に公開するのは、`mujou.time` の `now` / `sleep` / `get_time_scale` / `set_time_scale` / `pause` / `resume` / `is_paused`（グローバルタイマーを扱う）と、`mujou.time.Timer` / `mujou.time.ReadOnlyTimer` / `mujou.time.Timestamp`、テスト用の `mujou.testing.VirtualTimer` である。時刻を読む口は `now()`（`Timestamp`）の 1 つにした。秒は `now().float()`、ナノ秒は `now().ns` で取る。秒やナノ秒を直接返す `time()` / `time_ns()` を並べると、同じ時刻の読み方が 3 つになり、どれを使うか迷うからである（2026-10-17、ユーザーの決定）。native の `Timer.time()` / `time_ns()` はフレームワークとテストのために残す。`Timer` は native の `Timer` を包む Python のクラスで、`now()`（`Timestamp` を返す）・`sleep(seconds)`・`get_time_scale()`・`set_time_scale(scale)`・`pause()`・`resume()`・`is_paused()` だけを見せる。native の `load_state_dict`（走っているタイマーの時刻を飛ばせる）・`use_virtual_clock` はフレームワークとテストのためのものなので見せない。`Timestamp` は native の型をそのまま公開し、pickle と deepcopy ができる（`copyreg.__newobj_ex__` で `Timestamp(ns=...)` に戻す `__reduce__`）。`VirtualTimer` は `Timer` の派生で、時刻 0 の仮想時計から始まり、`advance(seconds)` を足す。`mujou.run(..., timer=...)` に渡すと、その実行のスロット・ホストの入力・ランタイムがすべてそのタイマーを使う。`timer=None` はグローバルタイマーである
+- タイマーを動かすのはホストだけである。ノードは属性 `timer` で、タイマーの読み取り側（`ReadOnlyTimer`）を通して時刻を読む（[ノード](nodes.md#ライフサイクル-hook)）。`ReadOnlyTimer(timer)` は、native の `Timer.reader()` が返す `TimerReader`（`now()` と `time_scale()` だけを持ち、Python からは元のタイマーにたどれない）の束縛メソッドを `now` / `get_time_scale` として写し、タイマーのオブジェクトは属性に持たない。正常に終了した後の `state_dict` の中では、止まった時刻とスケールを繰り返し返すだけの関数（`itertools.repeat(...).__next__`）を写す。クラスの関数から module の globals（グローバルタイマーなど）にはたどれるが、これはどのクラスでも同じで、`import mujou.time` でも届く。実行に渡したタイマーそのものにはたどれない。`Timer.sleep` / `Timer.set_time_scale` / `Timer.pause` / `Timer.resume` / `VirtualTimer.advance` と `mujou.time.sleep` / `mujou.time.set_time_scale` / `mujou.time.pause` / `mujou.time.resume` は、ノードの hook の中から呼ぶと `RuntimeError` になる。ノードが時間を止めると、同じタイマーのほかのノードの更新まで止まり、Port を通らない通信路になる。ノードがスケールを変えると、同じ実行のほかのノードの $\Delta t$ が変わり、Port を通らない通信路になる（局所性）。ノードが仮想時計を進めると、手動ステップの $\Delta t$ がテストの進めた値からずれる。ノードがタイマーで待つと、停止はタイマーを先に凍結するので状態の取得が `PauseTimeoutError` になり、手動実行では誰も時計を進めないので `step` が戻らない
 - 仮想時計（`use_virtual_clock(True)`）では、時刻は `advance(seconds)` で進めた分だけ進み、スケールは効かない。停止中は `advance` できない
 - 停止には 2 種類ある。1 つは、ランタイムが状態の取得と起動の間に取る **保持** である。保持は Rust の `Timer::hold()` が返す `PauseHold` で、drop すると解ける。もう 1 つは、ホストやテストが使う **スイッチ**（`pause()` / `resume()`）である。タイマーは保持の数を数え、保持が 1 つも無く、スイッチも切れているときだけ時刻を進める。1 つのタイマーで複数のランタイムが走りうる（既定ではすべてグローバルタイマーで走る）。保持を数えないと、あるランタイムが状態の取得を終えたときに、別のランタイムの取得中の停止やホストの停止まで解いてしまう。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真になる
+- スイッチは公開する（`mujou.time.Timer.pause` / `resume` / `is_paused` と `mujou.time.pause` / `resume` / `is_paused`。2026-10-17、ユーザーの決定）。用途は pamiq-core の `TimeController` の一時停止と同じで、ホストが時間を止め、その間に状態を取る・保存するなどをするためである。特に、同じタイマーで走る複数の実行の状態を同じ時刻 $T$ でそろえて取るのに要る。1 つずつ `Run.state_dict()` を呼ぶと、その間に時間が進み、実行ごとに木の時刻がずれる。スイッチが入っている間も `Run.state_dict()` は取れる（ランタイムは保持を重ねて取り、解いてもスイッチは残るので、時刻は $T$ のまま）。止めている間はノードの $\Delta t$ が進まず、ノードは時刻が進むまで待つ。再開後の最初の $\Delta t$ に止めていた時間は入らない。`sleep` は再開まで戻らず、`VirtualTimer.advance` は `RuntimeError` になる
 - pamiq-core の `time.py` から、anchor の方式（スケールの変更・停止・再開で anchor を張り替える）を引き継いだ。次の点は意図して変えた
   - 時刻は 1 本だけで、0 から始まる。pamiq-core は `time` / `perf_counter` / `monotonic` を、それぞれ元の時計の値から始めて別々にスケールする
   - `sleep` はそのタイマーの時間で待つ。途中のスケールの変更に従い、停止中は再開まで戻らない。pamiq-core は呼んだ時点のスケールで実時間を計算して眠り、停止中ならすぐに戻る。mujou の `sleep` はホストが入力の提示時間を待つためのもので、状態の取得のための短い停止で提示が短くならないようにした。ノードのループの待ちを停止要求で起こす仕組みは、ランタイムの側に持たせた（$\Delta t = 0$ の待ちと周期の待ちは、目標の時刻か制御の要求で起きる。[実装](#実装-1)）
@@ -128,8 +129,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 ```python
 state = run.state_dict()         # 停止 → コピー → 再開 → 木を返す
-with open("state.pkl", "wb") as f:
-    pickle.dump(state, f)        # 保存の方法はユーザーが決める
+torch.save(state.cpu(), "state.pt")  # 保存の方法はユーザーが決める。cpu() で GPU のテンソルも CPU へ
 
 run.shutdown()
 state = run.state_dict()         # 正常に終了した後は、終了した時点の木を返す
@@ -148,6 +148,16 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 
 各ノードの状態は、ネットワークの木の中の属性のパス（`body.l1` など）で識別する。
 
+### `StateDict`
+
+`Run.state_dict()` は木を `mujou.StateDict` で返す。木の構造は変えず、木の中のテンソルをまとめてデバイスへ移す `to(device)` と `cpu()` を足すためのクラスである（2026-10-17、ユーザーの決定）。木のテンソルは各ノードのデバイスに置いたままにし、常に CPU に移すことはしない。GPU のノードの状態を CPU のテンソルで保存したいときに、利用者が `tree.cpu()` を呼ぶ。
+
+- `dict` の派生にした。`tree["nodes"]["x"]`・pickle・`mujou.run(state=)` への受け渡しなど、素の dict の木での使い方がそのまま動くからである
+- `to(device)` は、木の中の dict（`OrderedDict` など派生も含む。`copy.copy` で同じ型と属性（`nn.Module.state_dict` の `_metadata`）を保つ）・list・tuple を再帰的に辿り、テンソルを `Tensor.to(device)` で移した新しい木を返す。元の木は変えない。入れ物は新しく作り、それ以外の値は共有する。すでに `device` にあるテンソルは、`Tensor.to` と同じくコピーせず共有する。木の中で同じテンソルを 2 か所が指していれば、移した木でも 1 つのテンソルを指す（`id` の memo）。`list` / `tuple` の派生（`torch.Size` など）は入れ物として辿らず、そのまま共有する。`dtype` は扱わない（要求されていない）
+- `torch.load` の既定 `weights_only=True` の unpickler は、`SETITEMS` を素の `dict` と `OrderedDict` などにしか許さない。dict の派生を普通に pickle すると、`torch.save` した木を既定の `torch.load` で読めなくなる。そこで `__reduce__` で `(StateDict, (dict(self),))` を返し、中身は素の dict として pickle し、`StateDict` はそれを引数に呼ぶ。`StateDict` は `mujou` を import したときに `torch.serialization.add_safe_globals` に登録する。こうすると、`torch.save` した木は既定の `torch.load` で `StateDict` に戻る。素の dict として保存する案（`__reduce__` で `dict` を返す）も試したが、`weights_only=True` は `builtins.dict` の呼び出しも許さず読めなかった。登録はプロセス全体の torch の設定を変えるが、`StateDict` の構築は dict を作るだけで、任意のコードを実行する経路にならない
+- pickle には `mujou.StateDict` の名前で入れる（`__module__ = "mujou"`）。実装のモジュールを移しても、保存したファイルが読めるようにするためである
+- `torch.load` で読むには、先に `import mujou` していなければならない。mujou の木を使うのは mujou を使うプロセスなので、制約にならないと判断した
+
 ### コピーを取る理由
 
 ノードの `state_dict()` は、PyTorch のテンソルのように、ノードが更新し続ける値への参照を返すことがある。参照のままホストに返すと、再開した後のノードの更新で、ホストの手元の木が書き換わってしまう。そこでフレームワークは、停止している間に木のコピーを作ってから再開する。スロットの値は、`mujou._core._native` の外の torch に依存する層が `torch.Tensor` にコピーして木に入れる。
@@ -164,7 +174,7 @@ state = run.state_dict()         # 正常に終了した後は、終了した時
 
 ### 停止のタイムアウト
 
-`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。
+`on_update` の 1 回が長いノード（重い BP のスタックなど）があると、停止が遅れる。停止にはタイムアウトを設け、時間内に止まらなかったら状態の取得を中止し、止まらなかったノードの名前を例外のメッセージに入れる（[実装](#実装-1)）。待つ長さは取得ごとに `run.state_dict(timeout)` で渡す。
 
 ## 終了と例外
 
@@ -218,7 +228,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 
 - ノードはそれぞれ専用のスレッドで動く。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
 - `mujou.run` は、その実行のタイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `_on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_thread_start` → `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
-- `Run.state_dict()` が返す木は次の形で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする
+- `Run.state_dict()` が返す木は次の形の `mujou.StateDict`（`dict` の派生）で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする。`mujou.run(..., state=)` は `StateDict` でも、同じ中身の素の `Mapping` でも受け付ける
 
 ```python
 {
@@ -229,7 +239,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 }
 ```
 
-- 停止のタイムアウトの既定値は実時間 30 秒で、`mujou.run(..., pause_timeout=...)` で変える。`pause_timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `pause_timeout` を入れる）。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
+- 停止のタイムアウトは `Run.state_dict(timeout=30.0)` の引数で、既定は実時間 30 秒である。取得のたびに決められるよう、実行の起動時ではなく取得の呼び出しで渡す（2026-10-17、ユーザーの決定。以前は `mujou.run(..., pause_timeout=...)` だった）。ホストは native の `Runtime.capture(build, timeout)` に渡し、コアの `Runtime::capture(build, timeout)` が待つ。`timeout` は有限の正の秒数で、それ以外（0 以下・NaN・`math.inf`）は `ValueError` になる（メッセージに引数名 `timeout` を入れる）。正常に終了した後は待つものが無いので使わないが、同じく検査する。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
 - 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。`shutdown` に有限の `timeout` を渡すと、コアに待たずに終了を要求し（`Runtime.request_stop`）、呼んだスレッドはコアの `join` で時間を区切って待つ。時間切れでも要求は残り、ネットワークは止まりに向かう
 - 正常に終了した後の `state_dict()` は、ホストのスレッドで各ノードの `_capture_state()` を呼ぶ。CUDA のノードの同期は、制御スレッドで呼ぶときと同じである
 - 例外は時間を止めない。ランタイムは例外で状態を取得しないので、例外の記録から終了処理の完了まで、タイマーは保持されずに進む。起動中や状態の取得中に例外が起きたときは、その保持を終了処理の最後に解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである
@@ -247,8 +257,8 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 テスト用の口は `mujou.testing` に公開する。mujou 自身のテスト（既定のノードのテストを含む）と利用者のテストは、同じ口を使う。
 
 - `VirtualTimer()`: 時刻 0 の仮想時計のタイマー。`advance(seconds)` で進めた分だけ進む
-- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数とその制約（`pause_timeout` は有限の正の秒数）は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
-- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
+- `run(component, *components, timer=None, inputs=None, state=None)`: 引数とその制約は `mujou.run` と同じで、`ManualRun` を返す。ただし `timer` の既定は、実行ごとに新しく作る `VirtualTimer` である（2026-10-17。手動で回すテストの目的は $\Delta t$ を決めることなので、グローバルタイマーを既定にすると決定性を損なう）。仮想でない `Timer` を渡せば、仮想時計と手動のステップを独立に選べる
+- `ManualRun.timer`: その実行のタイマー（作った `VirtualTimer` か、渡した `timer`）。`Run.timer` を override し、型は渡したタイマーの型で、既定なら `VirtualTimer` なので `run.timer.advance(dt)` がそのまま型検査を通る
 - `ManualRun.step(*nodes)`: 渡した順に各ノードを 1 回ずつ更新し、終わってから戻る。引数なしなら木の順に全ノード。時計は進めないので、`run.timer.advance(dt)` と組み合わせる。前回の更新から時刻が進んでいないノードは飛ばす（$\Delta t = 0$ になるため）
 
 ```python

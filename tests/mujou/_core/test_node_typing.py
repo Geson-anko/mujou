@@ -67,7 +67,7 @@ class TestStrictTyping:
         values = {net.prev: torch.ones(2)}  # a dict built before the call
         with mujou.run(net, inputs=values) as run:
             run.write(values)
-            _, t = run.read(net.layer.out)
+            _, t = run.read_with_time(net.layer.out)
             assert t.ns >= 0
 
     def test_a_typed_dict_message_is_written(self) -> None:

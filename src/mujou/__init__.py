@@ -11,6 +11,7 @@ from mujou._core.node import Node
 from mujou._core.port import Channel, NextPort, Port, PrevPort
 from mujou._core.run import Run, run
 from mujou._core.spec import DictSpec, TensorSpec
+from mujou._core.state import StateDict
 
 __all__ = [
     "Channel",
@@ -25,6 +26,7 @@ __all__ = [
     "Port",
     "PrevPort",
     "Run",
+    "StateDict",
     "TensorSpec",
     "__version__",
     "run",

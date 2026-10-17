@@ -3,7 +3,7 @@
 import math
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from types import TracebackType
-from typing import Any, Never, Self, cast
+from typing import Any, Never, Self, cast, override
 
 import torch
 
@@ -15,6 +15,7 @@ from mujou._core.network import Network, RunGroup, unbuild
 from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
+from mujou._core.state import StateDict
 from mujou._core.timer import GLOBAL, Timer, VirtualTimer
 
 
@@ -25,7 +26,8 @@ class Run:
     The nodes run in the background, each on its own thread; the host's thread
     only writes inputs, reads outputs and takes the state:
 
-    - ``write`` inputs, ``read`` / ``subscribe`` outputs, take a ``state_dict``.
+    - ``write`` inputs, ``read`` / ``read_with_time`` / ``subscribe`` outputs,
+      take a ``state_dict``.
     - ``shutdown()`` to stop the run, or ``join()`` to wait until it stops.
     - After a normal end: take the final ``state_dict``.
 
@@ -34,8 +36,8 @@ class Run:
 
     If a node raises, the whole run stops. If that happens while ``mujou.run``
     starts the nodes, ``mujou.run`` raises ``NetworkError``; otherwise every later
-    call of ``write``, ``read``, ``subscribe`` (and its iterator), ``state_dict``,
-    ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's
+    call of ``write``, ``read``, ``read_with_time``, ``subscribe`` (and its
+    iterator), ``state_dict``, ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's
     exception. The state at the exception is not kept.
 
     A run keeps running when the host drops it, until ``shutdown`` or, at the
@@ -74,14 +76,23 @@ class Run:
         with mujou.run(node, inputs={node.prev: x, node.teacher: y}) as run:
             run.write({node.prev: 2 * x, node.teacher: x})  # switch together
             mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
-            error, t = run.read(node.next)
+            error, t = run.read_with_time(node.next)
         state = run.state_dict()  # the state at the end, to save
     """
 
     _session: Session
+    _timer: Timer
 
     def __init__(self) -> Never:
         raise TypeError("a Run is made by mujou.run() or mujou.testing.run()")
+
+    @property
+    def timer(self) -> Timer:
+        """The run's timer: the ``timer`` given to ``mujou.run``, or the global
+        timer (the one ``mujou.time`` reads) when none was given.
+
+        Every node's ``dt`` and every time of the run is on it."""
+        return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
     # Port[Any, Any, Any] would reject (Mapping keys are invariant). A dict message
@@ -99,8 +110,8 @@ class Run:
         written, exposed by the root or not.
 
         The time is the run's timer at the write, as a node's ``recv_with_time``
-        and the ``/in`` slots of ``state_dict`` show it; ``read`` shows the times
-        of sends, not of writes. An empty ``values`` changes nothing and returns
+        and the ``/in`` slots of ``state_dict`` show it; ``read_with_time`` shows
+        the times of sends, not of writes. An empty ``values`` changes nothing and returns
         the time all the same.
 
         Raises:
@@ -113,13 +124,24 @@ class Run:
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
-        """Return the latest message ``port`` sent and the time it was sent at.
+    def read[S](self, port: Port[S, Any, Any]) -> S:
+        """Return the latest message ``port`` sent.
 
         Any port that sends can be read, so a connected port shows an inner
         node. Only ``send`` (to every peer) updates the value read here; before
         the first one it is the port's ``initial`` (zeros by default) or the
         value restored from ``state``. The tensors are new copies on the CPU.
+        ``read_with_time`` also returns the time it was sent at.
+
+        Raises:
+            ValueError: ``port`` is outside the run or sends nothing.
+            NetworkError: The run stopped because a node raised.
+        """
+        return cast(S, _host(self).read(port)[0])
+
+    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
+        """Return the latest message ``port`` sent, as ``read`` does, and the time
+        it was sent at.
 
         The time is on the run's timer. A ``Timestamp`` does not say which timer
         it is on: compare it only with times of the same timer (with
@@ -132,7 +154,7 @@ class Run:
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
     def subscribe[S](
-        self, port: Port[S, Any, Any], *, timeout: float = math.inf
+        self, port: Port[S, Any, Any], timeout: float = math.inf
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
@@ -170,7 +192,6 @@ class Run:
         self,
         port: Port[S, Any, Any],
         condition: Callable[[S], bool],
-        *,
         timeout: float = math.inf,
     ) -> tuple[S, Timestamp]:
         """Wait until ``port`` sends a message that meets ``condition``, and return
@@ -203,7 +224,7 @@ class Run:
             RuntimeError: The run shut down normally first.
             NetworkError: The run stopped because a node raised.
         """
-        messages = self.subscribe(port, timeout=timeout)
+        messages = self.subscribe(port, timeout)
         # Valid: subscribe has checked the port.
         name = _host(self).label(port)
         while True:
@@ -225,12 +246,13 @@ class Run:
             "the condition"
         )
 
-    def state_dict(self) -> dict[str, Any]:
+    def state_dict(self, timeout: float = 30.0) -> StateDict:
         """Copy the state of the run at one time, while it runs or after it ended
         normally.
 
         While it runs, this pauses the run's timer and nodes, copies the state
-        and resumes, and returns once the run has resumed. After a normal end,
+        and resumes, and returns once the run has resumed. It waits at most
+        ``timeout`` for every node to pause. After a normal end,
         this copies the state as the nodes left it, calling each node's
         ``state_dict`` on this thread (an exception it raises reaches the caller
         as it is). The tree's timer holds the time at which ``shutdown`` asked
@@ -238,9 +260,9 @@ class Run:
         of an ``on_stop``), so that a restored run goes on from there without the
         time that passed after the end.
 
-        The tree is a copy (later updates of the nodes do not change it) and
-        pickles; saving it is up to the host. Pass it to ``mujou.run(...,
-        state=tree)`` to restore it::
+        The tree is a copy (later updates of the nodes do not change it), a
+        ``StateDict`` (a ``dict``) that pickles; saving it is up to the host.
+        Pass it to ``mujou.run(..., state=tree)`` to restore it::
 
             {
                 "nodes": {"body.l1": ..., ...},  # each node's state_dict()
@@ -256,19 +278,26 @@ class Run:
         ``/in`` what the host wrote. A node run alone is the root: it is keyed
         ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
-        The tensors of the tree stay on their nodes' devices. MPS cannot be used
-        from two threads at once: use MPS tensors of the tree on the host only
-        while no node on MPS runs, and call this after the end only while no
-        other run's node on MPS runs (it copies on this thread then).
+        The tensors of the tree stay on their nodes' devices. ``tree.cpu()``
+        moves them all to the CPU, for example before saving the tree.
+
+        Args:
+            timeout: Real seconds to wait for every node to pause (the end of
+                its current ``on_update``): finite and > 0. After the end there
+                is nothing to wait for, and it is only checked.
 
         Raises:
             RuntimeError: This is called from a node's hook.
-            PauseTimeoutError: A node did not pause within ``pause_timeout``; the
-                run keeps running.
+            ValueError: ``timeout`` is not finite and > 0.
+            PauseTimeoutError: A node did not pause within ``timeout``; no state
+                is taken and the run keeps running.
             NetworkError: The run stopped because a node raised; its state is
                 not kept.
         """
-        return _host(self).state_dict()
+        host = _host(self)
+        if not (math.isfinite(timeout) and timeout > 0):
+            raise ValueError(f"timeout must be finite and > 0 seconds, got {timeout}")
+        return host.state_dict(timeout)
 
     def shutdown(self, timeout: float = math.inf) -> None:
         """Stop every node and return once every ``on_stop`` has returned.
@@ -338,13 +367,13 @@ class ManualRun[T: Timer = VirtualTimer](Run):
     and the result follows the discrete algorithm of the chosen order.
     """
 
-    _timer: T
-
     @property
+    @override
     def timer(self) -> T:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
         or the timer given to it."""
-        return self._timer
+        # The T that start_manual gave start_run.
+        return cast(T, self._timer)
 
     def step(self, *nodes: Node) -> None:
         """Update each of ``nodes`` once, one after another in the given order (by
@@ -370,7 +399,6 @@ def run[P: Port[Any, Any, Any]](
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
-    pause_timeout: float = 30.0,
 ) -> Run:
     """Build the given nodes and networks and run them in the background; return
     once every node has started.
@@ -397,20 +425,19 @@ def run[P: Port[Any, Any, Any]](
         inputs: The initial values of unconnected single-peer ports that
             receive, as ``Run.write`` takes them. Written after ``state``, they
             replace its values and carry its time.
-        state: A tree from ``Run.state_dict`` to restore. The slots, the nodes'
+        state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
+            or any mapping of the same items (such as a plain ``dict``). The slots, the nodes'
             states (through each node's ``load_state_dict``, after its
             ``on_start``), their last update times and the timer continue from
             the time the tree was taken. Build the networks as the ones the tree
             came from: the same node paths and slots.
-        pause_timeout: Real seconds that ``Run.state_dict`` waits for every node
-            to pause (the end of its current ``on_update``): finite and > 0.
 
     Example, with the node ``Error`` of the example of ``Run``::
 
         node = Error()
         with mujou.run(node, inputs={node.prev: torch.ones(2)}) as run:
             mujou.time.sleep(0.1)
-            error, t = run.read(node.next)
+            error = run.read(node.next)
 
     Raises:
         RuntimeError: A network or node has already run (``"Leaky has already
@@ -419,11 +446,10 @@ def run[P: Port[Any, Any, Any]](
             from a node's hook.
         TypeError: A value is neither a ``Node`` nor a ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Group`` and
-            ``Run.write`` (for ``inputs``) raise; ``pause_timeout`` is not finite
-            and > 0; ``state`` does not match the networks, or the timer it would
-            set back has another run on it; or the run would have a second node
-            on MPS, counting the runs still running. Nothing has started: the
-            same networks, given the same way, may run once the cause is gone.
+            ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
+            networks, or the timer it would set back has another run on it.
+            Nothing has started: the same networks, given the same way, may run
+            once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(
@@ -432,7 +458,6 @@ def run[P: Port[Any, Any, Any]](
         timer=timer,
         inputs=inputs,
         state=state,
-        pause_timeout=pause_timeout,
         manual=False,
     )
 
@@ -444,7 +469,6 @@ def start_run[R: Run](
     timer: Timer | None,
     inputs: Mapping[Any, object] | None,
     state: Mapping[str, Any] | None,
-    pause_timeout: float,
     manual: bool,
 ) -> R:
     """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
@@ -456,10 +480,7 @@ def start_run[R: Run](
             raise TypeError(
                 f"mujou.run() takes nodes and networks, got {type(given).__name__}"
             )
-    if not (math.isfinite(pause_timeout) and pause_timeout > 0):
-        raise ValueError(
-            f"pause_timeout must be finite and > 0 seconds, got {pause_timeout}"
-        )
+    run_timer = GLOBAL if timer is None else timer
     # ours: a tree mujou.run built only for this run, undone if the run is refused.
     match components:
         case [Network() as network]:
@@ -471,10 +492,8 @@ def start_run[R: Run](
 
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.
-        session = Session(graph, GLOBAL if timer is None else timer)
-        session.start(
-            manual=manual, state=state, inputs=inputs, pause_timeout=pause_timeout
-        )
+        session = Session(graph, run_timer)
+        session.start(manual=manual, state=state, inputs=inputs)
         return session
 
     try:
@@ -487,6 +506,7 @@ def start_run[R: Run](
         raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
+    handle._timer = run_timer  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle
 
 
@@ -496,21 +516,17 @@ def start_manual[T: Timer](
     timer: T,
     inputs: Mapping[Any, object] | None,
     state: Mapping[str, Any] | None,
-    pause_timeout: float,
 ) -> ManualRun[T]:
     """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
     # The class itself: a subscripted generic is not a class to instantiate.
-    handle = start_run(
+    return start_run(
         cast(type[ManualRun[T]], ManualRun),
         components,
         timer=timer,
         inputs=inputs,
         state=state,
-        pause_timeout=pause_timeout,
         manual=True,
     )
-    handle._timer = timer  # pyright: ignore[reportPrivateUsage]  # ManualRun's own module
-    return handle
 
 
 def _host(run: Run) -> Session:

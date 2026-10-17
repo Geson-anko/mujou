@@ -8,20 +8,21 @@ should follow the global time, e.g. to present an input for a while.
 The global time starts at 0 when the process first uses it.
 
 - ``now()``: the global time as a ``Timestamp``, as ``Timer.now`` gives a timer's
-- ``time()``: the global time in seconds
-- ``time_ns()``: the global time in nanoseconds
+  (``now().float()`` in seconds, ``now().ns`` in nanoseconds)
 - ``sleep(seconds)``: block for ``seconds`` of global time, following the scale and
   pauses
+- ``pause()`` / ``resume()`` / ``is_paused()``: stop the global time and move it
+  again, e.g. to take the states of several runs on it at one time
 - ``get_time_scale()`` / ``set_time_scale(scale)``: how many global seconds pass per
   real second (finite and > 0)
 - ``Timer``: a time axis of its own for a run
 - ``ReadOnlyTimer``: the reading side of a timer, as a node sees its run's timer
   (``Node.timer``)
-- ``Timestamp``: a time on a timer, as ``Run.read`` and ``Port.recv_with_time``
-  give it
+- ``Timestamp``: a time on a timer, as ``Run.read_with_time`` and
+  ``Port.recv_with_time`` give it
 
-Only the host controls the time: ``sleep`` and ``set_time_scale`` raise
-``RuntimeError`` in a node's hook.
+Only the host controls the time: ``sleep``, ``set_time_scale``, ``pause`` and
+``resume`` raise ``RuntimeError`` in a node's hook.
 """
 
 from mujou._core._native import Timestamp as Timestamp, timer as _timer
@@ -30,16 +31,6 @@ from mujou._core.timer import (
     Timer as Timer,
     host_only as _host_only,
 )
-
-
-def time() -> float:
-    """Return the global time now, in seconds."""
-    return _timer.time()
-
-
-def time_ns() -> int:
-    """Return the global time now, in nanoseconds."""
-    return _timer.time_ns()
 
 
 def get_time_scale() -> float:
@@ -51,7 +42,7 @@ def now() -> Timestamp:
     """Return the global time now, as ``Timer.now`` returns a timer's.
 
     Compare it with the times of runs on the global timer, such as those that
-    ``Run.read`` and ``Run.write`` return.
+    ``Run.read_with_time`` and ``Run.write`` return.
     """
     return _timer.now()
 
@@ -76,3 +67,31 @@ def set_time_scale(scale: float) -> None:
     """
     _host_only("mujou.time.set_time_scale")
     _timer.set_time_scale(scale)
+
+
+def pause() -> None:
+    """Stop the global time until ``resume``, as ``Timer.pause`` stops a timer's.
+
+    Every run on the global timer stops updating at one time T, so states taken
+    with ``Run.state_dict`` until ``resume`` are all of T.
+
+    Raises:
+        RuntimeError: This is called from a node's hook.
+    """
+    _host_only("mujou.time.pause")
+    _timer.pause()
+
+
+def resume() -> None:
+    """Turn off the switch of ``pause``, as ``Timer.resume`` does for a timer.
+
+    Raises:
+        RuntimeError: This is called from a node's hook.
+    """
+    _host_only("mujou.time.resume")
+    _timer.resume()
+
+
+def is_paused() -> bool:
+    """Return whether the global time is stopped, as ``Timer.is_paused`` does."""
+    return _timer.is_paused()

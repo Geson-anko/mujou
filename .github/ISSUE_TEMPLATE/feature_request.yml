@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a change or an addition to Mujou.
+description: Suggest a change or an addition to Mujou. Write in English or Japanese. For a large change, agree on the design here before opening a pull request.
 labels: [enhancement]
 body:
   - type: textarea

@@ -41,7 +41,7 @@ Example::
     with mujou.testing.run(net, inputs={net.prev: x}) as run:
         run.timer.advance(0.001)  # the run's VirtualTimer
         run.step(net.a, net.b)  # a, then b reads a's new value
-        y, t = run.read(net.next)
+        y, t = run.read_with_time(net.next)
     assert torch.equal(y, 4 * x) and t.ns == 1_000_000
 """
 
@@ -66,7 +66,6 @@ def run[P: Port[Any, Any, Any], T: Timer = VirtualTimer](
     timer: T | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
-    pause_timeout: float = 30.0,
 ) -> ManualRun[T]:
     """Run the given nodes and networks as ``mujou.run`` does, with the updates
     left to ``ManualRun.step``.
@@ -78,14 +77,11 @@ def run[P: Port[Any, Any, Any], T: Timer = VirtualTimer](
     the clock runs by itself, and each ``dt`` is whatever real time passed between
     the steps.
 
-    The other arguments and the errors are those of ``mujou.run``:
-    ``pause_timeout`` too is in real seconds, finite and > 0 (``ValueError``
-    otherwise).
+    The other arguments and the errors are those of ``mujou.run``.
     """
     return start_manual(
         (component, *components),
         timer=cast(T, VirtualTimer()) if timer is None else timer,
         inputs=inputs,
         state=state,
-        pause_timeout=pause_timeout,
     )

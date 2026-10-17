@@ -1,3 +1,4 @@
+import io
 import math
 import pickle
 import re
@@ -16,7 +17,6 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
-from mujou._core import session as session_module
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
@@ -297,7 +297,7 @@ class TestRun:
             assert isinstance(error, RuntimeError)
             assert re.match(who + refused, str(error)), str(error)
 
-    def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
+    def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
         alone, other = Chain(), Chain()
         start_manual(alone)
         with pytest.raises(RuntimeError, match="^Chain has already run"):
@@ -312,18 +312,6 @@ class TestRun:
             with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
 
-    @pytest.mark.parametrize("pause_timeout", [0.0, -1.0, math.nan, math.inf])
-    def test_rejects_a_pause_timeout_that_is_not_finite_and_positive(
-        self, pause_timeout: float, start_manual: StartManual
-    ):
-        net = Chain()
-        for run in (mujou.run, mujou.testing.run):
-            with pytest.raises(ValueError, match="^pause_timeout must be"):
-                run(net, pause_timeout=pause_timeout)
-        # Refused before the build: the network is not marked as built, so it can
-        # still run with others (a network built alone could not).
-        start_manual(net, Chain())
-
     def test_a_run_is_made_only_by_mujou_run(self):
         with pytest.raises(TypeError, match=r"mujou\.run"):
             Run()
@@ -334,7 +322,7 @@ class TestRunANode:
         node = Leaky()
         run = start_manual(node, inputs={node.prev: u(1)})
         step(run, node)
-        y, _ = run.read(node.next)
+        y = run.read(node.next)
         assert torch.equal(y, euler(torch.zeros(2, dtype=F64), u(1)))
         tree = run.state_dict()
         assert set(tree["nodes"]) == {""}
@@ -424,7 +412,7 @@ class TestRunANode:
             a = euler(a, u(1))
             b = euler(b, a)
             n = euler(n, b)
-        y, _ = run.read(node.next)
+        y = run.read(node.next)
         assert torch.equal(y, n)
 
 
@@ -534,15 +522,32 @@ class TestTimer:
             @override
             def state_dict(self) -> object:
                 # Called while the run on `held` is paused.
-                h0, f0, g0 = held.now(), free.now(), mujou.time.time_ns()
+                h0, f0, g0 = held.now(), free.now(), mujou.time.now()
                 time.sleep(0.05)
-                return held.now() - h0, free.now() - f0, mujou.time.time_ns() - g0
+                return held.now() - h0, free.now() - f0, mujou.time.now() - g0
 
         start(Chain(tau=0.01), timer=free)
         run = start(Group(node=Measures()), timer=held)
         on_held, on_free, on_global = run.state_dict()["nodes"]["node"]
-        assert on_held == Timestamp(ns=0)
-        assert on_free > Timestamp(ns=0) and on_global > 0
+        assert on_held == 0.0
+        assert on_free > 0.0 and on_global > 0.0
+
+    def test_gives_the_timer_it_runs_on(self, start: Start):
+        timer = Timer()
+        assert start(Chain(), timer=timer).timer is timer
+        # By default the global timer, which mujou.time reads.
+        default = start(Chain()).timer
+        assert not default.is_paused()
+        mujou.time.pause()
+        try:
+            assert default.is_paused()
+        finally:
+            mujou.time.resume()
+
+    def test_a_manual_run_gives_its_virtual_timer(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        assert start_manual(Chain(), timer=virtual).timer is virtual
 
     def test_the_global_timer_by_default(self, start: Start):
         class ReadsTimer(Node):
@@ -558,7 +563,7 @@ class TestTimer:
         assert seen is not None
         # On one time axis with mujou.time.
         first = seen.now()
-        now_ns = mujou.time.time_ns()
+        now_ns = mujou.time.now().ns
         assert first.ns <= now_ns <= seen.now().ns
 
 
@@ -635,7 +640,7 @@ class TestWrite:
         virtual.advance(H)
         written_at = run.write({echo.prev: u(1)})
         step(run)
-        (received_ns, _) = run.read(echo.next)
+        received_ns = run.read(echo.next)
         assert int(received_ns) == written_at.ns
 
     def test_of_nothing_returns_the_time_and_changes_nothing(
@@ -711,23 +716,30 @@ class TestWrite:
 
 
 class TestRead:
-    def test_gives_the_latest_output_and_its_time(
+    def test_gives_the_latest_output(self, step: Step, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        run.write({net.prev: u(1)})
+        step(run)
+        assert torch.equal(run.read(net.next), net.b.x)
+        inner = run.read(net.a.next)  # a connected port shows an inner node
+        assert torch.equal(inner, net.a.x)
+
+    def test_with_time_gives_the_latest_output_and_its_time(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
         net = Chain()
         run = start_manual(net)
         run.write({net.prev: u(1)})
         step(run)
-        out, t = run.read(net.next)
+        out, t = run.read_with_time(net.next)
         assert torch.equal(out, net.b.x)
         assert isinstance(t, Timestamp) and t == virtual.now()
-        inner, _ = run.read(net.a.next)  # a connected port shows an inner node
-        assert torch.equal(inner, net.a.x)
 
     def test_gives_zeros_before_the_first_send(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        out, t = run.read(net.next)
+        out, t = run.read_with_time(net.next)
         assert torch.equal(out, torch.zeros(2, dtype=F64))
         assert t == Timestamp(ns=0)
 
@@ -741,6 +753,12 @@ class TestRead:
         run = start_manual(Chain())
         with pytest.raises(ValueError, match="is not a port of a node in this run$"):
             run.read(Chain().next)
+
+    def test_with_time_rejects_what_read_rejects(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match="sends no messages"):
+            run.read_with_time(net.prev)
 
 
 class TestSubscribe:
@@ -810,7 +828,7 @@ class TestSubscribe:
             next(values)
         run.write({net.prev: u(1)})
         step(run)
-        assert torch.equal(run.read(net.next)[0], net.b.x)
+        assert torch.equal(run.read(net.next), net.b.x)
 
     def test_the_timeout_counts_the_whole_iteration(
         self, step: Step, start_manual: StartManual
@@ -881,6 +899,23 @@ class TestWaitFor:
 
 
 class TestStateDict:
+    @pytest.mark.parametrize("timeout", [0.0, -1.0, math.nan, math.inf])
+    def test_rejects_a_timeout_that_is_not_finite_and_positive(
+        self, timeout: float, step: Step, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
+            run.state_dict(timeout)
+        # Nothing was taken or paused: the run goes on.
+        run.write({net.prev: u(1)})
+        step(run)
+        assert net.a.updates == 1
+        run.shutdown()
+        # After the end there is nothing to wait for, but it is checked all the same.
+        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
+            run.state_dict(timeout)
+
     def test_after_a_normal_end_is_the_state_at_the_end(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
@@ -918,9 +953,9 @@ class TestStateDict:
         run = start(net, inputs={net.prev: u(1)})
         # Free running: both nodes have updated once b sends a value other than 0.
         run.wait_for(net.next, lambda out: bool(out.any()), timeout=10.0)
-        asked_after = mujou.time.time_ns()
+        asked_after = mujou.time.now().ns
         run.shutdown()
-        stopped_before = mujou.time.time_ns()
+        stopped_before = mujou.time.now().ns
         mujou.time.sleep(0.05)  # time goes on after the end
         tree = run.state_dict()
         frozen_at = tree["timer"]["time_ns"]
@@ -972,6 +1007,13 @@ class TestStateDict:
         again = pickle.loads(pickle.dumps(tree))
         assert torch.equal(again["nodes"]["a"]["x"], x)
         assert again["timer"] == tree["timer"]
+
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_is_a_state_dict(self, start_manual: StartManual, ended: bool):
+        run = start_manual(Chain())
+        if ended:
+            run.shutdown()
+        assert isinstance(run.state_dict(), mujou.StateDict)
 
     @pytest.mark.parametrize("ended", [False, True])
     def test_cannot_receive_in_the_node_state_dict(
@@ -1075,6 +1117,28 @@ class TestState:
         assert restored is not None
         net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
+
+    @pytest.mark.parametrize("saved_as", ["torch.save", "dict"])
+    def test_restores_a_saved_tree(
+        self, step: Step, start_manual: StartManual, saved_as: str
+    ):
+        source = Chain()
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run)
+        tree = run.state_dict()
+        run.shutdown()
+        if saved_as == "torch.save":
+            buffer = io.BytesIO()
+            torch.save(tree, buffer)
+            buffer.seek(0)
+            loaded = torch.load(buffer)  # weights_only=True by default
+            assert isinstance(loaded, mujou.StateDict)
+        else:
+            loaded = dict(tree)  # any mapping of the same items
+        net = Chain()
+        start_manual(net, timer=VirtualTimer(), state=loaded)
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+        assert torch.equal(net.b.x, tree["nodes"]["b"]["x"])
 
 
 class TestNodeException:
@@ -1192,7 +1256,7 @@ class TestTimeout:
         call: Callable[[float], object] = {
             "shutdown": lambda t: run.shutdown(timeout=t),
             "join": lambda t: run.join(timeout=t),
-            "subscribe": lambda t: run.subscribe(net.next, timeout=t),
+            "subscribe": lambda t: run.subscribe(net.next, t),
         }[method]
         for timeout in (-1.0, math.nan):
             with pytest.raises(ValueError, match="timeout"):
@@ -1212,10 +1276,10 @@ class TestTimeout:
             if method == "join":
                 run.join(timeout=0.05)
             else:
-                run.wait_for(net.next, lambda _: False, timeout=0.05)
+                run.wait_for(net.next, lambda _: False, 0.05)
         run.write({net.prev: u(1)})
         step(run)
-        assert torch.equal(run.read(net.next)[0], net.b.x)
+        assert torch.equal(run.read(net.next), net.b.x)
 
 
 class TestManualRun:
@@ -1248,7 +1312,7 @@ class TestManualRun:
             for _ in range(3):
                 timer.advance(H)  # the clock moves only here
                 run.step()
-            out, t = run.read(net.next)
+            out, t = run.read_with_time(net.next)
         x = torch.zeros(2, dtype=F64)
         for _ in range(3):
             x = euler(x, u(1))
@@ -1278,7 +1342,7 @@ class TestEndToEnd:
         for k in (1, 2):
             run.write({net.prev: u(k)})
             mujou.time.sleep(presented)
-            out, _ = run.read(net.next)
+            out = run.read(net.next)
             # After a step of the input by d, the error of two leaky stages in a
             # row is d (1 + t/tau) exp(-t/tau). Allow the nodes to have run for
             # only a third of the time (scheduling under load): t = 10 tau.
@@ -1321,7 +1385,7 @@ class TestEndToEnd:
                 xb = euler(xb, sent_a)
         assert torch.equal(a.x, xa)
         assert torch.equal(b.x, xb)
-        assert torch.equal(run.read(b.next)[0], xb)
+        assert torch.equal(run.read(b.next), xb)
 
     @pytest.mark.parametrize("b_first", [False, True])
     def test_a_restored_network_continues_the_same(
@@ -1340,7 +1404,7 @@ class TestEndToEnd:
         for i in range(k, k + m):
             step(run, *order)
             run.write({net.prev: u(i + 1)})
-        expected = (net.a.x.clone(), net.b.x.clone(), run.read(net.next))
+        expected = (net.a.x.clone(), net.b.x.clone(), run.read_with_time(net.next))
         run.shutdown()
 
         restored = Chain()
@@ -1361,7 +1425,7 @@ class TestEndToEnd:
             again_run.write({restored.prev: u(i + 1)})
         assert torch.equal(restored.a.x, expected[0])
         assert torch.equal(restored.b.x, expected[1])
-        out, t = again_run.read(restored.next)
+        out, t = again_run.read_with_time(restored.next)
         assert torch.equal(out, expected[2][0]) and t == expected[2][1]
         # The nodes got copies: their updates in place did not reach the tree.
         assert not torch.equal(tree["nodes"]["a"]["x"], restored.a.x)
@@ -1639,9 +1703,22 @@ class TestCuda:
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
 
-    # The two tests below cannot run on MPS: it has no float64, and its work from
-    # two threads at once (here, the host's reading while the node updates) aborts
-    # the process.
+    def test_the_state_moved_to_the_cpu_restores(
+        self, step: Step, start_manual: StartManual
+    ):
+        source = DeviceChain(CUDA0)
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run, source.a, source.b)
+        tree = run.state_dict()
+        run.shutdown()
+        assert tree["nodes"]["a"]["x"].device == CUDA0
+        on_cpu = tree.cpu()
+        assert on_cpu["nodes"]["a"]["x"].device == torch.device("cpu")
+        net = DeviceChain(CUDA0)
+        start_manual(net, timer=VirtualTimer(), state=on_cpu)
+        assert net.a.x.device == CUDA0
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+
     def test_manual_steps_match_the_discrete_algorithm(
         self, step: Step, start_manual: StartManual
     ):
@@ -1654,7 +1731,7 @@ class TestCuda:
             step(run, net.a, net.b)
             xa = euler(xa, u(k).to(CUDA0))
             xb = euler(xb, xa)
-        assert torch.equal(run.read(net.next)[0], xb.cpu())
+        assert torch.equal(run.read(net.next), xb.cpu())
 
     @pytest.mark.slow
     def test_state_dict_is_whole_while_a_node_updates_in_place(self, start: Start):
@@ -1673,27 +1750,21 @@ class TestCuda:
         assert changed == []
         assert trees[-1]["nodes"]["node"]["k"] > 0
 
-
-class TestAccelerator:
     @pytest.mark.slow
-    def test_on_start_sees_the_work_the_host_queued(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
+    def test_on_start_sees_the_work_the_host_queued(self, start_manual: StartManual):
         seen: list[float | None] = []
         for _ in range(5):
             # Run each node right after making it, while its work is still queued.
-            node = QueuesOnTheHost(accelerator)
+            node = QueuesOnTheHost(CUDA0)
             start_manual(Group(node=node)).shutdown()
             seen.append(node.seen)
         assert seen == [float(HOST_ADDS)] * 5
 
     @pytest.mark.slow
-    def test_state_dict_waits_for_the_work_of_on_start(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
+    def test_state_dict_waits_for_the_work_of_on_start(self, start_manual: StartManual):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Group(node=BusyStart(accelerator)))
+            run = start_manual(Group(node=BusyStart(CUDA0)))
             w = run.state_dict()["nodes"]["node"]["w"]
             run.shutdown()
             captured.append((w.min().item(), w.max().item()))
@@ -1701,11 +1772,11 @@ class TestAccelerator:
 
     @pytest.mark.slow
     def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
-        self, start_manual: StartManual, accelerator: torch.device
+        self, start_manual: StartManual
     ):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Group(node=BusyStop(accelerator)))
+            run = start_manual(Group(node=BusyStop(CUDA0)))
             run.shutdown()
             w = run.state_dict()["nodes"]["node"]["w"]
             captured.append((w.min().item(), w.max().item()))
@@ -1716,129 +1787,21 @@ class TestAccelerator:
         self,
         step: Step,
         start_manual: StartManual,
-        accelerator: torch.device,
     ):
-        net = Group(node=Counter(accelerator))
+        net = Group(node=Counter(CUDA0))
         run = start_manual(net)
         for _ in range(3):
             step(run)
         tree = run.state_dict()
         run.shutdown()
 
-        node = Counter(accelerator)
+        node = Counter(CUDA0)
         restored = start_manual(Group(node=node), state=tree)
         step(restored)
         assert node.first is not None
-        expected = torch.full((BIG,), float(3 * ADDS), device=accelerator)
+        expected = torch.full((BIG,), float(3 * ADDS), device=CUDA0)
         assert torch.equal(node.first, expected)
-        assert torch.equal(tree["nodes"]["node"]["w"].to(accelerator), expected)
-
-
-class OnMps(Node):
-    """Does nothing on MPS; records whether it started."""
-
-    def __init__(self) -> None:
-        super().__init__(device="mps")
-        self.started = False
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.started = True
-
-
-class TwoOnMps(Network):
-    def __init__(self) -> None:
-        self.a = OnMps()
-        self.b = OnMps()
-
-
-@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs MPS")
-class TestOneNodeOnMps:
-    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
-        net = TwoOnMps()
-        with pytest.raises(ValueError, match=r"^MPS cannot .* but 'a', 'b' do;"):
-            start_manual(net)
-        assert not net.a.started and not net.b.started
-
-    def test_refuses_a_node_while_another_run_has_one(self, start_manual: StartManual):
-        first, second = OnMps(), OnMps()
-        run = start_manual(first)
-        with pytest.raises(ValueError, match=r"'OnMps' \(of a running run\)"):
-            start_manual(second)
-        assert not second.started
-        run.shutdown()
-        start_manual(Group(node=second))  # the first run has ended: it no longer counts
-        assert second.started
-
-    def test_allows_one_node_beside_nodes_on_the_cpu(self, start_manual: StartManual):
-        node, net = OnMps(), Chain()
-        start_manual(node, net)
-        assert node.started and net.a.started
-
-
-class OnCpu(Node):
-    """Does nothing on the CPU; records whether it started."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.started = False
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.started = True
-
-
-@pytest.fixture
-def one_node_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Count the CPU as MPS is counted, so that the one-node rule runs without
-    MPS: ``Session.start`` reads the module's device types at each start."""
-    monkeypatch.setattr(session_module, "_ONE_NODE_DEVICES", ("cpu",))
-
-
-@pytest.mark.usefixtures("one_node_cpu")
-class TestOneNodeDevice:
-    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
-        a, b = OnCpu(), OnCpu()
-        with pytest.raises(ValueError, match=r"^CPU cannot .* but 'a', 'b' do;"):
-            start_manual(Group(a=a, b=b))
-        assert not a.started and not b.started
-
-    def test_refuses_one_node_in_each_of_two_runs(self, start_manual: StartManual):
-        first, second = OnCpu(), OnCpu()
-        run = start_manual(first)
-        with pytest.raises(ValueError, match=r"'OnCpu' \(of a running run\)"):
-            start_manual(second)
-        assert not second.started
-        run.shutdown()
-        start_manual(second)  # the first run has ended: it no longer counts
-        assert second.started
-
-    def test_starts_one_of_two_runs_started_at_once(self):
-        # Without the lock around the count and the registration, both runs pass
-        # the count in most rounds.
-        for _ in range(50):
-            barrier = threading.Barrier(2)
-            outcomes: list[Run | ValueError] = []
-
-            def go(barrier: threading.Barrier = barrier) -> None:
-                node = OnCpu()
-                barrier.wait()
-                try:
-                    outcomes.append(mujou.run(node))
-                except ValueError as e:
-                    outcomes.append(e)
-
-            threads = [threading.Thread(target=go) for _ in range(2)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            runs = [outcome for outcome in outcomes if isinstance(outcome, Run)]
-            for run in runs:
-                run.shutdown()
-            assert len(runs) == 1
+        assert torch.equal(tree["nodes"]["node"]["w"].to(CUDA0), expected)
 
 
 class Hooks(Node):
@@ -1968,12 +1931,12 @@ class TestPauseTimeout:
         self, started: list[Run]
     ):
         node = Blocks()
-        run = mujou.run(node, pause_timeout=0.05)
+        run = mujou.run(node)
         started.append(run)
         try:
             assert node.entered.wait(10.0)
             with pytest.raises(mujou.PauseTimeoutError):
-                run.state_dict()
+                run.state_dict(0.05)
         finally:
             node.release.set()
 

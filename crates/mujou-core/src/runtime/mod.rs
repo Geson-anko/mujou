@@ -84,11 +84,10 @@ pub trait NodeHooks: Send + 'static {
     fn state_dict(&mut self) -> Result<Self::State, HookError>;
 }
 
+#[derive(Default)]
 pub struct RuntimeConfig {
     /// Run the nodes only when [`Runtime::step`] allows them, one at a time.
     pub manual: bool,
-    /// How long a capture waits for every node to pause.
-    pub pause_timeout: Duration,
     /// Where each node's first Δt starts. Defaults to the time at the start.
     pub last_update_ns: Option<Vec<u64>>,
     /// Each node's period on the timer, in ns (> 0): a free-running node
@@ -99,18 +98,6 @@ pub struct RuntimeConfig {
     pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
-}
-
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self {
-            manual: false,
-            pause_timeout: Duration::from_secs(30),
-            last_update_ns: None,
-            period_ns: None,
-            timer_state: None,
-        }
-    }
 }
 
 thread_local! {
@@ -434,7 +421,6 @@ impl<N: NodeHooks> Runtime<N> {
         let controller = Controller {
             shared: Arc::clone(&shared),
             threads,
-            pause_timeout: config.pause_timeout,
             done: false,
         };
         let (started_tx, started_rx) = mpsc::channel();
@@ -490,13 +476,16 @@ impl<N: NodeHooks> Runtime<N> {
     }
 
     /// Pauses every node, takes their states and passes them to `build` on the
-    /// control thread while paused, then resumes. Gives up after the
-    /// configured pause timeout if some node does not pause.
+    /// control thread while paused, then resumes. Gives up after `timeout`
+    /// (real time) if some node does not pause.
     pub fn capture<R: Send + 'static>(
         &self,
         build: impl FnOnce(Vec<N::State>) -> R + Send + 'static,
+        timeout: Duration,
     ) -> Reply<R> {
-        self.submit(unavailable, move |controller| controller.capture(build))
+        self.submit(unavailable, move |controller| {
+            controller.capture(build, timeout)
+        })
     }
 
     /// Stops every node and ends the system. Succeeds if the system has

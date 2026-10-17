@@ -66,7 +66,7 @@ def test_chain_follows_the_discrete_algorithm() -> None:
         for _ in range(steps):
             run.timer.advance(h)  # every node's next dt is exactly h
             run.step(net.a, net.b)  # a, then b, which reads a's new value
-        y, t = run.read(net.next)
+        y, t = run.read_with_time(net.next)
 
     assert torch.equal(y, b)  # the same operations: equal to the last bit
     assert t.ns == steps * 1_000_000  # sent at the time of the last step

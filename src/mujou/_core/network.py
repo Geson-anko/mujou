@@ -55,7 +55,7 @@ class Network(Component):
         with mujou.run(net, inputs={net.prev: x0, net.teacher: y0}) as run:
             run.write({net.prev: x, net.teacher: y})  # switch together
             mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
-            prediction, t = run.read(net.head.next)
+            prediction = run.read(net.head.next)
             state = run.state_dict()
     """
 
