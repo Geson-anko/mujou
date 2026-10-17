@@ -46,10 +46,11 @@ create_exception!(
 ///
 /// The runtime calls the hooks on the node's own thread (`state_dict`, through
 /// `_capture_state`, on the control thread while the node is paused). They do
-/// nothing by default. The hooks other than `_on_thread_start`, `on_start` and
-/// `load_state_dict` are looked up once, after those three, so replacing one
-/// there takes effect. `state_dict` itself is looked up by the default
-/// `_capture_state` at each capture, so replacing it later takes effect too.
+/// nothing by default. The hooks other than `_on_thread_start`,
+/// `on_thread_start`, `on_start` and `load_state_dict` are looked up once, after
+/// those four, so replacing one there takes effect. `state_dict` itself is
+/// looked up by the default `_capture_state` at each capture, so replacing it
+/// later takes effect too.
 #[pyclass(subclass, frozen, module = "mujou._core._native")]
 pub struct Node;
 
@@ -63,9 +64,14 @@ impl Node {
         Self
     }
 
-    /// Called on the node's thread right before `on_start`, for the framework's
-    /// per-thread settings (so that overriding `on_start` cannot skip them).
+    /// Called on the node's thread first, before `on_thread_start`, for the
+    /// framework's per-thread settings (so that no override of a public hook
+    /// can skip them).
     fn _on_thread_start(&self) {}
+
+    /// Called on the node's thread right before `on_start`, after the
+    /// framework's own per-thread settings, for the node's per-thread settings.
+    fn on_thread_start(&self) {}
 
     fn on_start(&self) {}
 
@@ -94,6 +100,14 @@ impl Node {
     #[pyo3(signature = (state: "object"))]
     fn load_state_dict(&self, state: &Bound<'_, PyAny>) {
         let _ = state;
+    }
+
+    /// Called instead of `load_state_dict` when the runtime restores the state
+    /// (on the node's thread, after `on_start`), for the framework's work around
+    /// it. Calls `self.load_state_dict(state)` by default.
+    #[pyo3(signature = (state: "object"))]
+    fn _restore_state(slf: &Bound<'_, Self>, state: &Bound<'_, PyAny>) -> PyResult<()> {
+        slf.call_method1("load_state_dict", (state,)).map(drop)
     }
 
     /// Called instead of `state_dict` when the runtime takes the state (on the
@@ -177,10 +191,13 @@ impl Methods {
 }
 
 /// The attribute the runtime calls for `hook`. Taking the state goes through
-/// `_capture_state`, which calls `state_dict`; errors still name `state_dict`.
+/// `_capture_state`, which calls `state_dict`, and restoring it through
+/// `_restore_state`, which calls `load_state_dict`; errors still name the
+/// public hook.
 fn attribute(hook: &str) -> &str {
     match hook {
         "state_dict" => "_capture_state",
+        "load_state_dict" => "_restore_state",
         _ => hook,
     }
 }
@@ -258,14 +275,15 @@ impl NodeHooks for PyNode {
     fn start(&mut self) -> Result<(), HookError> {
         let state = self.state.take();
         self.call0("_on_thread_start")?;
+        self.call0("on_thread_start")?;
         self.call0("on_start")?;
         if let Some(state) = state {
             self.call("load_state_dict", |py| {
                 PyTuple::new(py, [state]).expect("a tuple of one object")
             })?;
         }
-        // Look the hooks up last, so that `_on_thread_start`, `on_start` and
-        // `load_state_dict` may still replace them (by instance attributes).
+        // Look the hooks up last, so that the hooks above may still replace them
+        // (by instance attributes).
         let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
         self.methods =
             Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);

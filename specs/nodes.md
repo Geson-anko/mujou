@@ -59,16 +59,17 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 | hook                     | 呼ばれるとき                                       | 役割                                                         |
 | ------------------------ | -------------------------------------------------- | ------------------------------------------------------------ |
+| `on_thread_start()`      | 実行開始時に 1 回。フレームワークのスレッドの設定の後、`on_start` の直前に同じスレッドで | ノード自身のスレッドごとの設定。`super()` を呼ぶ必要はない |
 | `on_start()`             | 実行開始時に 1 回。ノードを実行するスレッドの上で | 状態の確保・初期化                                           |
 | `on_update(dt)`          | 自分の周期で繰り返し                               | 隣の最新値を読み、$\Delta t$ ぶん更新し、書き込む。他を待たない |
 | `on_pause()`             | 停止の要求を受けて、ループの区切りで止まったとき   | I/O の一時停止など                                           |
 | `on_resume()`            | 停止から再開し、次の `on_update` の前              | I/O の再開、停止中に溜まった外界の値の破棄など               |
 | `on_exception()`         | どれかのノードの例外で終了するとき、全ノードに 1 回。`on_stop` の前 | アクチュエータの安全停止など、異常終了に固有の I/O の処理 |
 | `on_stop()`              | 実行終了時に 1 回。例外による終了でも呼ぶ          | I/O などの資源の解放。`state_dict()` が返す状態は変えない     |
-| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードのスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す               |
-| `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す                      |
+| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードのスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す。`mujou.Node` の既定は自動で集めた状態（[状態の自動収集](#状態の自動収集)） |
+| `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す。`mujou.Node` の既定はその場でコピーする |
 
-表の hook のほかに、フレームワークが自分のために使う hook がある。`_on_thread_start()`（`on_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージには `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
+表の hook のほかに、フレームワークが自分のために使う内部の hook がある。`_on_thread_start()`（`on_thread_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_restore_state(state)`（状態の復元で `load_state_dict(state)` の代わりに呼び、既定は `load_state_dict(state)` を呼ぶ）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。公開の hook とは別なので、どの公開の hook を override しても、`super()` を呼ばなくても、設定と同期は漏れない。`_restore_state` の中の例外は `load_state_dict` と出る。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージには `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
 
 ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
 
@@ -102,7 +103,7 @@ class Linear(Node):
         self.next = NextPort(send=TensorSpec((B, n_out)), recv=TensorSpec((B, n_out)))
 
     def on_start(self) -> None:
-        self._w = ...
+        self._w = ...             # Tensor を代入すると、状態として自動で集まる
         self._h = ...
 
     def on_update(self, dt: float) -> None:
@@ -112,12 +113,36 @@ class Linear(Node):
         self.next.send(h)
         self.prev.send(wt_eps)
 
-    def state_dict(self) -> object:
-        return {"w": self._w, "h": self._h}
-
-    def load_state_dict(self, state: object) -> None:
-        ...
+    # state_dict / load_state_dict は既定のままで {"_w": ..., "_h": ...} を保存・復元する
 ```
+
+### 状態の自動収集
+
+`mujou.Node` は、`nn.Module` と同じく `__setattr__` をフックして状態を集める。名前の `_` の有無にかかわらず、`torch.Tensor`（`nn.Parameter` を含む）か `nn.Module` を代入した属性を、代入した順に登録する。
+
+| 操作 | 登録 |
+| --- | --- |
+| Tensor か nn.Module を代入 | 登録する。登録済みの名前なら順序はそのまま |
+| ほかの値（`None` を含む）で上書き | 外す |
+| `del` | 外す |
+
+Port・数値・Tensor のリストや dict は集めない。property も集めない（setter が別の名前の属性に Tensor を置けば、そちらが集まる）。
+
+状態にする Tensor は `on_start` までに確保し、その後はその場で更新するのが基本である。後で初めて代入したものも復元できるが、その場の更新ではなく新しいテンソルになる。`on_stop` で GPU メモリを返すつもりで `self._w = None` とすると、そのキーは終了後の `state_dict()` から消える（`on_stop` は `state_dict()` が返すものを変えない、という規約に反する）。
+
+既定の `state_dict()` は、属性名をキーにした dict を返す。値は、Tensor なら `detach()` したもの（記憶域は共有し、コピーはフレームワークが取る）、nn.Module ならその `state_dict()` である。`requires_grad` は木に入れない（`nn.Module.state_dict` と同じ）。`detach` するので、ノード内 BP のグラフにつながったテンソルでも pickle できる。
+
+既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。木にあって登録に無い Tensor（`on_start` の後で初めて代入したもの）は、木の値のコピーを新しい属性として置く（登録される）。
+
+| 不一致 | 例外 |
+| --- | --- |
+| `state` や nn.Module の状態が mapping でない、登録した Tensor の値が Tensor でない | `TypeError` |
+| 登録した名前が木に無い、登録に無いキーの値が Tensor でない、Tensor の shape の違い、要素が記憶域を共有する Tensor（`expand` など） | `ValueError` |
+| nn.Module の状態のキーや shape がモジュールの `state_dict()` と違う | `RuntimeError`（strict な `nn.Module.load_state_dict` と同じ型） |
+
+どれもコピーの前に確かめるので、例外のときは何も書き換えない。
+
+自分で状態を選ぶノードは、`state_dict` と `load_state_dict` を override する。`super()` を呼んで既定の木に足してもよい（乱数生成器の状態など）。
 
 ノードのインスタンスは、定義と実行の両方を担う。`__init__` で Port を宣言したインスタンスが、そのまま実行時に hook を呼ばれる。`mujou.run` でネットワークを走らせると、Port はその実行のスロットに結び付けられる。
 

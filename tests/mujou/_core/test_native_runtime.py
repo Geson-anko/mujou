@@ -71,8 +71,8 @@ class Recorder(Node):
             raise self.error
 
     @override
-    def _on_thread_start(self) -> None:
-        self.hook("_on_thread_start")
+    def on_thread_start(self) -> None:
+        self.hook("on_thread_start")
 
     @override
     def on_start(self) -> None:
@@ -161,7 +161,7 @@ class TestStart:
         for i, node in enumerate(nodes):
             events = log.of(node.name)
             assert events[:4] == [
-                "_on_thread_start",
+                "on_thread_start",
                 "on_start",
                 "load_state_dict",
                 "on_update",
@@ -187,9 +187,7 @@ class TestStart:
         # Only the upper bound is checked, so a loaded machine does not fail it.
         assert node.dts[0] < 0.25
 
-    @pytest.mark.parametrize(
-        "hook", ["_on_thread_start", "on_start", "load_state_dict"]
-    )
+    @pytest.mark.parametrize("hook", ["on_thread_start", "on_start", "load_state_dict"])
     def test_an_error_while_starting_stops_before_any_update(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, hook: str
     ):
@@ -425,6 +423,15 @@ class FrameworkHooks(Recorder):
     """Records the framework's hooks too, and wraps the state in _capture_state."""
 
     @override
+    def _on_thread_start(self) -> None:
+        self.hook("_on_thread_start")
+
+    @override
+    def _restore_state(self, state: object) -> None:
+        self.hook("_restore_state")
+        super()._restore_state(state)
+
+    @override
     def _after_update(self) -> None:
         self.hook("_after_update")
 
@@ -435,6 +442,45 @@ class FrameworkHooks(Recorder):
 
 
 class TestFrameworkHooks:
+    def test_the_framework_starts_the_thread_before_the_node(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log)
+        runtime = make_runtime([node])
+        runtime.start(manual=True, states=[{"s": 0}])
+        runtime.shutdown()
+        assert log.of("a")[:5] == [
+            "_on_thread_start",
+            "on_thread_start",
+            "on_start",
+            "_restore_state",
+            "load_state_dict",  # called by the default
+        ]
+        assert node.loaded == {"s": 0}
+        assert len({node.threads[e] for e in log.of("a")[:5]}) == 1
+
+    def test_an_error_in_the_framework_thread_start_stops_before_the_node_hooks(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log, raise_in="_on_thread_start")
+        runtime = make_runtime([node])
+        with pytest.raises(NetworkError, match="_on_thread_start") as raised:
+            runtime.start(manual=True)
+        assert raised.value.__cause__ is node.error
+        assert "on_thread_start" not in log.of("a")
+        assert "on_start" not in log.of("a")
+
+    def test_an_error_in_load_state_dict_still_names_load_state_dict(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log, raise_in="load_state_dict")
+        runtime = make_runtime([node])
+        with pytest.raises(NetworkError, match="in load_state_dict"):
+            runtime.start(manual=True, states=[None])
+
     def test_after_update_follows_each_update_on_the_node_thread(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):

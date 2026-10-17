@@ -52,7 +52,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ### 実行スレッドの設定
 
-フレームワークは、ノードを実行するスレッドの上で `on_start` の前に `_on_thread_start()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はそこで次を設定する。`on_start` とは別の hook にしたので、サブクラスが `on_start` を override して `super().on_start()` を呼び忘れても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
+フレームワークは、ノードを実行するスレッドの上で、まず内部の hook `_on_thread_start()` を呼び、次に公開の `on_thread_start()`、`on_start()` の順に呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` は `_on_thread_start()` で次を設定する。公開の hook とは別にしたので、サブクラスが `on_thread_start` や `on_start` を override して `super()` を呼ばなくても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
@@ -66,9 +66,9 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 乱数生成器は `self.generator` で使う。ノードのスレッドの上で作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。生成器は起動のたびに seed から作り直すので、復元しても生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
-`_on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。
+`_on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。あわせて、このスレッドを「hook の中」として印を付け、ネットワークのホスト用のメソッドを呼べないようにする。
 
-`_on_thread_start`・`_after_update`・`_capture_state` は、コアの `Node` が持つフレームワーク用の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_start`・`on_update`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
+`_on_thread_start`・`_after_update`・`_restore_state`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_thread_start`・`on_start`・`on_update`・`load_state_dict`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
 
 `state_dict()` は、ノードのスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。これらのスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
 
@@ -84,6 +84,7 @@ CUDA のときにどこで何を同期するかを次の表にまとめる。ど
 | 状態の取得（`_capture_state`） | 制御スレッド（終了した後はホストのスレッド） | 自分のストリーム（上の 1〜3） | `state_dict()` が、ほかの hook の仕事が終わる前の値を返す |
 | 状態の取得で、木をコピーした後、ノードを再開する前 | 制御スレッド（終了した後はホストのスレッド） | 制御スレッドの現在のストリーム | 再開したノードがその場で更新した重みが、木のコピーに混ざる |
 | 復元で、`mujou.run(..., state=...)` が木をコピーした後 | `mujou.run` を呼んだホストのスレッド | そのスレッドの現在のストリーム | ノードが、コピーが終わる前の値を使う |
+| 復元で、ノードの `load_state_dict` の後（`_restore_state`） | ノードのスレッド | 自分のストリーム | `mujou.run` が戻った後にホストが木を手放すと、ノードのストリームがまだ読んでいる記憶域を、キャッシュアロケータがほかの確保に回す |
 | `mujou.run` がノードを起動する前 | `mujou.run` を呼んだホストのスレッド | そのスレッドの現在のストリーム | ノードが、`__init__` で確保した Tensor を確保が終わる前に使う |
 
 `mujou.run` が同期するのは、`mujou.run` を呼んだスレッドのストリームだけである。ほかのホストのスレッドで確保した Tensor は、そのスレッドで同期してから `mujou.run` する。
@@ -105,7 +106,9 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 
 ### 状態
 
-パラメータや活動は、`nn.Module` や `nn.Parameter` を使わず、`requires_grad=False` のただのテンソルとして持つ。状態はノードの `state_dict()` / `load_state_dict()` で扱う（[ノード](nodes.md#ライフサイクル-hook)）。
+更新式を直接計算するノード（PC-ALM など）は、パラメータや活動を `requires_grad=False` のただのテンソルとして持つ。ノード内 BP を使うノードは、`nn.Module`（`nn.Parameter` を持つ）や `requires_grad=True` のテンソルを持ってよい。どれも属性に代入すれば、`mujou.Node` が状態として自動で集め、既定の `state_dict()` / `load_state_dict()` が保存・復元する（[状態の自動収集](nodes.md#状態の自動収集)）。
+
+`requires_grad` と `.grad` は状態の木に入れない。木の Tensor は `detach()` したもので、復元は `torch.no_grad()` の下でその場の `copy_` なので、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`.backward()` で数歩分の勾配を溜めてから更新するノードは、復元すると溜めていた勾配を失い、止めずに続けた結果と一致しない。optimizer の状態（モーメントなど）も Tensor の属性ではないので自動では集まらない。どちらも、使うノードは `state_dict` を override して足す。
 
 状態は `add_`・`sub_`・`addmm_` などでその場で更新し、ステップごとに新しいテンソルを確保しない。隣へ送る値（$W^\top\varepsilon$ など）は、重みを更新する前に計算する。大きな重みを毎ステップ確保し直すと、多数のスレッドで動かしたときにメモリの確保が律速になる（[性能の測定](#性能の測定)）。
 
