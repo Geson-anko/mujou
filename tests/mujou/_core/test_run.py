@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
 
@@ -166,11 +167,44 @@ class TestRun:
         start(net)
         assert net.build() is graph
 
-    def test_runs_once(self, start: Start):
-        net = Chain()
-        start(net).shutdown()
-        with pytest.raises(RuntimeError, match="already run"):
-            start(net)
+    @pytest.mark.parametrize(
+        ("make", "again", "message"),
+        [
+            pytest.param(Chain, lambda c: (c,), "Chain", id="network"),
+            # Not the path "0" of mujou.run's Compose.
+            pytest.param(Leaky, lambda c: (c,), "Leaky", id="node"),
+            pytest.param(
+                Leaky,
+                lambda c: (Compose(node=c),),
+                "Leaky at 'node'",
+                id="node-in-a-network",
+            ),
+            pytest.param(
+                Leaky, lambda c: (Compose(c),), "Leaky at '0'", id="node-composed"
+            ),
+            # Named by its path in the tree mujou.run makes.
+            pytest.param(
+                Chain,
+                lambda c: (Compose(x=c), Chain()),
+                "Chain at '0.x'",
+                id="network-among-several",
+            ),
+        ],
+    )
+    def test_runs_once(
+        self,
+        start: Start,
+        make: Callable[[], Node | Network],
+        again: Callable[[Node | Network], tuple[Node | Network, ...]],
+        message: str,
+    ):
+        component = make()
+        start(component).shutdown()
+        with pytest.raises(RuntimeError) as raised:
+            start(*again(component))
+        assert str(raised.value) == (
+            f"{message} has already run; create a new instance to run again"
+        )
 
     def test_raises_what_on_start_raised(self, start: Start):
         net = Chain(raise_in_b=0)
@@ -262,26 +296,6 @@ class TestRun:
             assert isinstance(error, RuntimeError)
             assert re.match(who + refused, str(error)), str(error)
 
-    def test_names_a_part_by_its_path_in_the_tree_mujou_run_makes(self, start: Start):
-        net = Chain()
-        start(net).shutdown()
-        with pytest.raises(RuntimeError) as raised:
-            start(Compose(x=net), Chain())
-        assert str(raised.value) == (
-            "Chain at '0.x' has already run; create a new instance to run again"
-        )
-
-    def test_a_refused_run_of_several_networks_can_be_retried(
-        self, start_manual: StartManual
-    ):
-        a, b = Chain(), Chain()
-        with pytest.raises(ValueError, match="shape"):
-            start_manual(a, b, inputs={a.prev: torch.zeros(3, dtype=F64)})
-        assert not a.a.started
-        run = start_manual(a, b, inputs={a.prev: u(1)})
-        assert a.a.started and b.a.started
-        assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1.a", "1.b"}
-
     def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
         alone, other = Chain(), Chain()
         start_manual(alone)
@@ -372,20 +386,6 @@ class TestRunANode:
         assert torch.equal(back["nodes"][""]["x"], tree["nodes"][""]["x"])
         assert back["slots"]["prev/in"][1] == tree["slots"]["prev/in"][1]
 
-    def test_runs_once(self, start: Start):
-        node = Leaky()
-        start(node).shutdown()
-        again = "has already run; create a new instance to run again"
-        cases: list[tuple[Node | Network, str]] = [
-            (node, f"Leaky {again}"),  # not the path "0" of mujou.run's Compose
-            (Compose(node=node), f"Leaky at 'node' {again}"),
-            (Compose(node), f"Leaky at '0' {again}"),
-        ]
-        for given, message in cases:
-            with pytest.raises(RuntimeError) as raised:
-                start(given)
-            assert str(raised.value) == message
-
     def test_a_node_of_a_built_network_is_named_without_the_path_of_mujou_run(
         self, start: Start
     ):
@@ -394,17 +394,6 @@ class TestRunANode:
         with pytest.raises(RuntimeError) as raised:
             start(net.a)
         assert str(raised.value) == "Leaky belongs to a network that is already built"
-
-    def test_a_refused_run_can_be_retried(self, start_manual: StartManual):
-        node = Leaky()
-        with pytest.raises(ValueError, match="shape"):
-            start_manual(node, inputs={node.prev: torch.zeros(3, dtype=F64)})
-        assert not node.started
-        run = start_manual(
-            Compose(node=node), inputs={node.prev: u(1)}
-        )  # in another way
-        assert node.started
-        assert set(run.state_dict()["nodes"]) == {"node"}
 
     def test_mixes_with_networks(self, step: Step, start_manual: StartManual):
         net, node = Chain(), Leaky()
@@ -420,6 +409,58 @@ class TestRunANode:
             n = euler(n, b)
         y, _ = run.read(node.next)
         assert torch.equal(y, n)
+
+
+class TestRefusedRun:
+    @pytest.mark.parametrize(
+        "given",
+        ["inputs", "inputs-of-several", "inputs-of-a-node", "state", "busy-timer"],
+    )
+    def test_starts_nothing_and_can_be_retried(
+        self, start_manual: StartManual, given: str
+    ):
+        net, other, node = Chain(), Chain(), Leaky()
+        wrong = torch.zeros(3, dtype=F64)
+        # The refused calls with what their errors match, then the call retried
+        # and the nodes of its run.
+        refused: list[tuple[Callable[[], object], str | None]]
+        if given in ("inputs", "inputs-of-several"):
+            components = (net,) if given == "inputs" else (net, other)
+            refused = [
+                (partial(start_manual, *components, inputs={net.prev: wrong}), "shape")
+            ]
+            retry = partial(start_manual, *components, inputs={net.prev: u(1)})
+            nodes = {"a", "b"} if given == "inputs" else {"0.a", "0.b", "1.a", "1.b"}
+        elif given == "inputs-of-a-node":
+            refused = [
+                (partial(start_manual, node, inputs={node.prev: wrong}), "shape")
+            ]
+            # In another way: in a network.
+            retry = partial(start_manual, Compose(node=node), inputs={node.prev: u(1)})
+            nodes = {"node"}
+        else:
+            source = start_manual(Chain())
+            tree = source.state_dict()
+            nodes = {"a", "b"}
+            if given == "state":
+                source.shutdown()
+                last_update_ns = {**tree, "last_update_ns": {"a": 0.5, "b": 0}}
+                scale = {**tree, "timer": {**tree["timer"], "scale": -1.0}}
+                refused = [
+                    (partial(start_manual, net, state=last_update_ns), "not an int"),
+                    # Refused by the timer before any node starts.
+                    (partial(start_manual, net, state=scale), None),
+                ]
+                retry = partial(start_manual, net, state=tree)
+            else:
+                # The source still runs on the timer: it cannot be set back.
+                refused = [(partial(start_manual, net, state=tree), None)]
+                retry = partial(start_manual, net, timer=VirtualTimer(), state=tree)
+        for call, match in refused:
+            with pytest.raises(ValueError, match=match):
+                call()
+        assert not (net.a.started or other.a.started or node.started)
+        assert set(retry().state_dict()["nodes"]) == nodes
 
 
 class TestWith:
@@ -535,14 +576,6 @@ class TestInputs:
         assert torch.equal(replaced.seen[0][0][0], u(3))
         # Written for the restored run, so stamped with the tree's time.
         assert replaced.seen[0][0][1].ns == frozen_at
-
-    def test_a_refused_input_starts_nothing(self, start_manual: StartManual):
-        net = Chain()
-        with pytest.raises(ValueError, match="shape"):
-            start_manual(net, inputs={net.prev: torch.zeros(3, dtype=F64)})
-        assert not net.a.started
-        start_manual(net, inputs={net.prev: u(1)})
-        assert net.a.started
 
 
 class TestWrite:
@@ -1059,36 +1092,6 @@ class TestState:
         for wrong, match in broken:
             with pytest.raises(ValueError, match=match):
                 start_manual(Chain(), state=wrong)
-
-    def test_a_refused_run_can_be_retried(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        source = start_manual(Chain())
-        tree = source.state_dict()
-        source.shutdown()
-        net = Chain()
-        with pytest.raises(ValueError, match="not an int"):
-            start_manual(net, state={**tree, "last_update_ns": {"a": 0.5, "b": 0}})
-        with pytest.raises(ValueError):
-            # Refused by the timer before any node starts.
-            start_manual(net, state={**tree, "timer": {**tree["timer"], "scale": -1.0}})
-        assert not net.a.started
-        start_manual(net, state=tree)
-        assert net.a.started
-
-    def test_cannot_set_back_a_timer_another_run_uses(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        source = start_manual(Chain())
-        tree = source.state_dict()
-        # source still runs on `virtual`.
-        net = Chain()
-        with pytest.raises(ValueError):
-            start_manual(net, state=tree)
-        assert not net.a.started
-        # Another timer is free.
-        start_manual(net, timer=VirtualTimer(), state=tree)
-        assert net.a.started
 
     def test_the_nodes_get_copies(self, step: Step, start_manual: StartManual):
         source = Chain()
