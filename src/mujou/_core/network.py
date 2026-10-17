@@ -91,9 +91,9 @@ class Graph:
     network.
 
     ``Network.build`` makes it; it cannot be created directly, and
-    ``mujou.run`` takes networks, not graphs. It is a different object from the
-    network it was built from: the network declares the structure, and the
-    graph is what runs. A graph runs once.
+    ``mujou.run`` takes nodes and networks, not graphs. It is a different object
+    from the network it was built from: the network declares the structure, and
+    the graph is what runs. A graph runs once.
     """
 
     # Any: ports of every message type are handled alike.
