@@ -44,7 +44,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 | 専用スレッド | 自分の OS スレッド | Python/PyTorch のノード、ノード内 BP、I/O、重いスタック |
 
 - Python のコードを動かすノードは GIL を要するので、タスクのプールに載せない
-- スロットの読み書きはワーカーを止めない形（atomic なポインタ差し替えとバッファプール。`specs/messages.md`）にする
+- スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。相手の更新の進み具合は待たない。待つのは、スロットごとの lock の下で `Arc` を複製・差し替える短い区間だけ。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない
 - 利用者が扱う値は `torch.Tensor` だけ。コアの値は `mujou._core._native` の内部のホストバッファで、`mujou.Node` が DLPack を介して読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
 
 ## 更新手法の差し替え

@@ -16,6 +16,8 @@
 - `_core/` の中のモジュールには `_` を付けない（パッケージ自体が非公開なので）。`_native` だけは `_` を付けた（ユーザーの指定。拡張モジュールで、`_core` の中でも直接使うのは `node` と `session` だけ）
 - `src/mujou/_core/__init__.py` は docstring だけで、何も再公開しない。公開は `mujou/__init__.py` が各モジュールから直接 import する
 - 移動のコミットは rename だけにしたかったが、pre-commit の ruff（isort）が、移動で import 先が解決できなくなったファイルの import の並びを変えた。`SKIP=ruff` での commit は auto mode の分類器に CI の迂回として断られたので、ruff の並べ替えだけは移動のコミットに入っている（各ファイル数行。git の rename 検出は効いている）。`test_native_slot.py` を含む拡張モジュールのテストは 100% の rename
+- 移動のコミット（`c04f362`）は単独では `just run` が通らない（import の修正は次のコミット）。上に別のブランチが乗っているので履歴は書き換えない（レビューの should-fix 2、orchestrator の判断）
+- `.gitignore` に古いパターン（`src/mujou/*.so` / `*.pyd`）も残した。既存の checkout に残る古い拡張モジュールが untracked に出ないように（レビューの should-fix 1）
 - `test_native_slot.py` は 2 つ目のコミットで import 1 行だけ変えた（`from mujou._core import (` → `from mujou._core._native import (`）。スロットの並列作業と merge するときはこの 1 行だけがぶつかり得る
 - `crates/mujou-python/src/slot.rs`（bindings）はクラスの `module = "..."` だけ変えた。`crates/mujou-core/src/slot.rs` には触れていない
 - `Cargo.toml` の `[lib] name` を `_native` にした。maturin が作る共有ライブラリの名前が `_native.*.so` になり、`src/mujou/_core/` に置かれる。古い `src/mujou/_core.cpython-314t-darwin.so` は消した。`.gitignore` は `src/mujou/_core/*.so` / `*.pyd` に変えた
