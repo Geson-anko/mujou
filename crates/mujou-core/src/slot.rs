@@ -14,7 +14,7 @@
 //! record the pointers they load in a list shared by every `ArcSwap` in the
 //! process, so once a message is freed and its address reused for a value of
 //! another slot (even of another type), a writer of that slot could hand the
-//! value to a reader of this one (`memory/agents/plan-implementer/slot-race.md`).
+//! value to a reader of this one (`docs/native-core.md`).
 //!
 //! - [`Outlet`]: the sending side of one port, writing its outward slot and the
 //!   slot of each channel
@@ -571,8 +571,9 @@ impl Outlet {
 ///
 /// A write places the new value of each slot as its next value tagged with
 /// version `V + 1`, then increments `V`. A reader takes the next value only if its
-/// version is at most `V`, so the single increment switches all slots together,
-/// without the writer or any reader waiting.
+/// version is at most `V`, so the single increment switches all slots together.
+/// Neither the writer nor a reader waits for the other to make progress: each waits
+/// only while the lock of one slot is held to read or replace its pair.
 pub struct InputGroup {
     version: AtomicU64,
     /// Serializes writers (the host may write from several threads). Readers never
@@ -910,35 +911,50 @@ mod tests {
         }
     }
 
-    /// A message freed from one slot is often allocated again, at the same address,
-    /// for the next write to another slot, and the writer below makes that likely by
-    /// writing both from one thread. A reader of `pairs` must still see only
-    /// messages of `pairs`, however the addresses repeat.
+    /// A probabilistic smoke test against slots handing a reader the value of
+    /// another slot, as the lock-free `arc-swap` once did. A message or input pair
+    /// freed by one slot is often allocated again, at the same address, for the
+    /// next write to another slot, and writing every slot from one thread makes
+    /// that likely. Readers of `pairs` and of `input` (whose pairs have the same
+    /// allocation size as messages) must still see only their own messages.
+    ///
+    /// Passing proves little: against `arc-swap` it failed in about half of the runs
+    /// (`docs/native-core.md`).
     #[test]
     fn readers_never_see_a_message_of_another_slot() {
         const WRITES: i64 = 100_000;
         let pairs = Outlet::new(pair_schema(), 0, "pairs", timer());
         let scalars = Outlet::new(scalar_schema(), 0, "scalars", timer());
+        let group = InputGroup::new(timer());
+        let input = group.input(pair_schema(), "input");
         let done = Arc::new(AtomicBool::new(false));
-        let readers: Vec<_> = (0..8)
-            .map(|_| {
-                let (slot, done) = (Arc::clone(pairs.outbox()), Arc::clone(&done));
-                thread::spawn(move || {
-                    while !done.load(Ordering::Relaxed) {
-                        let msg = slot.load();
-                        let fields: Vec<_> = msg
-                            .buffers()
-                            .iter()
-                            .map(|b| b.field().name.as_str())
-                            .collect();
-                        assert_eq!(fields, ["a", "b"], "read a message of another slot");
-                    }
-                })
+        let reader = |load: Box<dyn Fn() -> Arc<Message> + Send>| {
+            let done = Arc::clone(&done);
+            thread::spawn(move || {
+                while !done.load(Ordering::Relaxed) {
+                    let msg = load();
+                    let fields: Vec<_> = msg
+                        .buffers()
+                        .iter()
+                        .map(|b| b.field().name.as_str())
+                        .collect();
+                    assert_eq!(fields, ["a", "b"], "read a message of another slot");
+                }
+            })
+        };
+        let readers: Vec<_> = (0..4)
+            .flat_map(|_| {
+                let (slot, input) = (Arc::clone(pairs.outbox()), Arc::clone(&input));
+                [
+                    reader(Box::new(move || slot.load())),
+                    reader(Box::new(move || input.load())),
+                ]
             })
             .collect();
         for k in 1..=WRITES {
             pairs.send_with(Target::All, fill_k(k)).unwrap();
             scalars.send_with(Target::All, fill_k(k)).unwrap();
+            group.write(&[&input], |_, bytes| fill_k(k)(bytes)).unwrap();
         }
         done.store(true, Ordering::Relaxed);
         for r in readers {
