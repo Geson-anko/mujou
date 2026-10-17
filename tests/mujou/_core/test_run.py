@@ -327,13 +327,6 @@ class TestRun:
         with pytest.raises(TypeError, match=r"mujou\.run"):
             Run()
 
-    def test_rejects_a_call_from_a_hook(self, step: Step, start_manual: StartManual):
-        node = Calls(lambda: mujou.run(Compose(node=Pair())))
-        run = start_manual(Compose(node=node))
-        step(run)
-        assert len(node.errors) == 1
-        assert "host methods" in str(node.errors[0])
-
 
 class TestRunANode:
     def test_runs_as_the_root(self, step: Step, start_manual: StartManual):
@@ -876,13 +869,17 @@ class TestStateDict:
         step(run, net.a)  # b's last update is one step behind
         run.write({net.prev: u(3)})
         running = run.state_dict()
+        virtual.advance(0.3)  # the input stays presented for 0.3 s more
+        virtual.set_time_scale(2.0)
+        asked_at = virtual.now().ns
         run.shutdown()
         virtual.advance(100.0)  # time goes on after the end
+        virtual.set_time_scale(3.0)
         ended = run.state_dict()
         # Nothing changed after the last update: the same tree as just before the
-        # end, at the time of the latest update or write (the time after the end
-        # is not part of the run).
-        assert ended["timer"] == running["timer"]
+        # end, at the time of the shutdown (the time after the end is not part of
+        # the run).
+        assert ended["timer"] == {"time_ns": asked_at, "scale": 2.0}
         assert ended["last_update_ns"] == running["last_update_ns"]
         assert ended["slots"].keys() == running["slots"].keys()
         for name, (value, time_ns) in running["slots"].items():
@@ -892,17 +889,6 @@ class TestStateDict:
             assert torch.equal(ended["nodes"][path]["x"], running["nodes"][path]["x"])
             assert ended["nodes"][path]["updates"] == running["nodes"][path]["updates"]
         pickle.dumps(ended)
-
-    def test_after_a_normal_end_is_a_copy(self, step: Step, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        run.write({net.prev: u(1)})
-        step(run)
-        run.shutdown()
-        tree = run.state_dict()
-        x = net.a.x.clone()
-        net.a.x += 1.0
-        assert torch.equal(tree["nodes"]["a"]["x"], x)
 
     def test_after_a_normal_end_of_a_free_running_network(self, start: Start):
         net = Chain(tau=0.01)
@@ -922,57 +908,6 @@ class TestStateDict:
         for _, written_at in tree["slots"].values():
             assert written_at <= frozen_at
         assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
-
-    def test_after_a_normal_end_is_taken_at_the_time_of_the_shutdown(
-        self, step: Step, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        run.write({net.prev: u(1)})
-        step(run)
-        virtual.advance(0.3)  # the input stays presented for 0.3 s more
-        virtual.set_time_scale(2.0)
-        asked_at = virtual.now().ns
-        run.shutdown()
-        virtual.advance(100.0)
-        virtual.set_time_scale(3.0)
-        tree = run.state_dict()
-        assert tree["timer"] == {"time_ns": asked_at, "scale": 2.0}
-
-    def test_after_a_normal_end_cannot_call_the_run_in_the_node_state_dict(
-        self, start_manual: StartManual
-    ):
-        runs: list[Run] = []
-
-        class Reading(Pair):
-            @override
-            def state_dict(self) -> object:
-                try:
-                    runs[0].read(self.out)
-                except RuntimeError as e:
-                    return str(e)
-                return None
-
-        runs.append(start_manual(Compose(node=Reading())))
-        runs[0].shutdown()
-        assert "host methods" in runs[0].state_dict()["nodes"]["node"]
-
-    def test_after_a_normal_end_cannot_receive_in_the_node_state_dict(
-        self, start_manual: StartManual
-    ):
-        class Receiving(Pair):
-            @override
-            def state_dict(self) -> object:
-                try:
-                    self.x.recv()
-                except RuntimeError as e:
-                    return str(e)
-                return None
-
-        net = Compose(node=Receiving())
-        run = start_manual(net)
-        run.shutdown()
-        assert "only the node that owns" in run.state_dict()["nodes"]["node"]
 
     def test_is_taken_at_one_time(self, start: Start):
         net = Chain(tau=0.01)
@@ -995,22 +930,27 @@ class TestStateDict:
         # updates has sent its state as it is.
         assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
 
-    def test_is_a_copy_that_pickles(self, step: Step, start_manual: StartManual):
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_is_a_copy_that_pickles(
+        self, step: Step, start_manual: StartManual, ended: bool
+    ):
         net = Chain()
         run = start_manual(net)
         run.write({net.prev: u(1)})
         step(run)
+        if ended:
+            run.shutdown()
         tree = run.state_dict()
         x = net.a.x.clone()
-        step(run)  # the node updates its state in place
-        assert not torch.equal(net.a.x, x)
+        net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
         again = pickle.loads(pickle.dumps(tree))
         assert torch.equal(again["nodes"]["a"]["x"], x)
         assert again["timer"] == tree["timer"]
 
+    @pytest.mark.parametrize("ended", [False, True])
     def test_cannot_receive_in_the_node_state_dict(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self, start_manual: StartManual, ended: bool
     ):
         class Receiving(Pair):
             @override
@@ -1021,18 +961,20 @@ class TestStateDict:
                     return str(e)
                 return None
 
-        net = Compose(node=Receiving())
-        run = start_manual(net)
+        run = start_manual(Compose(node=Receiving()))
+        if ended:
+            run.shutdown()
         assert "only the node that owns" in run.state_dict()["nodes"]["node"]
 
 
 class TestHostMethodsFromANode:
+    @pytest.mark.parametrize("ended", [False, True])
     def test_raise_in_state_dict_on_the_control_thread(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self, start_manual: StartManual, ended: bool
     ):
         runs: list[Run] = []
 
-        class Writing(Pair):
+        class Reading(Pair):
             @override
             def state_dict(self) -> object:
                 try:
@@ -1041,7 +983,9 @@ class TestHostMethodsFromANode:
                     return str(e)
                 return None
 
-        runs.append(start_manual(Compose(node=Writing())))
+        runs.append(start_manual(Compose(node=Reading())))
+        if ended:
+            runs[0].shutdown()
         assert "host methods" in runs[0].state_dict()["nodes"]["node"]
 
     def test_raise(self, step: Step, start_manual: StartManual):
@@ -1056,6 +1000,7 @@ class TestHostMethodsFromANode:
                 run.state_dict,
                 run.shutdown,
                 run.join,
+                lambda: mujou.run(Compose(node=Pair())),
             ):
                 try:
                     call()
@@ -1069,7 +1014,7 @@ class TestHostMethodsFromANode:
         run = start_manual(chain)
         runs.append(run)
         step(run)
-        assert len(node.errors) == 6
+        assert len(node.errors) == 7
         assert all("host methods" in str(e) for e in node.errors)
 
 
