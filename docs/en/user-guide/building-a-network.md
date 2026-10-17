@@ -105,7 +105,7 @@ A `NextPort` also takes many peers by default, so its `recv()` returns a dict. I
 
 ## Checking the built structure
 
-`net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you do not need to call it just to run. Call it when you want to check the structure before running.
+`net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you do not need to call it just to run. Call it when you want to check the structure before running. Call it only on the network you will run: a built network cannot become part of a bigger network afterwards.
 
 ```python
 --8<-- "examples/branching.py:88:91"

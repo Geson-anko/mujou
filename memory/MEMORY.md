@@ -25,7 +25,7 @@
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_exception → on_stop、ホストへ最初の例外を送出。例外時の state tree は取得しない。部分停止・再起動・スキップはしない
 - [ネットワークと Port](project_network_ports.md) — Node と Network は Composite、a.connect(b) は NextPort（既定で複数）と PrevPort をつなぐ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
 - [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、mujou.run が返す Run ハンドルの write / read / subscribe / state_dict / shutdown / join。初期値と復元は inputs= / state=。複数 Port の write は版番号で一斉切り替え。入力はその実行のタイマー上の信号
-- [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由
+- [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由。2026-10-17 から CUDA 以外のアクセラレータ（MPS など）もストリーム無しで使える
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — 実装は private な mujou._core パッケージ、PyTorch を必須の依存として全面採用（mujou.torch に分けない）、torch を使わないのは拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node が内部の hook _on_thread_start で勾配停止・ノードごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA のみ、MPS は考えない。JAX は多数スレッドで伸びず不採用
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語）。サンプルは examples/ でテストが実行。今は公開しない
