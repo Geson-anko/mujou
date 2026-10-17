@@ -52,7 +52,7 @@ class Affine(mujou.Network):
         super().__init__()
         self.scale = Scale(2.0)
         self.shift = Shift(1.0)
-        self.scale.connect(self.shift)  # scale.next <-> shift.prev
+        self.scale.next.connect(self.shift.prev)
         self.prev = self.scale.prev  # the input of the network
         self.next = self.shift.next  # the output of the network
 

@@ -165,6 +165,7 @@ class TestConnect:
 class TestPortNames:
     class Shift(Node):
         def __init__(self) -> None:
+            super().__init__()
             self.prev = PrevPort(recv=h())
             self.next = NextPort(send=h())
             self.alias = self.next  # a second name does not rename the port
@@ -177,6 +178,7 @@ class TestPortNames:
 
         class Exposing(Network):
             def __init__(self) -> None:
+                super().__init__()
                 self.node = shift
                 self.next = shift.next
 
@@ -243,6 +245,7 @@ class Probe(Node):
         update: Callable[[], object] = lambda: None,
         **ports: Port[Any, Any, Any],
     ) -> None:
+        super().__init__()
         for name, port in ports.items():
             setattr(self, name, port)
         self.update = update

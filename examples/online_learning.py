@@ -99,7 +99,7 @@ def learned(loss: torch.Tensor) -> bool:
 
 
 teacher, learner = Teacher(), Learner(rate=5.0)
-teacher.connect(learner)
+teacher.next.connect(learner.prev)
 net = mujou.Group(teacher=teacher, learner=learner)
 with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
     # How fast the learner learns depends on time, not on how often its thread

@@ -10,9 +10,9 @@ from types import MappingProxyType
 from typing import Any, Final, Never, final
 
 from mujou._core import _native
-from mujou._core.component import Component, attribute_ports, sides
+from mujou._core.component import Component, children_of, ports_of
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort, freeze, is_frozen, thaw
+from mujou._core.port import Port, freeze, is_frozen, thaw
 
 
 @final
@@ -131,18 +131,7 @@ def build_tree(root: Component, by_run: bool) -> Graph:
         if isinstance(component, Node):
             index = len(nodes)
             nodes.append((path, component))
-            for name, value in vars(component).items():
-                if isinstance(value, Component):
-                    holder = (
-                        f"node {path!r}"
-                        if path
-                        else f"the node {type(component).__name__}"
-                    )
-                    raise ValueError(
-                        f"{holder} holds a {type(value).__name__} at {name!r}; "
-                        "only networks hold nodes and networks"
-                    )
-            for name, port in attribute_ports(component):
+            for name, port in ports_of(component).items():
                 owner = (index, name)
                 if port in ports:
                     raise ValueError(
@@ -152,10 +141,9 @@ def build_tree(root: Component, by_run: bool) -> Graph:
                 ports[port] = owner
             return
         first = len(nodes)
-        for name, value in vars(component).items():
-            if isinstance(value, Component):
-                visit(value, _child(path, name))
-        for name, port in attribute_ports(component):
+        for name, child in children_of(component).items():
+            visit(child, _child(path, name))
+        for name, port in ports_of(component).items():
             exposed.append((_child(path, name), port, range(first, len(nodes))))
 
     visit(root, "")
@@ -218,6 +206,11 @@ _BUILT: Final[dict[int, tuple[weakref.ref[Component], _Tree]]] = {}
 # One build (or undoing of one) at a time: two threads building one tree would
 # each make a graph, and both would run.
 BUILD_LOCK: Final = threading.Lock()
+
+
+def is_built(component: Component) -> bool:
+    """Whether ``component`` is part of a built tree."""
+    return _tree_of(component) is not None
 
 
 def _tree_of(component: Component) -> _Tree | None:
@@ -294,7 +287,7 @@ def _named(component: Component, path: str) -> str:
 
 
 def _check_declarations(component: Component, path: str) -> None:
-    """Reject ports declared on the class and more than one side of a kind."""
+    """Reject ports declared on the class."""
     for klass in type(component).__mro__:
         for name, value in vars(klass).items():
             if isinstance(value, Port):
@@ -303,10 +296,3 @@ def _check_declarations(component: Component, path: str) -> None:
                     f"{name!r} on the class {klass.__name__}; declare ports as "
                     "instance attributes in __init__"
                 )
-    for kind in (PrevPort, NextPort):
-        n = len(sides(component, kind))
-        if n > 1:
-            raise ValueError(
-                f"{_named(component, path)} has {n} {kind.__name__} "
-                "attributes; at most one is allowed"
-            )

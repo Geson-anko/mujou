@@ -3,26 +3,26 @@
 import inspect
 import math
 import threading
-import types
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, Final, cast, override
 
 import torch
 from torch import nn
 
 from mujou._core import _native
-from mujou._core.component import Component
+from mujou._core.component import Component, is_data_descriptor
 from mujou._core.hooks import enter_node_thread, running_hook
-from mujou._core.port import Port, assign_owner
 from mujou._core.timer import ReadOnlyTimer
 
 
 class Node(_native.Node, Component):
     """A unit of asynchronous computation: the leaf of a network.
 
-    Declare the ports as instance attributes in ``__init__`` (``build`` rejects
-    ports declared on the class). A node must not hold other nodes or networks as
-    attributes; put them side by side in a ``Network`` instead.
+    Declare the ports as instance attributes in ``__init__``, after
+    ``super().__init__()`` (``build`` rejects ports declared on the class). The
+    node registers them as they are assigned. A node must not hold other nodes or
+    networks as attributes (assigning one raises ``ValueError``); put them side by
+    side in a ``Network`` instead.
 
     Override the lifecycle hooks below; each does nothing by default, except
     ``state_dict`` and ``load_state_dict``. As in any subclass, call
@@ -124,7 +124,7 @@ class Node(_native.Node, Component):
 
 
         l1, l2 = Hidden(784, 256), Hidden(256, 256)
-        l1.connect(l2)  # l1.next <-> l2.prev
+        l1.next.connect(l2.prev)
 
     Args:
         device: Where the node computes: the CPU or a CUDA device (no other
@@ -167,6 +167,7 @@ class Node(_native.Node, Component):
             raise TypeError(f"the period must be a number of seconds, got {period}")
         if not (math.isfinite(period) and period >= 0):
             raise ValueError(f"the period must be finite and >= 0, got {period}")
+        super().__init__()
         self._device = _check_device(torch.device(device))
         self._seed = seed
         self._period = period
@@ -213,13 +214,11 @@ class Node(_native.Node, Component):
 
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
-            if isinstance(value, Port):
-                assign_owner(value, type(self).__name__, name)
-            if _is_data_descriptor(type(self), name):
-                return  # A property: what its setter stores registers itself.
             names = _state_names(self)
-            if isinstance(value, torch.Tensor | nn.Module):
-                if name not in names:
+            if isinstance(value, _STATE_TYPES):
+                # A property is not registered: what its setter stores is. Looked
+                # up only for a new name, as the lookup walks the MRO.
+                if name not in names and not is_data_descriptor(type(self), name):
                     _set_state_names(self, {**names, name: None})
             elif name in names:
                 _set_state_names(self, {k: v for k, v in names.items() if k != name})
@@ -420,6 +419,11 @@ def _check_device(device: torch.device) -> torch.device:
     return device
 
 
+# The types of the values collected into the state. A tuple, not a union:
+# isinstance checks a tuple several times faster, and Node.__setattr__ checks every
+# assignment.
+_STATE_TYPES: Final = (torch.Tensor, nn.Module)
+
 # The attribute that holds a node's registry of state names. Long, so that it does
 # not meet a name of the user's.
 _STATE_NAMES = "_mujou_state_names"
@@ -443,18 +447,6 @@ def _state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
     """Return ``(attribute name, value)`` for the tensors and modules registered on
     ``node``, in the order of registration."""
     return [(name, getattr(node, name)) for name in _state_names(node)]
-
-
-def _is_data_descriptor(klass: type, name: str) -> bool:
-    """Whether ``name`` on ``klass`` is a data descriptor other than a slot (a
-    property, say), which stores the value somewhere else."""
-    for base in klass.__mro__:
-        if name in vars(base):
-            attribute: object = vars(base)[name]
-            return hasattr(type(attribute), "__set__") and not isinstance(
-                attribute, types.MemberDescriptorType
-            )
-    return False
 
 
 def _mapping(value: object, what: str) -> Mapping[str, Any]:

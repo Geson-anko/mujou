@@ -32,7 +32,7 @@ Example::
         def __init__(self) -> None:
             super().__init__()
             self.a, self.b = Double(), Double()
-            self.a.connect(self.b)
+            self.a.next.connect(self.b.prev)
             self.prev, self.next = self.a.prev, self.b.next
 
 

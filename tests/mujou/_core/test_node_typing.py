@@ -57,6 +57,7 @@ class Fan(Node):
 
 class Wrapped(Network):
     def __init__(self) -> None:
+        super().__init__()
         self.layer = Layer(2)
         self.prev = self.layer.prev
 
