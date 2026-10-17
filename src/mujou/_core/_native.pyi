@@ -355,6 +355,7 @@ class Runtime:
         manual: bool = False,
         states: SupportsGetItem[int, Any] | None = None,
         last_update_ns: SupportsGetItem[int, SupportsIndex] | None = None,
+        period_ns: SupportsGetItem[int, SupportsIndex | None] | None = None,
         timer_state: "dict[str, int | float] | None" = None,
         pause_timeout: SupportsFloat | SupportsIndex = 10.0,
         on_exception_capture: Any | None = None,
@@ -370,7 +371,9 @@ class Runtime:
         (`Timer.state_dict()`), so the time does not run while the nodes start.
         Loading it raises `ValueError` while another runtime runs on the same
         timer, whose time would jump. `last_update_ns` is where each node's
-        first Δt starts (the time at the start by default).
+        first Δt starts (the time at the start by default). `period_ns` is each
+        node's period on the timer in ns (> 0), or `None` to update as soon as
+        any time has passed; the manual mode ignores it.
         `on_exception_capture(states, node, hook, exception)` takes the states
         (by node index, without those whose `state_dict` failed) when a node
         raises.

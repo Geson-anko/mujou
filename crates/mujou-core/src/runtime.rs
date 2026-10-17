@@ -93,6 +93,11 @@ pub struct RuntimeConfig {
     pub pause_timeout: Duration,
     /// Where each node's first Δt starts. Defaults to the time at the start.
     pub last_update_ns: Option<Vec<u64>>,
+    /// Each node's period on the timer, in ns (> 0): a free-running node
+    /// updates once every period on average, at targets a period apart (see
+    /// `node_loop`). `None` (for all nodes or one) updates as soon as any time
+    /// has passed. The manual mode ignores it.
+    pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
 }
@@ -103,6 +108,7 @@ impl Default for RuntimeConfig {
             manual: false,
             pause_timeout: Duration::from_secs(10),
             last_update_ns: None,
+            period_ns: None,
             timer_state: None,
         }
     }
@@ -327,6 +333,9 @@ struct Shared<N: NodeHooks> {
     /// before the timer's elsewhere).
     word: AtomicU64,
     last_update_ns: Vec<AtomicU64>,
+    /// Each node's period in ns when running freely (1 without a period: the
+    /// next update as soon as Δt > 0).
+    period_ns: Vec<u64>,
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
     to_controller: Sender<Message<N>>,
@@ -503,25 +512,41 @@ impl<N: NodeHooks> Shared<N> {
     }
 
     /// Updates node `i` until the stop request or one of its hooks fails.
+    ///
+    /// Running freely, the node updates once the time reaches its target. The
+    /// first target is one period after the last update (the start, or the
+    /// restored one); each next target is one period after the previous target,
+    /// so that waking up late does not delay the following updates. Only an
+    /// update a period or more late (already at or past the target after its
+    /// own) starts counting again from its own time, so the node never updates
+    /// several times in a row to catch up. Without a period, the target is 1 ns
+    /// after the last update. The manual mode updates on every step that has
+    /// Δt > 0.
     fn node_loop(&self, i: usize) {
         let mut last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
+        let period_ns = self.period_ns[i];
+        let mut target_ns = last_ns.saturating_add(period_ns);
         loop {
             let (now_ns, word) = match self.boundary(i) {
                 Boundary::Exit => return,
                 Boundary::Again => continue,
                 Boundary::Update { now_ns, word } => (now_ns, word),
             };
-            if now_ns <= last_ns {
+            let next_ns = if self.manual {
+                last_ns.saturating_add(1)
+            } else {
+                target_ns
+            };
+            if now_ns < next_ns {
                 if self.manual {
                     // Nothing to do for a step without time passing.
                     self.end_step();
                 } else {
-                    // Δt would be 0. Wait for the time to move instead of
+                    // Wait for the time to reach the next update instead of
                     // spinning, but wake up on any control request.
-                    self.timer
-                        .wait_until_ns_or(last_ns.saturating_add(1), Duration::MAX, || {
-                            self.word.load(Ordering::SeqCst) != word
-                        });
+                    self.timer.wait_until_ns_or(next_ns, Duration::MAX, || {
+                        self.word.load(Ordering::SeqCst) != word
+                    });
                 }
                 continue;
             }
@@ -533,6 +558,10 @@ impl<N: NodeHooks> Shared<N> {
             }
             last_ns = now_ns;
             self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
+            target_ns = target_ns.saturating_add(period_ns);
+            if now_ns >= target_ns {
+                target_ns = now_ns.saturating_add(period_ns);
+            }
             if self.manual {
                 self.end_step();
             }
@@ -965,6 +994,25 @@ impl<N: NodeHooks> Runtime<N> {
                 )));
             }
         }
+        let period_ns = match config.period_ns {
+            None => vec![1; n],
+            Some(periods) if periods.len() != n => {
+                return Err(RuntimeError::InvalidArgument(format!(
+                    "got {n} nodes but {} periods",
+                    periods.len()
+                )));
+            }
+            Some(periods) => periods
+                .into_iter()
+                .map(|period| match period {
+                    None => Ok(1),
+                    Some(0) => Err(RuntimeError::InvalidArgument(
+                        "a period must be > 0 ns".to_owned(),
+                    )),
+                    Some(ns) => Ok(ns),
+                })
+                .collect::<Result<_, _>>()?,
+        };
         let (to_controller, messages) = mpsc::channel();
         let shared = Arc::new(Shared {
             timer,
@@ -987,6 +1035,7 @@ impl<N: NodeHooks> Runtime<N> {
             changed: Condvar::new(),
             word: AtomicU64::new(control_word(0, Command::Run)),
             last_update_ns: (0..n).map(|_| AtomicU64::new(0)).collect(),
+            period_ns,
             failure: Arc::new(OnceLock::new()),
             hooks: nodes.into_iter().map(Mutex::new).collect(),
             to_controller,

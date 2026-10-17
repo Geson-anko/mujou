@@ -1,5 +1,7 @@
 """The node, the unit of asynchronous computation."""
 
+import inspect
+import math
 import threading
 import types
 from collections.abc import Mapping
@@ -34,10 +36,11 @@ class Node(_native.Node, Component):
       this node's ``state_dict`` returned. By default it copies the state into the
       collected tensors and modules (see below). When ``device`` is CUDA, the
       framework waits for the node's stream after it.
-    - ``on_update(dt)``: repeatedly. ``dt`` is the time in seconds on the
-      run's ``timer`` since the node's last update. Read the ports with
-      ``recv``, update in proportion to ``dt``, and write the ports with
-      ``send``. It never waits for other nodes.
+    - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
+      below). ``dt`` is the
+      time in seconds on the run's ``timer`` since the node's last update. Read
+      the ports with ``recv``, update in proportion to ``dt``, and write the
+      ports with ``send``. It never waits for other nodes.
     - ``on_pause()``: when the node has stopped for a pause of the network (as
       ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
@@ -82,11 +85,30 @@ class Node(_native.Node, Component):
     ``_capture_state``, which subclasses must not override. So overriding a
     public hook never skips it.
 
-    Calling ``super().__init__()`` is optional: without it the node computes on
-    the CPU and seeds its generator nondeterministically.
+    Without a ``period``, the node updates as fast as it can: as soon as one
+    ``on_update`` returns, the next one is called (once any time has passed).
+    With a ``period``, the framework waits on the run's timer for the next
+    target before each update. The first target is ``period`` after the start
+    of the run (after the last update before the state was taken, when the run
+    was restored), and each next one is ``period`` after the previous target, so
+    the time an update takes and a late wake-up count toward the period and the
+    node updates once every ``period`` on average. A node a whole ``period`` or
+    more late updates once and counts again from that update: it never updates
+    several times in a row to catch up. The wait follows the time scale and the
+    virtual clock, and ends at once on a pause or a stop; the time does not run
+    while paused, so a pause does not count. ``dt`` is still the time that
+    actually passed since the last update: about ``period``, longer when the
+    node is late and shorter right after. ``on_update`` must stay stable for
+    the longest ``dt`` it can get; split the step inside the node if needed
+    (cutting ``dt`` would lose time). A manual run (``mujou.testing.run``,
+    stepped by ``ManualRun.step``) ignores the period.
 
-    ``device``, ``generator`` and ``timer`` (the reading side of the run's timer)
-    are reserved names: do not assign attributes of those names.
+    Calling ``super().__init__()`` is optional: without it the node computes on
+    the CPU, seeds its generator nondeterministically and has no period.
+
+    ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
+    run's timer) are reserved names: do not assign attributes of those names
+    (a class attribute ``period`` makes the run raise ``TypeError``).
 
     Example::
 
@@ -114,23 +136,36 @@ class Node(_native.Node, Component):
         device: Where the node computes: the CPU or a CUDA device. Received
             messages arrive on it.
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
+        period: The time between two updates on average, in seconds of the
+            run's timer. ``None`` updates as fast as possible.
 
     Raises:
+        TypeError: ``period`` is a ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
-            while CUDA is not available.
+            while CUDA is not available, or ``period`` is not finite and
+            positive.
     """
 
     # Class-level defaults, so that subclasses need not call super().__init__().
     _device: torch.device = torch.device("cpu")
     _seed: int | None = None
+    _period: float | None = None
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
     _timer: ReadOnlyTimer | None = None
 
     def __init__(
-        self, *, device: torch.device | str = "cpu", seed: int | None = None
+        self,
+        *,
+        device: torch.device | str = "cpu",
+        seed: int | None = None,
+        period: float | None = None,
     ) -> None:
+        if isinstance(period, bool):
+            raise TypeError(f"the period must be a number of seconds, got {period}")
+        if period is not None and not (math.isfinite(period) and period > 0):
+            raise ValueError(f"the period must be finite and > 0, got {period}")
         device = torch.device(device)
         if device.type not in ("cpu", "cuda"):
             raise ValueError(f"a node computes on the CPU or CUDA, got {device}")
@@ -147,6 +182,7 @@ class Node(_native.Node, Component):
                 device = torch.device("cuda", torch.cuda.current_device())
         self._device = device
         self._seed = seed
+        self._period = period
 
     @property
     def device(self) -> torch.device:
@@ -156,6 +192,12 @@ class Node(_native.Node, Component):
         current device is this one, but an explicit device states the intent.
         """
         return self._device
+
+    @property
+    def period(self) -> float | None:
+        """The time between two updates on average, in seconds of the run's
+        timer, or ``None`` to update as fast as possible."""
+        return self._period
 
     @property
     def generator(self) -> torch.Generator:
@@ -477,6 +519,26 @@ def end_thread(node: Node) -> None:
 def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     """Give ``node`` the view of its run's timer, or take it back with ``None``."""
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def period_ns(node: Node) -> int | None:
+    """Return the period of ``node`` in ns for the runtime, at least 1 ns and
+    rounded as the core rounds seconds (half away from zero).
+
+    Raises:
+        TypeError: A subclass of ``Node`` replaced the reserved ``period``.
+    """
+    if inspect.getattr_static(type(node), "period") is not vars(Node)["period"]:
+        raise TypeError(
+            f"{type(node).__qualname__} replaces period, a reserved name of Node: "
+            "pass the period to Node.__init__ instead"
+        )
+    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
+    if period is None:
+        return None
+    ns = period * 1e9
+    whole = math.floor(ns)
+    return max(1, whole + int(ns - whole >= 0.5))
 
 
 def capture_state(node: Node) -> object:
