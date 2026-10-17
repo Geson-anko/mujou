@@ -18,13 +18,13 @@ from typing import (
     override,
 )
 
-from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec, split
+from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec, host_tensors
 
 if TYPE_CHECKING:
     import torch
 
     from mujou._core._native import Timestamp
-    from mujou._core.session import Binding
+    from mujou._core.binding import Binding
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
 # that pyright solves the message type of an omitted direction to Never, where an
@@ -151,8 +151,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         if initial is not None:
             if send is None:
                 raise TypeError(f"{name} sends no messages, so it takes no initial")
-            tensors = split(cast(Spec, send), initial, where=f"{name} initial")
-            self._initial = [t.detach().to("cpu", copy=True) for t in tensors]
+            self._initial = host_tensors(
+                cast(Spec, send), initial, where=f"{name} initial", copy=True
+            )
         self._send_spec = send
         self._recv_spec = recv
         self._multi = multi

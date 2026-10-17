@@ -352,6 +352,22 @@ def split(spec: Spec, msg: object, *, where: str) -> list[torch.Tensor]:
     ]
 
 
+def host_tensors(
+    spec: Spec, msg: object, *, where: str, copy: bool = False
+) -> list[torch.Tensor]:
+    """Check ``msg`` against ``spec`` (as ``split``), cut the gradients and return
+    its tensors in host memory, for the core to copy.
+
+    ``copy`` makes new tensors even of those already in host memory, for a value
+    kept beyond the call. A CUDA tensor is copied on the calling thread's current
+    stream (a node's own, in its hooks), and only that stream is synchronized.
+
+    Raises:
+        TypeError, ValueError: As ``split``.
+    """
+    return [t.detach().to("cpu", copy=copy) for t in split(spec, msg, where=where)]
+
+
 def join(
     spec: Spec, tensors: Sequence[torch.Tensor]
 ) -> torch.Tensor | dict[str, torch.Tensor]:

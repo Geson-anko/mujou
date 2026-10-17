@@ -2,14 +2,11 @@
 host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
 ``mujou.run`` creates one ``Session`` per run, on the run's timer. It lays out the
-slots of every port on that timer, binds each port to them (``Binding``), and
-starts the runtime on the same timer. Values cross the boundary to the core as
-copies: a received message is a new tensor, and a sent one is copied into the core.
+slots of every port on that timer, binds each port to them (``binding.py``), and
+starts the runtime on the same timer. The state tree is ``state.py``'s, and the
+registry of running runs ``lifetime.py``'s.
 """
 
-import atexit
-import contextlib
-import copy
 import math
 import threading
 import time
@@ -18,7 +15,8 @@ from typing import Any, Final, cast, final
 
 import torch
 
-from mujou._core import _native
+from mujou._core import _native, lifetime
+from mujou._core.binding import AnyPort, AnySlot, Binding, as_spec, message_value
 from mujou._core.graph import Graph, ports
 from mujou._core.node import (
     Node,
@@ -26,115 +24,16 @@ from mujou._core.node import (
     checked_period,
     end_thread,
     set_timer,
-    thread_ident,
 )
-from mujou._core.port import Channel, Port, bind, initial
-from mujou._core.spec import Spec, fields, join, split
+from mujou._core.port import Channel, bind, initial
+from mujou._core.spec import Spec, fields, host_tensors
+from mujou._core.state import make_tree, read_tree
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
-
-# Any (here and below): ports and messages of every type are handled alike.
-type AnyPort = Port[Any, Any, Any]
-type AnySlot = _native.Slot | _native.InputSlot
 
 # Real seconds between the checks of `subscribe` for the end of the run.
 _POLL: Final = 0.05
 # Where the host receives values.
 _CPU: Final = torch.device("cpu")
-
-
-def _spec(spec: object) -> Spec | None:
-    # Port accepts only TensorSpec, DictSpec or None (checked when it is made).
-    return cast(Spec | None, spec)
-
-
-def _host_tensors(spec: Spec, msg: object, where: str) -> list[torch.Tensor]:
-    """Split ``msg`` by ``spec``, cut the gradients and bring the tensors to host
-    memory for the core to copy.
-
-    A CUDA tensor is copied on the calling thread's current stream (a node's own,
-    in its hooks), and only that stream is synchronized.
-    """
-    return [t.detach().cpu() for t in split(spec, msg, where=where)]
-
-
-def _value(spec: Spec, message: _native.Message, device: torch.device) -> object:
-    """Copy ``message`` into new tensors on ``device`` and build the message."""
-    return join(
-        spec, [torch.from_dlpack(b).to(device, copy=True) for b in message.buffers]
-    )
-
-
-@final
-class Binding:
-    """What one port of a running network reads and writes.
-
-    ``Port.recv`` / ``send`` delegate here once the network is built.
-    """
-
-    def __init__(
-        self,
-        owner: Node,
-        path: str,
-        port: AnyPort,
-        outlet: _native.Outlet | None,
-        sources: Sequence[tuple[Channel | None, AnySlot]],
-    ) -> None:
-        self._owner = owner
-        self._path = path
-        self._send_spec = _spec(port.send_spec)
-        self._recv_spec = _spec(port.recv_spec)
-        self._multi = port.multi
-        self._outlet = outlet
-        # (channel, slot) in connection order; a single-peer port has exactly one,
-        # whose channel is None while unconnected (the host writes it).
-        self._sources = list(sources)
-        self._indices = {channel: k for k, channel in enumerate(port.channels)}
-
-    def recv(self, with_time: bool) -> object:
-        self._check_owner("receives on")
-        spec = self._recv_spec
-        if spec is None:
-            raise TypeError(f"the port {self._path!r} receives no messages")
-        device = self._owner.device
-        received: dict[Channel | None, object] = {}
-        for channel, slot in self._sources:
-            message = slot.read()
-            value = _value(spec, message, device)
-            received[channel] = (value, message.timestamp) if with_time else value
-        if self._multi:
-            return received
-        (value,) = received.values()
-        return value
-
-    def send(self, msg: object) -> None:
-        outlet = self._sending()
-        outlet.send(self._tensors(msg))
-
-    def send_to(self, channel: Channel, msg: object) -> None:
-        outlet = self._sending()
-        index = self._indices.get(channel)
-        if index is None:
-            raise ValueError(f"{channel!r} is not a channel of {self._path!r}")
-        outlet.send_to(index, self._tensors(msg))
-
-    def _check_owner(self, verb: str) -> None:
-        # A port is read and written only by its owner: this keeps each slot to
-        # one writer, and a node to the slots of its own ports (locality).
-        if threading.get_ident() != thread_ident(self._owner):
-            raise RuntimeError(
-                f"only the node that owns the port {self._path!r} {verb} it, from its "
-                "own hooks while the network runs (state_dict runs on another thread)"
-            )
-
-    def _sending(self) -> _native.Outlet:
-        self._check_owner("sends on")
-        if self._outlet is None:
-            raise TypeError(f"the port {self._path!r} sends no messages")
-        return self._outlet
-
-    def _tensors(self, msg: object) -> list[torch.Tensor]:
-        spec = cast(Spec, self._send_spec)  # an outlet exists only with a send spec
-        return _host_tensors(spec, msg, self._path)
 
 
 @final
@@ -182,7 +81,7 @@ class Session:
         self._ended: tuple[ReadOnlyTimer | None] | None = None
 
     def _add_outlet(self, port: AnyPort) -> None:
-        spec = _spec(port.send_spec)
+        spec = as_spec(port.send_spec)
         if spec is None:
             return
         outlet = _native.Outlet(
@@ -207,7 +106,7 @@ class Session:
         self, port: AnyPort, path: str
     ) -> list[tuple[Channel | None, AnySlot]]:
         """The slots ``port`` reads, as ``Binding`` takes them."""
-        spec = _spec(port.recv_spec)
+        spec = as_spec(port.recv_spec)
         if spec is None:
             return []
         if port.channels:
@@ -257,10 +156,9 @@ class Session:
                     slot.restore(tensors, time_ns)
         runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
         self._runtime = runtime
-        for session in list(_RUNNING):
+        for session in lifetime.running(Session):
             session._settle()
-        _RUNNING.add(self)
-        _watch_exit()
+        lifetime.add(self)
         for node in self._nodes:
             set_timer(node, self._view)
         # What this thread queued for the nodes (tensors made in __init__ or by
@@ -280,7 +178,7 @@ class Session:
             # Refused before any node started (e.g. the timer cannot be set back):
             # the network may run once the cause is gone.
             self._runtime = None
-            _RUNNING.discard(self)
+            lifetime.discard(self)
             for node in self._nodes:
                 set_timer(node, None)
             raise
@@ -296,7 +194,7 @@ class Session:
     def _check_one_node_devices(self) -> None:
         """Refuse a second node on a device type of ``_ONE_NODE_DEVICES``, counting
         the nodes of this run and of every run still running."""
-        for session in list(_RUNNING):
+        for session in lifetime.running(Session):
             session._settle()  # a run that has ended no longer counts
         for kind in _ONE_NODE_DEVICES:
             users = [
@@ -306,7 +204,7 @@ class Session:
             ]
             users += [
                 f"{name!r} (of a running run)"
-                for session in _RUNNING
+                for session in lifetime.running(Session)
                 for name, node in zip(session._names(), session._nodes)
                 if node.device.type == kind
             ]
@@ -384,7 +282,7 @@ class Session:
         with self._settle_lock:
             if self._ended is not None:
                 return
-            _RUNNING.discard(self)
+            lifetime.discard(self)
             ended = self._ended_timer(runtime)
             for node in self._nodes:
                 end_thread(node)
@@ -442,7 +340,7 @@ class Session:
         for port, value in values.items():
             slot, spec = self._writable(port)
             items.append(
-                (slot, _host_tensors(spec, value, self._graph.port_path(port)))
+                (slot, host_tensors(spec, value, where=self._graph.port_path(port)))
             )
         return items
 
@@ -450,7 +348,7 @@ class Session:
         self.check()
         outbox, spec = self._outbox(port)
         message = outbox.read()
-        return _value(spec, message, _CPU), message.timestamp
+        return message_value(spec, message, _CPU), message.timestamp
 
     def subscribe(
         self, port: AnyPort, timeout: float
@@ -474,7 +372,7 @@ class Session:
         deadline: float,
     ) -> Iterator[tuple[object, _native.Timestamp]]:
         self.check()
-        yield _value(spec, last, _CPU), last.timestamp
+        yield message_value(spec, last, _CPU), last.timestamp
         while True:
             self.check()
             finished = runtime.is_finished
@@ -496,7 +394,7 @@ class Session:
                     return
                 continue
             last = message
-            yield _value(spec, message, _CPU), message.timestamp
+            yield message_value(spec, message, _CPU), message.timestamp
 
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         if port in self._inputs:
@@ -561,70 +459,15 @@ class Session:
         Raises:
             ValueError: The tree does not match the network; nothing changed.
         """
-        for key in ("nodes", "slots", "last_update_ns", "timer"):
-            if key not in state:
-                raise ValueError(f"the state tree has no {key!r}")
-        nodes = cast(Mapping[str, object], state["nodes"])
-        slots = cast(Mapping[str, object], state["slots"])
-        last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
-        timer = cast(Mapping[str, object], state["timer"])
-        _same_keys("nodes", nodes, self._paths)
-        _same_keys("slots", slots, self._slots)
-        _same_keys("last_update_ns", last_update_ns, self._paths)
-        _same_keys("timer", timer, ("time_ns", "scale"))
-        for path in self._paths:
-            if not _is_int(last_update_ns[path]):
-                raise ValueError(
-                    f"the state tree's last_update_ns[{path!r}] is not an int"
-                )
-        if not _is_int(timer["time_ns"]) or not isinstance(timer["scale"], int | float):
-            raise ValueError(
-                "the state tree's timer must have an int time_ns and a scale"
-            )
         # Check and copy everything before changing anything, so that an error
         # changes nothing.
-        restores = self._slot_restores(slots)
-        # Copies: the nodes update their state in place, which must not reach the
-        # caller's tree (or another network loaded from it).
-        states = [copy.deepcopy(nodes[path]) for path in self._paths]
+        restores, restored = read_tree(state, self._paths, self._slots)
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
         self._synchronize_current_streams()
         for slot, tensors, time_ns in restores:
             slot.restore(tensors, time_ns)
-        return {
-            "states": states,
-            "last_update_ns": [cast(int, last_update_ns[path]) for path in self._paths],
-            "timer_state": {
-                "time_ns": cast(int, timer["time_ns"]),
-                "scale": cast(float, timer["scale"]),
-            },
-        }
-
-    def _slot_restores(
-        self, slots: Mapping[str, object]
-    ) -> list[tuple[AnySlot, list[torch.Tensor], int]]:
-        """Check each slot's ``(value, time_ns)`` in the tree and copy the value to
-        the host, without restoring anything yet."""
-        restores: list[tuple[AnySlot, list[torch.Tensor], int]] = []
-        for name, (slot, spec) in self._slots.items():
-            entry = slots[name]
-            if (
-                not isinstance(entry, tuple)
-                or len(cast(tuple[object, ...], entry)) != 2
-            ):
-                raise ValueError(
-                    f"the state tree's slot {name!r} is not (value, time_ns)"
-                )
-            value, time_ns = cast(tuple[object, object], entry)
-            if not _is_int(time_ns):
-                raise ValueError(
-                    f"the state tree's slot {name!r} has a time that is not an int"
-                )
-            restores.append(
-                (slot, _host_tensors(spec, value, name), cast(int, time_ns))
-            )
-        return restores
+        return restored
 
     def _synchronize_current_streams(self) -> None:
         """Wait for the calling thread's current stream on each CUDA device the
@@ -644,21 +487,9 @@ class Session:
 
         The nodes' streams are idle here (``Node._capture_state`` waited for them).
         """
-        slots: dict[str, tuple[object, int]] = {}
-        for name, (slot, spec) in self._slots.items():
-            message = slot.read()
-            slots[name] = (_value(spec, message, _CPU), message.timestamp.ns)
-        tree = {
-            "nodes": {
-                path: copy.deepcopy(state)
-                for path, state in zip(self._paths, states, strict=True)
-            },
-            "slots": slots,
-            "last_update_ns": dict(zip(self._paths, last_update_ns, strict=True)),
-            "timer": dict(timer),
-        }
-        # The copies above queue on this thread's current streams. Finish them
-        # before the runtime resumes the nodes, which update in place.
+        tree = make_tree(self._paths, states, self._slots, last_update_ns, timer)
+        # The copies queue on this thread's current streams. Finish them before
+        # the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
         return tree
 
@@ -674,81 +505,8 @@ def _wait(timeout: float) -> float | None:
     return None if timeout == math.inf else timeout
 
 
-def _is_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _same_keys(
-    what: str, given: Mapping[str, object], expected: Sequence[str] | Mapping[str, Any]
-) -> None:
-    missing = [k for k in expected if k not in given]
-    unknown = [k for k in given if k not in expected]
-    if missing or unknown:
-        raise ValueError(
-            f"the state tree's {what} do not match this network: missing {missing}, "
-            f"unknown {unknown}"
-        )
-
-
-# The sessions that have run and not yet been seen to end. Held strongly: a running
-# network keeps running when the host drops it, until it is shut down here at the
-# latest. The runtime's threads are not Python threads, and must not call into a
-# finalizing interpreter.
-_RUNNING: Final[set[Session]] = set()
-
 # The device types that torch cannot use from several threads at once: two threads
 # computing on MPS at the same time crash the process (seen with torch 2.14). Each
 # node computes on its own thread, so at most one node of all the running runs may
 # compute on such a device.
 _ONE_NODE_DEVICES: Final = ("mps",)
-
-
-def _shutdown_all() -> None:
-    # Stop every session even if one fails (e.g. Ctrl-C while waiting for its
-    # on_stop), then raise the first failure.
-    failure: BaseException | None = None
-    for session in list(_RUNNING):
-        try:
-            session.shutdown(math.inf)
-        except _native.NetworkError:
-            pass  # already logged, and the host has gone
-        except BaseException as e:  # noqa: BLE001 - re-raised below
-            failure = failure or e
-    if failure is not None:
-        raise failure
-
-
-def _stop_at_exit() -> None:
-    """Stop every running network once the main thread has ended.
-
-    At the interpreter's exit, ``threading`` marks the main thread as ended
-    before it joins the non-daemon threads, so this starts stopping the networks
-    before that join and a thread iterating over ``subscribe`` ends with its
-    network. That order is CPython's implementation, not its documented
-    behavior; ``TestInterpreterExit`` in ``tests/mujou/_core/test_run.py`` guards
-    it.
-    """
-    threading.main_thread().join()
-    # On a failure the atexit call below tries again, and raises.
-    with contextlib.suppress(Exception):
-        _shutdown_all()
-
-
-_watching = False
-_watching_lock: Final = threading.Lock()
-
-
-def _watch_exit() -> None:
-    """Start the daemon thread of ``_stop_at_exit`` once, at the first run."""
-    global _watching
-    with _watching_lock:
-        if _watching:
-            return
-        _watching = True
-    threading.Thread(target=_stop_at_exit, name="mujou-exit", daemon=True).start()
-
-
-# After the join of the non-daemon threads, wait until the networks have stopped
-# (the daemon thread may still be stopping them) and stop those that started
-# since.
-atexit.register(_shutdown_all)
