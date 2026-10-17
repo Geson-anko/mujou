@@ -80,3 +80,22 @@
 - nit 1: 並行の run では、相手が後で断られてもこちらが断られることがある（走らせ直せる）と仕様に追記
 - nit 2: 文言のパスは mujou.run が作る木でのパス（`'0.x'`）を正とし、仕様とテストを追加
 - nit 4: `mujou.run` の Raises を今の文言に合わせた
+
+## ユーザーの決定（2026-10-17）: 1 つだけなら包まない
+
+### 段階 1: 計画
+
+- `mujou.run(component, *components, timer=..., inputs=..., state=..., pause_timeout=...)`、`mujou.testing.run` も同じ。`Compose(*components, **named)`
+- 1 つだけ: ネットワークはそのまま。ノードも包まずに根にする（ノードのパス `""`、Port は `"prev"`。根が空なら `.` を入れない）。2 つ以上は `RunCompose(component, *components)`
+- 実装: `Network._build` を根を取る関数 `_build(root, by_run)` にし、ノードの根は `build_node(node)`（`by_run=True`、Graph はノードに持たせず実行ごと）。断られたら `unbuild(graph)` で取り消す
+- 状態の木: `{"nodes": {"": ...}, "slots": {"prev/in": ..., "next/out": ...}, "last_update_ns": {"": ...}}`。pickle → 復元で往復するかをテストで確かめる
+- 名指し: エラーで根（パス `""`）を指すときはクラス名だけにする（`"Leaky has already run"`, `"Leaky declares the port ..."`）。ランタイムのログと `NetworkError`（Rust の `node '<name>' raised in ...`）には、パスが空のノードだけクラス名を名前として渡す（`node 'Leaky' raised in on_update`）。Rust の文言は変えない
+- 引数なしの `mujou.run()`: pyright で `reportCallIssue`、実行時は Python 自身の `TypeError`（missing 'component'）
+
+### 段階 3-5 の判断
+
+- `Network._build` を根を取る `_build(root, by_run)` に移した。ノードの根は `build_node(node)`（Graph はノードに持たせず、実行ごとに作る。`by_run=True` なので 2 回目は "has already run"）。`unbuild` は Graph を取る形にし、根がネットワークで `_graph` がその Graph なら外す
+- `_path` は `_child` を使い、根が空なら `.` を入れない。エラーの名指しは `_named(component, path)`（根ならクラス名だけ）。"appears at both the root and ..." の `_where` はそのまま（ノードの根では起こらない）
+- ランタイムの名前: Rust の文言（`node '{name}'`）は変えず、Python から渡す名前を「パスが空ならクラス名」にした。スレッド名も `mujou-node-Leaky` になる
+- `start` の「少なくとも 1 つ」の検査は、シグネチャが `component` を必須にしたので消した（実行時は Python の TypeError、型検査は reportCallIssue。`test_node_typing.py` に `reportUnnecessaryTypeIgnoreComment` を立てて、ignore が要ることを pyright で確かめる）
+- `docs/*/user-guide/*.md` の `mujou.run(*networks)` はスタブで docs-content の担当なので触らない

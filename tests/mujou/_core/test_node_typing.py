@@ -1,10 +1,13 @@
 # pyright: strict
+# pyright: reportUnnecessaryTypeIgnoreComment=true
 """Checked by pyright in strict mode, as users' code and mujou's own nodes are:
 subclassing ``mujou.Node`` and writing to a run must type-check cleanly."""
 
+import pytest
 import torch
 
 import mujou
+import mujou.testing
 from mujou import Network, Node, Port, PrevPort, TensorSpec
 
 
@@ -29,3 +32,11 @@ class TestStrictTyping:
             run.write(values)
             _, t = run.read(net.layer.out)
             assert t.ns >= 0
+
+    def test_a_run_takes_at_least_one_component(self) -> None:
+        # Without the ignore pyright reports the call, and an unneeded ignore is
+        # reported too: the signature itself asks for a component.
+        with pytest.raises(TypeError, match="component"):
+            mujou.run()  # pyright: ignore[reportCallIssue]
+        with pytest.raises(TypeError, match="component"):
+            mujou.testing.run()  # pyright: ignore[reportCallIssue]
