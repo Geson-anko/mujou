@@ -52,7 +52,7 @@ repos:
         name: cargo clippy
         entry: cargo clippy --workspace --all-targets -- -D warnings
         language: system
-        files: ^(Cargo\.(toml|lock)|crates/)
+        files: ^(Cargo\.(toml|lock)|rust-toolchain\.toml|crates/)
         pass_filenames: false
 
   # Python syntax upgrading
