@@ -1,10 +1,10 @@
 """Learning while the world changes: a learner follows a target that drifts.
 
-A teacher sends one batch of samples every 10 ms from y = a x + b, and switches
-``a`` from 2 to -1 partway through the run. The learner learns from each new batch
-as it comes, while it runs: there is no training phase and no inference phase.
-The host follows the learner's loss as it falls, jumps when the target changes,
-and falls again.
+A teacher sends one batch of samples every 10 ms from y = a x + b, where the host
+sets ``a`` and changes it from 2 to -1 while the network runs. The learner learns
+from each new batch as it comes: there is no training phase and no inference
+phase. The host follows the learner's loss as it falls, jumps when the target
+changes, and falls again.
 """
 
 import math
@@ -18,7 +18,6 @@ from mujou import DictSpec, NextPort, Node, Port, PrevPort, TensorSpec
 
 BATCH = 8
 A_BEFORE, A_AFTER, B = 2.0, -1.0, 0.5
-SWITCH = 1.5  # seconds after the teacher starts: when `a` changes
 MAX_STEP = 0.01  # seconds: a longer explicit Euler step could diverge
 
 
@@ -32,23 +31,18 @@ SCALAR = TensorSpec(())
 
 
 class Teacher(Node):
-    """Sends a batch of y = a x + b each update, with ``a`` switching at SWITCH."""
+    """Sends a batch of y = a x + b each update, with the ``a`` the host writes."""
 
     def __init__(self) -> None:
         super().__init__(seed=0, period=0.01)
+        self.a = Port(recv=SCALAR)  # unconnected: the host writes it
         self.next = NextPort(send=SAMPLE)
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.start = self.timer.now()
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
-        a = A_BEFORE if float(self.timer.now() - self.start) < SWITCH else A_AFTER
         x = torch.randn(BATCH, 1, generator=self.generator)
-        self.next.send({"x": x, "y": a * x + B})
+        self.next.send({"x": x, "y": self.a.recv() * x + B})
 
 
 class Learner(Node):
@@ -95,22 +89,28 @@ class Learner(Node):
 
 torch.set_num_threads(1)  # each node computes on a thread of its own
 
+
+def learned(loss: torch.Tensor) -> bool:
+    return loss.item() < 1e-4
+
+
 teacher, learner = Teacher(), Learner(rate=5.0)
 teacher.connect(learner)
-with mujou.run(teacher, learner) as run:
-    start = mujou.time.now()  # the run is on the global timer
+net = mujou.Compose(teacher=teacher, learner=learner)
+with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
     # How fast the learner learns depends on time, not on how often its thread
     # runs: follow its loss, giving each phase up to 5 s of real time.
-    phases = [
-        ("first batch", lambda loss: bool(loss.isfinite())),
-        (f"learned a = {A_BEFORE}", lambda loss: loss.item() < 1e-4),
-        ("the target changed", lambda loss: loss.item() > 1.0),
-        (f"learned a = {A_AFTER} again", lambda loss: loss.item() < 1e-4),
-    ]
-    for what, condition in phases:
-        loss, t = run.wait_for(learner.loss, condition, timeout=5.0)
-        print(f"t = {float(t - start):.2f} s: loss = {loss.item():.6f}  ({what})")
-model = run.state_dict()["nodes"]["1"]["model"]  # the learner's state at the end
+    loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
+    print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_BEFORE})")
+    # The world changes: the same learner keeps learning, with no new phase.
+    changed_at = run.write({teacher.a: torch.tensor(A_AFTER)})
+    loss, t = run.wait_for(learner.loss, lambda loss: loss.item() > 1.0, timeout=5.0)
+    print(
+        f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (a changed at {float(changed_at):.2f} s)"
+    )
+    loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
+    print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_AFTER})")
+model = run.state_dict()["nodes"]["learner"]["model"]  # the learner's state at the end
 
 weight, bias = model["weight"].item(), model["bias"].item()
 print(f"the learner's weight = {weight:.3f}, bias = {bias:.3f}")
