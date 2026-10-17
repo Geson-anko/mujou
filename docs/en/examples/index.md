@@ -21,7 +21,7 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 
 What each program shows:
 
-- `quickstart.py`: runs a two-node network with `with mujou.run(...)`, and does input and output with `write` → `mujou.time.sleep` → `read`
+- `quickstart.py`: runs a two-node network with `with mujou.run(...)`, writes input with `write`, and reads output with `read` again, waiting a little with `mujou.time.sleep`, until it arrives
 - `leaky_chain/`: a node defined in continuous time (a leaky integrator). The update uses the coefficient of the exact solution, so it is stable for any `dt`. The output is compared with the exact solution at the time elapsed from the write (the time that `run.write` returns) to the output
 - `branching.py`: sends from one `NextPort` to several nodes and merges them with `PrevPort(multi=True)`. `send_to` sends only to the peer on a Channel that `connect` returned
 - `compose.py`: `Compose(enc=..., dec=...)` and `mujou.run(a, b)`, and how node paths (`"enc.scale"`, `"0.scale"`) are named

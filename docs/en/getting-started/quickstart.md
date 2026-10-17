@@ -21,10 +21,10 @@ If you built from source, run it from the root of the repository.
 uv run python examples/quickstart.py
 ```
 
-It prints one line like this.
+It prints one line like this. The value of `t` changes from run to run.
 
 ```text
-y = tensor([3., 5., 7.]) at t = 0.106 s
+y = tensor([3., 5., 7.]) at t = 0.017 s
 ```
 
 ## Define the nodes
@@ -58,8 +58,8 @@ The host part runs from `with mujou.run(net) as run:` to the final `assert`.
 
 1. `mujou.run(net)` runs the network. Each node repeats `on_update` on a thread of its own. Once the nodes are running, `mujou.run` returns and the host program moves on
 2. `run.write({net.prev: x})` writes `x` to `prev` of `scale`, an input port that is not connected to anything. The written value stays on that port until you write again
-3. `mujou.time.sleep(0.1)` waits 0.1 seconds of global time. Meanwhile, `scale` reads `x` and sends $2x$, and `shift` reads $2x$ and sends $2x + 1$
-4. `run.read(net.next)` returns the pair `(y, t)`: the last value that `next` of `shift` sent, and the time it was sent
+3. `run.read(net.next)` returns the pair `(y, t)`: the last value that `next` of `shift` sent, and the time it was sent
+4. Until `y` is $2x + 1$, the host waits 0.01 seconds of global time with `mujou.time.sleep(0.01)` and reads again. If `y` is still not $2x + 1$ after 5 seconds of global time, the host stops reading again, and the final `assert` fails
 5. Leaving the `with` block stops the network
 
 To wait, use `mujou.time.sleep`, not the standard `time.sleep`. `mujou.time.sleep` waits on Mujou's global time, so it still waits correctly when you change the speed of time or when the run is paused (see [Global Time](../concepts/time.md)).
@@ -67,17 +67,17 @@ To wait, use `mujou.time.sleep`, not the standard `time.sleep`. `mujou.time.slee
 ## Read the output
 
 ```text
-y = tensor([3., 5., 7.]) at t = 0.106 s
+y = tensor([3., 5., 7.]) at t = 0.017 s
 ```
 
-| Part                       | Meaning                                                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `y = tensor([3., 5., 7.])` | $2x + 1$ for `x = [1, 2, 3]`. The final `assert` checks it                                                                                                                      |
-| `t = 0.106 s`              | The global time, in seconds, at which `shift` sent `y`. Global time is 0 at the moment the process first uses it. You can take that moment to be about when `import mujou` runs |
+| Part                       | Meaning                                                                                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `y = tensor([3., 5., 7.])` | $2x + 1$ for `x = [1, 2, 3]`. The final `assert` checks it                                                                                                                                                            |
+| `t = 0.017 s`              | The global time, in seconds, at which `shift` sent `y`. It is not the time the host read `y`. Global time is 0 at the moment the process first uses it. You can take that moment to be about when `import mujou` runs |
 
-`t` varies a little from run to run. The nodes run without waiting for each other, so the update at which the value arrives differs between runs.
+Step 4 reads again because `y` may not be `[3., 5., 7.]` right after `write`. It takes a few updates for `x` to pass through `scale` and `shift`. Until it arrives, `shift` still sends a value computed from the previous input (zeros at first). How many updates fit in a given time depends on how the threads get scheduled. So the host does not wait for a fixed time. It reads again until the value arrives.
 
-If you `read` without waiting with `mujou.time.sleep`, `y` may not be `[3., 5., 7.]`. After `write`, the value takes time to pass through `scale` and `shift`. Until it arrives, `shift` still sends a value computed from the previous input (zeros at first).
+`t` varies from run to run. The nodes run without waiting for each other, so the update at which the value arrives differs between runs.
 
 ## When a node raises an exception
 

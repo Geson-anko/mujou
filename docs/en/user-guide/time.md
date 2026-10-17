@@ -32,7 +32,7 @@ The time returned by `run.read`, the time of a write returned by `run.write`, an
 Create `mujou.time.Timer()` and pass it as `mujou.run(..., timer=timer)`, and the run runs on that timer. A new timer starts at time 0 with scale 1.
 
 ```python
---8<-- "examples/timers.py:36:54"
+--8<-- "examples/timers.py:36:62"
 ```
 
 Give a run its own timer in these cases.
@@ -48,7 +48,7 @@ The host then waits on that run with `timer.sleep`, and compares the times from 
 `mujou.time.set_time_scale` changes the speed of every run on the global timer.
 
 ```python
---8<-- "examples/timers.py:56:61"
+--8<-- "examples/timers.py:64:69"
 ```
 
 The global time starts at 0 when the process first uses it.

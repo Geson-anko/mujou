@@ -56,4 +56,4 @@ If you built from source, you can also run the quickstart program.
 uv run python examples/quickstart.py
 ```
 
-If it prints a line such as `y = tensor([3., 5., 7.]) at t = 0.106 s`, it works. The value of `t` varies a little from run to run. The [Quickstart](quickstart.md) explains how to read this output.
+If it prints a line such as `y = tensor([3., 5., 7.]) at t = 0.017 s`, it works. The value of `t` varies from run to run. The [Quickstart](quickstart.md) explains how to read this output.

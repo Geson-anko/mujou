@@ -21,7 +21,7 @@ mujou の使い方を示す、動くプログラムの一覧である。プロ�
 
 各プログラムが示すことは次のとおりである。
 
-- `quickstart.py`: 2 ノードのネットワークを `with mujou.run(...)` で走らせ、`write` → `mujou.time.sleep` → `read` で入出力する
+- `quickstart.py`: 2 ノードのネットワークを `with mujou.run(...)` で走らせ、`write` で入力を書き、出力が届くまで `mujou.time.sleep` で少しずつ待っては `read` で読み直す
 - `leaky_chain/`: 連続時間で定義したノード（リーク積分器）。厳密解の係数で更新するので、どんな `dt` でも安定する。出力を、`run.write` が返す書き込みの時刻から出力の時刻までの経過時間で厳密解と比べる
 - `branching.py`: 1 つの `NextPort` から複数のノードへ送り、`PrevPort(multi=True)` で合流して受け取る。`send_to` で、`connect` が返した Channel の相手にだけ送る
 - `compose.py`: `Compose(enc=..., dec=...)` と `mujou.run(a, b)`。ノードのパス（`"enc.scale"`、`"0.scale"`）の付き方
