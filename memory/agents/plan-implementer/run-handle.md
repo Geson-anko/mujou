@@ -173,3 +173,11 @@ class ManualRun(Run):
 - **algorithm should-fix 1:** `test_manual_steps_match_the_discrete_algorithm` を `Compose` でもパラメタライズ
 - **S8:** node-state 側が書き直すので対応しない。`Node.timer` の docstring と `specs/nodes.md` に「公開の `on_thread_start` でも読める」を書いた
 - specs: `nodes.md`（view・予約名・終了後の時刻）、`network.md`（構築の lock と印、断られた Compose、`TypeError`、名前の検査、`Timestamp` を状態に入れてよいこと、「グローバル時間」を「その実行のタイマー」に。見出しを「入力は実行の時間上の信号」に変え、リンクを直した）、`execution-model.md`（`Clock`、ホストだけが時間を動かす理由、`Timestamp` の pickle）
+
+## ReadOnlyTimer への作り直し（2026-10-17、ユーザーの指示）
+
+- `Clock` は `_timer` に native のタイマーそのものを持っていたので、ノードが `self.timer._timer.set_time_scale(...)` で書き込み側にたどれた。pamiq-core の `ReadOnlyController` にならい、`mujou.time.ReadOnlyTimer(timer: Timer)` に置き換えた。読み取りのメソッド（`now`、`get_time_scale`）だけを属性として写し、タイマーのオブジェクトは持たない
+- 束縛メソッドの `__self__` からたどれないように、Rust の bindings に `TimerReader`（`now()` と `time_scale()` だけ。コンストラクタ無し、`Timer.reader()` で作る）を足した。`ReadOnlyTimer` はその束縛メソッドを写すので、`now.__self__` は `TimerReader` で、そこから先に書き込み側は無い
+- 正常に終了した後の止まった時刻: `stopped(at, scale)` が `itertools.repeat(at).__next__` などを写す。Python の関数（lambda）は `__globals__` から module に届くので使わなかった
+- 残る経路: `ReadOnlyTimer` のクラスの関数（`__init__` など）の `__globals__` から `mujou._core.timer` の module の globals（`GLOBAL`、`_native`）に届く。どのクラスでも同じで、`import mujou.time` でも届くので塞がない。実行に渡したタイマーそのもの（利用者の `Timer` / `VirtualTimer`）にはたどれない。テスト `test_reaches_nothing_that_changes_the_timer` は、インスタンスの属性・`__self__`・`__func__`・`__wrapped__`・closure を総当たりでたどり、`Timer` と native の `Timer` と `set_time_scale` を持つものが無いことを、実行中と終了後の両方で確かめる
+- hook の中からの sleep / set_time_scale / advance の禁止はそのまま
