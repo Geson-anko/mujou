@@ -9,11 +9,30 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | モジュール | torch への依存 | 中身 |
 | --- | --- | --- |
 | `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
-| `mujou._core` のほか（`spec` / `port` / `network` / `node` / `session` / `run` / `timer`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
+| `mujou._core` のほか（`spec` / `port` / `component` / `node` / `network` / `graph` / `binding` / `state` / `session` / `run`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
+| `mujou._core` の `timer` / `hooks` / `lifetime` | しない（import しない） | タイマー、hook の中かどうかの判定、動いている実行の登録と終了時の停止 |
 | `mujou` / `mujou.time` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
 | `mujou.pc`（予定） | する | PC-ALM のノード |
 
 torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
+
+`mujou._core` の中のモジュールは、下の表の向きだけで import し合い、循環しない（型注釈のためだけの `TYPE_CHECKING` の import は除く。`port` は `binding` の `Binding` を、`component` は `node` と `network` を注釈にだけ使う）。
+
+| モジュール | 中身 | import する `_core` のモジュール（`_native` を除く） |
+| --- | --- | --- |
+| `hooks` | 呼んだスレッドがノードの hook の中かどうか（`in_hook`） | なし |
+| `timer` | `Timer` / `ReadOnlyTimer` / `VirtualTimer`、ホスト専用の操作の検査 | `hooks` |
+| `spec` | `TensorSpec` / `DictSpec`、メッセージとテンソルの分解・組み立て、ホストのメモリへのコピー（`host_tensors`） | なし |
+| `port` | Port と `Channel` | `spec` |
+| `component` | `Node` と `Network` の共通の基底 `Component`（`connect`）と、属性の Port の列挙 | `port` |
+| `node` | `mujou.Node` | `component` / `hooks` / `port` / `timer` |
+| `graph` | ネットワークの構築（木の走査・検査・凍結・構築済みの印）と `Graph`、1 回だけの起動（`start_once`） | `component` / `node` / `port` |
+| `network` | `Network` / `Compose` / `RunCompose` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
+| `binding` | 動いている実行での Port の読み書き（`Binding`） | `node` / `port` / `spec` |
+| `state` | 状態の木（`Run.state_dict` の形）を作る・検査して読む。木の形を定めるのはここだけ | `binding` / `spec` |
+| `lifetime` | 動いている実行の登録と、インタープリタの終了時の停止。`session` を import しないように、実行を小さな Protocol で持つ | なし |
+| `session` | 1 つの実行のスロットの配置、ランタイムの制御、ホストの読み書き | `binding` / `graph` / `lifetime` / `node` / `port` / `spec` / `state` / `timer` |
+| `run` | `mujou.run` と `Run` / `ManualRun` | `graph` / `hooks` / `network` / `node` / `port` / `session` / `timer` |
 
 `mujou._core` は private なパッケージで、利用者は直接使わない。`TensorSpec` など利用者が使うものは、mujou のトップレベル（`mujou.*`）に公開する。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型は公開しない（[メッセージ](messages.md#値の型)）。
 
@@ -108,7 +127,7 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 制約: PyTorch の MPS は、2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1、Apple Silicon で確認。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）。mujou のノードはそれぞれ自分のスレッドで計算するので、MPS のノードを 2 つ以上置いたネットワーク、または MPS のノードが動いている間にホストが MPS で計算すると、プロセスが落ちる。MPS のノード 1 つとホストからの読み書き（CPU の値）は動く。
 
-この制約への対処として、2026-10-17 に（orchestrator の推奨案で。ロックで直列にする案はユーザーに後で確認する）、MPS のノードを 1 つに限ることにした。`Session.start` は、どのノードも起動する前に、この実行と、まだ動いているすべての実行（`_RUNNING`。終わった実行は先に `_settle` して数えない）を合わせて、`_ONE_NODE_DEVICES`（今は `("mps",)`）の種類のデバイスのノードを数える。2 つ以上なら、ノードの名前（パス、根ならクラス名）を挙げて `ValueError` にする。拒んだ実行は何も起動しないので、ほかの拒否と同じく、原因が無くなれば同じネットワークを後で起動できる。実行をまたいで数えるのは、MPS のノードを 1 つずつ持つ 2 つの実行でも落ちるからである。ホストのコードが MPS を使うことは止められないので、利用者向けの文書で注意する。2 つのスレッドから同時に `mujou.run` を呼んだときの検査と登録の競合は扱わない。
+この制約への対処として、2026-10-17 に（orchestrator の推奨案で。ロックで直列にする案はユーザーに後で確認する）、MPS のノードを 1 つに限ることにした。`Session.start` は、どのノードも起動する前に、この実行と、まだ動いているすべての実行（`lifetime.running`。終わった実行は先に `_settle` して数えない）を合わせて、`_ONE_NODE_DEVICES`（今は `("mps",)`）の種類のデバイスのノードを数える。2 つ以上なら、ノードの名前（パス、根ならクラス名）を挙げて `ValueError` にする。拒んだ実行は何も起動しないので、ほかの拒否と同じく、原因が無くなれば同じネットワークを後で起動できる。実行をまたいで数えるのは、MPS のノードを 1 つずつ持つ 2 つの実行でも落ちるからである。ホストのコードが MPS を使うことは止められないので、利用者向けの文書で注意する。2 つのスレッドから同時に `mujou.run` を呼んだときの検査と登録の競合は扱わない。
 
 MPS は float64 も持たないので、float64 の spec のメッセージを MPS のノードが受け取ると torch の `TypeError` になる。
 
