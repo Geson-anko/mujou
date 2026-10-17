@@ -372,12 +372,6 @@ impl Timer {
         let _s = self.lock();
         self.changed.notify_all();
     }
-
-    /// Blocks for `dt_ns` of this timer's time. Waits through pauses.
-    pub fn sleep_ns(&self, dt_ns: u64) {
-        let target_ns = self.time_ns().saturating_add(dt_ns);
-        while !self.wait_until_ns(target_ns, Duration::MAX) {}
-    }
 }
 
 /// A reason to keep the time frozen; dropping it removes the reason.

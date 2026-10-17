@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
 use crate::hint::Build;
-use crate::time::{PyTimer, extract_state, timer_or_global};
+use crate::time::{PyTimer, extract_state};
 use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
 
 // pyo3 does not introspect these, so `crates/mujou-stubgen` adds them to the
@@ -405,15 +405,15 @@ impl Runtime {
 
 #[pymethods]
 impl Runtime {
-    /// The nodes run on `timer` (the global timer if `None`): it measures their
-    /// Δt, and the runtime freezes it to start and to take the state. Create
-    /// the `Outlet`s and the `InputGroup` of this run with the same timer.
+    /// The nodes run on `timer`: it measures their Δt, and the runtime freezes
+    /// it to start and to take the state. Create the `Outlet`s and the
+    /// `InputGroup` of this run with the same timer.
     #[new]
-    #[pyo3(signature = (nodes, names, *, timer = None))]
+    #[pyo3(signature = (nodes, names, *, timer))]
     fn new(
         nodes: Vec<Bound<'_, Node>>,
         names: Vec<String>,
-        timer: Option<PyRef<'_, PyTimer>>,
+        timer: PyRef<'_, PyTimer>,
     ) -> PyResult<Self> {
         if nodes.len() != names.len() {
             return Err(PyValueError::new_err(format!(
@@ -426,7 +426,7 @@ impl Runtime {
         Ok(Self {
             pending: Mutex::new(Some(nodes)),
             names,
-            timer: timer_or_global(timer),
+            timer: Arc::clone(timer.timer()),
             inner: OnceLock::new(),
         })
     }
@@ -444,7 +444,7 @@ impl Runtime {
     /// first Δt starts (the time at the start by default). `period_ns` is each
     /// node's period on the timer in ns (> 0), or `None` to update as soon as
     /// any time has passed; the manual mode ignores it. `pause_timeout` is how
-    /// many real seconds `capture` waits for every node to pause by default.
+    /// many real seconds `capture` waits for every node to pause.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -534,12 +534,11 @@ impl Runtime {
     /// waiting methods. It may capture another runtime, but two builds must
     /// not wait for each other's runtime: that cycle deadlocks, and the control
     /// threads cannot see Ctrl-C. If `build` raises, the exception propagates
-    /// and the network keeps running.
-    #[pyo3(signature = (build, *, timeout = None))]
-    fn capture(&self, py: Python<'_>, build: Build, timeout: Option<f64>) -> PyResult<Py<PyAny>> {
-        let timeout = timeout.map(duration).transpose()?;
+    /// and the network keeps running. Gives up with `PauseTimeoutError` after
+    /// the `pause_timeout` given to `start`.
+    fn capture(&self, py: Python<'_>, build: Build) -> PyResult<Py<PyAny>> {
         let Build(build) = build;
-        let reply = self.core()?.capture(timeout, move |states| {
+        let reply = self.core()?.capture(move |states| {
             Python::attach(|py| {
                 let states = PyList::new(py, states)?;
                 build.call1(py, (states,))
@@ -597,11 +596,6 @@ impl Runtime {
             )),
             None => Ok(()),
         }
-    }
-
-    #[getter]
-    fn is_running(&self) -> bool {
-        self.inner.get().is_some_and(core::Runtime::is_running)
     }
 
     #[getter]

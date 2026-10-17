@@ -119,7 +119,7 @@ def make_runtime() -> Iterator[MakeRuntime]:
     created: list[Runtime] = []
 
     def make(nodes: Sequence[Recorder]) -> Runtime:
-        runtime = Runtime(nodes, [node.name for node in nodes])
+        runtime = Runtime(nodes, [node.name for node in nodes], timer=timer)
         created.append(runtime)
         return runtime
 
@@ -364,11 +364,12 @@ class TestStart:
         with pytest.raises(ValueError):
             start(runtime)
         assert log.events == []
-        assert not runtime.is_running
+        with pytest.raises(RuntimeError, match="not started"):
+            runtime.join(timeout=0)
         assert not virtual_timer.is_paused()
         # Nothing was used up: the runtime can still start.
         runtime.start()
-        assert runtime.is_running
+        assert runtime.join(timeout=0) is False
 
     def test_the_start_of_each_dt_is_known_when_starting_fails(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -390,7 +391,7 @@ class TestStart:
 
     def test_a_runtime_without_references_stops(self, virtual_timer: GlobalTimer):
         log = Log()
-        runtime = Runtime(recorders(log, "a"), ["a"])
+        runtime = Runtime(recorders(log, "a"), ["a"], timer=timer)
         runtime.start()
         del runtime
         gc.collect()
@@ -404,7 +405,7 @@ def wait_until_no_runtime_runs() -> None:
     in the background does not leak into the next test."""
     deadline = time.monotonic() + WAIT
     while True:
-        probe = Runtime([], [])
+        probe = Runtime([], [], timer=timer)
         try:
             probe.start(timer_state=timer.state_dict())
             probe.shutdown()
@@ -658,16 +659,16 @@ class TestCapture:
         log = Log()
         stuck, other = Stuck("stuck", log), Recorder("other", log)
         runtime = make_runtime([stuck, other])
-        runtime.start()
+        runtime.start(pause_timeout=0.1)
         virtual_timer.advance(H)
         assert entered.wait(WAIT)
         log.wait_for(lambda: len(other.dts) == 1)
 
         with pytest.raises(PauseTimeoutError, match="stuck") as exc_info:
-            runtime.capture(lambda states: None, timeout=0.1)
+            runtime.capture(lambda states: None)
         assert "other" not in str(exc_info.value)
         # The network keeps running on a running timer.
-        assert runtime.is_running
+        assert runtime.join(timeout=0) is False
         assert not virtual_timer.is_paused()
         log.wait_for(lambda: log.of("other")[-1] == "on_resume")
         release.set()
@@ -687,7 +688,7 @@ class TestCapture:
         with pytest.raises(KeyError, match="build"):
             runtime.capture(build)
         runtime.check()
-        assert runtime.is_running
+        assert runtime.join(timeout=0) is False
         assert not virtual_timer.is_paused()
 
     def test_build_cannot_wait_for_the_runtime(
@@ -698,7 +699,7 @@ class TestCapture:
         # Waiting from the control thread for the control thread would deadlock.
         with pytest.raises(RuntimeError, match="own threads"):
             runtime.capture(lambda states: runtime.shutdown())
-        assert runtime.is_running
+        assert runtime.join(timeout=0) is False
 
 
 def chain_update(x: list[float], i: int, dt: float, u: float, w: list[float]) -> None:
@@ -901,7 +902,6 @@ class TestWaiting:
         assert runtime.join()
         thread.join(WAIT)
         assert runtime.is_finished
-        assert not runtime.is_running
 
 
 class TestRequestStop:
@@ -939,7 +939,7 @@ class TestRequestStop:
         runtime = make_runtime(recorders(log, "a"))
         runtime.request_stop()
         runtime.start(manual=True)
-        assert runtime.is_running
+        assert runtime.join(timeout=0) is False
         runtime.request_stop()
         assert runtime.join(timeout=WAIT)
         runtime.request_stop()

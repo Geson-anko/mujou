@@ -384,7 +384,7 @@ class Session:
             [
                 int(stop_timer["time_ns"]),
                 *runtime.last_update_ns(),
-                *(slot.read().time_ns for slot, _ in self._slots.values()),
+                *(slot.read().timestamp.ns for slot, _ in self._slots.values()),
             ]
         )
         return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
@@ -605,7 +605,7 @@ class Session:
         slots: dict[str, tuple[object, int]] = {}
         for name, (slot, spec) in self._slots.items():
             message = slot.read()
-            slots[name] = (_value(spec, message, _CPU), message.time_ns)
+            slots[name] = (_value(spec, message, _CPU), message.timestamp.ns)
         tree = {
             "nodes": {
                 path: copy.deepcopy(state)

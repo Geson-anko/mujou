@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::hint::{Values, Views};
-use crate::time::{PyTimer, PyTimestamp, timer_or_global};
+use crate::time::{PyTimer, PyTimestamp};
 use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
 use mujou_core::slot::{self as core, DType, FieldSpec, Message, Schema, SlotError, Target};
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
@@ -369,12 +369,6 @@ impl PyMessage {
         PyTuple::new(py, views).map(Views)
     }
 
-    /// The time it was written at, in nanoseconds.
-    #[getter]
-    fn time_ns(&self) -> u64 {
-        self.0.time_ns()
-    }
-
     /// The time it was written at.
     #[getter]
     fn timestamp(&self) -> PyTimestamp {
@@ -399,8 +393,7 @@ impl PySlot {
 
     /// Waits without the GIL until the slot holds a message other than `last`.
     ///
-    /// Returns `None` after `timeout` seconds of real time. With `last` `None`,
-    /// returns the current value at once.
+    /// Returns `None` after `timeout` seconds of real time.
     ///
     /// Only for the host's `subscribe`: a node must never wait for another, so
     /// ports do not expose it.
@@ -411,7 +404,7 @@ impl PySlot {
     fn wait_newer(
         &self,
         py: Python<'_>,
-        last: Option<PyRef<'_, PyMessage>>,
+        last: PyRef<'_, PyMessage>,
         timeout: f64,
     ) -> PyResult<Option<PyMessage>> {
         let timeout = Duration::try_from_secs_f64(timeout).map_err(|_| {
@@ -419,7 +412,7 @@ impl PySlot {
                 "timeout must be finite and >= 0 seconds, got {timeout}"
             ))
         })?;
-        let last = last.map(|m| Arc::clone(&m.0));
+        let last = Arc::clone(&last.0);
         // A timeout too long to represent never expires.
         let deadline = Instant::now().checked_add(timeout);
         loop {
@@ -427,7 +420,7 @@ impl PySlot {
                 d.saturating_duration_since(Instant::now())
             });
             let step = remaining.min(SIGNAL_CHECK_INTERVAL);
-            if let Some(msg) = py.detach(|| self.0.wait_newer(last.as_ref(), step)) {
+            if let Some(msg) = py.detach(|| self.0.wait_newer(&last, step)) {
                 return Ok(Some(PyMessage(msg)));
             }
             if remaining <= SIGNAL_CHECK_INTERVAL {
@@ -487,26 +480,25 @@ impl PyOutlet {
 #[pymethods]
 impl PyOutlet {
     /// Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
-    /// Every message is stamped with the time on `timer` (the global timer if
-    /// `None`).
+    /// Every message is stamped with the time on `timer`.
     ///
     /// The slots and the host's inputs of one run must use the timer of its
     /// runtime: on another timer, the times of the messages would not be on
     /// the axis the nodes' Δt is measured on, and a pause of the run would not
     /// stop them, so a state taken at T could hold later messages.
     #[new]
-    #[pyo3(signature = (schema, channels, name, *, timer = None))]
+    #[pyo3(signature = (schema, channels, name, *, timer))]
     fn new(
         schema: PyRef<'_, PySchema>,
         channels: usize,
         name: &str,
-        timer: Option<PyRef<'_, PyTimer>>,
+        timer: PyRef<'_, PyTimer>,
     ) -> Self {
         Self(core::Outlet::new(
             Arc::clone(&schema.0),
             channels,
             name,
-            timer_or_global(timer),
+            Arc::clone(timer.timer()),
         ))
     }
 
@@ -539,17 +531,16 @@ pub struct PyInputGroup(Arc<core::InputGroup>);
 
 #[pymethods]
 impl PyInputGroup {
-    /// Every write is stamped with the time on `timer` (the global timer if
-    /// `None`).
+    /// Every write is stamped with the time on `timer`.
     ///
     /// The slots and the host's inputs of one run must use the timer of its
     /// runtime: on another timer, the times of the messages would not be on
     /// the axis the nodes' Δt is measured on, and a pause of the run would not
     /// stop them, so a state taken at T could hold later messages.
     #[new]
-    #[pyo3(signature = (*, timer = None))]
-    fn new(timer: Option<PyRef<'_, PyTimer>>) -> Self {
-        Self(core::InputGroup::new(timer_or_global(timer)))
+    #[pyo3(signature = (*, timer))]
+    fn new(timer: PyRef<'_, PyTimer>) -> Self {
+        Self(core::InputGroup::new(Arc::clone(timer.timer())))
     }
 
     /// Creates the slot `"{name}/in"` holding zeros.

@@ -790,11 +790,7 @@ impl<N: NodeHooks> Controller<N> {
         Ok(())
     }
 
-    fn capture<R>(
-        &mut self,
-        timeout: Duration,
-        build: impl FnOnce(Vec<N::State>) -> R,
-    ) -> Result<R, RuntimeError> {
+    fn capture<R>(&mut self, build: impl FnOnce(Vec<N::State>) -> R) -> Result<R, RuntimeError> {
         self.ensure_running()?;
         let s = Arc::clone(&self.shared);
         let mut c = s.lock();
@@ -804,7 +800,7 @@ impl<N: NodeHooks> Controller<N> {
         s.set_command(&mut c, Command::Pause);
         let epoch = c.epoch;
         c.freeze.hold(FreezeReason::Capture, &s.timer);
-        let deadline = Instant::now().checked_add(timeout);
+        let deadline = Instant::now().checked_add(self.pause_timeout);
         while !c.failed && !c.nodes.iter().all(|r| r.paused_at == Some(epoch)) {
             let remaining = remaining(deadline);
             if remaining.is_zero() {
@@ -1086,17 +1082,13 @@ impl<N: NodeHooks> Runtime<N> {
     }
 
     /// Pauses every node, takes their states and passes them to `build` on the
-    /// control thread while paused, then resumes. Gives up after `timeout`
-    /// (the configured pause timeout if `None`) if some node does not pause.
+    /// control thread while paused, then resumes. Gives up after the
+    /// configured pause timeout if some node does not pause.
     pub fn capture<R: Send + 'static>(
         &self,
-        timeout: Option<Duration>,
         build: impl FnOnce(Vec<N::State>) -> R + Send + 'static,
     ) -> Reply<R> {
-        self.submit(unavailable, move |controller| {
-            let timeout = timeout.unwrap_or(controller.pause_timeout);
-            controller.capture(timeout, build)
-        })
+        self.submit(unavailable, move |controller| controller.capture(build))
     }
 
     /// Stops every node and ends the system. Succeeds if the system has
@@ -1141,18 +1133,8 @@ impl<N: NodeHooks> Runtime<N> {
         self.shared.failure.get()
     }
 
-    /// Started and not yet ended.
-    pub fn is_running(&self) -> bool {
-        let c = self.shared.lock();
-        c.go && !c.finished
-    }
-
     pub fn is_finished(&self) -> bool {
         self.shared.lock().finished
-    }
-
-    pub fn names(&self) -> &[String] {
-        &self.shared.names
     }
 
     /// The time of each node's last update on the runtime's timer (where its
