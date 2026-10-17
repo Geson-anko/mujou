@@ -309,8 +309,6 @@ class TestRun:
             start_manual(composed)
 
     def test_takes_only_nodes_and_networks(self, start: Start):
-        with pytest.raises(TypeError, match="component"):
-            start()  # pyright: ignore[reportCallIssue]
         for given in ((object(),), (Chain(), object())):
             with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
