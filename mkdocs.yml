@@ -3,6 +3,8 @@ site_description: Documentation for Mujou - Asynchronous Distributed Deep Learni
 repo_url: https://github.com/Geson-anko/mujou
 repo_name: Geson-anko/mujou
 
+copyright: "Images: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>"
+
 # User documentation. The design specifications for developers are in specs/.
 docs_dir: docs
 # Rebuild on changes to the docstrings and to the included examples too.
@@ -25,23 +27,34 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: indigo
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: indigo
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  # The image of Mujou: a new work based on Yoichi Ochiai's Liquid Universe. The
+  # credit is in copyright (the footer of every page) and under the image on the home
+  # page.
+  logo: assets/icon.jpg
+  favicon: assets/favicon.png
   icon:
     repo: fontawesome/brands/github
 
 markdown_extensions:
   - admonition
+  # Grid cards on the landing pages: <div class="grid cards" markdown>.
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.details
   - pymdownx.superfences:
       custom_fences:
@@ -93,6 +106,7 @@ plugins:
         - locale: ja
           name: 日本語
           build: true
+          copyright: "画像: 落合陽一「リキッドユニバース」をもとに新たに制作"
           nav_translations:
             Home: ホーム
             Getting Started: はじめに
@@ -178,6 +192,9 @@ nav:
       - Types: api/typing.md
       - Errors: api/errors.md
       - Testing: api/testing.md
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - javascripts/mathjax.js

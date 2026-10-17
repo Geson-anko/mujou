@@ -1,6 +1,8 @@
-# 状態の保存と復元
+# 💾 状態の保存と復元
 
-このページでは、走っているネットワークの状態を取って保存し、後でその状態から走らせ直す手順を書く。状態の木の中身と、取得の間に時間が止まる仕組みは[状態](../concepts.md#%E7%8A%B6%E6%85%8B)にある。
+このページでは、走っているネットワークの状態を取って保存し、後でその状態から走らせ直す手順を書く。
+
+状態の木の中身と、取得の間に時間が止まる仕組みは[状態](../concepts.md#%E7%8A%B6%E6%85%8B)にある。
 
 ## 基本の手順
 
@@ -31,19 +33,29 @@
 
 ## 複数の実行の状態を同じ時刻で取る
 
-`run.state_dict()` は、1 つの実行の状態を 1 つの時刻で取る。複数の実行が 1 つのタイマーを共有しているとき（既定では、どの実行もグローバルタイマーで走る）、状態を 1 つずつ取ると、その間にも時間が進む。そのため、後で取った状態ほど時刻が遅れる。すべてを同じ時刻で取るには、先にタイマーを止め、状態を取り、再開する。
+`run.state_dict()` は、1 つの実行の状態を 1 つの時刻で取る。複数の実行が 1 つのタイマーを共有しているとき（既定では、どの実行もグローバルタイマーで走る）、状態を 1 つずつ取ると、その間にも時間が進む。そのため、後で取った状態ほど時刻が遅れる。
+
+すべてを同じ時刻で取るには、先にタイマーを止め、状態を取り、再開する。
 
 ```python
 --8<-- "examples/pause.py:pause"
 ```
 
-タイマーが止まっている間も `run.state_dict()` は取れ、どの木も止めた時刻を持つ。止まっている間はノードが更新せず、止まっていた時間は `resume` の後の `dt` に入らない（[時間を止める](time.md#%E6%99%82%E9%96%93%E3%82%92%E6%AD%A2%E3%82%81%E3%82%8B)）。例外で時間が止まったままにならないよう、`resume` は `finally` に書く。
+タイマーが止まっている間も `run.state_dict()` は取れ、どの木も止めた時刻を持つ。止まっている間はノードが更新せず、止まっていた時間は `resume` の後の `dt` に入らない（[時間を止める](time.md#%E6%99%82%E9%96%93%E3%82%92%E6%AD%A2%E3%82%81%E3%82%8B)）。
+
+!!! tip "resume は finally に書く"
+
+    例外で時間が止まったままにならないよう、`resume` は `finally` に書く。
 
 木を復元するときは、同じタイマーでほかの実行が走っている間は復元できないことに注意する。前の実行が終わってから 1 つずつ復元するか、復元する実行それぞれに専用のタイマーを渡す。どのタイマーも、木の同じ時刻から始まる。
 
 ## 例外で終了したときは保存できない
 
-例外で終了した実行では、`run.state_dict()` は `NetworkError` を送出し、状態を返さない（[例外と終了](errors.md)）。長く走らせる実行で状態を失いたくなければ、実行中に定期的に `run.state_dict()` を取って保存する。
+例外で終了した実行では、`run.state_dict()` は `NetworkError` を送出し、状態を返さない（[例外と終了](errors.md)）。
+
+!!! tip "長い実行では定期的に保存する"
+
+    長く走らせる実行で状態を失いたくなければ、実行中に定期的に `run.state_dict()` を取って保存する。
 
 ## 自動で集まらないものを状態に入れる
 
@@ -54,7 +66,9 @@
 - 乱数生成器 `self.generator` の状態
 - optimizer の状態（モーメントなど）と、`.grad` に溜めた勾配
 
-これらを状態に入れるには、`state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分はそのまま扱える。数値なら override せずに、`on_start` で 0 次元のテンソルとして作り（`self.count = torch.zeros((), device=self.device)`）、その場で更新してもよい（`self.count += 1`）。そうすれば自動で集まる。
+これらを状態に入れるには、`state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分はそのまま扱える。
+
+数値なら override せずに、`on_start` で 0 次元のテンソルとして作り（`self.count = torch.zeros((), device=self.device)`）、その場で更新してもよい（`self.count += 1`）。そうすれば自動で集まる。
 
 次の例では、乱数生成器の状態を足す。生成器は起動のたびに `seed` から作り直される。そのため生成器の状態を足さないと、復元した後の乱数列は止めずに続けたときと違う列になる。
 
@@ -85,11 +99,15 @@ override するときは次を守る。
 | `state_dict()`           | pickle できるオブジェクトを返す。この中で Port の `recv` と `send` を呼ばない（`RuntimeError` になる）。更新中のテンソルをそのまま入れてよい。mujou が木をコピーする |
 | `load_state_dict(state)` | `state` は `state_dict()` が返したもののコピーである。`on_start` の後、最初の `on_update` の前に、ノードのスレッドで呼ばれる                                         |
 
-`on_stop` では状態を変えない。正常に終了した後の `run.state_dict()` は、`on_stop` の後にノードが残した状態を写し、時刻は `shutdown` が終了を求めた時点にする。`on_stop` で変えた値は木に入ってしまう（理由は[状態](../concepts.md#%E7%8A%B6%E6%85%8B)）。
+!!! warning "on_stop で状態を変えない"
+
+    `on_stop` では状態を変えない。正常に終了した後の `run.state_dict()` は、`on_stop` の後にノードが残した状態を写し、時刻は `shutdown` が終了を求めた時点にする。`on_stop` で変えた値は木に入ってしまう（理由は[状態](../concepts.md#%E7%8A%B6%E6%85%8B)）。
 
 ## 保存の形式
 
-`run.state_dict()` が返す木は `mujou.StateDict` である。`dict` の派生なので、dict と同じようにキーで引け、pickle でも `torch.save` でも保存できる。読み込んだ木も `mujou.StateDict` に戻る。自分で使うファイルなら、どちらでもよい。木を他人と共有するなら `torch.save` で保存し、相手が既定の `torch.load` で読めるようにする。`mujou.run(..., state=)` には、`mujou.StateDict` のほか、同じ中身の素の dict も渡せる。
+`run.state_dict()` が返す木は `mujou.StateDict` である。`dict` の派生なので、dict と同じようにキーで引け、pickle でも `torch.save` でも保存できる。読み込んだ木も `mujou.StateDict` に戻る。
+
+自分で使うファイルなら、どちらでもよい。木を他人と共有するなら `torch.save` で保存し、相手が既定の `torch.load` で読めるようにする。`mujou.run(..., state=)` には、`mujou.StateDict` のほか、同じ中身の素の dict も渡せる。
 
 読むときは、保存したときと同じ方法を使う（`pickle.dumps` なら `pickle.loads`、`torch.save` なら `torch.load`）。保存の方法が分からないファイルは、まず既定の `torch.load` で読む。それが失敗したら、送り手を信頼できるときだけ pickle で読む。
 
@@ -102,4 +120,6 @@ torch.save(run.state_dict().cpu(), "state.pt")  # GPU のノードの状態も C
 tree = torch.load("state.pt")  # mujou.StateDict
 ```
 
-`tree.to(device)` は、木のテンソルをすべて `device` に移す。`cpu()` は `to("cpu")` と同じである。辿るのは木の中の dict（`nn.Module` の `state_dict` の `OrderedDict` も含む）・list・tuple で、これらの入れ物は新しく作る。テンソル以外の値は元の木と共有する。`torch.Tensor.to` と同じく、すでに `device` にあるテンソルはコピーせず、元の木と共有する
+`tree.to(device)` は、木のテンソルをすべて `device` に移す。`cpu()` は `to("cpu")` と同じである。
+
+辿るのは木の中の dict（`nn.Module` の `state_dict` の `OrderedDict` も含む）・list・tuple で、これらの入れ物は新しく作る。テンソル以外の値は元の木と共有する。`torch.Tensor.to` と同じく、すでに `device` にあるテンソルはコピーせず、元の木と共有する

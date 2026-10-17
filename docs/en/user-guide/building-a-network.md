@@ -1,6 +1,14 @@
-# Building a Network
+# 🕸️ Building a Network
 
-You write a network as a class that inherits from `mujou.Network`. This page shows how to connect nodes, expose ports to the outside, nest networks, branch and merge, and check the built structure. How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
+You write a network as a class that inherits from `mujou.Network`. This page shows how to:
+
+- connect nodes
+- expose ports to the outside
+- nest networks
+- branch and merge
+- check the built structure
+
+How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
 
 ## The basic form
 
@@ -14,13 +22,19 @@ In `__init__`, write these three things in order.
 --8<-- "examples/quickstart.py:network"
 ```
 
-Call `super().__init__()` first: the network registers each node, network and port as it is assigned to an attribute, as `nn.Module` registers submodules, and assigning one before `super().__init__()` raises `AttributeError`. Nodes put in a list or a dict are not registered and do not become part of the network: assign each node to an attribute of its own.
+Call `super().__init__()` first: the network registers each node, network and port as it is assigned to an attribute, as `nn.Module` registers submodules, and assigning one before `super().__init__()` raises `AttributeError`.
+
+!!! warning "Assign each node to its own attribute"
+
+    Nodes put in a list or a dict are not registered and do not become part of the network: assign each node to an attribute of its own.
 
 ## Connecting
 
 Connect two ports with `Port.connect`, as in `a.next.connect(b.prev)`. Nodes and networks have no `connect` of their own: a node can have several inputs and outputs, so naming the two ports always says which path you mean.
 
-By convention, the port on the side of the previous node is a `PrevPort` named `prev`, and the port on the side of the next node is a `NextPort` named `next`, so a chain reads `a.next.connect(b.prev)`. The names and the kinds only make the direction readable. `PrevPort` and `NextPort` differ from `Port` only in how many peers they take by default (one for `PrevPort`, many for `NextPort`), and a node can have any number of each.
+By convention, the port on the side of the previous node is a `PrevPort` named `prev`, and the port on the side of the next node is a `NextPort` named `next`, so a chain reads `a.next.connect(b.prev)`.
+
+The names and the kinds only make the direction readable. `PrevPort` and `NextPort` differ from `Port` only in how many peers they take by default (one for `PrevPort`, many for `NextPort`), and a node can have any number of each.
 
 Two ports connect only when the `send` spec of one matches the `recv` spec of the other, in both directions. If they do not match, the call to `connect` raises `TypeError`. Connecting a second channel to a port that takes one peer raises `ValueError`.
 
@@ -63,7 +77,11 @@ class Classifier(mujou.Network):
 
 `Hidden` and `Head` are nodes that each have a `PrevPort` and a `NextPort`. `Head` also has a `Port` (`teacher`) that receives a teacher signal.
 
-Nodes are told apart by their path: the attribute names from the root, joined with `.`. The paths of the nodes in this example are `"body.l1"`, `"body.l2"` and `"head"`. Renaming an attribute changes the path, and a state saved before the rename can no longer be restored (see [Saving and restoring state](state.md)).
+Nodes are told apart by their path: the attribute names from the root, joined with `.`. The paths of the nodes in this example are `"body.l1"`, `"body.l2"` and `"head"`.
+
+!!! warning "Renaming an attribute changes the path"
+
+    Renaming an attribute changes the path, and a state saved before the rename can no longer be restored (see [Saving and restoring state](state.md)).
 
 A node cannot hold other nodes or networks as attributes: assigning one raises `ValueError`. To line up nodes, put them in attributes of a network.
 
@@ -84,9 +102,17 @@ A `NextPort` takes many peers by default, so writing `a.next.connect(b.prev)` an
 | `send(value)`             | The same value to every peer             | Updated                  |
 | `send_to(channel, value)` | Only to the peer at the end of `channel` | Not updated              |
 
-If the host reads with `Run.read` a port that only uses `send_to`, it gets the port's initial value (`initial`, or zeros). The host has no way to read the values sent with `send_to` themselves. `Run.read` reads only ports that have a send type, so it cannot read the receive-only ports of the branches (each branch's `prev`) either. What the host can read is the result that a branch's node computed from the received value and sent with `send` (in the example above, `2 x` at `net.double.next`).
+If the host reads with `Run.read` a port that only uses `send_to`, it gets the port's initial value (`initial`, or zeros). The host has no way to read the values sent with `send_to` themselves.
 
-Keep the `Channel` passed to `send_to` apart for each destination. As in the example above, the network assigns the `Channel` that `connect` returns to an attribute of the sending node (`self.split.plus = self.split.next.connect(self.double.prev)`). If the node takes them from `self.next.channels` (in the order of connection) instead, swapping the order of `connect` swaps the destinations without any error. Attributes that hold a `Channel` are not collected into the state.
+`Run.read` reads only ports that have a send type, so it cannot read the receive-only ports of the branches (each branch's `prev`) either. What the host can read is the result that a branch's node computed from the received value and sent with `send` (in the example above, `2 x` at `net.double.next`).
+
+Keep the `Channel` passed to `send_to` apart for each destination. As in the example above, the network assigns the `Channel` that `connect` returns to an attribute of the sending node (`self.split.plus = self.split.next.connect(self.double.prev)`).
+
+!!! warning "Do not pick channels by their order"
+
+    If the node takes them from `self.next.channels` (in the order of connection) instead, swapping the order of `connect` swaps the destinations without any error.
+
+Attributes that hold a `Channel` are not collected into the state.
 
 ### Merging: the receiving side
 
@@ -106,4 +132,14 @@ A `NextPort` also takes many peers by default, so its `recv()` returns a dict. I
 --8<-- "examples/branching.py:build"
 ```
 
-`build()` freezes the network: afterwards no port in the tree can `connect` any more, no node, network or port can be assigned to or removed from the nodes and networks of the tree (both `RuntimeError`), and the network cannot become part of a bigger network. So call it only on the network you will run. If the structure is invalid, `build()` raises `ValueError` with the reason. The API reference lists `Graph` and the causes.
+!!! warning "`build()` freezes the network"
+
+    After `build()`:
+
+    - no port in the tree can `connect` any more
+    - no node, network or port can be assigned to or removed from the nodes and networks of the tree (both `RuntimeError`)
+    - the network cannot become part of a bigger network
+
+    So call it only on the network you will run.
+
+If the structure is invalid, `build()` raises `ValueError` with the reason. The API reference lists `Graph` and the causes.

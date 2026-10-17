@@ -1,6 +1,8 @@
-# Grouping Networks
+# 🗂️ Grouping Networks
 
-To run several networks in one run, pass them side by side as `mujou.run(a, b)`, or combine them with `mujou.Group`. This page shows how to write that, and when to split them into separate runs instead.
+To run several networks in one run, pass them side by side as `mujou.run(a, b)`, or combine them with `mujou.Group`.
+
+This page shows how to write that, and when to split them into separate runs instead.
 
 ## How to write it
 
@@ -19,9 +21,15 @@ The grouped networks have paths under the names given by `Group`.
 | `Group(a, b)`         | `"0.l1"`                     |
 | `Group(enc=a, dec=b)` | `"enc.l1"`                   |
 
-The paths are the keys of the state tree. A position and a keyword give different paths. To restore a saved state, group the networks the same way as when the state was saved: the same order, and keywords only where they were used. Otherwise the paths do not match, and `mujou.run(..., state=tree)` raises `ValueError` (see [Saving and restoring state](state.md)).
+The paths are the keys of the state tree. A position and a keyword give different paths.
 
-`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on. `Group(node)` adds a name, so there the path of the node is `"0"`.
+!!! warning "Group the same way to restore"
+
+    To restore a saved state, group the networks the same way as when the state was saved: the same order, and keywords only where they were used. Otherwise the paths do not match, and `mujou.run(..., state=tree)` raises `ValueError` (see [Saving and restoring state](state.md)).
+
+`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on.
+
+`Group(node)` adds a name, so there the path of the node is `"0"`.
 
 An invalid keyword (such as an empty name or one containing `.`) raises `ValueError`.
 
@@ -31,11 +39,15 @@ Networks whose ports you connect with `connect` before grouping them run connect
 
 To write input and read output, use the ports of the networks you passed as they are (`enc.prev`, `dec.next`). You do not have to go through the attributes of the `Group`.
 
-If you run a network alone with `mujou.run(a)`, that network is built alone. Passing the same network to `mujou.run(a, b)` afterwards raises `RuntimeError`, whether the first run is still running or has ended. Run them together from the start, or create new instances.
+!!! warning "A network built alone cannot be grouped later"
+
+    If you run a network alone with `mujou.run(a)`, that network is built alone. Passing the same network to `mujou.run(a, b)` afterwards raises `RuntimeError`, whether the first run is still running or has ended. Run them together from the start, or create new instances.
 
 ## Group them, or run them separately?
 
-Grouped networks become one run. One run shares one timer, one state tree and one ending. Decide whether to group or to split by whether you want to share these.
+Grouped networks become one run. One run shares one timer, one state tree and one ending.
+
+Decide whether to group or to split by whether you want to share these.
 
 | What is shared   | When grouped                                                          | In separate runs, each given its own `Timer`           |
 | ---------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -50,7 +62,9 @@ In the following cases, do not group them; use separate runs, and give each one 
 - You want to speed up or slow down only one of them
 - You want one to keep running even if the other stops with an exception
 
-Even in separate runs, runs given no `timer` both share the global timer. Then taking the state of one stops the time of the other too. If they should not stop each other, give them separate `Timer`s.
+!!! warning "Runs without a timer share the global timer"
+
+    Even in separate runs, runs given no `timer` both share the global timer. Then taking the state of one stops the time of the other too. If they should not stop each other, give them separate `Timer`s.
 
 ```python
 timer_a, timer_b = mujou.time.Timer(), mujou.time.Timer()

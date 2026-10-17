@@ -1,0 +1,64 @@
+/* The theme colors come from the deep purple palette (mkdocs.yml); this file only
+   adds what the palette does not cover. */
+
+/* A gradient header, from deep purple to purple. */
+.md-header,
+.md-tabs {
+  background: linear-gradient(90deg, #4527a0 0%, #6a1b9a 100%);
+}
+
+/* Japanese text needs more line spacing than Latin text to stay readable. */
+.md-typeset {
+  line-height: 1.8;
+}
+
+/* The tagline under the title of the home page. */
+.md-typeset .mujou-tagline {
+  font-size: 1.15em;
+  color: var(--md-default-fg-color--light);
+  margin-top: -0.6em;
+}
+
+/* Grid cards: lift on hover, tinted with the accent color. */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border-radius: 0.6rem;
+  transition:
+    border-color 125ms,
+    box-shadow 125ms,
+    transform 125ms;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-2px);
+}
+
+.md-typeset .grid.cards > ul > li > hr,
+.md-typeset .grid > .card > hr {
+  margin: 0.4em 0;
+}
+
+/* The logo in the header: the round icon of Mujou. */
+.md-header__button.md-logo img {
+  height: 1.8rem;
+  border-radius: 50%;
+}
+
+/* The image of Mujou on the home page, and its credit. */
+.md-typeset .mujou-hero {
+  width: 100%;
+  border-radius: 0.8rem;
+  box-shadow: var(--md-shadow-z2);
+}
+
+.md-typeset figure.mujou-figure {
+  margin: 1em 0 1.6em;
+}
+
+.md-typeset figure.mujou-figure figcaption {
+  max-width: none;
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}
