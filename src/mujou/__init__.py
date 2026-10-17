@@ -4,7 +4,8 @@
 # __all__: a star import would shadow the standard `time`.
 from mujou import time as time
 from mujou._core._native import NetworkError, PauseTimeoutError, __version__
-from mujou._core.network import Compose, Graph, Network
+from mujou._core.graph import Graph
+from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import Channel, NextPort, Port, PrevPort
 from mujou._core.run import Run, run

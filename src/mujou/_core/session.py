@@ -19,7 +19,7 @@ from typing import Any, Final, cast, final
 import torch
 
 from mujou._core import _native
-from mujou._core.network import Graph, ports
+from mujou._core.graph import Graph, ports
 from mujou._core.node import (
     Node,
     capture_state,

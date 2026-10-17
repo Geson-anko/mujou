@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Any, override
 
 import pytest
 
-from mujou._core.network import Compose, Graph, Network
+from mujou._core.graph import Graph
+from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec

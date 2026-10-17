@@ -9,14 +9,9 @@ import torch
 
 from mujou._core import _native
 from mujou._core._native import Timestamp  # by name: the API reference shows it
+from mujou._core.graph import build_node, start_once
 from mujou._core.hooks import in_hook
-from mujou._core.network import (
-    Network,
-    RunCompose,
-    build_node,
-    start_once,
-    unbuild,
-)
+from mujou._core.network import Network, RunCompose, unbuild
 from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
