@@ -14,7 +14,7 @@ In `__init__`, write these three things in order.
 --8<-- "examples/quickstart.py:network"
 ```
 
-A network follows only its direct attributes. Nodes put in a list or a dict do not become part of the network.
+A network follows only its direct attributes. Nodes put in a list or a dict do not become part of the network: assign each node to an attribute of its own.
 
 ## Connecting
 
@@ -41,7 +41,7 @@ Assigning a child's port to an attribute of the network exposes that port. The k
 
 Like a node, a network can expose at most one `PrevPort` and at most one `NextPort`. A network can expose only ports held by nodes inside it.
 
-The host writes to unconnected ports. It can also write to ports that are not exposed. As in `run.write({net.head.teacher: y})`, the host can name any port in the tree by following the attributes of the children. Exposing a port also gives it a shorter name.
+The host can write with `run.write` to any port that receives and is not connected, whether it is exposed or not. It names the port by following the attributes of the children, as in `run.write({net.head.teacher: y})`. Exposing a port only gives it a shorter name.
 
 ## Nesting
 
@@ -63,7 +63,7 @@ class Classifier(mujou.Network):
         super().__init__()
         self.body = Stack()
         self.head = Head()
-        self.body.connect(self.head)   # connects body.next (in fact l2.next) and head.prev
+        self.body.connect(self.head)   # connects body.next, which is l2.next, and head.prev
         self.prev = self.body.prev     # exposes again a port that the child exposed
         self.teacher = self.head.teacher
 ```
@@ -93,7 +93,7 @@ A `NextPort` takes many peers by default, so writing `a.connect(b)` and then `a.
 
 If the host reads with `Run.read` a port that only uses `send_to`, it gets the port's initial value (`initial`, or zeros). The host has no way to read the values sent with `send_to` themselves. `Run.read` reads only ports that have a send type, so it cannot read the receive-only ports of the branches (each branch's `prev`) either. What the host can read is the result that a branch's node computed from the received value and sent with `send` (in the example above, `2 x` at `net.double.next`).
 
-Keep the `Channel` passed to `send_to` apart for each destination. As in the example above, the network assigns the `Channel` that `connect` returns to an attribute of the sending node. If the node takes them from `self.next.channels` (in the order of connection) instead, swapping the order of `connect` swaps the destinations without any error. Attributes that hold a `Channel` are not collected into the state.
+Keep the `Channel` passed to `send_to` apart for each destination. As in the example above, the network assigns the `Channel` that `connect` returns to an attribute of the sending node (`self.split.plus = self.split.connect(self.double)`). If the node takes them from `self.next.channels` (in the order of connection) instead, swapping the order of `connect` swaps the destinations without any error. Attributes that hold a `Channel` are not collected into the state.
 
 ### Merging: the receiving side
 

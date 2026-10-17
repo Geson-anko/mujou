@@ -19,9 +19,9 @@ The composed networks have paths under the names given by `Compose`.
 | `Compose(a, b)`         | `"0.l1"`                     |
 | `Compose(enc=a, dec=b)` | `"enc.l1"`                   |
 
-`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on. `Compose(node)` adds a name, so there the path of the node is `"0"`.
+The paths are the keys of the state tree. A position and a keyword give different paths. To restore a saved state, compose the networks the same way as when the state was saved: the same order, and keywords only where they were used. Otherwise the paths do not match, and `mujou.run(..., state=tree)` raises `ValueError` (see [Saving and restoring state](state.md)).
 
-The paths are the keys of the state tree. To restore a saved state, compose the networks the same way as when the state was saved (the same order, the same keywords) (see [Saving and restoring state](state.md)).
+`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on. `Compose(node)` adds a name, so there the path of the node is `"0"`.
 
 An invalid keyword (such as an empty name or one containing `.`) raises `ValueError`.
 
@@ -53,9 +53,9 @@ In the following cases, do not compose; use separate runs, and give each one a `
 Even in separate runs, runs given no `timer` both share the global timer. Then taking the state of one stops the time of the other too. If they should not stop each other, give them separate `Timer`s.
 
 ```python
-timer = mujou.time.Timer()
-with mujou.run(net, timer=timer) as run:
-    timer.sleep(2.0)   # wait on this run's timer
+timer_a, timer_b = mujou.time.Timer(), mujou.time.Timer()
+with mujou.run(a, timer=timer_a) as run_a, mujou.run(b, timer=timer_b) as run_b:
+    timer_a.sleep(2.0)   # wait on the timer of a's run
 ```
 
 How to use `Timer` is in [Controlling time](time.md).
