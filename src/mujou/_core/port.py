@@ -18,10 +18,10 @@ from typing import (
     override,
 )
 
-from mujou._spec import DictSpec, MessageSpec, TensorSpec
+from mujou._core.spec import DictSpec, MessageSpec, TensorSpec
 
 if TYPE_CHECKING:
-    from mujou._session import Binding
+    from mujou._core.session import Binding
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
 # that pyright solves the message type of an omitted direction to Never, where an

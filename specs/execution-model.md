@@ -73,7 +73,7 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 - 時刻は「anchor の時刻 + anchor からの実経過 × スケール」で求める。スケールの変更・停止・再開・時計の切り替えでは、先に anchor を今の時刻へ張り替えるので、時刻は飛ばない
 - タイマーの時間で待つ処理は、条件変数で状態の変化を待つ。停止中は時刻が進まないので、停止中の `sleep` は再開まで戻らない
 - 状態の木に入れるのは時刻（ns）とスケールだけである。状態は必ず停止中に取得するので、停止中かどうかは入れない。時計の種類はテストの設定なので入れない
-- Python からは private な `mujou._core` で使う。`Timer()` が新しいタイマー、`mujou._core.timer`（`GlobalTimer` 型、`Timer` の派生）がグローバルタイマーで、どちらも全機能を持つ。`Outlet` / `InputGroup` / `Runtime` は `timer=` を任意で受け取り、省略するとグローバルタイマーを使う。`Timestamp` は `float(ts)` が秒、`int(ts)` が秒の整数部、`ts.ns` がナノ秒で、比較と hash ができる。`Message.timestamp` が返す。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで（グローバルタイマーを読む）、停止・状態・仮想時計はフレームワークとテストが `mujou._core` から使う。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる。`mujou.run(..., timer=...)` で実行ごとにタイマーを渡すのは、ホスト側の別の作業で入れる
+- Python からは private な `mujou._core._native` で使う。`Timer()` が新しいタイマー、`mujou._core._native.timer`（`GlobalTimer` 型、`Timer` の派生）がグローバルタイマーで、どちらも全機能を持つ。`Outlet` / `InputGroup` / `Runtime` は `timer=` を任意で受け取り、省略するとグローバルタイマーを使う。`Timestamp` は `float(ts)` が秒、`int(ts)` が秒の整数部、`ts.ns` がナノ秒で、比較と hash ができる。`Message.timestamp` が返す。利用者に公開するのは `mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` だけで（グローバルタイマーを読む）、停止・状態・仮想時計はフレームワークとテストが `mujou._core._native` から使う。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる。`mujou.run(..., timer=...)` で実行ごとにタイマーを渡すのは、ホスト側の別の作業で入れる
 - 仮想時計（`use_virtual_clock(True)`）では、時刻は `advance(seconds)` で進めた分だけ進み、スケールは効かない。停止中は `advance` できない
 - 停止には 2 種類ある。1 つは、ランタイムが状態の取得・起動・例外による終了（例外のときに状態を取得する設定のときだけ）の間に取る **保持** である。保持は Rust の `Timer::hold()` が返す `PauseHold` で、drop すると解ける。もう 1 つは、ホストやテストが使う **スイッチ**（`pause()` / `resume()`）である。タイマーは保持の数を数え、保持が 1 つも無く、スイッチも切れているときだけ時刻を進める。1 つのタイマーで複数のランタイムが走りうる（既定ではすべてグローバルタイマーで走る）。保持を数えないと、あるランタイムが状態の取得を終えたときに、別のランタイムの取得中の停止やホストの停止まで解いてしまう。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真になる
 - pamiq-core の `time.py` から、anchor の方式（スケールの変更・停止・再開で anchor を張り替える）を引き継いだ。次の点は意図して変えた
@@ -146,7 +146,7 @@ state = net.state_dict()         # 正常に終了した後は、終了した時
 
 ### コピーを取る理由
 
-ノードの `state_dict()` は、PyTorch のテンソルのように、ノードが更新し続ける値への参照を返すことがある。参照のままホストに返すと、再開した後のノードの更新で、ホストの手元の木が書き換わってしまう。そこでフレームワークは、停止している間に木のコピーを作ってから再開する。スロットの値は、`mujou._core` の外の torch に依存する層が `torch.Tensor` にコピーして木に入れる。
+ノードの `state_dict()` は、PyTorch のテンソルのように、ノードが更新し続ける値への参照を返すことがある。参照のままホストに返すと、再開した後のノードの更新で、ホストの手元の木が書き換わってしまう。そこでフレームワークは、停止している間に木のコピーを作ってから再開する。スロットの値は、`mujou._core._native` の外の torch に依存する層が `torch.Tensor` にコピーして木に入れる。
 
 ### 復元
 
@@ -210,7 +210,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 
 > 状態: 実装済み（2026-10-16）。
 
-ノードの実行と制御はコア（Rust の `mujou_core::runtime`、Python からは private な `mujou._core.Runtime`）にあり、`mujou.Network` がそれを使う。ネットワークのメソッドの一覧は [ネットワーク](network.md#実装) にある。
+ノードの実行と制御はコア（Rust の `mujou_core::runtime`、Python からは private な `mujou._core._native.Runtime`）にあり、`mujou.Network` がそれを使う。ネットワークのメソッドの一覧は [ネットワーク](network.md#実装) にある。
 
 - ノードはそれぞれ専用のスレッドで動く。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
 - `run()` は、タイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードのスレッドで `_on_thread_start`（`mujou.Node` のスレッドの設定）→ `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
@@ -226,7 +226,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 ```
 
 - 停止のタイムアウトの既定値は実時間 30 秒で、`run(pause_timeout=...)` で変える。時間内に止まらなければ `PauseTimeoutError`（`TimeoutError` の派生）を送出し、止まらなかったノードの名前をメッセージに入れる。ネットワークは動き続ける
-- 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。コアの終了の要求は終わるまで待つので、`shutdown` に有限の `timeout` を渡すと、daemon のスレッドで終了を要求し、呼んだスレッドはコアの `join` で時間を区切って待つ
+- 終了を待つ `shutdown(timeout)` と `join(timeout)` の既定は `math.inf`（いつまでも待つ）。時間内に終わらなければ `TimeoutError` を送出する（[ネットワーク](network.md#ホストの入出力)）。`shutdown` に有限の `timeout` を渡すと、コアに待たずに終了を要求し（`Runtime.request_stop`）、呼んだスレッドはコアの `join` で時間を区切って待つ。時間切れでも要求は残り、ネットワークは止まりに向かう
 - 正常に終了した後の `state_dict()` は、ホストのスレッドで各ノードの `_capture_state()` を呼ぶ。CUDA のノードの同期は、制御スレッドで呼ぶときと同じである
 - コアのランタイムには、例外のときに状態の木を取得する仕組み（`Runtime.start` の `on_exception_capture`）がまだ残っているが、Python からは使わない。後で取り除く
 - 例外による終了の最後に、ランタイムはタイマーの保持を解く（[グローバルタイマーの実装](#実装)）。ホストがそのタイマーの時間で待つ処理（グローバルタイマーなら `mujou.time.sleep`）が戻らなくなるのを避けるためである。保持している間（例外の記録から終了処理の完了まで）は、仮想時計の `advance` もできない

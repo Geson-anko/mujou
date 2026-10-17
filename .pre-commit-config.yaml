@@ -113,8 +113,8 @@ repos:
   - repo: local
     hooks:
       - id: mujou-stub
-        name: just stub (src/mujou/_core.pyi)
+        name: just stub (src/mujou/_core/_native.pyi)
         entry: just stub
         language: system
-        files: ^(Cargo\.(toml|lock)|crates/|pyproject\.toml$|src/mujou/_core\.pyi$)
+        files: ^(Cargo\.(toml|lock)|crates/|pyproject\.toml$|src/mujou/_core/_native\.pyi$)
         pass_filenames: false

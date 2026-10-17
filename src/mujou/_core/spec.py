@@ -289,7 +289,7 @@ type Spec = TensorSpec | DictSpec[Any]
 
 
 def fields(spec: Spec) -> list[tuple[str, tuple[int, ...], tuple[int, int, int]]]:
-    """Return the fields of ``spec`` as ``_core.Schema`` takes them.
+    """Return the fields of ``spec`` as ``_native.Schema`` takes them.
 
     A tensor message is one field named ``""``; a dict message has one field per
     key, in key order.

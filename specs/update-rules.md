@@ -24,7 +24,7 @@ PC-ALM は、現時点の既定の更新手法として暫定的に採用した�
 
 PC-ALM は PyTorch で実装し、モジュール `mujou.pc` から公開する。PC-ALM のノードは、`mujou.Node` を継承したクラスとして提供する（[ノード](nodes.md#ライフサイクル-hook)）。
 
-Rust では実装しない。PC-ALM の計算はノードの内側の行列演算なので、PyTorch の演算で書き、必要なら `torch.compile` などで速くすれば足りる。Rust のコア（`mujou._core`）は、学習則を知らない基盤にとどめる。`torch.compile` が free-threaded の 3.14t で、多数のスレッドから使えるかどうかは、使うときに確かめる。
+Rust では実装しない。PC-ALM の計算はノードの内側の行列演算なので、PyTorch の演算で書き、必要なら `torch.compile` などで速くすれば足りる。Rust のコア（`mujou._core._native`）は、学習則を知らない基盤にとどめる。`torch.compile` が free-threaded の 3.14t で、多数のスレッドから使えるかどうかは、使うときに確かめる。
 
 モジュール名を `pc`（予測符号化）にしたのは、PC-ALM が双対変数のステップサイズ $\alpha = 0$ で通常の予測符号化（PC）に退化し、PC も同じモジュールに収まるからである。
 

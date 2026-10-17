@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from mujou._port import Channel, NextPort, Port, PrevPort, freeze, is_frozen
+from mujou._core.port import Channel, NextPort, Port, PrevPort, freeze, is_frozen
 
 if TYPE_CHECKING:
-    from mujou._node import Node
-    from mujou._session import Session
+    from mujou._core.node import Node
+    from mujou._core.session import Session
 
 
 class Component:
@@ -198,7 +198,7 @@ class Network(Component):
                 direct attributes.
         """
         # Imported here: _node imports Component from this module.
-        from mujou._node import Node
+        from mujou._core.node import Node
 
         if self._graph is not None:
             raise RuntimeError("the network is already built")
@@ -271,7 +271,7 @@ class Network(Component):
             freeze(port)
         self._graph = Graph(tuple(nodes), MappingProxyType(ports))
         # Imported here: _session imports _node, which imports this module.
-        from mujou._session import Session
+        from mujou._core.session import Session
 
         self._session = Session(self._graph)
 
@@ -481,7 +481,7 @@ def run[N: Network](
 
 def _session(network: Network) -> Session:
     # Imported here: _node imports this module.
-    from mujou._node import in_hook
+    from mujou._core.node import in_hook
 
     if in_hook():
         raise RuntimeError(

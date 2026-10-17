@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, over
 import pytest
 import torch
 
-from mujou._core import GlobalTimer
-from mujou._network import Network
-from mujou._node import Node
-from mujou._port import Channel, Multi, NextPort, Port, PrevPort, Single
-from mujou._spec import DictSpec, TensorSpec
+from mujou._core._native import GlobalTimer
+from mujou._core.network import Network
+from mujou._core.node import Node
+from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
+from mujou._core.spec import DictSpec, TensorSpec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork

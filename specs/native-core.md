@@ -17,13 +17,13 @@ mujou のコアには 2 つの責務がある。1 つは、各ノードを非同
 
 ### 非同期・分散的に学習するためのフレームワーク
 
-mujou は、ノードを回す基盤だけでなく、その上で非同期・分散的に学習するためのフレームワークも、コアの責務として提供する。学習フレームワークとして提供するのは PC-ALM である。ここでいうコアは mujou の中核の機能のことで、Rust の `mujou._core` のことではない。PC-ALM は PyTorch で実装し、`mujou.pc` から公開する（[更新手法](update-rules.md#実装と公開元)）。
+mujou は、ノードを回す基盤だけでなく、その上で非同期・分散的に学習するためのフレームワークも、コアの責務として提供する。学習フレームワークとして提供するのは PC-ALM である。ここでいうコアは mujou の中核の機能のことで、`mujou._core` パッケージ（とその中の Rust の拡張モジュール `_native`）のことではない。PC-ALM は PyTorch で実装し、`mujou.pc` から公開する（[更新手法](update-rules.md#実装と公開元)）。
 
 PC-ALM を mujou が提供しても、ノード・スロット・スケジューラは特定の学習則を前提にしない。更新手法を差し替えられるという要件（[更新手法](update-rules.md)）はそのまま保ち、PC-ALM 固有の状態や値は PC-ALM の更新手法の側に閉じ込める。局所性・非同期性の不変条件も、実行の基盤と同じように守る。
 
 ## 実装言語
 
-コアは Rust で実装し、Python はインターフェースにする。Python からは private なモジュール `mujou._core` として使い、利用者が使う名前は `mujou.*` のトップレベルに公開する。`mujou._core` は torch に依存しない（[PyTorch の利用](torch.md#モジュールの構成)）。Python からは PyO3 + maturin で呼ぶ想定で、コアの処理中は GIL を解放する。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。
+コアは Rust で実装し、Python はインターフェースにする。Python からは private な拡張モジュール `mujou._core._native` として使う。Python の実装も private なパッケージ `mujou._core` に集め、利用者が使う名前は `mujou.*` のトップレベルに公開する。`mujou._core._native` は torch に依存しない（[PyTorch の利用](torch.md#モジュールの構成)）。Python からは PyO3 + maturin で呼ぶ想定で、コアの処理中は GIL を解放する。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。
 
 ## M:N スケジューリング
 
@@ -52,7 +52,7 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 
 ## メッセージの値の型
 
-コアは、スロットの値を不変なバッファとしてホストのメモリに持つ。このバッファは `mujou._core` の内部の型で、利用者には見せない。利用者がやり取りする値は `torch.Tensor` だけである。コアは特定のテンソルライブラリに依存せず、torch も import しない。フレームワークの基礎を自分たちで制御するためである。
+コアは、スロットの値を不変なバッファとしてホストのメモリに持つ。このバッファは `mujou._core._native` の内部の型で、利用者には見せない。利用者がやり取りする値は `torch.Tensor` だけである。コアは特定のテンソルライブラリに依存せず、torch も import しない。フレームワークの基礎を自分たちで制御するためである。
 
 `torch.Tensor` とコアの間は DLPack で受け渡し、読み書きとも必ずコピーする。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。コアは GPU をサポートせず、GPU 上の値は受け取らない。値の型とメッセージの型、スロットのメモリ管理は [メッセージ](messages.md) で、ノードの内側で GPU を使う場合の方針は [PyTorch の利用](torch.md) で定める。
 
@@ -63,15 +63,15 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 | crate                  | 中身                                                                                      |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
 | `crates/mujou-core`    | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る           |
-| `crates/mujou-python`  | PyO3 の bindings。拡張モジュール `mujou._core` になる。free-threaded 対応を明示する（`gil_used = false`） |
-| `crates/mujou-stubgen` | `mujou._core` の型スタブの生成器（`just stub` が使う）                                    |
+| `crates/mujou-python`  | PyO3 の bindings。拡張モジュール `mujou._core._native` になる。free-threaded 対応を明示する（`gil_used = false`） |
+| `crates/mujou-stubgen` | `mujou._core._native` の型スタブの生成器（`just stub` が使う）                                    |
 
-- Python のパッケージのビルドバックエンドは maturin にする。`uv sync` が拡張モジュールをビルドし、`src/mujou/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
-- 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `mujou._core.__version__` を再 export する
+- Python のパッケージのビルドバックエンドは maturin にする。`uv sync` が拡張モジュールをビルドし、`src/mujou/_core/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
+- 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `mujou._core._native.__version__` を再 export する
 - `just test` は `cargo test --workspace` と pytest を回す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で回す
-- 型スタブ `src/mujou/_core.pyi` は `just stub` で生成し、生成物をコミットする。pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring は Rust の doc comment から出るので、説明はそこに書く。pre-commit の `mujou-stub` が毎回生成し直し、コミットしたスタブが古ければ「ファイルを変更した」として失敗する（`just run` の `format` でも走る）
+- 型スタブ `src/mujou/_core/_native.pyi` は `just stub` で生成し、生成物をコミットする。pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring は Rust の doc comment から出るので、説明はそこに書く。pre-commit の `mujou-stub` が毎回生成し直し、コミットしたスタブが古ければ「ファイルを変更した」として失敗する（`just run` の `format` でも走る）
   - `pyo3-stub-gen` は pyo3 0.30 に対応していない（0.23.1 時点で `<0.30`）ので使わない
-  - introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou", name = "_core")]` で決まり、各クラスの `module = "mujou._core"` と `pyproject.toml` の `module-name` もそろえる（pyo3 はクラスの `module` に文字列リテラルしか取らない）。`just stub` は `module-name` から拡張モジュールとスタブの置き場所を決める
-  - 生成器は pyo3 の足りない所を補う。`create_exception!` の例外（`NetworkError` / `PauseTimeoutError`）は introspection に出ないので、生成器が同じ docstring で足す。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける。`tests/mujou/test_core_stub.py` がスタブと実行時のモジュールの名前・docstring・基底クラスのずれを検出する
+  - introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou._core", name = "_native")]` で決まり、各クラスの `module = "mujou._core._native"` と `pyproject.toml` の `module-name` もそろえる（pyo3 はクラスの `module` に文字列リテラルしか取らない）。`just stub` は `module-name` から拡張モジュールとスタブの置き場所を決める
+  - 生成器は pyo3 の足りない所を補う。`create_exception!` の例外（`NetworkError` / `PauseTimeoutError`）は introspection に出ないので、生成器が同じ docstring で足す。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける。`tests/mujou/_core/test_native_stub.py` がスタブと実行時のモジュールの名前・docstring・基底クラスのずれを検出する
   - `PauseTimeoutError` をクラスにできないのは、pyo3 0.30 が `PyTimeoutError` を `BaseException` のレイアウトで宣言しており、継承するとクラスの初期化に失敗するからである
   - `#[pyo3(signature = ...)]` の文字列の注釈は import を伴わないので、組み込みとモジュール内の名前だけを書く。`collections.abc.Callable` などが要る型は、`IntoPyObject::OUTPUT_TYPE` / `FromPyObject::INPUT_TYPE` を持つ小さな型で表す（`crates/mujou-python/src/hint.rs`）

@@ -324,6 +324,11 @@ class Runtime:
         The time of each node's last update on the runtime's timer, in
         nanoseconds.
         """
+    def request_stop(self, /) -> None:
+        """
+        Asks every node to stop and returns without waiting; `join` waits for
+        the end. Does nothing before `start` or once the network has stopped.
+        """
     def shutdown(self, /) -> None:
         """
         Stops every node and waits until the network has stopped. Does nothing

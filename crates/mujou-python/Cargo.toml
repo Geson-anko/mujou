@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "_core"
+name = "_native"
 crate-type = ["cdylib"]
 # Test binaries would have to link libpython; test the logic in mujou-core and the
 # bindings from pytest instead.

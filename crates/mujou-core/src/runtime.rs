@@ -1092,6 +1092,15 @@ impl<N: NodeHooks> Runtime<N> {
         self.submit(stopped, |controller| controller.shutdown())
     }
 
+    /// Asks every node to stop and returns without waiting; [`Runtime::join`]
+    /// waits for the end. Does nothing once the system has ended.
+    pub fn request_stop(&self) {
+        // Not through `submit`: there is no reply to wait for, so a node's own
+        // thread may ask too.
+        let job = Box::new(|controller: &mut Controller<N>| controller.finish());
+        let _ = self.shared.to_controller.send(Message::Job(job));
+    }
+
     /// Waits until the system has ended (every node thread joined), for at most
     /// `timeout`. Returns whether it has ended; fails if it ended because of an
     /// exception.
@@ -1155,8 +1164,7 @@ fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> Runt
 impl<N: NodeHooks> Drop for Runtime<N> {
     fn drop(&mut self) {
         // Do not wait: the caller may hold a lock the nodes need (the GIL).
-        let job = Box::new(|controller: &mut Controller<N>| controller.finish());
-        let _ = self.shared.to_controller.send(Message::Job(job));
+        self.request_stop();
     }
 }
 

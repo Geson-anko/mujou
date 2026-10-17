@@ -45,7 +45,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 
 - Python のコードを動かすノードは GIL を要するので、タスクのプールに載せない
 - スロットの読み書きはワーカーを止めない形（atomic なポインタ差し替えとバッファプール。`specs/messages.md`）にする
-- 利用者が扱う値は `torch.Tensor` だけ。コアの値は `mujou._core` の内部のホストバッファで、`mujou.Node` が DLPack を介して読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
+- 利用者が扱う値は `torch.Tensor` だけ。コアの値は `mujou._core._native` の内部のホストバッファで、`mujou.Node` が DLPack を介して読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
 
 ## 更新手法の差し替え
 

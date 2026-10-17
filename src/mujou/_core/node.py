@@ -5,11 +5,11 @@ from typing import cast, override
 
 import torch
 
-from mujou import _core
-from mujou._network import Component
+from mujou._core import _native
+from mujou._core.network import Component
 
 
-class Node(_core.Node, Component):
+class Node(_native.Node, Component):
     """A unit of asynchronous computation: the leaf of a network.
 
     Declare the ports as instance attributes in ``__init__`` (``build`` rejects

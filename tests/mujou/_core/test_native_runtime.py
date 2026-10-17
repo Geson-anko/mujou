@@ -7,7 +7,7 @@ from typing import override
 
 import pytest
 
-from mujou._core import (
+from mujou._core._native import (
     GlobalTimer,
     NetworkError,
     Node,
@@ -916,6 +916,49 @@ class TestWaiting:
         thread.join(WAIT)
         assert runtime.is_finished
         assert not runtime.is_running
+
+
+class TestRequestStop:
+    def test_returns_while_a_node_is_updating_and_join_sees_the_end(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        release = threading.Event()
+
+        class Blocking(Recorder):
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                release.wait(WAIT)
+
+        log = Log()
+        runtime = make_runtime([Blocking("a", log)])
+        runtime.start()
+        virtual_timer.advance(H)
+        log.wait_for(lambda: log.count("a", "on_update") == 1)
+
+        # A waiting stop would not return while the node is in its update.
+        runtime.request_stop()
+        assert runtime.join(timeout=0.05) is False
+        assert log.count("a", "on_stop") == 0
+
+        release.set()
+        assert runtime.join(timeout=WAIT)
+        assert log.of("a")[-1] == "on_stop"
+        assert runtime.is_finished
+
+    def test_does_nothing_before_start_and_after_the_end(
+        self, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        runtime = make_runtime(recorders(log, "a"))
+        runtime.request_stop()
+        runtime.start(manual=True)
+        assert runtime.is_running
+        runtime.request_stop()
+        assert runtime.join(timeout=WAIT)
+        runtime.request_stop()
+        runtime.shutdown()
+        assert log.count("a", "on_stop") == 1
 
 
 class TestOwnTimer:

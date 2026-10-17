@@ -59,7 +59,7 @@ container *args:
     devcontainer up --workspace-folder "$main" > /dev/null
     devcontainer exec --workspace-folder "$main" bash -lc 'cd "$1" && shift && exec "$@"' _ "{{justfile_directory()}}" "$@"
 
-# Generate the type stub of the native extension (src/mujou/_core.pyi) from its
+# Generate the type stub of the native extension (src/mujou/_core/_native.pyi) from its
 # signatures and doc comments. Commit the result; pre-commit regenerates it.
 stub:
     #!/usr/bin/env -S uv run --quiet python

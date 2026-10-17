@@ -8,7 +8,7 @@ metadata:
 2026-10-13 決定。詳細は `specs/messages.md`。
 
 - **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ノード 1 つ、読み手は N 個可
-- **利用者が扱う値は `torch.Tensor` だけ（2026-10-15 変更）。** Port の `recv()` / `send()`、ホストの `write` / `read`、`TensorSpec.zeros()` / `rand()` はすべて `torch.Tensor`。コアの値の型（旧 `mujou.Tensor`）は `mujou._core` の内部に閉じ、`mujou.dtypes` と `mujou.default.dtype` は廃止。NumPy との変換と `ml_dtypes` も不要になった
+- **利用者が扱う値は `torch.Tensor` だけ（2026-10-15 変更）。** Port の `recv()` / `send()`、ホストの `write` / `read`、`TensorSpec.zeros()` / `rand()` はすべて `torch.Tensor`。コアの値の型（旧 `mujou.Tensor`）は `mujou._core._native` の内部に閉じ、`mujou.dtypes` と `mujou.default.dtype` は廃止。NumPy との変換と `ml_dtypes` も不要になった
 - **dtype は torch の dtype。** float16・bfloat16・float32・float64・int8・int16・int32・int64・uint8・bool。バッチは shape の一部で特別扱いしない
 - **コアの中の値は、ホストのメモリ上の不変なバッファ（連続 row-major）。** torch とは DLPack で受け渡し、読み書きとも必ずコピーする（ゼロコピーにすると、利用者が受け取った値をその場で書き換えたときに他の読み手のバッファまで変わるため）。コアは独自の dtype を持たず DLPack の dtype 表現を使う。NumPy 経由では bf16 を渡せないので DLPack を選んだ。書くときは `detach()` し（`requires_grad` の値は `__dlpack__` で書き出せない）、GPU 上の値はホストへコピーしてから渡す。ノードの `send()` とホストの `write()` で同じ。ホストの `read` / `subscribe` と `TensorSpec.zeros()` / `rand()` は CPU 上の値を返す。コアが受け取るのは `kDLCPU` と `kDLCUDAHost`（pinned）の値だけ。`torch.dtype` → DLPack dtype の対応表は torch 依存の側が持つ
 - **メッセージの型は `torch.Tensor` と `TypedDict` の 2 種類。** TypedDict はキー名と値の型（`torch.Tensor`）を明示し、入れ子は許さない

@@ -13,11 +13,11 @@ import torch
 
 import mujou
 from mujou import NetworkError
-from mujou._core import GlobalTimer
-from mujou._network import Graph, Network, graph
-from mujou._node import Node
-from mujou._port import NextPort, Port, PrevPort
-from mujou._spec import TensorSpec
+from mujou._core._native import GlobalTimer
+from mujou._core.network import Graph, Network, graph
+from mujou._core.node import Node
+from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.spec import TensorSpec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork
@@ -1040,26 +1040,21 @@ class TestShutdown:
             net.shutdown(timeout=1.0)
         assert raised.value.__cause__ is net.b.error
 
-    def test_asks_on_one_thread_however_often_it_times_out(
+    def test_asks_without_a_thread_however_often_it_times_out(
         self, run_network: RunNetwork
     ):
-        def askers() -> int:
-            return sum(t.name == "mujou-shutdown" for t in threading.enumerate())
-
         node = SlowStop()
         net = run_network(Solo(node), _manual=True)
-        before = askers()
+        before = threading.active_count()
         try:
             for _ in range(5):
                 with pytest.raises(TimeoutError):
                     net.shutdown(timeout=0.01)
-            assert askers() - before <= 1
+            assert threading.active_count() <= before
         finally:
             node.release.set()
         net.join()
-        ended = askers()
-        net.shutdown(timeout=1.0)  # after the end: nothing to ask
-        assert askers() <= ended
+        assert node.stopped.is_set()
 
 
 class TestJoin:

@@ -3,7 +3,7 @@
 //! signatures and the doc comments of `crates/mujou-python`.
 //!
 //! Usage: `mujou-stubgen <library> <module> <output.pyi>`, where `<module>` is the
-//! full name of the module (such as `mujou._core`). Run it through `just stub`.
+//! full name of the module (such as `mujou._core._native`). Run it through `just stub`.
 
 use std::path::Path;
 use std::{env, fs};
@@ -14,7 +14,7 @@ use pyo3_introspection::{introspect_cdylib, module_stub_files};
 
 /// The exceptions made with `create_exception!`, which pyo3 does not
 /// introspect: `(name, base, docstring)`. Keep them as in
-/// `crates/mujou-python/src/runtime.rs`; `tests/mujou/test_core_stub.py` checks
+/// `crates/mujou-python/src/runtime.rs`; `tests/mujou/_core/test_native_stub.py` checks
 /// that the stub matches the module.
 const EXCEPTIONS: &[(&str, &str, &str)] = &[
     (

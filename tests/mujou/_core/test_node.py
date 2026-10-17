@@ -5,8 +5,8 @@ import pytest
 import torch
 
 from mujou import Network, Node, Port, TensorSpec
-from mujou._core import GlobalTimer
-from mujou._node import thread_ident
+from mujou._core._native import GlobalTimer
+from mujou._core.node import thread_ident
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import RunNetwork
