@@ -202,6 +202,10 @@ class TestPortNames:
 
 
 class TestChannel:
+    def test_is_made_only_by_connect(self):
+        with pytest.raises(TypeError, match=r"Port\.connect"):
+            Channel()
+
     def test_other_rejects_a_port_that_is_not_an_end(self):
         ch = Port(send=h()).connect(Port(recv=h()))
         with pytest.raises(ValueError, match="not an end"):

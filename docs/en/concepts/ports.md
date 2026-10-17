@@ -5,7 +5,7 @@ Nodes exchange values with each other only through ports and channels.
 ## Connection points and connections
 
 - A port is a connection point that a node holds. Declare it as an attribute in `__init__`
-- A channel is one connection between two ports. Each call to `connect` makes one channel
+- A channel is one connection between two ports. Each call to `connect` makes one channel; a channel cannot be created any other way
 
 A channel is two-way. One channel has one slot for the value in each direction. Between two one-way ports, values flow in one direction only, so the channel has one slot. Only one node writes each slot: the sender in that direction.
 

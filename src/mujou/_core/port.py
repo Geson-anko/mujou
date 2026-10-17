@@ -225,7 +225,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                     f"{port._label()} takes one peer and is already connected; "
                     "declare it with multi=True to take more"
                 )
-        channel = Channel(self, other)
+        channel = _make_channel(self, other)
         self._channels.append(channel)
         other._channels.append(channel)
         return channel
@@ -424,6 +424,9 @@ class Channel:
     channel and ``send_to`` takes one. Channels compare by identity, so two
     connections between the same ports are two different keys.
 
+    It cannot be created directly: a channel that its ports do not know would
+    carry nothing.
+
     Example::
 
         ch = a.next.connect(b.prev)
@@ -431,9 +434,10 @@ class Channel:
     """
 
     # Any: a channel joins ports of any message types (connect checks they match).
-    def __init__(self, a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> None:
-        # Only Port.connect creates channels.
-        self._ends = (a, b)
+    _ends: tuple[Port[Any, Any, Any], Port[Any, Any, Any]]
+
+    def __init__(self) -> Never:
+        raise TypeError("a Channel is made by Port.connect()")
 
     @property
     def ends(self) -> tuple[Port[Any, Any, Any], Port[Any, Any, Any]]:
@@ -457,6 +461,12 @@ class Channel:
     def __repr__(self) -> str:
         a, b = self._ends
         return f"Channel({a!r} <-> {b!r})"
+
+
+def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
+    channel = object.__new__(Channel)
+    channel._ends = (a, b)  # pyright: ignore[reportPrivateUsage]  # Channel's own module
+    return channel
 
 
 def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
