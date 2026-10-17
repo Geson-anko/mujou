@@ -420,6 +420,12 @@ def freeze(port: Port[Any, Any, Any]) -> None:
     port._frozen = True  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
+def thaw(port: Port[Any, Any, Any]) -> None:
+    """Let ``port`` take connections again (``mujou.run`` undoing a build whose run
+    was refused)."""
+    port._frozen = False  # pyright: ignore[reportPrivateUsage]  # Port's own module
+
+
 def is_frozen(port: Port[Any, Any, Any]) -> bool:
     """Whether ``port`` belongs to a built network."""
     return port._frozen  # pyright: ignore[reportPrivateUsage]  # Port's own module

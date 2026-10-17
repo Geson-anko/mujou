@@ -8,7 +8,7 @@ from typing import Any, Never, Self, cast
 import torch
 
 from mujou._core import _native
-from mujou._core.network import Compose, Network, start_once
+from mujou._core.network import Compose, Network, start_once, unbuild
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
@@ -85,7 +85,11 @@ class Run:
         Any port that sends can be read, so a connected port shows an inner
         node. Only ``send`` (to every peer) updates the value read here; before
         the first one it is zeros (or the value restored from ``state``). The
-        tensors are new copies on the CPU. The time is on the run's timer.
+        tensors are new copies on the CPU.
+
+        The time is on the run's timer. A ``Timestamp`` does not say which timer
+        it is on: compare it only with times of the same timer (with
+        ``mujou.time`` only when the run is on the global timer).
 
         Raises:
             ValueError: ``port`` is outside the run or sends nothing.
@@ -230,6 +234,7 @@ class ManualRun(Run):
 
         Raises:
             ValueError: A node is not in this run.
+            RuntimeError: The run has stopped normally.
             NetworkError: A node raised; the run has stopped.
         """
         _host(self).step(nodes)
@@ -277,8 +282,11 @@ def run[P: Port[Any, Any, Any]](
             y, t = run.read(net.head.next)
 
     Raises:
-        RuntimeError: A network has already run, or this is called from a node's
-            hook.
+        RuntimeError: A network has already run, part of a network belongs to
+            another built network (e.g. a network that ran alone and is now
+            given with others, or the other way around), or this is called from
+            a node's hook.
+        TypeError: No network is given, or a value is not a ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) do; or ``state`` does not match the
             networks, or it cannot set the timer back because another run is
@@ -310,7 +318,14 @@ def start[R: Run](
     """Run ``networks`` as ``mujou.run`` does and return a ``kind`` for it."""
     if in_hook():
         raise _from_hook()
-    network = networks[0] if len(networks) == 1 else Compose(*networks)
+    if not networks:
+        raise TypeError("mujou.run() takes at least one network")
+    for network in networks:
+        # The annotation is not checked at runtime.
+        if not isinstance(network, Network):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(f"mujou.run() takes networks, got {type(network).__name__}")
+    composed = len(networks) > 1
+    network = Compose(*networks) if composed else networks[0]
     graph = network.build()
 
     def go() -> Session:
@@ -321,7 +336,14 @@ def start[R: Run](
         )
         return session
 
-    session = start_once(graph, go)
+    try:
+        session = start_once(graph, go)
+    except Exception as e:
+        # Refused before any node started: the Compose is ours and is dropped, so
+        # its build must not keep the given networks from being built again.
+        if composed and not isinstance(e, _native.NetworkError):
+            unbuild(network)
+        raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle

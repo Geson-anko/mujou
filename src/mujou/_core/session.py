@@ -22,7 +22,7 @@ from mujou._core.network import ports
 from mujou._core.node import Node, capture_state, end_thread, set_timer, thread_ident
 from mujou._core.port import Channel, Port, bind
 from mujou._core.spec import Spec, fields, join, split
-from mujou._core.timer import Timer, native
+from mujou._core.timer import Timer, clock, native, stopped_clock
 
 if TYPE_CHECKING:
     from mujou._core.network import Graph
@@ -146,8 +146,9 @@ class Session:
         self._nodes = [node for _, node in graph.nodes]
         # The one timer of the run: every slot, the host's inputs and the runtime
         # use it, so that every time in the run is on the axis dt is measured on.
-        self._timer = timer
         self._clock = native(timer)
+        # What the nodes see of it: they read the time and change nothing.
+        self._view = clock(timer)
         # One group for the whole network: a write switches together only within a
         # group.
         self._group = _native.InputGroup(timer=self._clock)
@@ -244,7 +245,7 @@ class Session:
         _RUNNING.add(self)
         _watch_exit()
         for node in self._nodes:
-            set_timer(node, self._timer)
+            set_timer(node, self._view)
         # What this thread queued for the nodes (tensors made in __init__ or by
         # the restore) is done before their streams use it.
         self._synchronize_current_streams()
@@ -442,21 +443,28 @@ class Session:
         (through ``_capture_state``, which waits for a CUDA node's stream). The
         timer is the one ``shutdown`` read when it asked the run to stop, as a
         pause would have frozen it, and not earlier than any update or slot
-        (an ``on_stop`` may still send after the request).
+        (an ``on_stop`` may still send after the request). The nodes' ``timer``
+        holds that time while their ``state_dict`` runs.
         """
-        states = [capture_state(node) for node in self._nodes]
         # Only shutdown ends a run normally, and it reads the timer first.
         stop_timer = cast(dict[str, int | float], self._stop_timer)
-        tree = self._tree(states, runtime.last_update_ns(), stop_timer)
+        last_update_ns = runtime.last_update_ns()
         latest = max(
             [
                 int(stop_timer["time_ns"]),
-                *tree["last_update_ns"].values(),
-                *(time_ns for _, time_ns in tree["slots"].values()),
+                *last_update_ns,
+                *(slot.read().time_ns for slot, _ in self._slots.values()),
             ]
         )
-        tree["timer"]["time_ns"] = latest
-        return tree
+        stopped = stopped_clock(_native.Timestamp(ns=latest))
+        for node in self._nodes:
+            set_timer(node, stopped)
+        try:
+            states = [capture_state(node) for node in self._nodes]
+        finally:
+            for node in self._nodes:
+                set_timer(node, None)
+        return self._tree(states, last_update_ns, {**stop_timer, "time_ns": latest})
 
     def _restore(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """Check ``state``, restore the slots and return what ``Runtime.start``

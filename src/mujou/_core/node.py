@@ -7,7 +7,7 @@ import torch
 
 from mujou._core import _native
 from mujou._core.network import Component
-from mujou._core.timer import Timer
+from mujou._core.timer import Clock
 
 
 class Node(_native.Node, Component):
@@ -25,9 +25,10 @@ class Node(_native.Node, Component):
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned.
-    - ``on_update(dt)``: repeatedly. ``dt`` is the time in seconds on the run's
-      ``timer`` since the node's last update. Read the ports with ``recv``, update in proportion
-      to ``dt``, and write the ports with ``send``. It never waits for other nodes.
+    - ``on_update(dt)``: repeatedly. ``dt`` is the time in seconds on the
+      run's ``timer`` since the node's last update. Read the ports with
+      ``recv``, update in proportion to ``dt``, and write the ports with
+      ``send``. It never waits for other nodes.
     - ``on_pause()``: when the node has stopped for a pause of the network (as
       ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
@@ -61,6 +62,9 @@ class Node(_native.Node, Component):
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU and seeds its generator nondeterministically.
+
+    ``device``, ``generator`` and ``timer`` (a read-only view of the run's timer)
+    are reserved names: do not assign attributes of those names.
 
     Example::
 
@@ -100,7 +104,7 @@ class Node(_native.Node, Component):
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
-    _timer: Timer | None = None
+    _timer: Clock | None = None
 
     def __init__(
         self, *, device: torch.device | str = "cpu", seed: int | None = None
@@ -152,22 +156,31 @@ class Node(_native.Node, Component):
         return self._generator
 
     @property
-    def timer(self) -> Timer:
-        """The timer of the run this node is in, which measures its ``dt``.
+    def timer(self) -> Clock:
+        """A read-only view of the timer of the run this node is in, which
+        measures its ``dt``.
 
-        Read the time with ``self.timer.now()``. It is the timer given to
-        ``mujou.run(..., timer=...)``, or the global timer by default.
+        Read the time with ``self.timer.now()``. The timer is the one given to
+        ``mujou.run(..., timer=...)``, or the global timer by default. The view
+        only reads: a node does not change the time of its run (``Timer.sleep``,
+        ``set_time_scale`` and ``VirtualTimer.advance`` raise ``RuntimeError`` in
+        a hook). ``timer`` is a reserved name: do not assign an attribute of
+        that name.
+
+        It can be read from the start of the run (also in ``on_thread_start``
+        and ``on_start``) until the host has seen the run end, and in the
+        ``state_dict`` that the host takes after a normal end, where it holds
+        the time of the state.
 
         Raises:
             RuntimeError: The node is not in a run: before the run starts its
-                nodes (``on_start`` and later hooks can read it), or once the
-                host has seen the run end (after ``Run.shutdown`` or ``Run.join``
-                returned, also in ``state_dict`` after the end).
+                nodes, or once the host has seen the run end (after
+                ``Run.shutdown`` or ``Run.join`` returned).
         """
         if self._timer is None:
             raise RuntimeError(
-                "the node is not in a run; its timer is set from on_start until "
-                "the host sees the run end"
+                "the node is not in a run; its timer can be read from the start of "
+                "the run until the host sees the run end"
             )
         return self._timer
 
@@ -243,8 +256,8 @@ def end_thread(node: Node) -> None:
     node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
-def set_timer(node: Node, timer: Timer | None) -> None:
-    """Give ``node`` the timer of its run, or take it back with ``None``."""
+def set_timer(node: Node, timer: Clock | None) -> None:
+    """Give ``node`` the view of its run's timer, or take it back with ``None``."""
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 

@@ -40,9 +40,11 @@ def run[P: Port[Any, Any, Any]](
     """Run ``networks`` as ``mujou.run`` does, with the updates left to
     ``ManualRun.step``.
 
-    The arguments and the errors are those of ``mujou.run``. ``timer`` is the
-    global timer by default, as there; pass a ``VirtualTimer`` to choose every
-    ``dt``.
+    Pass a ``VirtualTimer`` as ``timer`` for a deterministic test: on any other
+    timer the clock runs by itself, and each ``dt`` is whatever real time passed
+    between the steps. The default is the global timer, as in ``mujou.run``.
+
+    The arguments and the errors are those of ``mujou.run``.
     """
     return start(
         ManualRun,

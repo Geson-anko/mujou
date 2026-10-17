@@ -1,12 +1,20 @@
 import threading
 import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING, override
 
 import pytest
 
 import mujou.testing
 import mujou.time
+from mujou import Network, Node
 from mujou.testing import VirtualTimer
 from mujou.time import Timer, Timestamp
+
+if TYPE_CHECKING:
+    from tests.mujou.conftest import Start, StartManual
+
+H = 0.001
 
 
 class TestTimer:
@@ -89,3 +97,73 @@ class TestVirtualTimer:
         before = mujou.time.time_ns()
         VirtualTimer().advance(100.0)
         assert mujou.time.time_ns() - before < 50_000_000_000
+
+
+class Calls(Node):
+    """Calls ``action`` in each ``on_update``, keeps what it raised, and records
+    each ``dt``."""
+
+    def __init__(self, action: Callable[[], object] = lambda: None) -> None:
+        self.action = action
+        self.errors: list[Exception] = []
+        self.dts: list[float] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.dts.append(dt)
+        try:
+            self.action()
+        except Exception as e:  # noqa: BLE001 - kept for the test to inspect
+            self.errors.append(e)
+
+
+class Pair(Network):
+    def __init__(self, first: Node, second: Node) -> None:
+        self.first = first
+        self.second = second
+
+
+class TestOnlyTheHostControlsTheTime:
+    """A node reads the time and changes nothing: a node changing the scale, the
+    virtual clock or waiting on the time would reach the other nodes past the
+    ports."""
+
+    def test_a_node_cannot_scale_the_time(self, start: Start):
+        timer = Timer()
+        calls = [lambda: timer.set_time_scale(1000.0)]
+        calls.append(lambda: mujou.time.set_time_scale(1000.0))
+        for call in calls:
+            node = Calls(call)
+            run = start(Pair(node, Calls()), timer=timer)
+            while not node.errors:
+                timer.sleep(0.001)
+            run.shutdown()
+            assert isinstance(node.errors[0], RuntimeError)
+            assert "only the host" in str(node.errors[0])
+        assert timer.get_time_scale() == 1.0
+        assert mujou.time.get_time_scale() == 1.0
+
+    def test_a_node_cannot_advance_the_virtual_clock(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        first = Calls(lambda: virtual.advance(5.0))
+        second = Calls()
+        run = start_manual(Pair(first, second), timer=virtual)
+        virtual.advance(H)
+        run.step(first, second)
+        assert isinstance(first.errors[0], RuntimeError)
+        # Every dt is the time the test advanced.
+        assert second.dts == [H]
+        assert virtual.now() == Timestamp(ns=1_000_000)
+
+    @pytest.mark.parametrize("sleep", ["timer", "global"])
+    def test_a_node_cannot_wait_on_the_time(
+        self, virtual: VirtualTimer, start_manual: StartManual, sleep: str
+    ):
+        wait = virtual.sleep if sleep == "timer" else mujou.time.sleep
+        node = Calls(lambda: wait(0.001))
+        run = start_manual(Pair(node, Calls()), timer=virtual)
+        virtual.advance(H)
+        run.step()  # returns: nothing in the step waits for the clock
+        assert isinstance(node.errors[0], RuntimeError)
+        run.state_dict()  # the pause does not wait for a sleeping node

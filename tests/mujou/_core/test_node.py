@@ -7,7 +7,7 @@ import torch
 from mujou import Network, Node, Port, TensorSpec
 from mujou._core.node import thread_ident
 from mujou.testing import VirtualTimer
-from mujou.time import Timer, Timestamp
+from mujou.time import Clock, Timestamp
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -92,7 +92,7 @@ class Clocked(Node):
 
     def __init__(self) -> None:
         self.out = Port(send=TensorSpec((3,)))
-        self.timers: list[Timer] = []
+        self.timers: list[Clock] = []
         self.times: list[Timestamp] = []
 
     def keep(self) -> None:
@@ -111,6 +111,10 @@ class Clocked(Node):
     def on_stop(self) -> None:
         self.keep()
 
+    @override
+    def state_dict(self) -> object:
+        return self.timer.now()
+
 
 class TestTimer:
     def test_is_the_timer_of_the_run_from_on_start_to_on_stop(
@@ -122,12 +126,35 @@ class TestTimer:
         virtual.advance(0.5)
         run.step()
         run.shutdown()
-        assert all(timer is virtual for timer in node.timers)
+        assert all(isinstance(timer, Clock) for timer in node.timers)
         assert node.times == [
             Timestamp(ns=1_000_000_000),
             Timestamp(ns=1_500_000_000),
             Timestamp(ns=1_500_000_000),
         ]
+
+    def test_is_a_view_that_only_reads(self, start_manual: StartManual):
+        node = Clocked()
+        start_manual(Solo(node))
+        public = {name for name in dir(node.timer) if not name.startswith("_")}
+        assert public == {"now"}
+        with pytest.raises(TypeError, match="Node.timer"):
+            Clock()
+
+    def test_holds_the_time_of_the_state_in_state_dict_after_the_end(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Clocked()
+        run = start_manual(Solo(node), timer=virtual)
+        virtual.advance(0.5)
+        run.step()
+        run.shutdown()
+        virtual.advance(100.0)  # after the end: not part of the state
+        tree = run.state_dict()
+        assert tree["nodes"]["node"] == Timestamp(ns=tree["timer"]["time_ns"])
+        assert tree["timer"]["time_ns"] == 500_000_000
+        with pytest.raises(RuntimeError, match="run"):
+            _ = node.timer
 
     def test_raises_outside_a_run(self, start_manual: StartManual):
         node = Clocked()

@@ -14,15 +14,39 @@ The global time starts at 0 when the process first uses it.
 - ``get_time_scale()`` / ``set_time_scale(scale)``: how many global seconds pass per
   real second (finite and > 0)
 - ``Timer``: a time axis of its own for a run
+- ``Clock``: a read-only view of a run's timer, as a node sees it (``Node.timer``)
 - ``Timestamp``: a time on a timer, as ``Run.read`` and ``Port.recv_with_time``
   give it
+
+Only the host controls the time: ``sleep`` and ``set_time_scale`` raise
+``RuntimeError`` in a node's hook.
 """
 
 from mujou._core._native import Timestamp as Timestamp, timer as _timer
-from mujou._core.timer import Timer as Timer
+from mujou._core.timer import Clock as Clock, Timer as Timer, host_only as _host_only
 
 time = _timer.time
 time_ns = _timer.time_ns
-sleep = _timer.sleep
 get_time_scale = _timer.time_scale
-set_time_scale = _timer.set_time_scale
+
+
+def sleep(seconds: float) -> None:
+    """Block for ``seconds`` of global time, following the scale and the pauses.
+
+    Raises:
+        ValueError: ``seconds`` is negative or not finite.
+        RuntimeError: This is called from a node's hook.
+    """
+    _host_only("mujou.time.sleep")
+    _timer.sleep(seconds)
+
+
+def set_time_scale(scale: float) -> None:
+    """Set how many global seconds pass per real second.
+
+    Raises:
+        ValueError: ``scale`` is not finite and > 0.
+        RuntimeError: This is called from a node's hook.
+    """
+    _host_only("mujou.time.set_time_scale")
+    _timer.set_time_scale(scale)

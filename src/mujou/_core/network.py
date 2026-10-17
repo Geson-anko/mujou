@@ -7,12 +7,21 @@ freezes it and returns its ``Graph``, which ``mujou.run`` runs
 """
 
 import threading
+import weakref
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Never, cast, final
+from typing import TYPE_CHECKING, Any, Final, Never, cast, final
 
 from mujou._core import _native
-from mujou._core.port import Channel, NextPort, Port, PrevPort, freeze, is_frozen
+from mujou._core.port import (
+    Channel,
+    NextPort,
+    Port,
+    PrevPort,
+    freeze,
+    is_frozen,
+    thaw,
+)
 
 if TYPE_CHECKING:
     from mujou._core.node import Node
@@ -81,16 +90,20 @@ def _side(
 
 @final
 class Graph:
-    """The structure of a built network, which ``mujou.run`` runs.
+    """The structure of a built network: what runs when ``mujou.run`` runs the
+    network.
 
-    ``Network.build`` makes it; it cannot be created directly. It is a different
-    object from the network it was built from: the network declares the
-    structure, and the graph is what runs. A graph runs once.
+    ``Network.build`` makes it; it cannot be created directly, and
+    ``mujou.run`` takes networks, not graphs. It is a different object from the
+    network it was built from: the network declares the structure, and the
+    graph is what runs. A graph runs once.
     """
 
     # Any: ports of every message type are handled alike.
     _nodes: tuple[tuple[str, Node], ...]
     _ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
+    # Every node and network of the tree, marked as built.
+    _members: tuple[Component, ...]
     # Whether a run has started (or tried to start and failed in a node), and the
     # lock that makes the check and the start one step for concurrent callers.
     _ran: bool
@@ -122,10 +135,12 @@ class Graph:
 def _make_graph(
     nodes: tuple[tuple[str, Node], ...],
     ports: Mapping[Port[Any, Any, Any], tuple[int, str]],
+    members: tuple[Component, ...],
 ) -> Graph:
     graph = object.__new__(Graph)
     graph._nodes = nodes  # pyright: ignore[reportPrivateUsage]  # Graph's own module
     graph._ports = ports  # pyright: ignore[reportPrivateUsage]
+    graph._members = members  # pyright: ignore[reportPrivateUsage]
     graph._ran = False  # pyright: ignore[reportPrivateUsage]
     graph._lock = threading.Lock()  # pyright: ignore[reportPrivateUsage]
     return graph
@@ -189,8 +204,9 @@ class Network(Component):
         again returns the same graph. ``mujou.run`` calls it.
 
         Raises:
-            RuntimeError: Part of the tree belongs to another built network (or
-                this network is part of a built one).
+            RuntimeError: Part of the tree (a node, a network or a port) belongs
+                to another built network, or this network is part of a built
+                one.
             ValueError: The structure is invalid: the tree has no node; a component
                 appears at two paths; a port is owned by two nodes (or under two
                 names); a port is declared as a class attribute; a node holds a
@@ -199,12 +215,18 @@ class Network(Component):
                 a component has more than one ``PrevPort`` or ``NextPort`` as
                 direct attributes.
         """
+        # One build at a time: two threads building one tree would each make a
+        # graph, and both would run.
+        with _BUILD_LOCK:
+            if self._graph is None:
+                self._graph = self._build()
+            return self._graph
+
+    def _build(self) -> Graph:
         # Imported here: _node imports Component from this module.
         from mujou._core.node import Node
 
-        if self._graph is not None:
-            return self._graph
-
+        members: list[Component] = []
         nodes: list[tuple[str, Node]] = []
         ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
         # (attribute path, port, indices of the nodes in the exposing subtree)
@@ -218,6 +240,12 @@ class Network(Component):
                     f"{_where(seen[id(component)])} and {_where(path)}"
                 )
             seen[id(component)] = path
+            if component in _BUILT:
+                raise RuntimeError(
+                    f"{type(component).__name__} at {_where(path)} belongs to a "
+                    "network that is already built"
+                )
+            members.append(component)
             _check_declarations(component, _where(path))
             if isinstance(component, Node):
                 index = len(nodes)
@@ -271,8 +299,28 @@ class Network(Component):
                     )
         for port in ports:
             freeze(port)
-        self._graph = _make_graph(tuple(nodes), MappingProxyType(ports))
-        return self._graph
+        _BUILT.update(members)
+        return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members))
+
+
+def unbuild(network: Network) -> None:
+    """Undo the ``build`` of ``network``, which has not run, so that its parts can
+    be built again (``mujou.run`` does this for a ``Compose`` of its own whose run
+    was refused)."""
+    with _BUILD_LOCK:
+        graph = network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
+        if graph is None:
+            return
+        for port in graph._ports:  # pyright: ignore[reportPrivateUsage]
+            thaw(port)
+        _BUILT.difference_update(graph._members)  # pyright: ignore[reportPrivateUsage]
+        network._graph = None  # pyright: ignore[reportPrivateUsage]
+
+
+# The nodes and networks of every built tree: a part of one cannot join another.
+# Ports are marked too (frozen), but a node without ports has only this mark.
+_BUILT: Final[weakref.WeakSet[Component]] = weakref.WeakSet()
+_BUILD_LOCK: Final = threading.Lock()
 
 
 class Compose(Network):
@@ -293,17 +341,25 @@ class Compose(Network):
 
     Raises:
         TypeError: A value is not a ``Network``.
-        ValueError: A keyword starts with ``_``, is the name of an attribute of
+        ValueError: A keyword is empty, holds a ``.`` (a path would be
+            ambiguous), starts with ``_``, is the name of an attribute of
             ``Network`` (such as ``build``), or is the path of a position.
     """
 
     def __init__(self, *networks: Network, **named: Network) -> None:
         children = {str(i): network for i, network in enumerate(networks)}
         for name, network in named.items():
-            if name.startswith("_") or hasattr(Compose, name) or name in children:
+            if (
+                not name
+                or "." in name
+                or name.startswith("_")
+                or hasattr(Compose, name)
+                or name in children
+            ):
                 raise ValueError(
-                    f"cannot compose a network as {name!r}: the name is private, "
-                    "an attribute of Network, or a position"
+                    f"cannot compose a network as {name!r}: the name is empty, "
+                    "holds a '.', is private, is an attribute of Network, or is a "
+                    "position"
                 )
             children[name] = network
         for name, network in children.items():
@@ -319,8 +375,10 @@ class Compose(Network):
 def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
     """Call ``start`` to run ``graph`` unless it has run, and mark it as run.
 
-    A start refused before any node started (any exception but ``NetworkError``)
-    does not count, so the graph may run once the cause is gone.
+    A start refused before any node started (an ``Exception`` other than
+    ``NetworkError``) does not count, so the graph may run once the cause is
+    gone. An interruption (``KeyboardInterrupt``) counts: the start may go on in
+    the background.
 
     Raises:
         RuntimeError: ``graph`` has already run.
@@ -332,7 +390,11 @@ def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
             )
         try:
             started = start()
-        except _native.NetworkError:
+        except Exception as e:
+            if isinstance(e, _native.NetworkError):
+                graph._ran = True  # pyright: ignore[reportPrivateUsage]
+            raise
+        except BaseException:
             graph._ran = True  # pyright: ignore[reportPrivateUsage]
             raise
         graph._ran = True  # pyright: ignore[reportPrivateUsage]

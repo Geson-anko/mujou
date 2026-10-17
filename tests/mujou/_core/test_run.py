@@ -19,7 +19,7 @@ from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
 from mujou.testing import ManualRun, VirtualTimer
-from mujou.time import Timer, Timestamp
+from mujou.time import Clock, Timer, Timestamp
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -176,6 +176,59 @@ class TestRun:
         assert raised.value.__cause__ is net.b.error
         assert net.a.updates == 0 and net.b.updates == 0
 
+    def test_runs_once_under_concurrent_calls(self, started: list[Run]):
+        for _ in range(20):
+            net = Chain()
+            barrier = threading.Barrier(2)
+            outcomes: list[object] = []
+
+            def run(net: Chain = net, barrier: threading.Barrier = barrier) -> None:
+                barrier.wait()
+                try:
+                    handle = mujou.testing.run(net, timer=VirtualTimer())
+                except RuntimeError as e:
+                    outcomes.append(e)
+                    return
+                started.append(handle)
+                outcomes.append(handle)
+
+            threads = [threading.Thread(target=run) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            assert sum(isinstance(o, Run) for o in outcomes) == 1
+            (error,) = (o for o in outcomes if not isinstance(o, Run))
+            assert "already run" in str(error)
+
+    def test_a_refused_run_of_several_networks_can_be_retried(
+        self, start_manual: StartManual
+    ):
+        a, b = Chain(), Chain()
+        with pytest.raises(ValueError, match="shape"):
+            start_manual(a, b, inputs={a.prev: torch.zeros(3, dtype=F64)})
+        assert not a.a.started
+        run = start_manual(a, b, inputs={a.prev: u(1)})
+        assert a.a.started and b.a.started
+        assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1.a", "1.b"}
+
+    def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
+        alone, other = Chain(), Chain()
+        start_manual(alone)
+        with pytest.raises(RuntimeError, match="already built"):
+            start_manual(alone, other)
+        composed, other = Chain(), Chain()
+        start_manual(composed, other)
+        with pytest.raises(RuntimeError, match="already built"):
+            start_manual(composed)
+
+    def test_takes_only_networks(self, start: Start):
+        with pytest.raises(TypeError, match="at least one network"):
+            start()
+        for given in ((Leaky(),), (Chain(), Leaky())):
+            with pytest.raises(TypeError, match="Leaky"):
+                start(*given)  # pyright: ignore[reportArgumentType]
+
     def test_a_run_is_made_only_by_mujou_run(self):
         with pytest.raises(TypeError, match=r"mujou\.run"):
             Run()
@@ -244,22 +297,17 @@ class TestTimer:
                 # Called while the run on `held` is paused.
                 h0, f0, g0 = held.now(), free.now(), mujou.time.time_ns()
                 time.sleep(0.05)
-                # Timestamps do not pickle; the tree must.
-                return (
-                    (held.now() - h0).ns,
-                    (free.now() - f0).ns,
-                    mujou.time.time_ns() - g0,
-                )
+                return held.now() - h0, free.now() - f0, mujou.time.time_ns() - g0
 
         start(Chain(tau=0.01), timer=free)
         run = start(Solo(Measures()), timer=held)
         on_held, on_free, on_global = run.state_dict()["nodes"]["node"]
-        assert on_held == 0
-        assert on_free > 0 and on_global > 0
+        assert on_held == Timestamp(ns=0)
+        assert on_free > Timestamp(ns=0) and on_global > 0
 
     def test_the_global_timer_by_default(self, start: Start):
         class ReadsTimer(Node):
-            seen: Timer | None = None
+            seen: Clock | None = None
 
             @override
             def on_start(self) -> None:
@@ -922,16 +970,31 @@ class TestEndToEnd:
             assert (out - u(k)).abs().max().item() <= bound
             before = u(k)
 
+    @pytest.mark.parametrize("composed", [False, True])
     @pytest.mark.parametrize("b_first", [False, True])
     def test_manual_steps_match_the_discrete_algorithm(
-        self, virtual: VirtualTimer, start_manual: StartManual, b_first: bool
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        b_first: bool,
+        composed: bool,
     ):
-        net = Chain()
-        run = start_manual(net)
-        order = (net.b, net.a) if b_first else (net.a, net.b)
+        a, b = Leaky(), Leaky()
+        if composed:
+            # The same two nodes as two networks: a network is no boundary of the
+            # asynchrony, and both run on the one timer of the run.
+            first, second = Solo(a), Solo(b)
+            a.connect(b)
+            run = start_manual(first, second)
+            assert set(run.state_dict()["last_update_ns"]) == {"0.node", "1.node"}
+        else:
+            chain = Chain()
+            a, b = chain.a, chain.b
+            run = start_manual(chain)
+        order = (b, a) if b_first else (a, b)
         xa = xb = sent_a = torch.zeros(2, dtype=F64)
         for k in range(20):
-            run.write({net.prev: u(k)})
+            run.write({a.prev: u(k)})
             step(run, virtual, *order)
             if b_first:  # Jacobi: b reads a's value of the previous step
                 xb = euler(xb, sent_a)
@@ -939,9 +1002,9 @@ class TestEndToEnd:
             else:  # Gauss-Seidel: b reads a's value of this step
                 xa = sent_a = euler(xa, u(k))
                 xb = euler(xb, sent_a)
-        assert torch.equal(net.a.x, xa)
-        assert torch.equal(net.b.x, xb)
-        assert torch.equal(run.read(net.next)[0], xb)
+        assert torch.equal(a.x, xa)
+        assert torch.equal(b.x, xb)
+        assert torch.equal(run.read(b.next)[0], xb)
 
     @pytest.mark.parametrize("b_first", [False, True])
     def test_a_restored_network_continues_the_same(

@@ -1,3 +1,4 @@
+import threading
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -256,6 +257,37 @@ class TestBuild:
         with pytest.raises(ValueError, match="'node' has 2 NextPort"):
             Net().build()
 
+    def test_rejects_a_node_of_another_built_network(self):
+        # A node without ports: only the mark on the node itself tells.
+        class Lone(Node):
+            pass
+
+        class Net(Network):
+            def __init__(self, node: Node) -> None:
+                self.node = node
+
+        lone = Lone()
+        Net(lone).build()
+        with pytest.raises(RuntimeError, match="'node' belongs to a network"):
+            Net(lone).build()
+
+    def test_builds_once_under_concurrent_calls(self):
+        nets = [Classifier() for _ in range(20)]
+        for net in nets:
+            barrier = threading.Barrier(2)
+            graphs: list[Graph] = []
+
+            def build(net: Classifier = net, barrier: threading.Barrier = barrier):
+                barrier.wait()
+                graphs.append(net.build())
+
+            threads = [threading.Thread(target=build) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            assert graphs[0] is graphs[1]
+
     def test_rejects_a_network_without_nodes(self):
         class Empty(Network):
             def __init__(self) -> None:
@@ -297,7 +329,7 @@ class TestCompose:
         with pytest.raises(TypeError, match="'x'"):
             Compose(x=Hidden())  # pyright: ignore[reportArgumentType]
 
-    @pytest.mark.parametrize("name", ["build", "connect", "_private"])
+    @pytest.mark.parametrize("name", ["build", "connect", "_private", "", "a.b"])
     def test_rejects_names_that_would_hide_its_own(self, name: str):
         with pytest.raises(ValueError, match=repr(name)):
             Compose(**{name: Stack()})
