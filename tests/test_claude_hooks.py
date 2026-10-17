@@ -47,6 +47,10 @@ class TestPreToolUseGuardBash:
             "uv pip install numpy",
             "cd src && pip install -e .",
             "FOO=1 pip install numpy",
+            "python3.14t -m pip install numpy",
+            "uv run pip install numpy",
+            "uv run --frozen python -m pip install numpy",
+            ".venv/bin/pip install numpy",
         ],
     )
     def test_blocks_pip_install(self, command: str):
@@ -61,6 +65,8 @@ class TestPreToolUseGuardBash:
             "git commit --no-verify -m 'x'",
             "git commit -n -m 'x'",
             "git commit -anm 'x'",
+            "git -c core.editor=true commit -n -m 'x'",
+            "git -C repo --no-pager commit --no-verify -m 'x'",
         ],
     )
     def test_blocks_commit_without_verification(self, command: str):
@@ -78,6 +84,9 @@ class TestPreToolUseGuardBash:
             "git commit -m 'feat(core): add -n flag docs'",
             "git commit -am 'fix: x'",
             "echo 'pip install numpy'",
+            "uv run pytest -q",
+            "git -c core.editor=true commit -m 'x'",
+            "git -C repo log -n 3",
         ],
     )
     def test_allows_other_commands(self, command: str):
@@ -118,6 +127,22 @@ class TestPostToolUseLocalityGuard:
         assert "LOCALITY GUARD" in context
         assert "L1" in context
 
+    @pytest.mark.parametrize(
+        "relative",
+        [
+            "src/mujou/_core/run.py",
+            ".claude/worktrees/wt/src/mujou/train.py",
+            ".claude/worktrees/wt/src/mujou/_core/run.py",
+        ],
+    )
+    def test_warns_in_subpackages_and_worktrees(self, tmp_path: Path, relative: str):
+        path = self.write_source(tmp_path, relative, "loss.backward()\n")
+
+        result = self.run_on(path, tmp_path)
+
+        assert result.returncode == 0
+        assert "LOCALITY GUARD" in result.stdout
+
     def test_ignores_lines_marked_as_local_autograd(self, tmp_path: Path):
         path = self.write_source(
             tmp_path,
@@ -130,8 +155,11 @@ class TestPostToolUseLocalityGuard:
         assert result.returncode == 0
         assert result.stdout == ""
 
-    def test_ignores_files_outside_library(self, tmp_path: Path):
-        path = self.write_source(tmp_path, "tests/test_bp.py", "loss.backward()\n")
+    @pytest.mark.parametrize(
+        "relative", ["tests/test_bp.py", ".claude/worktrees/wt/tests/test_bp.py"]
+    )
+    def test_ignores_files_outside_library(self, tmp_path: Path, relative: str):
+        path = self.write_source(tmp_path, relative, "loss.backward()\n")
 
         result = self.run_on(path, tmp_path)
 

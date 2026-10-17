@@ -161,11 +161,13 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                 neither direction carries a message.
             ValueError: ``other`` is this port, or a single-peer port is already
                 connected.
-            RuntimeError: Either port belongs to a network that is already built.
+            RuntimeError: Either port belongs to a tree that is already built (by
+                ``Network.build`` or ``mujou.run``).
         """
         if self._frozen or other._frozen:
             raise RuntimeError(
-                "cannot connect a port of a network that is already built"
+                "cannot connect a port of a tree that is already built (by "
+                "Network.build() or mujou.run())"
             )
         if other is self:
             raise ValueError(f"cannot connect a port to itself: {self!r}")

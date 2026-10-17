@@ -331,8 +331,8 @@ class Node(_native.Node, Component):
         ``mujou.run(..., timer=...)``, or the global timer by default. A
         ``ReadOnlyTimer`` only reads and does not hold the timer: a node does not
         change the time of its run (``Timer.sleep``, ``set_time_scale`` and
-        ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a reserved name: do not assign an attribute of
-        that name.
+        ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a
+        reserved name: do not assign an attribute of that name.
 
         It can be read from the start of the run (also in ``on_thread_start``
         and ``on_start``). Once the host has seen a normal end (e.g. after
