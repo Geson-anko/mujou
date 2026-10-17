@@ -5,4 +5,3 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-arc-swap = "1.9.2"
