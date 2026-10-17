@@ -37,10 +37,9 @@ class Node(_native.Node, Component):
       collected tensors and modules (see below). When ``device`` is CUDA, the
       framework waits for the node's stream after it.
     - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
-      below). ``dt`` is the
-      time in seconds on the run's ``timer`` since the node's last update. Read
-      the ports with ``recv``, update in proportion to ``dt``, and write the
-      ports with ``send``. It never waits for other nodes.
+      below). ``dt`` is the time in seconds on the run's ``timer`` since the
+      node's last update. Read the ports with ``recv``, update in proportion to
+      ``dt``, and write the ports with ``send``. It never waits for other nodes.
     - ``on_pause()``: when the node has stopped for a pause of the network (as
       ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
@@ -89,19 +88,23 @@ class Node(_native.Node, Component):
     ``on_update`` returns, the next one is called (once any time has passed).
     With a ``period``, the framework waits on the run's timer for the next
     target before each update. The first target is ``period`` after the start
-    of the run (after the last update before the state was taken, when the run
-    was restored), and each next one is ``period`` after the previous target, so
-    the time an update takes and a late wake-up count toward the period and the
-    node updates once every ``period`` on average. A node a whole ``period`` or
-    more late updates once and counts again from that update: it never updates
-    several times in a row to catch up. The wait follows the time scale and the
-    virtual clock, and ends at once on a pause or a stop; the time does not run
-    while paused, so a pause does not count. ``dt`` is still the time that
-    actually passed since the last update: about ``period``, longer when the
-    node is late and shorter right after. ``on_update`` must stay stable for
-    the longest ``dt`` it can get; split the step inside the node if needed
-    (cutting ``dt`` would lose time). A manual run (``mujou.testing.run``,
-    stepped by ``ManualRun.step``) ignores the period.
+    of the run, and each next one is ``period`` after the previous target, so
+    the time an update takes and a late wake-up count toward the period: as
+    long as the two together fit in ``period``, the node updates once every
+    ``period`` on average. A node a whole ``period`` or more late (at or past
+    the target after its own) updates once and counts again from that update:
+    it never updates several times in a row to catch up. The state of a run
+    does not hold the target, so a restored run puts the first target
+    ``period`` after the last update before the state was taken; the next
+    update may then come later than if the run had gone on. The wait follows
+    the time scale and the virtual clock, and ends at once on a pause or a
+    stop; the time does not run while paused, so a pause does not count.
+    ``dt`` is still the time that actually passed since the last update: about
+    ``period``, longer when the node is late, and shorter right after, down to
+    almost 0 when it was nearly a ``period`` late. ``on_update`` must stay
+    stable for the longest ``dt`` it can get; split the step inside the node if
+    needed (cutting ``dt`` would lose time). A manual run
+    (``mujou.testing.run``, stepped by ``ManualRun.step``) ignores the period.
 
     Calling ``super().__init__()`` is optional: without it the node computes on
     the CPU, seeds its generator nondeterministically and has no period.

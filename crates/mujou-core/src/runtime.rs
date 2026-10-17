@@ -94,8 +94,8 @@ pub struct RuntimeConfig {
     /// Where each node's first Δt starts. Defaults to the time at the start.
     pub last_update_ns: Option<Vec<u64>>,
     /// Each node's period on the timer, in ns (> 0): a free-running node
-    /// updates once every period on average, at targets a period apart (see
-    /// `node_loop`). `None` (for all nodes or one) updates as soon as any time
+    /// updates at targets a period apart (see `node_loop`), so once every
+    /// period on average while its update and its wake-up fit in the period. `None` (for all nodes or one) updates as soon as any time
     /// has passed. The manual mode ignores it.
     pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
