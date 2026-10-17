@@ -1,6 +1,6 @@
 # PyTorch in Nodes
 
-A node computes with PyTorch inside. This page covers update rules, devices and random numbers, backpropagation (BP) inside a node, CUDA and other accelerators, and the settings that affect the whole process.
+A node computes with PyTorch inside. This page covers update rules, devices and random numbers, backpropagation (BP) inside a node, CUDA, and the settings that affect the whole process.
 
 ## Update rules
 
@@ -27,7 +27,7 @@ In `online_learning.py` in [Examples](../examples/index.md), a node like this le
 
 Pass the device and the random seed in `__init__`, with `super().__init__(device=..., seed=...)`.
 
-- `device` is the CPU (the default, `"cpu"`) or a device of PyTorch's current accelerator: CUDA, MPS, XPU, and so on. A device that is not available, and any other device (such as `"meta"`), raise `ValueError`
+- `device` is the CPU (the default, `"cpu"`) or a CUDA device. Mujou supports only these two. Any other device, such as `"mps"` or `"meta"`, raises `ValueError`, and so does a CUDA device when CUDA is not available
 - Received messages (the values of `recv()`) arrive on the node's device
 - Allocate tensors with `device=self.device`
 
@@ -71,15 +71,6 @@ For a node given a CUDA `device`, Mujou sets up the following.
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`). Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
 
 Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
-
-## Other accelerators (MPS, ...)
-
-A node on another accelerator, such as `device="mps"`, gets the same setup as on CUDA, except for the stream: the node computes on the device's current stream, with no stream of its own. Mujou synchronizes the whole device where it would synchronize the node's stream on CUDA.
-
-- Without an index, as in `device="mps"`, the device is the host's current device (`mps:0`)
-- PyTorch's MPS cannot be used from two threads at once: the process crashes. So only one node of all the running runs may compute on MPS. `mujou.run` (and `mujou.testing.run`) raises `ValueError` before any node starts when a second one would; put the others on the CPU, or compute them in one node. Do not compute on MPS on the host either while a run with a node on MPS is running
-- The tree `run.state_dict()` returns keeps each tensor on its node's device. Using the MPS tensors of the tree on the host (`.cpu()`, a comparison, saving it) uses MPS from the host's thread, so do it only once no node on MPS is running. `state_dict()` of a run that has ended also copies its nodes' tensors on the host's thread, so call it only while no other run has a node on MPS running
-- MPS has no float64. A node on MPS cannot receive a message of a float64 spec
 
 ## Settings of the whole process
 
