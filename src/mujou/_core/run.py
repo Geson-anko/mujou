@@ -8,7 +8,13 @@ from typing import Any, Never, Self, cast
 import torch
 
 from mujou._core import _native
-from mujou._core.network import Compose, Network, start_once, unbuild
+from mujou._core.network import (
+    Network,
+    RunCompose,
+    build_node,
+    start_once,
+    unbuild,
+)
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
@@ -60,14 +66,20 @@ class Run:
     # Port[Any, Any, Any] would reject (Mapping keys are invariant).
     def write[P: Port[Any, Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
-    ) -> None:
-        """Write messages to unconnected single-peer ports that receive.
+    ) -> _native.Timestamp:
+        """Write messages to unconnected single-peer ports that receive, and
+        return the time they carry.
 
         The values are detached and copied. All of them switch together and carry
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Any port of the tree can be
         written, exposed by the root or not.
+
+        The time is the run's timer at the write, as a node's ``recv_with_time``
+        and the ``/in`` slots of ``state_dict`` show it; ``read`` shows the times
+        of sends, not of writes. An empty ``values`` changes nothing and returns
+        the time all the same.
 
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
@@ -77,7 +89,7 @@ class Run:
             TypeError: A message or dtype differs from the spec.
             NetworkError: The run stopped because a node raised.
         """
-        _host(self).write(values)
+        return _host(self).write(values)
 
     def read[S](self, port: Port[S, Any, Any]) -> tuple[S, _native.Timestamp]:
         """Return the latest message ``port`` sent and the time it was sent at.
@@ -145,7 +157,8 @@ class Run:
         the path of the port through its owning node (``"body.l1.prev/in"``, not
         an exposed name such as ``"prev/in"``) and holds its latest message:
         ``/out`` what ``read`` returns, ``/ch0``, ``/ch1``, ... each channel, and
-        ``/in`` what the host wrote.
+        ``/in`` what the host wrote. A node run alone is the root: it is keyed
+        ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
         Raises:
             RuntimeError: This is called from a node's hook.
@@ -242,23 +255,31 @@ class ManualRun(Run):
 
 # P: as in Run.write.
 def run[P: Port[Any, Any, Any]](
-    *networks: Network,
+    component: Node | Network,
+    *components: Node | Network,
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> Run:
-    """Build ``networks`` and run them in the background; return once every node
-    has started.
+    """Build the given nodes and networks and run them in the background; return
+    once every node has started.
 
-    One network runs as it is; several run as ``Compose(*networks)``, so their
-    paths start with their positions (``"0.l1"``, ``"1.l1"``, ...). Every node's
-    thread is set up, ``on_start`` (and, with ``state``, the node's
+    One component alone is the root of the run: a network runs as it is (its
+    nodes at ``"l1"``, ...), and a node is at the path ``""`` with its ports at
+    ``"prev"``, ``"next"``, .... Several run as ``Compose(component,
+    *components)``, nodes and networks mixed or not, so their paths start with
+    their positions: ``"0"`` for a node given first, ``"1.l1"``, ... for the
+    nodes of a network given second. Either way the host writes and reads the
+    ports themselves (``run.write({node.prev: x})``).
+
+    Every node's thread is set up, ``on_start`` (and, with ``state``, the node's
     ``load_state_dict``) has returned, and the run's timer runs when this
-    returns. A network runs once.
+    returns. A network or node runs once.
 
     Args:
-        networks: The networks to run.
+        component: The node or network to run.
+        components: More nodes and networks to run with it.
         timer: The time axis of the run: every node's ``dt``, every message's
             time and every pause of the run is on it. ``None`` is the global
             timer, which ``mujou.time`` reads and every run without a timer of
@@ -282,22 +303,27 @@ def run[P: Port[Any, Any, Any]](
             y, t = run.read(net.head.next)
 
     Raises:
-        RuntimeError: A network has already run, part of a network belongs to
-            another built network (e.g. a network that ran alone and is now
-            given with others, or the other way around), or this is called from
-            a node's hook.
-        TypeError: No network is given, or a value is not a ``Network``.
+        RuntimeError: A network or node has already run, or belongs to a tree
+            that has (``"Leaky has already run; create a new instance to run
+            again"``); part of a network belongs to another built network that
+            has not run (e.g. a network that was only built, or one whose run
+            alone was refused and is now given with others); or this is called
+            from a node's hook. Of runs called at once that share a part, the
+            refused ones may give either message.
+        TypeError: A value is neither a ``Node`` nor a ``Network`` (or none
+            is given).
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) do; or ``state`` does not match the
             networks, or it cannot set the timer back because another run is
             running on it. Nothing started: the same networks, given the same
             way (alone, or together in the same order), may run once the cause
-            is gone.
+            is gone; a node given alone, or with others, may run once the cause
+            is gone, given any way.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start(
         Run,
-        networks,
+        (component, *components),
         timer=timer,
         inputs=inputs,
         state=state,
@@ -308,7 +334,7 @@ def run[P: Port[Any, Any, Any]](
 
 def start[R: Run](
     kind: type[R],
-    networks: Sequence[Network],
+    components: Sequence[Node | Network],
     *,
     timer: Timer | None,
     inputs: Mapping[Any, object] | None,
@@ -316,18 +342,23 @@ def start[R: Run](
     pause_timeout: float,
     manual: bool,
 ) -> R:
-    """Run ``networks`` as ``mujou.run`` does and return a ``kind`` for it."""
+    """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
     if in_hook():
         raise _from_hook()
-    if not networks:
-        raise TypeError("mujou.run() takes at least one network")
-    for network in networks:
+    for given in components:
         # The annotation is not checked at runtime.
-        if not isinstance(network, Network):  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise TypeError(f"mujou.run() takes networks, got {type(network).__name__}")
-    composed = len(networks) > 1
-    network = Compose(*networks) if composed else networks[0]
-    graph = network.build()
+        if not isinstance(given, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"mujou.run() takes nodes and networks, got {type(given).__name__}"
+            )
+    # ours: a tree mujou.run built only for this run, undone if the run is refused.
+    match components:
+        case [Network() as network]:
+            graph, ours = network.build(), False
+        case [Node() as node]:
+            graph, ours = build_node(node), True
+        case _:
+            graph, ours = RunCompose(*components).build(), True
 
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.
@@ -340,10 +371,10 @@ def start[R: Run](
     try:
         session = start_once(graph, go)
     except Exception as e:
-        # Refused before any node started: the Compose is ours and is dropped, so
-        # its build must not keep the given networks from being built again.
-        if composed and not isinstance(e, _native.NetworkError):
-            unbuild(network)
+        # Refused before any node started: the tree is ours and is dropped, so its
+        # build must not keep what was given from being built again.
+        if ours and not isinstance(e, _native.NetworkError):
+            unbuild(graph)
         raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module

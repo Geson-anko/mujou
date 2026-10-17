@@ -250,7 +250,13 @@ class Session:
                 time_ns = int(restored["timer_state"]["time_ns"])
                 for slot, tensors in items:
                     slot.restore(tensors, time_ns)
-        runtime = _native.Runtime(self._nodes, self._paths, timer=self._clock)
+        # The names of the nodes in the runtime's errors and logs: a node that is
+        # itself the root (at the path "") by its class.
+        names = [
+            path or type(node).__name__
+            for path, node in zip(self._paths, self._nodes, strict=True)
+        ]
+        runtime = _native.Runtime(self._nodes, names, timer=self._clock)
         self._runtime = runtime
         for session in list(_RUNNING):
             session._settle()
@@ -389,7 +395,7 @@ class Session:
 
     # --- host input and output
 
-    def write[P: AnyPort](self, values: Mapping[P, object]) -> None:
+    def write[P: AnyPort](self, values: Mapping[P, object]) -> _native.Timestamp:
         runtime = self._started()
         finished = runtime.is_finished
         self.check()  # after is_finished: an end by an exception raises here
@@ -397,7 +403,7 @@ class Session:
             raise RuntimeError(
                 "the network has stopped; no node reads what is written now"
             )
-        self._group.write(self._items(values))
+        return self._group.write(self._items(values))
 
     def _items(
         self, values: Mapping[Any, object]

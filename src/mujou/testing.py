@@ -22,6 +22,7 @@ from typing import Any
 import torch
 
 from mujou._core.network import Network
+from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.run import ManualRun, start
 from mujou._core.timer import Timer, VirtualTimer
@@ -31,14 +32,15 @@ __all__ = ["ManualRun", "VirtualTimer", "run"]
 
 # P: as in Run.write.
 def run[P: Port[Any, Any, Any]](
-    *networks: Network,
+    component: Node | Network,
+    *components: Node | Network,
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> ManualRun:
-    """Run ``networks`` as ``mujou.run`` does, with the updates left to
-    ``ManualRun.step``.
+    """Run the given nodes and networks as ``mujou.run`` does, with the updates
+    left to ``ManualRun.step``.
 
     Pass a ``VirtualTimer`` as ``timer`` for a deterministic test: on any other
     timer the clock runs by itself, and each ``dt`` is whatever real time passed
@@ -48,7 +50,7 @@ def run[P: Port[Any, Any, Any]](
     """
     return start(
         ManualRun,
-        networks,
+        (component, *components),
         timer=timer,
         inputs=inputs,
         state=state,
