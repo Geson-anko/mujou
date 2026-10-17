@@ -51,6 +51,20 @@ Until a port first sends, its peers receive zeros, and so does the host that rea
 self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
 ```
 
+Values on two ports travel independently: a reader may see a new value on one port with an old value on the other. Send values that belong together (an input and its target, say) as one message: describe it with a `TypedDict` and a `DictSpec`, which gives a `TensorSpec` for each key. The whole dict arrives at once, and type checkers know the type of each key.
+
+```python
+class Sample(TypedDict):
+    x: torch.Tensor
+    y: torch.Tensor
+
+
+SAMPLE = DictSpec(Sample, x=TensorSpec((32, 4)), y=TensorSpec((32, 2)))
+
+self.next = NextPort(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y": y})
+self.prev = PrevPort(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
+```
+
 ## 2. Set up the state in `on_start`
 
 Create the state tensors in `on_start`. In `on_update`, do not assign a new tensor to the attribute; update the tensor in place with `+=`, `copy_` and the like.
@@ -69,6 +83,8 @@ def on_start(self) -> None:
 
 You may keep settings (a time constant, the size of a layer, ...) as numbers set in `__init__`. Numbers are not collected into the state.
 
+An `nn.Module` may be built in `__init__` or in `on_start`; it is collected either way. Initialize anything random from `self.generator`, which exists from `on_start` on, so a module initialized that way is built in `on_start`.
+
 ## 3. Update in proportion to `dt` in `on_update(dt)`
 
 Mujou calls `on_update(dt)` again and again. The node's author does not write a loop; write the work of one call only. One call does the following, in this order.
@@ -83,6 +99,27 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 
 - If the system has an exact solution, advance the state by `dt` with that solution. The `Leaky` above does not use explicit Euler. It moves $x$ by the fraction `1 - exp(-dt / tau)` of its distance to $u$. This fraction is exact while the input stays constant. It is below 1 for any `dt`, so $x$ never overshoots $u$
 - If the system has no exact solution, split the step inside one call of `on_update`. Choose `n` so that one step `dt / n` is no longer than a length that updates stably, and update `n` times in a `for` loop (see the example in [PyTorch in nodes](torch.md))
+
+`recv()` always returns a value, and `on_update` usually runs more often than the peer sends, so the same message is read many times. That is right for a value that holds over time (a sensor reading, an activity): update toward it by `dt` each time. For noise in a continuous-time update, scale its standard deviation by $\sqrt{dt}$, not by `dt`, so that the result does not depend on how often the node updates.
+
+When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed. Reading the time in `on_start` skips the value that is there before the peer's first send: the port's initial value (zeros unless the sender declares `initial=`), or the value of a restored state, which was already handled before the state was taken. (A port the host writes gets its `inputs=` value at that same time, so this skips it too.)
+
+```python
+@override
+def on_start(self) -> None:
+    super().on_start()
+    _, self.last = self.prev.recv_with_time()  # the time of the value there now
+
+
+@override
+def on_update(self, dt: float) -> None:
+    super().on_update(dt)
+    sample, t = self.prev.recv_with_time()
+    if t == self.last:  # nothing new since the last update
+        return
+    self.last = t
+    ...  # learn from the sample once
+```
 
 ## Set the period
 

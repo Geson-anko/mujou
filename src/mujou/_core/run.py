@@ -198,9 +198,16 @@ class Run:
             RuntimeError: The run shut down normally first.
             NetworkError: The run stopped because a node raised.
         """
-        for message, time in self.subscribe(port, timeout=timeout):
-            if condition(message):
-                return message, time
+        try:
+            for message, time in self.subscribe(port, timeout=timeout):
+                if condition(message):
+                    return message, time
+        except TimeoutError:
+            # Name this call, not the subscribe it is built on.
+            raise TimeoutError(
+                f"no message met the condition of wait_for within {timeout} s; the "
+                "run keeps running"
+            ) from None
         raise RuntimeError(
             "the run shut down before the port sent a message that meets the condition"
         )
