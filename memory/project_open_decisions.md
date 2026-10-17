@@ -7,7 +7,7 @@ metadata:
 
 2026-10-11 の初期セットアップ時点で、次は未決定。決めたら該当行を消し、決定と理由を個別のメモリファイルに書く。
 
-- **ネットワークスキーマの API**: define-and-run、Port・Channel、Composite、`a.connect(b)`、PrevPort・NextPort は決定済み（[[project-network-ports]], [[project-message-types]]）。名前とホスト入出力は決定済み（2026-10-16 に `Run` ハンドルと `inputs=` / `state=`、2026-10-17 に `mujou.run(component, *components, ...)`。[[project-runtime-api-revision]]、[[project-run-node-and-write-time]]）。shape の決め方は未決定
+- **ネットワークスキーマの API**: define-and-run、Port・Channel、Composite、Port 同士の接続（2026-10-17 に `a.connect(b)` を廃止、[[project-port-registry]]）、PrevPort・NextPort は決定済み（[[project-network-ports]], [[project-message-types]]）。名前とホスト入出力は決定済み（2026-10-16 に `Run` ハンドルと `inputs=` / `state=`、2026-10-17 に `mujou.run(component, *components, ...)`。[[project-runtime-api-revision]]、[[project-run-node-and-write-time]]）。shape の決め方は未決定
 - **実行の配置**: 複数ノードを同じワーカーで決まった順に回すことの指定方法、実行クラス（タスク・専用スレッド）の指定方法（[[project-compute-granularity]]）。目標周期は 2026-10-17 に `Node(period=...)` として実装（[[project-node-period]]、シグネチャはユーザー確認待ち）。数え方とクラス属性の扱いは同日ユーザーが決定。残り: M:N での扱い
 - **ライフサイクルの細部**: hook の構成と停止・状態の取得・復元の流れは決定済み（[[project-node-lifecycle]], [[project-pause-and-state]]）。例外時は全体を終了し、状態の木は取得しない（[[project-shutdown-on-exception]]）。保存はユーザー。停止タイムアウトの既定値（30 秒）と `shutdown`/`join` の `timeout`（既定 `math.inf`）は 2026-10-16 にユーザーが決定。スロットの識別名（`"body.l1.next/out"` など）と例外終了後のタイマー再開は推奨案で実装、ユーザー確認待ち
 - **時定数**: 連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い（skill `pc-alm` 7.1 節）。周期を入れた後も `max_dt` はまだ無い（2026-10-17）

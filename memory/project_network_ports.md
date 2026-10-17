@@ -1,20 +1,20 @@
 ---
 name: project-network-ports
-description: ノード間の双方向接続の決定。Node と Network は共通の基底（Composite）、a.connect(b) は a の NextPort と b の PrevPort をつなぐ（NextPort は既定で複数の相手）、Port 名は prev / next、向きを持たない Port（send 型と recv 型の組）、connect 1 回で両端に登録する Channel、単一/複数の相手を宣言で区別、相手は接続ハンドルで識別、集約は更新手法の責任
+description: ノード間の双方向接続の決定。Node と Network は共通の基底（Composite）、接続は Port 同士（2026-10-17 に a.connect(b) を廃止。NextPort は既定で複数の相手）、Port 名は prev / next、向きを持たない Port（send 型と recv 型の組）、connect 1 回で両端に登録する Channel、単一/複数の相手を宣言で区別、相手は接続ハンドルで識別、集約は更新手法の責任
 metadata:
   type: project
 ---
 
 2026-10-13 決定。詳細は `specs/network.md`。
 
-- **構成要素は ノード・ネットワーク・Port・Channel。** ノードは非同期処理の単位（末端）で Port を宣言する。ネットワークはノードや別のネットワークを子に持ち、内側の Port を外向きに公開する。Node と Network は共通の基底を持ち（Composite）、同じ書き方で接続できる。共通の基底は Port と connect だけを持つ。ネットワークは構築時だけの構造で hook を持たず、実行時の単位はノードだけ（2026-10-14、[[project-node-lifecycle]]）。インスタンスは定義と実行を兼ね、構築で Port が実スロットに結び付くChannel は 2 つの Port の間の接続 1 本で、向きごとのスロット 2 本からなる（[[project-message-types]]）
+- **構成要素は ノード・ネットワーク・Port・Channel。** ノードは非同期処理の単位（末端）で Port を宣言する。ネットワークはノードや別のネットワークを子に持ち、内側の Port を外向きに公開する。Node と Network は共通の基底を持ち（Composite）、同じ書き方で接続できる。共通の基底は代入した Port と子の登録だけを持つ（2026-10-17、[[project-port-registry]]）。ネットワークは構築時だけの構造で hook を持たず、実行時の単位はノードだけ（2026-10-14、[[project-node-lifecycle]]）。インスタンスは定義と実行を兼ね、構築で Port が実スロットに結び付くChannel は 2 つの Port の間の接続 1 本で、向きごとのスロット 2 本からなる（[[project-message-types]]）
 - **Port は向きを持たない。** send 型と recv 型の組だけを持ち、型が互いに逆向きの Port 同士だけ接続できる。上流・下流はフレームワークで決めない
 - **connect 時に型と shape の両方が逆向きに一致するかを検査し、一致しなければその場でエラー**（build を待たない）
 - **未接続の Port が残ってもよい。** 未接続でもスキーマどおりのスロットを持ち、ノードが受け取ると初期値（複数なら空の対応表）が返る
 - **send だけ・recv だけの片方向の Port を許す。** その Channel はスロット 1 本。入力を送るだけ・観測するだけのノードで無駄なスロットとメッセージを持たない
 - **ネットワークの入出力は、未接続のまま外に出ている Port。** 実行と読み書きの形は [[project-host-io]]（暫定）。ホストは未接続の Port に外から書き込んで入力し（そのスロットの唯一の書き手になる）、どの Port からでも送られた最新値を時刻と組で読める（未接続なら出力、接続済みなら中間層の観測。読み取り専用で動作に影響しない）。外から書けるのは未接続の Port だけ（書き手 1 つの原則）。周期的に動くセンサ等の入出力は普通のノードとして書く
-- **接続は `a.next.connect(b.prev)`（Port 同士）と `a.connect(b)`（ノード・ネットワーク同士）の 2 通り。** `a.connect(b)` は a の `NextPort` と b の `PrevPort` をつなぐ。同じ種類の層を並べると型だけではどの Port か決められないため、この宣言で決める。前側・次側は省略形と相手の数の既定のための宣言で、Port 自体は向きを持たない（`a.connect(b)` と `b.connect(a)` は別の接続）
-- **Port の宣言は `PrevPort`（前側・既定で相手 1 つ）、`NextPort`（次側・既定で相手は複数）、`Port`（どちらでもない・既定で相手 1 つ）の 3 種類。** 相手の数は明示して上書きできる。ノード・ネットワークが直接の属性として持てる PrevPort・NextPort はそれぞれ 1 つまで。ネットワークは内側の PrevPort・NextPort を自分の属性にして前側・次側を公開する
+- **接続は `a.next.connect(b.prev)`（Port 同士）だけ。** 当初はノード・ネットワーク同士の `a.connect(b)` もあったが、2026-10-17 に廃止した（[[project-port-registry]]）。Port 自体は向きを持たない
+- **Port の宣言は `PrevPort`（前側・既定で相手 1 つ）、`NextPort`（次側・既定で相手は複数）、`Port`（どちらでもない・既定で相手 1 つ）の 3 種類。** 相手の数は明示して上書きできる。前側・次側は慣習で、いくつ持ってもよい（2026-10-17 に 1 つずつの制約を廃止）。ネットワークは内側の Port を `prev`・`next` などの属性にして公開する
 - **Port 名は `upper` / `lower` ではなく `prev` / `next`（前・次）。** 上下は上から下へ落ちる直感と相反し、PC-ALM の上下を基盤に持ち込むため（ユーザーの指摘）
 - **接続は Channel を作り、両端を 2 つの Port に同時に登録する。** B を A に接続した時点で A にも逆向きの経路が登録される。define-and-run なので実行中に経路は変わらない
 - **相手の数は宣言で区別する。** 相手 1 つなら recv はメッセージをそのまま返し、複数なら相手ごとの対応表を返す。相手 1 つの Port に 2 本目を connect すると構築時エラー
