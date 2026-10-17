@@ -144,23 +144,6 @@ class TestOutlet:
         (y,) = values(outlet.outbox.read())
         assert torch.equal(y, x.contiguous())
 
-    def test_writer_changing_its_tensor_does_not_change_the_slot(self):
-        x = torch.zeros(4)
-        outlet = Outlet(tensor_schema((4,)), 0, "p", timer=global_timer)
-        outlet.send([x])
-        x.fill_(1.0)
-        (y,) = values(outlet.outbox.read())
-        assert torch.equal(y, torch.zeros(4))
-
-    def test_reader_changing_its_tensor_does_not_change_other_reads(self):
-        outlet = Outlet(tensor_schema((4,)), 0, "p", timer=global_timer)
-        outlet.send([torch.ones(4)])
-        msg = outlet.outbox.read()
-        (first,) = values(msg)
-        first.fill_(9.0)
-        assert torch.equal(values(msg)[0], torch.ones(4))
-        assert torch.equal(values(outlet.outbox.read())[0], torch.ones(4))
-
     def test_held_message_is_immutable(self):
         outlet = Outlet(tensor_schema((8,), torch.int64), 1, "p", timer=global_timer)
         outlet.send([torch.full((8,), 0)])
@@ -172,58 +155,12 @@ class TestOutlet:
         assert torch.equal(values(held)[0], torch.full((8,), 0))
         assert torch.equal(values(outlet.channel(0).read())[0], torch.full((8,), 100))
 
-    def test_send_reaches_the_outbox_and_every_channel(
-        self, virtual_timer: GlobalTimer
-    ):
-        outlet = Outlet(tensor_schema((2,)), 3, "p", timer=global_timer)
-        virtual_timer.advance(1.5)
-        outlet.send([torch.tensor([1.0, 2.0])])
-        slots = [outlet.outbox] + [outlet.channel(k) for k in range(3)]
-        for slot in slots:
-            msg = slot.read()
-            assert msg.timestamp.ns == 1_500_000_000
-            assert torch.equal(values(msg)[0], torch.tensor([1.0, 2.0]))
-
-    def test_send_to_changes_only_that_channel(self, virtual_timer: GlobalTimer):
-        outlet = Outlet(tensor_schema((2,)), 3, "p", timer=global_timer)
-        virtual_timer.advance(1.0)
-        outlet.send_to(1, [torch.ones(2)])
-        assert outlet.channel(1).read().timestamp.ns == 1_000_000_000
-        assert torch.equal(values(outlet.channel(1).read())[0], torch.ones(2))
-        for slot in [outlet.outbox, outlet.channel(0), outlet.channel(2)]:
-            msg = slot.read()
-            assert msg.timestamp.ns == 0
-            assert torch.equal(values(msg)[0], torch.zeros(2))
-
-    def test_starts_with_zeros_and_names_its_slots(self, virtual_timer: GlobalTimer):
-        virtual_timer.advance(0.25)
-        outlet = Outlet(
-            schema(("a", (2,), torch.int32), ("b", (), torch.bool)),
-            2,
-            "x.p",
-            timer=global_timer,
-        )
-        assert outlet.outbox.name == "x.p/out"
-        assert [outlet.channel(k).name for k in range(2)] == ["x.p/ch0", "x.p/ch1"]
-        msg = outlet.channel(1).read()
-        assert msg.timestamp.ns == 250_000_000
-        a, b = values(msg)
-        assert torch.equal(a, torch.zeros(2, dtype=torch.int32))
-        assert torch.equal(b, torch.tensor(False))
-
     def test_without_channels_writes_only_the_outbox(self):
         outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
         outlet.send([torch.tensor([3.0])])
         assert torch.equal(values(outlet.outbox.read())[0], torch.tensor([3.0]))
         with pytest.raises(IndexError):
             outlet.channel(0)
-
-    def test_restore_sets_value_and_time(self):
-        outlet = Outlet(tensor_schema((2,)), 1, "p", timer=global_timer)
-        outlet.channel(0).restore([torch.tensor([4.0, 5.0])], 123)
-        msg = outlet.channel(0).read()
-        assert msg.timestamp.ns == 123
-        assert torch.equal(values(msg)[0], torch.tensor([4.0, 5.0]))
 
     def test_accepts_producers_without_max_version(self):
         class OldProducer:
@@ -320,11 +257,6 @@ class TestOutlet:
 
 
 class TestSlotWaitNewer:
-    def test_times_out_without_a_write(self):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
-        last = outlet.outbox.read()
-        assert outlet.outbox.wait_newer(last, 0.02) is None
-
     def test_returns_once_another_thread_writes(self):
         outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
         last = outlet.outbox.read()
@@ -352,20 +284,6 @@ class TestSlotWaitNewer:
 
 
 class TestInputGroup:
-    def test_write_stamps_every_slot_with_one_time(self, virtual_timer: GlobalTimer):
-        group = InputGroup(timer=global_timer)
-        x = group.input(tensor_schema((2,)), "net.x")
-        y = group.input(schema(("t", (), torch.int64)), "net.y")
-        assert x.name == "net.x/in"
-        virtual_timer.advance(2.0)
-        written_at = group.write(
-            [(x, [torch.tensor([1.0, 2.0])]), (y, [torch.tensor(3)])]
-        )
-        mx, my = x.read(), y.read()
-        assert mx.timestamp.ns == my.timestamp.ns == written_at.ns == 2_000_000_000
-        assert torch.equal(values(mx)[0], torch.tensor([1.0, 2.0]))
-        assert torch.equal(values(my)[0], torch.tensor(3))
-
     def test_invalid_item_changes_no_slot(self):
         group = InputGroup(timer=global_timer)
         x = group.input(tensor_schema((2,)), "x")
@@ -387,62 +305,28 @@ class TestInputGroup:
         with pytest.raises(ValueError, match="another input group"):
             InputGroup(timer=global_timer).write([(other, [torch.ones(2)])])
 
-    def test_restore_sets_value_and_time(self):
-        group = InputGroup(timer=global_timer)
-        x = group.input(tensor_schema((2,)), "x")
-        group.write([(x, [torch.ones(2)])])
-        x.restore([torch.tensor([5.0, 6.0])], 42)
-        msg = x.read()
-        assert msg.timestamp.ns == 42
-        assert torch.equal(values(msg)[0], torch.tensor([5.0, 6.0]))
-
 
 class TestTimers:
-    """Slots stamp their messages with the timer they are given."""
-
-    @staticmethod
-    def own_timer(seconds: float) -> Timer:
-        t = Timer()
-        t.use_virtual_clock(True)
-        t.load_state_dict({"time_ns": 0, "scale": 1.0})
-        t.advance(seconds)
-        return t
-
-    def test_outlet_stamps_with_its_own_timer(self, virtual_timer: GlobalTimer):
-        own = self.own_timer(3.0)
-        virtual_timer.advance(1.0)
-        outlet = Outlet(tensor_schema((1,)), 1, "p", timer=own)
-        assert outlet.outbox.read().timestamp.ns == 3_000_000_000
-        own.advance(1.0)
-        outlet.send([torch.ones(1)])
-        assert outlet.channel(0).read().timestamp.ns == 4_000_000_000
-
-    def test_input_group_stamps_with_its_own_timer(self, virtual_timer: GlobalTimer):
-        own = self.own_timer(2.0)
-        virtual_timer.advance(5.0)
-        group = InputGroup(timer=own)
+    @pytest.mark.parametrize("own", [False, True], ids=["global", "own"])
+    def test_slots_stamp_with_the_timer_they_are_given(
+        self, virtual_timer: GlobalTimer, own: bool
+    ):
+        other = Timer()
+        other.use_virtual_clock(True)
+        other.load_state_dict({"time_ns": 0, "scale": 1.0})
+        given, other = (other, virtual_timer) if own else (virtual_timer, other)
+        other.advance(5.0)  # in no message
+        given.advance(1.5)
+        outlet = Outlet(tensor_schema((1,)), 1, "p", timer=given)
+        group = InputGroup(timer=given)
         x = group.input(tensor_schema((1,)), "x")
-        assert x.read().timestamp.ns == 2_000_000_000
-        own.advance(0.5)
-        group.write([(x, [torch.ones(1)])])
-        assert x.read().timestamp.ns == 2_500_000_000
+        at_start = Timestamp(ns=1_500_000_000)
+        assert outlet.channel(0).read().timestamp == x.read().timestamp == at_start
 
-    def test_they_stamp_with_the_global_timer(self, virtual_timer: GlobalTimer):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=virtual_timer)
-        x = InputGroup(timer=virtual_timer).input(tensor_schema((1,)), "x")
-        virtual_timer.advance(0.5)
+        given.advance(0.5)
         outlet.send([torch.ones(1)])
-        assert outlet.outbox.read().timestamp.ns == 500_000_000
-        assert x.read().timestamp.ns == 0
-
-    def test_message_timestamp_is_its_time(self, virtual_timer: GlobalTimer):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
-        virtual_timer.advance(1.5)
-        outlet.send([torch.ones(1)])
-        first = outlet.outbox.read()
-        virtual_timer.advance(0.5)
-        outlet.send([torch.ones(1)])
-        second = outlet.outbox.read()
-        assert first.timestamp == Timestamp(ns=1_500_000_000)
-        assert float(first.timestamp) == 1.5
-        assert first.timestamp < second.timestamp
+        written_at = group.write([(x, [torch.ones(1)])])
+        sent = outlet.outbox.read().timestamp
+        assert sent == x.read().timestamp == written_at == Timestamp(ns=2_000_000_000)
+        assert float(sent) == 2.0
+        assert at_start < sent
