@@ -293,10 +293,13 @@ def run[P: Port[Any, Any, Any]](
             y, t = run.read(net.head.next)
 
     Raises:
-        RuntimeError: A network has already run, part of a network belongs to
-            another built network (e.g. a network that ran alone and is now
-            given with others, or the other way around, or a node that has
-            run), or this is called from a node's hook.
+        RuntimeError: A network or node has already run, or belongs to a tree
+            that has (``"Leaky has already run; create a new instance to run
+            again"``); part of a network belongs to another built network that
+            has not run (e.g. a network that was only built, or one whose run
+            alone was refused and is now given with others); or this is called
+            from a node's hook. Of runs called at once that share a part, the
+            refused ones may give either message.
         TypeError: Nothing is given, or a value is neither a ``Node`` nor a
             ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
