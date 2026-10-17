@@ -1,6 +1,6 @@
 # Building a Network
 
-You write a network as a class that inherits from `mujou.Network`. This page shows how to connect nodes, expose ports to the outside, nest networks, branch and merge, and check the built structure. How to think about networks is in [Networks](../concepts/networks.md) and [Ports and channels](../concepts/ports.md).
+You write a network as a class that inherits from `mujou.Network`. This page shows how to connect nodes, expose ports to the outside, nest networks, branch and merge, and check the built structure. How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
 
 ## The basic form
 

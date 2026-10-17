@@ -102,7 +102,6 @@ plugins:
             Ports and Channels: Port と Channel
             Networks: ネットワーク
             Global Time: グローバル時間
-            State: 状態
             User Guide: ユーザーガイド
             Writing a Node: ノードを書く
             Building a Network: ネットワークを組む
@@ -153,16 +152,9 @@ validation:
 nav:
   - Home: index.md
   - Getting Started:
-      - getting-started/index.md
       - Installation: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
-  - Concepts:
-      - concepts/index.md
-      - Nodes: concepts/nodes.md
-      - Ports and Channels: concepts/ports.md
-      - Networks: concepts/networks.md
-      - Global Time: concepts/time.md
-      - State: concepts/state.md
+  - Concepts: concepts.md
   - User Guide:
       - user-guide/index.md
       - Writing a Node: user-guide/writing-a-node.md
