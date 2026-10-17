@@ -50,7 +50,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     Declare ports as attributes of a node (or expose a port of a child as an
     attribute of a network). ``send`` is the spec of what this port sends and
     ``recv`` the spec of what it receives; either may be omitted for a one-way port
-    (omit it rather than pass ``None``, so that type checkers infer ``Never``).
+    (omit it: type checkers reject ``None`` and infer ``Never`` for an omitted
+    spec).
     ``multi=True`` lets the port take any number of peers (``Multi``) and
     ``multi=False`` at most one (``Single``). The default is one peer for ``Port``
     and ``PrevPort``, and many for ``NextPort``. ``multi`` fixes what ``recv``
@@ -63,6 +64,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     peers receive and the host reads until then. It must match ``send`` exactly,
     and is copied when the port is made. Without it, that is the ``zeros()`` of
     ``send``. A restored run takes the values from the state instead.
+
+    Once assigned as an attribute of a node, the port is named
+    ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
+    ``repr``; the first assignment names it.
 
     ``Port`` is neither the previous nor the next side of its owner; use
     ``PrevPort`` and ``NextPort`` for the sides that ``a.connect(b)`` between two
@@ -81,6 +86,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                 super().__init__()
                 self.inp = Port(recv=TensorSpec((3,)))
 
+            @override
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
                 x = self.inp.recv()  # torch.Tensor (one peer); ones until out sends
@@ -100,8 +106,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     @overload
     def __init__[S2, R2](
         self: Port[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
@@ -109,8 +115,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     @overload
     def __init__[S2, R2](
         self: Port[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
@@ -151,6 +157,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         self._recv_spec = recv
         self._multi = multi
         self._channels: list[Channel] = []
+        # "<owner class>.<attribute>", set when the port is first assigned as an
+        # attribute of a node; names the port in errors and its repr.
+        self._name: str | None = None
         # Set by Network.build; a frozen port takes no more connections.
         self._frozen = False
         # Set by mujou.run: the slots recv and send use.
@@ -199,25 +208,26 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                 "Network.build() or mujou.run())"
             )
         if other is self:
-            raise ValueError(f"cannot connect a port to itself: {self!r}")
+            raise ValueError(f"cannot connect a port to itself: {self._label()}")
         if self._send_spec != other._recv_spec or self._recv_spec != other._send_spec:
             raise TypeError(
                 "port specs do not match: "
-                f"{self!r} sends {self._send_spec!r} and receives {self._recv_spec!r}, "
-                f"but {other!r} receives {other._recv_spec!r} and sends "
-                f"{other._send_spec!r}"
+                f"{self._label()} sends {self._send_spec!r} and receives "
+                f"{self._recv_spec!r}, but {other._label()} receives "
+                f"{other._recv_spec!r} and sends {other._send_spec!r}"
             )
         if self._send_spec is None and self._recv_spec is None:
             raise TypeError(
-                f"neither {self!r} nor {other!r} has a spec, so nothing would flow"
+                f"neither {self._label()} nor {other._label()} has a spec, so nothing "
+                "would flow"
             )
         for port in (self, other):
             if not port._multi and port._channels:
                 raise ValueError(
-                    f"{port!r} takes one peer and is already connected; declare it "
-                    "with multi=True to take more"
+                    f"{port._label()} takes one peer and is already connected; "
+                    "declare it with multi=True to take more"
                 )
-        channel = Channel(self, other)
+        channel = _make_channel(self, other)
         self._channels.append(channel)
         other._channels.append(channel)
         return channel
@@ -304,13 +314,22 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
     def _bound(self) -> Binding:
         if self._binding is None:
-            raise _not_running()
+            raise RuntimeError(
+                f"{self._label()} can only send and receive in its owning node's "
+                "hooks while the network runs (not in __init__)"
+            )
         return self._binding
+
+    def _label(self) -> str:
+        """Name this port in an error: by its owner and attribute (e.g.
+        ``"Shift.next"``) once assigned to a node, else by its repr."""
+        return self._name if self._name is not None else repr(self)
 
     @override
     def __repr__(self) -> str:
+        name = "" if self._name is None else f"{self._name}, "
         return (
-            f"{type(self).__name__}(send={self._send_spec!r}, "
+            f"{type(self).__name__}({name}send={self._send_spec!r}, "
             f"recv={self._recv_spec!r}, multi={self._multi})"
         )
 
@@ -330,8 +349,8 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
     @overload
     def __init__[S2, R2](
         self: PrevPort[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
@@ -339,8 +358,8 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
     @overload
     def __init__[S2, R2](
         self: PrevPort[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
@@ -373,8 +392,8 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     @overload
     def __init__[S2, R2](
         self: NextPort[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True] = True,
         initial: S2 | None = None,
@@ -382,8 +401,8 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     @overload
     def __init__[S2, R2](
         self: NextPort[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False],
         initial: S2 | None = None,
@@ -407,6 +426,9 @@ class Channel:
     channel and ``send_to`` takes one. Channels compare by identity, so two
     connections between the same ports are two different keys.
 
+    It cannot be created directly: a channel that its ports do not know would
+    carry nothing.
+
     Example::
 
         ch = a.next.connect(b.prev)
@@ -414,9 +436,10 @@ class Channel:
     """
 
     # Any: a channel joins ports of any message types (connect checks they match).
-    def __init__(self, a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> None:
-        # Only Port.connect creates channels.
-        self._ends = (a, b)
+    _ends: tuple[Port[Any, Any, Any], Port[Any, Any, Any]]
+
+    def __init__(self) -> Never:
+        raise TypeError("a Channel is made by Port.connect()")
 
     @property
     def ends(self) -> tuple[Port[Any, Any, Any], Port[Any, Any, Any]]:
@@ -442,11 +465,18 @@ class Channel:
         return f"Channel({a!r} <-> {b!r})"
 
 
-def _not_running() -> RuntimeError:
-    return RuntimeError(
-        "the port is not bound to slots: run the network, then use recv/send from "
-        "the owning node's hooks"
-    )
+def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
+    channel = object.__new__(Channel)
+    channel._ends = (a, b)  # pyright: ignore[reportPrivateUsage]  # Channel's own module
+    return channel
+
+
+def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
+    """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
+    (``Node.__setattr__`` calls this; the first assignment wins, so a second name
+    does not rename the port, and networks never do)."""
+    if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
+        port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
 
 
 def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:

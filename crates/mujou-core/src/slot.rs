@@ -124,8 +124,7 @@ impl Schema {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SlotError {
     InvalidSchema(String),
-    /// A value does not fit the schema. `what` is `"shape"`, `"dtype"` or
-    /// `"field count"`.
+    /// A value does not fit the schema. `what` is `"shape"` or `"dtype"`.
     Mismatch {
         slot: String,
         field: String,
@@ -423,18 +422,11 @@ impl Slot {
     }
 
     /// Waits until the slot holds a message other than `last`, up to `timeout` of
-    /// real time. With `last` absent, returns the current message at once.
+    /// real time.
     ///
     /// Only for the host (`subscribe`): a node must never wait for another, so the
     /// ports that nodes use do not expose it.
-    pub fn wait_newer(
-        &self,
-        last: Option<&Arc<Message>>,
-        timeout: Duration,
-    ) -> Option<Arc<Message>> {
-        let Some(last) = last else {
-            return Some(self.load());
-        };
+    pub fn wait_newer(&self, last: &Arc<Message>, timeout: Duration) -> Option<Arc<Message>> {
         let deadline = Instant::now().checked_add(timeout);
         // Counted before taking the lock: a writer that takes the lock after this
         // reader has checked the value therefore sees the count and notifies.
@@ -978,18 +970,11 @@ mod tests {
         let outlet = Outlet::new(scalar_schema(), 0, "p", timer());
         let slot = Arc::clone(outlet.outbox());
         let first = slot.load();
-        assert!(Arc::ptr_eq(
-            &slot.wait_newer(None, Duration::ZERO).unwrap(),
-            &first
-        ));
-        assert!(
-            slot.wait_newer(Some(&first), Duration::from_millis(20))
-                .is_none()
-        );
+        assert!(slot.wait_newer(&first, Duration::from_millis(20)).is_none());
 
         let waiter = {
             let (slot, first) = (Arc::clone(&slot), Arc::clone(&first));
-            thread::spawn(move || slot.wait_newer(Some(&first), Duration::from_secs(10)))
+            thread::spawn(move || slot.wait_newer(&first, Duration::from_secs(10)))
         };
         thread::sleep(Duration::from_millis(20));
         outlet.send_with(Target::All, fill_k(3)).unwrap();

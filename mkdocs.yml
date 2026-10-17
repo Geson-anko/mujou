@@ -123,7 +123,10 @@ plugins:
           paths: [src]
           options:
             docstring_style: google
-            show_source: true
+            show_source: false
+            # The typed overloads of the ports repeat each signature with the private
+            # spec default; the implementation's signature is enough.
+            show_overloads: false
             show_submodules: false
             separate_signature: true
             line_length: 88

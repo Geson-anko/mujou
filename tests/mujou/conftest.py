@@ -120,3 +120,13 @@ def start(started: list[Run]) -> Start:
         return run
 
     return start
+
+
+@pytest.fixture
+def accelerator() -> torch.device:
+    """Device 0 of torch's current accelerator (CUDA, MPS, ...); skips the test
+    when none is available."""
+    found = torch.accelerator.current_accelerator(check_available=True)
+    if found is None:
+        pytest.skip("needs an accelerator")
+    return torch.device(found.type, 0)

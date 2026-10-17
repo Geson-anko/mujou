@@ -79,6 +79,15 @@ class TestComponentConnect:
         with pytest.raises(ValueError, match="PrevPort"):
             Hidden().connect(Source())
 
+    def test_a_network_without_a_side_is_told_how_to_expose_one(self):
+        with pytest.raises(
+            ValueError,
+            match=r"found 0; expose one, e\.g\. self\.next = self\.<child>\.next",
+        ):
+            Classifier().connect(Hidden())
+        with pytest.raises(ValueError, match=r"self\.prev = self\.<child>\.prev"):
+            Hidden().connect(Compose(Hidden()))
+
     def test_the_same_port_under_two_names_is_one_side(self):
         class Aliased(Network):
             def __init__(self) -> None:

@@ -1,0 +1,7 @@
+# Pin the toolchain so that `cargo clippy -- -D warnings` (pre-commit, CI) does not
+# start failing when a new stable release adds lints. rustup installs it on first use.
+# The minimum supported version is `rust-version` in Cargo.toml (checked in CI).
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

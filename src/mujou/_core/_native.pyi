@@ -87,10 +87,9 @@ class InputGroup:
     """
     The slots the host writes, switched together by one version counter.
     """
-    def __new__(cls, /, *, timer: Timer | None = None) -> Self:
+    def __new__(cls, /, *, timer: Timer) -> Self:
         """
-        Every write is stamped with the time on `timer` (the global timer if
-        `None`).
+        Every write is stamped with the time on `timer`.
 
         The slots and the host's inputs of one run must use the timer of its
         runtime: on another timer, the times of the messages would not be on
@@ -145,11 +144,6 @@ class Message:
     def buffers(self, /) -> tuple[BufferView, ...]:
         """
         One view per field, in key order.
-        """
-    @property
-    def time_ns(self, /) -> int:
-        """
-        The time it was written at, in nanoseconds.
         """
     @property
     def timestamp(self, /) -> Timestamp:
@@ -277,18 +271,11 @@ class Outlet:
         IndexError: No such channel.
     """
     def __new__(
-        cls,
-        /,
-        schema: Schema,
-        channels: SupportsIndex,
-        name: str,
-        *,
-        timer: Timer | None = None,
+        cls, /, schema: Schema, channels: SupportsIndex, name: str, *, timer: Timer
     ) -> Self:
         """
         Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
-        Every message is stamped with the time on `timer` (the global timer if
-        `None`).
+        Every message is stamped with the time on `timer`.
 
         The slots and the host's inputs of one run must use the timer of its
         runtime: on another timer, the times of the messages would not be on
@@ -326,20 +313,14 @@ class Runtime:
         nodes: SupportsGetItem[int, Node],
         names: SupportsGetItem[int, str],
         *,
-        timer: Timer | None = None,
+        timer: Timer,
     ) -> Self:
         """
-        The nodes run on `timer` (the global timer if `None`): it measures their
-        Δt, and the runtime freezes it to start and to take the state. Create
-        the `Outlet`s and the `InputGroup` of this run with the same timer.
+        The nodes run on `timer`: it measures their Δt, and the runtime freezes
+        it to start and to take the state. Create the `Outlet`s and the
+        `InputGroup` of this run with the same timer.
         """
-    def capture(
-        self,
-        /,
-        build: Callable[[list[object]], Any],
-        *,
-        timeout: SupportsFloat | SupportsIndex | None = None,
-    ) -> Any:
+    def capture(self, /, build: Callable[[list[object]], Any]) -> Any:
         """
         Pauses every node, calls `build` with their `state_dict()` in node
         order while paused, resumes, and returns what `build` returned.
@@ -348,7 +329,8 @@ class Runtime:
         waiting methods. It may capture another runtime, but two builds must
         not wait for each other's runtime: that cycle deadlocks, and the control
         threads cannot see Ctrl-C. If `build` raises, the exception propagates
-        and the network keeps running.
+        and the network keeps running. Gives up with `PauseTimeoutError` after
+        the `pause_timeout` given to `start`.
         """
     def check(self, /) -> None:
         """
@@ -356,8 +338,6 @@ class Runtime:
         """
     @property
     def is_finished(self, /) -> bool: ...
-    @property
-    def is_running(self, /) -> bool: ...
     def join(self, /, timeout: SupportsFloat | SupportsIndex | None = None) -> bool:
         """
         Waits until the network has stopped, for at most `timeout` seconds, and
@@ -385,7 +365,8 @@ class Runtime:
         manual: bool = False,
         states: SupportsGetItem[int, Any] | None = None,
         last_update_ns: SupportsGetItem[int, SupportsIndex] | None = None,
-        period_ns: SupportsGetItem[int, SupportsIndex | None] | None = None,
+        periods: SupportsGetItem[int, SupportsFloat | SupportsIndex | None]
+        | None = None,
         timer_state: "dict[str, int | float] | None" = None,
         pause_timeout: SupportsFloat | SupportsIndex = 30.0,
     ) -> None:
@@ -400,10 +381,11 @@ class Runtime:
         (`Timer.state_dict()`), so the time does not run while the nodes start.
         Loading it raises `ValueError` while another runtime runs on the same
         timer, whose time would jump. `last_update_ns` is where each node's
-        first Δt starts (the time at the start by default). `period_ns` is each
-        node's period on the timer in ns (> 0), or `None` to update as soon as
-        any time has passed; the manual mode ignores it. `pause_timeout` is how
-        many real seconds `capture` waits for every node to pause by default.
+        first Δt starts (the time at the start by default). `periods` is each
+        node's period on the timer in seconds (> 0), rounded to the nearest ns
+        and at least 1 ns, or `None` to update as soon as any time has passed;
+        the manual mode ignores it. `pause_timeout` is how many real seconds
+        `capture` waits for every node to pause.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.
@@ -458,13 +440,12 @@ class Slot:
         `Outlet.send` does.
         """
     def wait_newer(
-        self, /, last: Message | None, timeout: SupportsFloat | SupportsIndex
+        self, /, last: Message, timeout: SupportsFloat | SupportsIndex
     ) -> Message | None:
         """
         Waits without the GIL until the slot holds a message other than `last`.
 
-        Returns `None` after `timeout` seconds of real time. With `last` `None`,
-        returns the current value at once.
+        Returns `None` after `timeout` seconds of real time.
 
         Only for the host's `subscribe`: a node must never wait for another, so
         ports do not expose it.
@@ -484,7 +465,7 @@ class Timer:
 
     `Timer()` is a new timer at time 0 on the real clock at scale 1. Systems
     whose pauses should not stop each other's time run on separate timers;
-    everything not given a timer runs on the global one, `timer`.
+    a run not given a timer runs on the global one, `timer`.
 
     The time is held in nanoseconds and saturates at about 584 years.
     """

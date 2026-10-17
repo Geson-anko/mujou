@@ -15,7 +15,7 @@ use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
 ///
 /// `Timer()` is a new timer at time 0 on the real clock at scale 1. Systems
 /// whose pauses should not stop each other's time run on separate timers;
-/// everything not given a timer runs on the global one, `timer`.
+/// a run not given a timer runs on the global one, `timer`.
 ///
 /// The time is held in nanoseconds and saturates at about 584 years.
 #[pyclass(subclass, frozen, module = "mujou._core._native", name = "Timer")]
@@ -25,11 +25,6 @@ impl PyTimer {
     pub fn timer(&self) -> &Arc<Timer> {
         &self.0
     }
-}
-
-/// The timer given as an optional argument, or the global timer.
-pub fn timer_or_global(timer: Option<PyRef<'_, PyTimer>>) -> Arc<Timer> {
-    timer.map_or_else(|| Arc::clone(core::global()), |t| Arc::clone(t.timer()))
 }
 
 #[pymethods]

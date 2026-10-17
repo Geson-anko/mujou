@@ -204,7 +204,7 @@ mod capture {
         rt.step(None).wait().unwrap();
         let frozen = Arc::clone(&timer);
         let (states, paused) = rt
-            .capture(None, move |states| (states, frozen.is_paused()))
+            .capture(move |states| (states, frozen.is_paused()))
             .wait()
             .unwrap();
         assert_eq!(states, vec![1, 1]);
@@ -383,7 +383,7 @@ mod separate_timers {
         // While `a` is paused, the runtime on the other timer keeps updating.
         let (own, other, other_rt) = (Arc::clone(&ta), Arc::clone(&tb), Arc::clone(&b));
         let (own_paused, other_paused) = a
-            .capture(None, move |_| {
+            .capture(move |_| {
                 other.advance_ns(H_NS).unwrap();
                 other_rt.step(None).wait().unwrap();
                 (own.is_paused(), other.is_paused())
@@ -719,9 +719,7 @@ mod period {
         let timer = virtual_timer();
         let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
         timer.advance_ns(P_NS / 2).unwrap();
-        rt.capture(None, |states: Vec<()>| states.len())
-            .wait()
-            .unwrap();
+        rt.capture(|states: Vec<()>| states.len()).wait().unwrap();
         timer.advance_ns(P_NS / 2 - 1).unwrap();
         assert_quiet(&dts);
         timer.advance_ns(1).unwrap();
@@ -795,9 +793,7 @@ mod period {
         let period = Some(1_000 * 1_000_000_000);
         let (rt, dts) = start_ticker(&timer, with_period(period, false), None);
         let begin = Instant::now();
-        rt.capture(None, |states: Vec<()>| states.len())
-            .wait()
-            .unwrap();
+        rt.capture(|states: Vec<()>| states.len()).wait().unwrap();
         rt.request_stop();
         assert!(rt.join(Some(LONG)).unwrap());
         assert!(begin.elapsed() < Duration::from_secs(2));

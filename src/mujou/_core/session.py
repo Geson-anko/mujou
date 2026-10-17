@@ -23,8 +23,8 @@ from mujou._core.network import ports
 from mujou._core.node import (
     Node,
     capture_state,
+    checked_period,
     end_thread,
-    period_ns,
     set_timer,
     thread_ident,
 )
@@ -244,7 +244,8 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
-        periods = [period_ns(node) for node in self._nodes]
+        self._check_one_node_devices()
+        periods = [checked_period(node) for node in self._nodes]
         restored = None if state is None else self._restore(state)
         if inputs:
             items = self._items(inputs)
@@ -257,13 +258,7 @@ class Session:
                 time_ns = int(restored["timer_state"]["time_ns"])
                 for slot, tensors in items:
                     slot.restore(tensors, time_ns)
-        # The names of the nodes in the runtime's errors and logs: a node that is
-        # itself the root (at the path "") by its class.
-        names = [
-            path or type(node).__name__
-            for path, node in zip(self._paths, self._nodes, strict=True)
-        ]
-        runtime = _native.Runtime(self._nodes, names, timer=self._clock)
+        runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
         self._runtime = runtime
         for session in list(_RUNNING):
             session._settle()
@@ -278,7 +273,7 @@ class Session:
             runtime.start(
                 manual=manual,
                 pause_timeout=pause_timeout,
-                period_ns=periods,
+                periods=periods,
                 **(restored or {}),
             )
         except _native.NetworkError:
@@ -292,6 +287,38 @@ class Session:
             for node in self._nodes:
                 set_timer(node, None)
             raise
+
+    def _names(self) -> list[str]:
+        """The names of the nodes in the runtime's errors and logs: a node that is
+        itself the root (at the path "") by its class."""
+        return [
+            path or type(node).__name__
+            for path, node in zip(self._paths, self._nodes, strict=True)
+        ]
+
+    def _check_one_node_devices(self) -> None:
+        """Refuse a second node on a device type of ``_ONE_NODE_DEVICES``, counting
+        the nodes of this run and of every run still running."""
+        for session in list(_RUNNING):
+            session._settle()  # a run that has ended no longer counts
+        for kind in _ONE_NODE_DEVICES:
+            users = [
+                f"{name!r}"
+                for name, node in zip(self._names(), self._nodes)
+                if node.device.type == kind
+            ]
+            users += [
+                f"{name!r} (of a running run)"
+                for session in _RUNNING
+                for name, node in zip(session._names(), session._nodes)
+                if node.device.type == kind
+            ]
+            if len(users) > 1:
+                raise ValueError(
+                    f"{kind.upper()} cannot be used from several threads at once, so "
+                    f"only one node may compute on it, but {', '.join(users)} do; put "
+                    "the others on the CPU, or compute them in one node"
+                )
 
     def step(self, order: Sequence[Node]) -> None:
         runtime = self._started()
@@ -385,7 +412,7 @@ class Session:
             [
                 int(stop_timer["time_ns"]),
                 *runtime.last_update_ns(),
-                *(slot.read().time_ns for slot, _ in self._slots.values()),
+                *(slot.read().timestamp.ns for slot, _ in self._slots.values()),
             ]
         )
         return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
@@ -623,7 +650,7 @@ class Session:
         slots: dict[str, tuple[object, int]] = {}
         for name, (slot, spec) in self._slots.items():
             message = slot.read()
-            slots[name] = (_value(spec, message, _CPU), message.time_ns)
+            slots[name] = (_value(spec, message, _CPU), message.timestamp.ns)
         tree = {
             "nodes": {
                 path: copy.deepcopy(state)
@@ -671,6 +698,12 @@ def _same_keys(
 # latest. The runtime's threads are not Python threads, and must not call into a
 # finalizing interpreter.
 _RUNNING: Final[set[Session]] = set()
+
+# The device types that torch cannot use from several threads at once: two threads
+# computing on MPS at the same time crash the process (seen with torch 2.14). Each
+# node computes on its own thread, so at most one node of all the running runs may
+# compute on such a device.
+_ONE_NODE_DEVICES: Final = ("mps",)
 
 
 def _shutdown_all() -> None:
