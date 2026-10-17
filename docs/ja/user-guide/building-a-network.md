@@ -23,9 +23,9 @@
 | `a.connect(b)`         | `a` の `NextPort` と `b` の `PrevPort`                        |
 | `a.out.connect(b.inp)` | 指定した 2 つの Port。`Port` で宣言した Port はこちらでつなぐ |
 
-`a.connect(b)` と `b.connect(a)` は別の接続である。`a` が前、`b` が次になる。
+`a.connect(b)` と `b.connect(a)` は別の接続である。`a.connect(b)` では `a` が前、`b` が次になる。
 
-つなげるのは、片方の `send` の spec がもう片方の `recv` の spec と一致し、逆向きも一致するときだけである。一致しなければ、`connect` を呼んだ時点で `TypeError` になる。相手が 1 つの Port に 2 本目をつなぐと `ValueError` になる。
+つなげるのは、片方の `send` の spec がもう片方の `recv` の spec と一致し、逆向きも一致するときだけである。一致しなければ、`connect` を呼んだ時点で `TypeError` になる。相手を 1 つしか取らない Port に 2 本目の Channel をつなぐと `ValueError` になる。
 
 `connect` は、できた接続（`Channel`）を返す。分岐で相手ごとに違う値を送るときに使う（このページの[分岐と合流](#%E5%88%86%E5%B2%90%E3%81%A8%E5%90%88%E6%B5%81)）。
 
@@ -93,7 +93,7 @@ class Classifier(mujou.Network):
 
 `send_to` だけを使う Port をホストが `Run.read` で読むと、その Port の初期値（`initial`。無ければゼロ）が返る。`send_to` で送った値そのものをホストが読む方法は無い。`Run.read` は送る型を持つ Port しか読まないので、受け取るだけの Port（各枝の `prev`）も読めない。ホストに読めるのは、枝のノードが受け取った値から計算して `send` した結果（上の例なら `net.double.next` の `2 x`）である。
 
-`send_to` に渡す `Channel` は、送り先ごとに区別して持つ。上の例のように、ネットワークで `connect` が返す `Channel` を、送る側のノードの属性に代入する（`self.split.plus = self.split.connect(self.double)`）。`self.next.channels`（つないだ順に並ぶ）から取り出すと、`connect` を書く順を入れ替えたときに、値の送り先が気づかないうちに入れ替わる。`Channel` を代入した属性は状態に集まらない。
+`send_to` に渡す `Channel` は、送り先ごとに区別して持つ。上の例のように、ネットワークで `connect` が返す `Channel` を、送る側のノードの属性に代入する（`self.split.plus = self.split.connect(self.double)`）。`self.next.channels`（つないだ順に並ぶ）から取り出すと、`connect` を書く順を入れ替えたときに、エラーも出ずに値の送り先が入れ替わる。`Channel` を代入した属性は状態に集まらない。
 
 ### 合流: 受け取る側
 
