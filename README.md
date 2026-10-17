@@ -2,47 +2,85 @@
 
 **Asynchronous Distributed Deep Learning Library for Continuous Learning.**
 
-Mujou (無常, "impermanence") is a deep learning framework where inference and learning happen at the same time. Computation is split into nodes: each node computes synchronously inside, and nodes exchange messages asynchronously. A node can be a layer (the default) or a stack of layers up to the whole model; single-neuron nodes are future work.
+[![Test](https://github.com/Geson-anko/mujou/actions/workflows/test.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/test.yml)
+[![Type Check](https://github.com/Geson-anko/mujou/actions/workflows/type-check.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/type-check.yml)
+[![Format & Lint](https://github.com/Geson-anko/mujou/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/pre-commit.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/)
 
-The default update rule will be [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding, not implemented yet), whose updates are local to each layer and neuron. The update rule is pluggable: other rules, including backpropagation confined to a single node, can be used instead.
+Mujou (無常, "impermanence") is a deep learning framework where inference and learning happen at the same time. You write nodes in PyTorch code and connect them into a network that runs in the background. Most models are trained once and then frozen; Mujou is for machines that keep learning from a stream, such as real-time systems and robots.
 
-Most machine learning systems are trained once and then frozen for inference. Mujou aims for machines that keep learning from a stream and never stop changing: real-time systems, robotics, lifelong learning.
+> **Status: early development.** The API works but may still change.
 
-> Status: early development. The API works but may still change. Read the documentation (English and Japanese) with `just docs`; the programs in `examples/` are run by the tests.
+## Key ideas
 
-## Development
+- **No epochs, no train/inference modes.** A running network takes input, produces output and learns, all at once.
+- **Synchronous inside, asynchronous outside.** Each node computes synchronously in ordinary PyTorch code. Nodes never wait for each other; a node reads the latest value its neighbour sent.
+- **One global time.** A node updates by an amount proportional to `dt`, the time since its last update, so nodes that update at different rates share one flow of time.
+- **Pluggable update rule.** The default will be [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding; not implemented yet), which learns with updates local to each node. Other rules work too, including backpropagation kept inside one node.
 
-Requires Python 3.14 or later. Development uses the free-threaded build 3.14t, set in `.python-version`; the regular build with the GIL is supported too.
+## Install
 
-Also requires [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) (>= 1.58) and a Rust toolchain ([rustup](https://rustup.rs/)) for the native core `mujou._core._native`, which `uv sync` builds with maturin.
-
-```sh
-just setup   # create .venv, install deps, install pre-commit hooks
-just run     # format -> test -> type -> docs-build
-```
-
-### Documentation
-
-The user documentation (English and Japanese) is in `docs/` and built with MkDocs; the design specifications for developers (Japanese) are in `specs/`.
+Mujou is not on PyPI yet; build it from source. You need [uv](https://docs.astral.sh/uv/), a Rust toolchain ([rustup](https://rustup.rs/)) and Python 3.14 (uv can install it). The free-threaded build 3.14t is recommended, because each node runs on a thread of its own.
 
 ```sh
-just docs         # serve the site at http://127.0.0.1:8000 with live reload
-just docs-build   # build it strictly into site/
+git clone https://github.com/Geson-anko/mujou.git
+cd mujou
+uv sync   # creates .venv/, installs PyTorch and builds the Rust core
 ```
 
-### Dev container
+## Example
 
-`.devcontainer/` provides Ubuntu with uv, just and the Rust toolchain. Open the main checkout in VS Code and choose "Reopen in Container", or use the [Dev Container CLI](https://github.com/devcontainers/cli) (`brew install devcontainer` or `npm install -g @devcontainers/cli`) through just, from the main checkout or any worktree under `.claude/worktrees/`:
+Two nodes compute `y = 2x + 1` on their own threads; the program writes `x` and reads `y`.
 
-```sh
-just container just run   # start the container if needed, then run `just run` in this checkout
+```python
+from typing import override
+
+import torch
+
+import mujou
+from mujou import NextPort, Node, PrevPort, TensorSpec
+
+VECTOR = TensorSpec((3,))  # every message is a float32 vector of 3
+
+
+class Affine(Node):
+    """Sends a * x + b, where x is the latest input."""
+
+    def __init__(self, a: float, b: float) -> None:
+        super().__init__()
+        self.a, self.b = a, b
+        self.prev = PrevPort(recv=VECTOR)  # receives from the previous node
+        self.next = NextPort(send=VECTOR)  # sends to the next node
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.next.send(self.a * self.prev.recv() + self.b)  # recv() never waits
+
+
+double, shift = Affine(2.0, 0.0), Affine(1.0, 1.0)
+double.connect(shift)  # double.next <-> shift.prev
+x = torch.tensor([1.0, 2.0, 3.0])
+# Each node updates on a thread of its own until the `with` block ends.
+with mujou.run(double, shift, inputs={double.prev: x}) as run:
+    y, t = run.read(shift.next)  # the latest output and the time it was sent
+    for _ in range(500):  # it arrives after a few updates; give up after ~5 s
+        if torch.equal(y, 2 * x + 1):
+            break
+        mujou.time.sleep(0.01)
+        y, t = run.read(shift.next)
+
+print(f"y = {y} at t = {float(t):.3f} s")  # y = tensor([3., 5., 7.]) at t = ...
 ```
 
-- The checkout is mounted at the same absolute path as on the host, so git worktrees work in the container: a worktree's `.git` file holds an absolute host path. Worktrees must live inside the main checkout (e.g. `.claude/worktrees/`) to be visible.
-- The container keeps its own Linux virtualenv in `.venv-devcontainer/` of each checkout (`UV_PROJECT_ENVIRONMENT`), next to the host's `.venv/`. Cargo builds share each checkout's `target/` with the host: the host triple is part of cargo's artifact hashes, so Linux and macOS artifacts live side by side. Do not point several checkouts at one `CARGO_TARGET_DIR`; cargo does not tell path dependencies of different checkouts apart.
-- Files are written as the `vscode` user. On Linux hosts the Dev Container CLI changes its UID/GID to yours (`updateRemoteUserUID`); Docker Desktop on macOS maps ownership to the host user by itself. No `sudo` is needed.
-- The container runs `uv sync` instead of `just setup`, and installs the pre-commit hook only if none exists, because the hook records the absolute path of the Python that installed it. The main checkout's `.venv-devcontainer/bin` is on `PATH`, so a hook installed on the host still finds `pre-commit` in the container. If you open a fresh clone in the container first, run `just setup` on the host before committing there.
-- `core.fileMode` is `false` inside the container only, because Docker Desktop bind mounts report every file as executable. To commit a new executable from the container, use `git update-index --chmod=+x <file>`.
+## Documentation
+
+The documentation site is not published yet. Run `just docs` (needs [just](https://just.systems/)) to serve it at <http://127.0.0.1:8000>, or read the Markdown in [`docs/en/`](docs/en/) (English) and [`docs/ja/`](docs/ja/) (Japanese). Working programs are in [`examples/`](examples/), and the tests run every one of them.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the dev container, the commands and the rules.
 
 ## License
 
