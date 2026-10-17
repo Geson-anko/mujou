@@ -202,8 +202,10 @@ class Network(Component):
             def __init__(self) -> None:
                 super().__init__()
                 self.body = Stack()
-                self.head = Head()
+                self.head = Head()  # a node with prev, next and teacher ports
                 self.body.connect(self.head)  # body.next (l2.next) <-> head.prev
+                self.prev = self.body.prev  # the input
+                self.teacher = self.head.teacher  # the target, a port of head
 
 
         net = Classifier()

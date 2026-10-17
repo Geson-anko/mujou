@@ -86,6 +86,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
                 super().__init__()
                 self.inp = Port(recv=TensorSpec((3,)))
 
+            @override
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
                 x = self.inp.recv()  # torch.Tensor (one peer); ones until out sends

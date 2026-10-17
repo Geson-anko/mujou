@@ -124,6 +124,7 @@ class Node(_native.Node, Component):
                 # Send h forward and receive W^T eps from each next peer (many).
                 self.next = NextPort(send=h, recv=h)
 
+            @override
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
                 x = self.prev.recv()  # torch.Tensor
