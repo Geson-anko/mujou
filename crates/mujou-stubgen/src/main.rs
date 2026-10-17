@@ -121,7 +121,14 @@ fn fix_methods(module: &mut Module) {
 const SAME_CLASS_OPERATORS: &[&str] = &["__lt__", "__le__", "__gt__", "__ge__", "__sub__"];
 
 /// The methods of `object` that a class may override.
-const OBJECT_METHODS: &[&str] = &["__eq__", "__ne__", "__hash__", "__repr__", "__str__"];
+const OBJECT_METHODS: &[&str] = &[
+    "__eq__",
+    "__ne__",
+    "__hash__",
+    "__reduce__",
+    "__repr__",
+    "__str__",
+];
 
 fn no_constructor() -> Function {
     Function {

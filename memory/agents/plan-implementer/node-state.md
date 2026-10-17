@@ -119,3 +119,10 @@
 - CUDA の sticky なエラー（device-side assert など）で止まったときは、コンテキストが使えず、CUDA のテンソルは救済できないことがある
 - 救済した木はノードごとに時刻が揃っておらず、`on_exception` / `on_stop` の後の値でもある。通常の復元に渡せる木と型で区別するか、印を付ける
 - どのスレッドで読むか、全ノードのスレッドの終了を待つかを決めておく
+
+## run-handle（PR #20）の merge（2026-10-17）
+
+- `node.py`: クラスの docstring は両方を合わせた（`load_state_dict` の既定と CUDA の同期の説明 + `on_update` の `dt` は実行の `timer` で測る）。`__setattr__` まわりと `timer` property は両方を残した。`set_timer` の `node._timer = ...` は `__setattr__` を通るが、`ReadOnlyTimer` は Tensor ではないので登録されない。`timer` は setter の無い property なので、代入は登録の前に `AttributeError` になる
+- `session.py`: run-handle の `Session.start` を採った。run-handle は復元の木を `self._states` に持たず、`start` の局所変数 `restored` で `runtime.start` に渡すだけなので、`start` が戻れば木への参照は残らない。「`self._states = None`」の 1 行は置き場所が無くなり、不要になった（`_restore_state` のストリームの同期は残っており、木を手放してよい根拠のまま）
+- specs: `execution-model.md` は run-handle の文に `on_thread_start` を足した。`nodes.md` は自動収集の節を残し、最後の文を run-handle の「`mujou.run` で走らせると、Port はその実行のスロットに結び付けられる」にした。`torch.md` の同期の表は run-handle の行に `_restore_state` の行を足した
+- テスト（code S8）: `TestOnThreadStart` は `start_manual` で起動し、ガードの確認は `on_thread_start` の中で `mujou.run(...)` を呼んで "host methods" の `RuntimeError` を見る形にした（`Run` は起動の後にしか無いので、`Run.read` は使えない）。`TestRestore` は `start_manual` / `ManualRun.step` / `VirtualTimer.advance` / `Run.state_dict` で取り、復元は別の `VirtualTimer`（元の実行のタイマーは戻せない）で `start_manual(..., timer=timer, state=tree)` にした

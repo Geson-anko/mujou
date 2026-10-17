@@ -71,7 +71,11 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 表の hook のほかに、フレームワークが自分のために使う内部の hook がある。`_on_thread_start()`（`on_thread_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_restore_state(state)`（状態の復元で `load_state_dict(state)` の代わりに呼び、既定は `load_state_dict(state)` を呼ぶ）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。公開の hook とは別なので、どの公開の hook を override しても、`super()` を呼ばなくても、設定と同期は漏れない。`_restore_state` の中の例外は `load_state_dict` と出る。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージには `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
 
-`on_pause` と `on_resume` は引数を取らない。停止している間、グローバル時間は進まないので、グローバル時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻はグローバルタイマーから読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
+ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
+
+`timer` は、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から読める。ホストが正常な終了を見たとき（`shutdown`・`join` などが戻ったとき）に、状態の時刻（終了を要求した時刻）で止まった `ReadOnlyTimer` に一度だけ差し替わり、以後はそれを返す。正常に終了した後にホストが取る `state_dict` の中でも同じものを読む。差し替える前にノードが取っておいた `ReadOnlyTimer` は、元のタイマーを読み続ける。実行の前、起動が断られた後、例外で終了した後に読むと `RuntimeError` になる。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
+
+`on_pause` と `on_resume` は引数を取らない。停止している間、その実行のタイマーは進まないので、その時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻は、その実行のタイマー（`self.timer`）から読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
 
 どの hook が例外を投げても、システム全体を終了する（[実行モデル](execution-model.md#例外による終了)）。そのとき、例外を投げていないノードも含めて全ノードの `on_exception()` を呼ぶ。`on_stop()` だけでは通常の終了と異常な終了を区別できず、ロボットのアクチュエータを安全な姿勢で止めるといった処理を書けないからである。自分の hook の例外に対処したいだけなら、その hook の中で `try`/`except` すればよい。
 
@@ -140,7 +144,7 @@ Port・数値・Tensor のリストや dict は集めない。property も集め
 
 自分で状態を選ぶノードは、`state_dict` と `load_state_dict` を override する。`super()` を呼んで既定の木に足してもよい（乱数生成器の状態など）。
 
-ノードのインスタンスは、定義と実行の両方を担う。`__init__` で Port を宣言したインスタンスが、そのまま実行時に hook を呼ばれる。ネットワークを構築すると、Port は実際のスロットに結び付けられる。
+ノードのインスタンスは、定義と実行の両方を担う。`__init__` で Port を宣言したインスタンスが、そのまま実行時に hook を呼ばれる。`mujou.run` でネットワークを走らせると、Port はその実行のスロットに結び付けられる。
 
 更新手法を差し替えられるという要件（[更新手法](update-rules.md)）は、基盤が特定の学習則を知らないことを指す。PC-ALM のレイヤーは、`mujou.Node` を継承したクラスとして `mujou.pc` で提供すれば足りる（[更新手法](update-rules.md#実装と公開元)）。
 
