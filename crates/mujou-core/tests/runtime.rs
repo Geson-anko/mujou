@@ -589,3 +589,231 @@ mod stop_request {
         }
     }
 }
+
+mod period {
+    use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+    use std::thread;
+    use std::time::Instant;
+
+    use super::*;
+
+    const P_NS: u64 = 10 * H_NS;
+    /// How long to watch for an update that must not come.
+    const QUIET: Duration = Duration::from_millis(50);
+    const LONG: Duration = Duration::from_secs(5);
+
+    /// Sends each Δt (in ns) as it updates, and blocks in the update while
+    /// `hold` has a message for it to wait for.
+    struct Ticker {
+        dts: Sender<u64>,
+        hold: Option<Receiver<()>>,
+    }
+
+    impl NodeHooks for Ticker {
+        type State = ();
+
+        fn start(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn update(&mut self, dt: f64) -> Result<(), HookError> {
+            let _ = self.dts.send((dt * 1e9).round() as u64);
+            if let Some(hold) = &self.hold {
+                let _ = hold.recv();
+            }
+            Ok(())
+        }
+
+        fn pause(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn resume(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn exception(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+
+        fn state_dict(&mut self) -> Result<(), HookError> {
+            Ok(())
+        }
+    }
+
+    fn with_period(period_ns: Option<u64>, manual: bool) -> RuntimeConfig {
+        RuntimeConfig {
+            manual,
+            period_ns: Some(vec![period_ns]),
+            ..RuntimeConfig::default()
+        }
+    }
+
+    fn start_ticker(
+        timer: &Arc<Timer>,
+        config: RuntimeConfig,
+        hold: Option<Receiver<()>>,
+    ) -> (Runtime<Ticker>, Receiver<u64>) {
+        let (dts, rx) = mpsc::channel();
+        let (rt, started) = Runtime::start(
+            vec![Ticker { dts, hold }],
+            vec!["ticker".to_owned()],
+            Arc::clone(timer),
+            config,
+            None,
+        )
+        .unwrap();
+        started.wait().unwrap();
+        (rt, rx)
+    }
+
+    fn assert_quiet(dts: &Receiver<u64>) {
+        assert_eq!(dts.recv_timeout(QUIET), Err(RecvTimeoutError::Timeout));
+    }
+
+    #[test]
+    fn waits_for_the_period_and_then_updates_once_with_dt_equal_to_it() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
+        timer.advance_ns(P_NS - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        assert_quiet(&dts);
+        timer.advance_ns(P_NS).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn after_a_jump_it_updates_once_and_counts_the_next_period_from_there() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
+        // Late by half a period: one update, not one per missed period.
+        timer.advance_ns(3 * P_NS / 2).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(3 * P_NS / 2));
+        assert_quiet(&dts);
+        // The next period starts at that update, not on the grid of multiples
+        // of P, which would update here.
+        timer.advance_ns(P_NS / 2).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(P_NS / 2).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn an_update_longer_than_the_period_is_followed_at_once_without_catching_up() {
+        let timer = virtual_timer();
+        let (release, hold) = mpsc::channel();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), Some(hold));
+        timer.advance_ns(P_NS).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        // The update takes 2.5 P.
+        timer.advance_ns(5 * P_NS / 2).unwrap();
+        release.send(()).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(5 * P_NS / 2));
+        release.send(()).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(P_NS - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        release.send(()).unwrap();
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn without_a_period_any_time_passing_is_enough() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(None, false), None);
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(1));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn the_manual_mode_ignores_the_period() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), true), None);
+        timer.advance_ns(1).unwrap();
+        rt.step(None).wait().unwrap();
+        assert_eq!(dts.try_recv(), Ok(1));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn a_stop_or_a_capture_wakes_the_wait_for_the_period() {
+        let timer = Arc::new(Timer::new());
+        let period = Some(1_000 * 1_000_000_000);
+        let (rt, dts) = start_ticker(&timer, with_period(period, false), None);
+        let begin = Instant::now();
+        rt.capture(None, |states: Vec<()>| states.len())
+            .wait()
+            .unwrap();
+        rt.request_stop();
+        assert!(rt.join(Some(LONG)).unwrap());
+        assert!(begin.elapsed() < Duration::from_secs(2));
+        assert!(dts.try_recv().is_err());
+    }
+
+    /// Runs a ticker of period `P_NS` on the real clock for about `run` and
+    /// returns its Δts and the real time it ran.
+    fn tick_for(scale: f64, run: Duration) -> (Vec<u64>, Duration) {
+        let timer = Arc::new(Timer::new());
+        timer.set_scale(scale).unwrap();
+        let begin = Instant::now();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
+        thread::sleep(run);
+        rt.shutdown().wait().unwrap();
+        let elapsed = begin.elapsed();
+        (dts.try_iter().collect(), elapsed)
+    }
+
+    #[test]
+    fn on_the_real_clock_it_updates_about_once_per_period() {
+        let (dts, elapsed) = tick_for(1.0, Duration::from_millis(500));
+        let at_most = elapsed.as_nanos() as f64 / P_NS as f64;
+        assert!(dts.iter().all(|&dt| dt >= P_NS), "{dts:?}");
+        assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
+        // Loose, so that a loaded machine passes: free running would be far more.
+        assert!((dts.len() as f64) >= at_most / 5.0, "{} updates", dts.len());
+    }
+
+    #[test]
+    fn the_time_scale_scales_the_updates_per_real_second() {
+        let scale = 4.0;
+        let (dts, elapsed) = tick_for(scale, Duration::from_millis(500));
+        let at_most = elapsed.as_nanos() as f64 * scale / P_NS as f64;
+        assert!(dts.iter().all(|&dt| dt >= P_NS), "{dts:?}");
+        assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
+        // More than the scale of 1 could give.
+        let unscaled = elapsed.as_nanos() as f64 / P_NS as f64;
+        assert!((dts.len() as f64) > unscaled + 1.0, "{} updates", dts.len());
+    }
+
+    #[test]
+    fn rejects_a_zero_period_and_a_wrong_number_of_periods() {
+        let timer = virtual_timer();
+        for period_ns in [vec![Some(0)], vec![None, None]] {
+            let config = RuntimeConfig {
+                period_ns: Some(period_ns),
+                ..RuntimeConfig::default()
+            };
+            let (dts, _) = mpsc::channel();
+            let started = Runtime::start(
+                vec![Ticker { dts, hold: None }],
+                vec!["ticker".to_owned()],
+                Arc::clone(&timer),
+                config,
+                None,
+            );
+            assert!(matches!(started, Err(RuntimeError::InvalidArgument(_))));
+        }
+    }
+}

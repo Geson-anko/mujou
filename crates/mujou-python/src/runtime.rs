@@ -452,7 +452,9 @@ impl Runtime {
     /// (`Timer.state_dict()`), so the time does not run while the nodes start.
     /// Loading it raises `ValueError` while another runtime runs on the same
     /// timer, whose time would jump. `last_update_ns` is where each node's
-    /// first Δt starts (the time at the start by default).
+    /// first Δt starts (the time at the start by default). `period_ns` is each
+    /// node's period on the timer in ns (> 0), or `None` to update as soon as
+    /// any time has passed; the manual mode ignores it.
     /// `on_exception_capture(states, node, hook, exception)` takes the states
     /// (by node index, without those whose `state_dict` failed) when a node
     /// raises.
@@ -464,6 +466,7 @@ impl Runtime {
         manual = false,
         states = None,
         last_update_ns = None,
+        period_ns = None,
         timer_state: "dict[str, int | float] | None" = None,
         pause_timeout = 10.0,
         on_exception_capture = None,
@@ -475,6 +478,7 @@ impl Runtime {
         manual: bool,
         states: Option<Vec<Py<PyAny>>>,
         last_update_ns: Option<Vec<u64>>,
+        period_ns: Option<Vec<Option<u64>>>,
         timer_state: Option<Bound<'_, PyAny>>,
         pause_timeout: f64,
         on_exception_capture: Option<Py<PyAny>>,
@@ -493,6 +497,7 @@ impl Runtime {
             manual,
             pause_timeout: duration(pause_timeout)?,
             last_update_ns,
+            period_ns,
             timer_state,
         };
         let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
