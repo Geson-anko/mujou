@@ -7,6 +7,7 @@ which ``mujou.run`` runs.
 
 from typing import final
 
+from mujou._core import component as component_module
 from mujou._core.component import Component
 from mujou._core.graph import BUILD_LOCK, Graph, build_tree, unbuild_tree
 from mujou._core.node import Node
@@ -97,6 +98,14 @@ def unbuild(graph: Graph) -> None:
         root = unbuild_tree(graph)
         if isinstance(root, Network) and root._graph is graph:  # pyright: ignore[reportPrivateUsage]  # Network's own module
             root._graph = None  # pyright: ignore[reportPrivateUsage]
+
+
+# component.py names Node and Network in annotations but cannot import them (both
+# import it), so it imports them only for the type checker. Bind them in its
+# globals here, where both exist, so that inspect.signature and get_type_hints
+# can resolve its annotations (evaluated lazily, on that request).
+component_module.Node = Node
+component_module.Network = Network
 
 
 class Compose(Network):
