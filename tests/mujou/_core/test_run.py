@@ -522,24 +522,27 @@ class TestTimer:
             @override
             def state_dict(self) -> object:
                 # Called while the run on `held` is paused.
-                h0, f0, g0 = held.now(), free.now(), mujou.time.time_ns()
+                h0, f0, g0 = held.now(), free.now(), mujou.time.now()
                 time.sleep(0.05)
-                return held.now() - h0, free.now() - f0, mujou.time.time_ns() - g0
+                return held.now() - h0, free.now() - f0, mujou.time.now() - g0
 
         start(Chain(tau=0.01), timer=free)
         run = start(Compose(node=Measures()), timer=held)
         on_held, on_free, on_global = run.state_dict()["nodes"]["node"]
-        assert on_held == Timestamp(ns=0)
-        assert on_free > Timestamp(ns=0) and on_global > 0
+        assert on_held == 0.0
+        assert on_free > 0.0 and on_global > 0.0
 
     def test_gives_the_timer_it_runs_on(self, start: Start):
         timer = Timer()
         assert start(Chain(), timer=timer).timer is timer
         # By default the global timer, which mujou.time reads.
         default = start(Chain()).timer
-        before = mujou.time.time_ns()
-        on_default = default.now().ns
-        assert before <= on_default <= mujou.time.time_ns()
+        assert not default.is_paused()
+        mujou.time.pause()
+        try:
+            assert default.is_paused()
+        finally:
+            mujou.time.resume()
 
     def test_a_manual_run_gives_its_virtual_timer(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -560,7 +563,7 @@ class TestTimer:
         assert seen is not None
         # On one time axis with mujou.time.
         first = seen.now()
-        now_ns = mujou.time.time_ns()
+        now_ns = mujou.time.now().ns
         assert first.ns <= now_ns <= seen.now().ns
 
 
@@ -950,9 +953,9 @@ class TestStateDict:
         run = start(net, inputs={net.prev: u(1)})
         # Free running: both nodes have updated once b sends a value other than 0.
         run.wait_for(net.next, lambda out: bool(out.any()), timeout=10.0)
-        asked_after = mujou.time.time_ns()
+        asked_after = mujou.time.now().ns
         run.shutdown()
-        stopped_before = mujou.time.time_ns()
+        stopped_before = mujou.time.now().ns
         mujou.time.sleep(0.05)  # time goes on after the end
         tree = run.state_dict()
         frozen_at = tree["timer"]["time_ns"]

@@ -2,4 +2,4 @@
 
 ::: mujou.time
     options:
-      members: [now, time, time_ns, sleep, get_time_scale, set_time_scale, Timer, ReadOnlyTimer, Timestamp]
+      members: [now, sleep, get_time_scale, set_time_scale, pause, resume, is_paused, Timer, ReadOnlyTimer, Timestamp]

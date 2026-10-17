@@ -24,10 +24,22 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 
 ## When you restore
 
-- **The timer goes back to the time of the tree.** On the default global timer, restoring sets the global time (`mujou.time.time()`) back to the time the tree was taken. When `mujou.run(..., state=tree)` returns, the time has already gone back. Do not compare a `mujou.time.time()` read before the restore with a time read after it. Measure elapsed time as the difference between two times read after the restore
+- **The timer goes back to the time of the tree.** On the default global timer, restoring sets the global time (`mujou.time.now()`) back to the time the tree was taken. When `mujou.run(..., state=tree)` returns, the time has already gone back. Do not compare a `mujou.time.now()` read before the restore with a time read after it. Measure elapsed time as the difference between two times read after the restore
 - **You cannot restore while another run is running on the same timer.** In that case `mujou.run` raises `ValueError` and starts nothing. End the other run first, or give the restored run a timer of its own, `mujou.time.Timer()` (see [Controlling time](time.md))
 - The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise `mujou.run` raises `ValueError`
 - If you pass both `state=` and `inputs=`, the values in `inputs` override the input values in the tree
+
+## Taking the states of several runs at one time
+
+`run.state_dict()` takes the state of one run at one time. When several runs share a timer (by default, all of them run on the global timer) and you take their states one after another, each state is of a later time than the one before, because the time goes on in between. To take them all at one time, pause the timer first, take the states, and resume it.
+
+```python
+--8<-- "examples/pause.py:pause"
+```
+
+`run.state_dict()` works while the timer is paused, and every tree then holds the time of the pause. While paused, the nodes do not update, and the paused time does not enter the `dt` after `resume` (see [Pausing the time](time.md#pausing-the-time)). Put the `resume` in `finally`, so that an exception does not leave the time stopped.
+
+To restore the trees, note that a run cannot restore while another run is running on the same timer. Restore them one after another once the previous run has ended, or give each restored run a timer of its own; each timer then starts from the same time of the trees.
 
 ## The state is not saved after an exception
 

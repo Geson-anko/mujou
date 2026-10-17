@@ -54,8 +54,6 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 
 次はまだ決めていない。
 
-- `Run.state_dict()` の木のテンソルを常に CPU へ移すか（今はノードのデバイスのまま）
-- `Timer.pause` / `resume` / `is_paused`（手動の一時停止）は src で使っておらず、テストの基盤だけが使う。残すか消すか
 - `Compose` の名前（torchvision の `Compose` は直列につなぐ意味で使われる）
 - 相手がまだ送っていないことを判定する API（今は `on_start` で `recv_with_time()` の時刻を読む書き方を案内している）
 - 手動の実行（`ManualRun`）で `period` を守る選択肢

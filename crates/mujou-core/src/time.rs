@@ -45,12 +45,11 @@ impl Timestamp {
         self.0 / 1_000_000_000
     }
 
-    /// `self - earlier`, or `None` if `earlier` is later.
-    pub const fn checked_sub(self, earlier: Self) -> Option<Self> {
-        match self.0.checked_sub(earlier.0) {
-            Some(ns) => Some(Self(ns)),
-            None => None,
-        }
+    /// The time from `other` to `self` in seconds, negative when `other` is
+    /// later: the difference is exact in `i128`, then rounded once to `f64` and
+    /// once by the division, as Python rounds `(a.ns - b.ns) / 1e9`.
+    pub fn secs_since(self, other: Self) -> f64 {
+        (i128::from(self.0) - i128::from(other.0)) as f64 / 1e9
     }
 }
 

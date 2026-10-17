@@ -199,10 +199,11 @@ impl PyTimerReader {
 
 /// A time on a timer.
 ///
-/// `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
-/// is the exact time in nanoseconds. Timestamps compare and hash by time, so
-/// compare only those of one timer. `later - earlier` is the time between them,
-/// as a `Timestamp`. Timestamps pickle and copy.
+/// `ts.float()` (or `float(ts)`) is the time in seconds and `int(ts)` its whole
+/// seconds; `ts.ns` is the exact time in nanoseconds. Timestamps compare and
+/// hash by time, so compare only those of one timer. `a - b` is the time from
+/// `b` to `a` in seconds, a `float` that is negative when `b` is later.
+/// Timestamps pickle and copy.
 #[pyclass(
     frozen,
     eq,
@@ -238,6 +239,11 @@ impl PyTimestamp {
         self.0.as_ns()
     }
 
+    /// The time in seconds.
+    fn float(&self) -> f64 {
+        self.0.as_secs_f64()
+    }
+
     fn __float__(&self) -> f64 {
         self.0.as_secs_f64()
     }
@@ -246,18 +252,10 @@ impl PyTimestamp {
         self.0.whole_secs()
     }
 
-    /// The time from `earlier` to this one.
-    ///
-    /// Raises:
-    ///     ValueError: `earlier` is later than this one.
-    fn __sub__(&self, earlier: PyRef<'_, Self>) -> PyResult<Self> {
-        self.0.checked_sub(earlier.0).map(Self).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "cannot subtract the later {:?} from {:?}",
-                earlier.__repr__(),
-                self.__repr__()
-            ))
-        })
+    /// The time from `other` to this one, in seconds: `(self.ns - other.ns) /
+    /// 1e9`, negative when `other` is later.
+    fn __sub__(&self, other: PyRef<'_, Self>) -> f64 {
+        self.0.secs_since(other.0)
     }
 
     fn __repr__(&self) -> String {
