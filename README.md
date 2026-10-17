@@ -64,12 +64,8 @@ double.connect(shift)  # double.next <-> shift.prev
 x = torch.tensor([1.0, 2.0, 3.0])
 # Each node updates on a thread of its own until the `with` block ends.
 with mujou.run(double, shift, inputs={double.prev: x}) as run:
-    y, t = run.read(shift.next)  # the latest output and the time it was sent
-    for _ in range(500):  # it arrives after a few updates; give up after ~5 s
-        if torch.equal(y, 2 * x + 1):
-            break
-        mujou.time.sleep(0.01)
-        y, t = run.read(shift.next)
+    # y arrives after a few updates: wait for it (and the time it was sent).
+    y, t = run.wait_for(shift.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
 
 print(f"y = {y} at t = {float(t):.3f} s")  # y = tensor([3., 5., 7.]) at t = ...
 ```
