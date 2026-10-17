@@ -68,12 +68,12 @@ class Noisy(Node):
 
 When you override them, follow these rules.
 
-| Hook                     | Rules                                                                                                                                                                                                                |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state_dict()`           | Return an object that pickles. It is called on another thread, not the node's own, so do not call `recv` or `send` on a port (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
-| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                                                                              |
+| Hook                     | Rules                                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
+| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                             |
 
-Do not change the state in `on_stop`. After a normal end, `run.state_dict()` takes the state from the nodes after `on_stop` has finished (the reason is in [State](../concepts.md#state)).
+Do not change the state in `on_stop`. After a normal end, `run.state_dict()` copies the state as the nodes left it, after `on_stop`, with the time at which `shutdown` asked the run to stop. A change made in `on_stop` would go into the tree (the reason is in [State](../concepts.md#state)).
 
 ## Formats
 

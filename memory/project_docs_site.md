@@ -9,7 +9,7 @@ metadata:
 
 - 設計仕様（日本語）は `specs/`（以前の `docs/`）に置く。設計判断とその理由を書き、未実装の仕様も含む
 - ユーザー向けのドキュメントは `docs/` の mkdocs のサイト。構成は pamiq-core に倣う（material、mkdocstrings）。英語と日本語の 2 言語で、mkdocs-static-i18n の folder 構成（`docs/en/`、`docs/ja/`）。API リファレンスは英語の docstring から生成し、`docs/en/api/` にだけ置く（日本語のサイトは英語のページにフォールバックする）
-- サンプルは `examples/` に置き、ページには snippets（`--8<-- "examples/<file>.py"`）で取り込む。`tests/test_examples.py` が全部を実行する。規則は `examples/README.md`
+- サンプルは `examples/` に置き、ページには snippets（`--8<-- "examples/<file>.py"`）で取り込む。一部だけ取り込むときは、行番号ではなく名前付きの区間（`# --8<-- [start:<name>]` / `[end:<name>]` と `"examples/<file>.py:<name>"`）を使う（2026-10-17）。`tests/test_examples.py` が全部を実行する。規則は `examples/README.md`
 - `just docs` でローカルに立ち上げ、`just docs-build`（strict）は `just run` と CI に入っている
 - サイトは今は公開しない。デプロイの workflow は作らない
 - Installation のページには、PyPI（`uv add mujou` / `pip install mujou`）とソースからのビルドの両方を書く

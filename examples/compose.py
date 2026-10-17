@@ -38,6 +38,7 @@ class Stage(mujou.Network):
         self.next = self.scale.next
 
 
+# --8<-- [start:compose]
 # By keyword: two networks connected before they are composed.
 enc, dec = Stage(2.0), Stage(3.0)
 enc.connect(dec)  # enc.next <-> dec.prev, as for nodes
@@ -62,3 +63,4 @@ with mujou.run(first, second, inputs={first.prev: x, second.prev: x}) as run:
 print(f"position: nodes {nodes}, y1 = {y1}, y2 = {y2}")
 assert nodes == ["0.scale", "1.scale"]
 assert torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x)
+# --8<-- [end:compose]

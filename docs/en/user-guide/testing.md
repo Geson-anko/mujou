@@ -20,7 +20,7 @@ Import `mujou.testing` with `import mujou.testing`. `import mujou` alone does no
 The following test compares a network of two leaky integrators in a row with a discrete algorithm written with the same exact coefficient as the nodes, `1 - exp(-h / tau)`.
 
 ```python
---8<-- "examples/testing_a_node.py"
+--8<-- "examples/testing_a_node.py:test"
 ```
 
 1. Write the reference with the same operations as the nodes. Here it updates `a`, then updates `b` with the new value of `a`
@@ -52,35 +52,15 @@ By default, `mujou.testing.run` makes a new `VirtualTimer` for each run, unlike 
 
 ## Testing save and restore
 
-You can check that a run that takes the state midway and continues in a new instance matches a run that went on without stopping. On a `VirtualTimer`, the two match to the last bit. The following example uses the `Chain` class of the example above. The second half restores onto the same `timer` as the first half; this is allowed because the first half has already ended.
+You can check that a run that takes the state midway and continues in a new instance matches a run that went on without stopping. On a `VirtualTimer`, the two match to the last bit. The following test continues the program above. The second half restores onto the same `timer` as the first half; this is allowed because the first half has already ended.
 
 ```python
-import torch
-
-import mujou.testing
-from mujou.testing import VirtualTimer
-
-u = torch.tensor([1.0, -2.0], dtype=torch.float64)
-
-
-def steps(net, timer, n, state=None):
-    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}, state=state) as run:
-        for _ in range(n):
-            timer.advance(0.001)
-            run.step()
-    return run.state_dict()
-
-
-straight = steps(Chain(0.01), VirtualTimer(), 20)
-timer = VirtualTimer()
-half = steps(Chain(0.01), timer, 10)
-resumed = steps(Chain(0.01), timer, 10, state=half)
-assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
+--8<-- "examples/testing_a_node.py:restore"
 ```
 
 ## Testing exceptions
 
-When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)).
+When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)). In the `with mujou.testing.run(...) as run:` block of a test, check it as follows.
 
 ```python
 import pytest

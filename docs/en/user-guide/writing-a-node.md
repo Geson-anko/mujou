@@ -1,6 +1,6 @@
 # Writing a Node
 
-You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. What a node is is in [How Mujou works](../concepts.md#nodes), and in what order the hooks are called is in the API reference of [`Node`](../api/node.md).
+You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. For what a node is, see [How Mujou works](../concepts.md#nodes).
 
 ## Example: a leaky integrator
 
@@ -18,7 +18,7 @@ The node writes three things.
 
 The sections below follow this order.
 
-As in any subclass, `__init__` first calls `super().__init__()`, and each overridden hook first calls the same hook of `super()`. The hooks of `mujou.Node` do nothing, except `state_dict` and `load_state_dict` (see [State](state.md)). Calling them still keeps the node right when it inherits from a node class of your own that does something there.
+As in any subclass, `__init__` first calls `super().__init__()`, and each overridden hook first calls the same hook of `super()`. The hooks of `mujou.Node` do nothing, except `state_dict` and `load_state_dict` (see [State](state.md)). Call them anyway: then your node keeps working when it later inherits from a node class of your own whose hooks do something.
 
 ## 1. Declare the ports in `__init__`
 
@@ -79,14 +79,14 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 
 `dt` is the time in seconds since this node's previous update. For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts.md#global-time)).
 
-`dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The cut-off time is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
+`dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The time you cut off is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
 
 - If the system has an exact solution, advance the state by `dt` with that solution. The `Leaky` above does not use explicit Euler. It moves $x$ by the fraction `1 - exp(-dt / tau)` of its distance to $u$. This fraction is exact while the input stays constant. It is below 1 for any `dt`, so $x$ never overshoots $u$
 - If the system has no exact solution, split the step inside one call of `on_update`. Choose `n` so that one step `dt / n` is no longer than a length that updates stably, and update `n` times in a `for` loop (see the example in [PyTorch in nodes](torch.md))
 
 ## Set the period
 
-By default, a node's next `on_update` is called as soon as the previous one returns, so the node loops as fast as it can. One such node uses up one CPU core. To match the period of a sensor, or to leave the CPU free, pass a period `period` in seconds. The period is the average interval; the node is not updated exactly that far apart every time.
+By default, a node's next `on_update` is called as soon as the previous one returns, so the node loops as fast as it can. One such node uses up one CPU core. To match the period of a sensor, or to leave the CPU free, pass a period `period` in seconds.
 
 ```python
 class Sensor(mujou.Node):
@@ -95,11 +95,7 @@ class Sensor(mujou.Node):
         self.next = mujou.NextPort(send=mujou.TensorSpec((3,)))
 ```
 
-The period is counted as follows.
-
-1. The target time of the first update is `period` after the run starts
-2. After an update, the next target is "the previous target + `period`". It is not counted from the time the update actually happened. So the time `on_update` takes and a small delay in waking up both fall inside the period, and on average the node updates once every `period`
-3. However, if an update happens `period` or more behind its own target (so its next target has already passed), the next target is counted again as "the time the update actually happened + `period`". The node never updates several times in a row to catch up
+The period is the average interval between updates. The time `on_update` takes counts as part of the period. A node that falls behind does not update several times in a row to catch up.
 
 The wait is measured on the run's timer. If you change the time scale, the period changes by the same factor against real time.
 
@@ -120,6 +116,18 @@ Pass `period` only as an argument of `super().__init__`. Setting a default with 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share. `self.generator` can be used in the hooks from `on_start` on. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 
 `device`, `generator`, `period` and `timer` are reserved names. Do not assign attributes with these names.
+
+## The hooks and their order
+
+Mujou calls the hooks of a node in this order. Override only the ones you need.
+
+1. `on_thread_start()`: once, before `on_start`. Per-thread settings (see [PyTorch in nodes](torch.md))
+2. `on_start()`: once. Create the state
+3. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
+4. `on_update(dt)`: again and again until the run ends
+5. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them
+6. `on_exception()`: once on every node, when any hook of any node raises (see [Errors and shutdown](errors.md))
+7. `on_stop()`: once at the end, normal or not
 
 ## What not to do in a hook
 

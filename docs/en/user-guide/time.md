@@ -9,37 +9,47 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 | Read the time         | `mujou.time.now()` (a `Timestamp`), `mujou.time.time()` (seconds), `time_ns()` (nanoseconds) | `timer.now()`                      | `self.timer.now()`            |
 | Wait on the time      | `mujou.time.sleep(seconds)`                                                                  | `timer.sleep(seconds)`             | Not allowed                   |
 | Read the time scale   | `mujou.time.get_time_scale()`                                                                | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
-| Change the time scale | `mujou.time.set_time_scale(factor)`                                                          | `timer.set_time_scale(factor)`     | Not allowed                   |
+| Change the time scale | `mujou.time.set_time_scale(scale)`                                                           | `timer.set_time_scale(scale)`      | Not allowed                   |
 
 - The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time, so it ignores changes of the time scale and pauses (a run pauses while its state is taken)
-- The factor is a finite number greater than 0. Anything else raises `ValueError`
+- The scale is a finite number greater than 0. Anything else raises `ValueError`
 
 ## Timestamp
 
-The time returned by `run.read`, the time of a write returned by `run.write`, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()` are all `mujou.time.Timestamp`.
+The times that `run.write`, `run.read`, `run.subscribe` and `run.wait_for` return, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()`, are all `mujou.time.Timestamp`.
+
+| Form              | Value                                           |
+| ----------------- | ----------------------------------------------- |
+| `float(ts)`       | Seconds (`float`)                               |
+| `ts.ns`           | Nanoseconds (`int`). The exact value            |
+| `later - earlier` | The difference of two times. Also a `Timestamp` |
+| `a < b` and so on | Which time is earlier                           |
+
+A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer.
+
+Comparing the time that `write` returns with the time that `read` returns tells whether an output was sent after the input was switched.
 
 ```python
---8<-- "examples/timers.py:33:36"
+t_in = run.write({net.prev: x})
+mujou.time.sleep(0.1)
+y, t_out = run.read(net.next)
+if t_out >= t_in:               # y was sent after x was written
+    print(float(t_out - t_in))  # seconds from writing x until y was sent
 ```
-
-- `float(ts)` is seconds, `int(ts)` the integer part of the seconds, and `ts.ns` the exact nanoseconds
-- The difference of two, `later - earlier`, is a `Timestamp` too. If `earlier` is the later one, it raises `ValueError`
-- To make one yourself, pass nanoseconds as a keyword: `Timestamp(ns=...)`
-- A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer
 
 ## A timer for one run
 
 Create `mujou.time.Timer()` and pass it as `mujou.run(..., timer=timer)`, and the run runs on that timer. A new timer starts at time 0 with scale 1.
 
 ```python
---8<-- "examples/timers.py:38:60"
+--8<-- "examples/timers.py:own-timer"
 ```
 
 Give a run its own timer in these cases.
 
 - You want to speed up or slow down only that run (for debugging, or for trials faster than real time)
-- You do not want a pause of that run (to take its state) to stop other runs on the global timer
 - You want to restore a state while another run is running on the global timer (see [Saving and restoring state](state.md))
+- You run several networks in separate runs that should not stop each other (see [Composing networks](compose.md))
 
 The host then waits on that run with `timer.sleep`, and compares the times from `run.read` with `timer.now()`. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.time()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
 
@@ -48,7 +58,7 @@ The host then waits on that run with `timer.sleep`, and compares the times from 
 `mujou.time.set_time_scale` changes the speed of every run on the global timer.
 
 ```python
---8<-- "examples/timers.py:62:67"
+--8<-- "examples/timers.py:global-scale"
 ```
 
 The global time starts at 0 when the process first uses it.

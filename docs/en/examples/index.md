@@ -28,7 +28,7 @@ What each program shows:
 - `save_and_restore.py`: takes the state with `run.state_dict()`, saves it with pickle, and restores it with `mujou.run(..., state=...)` to continue
 - `subscribe.py`: with `run.subscribe`, first receives the latest output at that moment, then the latest one each time a newer output is sent. If the next value is sent before one is received, the value in between is skipped. Calling `shutdown` from another thread ends the iteration
 - `torch_node.py`: trains an `nn.Module` inside a node with BP kept inside the node. Setting the seed, and an update that advances `dt` in smaller steps
-- `testing_a_node.py`: runs a node with a fixed `dt` and order, using the virtual timer and manual updates of `mujou.testing`, and compares the result bit for bit with a reference computation
+- `testing_a_node.py`: runs a node with a fixed `dt` and order, using the virtual timer and manual updates of `mujou.testing`, and compares the result bit for bit with a reference computation. It also checks that a run restored from a state taken midway matches a run that did not stop
 - `timers.py`: the time point `Timestamp`, the per-run timer `Timer`, and the speed of time (the run's timer and the global timer)
 - `errors.py`: the `NetworkError` the host receives and its `__cause__`, the order `on_exception` → `on_stop`, and that `mujou.run` raises an exception from `on_start`
 

@@ -5,7 +5,7 @@ To run several networks in one run, pass them side by side as `mujou.run(a, b)`,
 ## How to write it
 
 ```python
---8<-- "examples/compose.py:41:64"
+--8<-- "examples/compose.py:compose"
 ```
 
 `mujou.run(a, b)` is the same as `mujou.run(Compose(a, b))`. To give names, use `Compose` with keyword arguments.
@@ -23,7 +23,7 @@ The composed networks have paths under the names given by `Compose`.
 
 The paths are the keys of the state tree. To restore a saved state, compose the networks the same way as when the state was saved (the same order, the same keywords) (see [Saving and restoring state](state.md)).
 
-The following cannot be keywords: an empty name, a name containing `.`, a name starting with `_`, the name of an attribute of `Network` such as `build`, and the name of a network passed by position (the `"0"` in `Compose(a, **{"0": b})`). Using one raises `ValueError`.
+An invalid keyword (such as an empty name or one containing `.`) raises `ValueError`.
 
 ## Connect before composing
 

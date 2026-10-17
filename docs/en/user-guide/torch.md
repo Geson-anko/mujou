@@ -1,13 +1,24 @@
 # PyTorch in Nodes
 
-A node computes with PyTorch inside. This page covers devices and random numbers, backpropagation (BP) inside a node, CUDA and other accelerators, and the settings that affect the whole process.
+A node computes with PyTorch inside. This page covers update rules, devices and random numbers, backpropagation (BP) inside a node, CUDA and other accelerators, and the settings that affect the whole process.
+
+## Update rules
+
+The update a node writes in `on_update(dt)` is that node's update rule (its learning rule). Mujou builds no update rule into nodes, ports or the execution machinery, so each node chooses its own and can swap it.
+
+- The default update rule is PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). It is reported to perform close to BP with local updates. The choice is provisional
+- BP is also an update rule, as long as it stays inside one node (see "BP inside a node" below)
+
+!!! note "The PC-ALM nodes are not implemented yet"
+
+    The PC-ALM nodes are planned for the module `mujou.pc`, which is not implemented yet. Until then, subclass `mujou.Node` and write the update equations yourself in `on_update(dt)` (see [Writing a node](writing-a-node.md)).
 
 ## Example
 
 The following node learns a linear map from its input to the target online, and sends its prediction. BP stays inside the one node.
 
 ```python
---8<-- "examples/torch_node.py:19:57"
+--8<-- "examples/torch_node.py:node"
 ```
 
 ## Device and seed
@@ -33,7 +44,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## BP inside a node
 
-Mujou turns gradient recording off on every node's thread (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM (planned; see [Update rules](update-rules.md)), computes its update equations directly, so it will need no autograd graph.
+Mujou turns gradient recording off on every node's thread (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.
 
 To use autograd in a node, write it as follows.
 
@@ -53,13 +64,15 @@ For a node given a CUDA `device`, Mujou sets up the following.
 
 - It makes the node's device the current device of the node's thread
 - It creates a CUDA stream for the node alone and makes it the current stream of that thread. All of the node's operations go on this stream
-- It synchronizes the node's stream right after each `on_update`, after `load_state_dict`, and before and after `state_dict`
+- It synchronizes the node's stream after each `on_update`, and around taking and restoring the state
 
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`). Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
 
-- Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created
-- PyTorch assigns streams from a pool of 32 per device. If you put more than 32 nodes on one device, some nodes share a stream. The results do not change, but a synchronization then also waits for the other node's work
-- A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names `_after_update`, an internal hook of Mujou. The cause is in `on_update`
+Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
+
+??? tip "A CUDA error names `_after_update`"
+
+    A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names `_after_update`, an internal hook of Mujou. The cause is in `on_update`.
 
 ## Other accelerators (MPS, ...)
 
@@ -84,7 +97,7 @@ A node may change only per-thread settings. Write them in `on_thread_start`, a h
 Each node computes on its own thread. On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down. Mujou does not set the number of internal threads, so the host decides it before `mujou.run`.
 
 ```python
---8<-- "examples/torch_node.py:60:62"
+--8<-- "examples/torch_node.py:threads"
 ```
 
 As a rule of thumb, the number of nodes that compute on the CPU times the `n` of `torch.set_num_threads(n)` should not exceed the number of physical cores. With many nodes on small matrices, `n = 1` is enough.
