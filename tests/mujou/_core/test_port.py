@@ -57,6 +57,12 @@ class TestPortTypes:
         assert not single.multi and not prev.multi and not nxt_single.multi
         assert multi.multi and prev_multi.multi and nxt.multi
 
+    def test_an_explicit_none_spec_is_a_static_error(self):
+        # Omit a direction instead: an explicit None leaves its type unknown. Without
+        # the ignore pyright reports the call; at runtime None is still accepted.
+        port = Port(send=None)  # pyright: ignore[reportArgumentType]
+        assert port.send_spec is None
+
 
 class TestPortSpecs:
     @pytest.mark.parametrize("spec", [(2, 3), torch.zeros(3), TensorSpec])
@@ -154,7 +160,58 @@ class TestConnect:
         assert len(merge.channels) == 2
 
 
+class TestPortNames:
+    class Shift(Node):
+        def __init__(self) -> None:
+            self.prev = PrevPort(recv=h())
+            self.next = NextPort(send=h())
+            self.alias = self.next  # a second name does not rename the port
+
+    def test_a_bare_port_is_shown_by_its_specs(self):
+        assert repr(Port(send=h())) == f"Port(send={h()!r}, recv=None, multi=False)"
+
+    def test_a_port_of_a_node_is_named_by_its_first_owner_and_attribute(self):
+        shift = self.Shift()
+
+        class Exposing(Network):
+            def __init__(self) -> None:
+                self.node = shift
+                self.next = shift.next
+
+        Exposing()
+        assert repr(shift.next) == (
+            f"NextPort(Shift.next, send={h()!r}, recv=None, multi=True)"
+        )
+
+    def test_connect_errors_name_the_ports(self):
+        a, b = self.Shift(), self.Shift()
+        with pytest.raises(
+            TypeError,
+            match=r"^port specs do not match: Shift\.prev sends None .*, but "
+            r"Shift\.prev receives",
+        ):
+            a.prev.connect(b.prev)
+        with pytest.raises(ValueError, match=r"to itself: Shift\.next$"):
+            a.next.connect(a.next)
+        b.prev.connect(NextPort(send=h()))
+        with pytest.raises(ValueError, match=r"^Shift\.prev takes one peer"):
+            a.next.connect(b.prev)
+
+    def test_the_error_before_a_run_names_the_port(self):
+        shift = self.Shift()
+        with pytest.raises(
+            RuntimeError,
+            match=r"^Shift\.prev can only send and receive in its owning node's hooks "
+            r"while the network runs \(not in __init__\)$",
+        ):
+            shift.prev.recv()
+
+
 class TestChannel:
+    def test_is_made_only_by_connect(self):
+        with pytest.raises(TypeError, match=r"Port\.connect"):
+            Channel()
+
     def test_other_rejects_a_port_that_is_not_an_end(self):
         ch = Port(send=h()).connect(Port(recv=h()))
         with pytest.raises(ValueError, match="not an end"):
@@ -171,7 +228,7 @@ class TestRecvSendBeforeRun:
             lambda: a.send(torch.zeros(2, 3)),
             lambda: a.send_to(ch, torch.zeros(2, 3)),
         ):
-            with pytest.raises(RuntimeError, match="not bound"):
+            with pytest.raises(RuntimeError, match="while the network runs"):
                 call()
 
 

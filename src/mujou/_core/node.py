@@ -12,6 +12,7 @@ from torch import nn
 
 from mujou._core import _native
 from mujou._core.network import Component
+from mujou._core.port import Port, assign_owner
 from mujou._core.timer import ReadOnlyTimer
 
 
@@ -126,6 +127,7 @@ class Node(_native.Node, Component):
                 # Send h forward and receive W^T eps from each next peer (many).
                 self.next = NextPort(send=h, recv=h)
 
+            @override
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
                 x = self.prev.recv()  # torch.Tensor
@@ -220,6 +222,8 @@ class Node(_native.Node, Component):
 
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
+            if isinstance(value, Port):
+                assign_owner(value, type(self).__name__, name)
             if _is_data_descriptor(type(self), name):
                 return  # A property: what its setter stores registers itself.
             names = _state_names(self)

@@ -77,9 +77,13 @@ def _side(
     """Return the only direct attribute of ``component`` that is a ``kind``."""
     found = _sides(component, kind)
     if len(found) != 1:
+        hint = ""
+        if not found and isinstance(component, Network):
+            side = "next" if kind is NextPort else "prev"
+            hint = f"; expose one, e.g. self.{side} = self.<child>.{side}"
         raise ValueError(
             f"{type(component).__name__} must have exactly one {kind.__name__} as a "
-            f"direct attribute to connect, found {len(found)}"
+            f"direct attribute to connect, found {len(found)}{hint}"
         )
     return found[0]
 
@@ -198,8 +202,10 @@ class Network(Component):
             def __init__(self) -> None:
                 super().__init__()
                 self.body = Stack()
-                self.head = Head()
+                self.head = Head()  # a node with prev, next and teacher ports
                 self.body.connect(self.head)  # body.next (l2.next) <-> head.prev
+                self.prev = self.body.prev  # the input
+                self.teacher = self.head.teacher  # the target, a port of head
 
 
         net = Classifier()
@@ -216,8 +222,10 @@ class Network(Component):
         """Check the structure of this network as the root, freeze it and return
         its graph.
 
-        After ``build``, no port in the tree takes new connections. Calling it
-        again returns the same graph. ``mujou.run`` calls it.
+        After ``build``, no port in the tree takes new connections, and no part of
+        the tree, this network included, can become part of a bigger network:
+        build only the network you will run. Calling it again returns the same
+        graph. ``mujou.run`` calls it.
 
         Raises:
             RuntimeError: Part of the tree (a node, a network or a port) belongs
