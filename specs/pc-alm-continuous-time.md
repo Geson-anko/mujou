@@ -1,6 +1,6 @@
 # PC-ALM の連続時間系
 
-mujou は PC-ALM の離散更新を、グローバルな時間に対する微分方程式として扱い直す（[更新手法](update-rules.md#連続時間形)）。この文書では、その連続時間形を式の意味から順に解説する。式と記号の正確な定義は skill `pc-alm` にある。
+mujou は PC-ALM の離散更新を、実行のタイマーの時間（既定はグローバルタイマー）に対する微分方程式として扱い直す（[更新手法](update-rules.md#連続時間形)）。この文書では、その連続時間形を式の意味から順に解説する。式と記号の正確な定義は skill `pc-alm` にある。
 
 > 連続時間形は PC-ALM の記事の範囲外であり、mujou の研究課題である。確立した理論ではなく、仮説として扱う。
 
@@ -76,7 +76,7 @@ $\tau_h$ が小さく、$\tau_\theta$ がずっと大きいとき、入力と教
 
 ## 離散化
 
-連続時間の式は、そのままではコンピュータで計算できない。各ノードは前回の更新からの経過時間 $\Delta t$ をグローバルタイマーで測り、陽的 Euler 法でその分だけ進める。
+連続時間の式は、そのままではコンピュータで計算できない。各ノードは前回の更新からの経過時間 $\Delta t$ をその実行のタイマーで測り、陽的 Euler 法でその分だけ進める。
 
 $$h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}, \qquad \lambda_i \leftarrow \lambda_i + \frac{\Delta t}{\tau_\lambda} r_i, \qquad W_i \leftarrow W_i + \frac{\Delta t}{\tau_\theta}\varepsilon_i h_{i-1}^\top$$
 
