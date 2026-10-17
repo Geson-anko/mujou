@@ -10,7 +10,7 @@
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
 2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
-3. The host writes input with `write` and reads output with `read`. The example above waits a little with `mujou.time.sleep` and reads again until the expected output arrives. To show an input for a set time, write it as in "Showing an input for a set time" below
+3. The host writes input with `write` and reads output with `read` or `subscribe`. The example above follows the output with `subscribe` until the expected value arrives, and gives up with `TimeoutError` after 5 seconds of real time (see "Reading output" below). To show an input for a set time, write it as in "Showing an input for a set time" below
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
 `mujou.run` takes the following arguments.
@@ -79,8 +79,19 @@ Both read from any port that has a send type. Reading an unconnected port gives 
 1. The first item is the latest value at the time of the call, returned without waiting. If nothing has been sent yet, it is the port's initial value
 2. After that, it waits until a new value is sent, and returns the latest value at that moment. If you read slowly, the values in between are skipped
 3. When the run ends normally, the iteration ends. When the run ends with a node's exception, the iteration raises `NetworkError`
+4. With `timeout=seconds`, the iteration raises `TimeoutError` once that many seconds of real time have passed since the call to `subscribe`, the time spent in the body of the loop included. The run keeps running. The default is forever
 
-Only the host waits; the sending node does not wait for the host. The iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it.
+Only the host waits; the sending node does not wait for the host. Without a `timeout`, the iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it.
+
+To wait until an output arrives, give a `timeout` and `break` when the value has arrived. After the loop, the variables hold the value that arrived. The `else` block runs only if the loop ends without `break`, that is, if the run stops first.
+
+```python
+for y, t in run.subscribe(net.next, timeout=5.0):
+    if torch.equal(y, expected):
+        break                   # y has arrived
+else:
+    raise RuntimeError("the run stopped before y arrived")
+```
 
 ```python
 --8<-- "examples/subscribe.py:33:43"

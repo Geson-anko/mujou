@@ -111,7 +111,9 @@ class Run:
         """
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
-    def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, Timestamp]]:
+    def subscribe[S](
+        self, port: Port[S, Any, Any], *, timeout: float = math.inf
+    ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
         The first step yields the latest message at the time of this call (zeros
@@ -122,12 +124,29 @@ class Run:
         normally. Shut the run down before the program ends: a thread iterating
         here ends only with the run.
 
+        To wait until an output arrives, iterate with a ``timeout`` and break
+        when it has arrived::
+
+            for y, t in run.subscribe(net.next, timeout=5.0):
+                if torch.equal(y, target):
+                    break  # the iterator raises TimeoutError after 5 s instead
+
+        Args:
+            port: The port to follow.
+            timeout: Real seconds, counted from this call, that the whole
+                iteration may take, the time spent in the loop's body included.
+                ``math.inf`` iterates as long as the run runs.
+
         Raises:
-            ValueError: ``port`` is outside the run or sends nothing.
+            ValueError: ``port`` is outside the run or sends nothing; or
+                ``timeout`` is negative or NaN.
+            TimeoutError: From the iterator, at a step after the first that
+                begins once ``timeout`` has passed, or that would wait past it.
+                The iterator ends; the run keeps running.
             NetworkError: The run stopped because a node raised (also from the
                 iterator).
         """
-        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port))
+        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port, timeout))
 
     def state_dict(self) -> dict[str, Any]:
         """Copy the state of the run at one time, while it runs or after it ended

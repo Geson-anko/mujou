@@ -758,6 +758,55 @@ class TestSubscribe:
         assert times == sorted(times)
         assert len(times) >= 5
 
+    def test_raises_after_the_timeout_and_the_network_keeps_running(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=0.05)
+        next(values)  # the first step does not wait
+        begin = time.monotonic()
+        with pytest.raises(TimeoutError):
+            next(values)  # nothing is sent: the nodes wait for step
+        assert time.monotonic() - begin < 5.0
+        with pytest.raises(StopIteration):
+            next(values)
+        run.write({net.prev: u(1)})
+        step(run, virtual)
+        assert torch.equal(run.read(net.next)[0], net.b.x)
+
+    def test_the_timeout_counts_the_whole_iteration(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=0.05)
+        next(values)
+        time.sleep(0.1)  # the body of a loop that took longer than the timeout
+        step(run, virtual)  # a newer message is there
+        with pytest.raises(TimeoutError):
+            next(values)
+
+    def test_yields_what_arrives_within_the_timeout(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        values = run.subscribe(net.next, timeout=60.0)
+        next(values)
+        step(run, virtual)
+        assert next(values)[1] == virtual.now()
+        run.shutdown()
+        with pytest.raises(StopIteration):
+            next(values)
+
+    def test_rejects_a_negative_timeout(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        for timeout in (-1.0, math.nan):
+            with pytest.raises(ValueError, match="timeout"):
+                run.subscribe(net.next, timeout=timeout)
+
 
 class TestStateDict:
     def test_after_a_normal_end_is_the_state_at_the_end(

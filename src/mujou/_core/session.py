@@ -12,6 +12,7 @@ import contextlib
 import copy
 import math
 import threading
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Final, cast, final
 
@@ -427,12 +428,17 @@ class Session:
         message = outbox.read()
         return _value(spec, message, _CPU), message.timestamp
 
-    def subscribe(self, port: AnyPort) -> Iterator[tuple[object, _native.Timestamp]]:
+    def subscribe(
+        self, port: AnyPort, timeout: float
+    ) -> Iterator[tuple[object, _native.Timestamp]]:
+        _wait(timeout)  # checks it
+        # The whole iteration counts from this call, on the real clock.
+        deadline = time.monotonic() + timeout
         runtime = self._started()
         self.check()
         outbox, spec = self._outbox(port)
         # The value at the time of this call comes first.
-        return self._follow(runtime, outbox, spec, outbox.read())
+        return self._follow(runtime, outbox, spec, outbox.read(), timeout, deadline)
 
     def _follow(
         self,
@@ -440,14 +446,26 @@ class Session:
         outbox: _native.Slot,
         spec: Spec,
         last: _native.Message,
+        timeout: float,
+        deadline: float,
     ) -> Iterator[tuple[object, _native.Timestamp]]:
         self.check()
         yield _value(spec, last, _CPU), last.timestamp
         while True:
             self.check()
             finished = runtime.is_finished
-            # After the end nothing is written, so one last look without waiting.
-            message = outbox.wait_newer(last, 0.0 if finished else _POLL)
+            if finished:
+                # After the end nothing is written, so one last look without
+                # waiting.
+                message = outbox.wait_newer(last, 0.0)
+            else:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"subscribe did not end within {timeout} s; the run keeps "
+                        "running"
+                    )
+                message = outbox.wait_newer(last, min(_POLL, remaining))
             if message is None:
                 if finished:
                     self.check()  # the end may have come from an exception

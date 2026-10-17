@@ -44,13 +44,13 @@ start_real, start_global = time.perf_counter(), mujou.time.time()
 with mujou.run(clock, timer=timer) as run:
     timer.sleep(2.0)  # 2 s of the run's time: about 0.2 s of real time
     # The clock sends once per update, and when it updates depends on how the
-    # threads get scheduled: read until it has sent from 2 s on, giving up after
-    # 5 s of real time.
-    seen, t = run.read(clock.next)  # t is on the run's timer
-    give_up = time.perf_counter() + 5.0
-    while float(t) < 2.0 and time.perf_counter() < give_up:
-        timer.sleep(0.1)  # 0.01 s of real time
-        seen, t = run.read(clock.next)
+    # threads get scheduled: follow it until it has sent from 2 s on. The timeout
+    # is in real seconds, whatever the timer's scale.
+    for seen, t in run.subscribe(clock.next, timeout=5.0):  # t: the run's timer
+        if float(t) >= 2.0:
+            break
+    else:  # the run stopped before the clock sent from 2 s on
+        raise RuntimeError("the run stopped before the clock reached 2 s")
 elapsed_real = time.perf_counter() - start_real
 elapsed_global = mujou.time.time() - start_global
 print(

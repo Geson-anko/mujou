@@ -44,13 +44,13 @@ enc.connect(dec)  # enc.next <-> dec.prev, as for nodes
 x = torch.tensor([1.0, -1.0])
 with mujou.run(Compose(enc=enc, dec=dec), inputs={enc.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given
-    # time depends on how the threads get scheduled: read until the output
-    # arrives, giving up after 5 s.
-    y, _ = run.read(dec.next)  # the ports are those of the networks given
-    give_up = mujou.time.time() + 5.0
-    while not torch.equal(y, 6 * x) and mujou.time.time() < give_up:
-        mujou.time.sleep(0.01)
-        y, _ = run.read(dec.next)
+    # time depends on how the threads get scheduled: follow the output until y
+    # arrives (TimeoutError after 5 s).
+    for y, _ in run.subscribe(dec.next, timeout=5.0):  # the ports of the networks
+        if torch.equal(y, 6 * x):
+            break
+    else:  # the run stopped before y arrived
+        raise RuntimeError("the run stopped before the output arrived")
     nodes = list(run.state_dict()["nodes"])
 print(f"keyword: nodes {nodes}, y = {y}")
 assert nodes == ["enc.scale", "dec.scale"]
@@ -59,14 +59,13 @@ assert torch.equal(y, 6 * x)
 # By position: two independent networks in one run.
 first, second = Stage(2.0), Stage(3.0)
 with mujou.run(first, second, inputs={first.prev: x, second.prev: x}) as run:
-    (y1, _), (y2, _) = run.read(first.next), run.read(second.next)
-    give_up = mujou.time.time() + 5.0  # as above
-    while (
-        not (torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x))
-        and mujou.time.time() < give_up
-    ):
-        mujou.time.sleep(0.01)
-        (y1, _), (y2, _) = run.read(first.next), run.read(second.next)
+    # Follow one output and read the other at each of its messages.
+    for y2, _ in run.subscribe(second.next, timeout=5.0):
+        y1, _ = run.read(first.next)
+        if torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x):
+            break
+    else:
+        raise RuntimeError("the run stopped before the outputs arrived")
     nodes = list(run.state_dict()["nodes"])
 print(f"position: nodes {nodes}, y1 = {y1}, y2 = {y2}")
 assert nodes == ["0.scale", "1.scale"]
