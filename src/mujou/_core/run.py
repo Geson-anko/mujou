@@ -50,11 +50,35 @@ class Run:
 
     Example::
 
-        net = Classifier()
-        with mujou.run(net, inputs={net.prev: x0, net.teacher: y0}) as run:
-            run.write({net.prev: x, net.teacher: y})  # switch together
+        from typing import override
+
+        import torch
+
+        import mujou
+        from mujou import NextPort, Node, Port, PrevPort, TensorSpec
+
+        VECTOR = TensorSpec((2,))
+
+
+        class Error(Node):  # sends its input minus its teacher
+            def __init__(self) -> None:
+                super().__init__()
+                self.prev = PrevPort(recv=VECTOR)
+                self.teacher = Port(recv=VECTOR)
+                self.next = NextPort(send=VECTOR)
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                self.next.send(self.prev.recv() - self.teacher.recv())
+
+
+        node = Error()
+        x, y = torch.ones(2), torch.zeros(2)
+        with mujou.run(node, inputs={node.prev: x, node.teacher: y}) as run:
+            run.write({node.prev: 2 * x, node.teacher: x})  # switch together
             mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
-            prediction, t = run.read(net.head.next)
+            error, t = run.read(node.next)
         state = run.state_dict()  # the state at the end, to save
     """
 
@@ -125,11 +149,17 @@ class Run:
         here ends only with the run.
 
         To wait until an output arrives, iterate with a ``timeout`` and break
-        when it has arrived::
+        when it has arrived (here with the node ``Error`` of the example of
+        ``Run``)::
 
-            for y, t in run.subscribe(net.next, timeout=5.0):
-                if torch.equal(y, target):
-                    break  # the iterator raises TimeoutError after 5 s instead
+            node = Error()
+            x = torch.ones(2)
+            with mujou.run(node, inputs={node.prev: x}) as run:
+                for error, t in run.subscribe(node.next, timeout=5.0):
+                    if torch.equal(error, x):
+                        break  # TimeoutError instead if it takes over 5 s
+                else:  # the loop ended without break: the run stopped first
+                    raise RuntimeError("the run stopped before the output")
 
         Args:
             port: The port to follow.
@@ -323,12 +353,12 @@ def run[P: Port[Any, Any, Any]](
         pause_timeout: Real seconds that ``Run.state_dict`` waits for every node
             to pause (the end of its current ``on_update``): finite and > 0.
 
-    Example::
+    Example, with the node ``Error`` of the example of ``Run``::
 
-        net = Classifier()
-        with mujou.run(net, inputs={net.prev: x}) as run:
+        node = Error()
+        with mujou.run(node, inputs={node.prev: torch.ones(2)}) as run:
             mujou.time.sleep(0.1)
-            y, t = run.read(net.head.next)
+            error, t = run.read(node.next)
 
     Raises:
         RuntimeError: A network or node has already run, or belongs to a tree
