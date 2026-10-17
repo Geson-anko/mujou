@@ -236,6 +236,11 @@ class Run:
         ``/in`` what the host wrote. A node run alone is the root: it is keyed
         ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
+        The tensors of the tree stay on their nodes' devices. MPS cannot be used
+        from two threads at once: use MPS tensors of the tree on the host only
+        while no node on MPS runs, and call this after the end only while no
+        other run's node on MPS runs (it copies on this thread then).
+
         Raises:
             RuntimeError: This is called from a node's hook.
             PauseTimeoutError: A node did not pause within ``pause_timeout``; the

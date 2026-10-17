@@ -43,7 +43,10 @@ class Node(_native.Node, Component):
     - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
       below). ``dt`` is the time in seconds on the run's ``timer`` since the
       node's last update. Read the ports with ``recv``, update in proportion to
-      ``dt``, and write the ports with ``send``. It never waits for other nodes.
+      ``dt``, and write the ports with ``send``. It never waits for messages of
+      other nodes (on an accelerator other than CUDA, the device-wide
+      synchronize after it may wait for work other nodes queued on the same
+      device).
     - ``on_pause()``: when the node has stopped for a pause of the network (as
       ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.

@@ -80,6 +80,7 @@ A node on another accelerator, such as `device="mps"`, gets the same setup as on
 
 - Without an index, as in `device="mps"`, the device is the host's current device (`mps:0`)
 - PyTorch's MPS cannot be used from two threads at once: the process crashes. So only one node of all the running runs may compute on MPS. `mujou.run` (and `mujou.testing.run`) raises `ValueError` before any node starts when a second one would; put the others on the CPU, or compute them in one node. Do not compute on MPS on the host either while a run with a node on MPS is running
+- The tree `run.state_dict()` returns keeps each tensor on its node's device. Using the MPS tensors of the tree on the host (`.cpu()`, a comparison, saving it) uses MPS from the host's thread, so do it only once no node on MPS is running. `state_dict()` of a run that has ended also copies its nodes' tensors on the host's thread, so call it only while no other run has a node on MPS running
 - MPS has no float64. A node on MPS cannot receive a message of a float64 spec
 
 ## Settings of the whole process

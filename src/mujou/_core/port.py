@@ -286,8 +286,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
 
         ``msg`` must match the send spec exactly; dtypes are never converted. The
         values are detached and copied, so changing ``msg`` afterwards changes
-        nothing that was sent. A CUDA tensor is copied to the host on the node's
-        stream. It never waits for the peers to read.
+        nothing that was sent. A tensor on an accelerator is copied to the host on
+        the node's current stream (on CUDA, the node's own stream). It never waits
+        for the peers to read.
 
         Call it only from the owning node's hooks while the network runs.
 
