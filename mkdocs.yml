@@ -43,7 +43,15 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        # Material renders <pre class="mermaid"> blocks as diagrams.
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  # Math in $...$ and $$...$$, rendered by MathJax (extra_javascript).
+  - pymdownx.arithmatex:
+      generic: true
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -60,6 +68,11 @@ markdown_extensions:
   - footnotes
   - toc:
       permalink: true
+      # The default slugify drops non-ASCII characters, so Japanese headings got
+      # ids like _1 and links to them broke. This one keeps Unicode.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
 
 plugins:
   - search
@@ -126,6 +139,14 @@ plugins:
             # Hide private names and the dunders that exceptions inherit.
             filters: ["!^_"]
 
+# Anchors of links are checked against heading ids; hooks/anchors.py makes the
+# percent-encoded anchors that mdformat writes match too.
+hooks:
+  - hooks/anchors.py
+validation:
+  links:
+    anchors: warn
+
 nav:
   - Home: index.md
   - Getting Started:
@@ -161,6 +182,10 @@ nav:
       - Global Time: api/time.md
       - Errors: api/errors.md
       - Testing: api/testing.md
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
 
 extra:
   social:

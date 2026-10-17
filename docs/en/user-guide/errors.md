@@ -1,5 +1,84 @@
 # Errors and Shutdown
 
-!!! note "To be written"
+This page shows what happens when a hook of a node raises, and where the host receives the exception. It also covers the timeouts for waiting for the end and for taking the state, and what happens when the interpreter exits.
 
-    What happens when a hook raises: every node gets `on_exception` and then `on_stop`, and the host sees `NetworkError`. `mujou.run` itself raises the exceptions of `on_start`. The timeouts of stopping (30 seconds of real time by default).
+## One node's exception stops everything
+
+Whichever hook of whichever node raises (not only `on_update`, but also `on_start`, `on_pause`, `state_dict` and the rest), every node of the run stops. It goes as follows.
+
+1. Mujou catches the exception and logs the node's path, the hook's name and the traceback to the logger `"mujou"` at ERROR
+2. Each node finishes the hook it is running, stops, and calls its own `on_exception()` without waiting for the other nodes. Nodes that did not raise are called too
+3. Once `on_exception()` has finished on every node, `on_stop()` is called on every node. The node that raised is called too
+4. The host gets a `NetworkError`. Its `__cause__` is the first exception. If several nodes raise at almost the same time, the exceptions after the first are only logged
+
+Mujou never stops only the node that raised and keeps the others running. Its neighbors would keep reading the stopped node's old values and drift away from the equilibrium without anyone noticing.
+
+## Where the host receives it
+
+| The exception happens                    | What raises `NetworkError`                                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| While starting (`on_start` and the like) | `mujou.run` itself. It finishes the ending work (`on_exception`, `on_stop`) before it raises                |
+| After the start                          | The next `write`, `read`, `subscribe` (and its iterator), `state_dict`, `shutdown` or `join` the host calls |
+
+An exception after the start does not reach the host until it next calls a method of `Run`. If the host waits without calling anything, it does not notice the exception. To wait until the run stops, use `run.join(timeout)`, not `mujou.time.sleep`.
+
+```python
+--8<-- "examples/errors.py"
+```
+
+`NetworkError` is a subclass of `RuntimeError`. To tell causes apart by type, look at `error.__cause__`.
+
+### Inside a with statement
+
+The `with` statement calls `run.shutdown()` when it exits.
+
+- If the body of the `with` finishes without an exception: the node's exception arrives at the end of the `with` statement, as the `NetworkError` raised by `shutdown()`
+- If the body of the `with` raises too: the body's exception propagates as it is, and the `NetworkError` is discarded. Check the node's exception in the log (see "Logging" below)
+
+## on_exception and on_stop
+
+| Hook             | Called                                                                    | What to write                                                      |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `on_exception()` | Only when the run ends with an exception. On every node, before `on_stop` | Work specific to an abnormal end, such as a safe stop of actuators |
+| `on_stop()`      | Once at every end, normal or by an exception                              | Release of resources such as I/O. Do not change the state          |
+
+- `on_exception` takes no arguments. A node cannot know which exception of which node stopped the run. The host handles the cause, by looking at `__cause__`
+- If you only want to handle an exception in your own hook, use `try`/`except` in that hook. An exception you catch does not stop the run
+- If `on_exception` or `on_stop` raises, the exception is only logged, and the ending goes on
+
+## Logging
+
+A node's exception is logged with its traceback to the logger `"mujou"` at the ERROR level. In a program that has not configured logging, Python's default behavior prints it to standard error. To send it elsewhere, configure Python's `logging`. The example above (`examples/errors.py`) sends it to standard output with the following lines.
+
+```python
+--8<-- "examples/errors.py:19:21"
+```
+
+## The state after an exception
+
+The state of a run that ended with an exception is not saved. `run.state_dict()` raises `NetworkError` as well. To keep the state, take it regularly while the network runs (see [Saving and restoring state](state.md)).
+
+To run again, create new instances, nodes included. A network can run only once.
+
+## Timeouts
+
+`shutdown` and `join` take an argument `timeout` in seconds of real time. The default is `math.inf` (wait forever).
+
+| Call                    | When the time runs out                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.shutdown(timeout)` | `TimeoutError`. The request to stop is not withdrawn, and the nodes update no more. The ending goes on in the background, and you can wait for it with `join` |
+| `run.join(timeout)`     | `TimeoutError`. It does nothing to the run. A running run keeps running                                                                                       |
+
+`run.state_dict()` on a running network waits until every node has paused. You set this wait for each run when you start it, with `mujou.run(..., pause_timeout=seconds)` (seconds of real time, 30 by default). You cannot change it while the run is running. If some node does not pause in time, `run.state_dict()` raises `PauseTimeoutError` (a subclass of `TimeoutError`). The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
+
+A `state_dict` timeout is likely with a node whose single `on_update` is long (heavy BP, for example), because a node finishes the running `on_update` before it pauses.
+
+Passing a negative number or NaN as `timeout` raises `ValueError`.
+
+## Interpreter exit
+
+A run does not stop when the host lets go of its `Run`. It keeps running until `shutdown` is called, or at the latest until the interpreter exits.
+
+When the interpreter exits, Mujou sees the main thread end, stops the running runs, and waits until `on_stop` has finished on every node. Even if a thread is iterating over `subscribe`, the iterator ends with the run, so the process can exit.
+
+Still, stop a run you are done with by calling `shutdown()`. With a `with` statement, `shutdown()` is called when it exits.

@@ -10,6 +10,9 @@ repos:
       - id: end-of-file-fixer
       - id: check-docstring-first
       - id: check-yaml
+        # mkdocs.yml uses Python tags (!!python/name:...), as Material recommends.
+        # --unsafe only checks the syntax instead of loading the tags.
+        args: [--unsafe]
       - id: check-toml
       - id: check-json
       - id: debug-statements
