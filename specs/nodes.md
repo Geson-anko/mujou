@@ -72,7 +72,7 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
 
-`timer` を読めるのは、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から、ホストが終了を見たとき（`shutdown`・`join` などが戻ったとき）までである。正常に終了した後にホストが取る `state_dict` の中でも読め、そのときは状態の時刻（終了を要求した時刻）で止まっている。それ以外のとき（実行の前と、終了の後）に読むと `RuntimeError` になる。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
+`timer` は、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から読める。ホストが正常な終了を見たとき（`shutdown`・`join` などが戻ったとき）に、状態の時刻（終了を要求した時刻）で止まった `ReadOnlyTimer` に一度だけ差し替わり、以後はそれを返す。正常に終了した後にホストが取る `state_dict` の中でも同じものを読む。差し替える前にノードが取っておいた `ReadOnlyTimer` は、元のタイマーを読み続ける。実行の前、起動が断られた後、例外で終了した後に読むと `RuntimeError` になる。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
 
 `on_pause` と `on_resume` は引数を取らない。停止している間、その実行のタイマーは進まないので、その時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻は、その実行のタイマー（`self.timer`）から読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
 

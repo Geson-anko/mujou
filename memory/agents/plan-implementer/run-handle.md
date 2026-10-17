@@ -181,3 +181,16 @@ class ManualRun(Run):
 - 正常に終了した後の止まった時刻: `stopped(at, scale)` が `itertools.repeat(at).__next__` などを写す。Python の関数（lambda）は `__globals__` から module に届くので使わなかった
 - 残る経路: `ReadOnlyTimer` のクラスの関数（`__init__` など）の `__globals__` から `mujou._core.timer` の module の globals（`GLOBAL`、`_native`）に届く。どのクラスでも同じで、`import mujou.time` でも届くので塞がない。実行に渡したタイマーそのもの（利用者の `Timer` / `VirtualTimer`）にはたどれない。テスト `test_reaches_nothing_that_changes_the_timer` は、インスタンスの属性・`__self__`・`__func__`・`__wrapped__`・closure を総当たりでたどり、`Timer` と native の `Timer` と `set_time_scale` を持つものが無いことを、実行中と終了後の両方で確かめる
 - hook の中からの sleep / set_time_scale / advance の禁止はそのまま
+
+## 再レビュー（r2）への対応（2026-10-17）
+
+レビュー: `memory/agents/code-reviewer/run-handle-r2.md`（request-changes、4f7eb58 について）。S2 と nit 1 は `ReadOnlyTimer` への改名で解消済み。
+
+- **M1:** 構築済みの印を `weakref.WeakSet` から、`id()` をキーにした `weakref.ref` の dict に替えた。判定は `ref() is component` で、利用者の `__eq__` / `__hash__` を呼ばない。ref の callback は、同じ id を後のコンポーネントが使っていれば消さない。dataclass の Network と、等しさで比べる Node のテストを足した
+- **S1:** `_settle` が、終了を見たときに一度だけ（lock の下で）ノードの `timer` を差し替える。正常な終了なら止まった `ReadOnlyTimer`（`_ended_timer`。時刻は `max(停止を要求した時刻, 最後の更新, スロット)`）を付けたままにし、例外による終了なら外す。`_ended_tree` はその時刻を木に使う。`ManualRun.step` で node が例外を投げたときも `_settle` する。終了後に別スレッドで `read` しながら `state_dict` するテストを足した。`Node.timer` は、正常な終了の後もずっと止まった時刻を返す（以前の「終了後は `RuntimeError`」から変えた）
+- **nit 2:** `ReadOnlyTimer` と `Node.timer` の docstring を、実際の差し替え（終了を見たときに止まったものへ差し替わる。前に取っておいたものは元のタイマーを読み続ける）に合わせた
+- **nit 3:** 「同じネットワークを同じ形で」走らせ直せると、docstring と `specs/network.md` に書いた
+- **nit 4:** `specs/network.md` と `specs/execution-model.md` に、`Timestamp` を含む木は `torch.load(..., weights_only=False)` で読むと書いた
+- **nit 5:** KeyboardInterrupt は、起動の前に受けても安全側に倒して走ったものとして数えると書いた
+- **nit 6:** `TestOnlyTheHostControlsTheTime` を手動実行と `VirtualTimer` で決定的にし、待つテストは 5 秒で失敗するようにした。グローバルのスケールは `finally` で戻す
+- **nit 7:** `ReadOnlyTimer.__new__(ReadOnlyTimer)` で属性の無いものを作れるが、`__new__` を直接呼ぶ使い方は想定しないので塞がない
