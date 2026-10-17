@@ -413,10 +413,14 @@ class Node(_native.Node, Component):
         if self._stream is not None:
             self._stream.synchronize()
         elif self._device.type != "cpu":
+            # Without a stream of its own the node cannot wait for its work alone:
+            # this also waits for other nodes on the device, which is still correct.
             torch.accelerator.synchronize(self._device)
 
 
 # The device types of torch's accelerators, for the message of an unavailable one.
+# torch has no public list of them; a type not here (e.g. a private-use backend) is
+# still accepted when it is the current accelerator.
 _ACCELERATORS: Final = ("cuda", "mps", "xpu", "mtia", "hpu")
 
 

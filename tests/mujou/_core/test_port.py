@@ -368,7 +368,7 @@ class TestAccelerator:
         start_manual: StartManual,
         accelerator: torch.device,
     ):
-        out, inp = NextPort(send=h()), PrevPort(recv=h())
+        out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
 
         class OnAccelerator(Probe):
@@ -376,14 +376,20 @@ class TestAccelerator:
                 super().__init__(update, **ports)
                 Node.__init__(self, device=accelerator.type)
 
-        source = OnAccelerator(
-            lambda: out.send(torch.ones(2, 3, device=accelerator)), next=out
-        )
-        sink = OnAccelerator(inp.recv, prev=inp)
+        def update() -> torch.Tensor:
+            x = inp.recv()
+            back.send(2 * x)
+            return x
+
+        # The source stays on the CPU: MPS takes one node at most.
+        source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
+        sink = OnAccelerator(update, prev=inp, back=back)
         run = start_manual(Net(source=source, sink=sink))
         step(run, virtual, source, sink)
         received = cast(torch.Tensor, sink.results[0])
         # The index-less device is fixed, so the message compares equal to it.
         assert received.device == sink.device == accelerator
         assert torch.equal(received.cpu(), torch.ones(2, 3))
-        assert torch.equal(run.read(out)[0], torch.ones(2, 3))
+        sent, _ = run.read(back)
+        assert sent.device == torch.device("cpu")
+        assert torch.equal(sent, torch.full((2, 3), 2.0))

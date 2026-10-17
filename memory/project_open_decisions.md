@@ -15,7 +15,7 @@ metadata:
 - **mujou.Node の細部**: モジュール構成と `mujou.Node` の構成は決定済み（[[project-torch-module]]）。2026-10-16 に推奨案で実装、ユーザー確認待ち: 設定は `on_start` の前に呼ぶ内部の hook `_on_thread_start()` で行う（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた、[[project-runtime-api-revision]]）／トップレベルの公開名は `Channel, Compose, DictSpec, Graph, Network, NetworkError, NextPort, Node, PauseTimeoutError, Port, PrevPort, Run, TensorSpec, run`（`src/mujou/__init__.py` の `__all__`。ほかにサブモジュールの `mujou.time` と `mujou.testing`、PC-ALM は `mujou.pc` だけ、[[project-pc-module]]）／torch の内部スレッド数は mujou が設定せずホストが決める
 - **グローバルタイマーとスケジューラの境界**（2026-10-15 に挙がり、2026-10-16 にランタイムを実装）: 制御は 1 本のスレッドに直列化し、Δt=0 の待ちは制御の要求でも起きる（pamiq-core の `thread_control.py` に倣った）。残り: 時刻の読み取りがグローバルな Mutex を取る（性能が問題になったら seqlock など）／実経過を f64 で扱うので、約 104 日後に ns の分解能が落ちる。同じタイマーで動くネットワーク同士は停止で時間を止め合う。止め合いたくないネットワークは別のタイマーで動かす（2026-10-16 にユーザーが決定、[[project-timer-per-run]]。`mujou.run(..., timer=...)` は 2026-10-16 に実装済み）
 - **ライセンス**: LICENSE ファイル未作成
-- **MPS のスレッド安全性**: PyTorch の MPS は 2 つのスレッドから同時に使うとプロセスが落ちる。MPS のノードを直列にするロックを入れるか、2 つ目の MPS のノードを構築時に拒むか、文書の注意だけにするか（2026-10-17、[[project-gpu-policy]]）
+- **MPS のスレッド安全性**: PyTorch の MPS は 2 つのスレッドから同時に使うとプロセスが落ちる。2026-10-17 に推奨案で、MPS のノードを動いている実行全体で 1 つに限り、2 つ目は起動前に拒むようにした。MPS のノードを直列にするロックで複数を許すかはユーザー確認待ち（[[project-gpu-policy]]）
 
 **How to apply:** これらに触れるタスクでは、勝手に決めずにユーザーに確認する（CLAUDE.md 開発原則 1）。
 

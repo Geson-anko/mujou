@@ -1678,3 +1678,46 @@ class TestAccelerator:
         expected = torch.full((BIG,), float(3 * ADDS), device=accelerator)
         assert torch.equal(node.first, expected)
         assert torch.equal(tree["nodes"]["node"]["w"].to(accelerator), expected)
+
+
+class OnMps(Node):
+    """Does nothing on MPS; records whether it started."""
+
+    def __init__(self) -> None:
+        super().__init__(device="mps")
+        self.started = False
+
+    @override
+    def on_start(self) -> None:
+        super().on_start()
+        self.started = True
+
+
+class TwoOnMps(Network):
+    def __init__(self) -> None:
+        self.a = OnMps()
+        self.b = OnMps()
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs MPS")
+class TestOneNodeOnMps:
+    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
+        net = TwoOnMps()
+        with pytest.raises(ValueError, match=r"^MPS cannot .* but 'a', 'b' do;"):
+            start_manual(net)
+        assert not net.a.started and not net.b.started
+
+    def test_refuses_a_node_while_another_run_has_one(self, start_manual: StartManual):
+        first, second = OnMps(), OnMps()
+        run = start_manual(first)
+        with pytest.raises(ValueError, match=r"'OnMps' \(of a running run\)"):
+            start_manual(second)
+        assert not second.started
+        run.shutdown()
+        start_manual(Solo(second))  # the first run has ended: it no longer counts
+        assert second.started
+
+    def test_allows_one_node_beside_nodes_on_the_cpu(self, start_manual: StartManual):
+        node, net = OnMps(), Chain()
+        start_manual(node, net)
+        assert node.started and net.a.started

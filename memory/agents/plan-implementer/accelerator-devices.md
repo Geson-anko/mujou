@@ -25,4 +25,6 @@ PyTorch の MPS（torch 2.14.1、Apple Silicon、3.14t）は 2 つのスレッ�
 
 - 素の torch で再現: 2 スレッドが MPS で `add_`・`mul_` をすると SIGSEGV（rc=139）、1 スレッドが更新中にほかのスレッドが `clone`・`min` すると `failed assertion _status < MTLCommandBufferStatusCommitted`（rc=134）。ロックで直列にすると落ちない
 - mujou で再現: MPS のノード 1 つの鎖は動く（`mujou.run` で 50 回書き込み、`state_dict`、`shutdown` まで rc=0）。2 つの鎖は 2 回とも rc=139
-- 対処の候補: (a) MPS のノードの hook を 1 本のロックで直列にする（Rust に `_before_update` のような hook が要る。ホストの利用者のコードは守れない）、(b) 構築時に 2 つ目の MPS のノードを拒む、(c) 文書の注意だけ（今回はこれ）
+- 対処の候補: (a) MPS のノードの hook を 1 本のロックで直列にする（Rust に `_before_update` のような hook が要る。ホストの利用者のコードは守れない）、(b) 構築時に 2 つ目の MPS のノードを拒む、(c) 文書の注意だけ
+- orchestrator の決定で (b) を実装した: `Session.start` の最初の `_check_one_node_devices`。動いている実行（`_RUNNING`、先に `_settle`）も数える。(a) は後でユーザーに確認する
+- 同期をデバイス全体にすること（Q2）と、既知のアクセラレータの組（Q3）は orchestrator が了承した。理由をコードのコメントに足した

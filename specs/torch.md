@@ -106,7 +106,11 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 - ストリームを分けない理由: `torch.accelerator` の汎用 API でストリームを作れても、バックエンドごとに意味と性能が確かめられない。MPS は実質 1 本のコマンドキューで、分けても並列にならない
 - ホストのスレッドでの同期（`Session._synchronize_current_streams`）は CUDA のままにした。ノードがストリームを分けないので、ホストのスレッドとノードのスレッドは同じストリームに積み、順序は保たれる
 
-制約: PyTorch の MPS は、2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1、Apple Silicon で確認。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）。mujou のノードはそれぞれ自分のスレッドで計算するので、MPS のノードを 2 つ以上置いたネットワーク、または MPS のノードが動いている間にホストが MPS で計算すると、プロセスが落ちる。MPS のノード 1 つとホストからの読み書き（CPU の値）は動く。この制約への対処（MPS のノード間で hook を直列にするロック、構築時に 2 つ目を拒む、など）は未決定。MPS は float64 も持たないので、float64 の spec のメッセージを MPS のノードが受け取ると torch の `TypeError` になる。
+制約: PyTorch の MPS は、2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1、Apple Silicon で確認。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）。mujou のノードはそれぞれ自分のスレッドで計算するので、MPS のノードを 2 つ以上置いたネットワーク、または MPS のノードが動いている間にホストが MPS で計算すると、プロセスが落ちる。MPS のノード 1 つとホストからの読み書き（CPU の値）は動く。
+
+この制約への対処として、2026-10-17 に（orchestrator の推奨案で。ロックで直列にする案はユーザーに後で確認する）、MPS のノードを 1 つに限ることにした。`Session.start` は、どのノードも起動する前に、この実行と、まだ動いているすべての実行（`_RUNNING`。終わった実行は先に `_settle` して数えない）を合わせて、`_ONE_NODE_DEVICES`（今は `("mps",)`）の種類のデバイスのノードを数える。2 つ以上なら、ノードの名前（パス、根ならクラス名）を挙げて `ValueError` にする。拒んだ実行は何も起動しないので、ほかの拒否と同じく、原因が無くなれば同じネットワークを後で起動できる。実行をまたいで数えるのは、MPS のノードを 1 つずつ持つ 2 つの実行でも落ちるからである。ホストのコードが MPS を使うことは止められないので、利用者向けの文書で注意する。2 つのスレッドから同時に `mujou.run` を呼んだときの検査と登録の競合は扱わない。
+
+MPS は float64 も持たないので、float64 の spec のメッセージを MPS のノードが受け取ると torch の `TypeError` になる。
 
 > 状態: MPS の経路は 2026-10-17 に Apple Silicon の Mac（torch 2.14.1、3.14t）で確かめた。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestAccelerator`（と `TestRestore`、`TestDevice`）で、アクセラレータの無い環境では skip になる。CUDA のマシンでは同じテストが CUDA で走る。MPS ではストリームの状態を問い合わせられない（`Stream.query` が未対応）ので、各 `on_update` の後の同期を直接確かめるテストは無い。
 

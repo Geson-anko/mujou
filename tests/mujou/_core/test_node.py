@@ -706,7 +706,8 @@ class TestAccelerator:
     ):
         a, b = OnAccelerator(accelerator, seed=7), OnAccelerator(accelerator, seed=7)
         for node in (a, b):
-            start_manual(Solo(node))
+            # One at a time: MPS takes one node at most.
+            start_manual(Solo(node)).shutdown()
         generator = torch.Generator(accelerator).manual_seed(7)
         expected = torch.rand(3, generator=generator, device=accelerator)
         assert a.draws is not None and b.draws is not None

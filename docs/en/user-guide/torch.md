@@ -66,7 +66,7 @@ So the node's author does not have to write any synchronization. If you synchron
 A node on another accelerator, such as `device="mps"`, gets the same setup as on CUDA, except for the stream: the node computes on the device's current stream, with no stream of its own. Mujou synchronizes the whole device where it would synchronize the node's stream on CUDA.
 
 - Without an index, as in `device="mps"`, the device is the host's current device (`mps:0`)
-- PyTorch's MPS cannot be used from two threads at once: the process crashes. Put at most one node on MPS, and do not compute on MPS on the host while the network runs
+- PyTorch's MPS cannot be used from two threads at once: the process crashes. So only one node of all the running runs may compute on MPS. `mujou.run` (and `mujou.testing.run`) raises `ValueError` before any node starts when a second one would; put the others on the CPU, or compute them in one node. Do not compute on MPS on the host either while a run with a node on MPS is running
 - MPS has no float64. A node on MPS cannot receive a message of a float64 spec
 
 ## Settings of the whole process
