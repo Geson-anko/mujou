@@ -61,7 +61,7 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 
 タイマーはコア（Rust）側に置き、ノードが GIL なしで参照できるようにする（[ネイティブコア](native-core.md)）。
 
-ホストが入力の提示時間などを待つために、タイマーの時間で待つ関数（グローバルタイマーなら `mujou.time.sleep(dt)`、名前は暫定）を用意する。時間のスケール・停止・仮想時計に従って待つ。実時間の `time.sleep` で待つと、これらと噛み合わない（[ネットワーク](network.md#入力はグローバル時間上の信号)）。
+ホストが入力の提示時間などを待つために、タイマーの時間で待つ関数（グローバルタイマーなら `mujou.time.sleep(dt)`、名前は暫定）を用意する。時間のスケール・停止・仮想時計に従って待つ。実時間の `time.sleep` で待つと、これらと噛み合わない（[ネットワーク](network.md#入力は実行の時間上の信号)）。
 
 ### 実装
 
@@ -74,7 +74,8 @@ $$x \leftarrow x + \Delta t \cdot f(x)$$
 - タイマーの時間で待つ処理は、条件変数で状態の変化を待つ。停止中は時刻が進まないので、停止中の `sleep` は再開まで戻らない
 - 状態の木に入れるのは時刻（ns）とスケールだけである。状態は必ず停止中に取得するので、停止中かどうかは入れない。時計の種類はテストの設定なので入れない
 - Python からは private な `mujou._core._native` で使う。`Timer()` が新しいタイマー、`mujou._core._native.timer`（`GlobalTimer` 型、`Timer` の派生）がグローバルタイマーで、どちらも全機能を持つ。`Outlet` / `InputGroup` / `Runtime` は `timer=` を任意で受け取り、省略するとグローバルタイマーを使う。`Timestamp` は `float(ts)` が秒、`int(ts)` が秒の整数部、`ts.ns` がナノ秒で、比較と hash ができる。`Message.timestamp` が返す。`sleep` は GIL を外して待ち、50 ms ごとにシグナル（Ctrl-C）を確かめる
-- 利用者に公開するのは、`mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale`（グローバルタイマーを読む）と、`mujou.time.Timer` / `mujou.time.Timestamp`、テスト用の `mujou.testing.VirtualTimer` である。`Timer` は native の `Timer` を包む Python のクラスで、`now()`（`Timestamp` を返す）・`sleep(seconds)`・`get_time_scale()`・`set_time_scale(scale)` だけを見せる。native の `load_state_dict`（走っているタイマーの時刻を飛ばせる）・`use_virtual_clock`・`pause` / `resume` / `is_paused` はフレームワークとテストのためのものなので見せない。`Timestamp` は native の型をそのまま公開する。`VirtualTimer` は `Timer` の派生で、時刻 0 の仮想時計から始まり、`advance(seconds)` を足す。`mujou.run(..., timer=...)` に渡すと、その実行のスロット・ホストの入力・ランタイムがすべてそのタイマーを使い、ノードは属性 `timer` でそれを読む（[ノード](nodes.md#ライフサイクル-hook)）。`timer=None` はグローバルタイマーである
+- 利用者に公開するのは、`mujou.time` の `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale`（グローバルタイマーを読む）と、`mujou.time.Timer` / `mujou.time.Clock` / `mujou.time.Timestamp`、テスト用の `mujou.testing.VirtualTimer` である。`Timer` は native の `Timer` を包む Python のクラスで、`now()`（`Timestamp` を返す）・`sleep(seconds)`・`get_time_scale()`・`set_time_scale(scale)` だけを見せる。native の `load_state_dict`（走っているタイマーの時刻を飛ばせる）・`use_virtual_clock`・`pause` / `resume` / `is_paused` はフレームワークとテストのためのものなので見せない。`Timestamp` は native の型をそのまま公開し、pickle と deepcopy ができる（`copyreg.__newobj_ex__` で `Timestamp(ns=...)` に戻す `__reduce__`）。`VirtualTimer` は `Timer` の派生で、時刻 0 の仮想時計から始まり、`advance(seconds)` を足す。`mujou.run(..., timer=...)` に渡すと、その実行のスロット・ホストの入力・ランタイムがすべてそのタイマーを使う。`timer=None` はグローバルタイマーである
+- タイマーを動かすのはホストだけである。ノードは属性 `timer` で、読み取り専用の view（`Clock`、`now()` だけ）を通して時刻を読む（[ノード](nodes.md#ライフサイクル-hook)）。`Timer.sleep` / `Timer.set_time_scale` / `VirtualTimer.advance` と `mujou.time.sleep` / `mujou.time.set_time_scale` は、ノードの hook の中から呼ぶと `RuntimeError` になる。ノードがスケールを変えると、同じ実行のほかのノードの $\Delta t$ が変わり、Port を通らない通信路になる（局所性）。ノードが仮想時計を進めると、手動ステップの $\Delta t$ がテストの進めた値からずれる。ノードがタイマーで待つと、停止はタイマーを先に凍結するので状態の取得が `PauseTimeoutError` になり、手動実行では誰も時計を進めないので `step` が戻らない
 - 仮想時計（`use_virtual_clock(True)`）では、時刻は `advance(seconds)` で進めた分だけ進み、スケールは効かない。停止中は `advance` できない
 - 停止には 2 種類ある。1 つは、ランタイムが状態の取得・起動・例外による終了（例外のときに状態を取得する設定のときだけ）の間に取る **保持** である。保持は Rust の `Timer::hold()` が返す `PauseHold` で、drop すると解ける。もう 1 つは、ホストやテストが使う **スイッチ**（`pause()` / `resume()`）である。タイマーは保持の数を数え、保持が 1 つも無く、スイッチも切れているときだけ時刻を進める。1 つのタイマーで複数のランタイムが走りうる（既定ではすべてグローバルタイマーで走る）。保持を数えないと、あるランタイムが状態の取得を終えたときに、別のランタイムの取得中の停止やホストの停止まで解いてしまう。`resume()` はスイッチを切るだけで、保持は解かない。`is_paused()` はどちらかで止まっていれば真になる
 - pamiq-core の `time.py` から、anchor の方式（スケールの変更・停止・再開で anchor を張り替える）を引き継いだ。次の点は意図して変えた

@@ -70,9 +70,11 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 表の hook のほかに、フレームワークが自分のために使う hook がある。`_on_thread_start()`（`on_start` の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#実行スレッドの設定)）。利用者は override しない。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出る。そのため、`NetworkError` のメッセージには `_after_update` と出るが、原因は `on_update` で積んだ仕事にある。`_capture_state` の中の例外は `state_dict` と出る。
 
-ノードは、自分の実行のタイマーを属性 `timer` として持つ（`mujou.time.Timer`。時刻は `self.timer.now()` で `Timestamp` として読む）。`mujou.run(..., timer=...)` に渡したタイマーで、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。読めるのは実行の間だけで、実行が `on_start` の前にノードへ付け、ホストが終了を見たとき（`shutdown`・`join` などが戻ったとき）に外す。それ以外のとき（実行の前と、正常に終了した後の `state_dict` の中を含む）に読むと `RuntimeError` になる。
+ノードは、自分の実行のタイマーの読み取り専用の view を、属性 `timer` として持つ（`mujou.time.Clock`。時刻は `self.timer.now()` で `Timestamp` として読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。view は時刻を読むだけで、スケールを変えたり時計を進めたり、タイマーで待ったりはできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
 
-`on_pause` と `on_resume` は引数を取らない。停止している間、グローバル時間は進まないので、グローバル時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻は、その実行のタイマー（`self.timer`）から読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
+`timer` を読めるのは、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から、ホストが終了を見たとき（`shutdown`・`join` などが戻ったとき）までである。正常に終了した後にホストが取る `state_dict` の中でも読め、そのときは状態の時刻（終了を要求した時刻）で止まっている。それ以外のとき（実行の前と、終了の後）に読むと `RuntimeError` になる。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
+
+`on_pause` と `on_resume` は引数を取らない。停止している間、その実行のタイマーは進まないので、その時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻は、その実行のタイマー（`self.timer`）から読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
 
 どの hook が例外を投げても、システム全体を終了する（[実行モデル](execution-model.md#例外による終了)）。そのとき、例外を投げていないノードも含めて全ノードの `on_exception()` を呼ぶ。`on_stop()` だけでは通常の終了と異常な終了を区別できず、ロボットのアクチュエータを安全な姿勢で止めるといった処理を書けないからである。自分の hook の例外に対処したいだけなら、その hook の中で `try`/`except` すればよい。
 
