@@ -1,0 +1,33 @@
+name: GPU
+
+# The tests marked `cuda`, on a self-hosted runner with the label `gpu`
+# (.github/runner/README.md). Started by hand only: a pull request from a fork must
+# not run code on the self-hosted machine.
+on:
+  workflow_dispatch:
+
+jobs:
+  cuda:
+    name: cuda / 3.14t
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14t"
+
+      - uses: extractions/setup-just@v4
+
+      # Without the sources of pyproject.toml, torch comes from PyPI, whose Linux
+      # wheels are built with CUDA (the CPU-only index is for the regular CI).
+      - name: Install dependencies with the CUDA build of torch
+        run: uv sync --no-sources
+
+      - name: Check that torch sees a CUDA device
+        run: uv run --no-sync python -c "import torch; assert torch.cuda.is_available(), 'no CUDA device'; print(torch.__version__, torch.cuda.get_device_name(0))"
+
+      - name: Run the tests marked cuda
+        run: uv run --no-sync pytest -m cuda -v
