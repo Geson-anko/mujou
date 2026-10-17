@@ -124,3 +124,19 @@ code-reviewer・algorithm-reviewer とも approve（`memory/agents/{code,algorit
 ### 検証
 
 - 負荷試験はしていない（coordinator の指示。CPU を埋める並列は回さない）。実時計テストの不等式は、上限が「目標は P ずつ離れているので回数 ≤ 経過/P」で負荷に依らず、下限は期待値の半分で、遅れが積もらない方式なので余裕が大きい
+
+## 7. 2 巡目のレビュー後（2026-10-17）
+
+code-reviewer の 2 巡目は approve（`memory/agents/code-reviewer/node-period-r2.md`）。このブランチはすでに `docs/2026-10-17/docs-content` と `feature/2026-10-17/api-polish` に merge されているので、振る舞いは変えずに文書・記録・コメントだけ直した。
+
+- should-fix 1（復元で目標の位相が失われる）: 方向 (a)（orchestrator の推奨案、ユーザー確認待ち）。状態の木は目標を持たないので、復元すると目標は「保存した最後の更新 + P」に置き直される。少し遅れて更新した後に取った状態からは、止めずに続けた場合より次の更新が最大で P 近く遅れうる（Δt は実経過のまま）。取得してそのまま続ける場合は目標を保つ。`specs/nodes.md`・`Node` の docstring・`memory/project_node_period.md` に書いた。代案 (b) は次の目標を木に入れて `RuntimeConfig` に渡す（木の形が変わる）
+- should-fix 2: `memory/project_node_period.md` の待ちの記述を目標の方式に直した
+- nit 1: 「平均で P に 1 回」に「`on_update` の時間と起床の遅れの和が P に収まる間は」を足した（docstring、`RuntimeConfig::period_ns` の doc、specs）。超えると頻度はおよそ 1/(C + L) に下がる
+- nit 2: 「すでに過ぎていたら」を「すでに達していたら」に（実装の `>=` と一致）
+- nit 3: 遅れが P に近いほど次の Δt は 0 に近づく（常に > 0）ことを docstring と specs に
+- nit 4: `exactly_a_period_late_counts_again_from_the_late_update` のコメントを、`>` では Δt = 0 の更新が起きることを区別していると読めるように直した
+- nit 6: docstring の `on_update(dt)` の折り返しを直した
+- 記録だけ:
+  - nit 7: 同じ P・同じ起点のノードは位相がそろい続け、同じ ns に起きてタイマーの lock を取り合う。正しさには影響しない。M:N の検討材料
+  - nit 8: 約 584 年を超える `period` は `runtime.start` で `OverflowError`。何も起動せずに戻るので実害なし
+  - nit 9: 予約名の検査は実行の開始で行う。`Node.__init_subclass__` なら定義時に落とせるが、今の位置でも何も始まらずに `TypeError` になり走らせ直せる
