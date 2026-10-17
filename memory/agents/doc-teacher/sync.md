@@ -59,3 +59,14 @@
 - 確認元: src/mujou/_core/session.py `_tree` / `_restore`、run.py `state_dict` docstring
 - 但し書き（形は変わりうる・書き換えて復元は想定外）は specs/実装に根拠が無いので書かなかった
 - 問題 S1: `mujou.run(net)` で走らせた `l1` の状態を木から取り出す書き方（concepts/state.md）
+
+### R6（examples-timing: サンプルが「出力が届くまで読み直す」形になったことへの追従）
+- 行範囲: running.md quickstart.py:54:68、compose.md compose.py:38:70、time.md timers.py:36:62 / 64:69
+- quickstart.md: 出力例を t = 0.017 s に（実測 0.017〜0.024）。「t は実行ごとに変わる」「t は y を読んだ時刻ではなく送った時刻」。手順 3/4 を「read → 期待値まで 0.01 s ごとに読み直し、グローバル時間で 5 s で諦めて assert が失敗」に。待たずに読む話は読み直す理由の段落に統合
+- running.md 手順 3、examples/index.md の quickstart、installation.md の出力例も追従
+
+| 問 | 判定 (ja/en) | 原因 | 直したこと |
+| -- | ------------ | ---- | ---------- |
+| Q1 手順 4 の動きと理由、諦めたとき | 正解/正解 | - | 両者が「5 秒がどの時計か書かれていない」と指摘したので、手順 4 に「グローバル時間で」を足した |
+| Q2 t は何の時刻か、0.017 と違うのは異常か | 正解/正解 | - | - |
+- 見送り: グローバル時間の 0 点の定義、送る前の read の戻り値、失敗時に print が先に出る順序（事実の追従の範囲外）

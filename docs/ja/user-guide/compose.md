@@ -5,7 +5,7 @@
 ## 書き方
 
 ```python
---8<-- "examples/compose.py:38:59"
+--8<-- "examples/compose.py:38:70"
 ```
 
 `mujou.run(a, b)` は `mujou.run(Compose(a, b))` と同じである。名前を付けたいときは `Compose` をキーワード引数で使う。

@@ -32,7 +32,7 @@
 `mujou.time.Timer()` を作って `mujou.run(..., timer=timer)` に渡すと、その実行は自分のタイマーの上で走る。新しいタイマーは時刻 0、倍率 1 で始まる。
 
 ```python
---8<-- "examples/timers.py:36:54"
+--8<-- "examples/timers.py:36:62"
 ```
 
 自分のタイマーを渡すのは、次のときである。
@@ -48,7 +48,7 @@
 `mujou.time.set_time_scale` は、グローバルタイマーで走るすべての実行の速さを変える。
 
 ```python
---8<-- "examples/timers.py:56:61"
+--8<-- "examples/timers.py:64:69"
 ```
 
 グローバル時刻は、プロセスが初めて使ったときに 0 から始まる。

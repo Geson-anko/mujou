@@ -56,4 +56,4 @@ uv run python -c "import mujou; print(mujou.__version__)"
 uv run python examples/quickstart.py
 ```
 
-`y = tensor([3., 5., 7.]) at t = 0.106 s` のような 1 行が表示されれば動いている。`t` の値は実行ごとに少し変わる。この出力の読み方は[クイックスタート](quickstart.md)で説明する。
+`y = tensor([3., 5., 7.]) at t = 0.017 s` のような 1 行が表示されれば動いている。`t` の値は実行ごとに変わる。この出力の読み方は[クイックスタート](quickstart.md)で説明する。

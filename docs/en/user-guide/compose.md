@@ -5,7 +5,7 @@ To run several networks in one run, pass them side by side as `mujou.run(a, b)`,
 ## How to write it
 
 ```python
---8<-- "examples/compose.py:38:59"
+--8<-- "examples/compose.py:38:70"
 ```
 
 `mujou.run(a, b)` is the same as `mujou.run(Compose(a, b))`. To give names, use `Compose` with keyword arguments.

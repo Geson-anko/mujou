@@ -5,12 +5,12 @@
 ## The basic form
 
 ```python
---8<-- "examples/quickstart.py:54:62"
+--8<-- "examples/quickstart.py:54:68"
 ```
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
 2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
-3. The host writes input with `write`, waits with `mujou.time.sleep`, and reads output with `read`
+3. The host writes input with `write` and reads output with `read`. The example above waits a little with `mujou.time.sleep` and reads again until the expected output arrives. To show an input for a set time, write it as in "Showing an input for a set time" below
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
 `mujou.run` takes the following arguments.
