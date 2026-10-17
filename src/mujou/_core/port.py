@@ -254,7 +254,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         the initial value: the peer port's ``initial``, or else the recv spec's
         ``zeros()``. For a port the host writes, it is the value in ``inputs`` of
         ``mujou.run``, or else the ``zeros()``. A restored run takes it from
-        ``state``.
+        ``state``. ``has_received`` tells whether the writer has written yet.
 
         Every call copies into new tensors on the owning node's device, without
         gradients, so changing them in place changes nothing else.
@@ -282,6 +282,28 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         written. Raises as ``recv`` does.
         """
         return self._bound().recv(with_time=True)
+
+    @overload
+    def has_received(self: Port[Any, Any, Single]) -> bool: ...
+    @overload
+    def has_received(self: Port[Any, Any, Multi]) -> dict[Channel, bool]: ...
+    def has_received(self) -> Any:  # Any: as recv
+        """Whether ``recv`` returns a message that its writer sent, rather than the
+        initial value.
+
+        The writer is the peer (its ``send`` or ``send_to``), or the host for an
+        unconnected single-peer port (``inputs`` of ``mujou.run`` or
+        ``Run.write``). Until the writer first writes, ``recv`` returns the
+        initial value and this returns ``False``. A restored run keeps what was
+        true when the state was taken.
+
+        A single-peer port returns one ``bool``. A multi-peer port returns
+        ``{channel: bool}``, keyed as ``recv`` is (``{}`` while unconnected).
+
+        Call it only from the owning node's hooks while the network runs. Raises as
+        ``recv`` does.
+        """
+        return self._bound().has_received()
 
     def send(self, msg: S) -> None:
         """Send ``msg`` to every peer and to what the host reads (``Run.read``).

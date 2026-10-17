@@ -102,18 +102,20 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 
 `recv()` always returns a value, and `on_update` usually runs more often than the peer sends, so the same message is read many times. That is right for a value that holds over time (a sensor reading, an activity): update toward it by `dt` each time. For noise in a continuous-time update, scale its standard deviation by $\sqrt{dt}$, not by `dt`, so that the result does not depend on how often the node updates.
 
-When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed. Reading the time in `on_start` skips the value that is there before the peer's first send: the port's initial value (zeros unless the sender declares `initial=`), or the value of a restored state. A restored value was usually handled before the state was taken, but one the peer sent after the node's last update was not: a restored run may skip that one message. (A port the host writes gets its `inputs=` value at that same time, so this skips it too.)
+When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed. Until the peer first sends, `recv()` returns the port's initial value (zeros unless the sender declares `initial=`), and `has_received()` returns `False`: skip that value too. For a port the host writes, the `inputs=` value and each `run.write` count as sent. In a restored run, `has_received()` returns `True` for a value that had been sent when the state was taken. `self.last` starts again from `None`, so the node handles that value once more (usually it was handled before the state was taken).
 
 ```python
 @override
 def on_start(self) -> None:
     super().on_start()
-    _, self.last = self.prev.recv_with_time()  # the time of the value there now
+    self.last: mujou.time.Timestamp | None = None  # the time of the last one handled
 
 
 @override
 def on_update(self, dt: float) -> None:
     super().on_update(dt)
+    if not self.prev.has_received():  # the initial value: the peer has not sent yet
+        return
     sample, t = self.prev.recv_with_time()
     if t == self.last:  # nothing new since the last update
         return
@@ -123,12 +125,12 @@ def on_update(self, dt: float) -> None:
 
 ## Set the period
 
-By default, a node's next `on_update` is called as soon as the previous one returns, so the node loops as fast as it can. One such node uses up one CPU core. To match the period of a sensor, or to leave the CPU free, pass a period `period` in seconds.
+A node updates once every `period` seconds on average, 0.01 s (100 times a second) by default. To match the period of a sensor, or to respond faster or slower, pass a period `period` in seconds.
 
 ```python
 class Sensor(mujou.Node):
     def __init__(self) -> None:
-        super().__init__(period=0.01)  # update once every 10 ms on average
+        super().__init__(period=0.05)  # update once every 50 ms on average
         self.next = mujou.NextPort(send=mujou.TensorSpec((3,)))
 ```
 
@@ -138,7 +140,9 @@ The wait is measured on the run's timer. If you change the time scale, the perio
 
 Even with a period, `dt` is not exactly `period`. `dt` is the time that actually passed: after a delay it is longer than `period`, and the next one is shorter. Even with a period, update in proportion to `dt`.
 
-In a pipeline fed by a node with a period (a sensor, say), the nodes after it read the same input until the next one arrives. Without a period of their own they repeat the same work and each uses up a core; give them a period too, no longer than the period of their input.
+In a pipeline fed by a node with a period (a sensor, say), the nodes after it read the same input until the next one arrives. Give them a period no longer than the period of their input.
+
+`period=0.0` calls the next `on_update` as soon as any time has passed. Such a node uses up one CPU core, takes time from the other nodes and makes their `dt` irregular. Pass it only to a node that really must not wait.
 
 Pass `period` only as an argument of `super().__init__`. Setting a default with a class attribute `period = 0.01` makes the start of the run raise `TypeError`. A manual run (see [Testing](testing.md)) does not use the period.
 
@@ -150,7 +154,7 @@ Pass `period` only as an argument of `super().__init__`. Setting a default with 
 | -------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
 | `device` | The device the node computes on. `"cpu"`, a CUDA device, or another accelerator such as `"mps"` | `"cpu"`                       |
 | `seed`   | The seed of the node's own random number generator `self.generator`                             | `None` (different every time) |
-| `period` | The period of updates, in seconds                                                               | `None` (as fast as it can)    |
+| `period` | The period of updates, in seconds                                                               | `0.01`                        |
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share. `self.generator` can be used in the hooks from `on_start` on. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 

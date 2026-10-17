@@ -105,7 +105,7 @@ class Session:
             # laid out). A restore later replaces them, as it does the zeros.
             time_ns = outlet.outbox.read().timestamp.ns
             for slot in slots:
-                slot.restore(values, time_ns)
+                slot.restore(values, time_ns, sent=False)
 
     def _sources(
         self, port: AnyPort, path: str
@@ -165,7 +165,7 @@ class Session:
                     # checking them all above) switches them together.
                     time_ns = int(restored["timer_state"]["time_ns"])
                     for slot, tensors in items:
-                        slot.restore(tensors, time_ns)
+                        slot.restore(tensors, time_ns, sent=True)
             runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
             self._runtime = runtime
             for node in self._nodes:
@@ -481,8 +481,8 @@ class Session:
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
         self._synchronize_current_streams()
-        for slot, tensors, time_ns in restores:
-            slot.restore(tensors, time_ns)
+        for slot, tensors, time_ns, sent in restores:
+            slot.restore(tensors, time_ns, sent)
         return restored
 
     def _synchronize_current_streams(self) -> None:

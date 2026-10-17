@@ -197,8 +197,8 @@ impl BufferView {
     }
 }
 
-/// An immutable value of a slot, and the time it was written at on the
-/// writer's timer.
+/// An immutable value of a slot, the time it was written at on the writer's
+/// timer, and whether the writer sent it.
 #[pyclass(frozen, module = "mujou._core._native", name = "Message")]
 pub struct PyMessage(Arc<Message>);
 
@@ -218,6 +218,13 @@ impl PyMessage {
     #[getter]
     fn timestamp(&self) -> PyTimestamp {
         PyTimestamp(self.0.timestamp())
+    }
+
+    /// Whether the slot's writer sent it (or a restore said so), rather than it
+    /// being the value the slot was created or initialized with.
+    #[getter]
+    fn sent(&self) -> bool {
+        self.0.sent()
     }
 }
 
@@ -264,15 +271,16 @@ impl PySlot {
         Ok(msg.map(PyMessage))
     }
 
-    /// Sets the value and its time as they were when the state was taken.
+    /// Sets the value, its time and whether it was sent as they were when the
+    /// state was taken (`sent` is false for an initial value).
     ///
     /// Call it only while no node runs (before the start, or while every node
     /// is paused): it writes beside the slot's own writer. Raises as
     /// `Outlet.send` does.
-    fn restore(&self, values: Values<'_>, time_ns: u64) -> PyResult<()> {
+    fn restore(&self, values: Values<'_>, time_ns: u64, sent: bool) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema(), slot.name(), |fill| {
-            slot.restore(time_ns, fill)
+            slot.restore(time_ns, sent, fill)
         })
     }
 }
@@ -440,14 +448,15 @@ impl PyInputSlot {
         PyMessage(self.0.load())
     }
 
-    /// Sets the value and its time, dropping any pending write.
+    /// Sets the value, its time and whether it was sent, dropping any pending
+    /// write.
     ///
     /// Call it only while no node runs (before the start, or while every node
     /// is paused). Raises as `Outlet.send` does.
-    fn restore(&self, values: Values<'_>, time_ns: u64) -> PyResult<()> {
+    fn restore(&self, values: Values<'_>, time_ns: u64, sent: bool) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema(), slot.name(), |fill| {
-            slot.restore(time_ns, fill)
+            slot.restore(time_ns, sent, fill)
         })
     }
 }
