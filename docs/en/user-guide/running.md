@@ -108,7 +108,7 @@ The times that `read`, `subscribe` and `write` return are `mujou.time.Timestamp`
 | `later - earlier` | The difference of two times. Also a `Timestamp` |
 | `a < b` and so on | Which time is earlier                           |
 
-A time is a value on the run's timer. A `Timestamp` does not record which timer it is from, so compare only times from the same timer. If the run is on the global timer, you can also compare with `mujou.time.time()` (seconds as a `float`).
+A time is a value on the run's timer. A `Timestamp` does not record which timer it is from, so compare only times from the same timer. If the run is on the global timer, you can also compare with `mujou.time.now()`.
 
 Comparing the time that `write` returns with the time that `read` returns tells whether an output was sent before or after the input was switched.
 

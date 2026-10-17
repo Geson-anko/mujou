@@ -4,19 +4,19 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 
 ## What to use where
 
-| To                    | Host (default global timer)                              | Host (run on a `Timer` of its own) | In a node's hook              |
-| --------------------- | -------------------------------------------------------- | ---------------------------------- | ----------------------------- |
-| Read the time         | `mujou.time.time()` (seconds), `time_ns()` (nanoseconds) | `timer.now()`                      | `self.timer.now()`            |
-| Wait on the time      | `mujou.time.sleep(seconds)`                              | `timer.sleep(seconds)`             | Not allowed                   |
-| Read the time scale   | `mujou.time.get_time_scale()`                            | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
-| Change the time scale | `mujou.time.set_time_scale(factor)`                      | `timer.set_time_scale(factor)`     | Not allowed                   |
+| To                    | Host (default global timer)                                                                  | Host (run on a `Timer` of its own) | In a node's hook              |
+| --------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------- |
+| Read the time         | `mujou.time.now()` (a `Timestamp`), `mujou.time.time()` (seconds), `time_ns()` (nanoseconds) | `timer.now()`                      | `self.timer.now()`            |
+| Wait on the time      | `mujou.time.sleep(seconds)`                                                                  | `timer.sleep(seconds)`             | Not allowed                   |
+| Read the time scale   | `mujou.time.get_time_scale()`                                                                | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
+| Change the time scale | `mujou.time.set_time_scale(factor)`                                                          | `timer.set_time_scale(factor)`     | Not allowed                   |
 
 - The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time, so it ignores changes of the time scale and pauses (a run pauses while its state is taken)
 - The factor is a finite number greater than 0. Anything else raises `ValueError`
 
 ## Timestamp
 
-The time returned by `run.read`, the time of a write returned by `run.write`, and the values of `timer.now()` and `self.timer.now()` are all `mujou.time.Timestamp`.
+The time returned by `run.read`, the time of a write returned by `run.write`, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()` are all `mujou.time.Timestamp`.
 
 ```python
 --8<-- "examples/timers.py:33:36"
@@ -25,7 +25,7 @@ The time returned by `run.read`, the time of a write returned by `run.write`, an
 - `float(ts)` is seconds, `int(ts)` the integer part of the seconds, and `ts.ns` the exact nanoseconds
 - The difference of two, `later - earlier`, is a `Timestamp` too. If `earlier` is the later one, it raises `ValueError`
 - To make one yourself, pass nanoseconds as a keyword: `Timestamp(ns=...)`
-- A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.time()` only the times of a run on the global timer
+- A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer
 
 ## A timer for one run
 

@@ -249,7 +249,7 @@ A.next ──┼─ Channel ─ C.prev
 
 > 状態: 実装済み（2026-10-16）。実行の API を作り直した（2026-10-16、ハンドル・`Compose`・実行ごとのタイマー・`Timestamp`・`mujou.testing`）。`run.write` が時刻を返し、`mujou.run` と `Compose` がノードを受け付けるようにした（2026-10-17）。
 
-`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` / `Timer` / `ReadOnlyTimer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
+`mujou` のトップレベルには、利用者が使う名前として `Node`、`Network`、`Compose`、`Graph`、`Run`、`Port`、`PrevPort`、`NextPort`、`Channel`、`TensorSpec`、`DictSpec`、`NetworkError`、`PauseTimeoutError`、`run` がある。時間は `mujou.time` にある（`now` / `time` / `time_ns` / `sleep` / `get_time_scale` / `set_time_scale` / `Timer` / `ReadOnlyTimer` / `Timestamp`）。テスト用の口は `mujou.testing` にある（`run` / `ManualRun` / `VirtualTimer`、[実行モデル](execution-model.md#テスト)）。
 
 ### 構築と実行
 
