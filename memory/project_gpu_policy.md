@@ -19,14 +19,14 @@ metadata:
 - コア・スロット・バッファプールに device・stream・event の概念を入れない
 - GPU を使うノードは、ステップごとに自分のストリームを同期してからホストへ書き出す。ノードごとにストリームを分ければ、正しさや順序の面ではノード間で影響しない（SM・帯域・メモリといった資源の取り合いは、CPU のコアの取り合いと同じく $\Delta t$ の伸びとして吸収する）
 
-## 2026-10-17 追記: CUDA 以外のアクセラレータ
+## 2026-10-17 追記: 対象デバイスは CPU と CUDA だけ
 
-ユーザーの判断で、ノードが MPS など CUDA 以外のアクセラレータでも計算できるようにした（`specs/torch.md` の「CUDA 以外のアクセラレータ」）。
+ノードのデバイスは CPU と CUDA だけをサポートする（`specs/torch.md` の「CUDA 以外のアクセラレータ」）。それ以外の種類（`mps`、`xpu`、`meta` など）は、torch が使えるかどうかに関わらず `Node(device=...)` が `ValueError` にする。
 
-- 受け付けるのは CPU と、torch の現在のアクセラレータ（`torch.accelerator.current_accelerator(check_available=True)`）と同じ種類のデバイス。添字の無いデバイスは `current_device_index()` で固定する（`mps` と `mps:0` は等しくない）
-- ノードごとのストリームは CUDA だけ。ほかのアクセラレータはデバイスの現在のストリームで計算し、CUDA でストリームを同期する箇所で `torch.accelerator.synchronize(device)` を呼ぶ
-- **制約**: PyTorch の MPS は 2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1 で確認）。2026-10-17 に orchestrator の推奨案で、動いているすべての実行を合わせて MPS のノードを 1 つに限り、2 つ目は `mujou.run` が起動前に `ValueError` にする（`session.py` の `_ONE_NODE_DEVICES`）。実行中にホストで MPS を使わないことは文書の注意だけ。ロックで直列にする案はユーザー確認待ち
+経緯: 同日に一度、`torch.accelerator` で MPS など CUDA 以外のアクセラレータも使えるようにした（ストリームは CUDA だけ、ほかはデバイス全体を同期、MPS のノードは動いている実行全体で 1 つまで）。その後、ユーザーの決定で取りやめた。
 
-**Why:** 開発機が Apple Silicon の Mac で、手元で GPU の経路を試したい。ストリームを分けるのは CUDA でしか意味と性能を確かめていないので、ほかのバックエンドには広げない。
+**Why:** PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ちる（torch 2.14.1、GIL ありのビルドでも 10/10 で再現）。ノードごとのスレッドで計算する mujou の実行モデルと合わない。
+
+**How to apply:** ノード・ランタイムに `torch.accelerator` の汎用経路や MPS 向けの分岐・制限を入れ直さない。サポートするデバイスを増やすときはユーザーに確認する。
 
 関連: [[project-native-core-rust]], [[project-message-types]], [[project-compute-granularity]]

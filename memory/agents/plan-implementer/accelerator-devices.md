@@ -1,5 +1,7 @@
 # accelerator-devices（2026-10-17）
 
+> 取りやめ（2026-10-17）: ユーザーの決定で MPS など CUDA 以外のアクセラレータのサポートを取りやめ、ノードのデバイスを CPU と CUDA だけに戻した（`specs/torch.md` の「CUDA 以外のアクセラレータ」、[[project-gpu-policy]]）。以下は当時の記録で、`_START_LOCK`・`_ONE_NODE_DEVICES`・`accelerator` fixture・`TestAccelerator` はもう無い。
+
 ノードが CUDA 以外のアクセラレータ（MPS など）で計算できるようにする。ノードごとのストリームは CUDA だけ。
 
 ## 実装の判断

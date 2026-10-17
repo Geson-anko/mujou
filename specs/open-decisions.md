@@ -51,12 +51,10 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 - ホストの待ち方: `Run.wait_for(port, condition, timeout=)` と `Run.subscribe(port, timeout=)`（[ネットワーク](network.md)）
 - テスト: `mujou.testing.run` の既定のタイマーを新しい `VirtualTimer` にし、`ManualRun.timer` で返す。`mujou.time.now()`
 - Port: エラーと repr に `Owner.attr` の名前を出す。`Channel` は `connect` だけが作る。型付きの overload は `None` の spec を受け付けない
-- デバイス: CUDA 以外のアクセラレータ（MPS など）はストリーム無しで使い、デバイス全体を同期する。MPS は 2 スレッドから同時に使うとプロセスが落ちるので、走っている実行の全体で MPS のノードは 1 つまでとし、開始前に `ValueError` で拒む（[PyTorch の利用](torch.md)）
 
 次はまだ決めていない。
 
-- MPS のノードを複数許すために、MPS のノードの hook を 1 本のロックで直列にするか（ノード同士が計算を待ち合うことになる）
-- `Run.state_dict()` の木のテンソルを常に CPU へ移すか（今はノードのデバイスのまま。MPS のノードが走っている間にホストで触ると落ちうる）
+- `Run.state_dict()` の木のテンソルを常に CPU へ移すか（今はノードのデバイスのまま）
 - `Timer.pause` / `resume` / `is_paused`（手動の一時停止）は src で使っておらず、テストの基盤だけが使う。残すか消すか
 - `Compose` の名前（torchvision の `Compose` は直列につなぐ意味で使われる）
 - 相手がまだ送っていないことを判定する API（今は `on_start` で `recv_with_time()` の時刻を読む書き方を案内している）
@@ -66,3 +64,5 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 LICENSE は MIT に決めた（2026-10-17、ユーザーの決定）。
 
 `Run` の API は次のように整理した（2026-10-17、ユーザーの決定。[ネットワーク](network.md#実装)）。停止のタイムアウトは `mujou.run(..., pause_timeout=)` から `Run.state_dict(timeout=30.0)` に移した。`subscribe` と `wait_for` の `timeout` は位置でも渡せる。`Run.timer` はすべての実行が持ち、既定はグローバルタイマーである。`Run.read(port)` は値だけを返し、時刻との組は `Run.read_with_time(port)` が返す。
+
+ノードのデバイスは CPU と CUDA だけにし、MPS など CUDA 以外のアクセラレータのサポートを取りやめた（2026-10-17、ユーザーの決定）。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、ノードごとのスレッドで計算する実行モデルと合わないためである。これに伴い、MPS のノードを 1 つに限る規則と、MPS のノードの hook をロックで直列にする案は不要になった（[PyTorch の利用](torch.md#cuda-以外のアクセラレータ)）。

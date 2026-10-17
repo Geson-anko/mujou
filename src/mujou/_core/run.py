@@ -15,6 +15,7 @@ from mujou._core.network import Network, RunCompose, unbuild
 from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
+from mujou._core.state import StateDict
 from mujou._core.timer import GLOBAL, Timer, VirtualTimer
 
 
@@ -245,7 +246,7 @@ class Run:
             "the condition"
         )
 
-    def state_dict(self, timeout: float = 30.0) -> dict[str, Any]:
+    def state_dict(self, timeout: float = 30.0) -> StateDict:
         """Copy the state of the run at one time, while it runs or after it ended
         normally.
 
@@ -259,9 +260,9 @@ class Run:
         of an ``on_stop``), so that a restored run goes on from there without the
         time that passed after the end.
 
-        The tree is a copy (later updates of the nodes do not change it) and
-        pickles; saving it is up to the host. Pass it to ``mujou.run(...,
-        state=tree)`` to restore it::
+        The tree is a copy (later updates of the nodes do not change it), a
+        ``StateDict`` (a ``dict``) that pickles; saving it is up to the host.
+        Pass it to ``mujou.run(..., state=tree)`` to restore it::
 
             {
                 "nodes": {"body.l1": ..., ...},  # each node's state_dict()
@@ -277,10 +278,8 @@ class Run:
         ``/in`` what the host wrote. A node run alone is the root: it is keyed
         ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
-        The tensors of the tree stay on their nodes' devices. MPS cannot be used
-        from two threads at once: use MPS tensors of the tree on the host only
-        while no node on MPS runs, and call this after the end only while no
-        other run's node on MPS runs (it copies on this thread then).
+        The tensors of the tree stay on their nodes' devices. ``tree.cpu()``
+        moves them all to the CPU, for example before saving the tree.
 
         Args:
             timeout: Real seconds to wait for every node to pause (the end of
@@ -426,7 +425,8 @@ def run[P: Port[Any, Any, Any]](
         inputs: The initial values of unconnected single-peer ports that
             receive, as ``Run.write`` takes them. Written after ``state``, they
             replace its values and carry its time.
-        state: A tree from ``Run.state_dict`` to restore. The slots, the nodes'
+        state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
+            or any mapping of the same items (such as a plain ``dict``). The slots, the nodes'
             states (through each node's ``load_state_dict``, after its
             ``on_start``), their last update times and the timer continue from
             the time the tree was taken. Build the networks as the ones the tree
@@ -447,9 +447,9 @@ def run[P: Port[Any, Any, Any]](
         TypeError: A value is neither a ``Node`` nor a ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
-            networks, or the timer it would set back has another run on it; or the run would have a second node
-            on MPS, counting the runs still running. Nothing has started: the
-            same networks, given the same way, may run once the cause is gone.
+            networks, or the timer it would set back has another run on it.
+            Nothing has started: the same networks, given the same way, may run
+            once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(

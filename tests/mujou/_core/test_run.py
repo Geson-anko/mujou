@@ -1,3 +1,4 @@
+import io
 import math
 import pickle
 import re
@@ -16,7 +17,6 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
-from mujou._core import session as session_module
 from mujou._core.network import Compose, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
@@ -1006,6 +1006,13 @@ class TestStateDict:
         assert again["timer"] == tree["timer"]
 
     @pytest.mark.parametrize("ended", [False, True])
+    def test_is_a_state_dict(self, start_manual: StartManual, ended: bool):
+        run = start_manual(Chain())
+        if ended:
+            run.shutdown()
+        assert isinstance(run.state_dict(), mujou.StateDict)
+
+    @pytest.mark.parametrize("ended", [False, True])
     def test_cannot_receive_in_the_node_state_dict(
         self, start_manual: StartManual, ended: bool
     ):
@@ -1107,6 +1114,28 @@ class TestState:
         assert restored is not None
         net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
+
+    @pytest.mark.parametrize("saved_as", ["torch.save", "dict"])
+    def test_restores_a_saved_tree(
+        self, step: Step, start_manual: StartManual, saved_as: str
+    ):
+        source = Chain()
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run)
+        tree = run.state_dict()
+        run.shutdown()
+        if saved_as == "torch.save":
+            buffer = io.BytesIO()
+            torch.save(tree, buffer)
+            buffer.seek(0)
+            loaded = torch.load(buffer)  # weights_only=True by default
+            assert isinstance(loaded, mujou.StateDict)
+        else:
+            loaded = dict(tree)  # any mapping of the same items
+        net = Chain()
+        start_manual(net, timer=VirtualTimer(), state=loaded)
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+        assert torch.equal(net.b.x, tree["nodes"]["b"]["x"])
 
 
 class TestNodeException:
@@ -1671,9 +1700,22 @@ class TestCuda:
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
 
-    # The two tests below cannot run on MPS: it has no float64, and its work from
-    # two threads at once (here, the host's reading while the node updates) aborts
-    # the process.
+    def test_the_state_moved_to_the_cpu_restores(
+        self, step: Step, start_manual: StartManual
+    ):
+        source = DeviceChain(CUDA0)
+        run = start_manual(source, inputs={source.prev: u(1)})
+        step(run, source.a, source.b)
+        tree = run.state_dict()
+        run.shutdown()
+        assert tree["nodes"]["a"]["x"].device == CUDA0
+        on_cpu = tree.cpu()
+        assert on_cpu["nodes"]["a"]["x"].device == torch.device("cpu")
+        net = DeviceChain(CUDA0)
+        start_manual(net, timer=VirtualTimer(), state=on_cpu)
+        assert net.a.x.device == CUDA0
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+
     def test_manual_steps_match_the_discrete_algorithm(
         self, step: Step, start_manual: StartManual
     ):
@@ -1705,27 +1747,21 @@ class TestCuda:
         assert changed == []
         assert trees[-1]["nodes"]["node"]["k"] > 0
 
-
-class TestAccelerator:
     @pytest.mark.slow
-    def test_on_start_sees_the_work_the_host_queued(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
+    def test_on_start_sees_the_work_the_host_queued(self, start_manual: StartManual):
         seen: list[float | None] = []
         for _ in range(5):
             # Run each node right after making it, while its work is still queued.
-            node = QueuesOnTheHost(accelerator)
+            node = QueuesOnTheHost(CUDA0)
             start_manual(Compose(node=node)).shutdown()
             seen.append(node.seen)
         assert seen == [float(HOST_ADDS)] * 5
 
     @pytest.mark.slow
-    def test_state_dict_waits_for_the_work_of_on_start(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
+    def test_state_dict_waits_for_the_work_of_on_start(self, start_manual: StartManual):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Compose(node=BusyStart(accelerator)))
+            run = start_manual(Compose(node=BusyStart(CUDA0)))
             w = run.state_dict()["nodes"]["node"]["w"]
             run.shutdown()
             captured.append((w.min().item(), w.max().item()))
@@ -1733,11 +1769,11 @@ class TestAccelerator:
 
     @pytest.mark.slow
     def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
-        self, start_manual: StartManual, accelerator: torch.device
+        self, start_manual: StartManual
     ):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Compose(node=BusyStop(accelerator)))
+            run = start_manual(Compose(node=BusyStop(CUDA0)))
             run.shutdown()
             w = run.state_dict()["nodes"]["node"]["w"]
             captured.append((w.min().item(), w.max().item()))
@@ -1748,131 +1784,21 @@ class TestAccelerator:
         self,
         step: Step,
         start_manual: StartManual,
-        accelerator: torch.device,
     ):
-        net = Compose(node=Counter(accelerator))
+        net = Compose(node=Counter(CUDA0))
         run = start_manual(net)
         for _ in range(3):
             step(run)
         tree = run.state_dict()
         run.shutdown()
 
-        node = Counter(accelerator)
+        node = Counter(CUDA0)
         restored = start_manual(Compose(node=node), state=tree)
         step(restored)
         assert node.first is not None
-        expected = torch.full((BIG,), float(3 * ADDS), device=accelerator)
+        expected = torch.full((BIG,), float(3 * ADDS), device=CUDA0)
         assert torch.equal(node.first, expected)
-        assert torch.equal(tree["nodes"]["node"]["w"].to(accelerator), expected)
-
-
-class OnMps(Node):
-    """Does nothing on MPS; records whether it started."""
-
-    def __init__(self) -> None:
-        super().__init__(device="mps")
-        self.started = False
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.started = True
-
-
-class TwoOnMps(Network):
-    def __init__(self) -> None:
-        self.a = OnMps()
-        self.b = OnMps()
-
-
-@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs MPS")
-class TestOneNodeOnMps:
-    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
-        net = TwoOnMps()
-        with pytest.raises(ValueError, match=r"^MPS cannot .* but 'a', 'b' do;"):
-            start_manual(net)
-        assert not net.a.started and not net.b.started
-
-    def test_refuses_a_node_while_another_run_has_one(self, start_manual: StartManual):
-        first, second = OnMps(), OnMps()
-        run = start_manual(first)
-        with pytest.raises(ValueError, match=r"'OnMps' \(of a running run\)"):
-            start_manual(second)
-        assert not second.started
-        run.shutdown()
-        start_manual(
-            Compose(node=second)
-        )  # the first run has ended: it no longer counts
-        assert second.started
-
-    def test_allows_one_node_beside_nodes_on_the_cpu(self, start_manual: StartManual):
-        node, net = OnMps(), Chain()
-        start_manual(node, net)
-        assert node.started and net.a.started
-
-
-class OnCpu(Node):
-    """Does nothing on the CPU; records whether it started."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.started = False
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.started = True
-
-
-@pytest.fixture
-def one_node_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Count the CPU as MPS is counted, so that the one-node rule runs without
-    MPS: ``Session.start`` reads the module's device types at each start."""
-    monkeypatch.setattr(session_module, "_ONE_NODE_DEVICES", ("cpu",))
-
-
-@pytest.mark.usefixtures("one_node_cpu")
-class TestOneNodeDevice:
-    def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
-        a, b = OnCpu(), OnCpu()
-        with pytest.raises(ValueError, match=r"^CPU cannot .* but 'a', 'b' do;"):
-            start_manual(Compose(a=a, b=b))
-        assert not a.started and not b.started
-
-    def test_refuses_one_node_in_each_of_two_runs(self, start_manual: StartManual):
-        first, second = OnCpu(), OnCpu()
-        run = start_manual(first)
-        with pytest.raises(ValueError, match=r"'OnCpu' \(of a running run\)"):
-            start_manual(second)
-        assert not second.started
-        run.shutdown()
-        start_manual(second)  # the first run has ended: it no longer counts
-        assert second.started
-
-    def test_starts_one_of_two_runs_started_at_once(self):
-        # Without the lock around the count and the registration, both runs pass
-        # the count in most rounds.
-        for _ in range(50):
-            barrier = threading.Barrier(2)
-            outcomes: list[Run | ValueError] = []
-
-            def go(barrier: threading.Barrier = barrier) -> None:
-                node = OnCpu()
-                barrier.wait()
-                try:
-                    outcomes.append(mujou.run(node))
-                except ValueError as e:
-                    outcomes.append(e)
-
-            threads = [threading.Thread(target=go) for _ in range(2)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            runs = [outcome for outcome in outcomes if isinstance(outcome, Run)]
-            for run in runs:
-                run.shutdown()
-            assert len(runs) == 1
+        assert torch.equal(tree["nodes"]["node"]["w"].to(CUDA0), expected)
 
 
 class Hooks(Node):
