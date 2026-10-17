@@ -595,6 +595,8 @@ mod period {
     use std::thread;
     use std::time::Instant;
 
+    use mujou_core::time::TimerState;
+
     use super::*;
 
     const P_NS: u64 = 10 * H_NS;
@@ -653,22 +655,34 @@ mod period {
         }
     }
 
+    /// Starts one ticker per entry of `config.period_ns` (one if it is `None`).
+    fn start_tickers(
+        timer: &Arc<Timer>,
+        config: RuntimeConfig,
+        mut hold: Option<Receiver<()>>,
+    ) -> (Runtime<Ticker>, Vec<Receiver<u64>>) {
+        let n = config.period_ns.as_ref().map_or(1, Vec::len);
+        let (tickers, dts): (Vec<_>, Vec<_>) = (0..n)
+            .map(|_| {
+                let (dts, rx) = mpsc::channel();
+                let hold = hold.take();
+                (Ticker { dts, hold }, rx)
+            })
+            .unzip();
+        let names = (0..n).map(|i| format!("ticker{i}")).collect();
+        let (rt, started) =
+            Runtime::start(tickers, names, Arc::clone(timer), config, None).unwrap();
+        started.wait().unwrap();
+        (rt, dts)
+    }
+
     fn start_ticker(
         timer: &Arc<Timer>,
         config: RuntimeConfig,
         hold: Option<Receiver<()>>,
     ) -> (Runtime<Ticker>, Receiver<u64>) {
-        let (dts, rx) = mpsc::channel();
-        let (rt, started) = Runtime::start(
-            vec![Ticker { dts, hold }],
-            vec!["ticker".to_owned()],
-            Arc::clone(timer),
-            config,
-            None,
-        )
-        .unwrap();
-        started.wait().unwrap();
-        (rt, rx)
+        let (rt, mut dts) = start_tickers(timer, config, hold);
+        (rt, dts.remove(0))
     }
 
     fn assert_quiet(dts: &Receiver<u64>) {
@@ -684,25 +698,68 @@ mod period {
         timer.advance_ns(1).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
         assert_quiet(&dts);
+        // In steps: what counts is the time since the last update.
+        timer.advance_ns(P_NS / 2).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(P_NS / 2).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn late_by_less_than_a_period_the_next_target_stays_one_period_after_the_last() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
+        // Wakes up half a period late: one update.
+        timer.advance_ns(3 * P_NS / 2).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(3 * P_NS / 2));
+        assert_quiet(&dts);
+        // The next target is 2 P, not 2.5 P: the lateness is not carried on.
+        timer.advance_ns(P_NS / 2 - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS / 2));
+        assert_quiet(&dts);
         timer.advance_ns(P_NS).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
         rt.shutdown().wait().unwrap();
     }
 
     #[test]
-    fn after_a_jump_it_updates_once_and_counts_the_next_period_from_there() {
+    fn late_by_a_period_or_more_it_updates_once_and_counts_again_from_there() {
         let timer = virtual_timer();
         let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
-        // Late by half a period: one update, not one per missed period.
-        timer.advance_ns(3 * P_NS / 2).unwrap();
-        assert_eq!(dts.recv_timeout(LONG), Ok(3 * P_NS / 2));
+        // 1.5 P late: one update, not one per missed target.
+        timer.advance_ns(5 * P_NS / 2).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(5 * P_NS / 2));
         assert_quiet(&dts);
-        // The next period starts at that update, not on the grid of multiples
-        // of P, which would update here.
+        // The next target is 3.5 P, not 3 P on the grid of multiples of P.
+        timer.advance_ns(P_NS - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn exactly_a_period_late_counts_again_from_the_late_update() {
+        let timer = virtual_timer();
+        let (release, hold) = mpsc::channel();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), Some(hold));
         timer.advance_ns(P_NS / 2).unwrap();
-        assert_quiet(&dts);
         timer.advance_ns(P_NS / 2).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        // The update at P takes 2 P, so the next one comes at 3 P, a period
+        // after its target 2 P: the target after it is 4 P either way.
+        timer.advance_ns(2 * P_NS).unwrap();
+        release.send(()).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(2 * P_NS));
+        release.send(()).unwrap();
+        timer.advance_ns(P_NS - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        release.send(()).unwrap();
         rt.shutdown().wait().unwrap();
     }
 
@@ -724,6 +781,61 @@ mod period {
         timer.advance_ns(1).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
         release.send(()).unwrap();
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn a_capture_does_not_move_the_target() {
+        let timer = virtual_timer();
+        let (rt, dts) = start_ticker(&timer, with_period(Some(P_NS), false), None);
+        timer.advance_ns(P_NS / 2).unwrap();
+        rt.capture(None, |states: Vec<()>| states.len())
+            .wait()
+            .unwrap();
+        timer.advance_ns(P_NS / 2 - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        assert_quiet(&dts);
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn a_restored_node_counts_its_period_from_its_last_update() {
+        let timer = virtual_timer();
+        let at_ns = 100 * P_NS;
+        let config = RuntimeConfig {
+            last_update_ns: Some(vec![at_ns - P_NS / 2]),
+            timer_state: Some(TimerState {
+                time_ns: at_ns,
+                scale: 1.0,
+            }),
+            ..with_period(Some(P_NS), false)
+        };
+        let (rt, dts) = start_ticker(&timer, config, None);
+        timer.advance_ns(P_NS / 2 - 1).unwrap();
+        assert_quiet(&dts);
+        timer.advance_ns(1).unwrap();
+        assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
+        rt.shutdown().wait().unwrap();
+    }
+
+    #[test]
+    fn each_node_keeps_its_own_period() {
+        let timer = virtual_timer();
+        let config = RuntimeConfig {
+            period_ns: Some(vec![Some(P_NS), Some(3 * P_NS)]),
+            ..RuntimeConfig::default()
+        };
+        let (rt, dts) = start_tickers(&timer, config, None);
+        for _ in 0..2 {
+            timer.advance_ns(P_NS).unwrap();
+            assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
+            assert_quiet(&dts[1]);
+        }
+        timer.advance_ns(P_NS).unwrap();
+        assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
+        assert_eq!(dts[1].recv_timeout(LONG), Ok(3 * P_NS));
         rt.shutdown().wait().unwrap();
     }
 
@@ -762,8 +874,8 @@ mod period {
         assert!(dts.try_recv().is_err());
     }
 
-    /// Runs a ticker of period `P_NS` on the real clock for about `run` and
-    /// returns its Δts and the real time it ran.
+    /// Runs a ticker of period `P_NS` on the real clock for `run` and returns
+    /// its Δts and the real time from before its start to after its end.
     fn tick_for(scale: f64, run: Duration) -> (Vec<u64>, Duration) {
         let timer = Arc::new(Timer::new());
         timer.set_scale(scale).unwrap();
@@ -775,25 +887,32 @@ mod period {
         (dts.try_iter().collect(), elapsed)
     }
 
+    const RUN: Duration = Duration::from_millis(500);
+
     #[test]
     fn on_the_real_clock_it_updates_about_once_per_period() {
-        let (dts, elapsed) = tick_for(1.0, Duration::from_millis(500));
+        let (dts, elapsed) = tick_for(1.0, RUN);
+        // The targets are P apart, so the updates cannot outnumber them.
         let at_most = elapsed.as_nanos() as f64 / P_NS as f64;
-        assert!(dts.iter().all(|&dt| dt >= P_NS), "{dts:?}");
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
-        // Loose, so that a loaded machine passes: free running would be far more.
-        assert!((dts.len() as f64) >= at_most / 5.0, "{} updates", dts.len());
+        // Waking up late does not add up: on average one update per period.
+        // Loose, for a loaded machine: free running would be far more.
+        let expected = RUN.as_nanos() as f64 / P_NS as f64;
+        assert!(
+            (dts.len() as f64) >= expected / 2.0,
+            "{} updates",
+            dts.len()
+        );
     }
 
     #[test]
     fn the_time_scale_scales_the_updates_per_real_second() {
         let scale = 4.0;
-        let (dts, elapsed) = tick_for(scale, Duration::from_millis(500));
+        let (dts, elapsed) = tick_for(scale, RUN);
         let at_most = elapsed.as_nanos() as f64 * scale / P_NS as f64;
-        assert!(dts.iter().all(|&dt| dt >= P_NS), "{dts:?}");
         assert!((dts.len() as f64) <= at_most, "{} > {at_most}", dts.len());
         // More than the scale of 1 could give.
-        let unscaled = elapsed.as_nanos() as f64 / P_NS as f64;
+        let unscaled = RUN.as_nanos() as f64 / P_NS as f64;
         assert!((dts.len() as f64) > unscaled + 1.0, "{} updates", dts.len());
     }
 

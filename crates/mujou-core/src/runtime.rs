@@ -93,10 +93,10 @@ pub struct RuntimeConfig {
     pub pause_timeout: Duration,
     /// Where each node's first Δt starts. Defaults to the time at the start.
     pub last_update_ns: Option<Vec<u64>>,
-    /// Each node's period on the timer, in ns (> 0): a free-running node waits
-    /// until this much time has passed since its last update. `None` (for all
-    /// nodes or one) updates as soon as any time has passed. The manual mode
-    /// ignores it.
+    /// Each node's period on the timer, in ns (> 0): a free-running node
+    /// updates once every period on average, at targets a period apart (see
+    /// `node_loop`). `None` (for all nodes or one) updates as soon as any time
+    /// has passed. The manual mode ignores it.
     pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
@@ -333,9 +333,9 @@ struct Shared<N: NodeHooks> {
     /// before the timer's elsewhere).
     word: AtomicU64,
     last_update_ns: Vec<AtomicU64>,
-    /// The least time between two updates of each node, in ns (1 without a
-    /// period: Δt > 0).
-    min_dt_ns: Vec<u64>,
+    /// Each node's period in ns when running freely (1 without a period: the
+    /// next update as soon as Δt > 0).
+    period_ns: Vec<u64>,
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
     to_controller: Sender<Message<N>>,
@@ -513,21 +513,30 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Updates node `i` until the stop request or one of its hooks fails.
     ///
-    /// Running freely, the node updates once the time reaches its last update
-    /// plus its period (or just passes it, without a period), as pamiq-core's
-    /// `SleepIntervalAdjustor` does: the time of an update counts toward the
-    /// period, and a late update is not caught up on but starts the next period
-    /// from its own time. The manual mode updates on every step that has Δt > 0.
+    /// Running freely, the node updates once the time reaches its target. The
+    /// first target is one period after the last update (the start, or the
+    /// restored one); each next target is one period after the previous target,
+    /// so that waking up late does not delay the following updates. Only an
+    /// update a period or more late (already at or past the target after its
+    /// own) starts counting again from its own time, so the node never updates
+    /// several times in a row to catch up. Without a period, the target is 1 ns
+    /// after the last update. The manual mode updates on every step that has
+    /// Δt > 0.
     fn node_loop(&self, i: usize) {
         let mut last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
-        let min_dt_ns = if self.manual { 1 } else { self.min_dt_ns[i] };
+        let period_ns = self.period_ns[i];
+        let mut target_ns = last_ns.saturating_add(period_ns);
         loop {
             let (now_ns, word) = match self.boundary(i) {
                 Boundary::Exit => return,
                 Boundary::Again => continue,
                 Boundary::Update { now_ns, word } => (now_ns, word),
             };
-            let next_ns = last_ns.saturating_add(min_dt_ns);
+            let next_ns = if self.manual {
+                last_ns.saturating_add(1)
+            } else {
+                target_ns
+            };
             if now_ns < next_ns {
                 if self.manual {
                     // Nothing to do for a step without time passing.
@@ -549,6 +558,10 @@ impl<N: NodeHooks> Shared<N> {
             }
             last_ns = now_ns;
             self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
+            target_ns = target_ns.saturating_add(period_ns);
+            if now_ns >= target_ns {
+                target_ns = now_ns.saturating_add(period_ns);
+            }
             if self.manual {
                 self.end_step();
             }
@@ -981,7 +994,7 @@ impl<N: NodeHooks> Runtime<N> {
                 )));
             }
         }
-        let min_dt_ns = match config.period_ns {
+        let period_ns = match config.period_ns {
             None => vec![1; n],
             Some(periods) if periods.len() != n => {
                 return Err(RuntimeError::InvalidArgument(format!(
@@ -1022,7 +1035,7 @@ impl<N: NodeHooks> Runtime<N> {
             changed: Condvar::new(),
             word: AtomicU64::new(control_word(0, Command::Run)),
             last_update_ns: (0..n).map(|_| AtomicU64::new(0)).collect(),
-            min_dt_ns,
+            period_ns,
             failure: Arc::new(OnceLock::new()),
             hooks: nodes.into_iter().map(Mutex::new).collect(),
             to_controller,
