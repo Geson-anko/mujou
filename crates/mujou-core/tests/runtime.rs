@@ -749,8 +749,10 @@ mod period {
         timer.advance_ns(P_NS / 2).unwrap();
         timer.advance_ns(P_NS / 2).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
-        // The update at P takes 2 P, so the next one comes at 3 P, a period
-        // after its target 2 P: the target after it is 4 P either way.
+        // The update at P takes 2 P, so the next one comes at 3 P, exactly a
+        // period after its target 2 P. It must count again (target 4 P):
+        // otherwise the target would stay at 3 P and the node would update
+        // again at once with Δt = 0.
         timer.advance_ns(2 * P_NS).unwrap();
         release.send(()).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(2 * P_NS));
