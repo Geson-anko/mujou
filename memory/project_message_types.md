@@ -15,7 +15,7 @@ metadata:
 - **`torch.Tensor | None`（値が無いこと）は入れない（2026-10-14 変更）。** 一度は入れると決めたが取り消した。必要になったときに拡張する
 - **`TensorSpec(shape, dtype)` で値の形を表す。** dtype は torch の dtype。省略すると、TensorSpec を作った時点の `torch.get_default_dtype()` を読み取って確定し、あとで変えても既存の spec・スキーマは変わらない（スキーマは構築時に確定する決定と揃えるため）。`TensorSpec.zeros()`（全 dtype）と `TensorSpec.rand()`（浮動小数点のみ。一様 [0, 1)、seed か `torch.Generator` を渡せば決定的）で初期値の `torch.Tensor` を作れる。正規分布が要れば `randn` を足す。spec の一致は dtype を含み、暗黙の dtype 変換はしない（dtype が違う Port は接続できない）
 - **Port には spec を渡す。** `torch.Tensor` のメッセージには `TensorSpec`、`TypedDict` のメッセージには TypedDict と各キーの TensorSpec の対応表（例: `DictSpec(Feedback, error=TensorSpec(...))`。名前は仮）。対応表は TypedDict と照合し、キーの過不足はエラー
-- **スロットは常に宣言どおりの型の値を持つ。** スキーマ作成時に初期値を与える。既定はゼロ（`TensorSpec.zeros()`）
+- **スロットは常に宣言どおりの型の値を持つ。** スキーマ作成時に初期値を与える。既定はゼロ（`TensorSpec.zeros()`）。2026-10-17、ユーザーの決定で、送る側の Port が `initial=` で初期値を宣言できるようにした（`NextPort(send=spec, initial=x0)`。各 Channel と外向きのスロットがその値で始まり、復元では木の値が勝つ）。`on_start` での `send` は復元した値を上書きするので、初期値の手段にしない。`initial` が `send` の型推論を広げないよう、`MessageSpec` の型引数は不変にした
 - **スキーマ（型 + shape + 初期値）はネットワーク構築時に確定し、以後は変えない。** 非同期処理の単位はノードオブジェクト。mujou はノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で、`nn.Module` のように宣言的に組み合わせられる API で記述して最終的にスキーマオブジェクトを作る
 - **「Module API」は比喩。** `nn.Module` に相当する単位がノードになるわけではない（Module とノードは対応しない）
 - **スロットは書き込み時のその実行のタイマーの時刻を自動で添える**（2026-10-16 にグローバル時刻から改めた、[[project-timer-per-run]]）。時刻は秒（f64）とナノ秒（u64）の両方で持つ
