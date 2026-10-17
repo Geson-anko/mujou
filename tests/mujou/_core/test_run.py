@@ -309,8 +309,8 @@ class TestRun:
             start_manual(composed)
 
     def test_takes_only_nodes_and_networks(self, start: Start):
-        with pytest.raises(TypeError, match="at least one"):
-            start()
+        with pytest.raises(TypeError, match="component"):
+            start()  # pyright: ignore[reportCallIssue]
         for given in ((object(),), (Chain(), object())):
             with pytest.raises(TypeError, match="object"):
                 start(*given)  # pyright: ignore[reportArgumentType]
@@ -330,18 +330,40 @@ class TestRun:
 
 
 class TestRunANode:
-    def test_runs_as_a_network_holding_it_at_0(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
+    def test_runs_as_the_root(self, virtual: VirtualTimer, start_manual: StartManual):
         node = Leaky()
         run = start_manual(node, inputs={node.prev: u(1)})
         step(run, virtual, node)
         y, _ = run.read(node.next)
         assert torch.equal(y, euler(torch.zeros(2, dtype=F64), u(1)))
         tree = run.state_dict()
-        assert set(tree["nodes"]) == {"0"}
-        assert set(tree["slots"]) == {"0.prev/in", "0.next/out"}
-        assert set(tree["last_update_ns"]) == {"0"}
+        assert set(tree["nodes"]) == {""}
+        assert set(tree["slots"]) == {"prev/in", "next/out"}
+        assert set(tree["last_update_ns"]) == {""}
+
+    def test_a_network_alone_is_the_root_and_several_are_at_their_positions(
+        self, start_manual: StartManual
+    ):
+        alone = start_manual(Chain()).state_dict()
+        assert set(alone["nodes"]) == {"a", "b"}
+        several = start_manual(Leaky(), Chain()).state_dict()
+        assert set(several["nodes"]) == {"0", "1.a", "1.b"}
+        assert "0.prev/in" in several["slots"]
+        composed = start_manual(Compose(Leaky())).state_dict()
+        assert set(composed["nodes"]) == {"0"}
+
+    def test_names_the_root_node_by_its_class_in_a_structure_error(self, start: Start):
+        class Declared(Node):
+            port = Port(send=vec())
+
+        with pytest.raises(ValueError, match=r"^Declared declares the port 'port'"):
+            start(Declared())
+
+    def test_names_the_root_node_by_its_class_when_it_raises(self, start: Start):
+        node = Leaky(raise_at=0)
+        with pytest.raises(NetworkError) as raised:
+            start(node)
+        assert "node 'Leaky' raised in on_start" in str(raised.value)
 
     def test_restores_a_tree_of_the_same_node_class(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -349,11 +371,14 @@ class TestRunANode:
         first = Leaky()
         run = start_manual(first, inputs={first.prev: u(1)})
         step(run, virtual)
-        tree = run.state_dict()
+        tree = pickle.loads(pickle.dumps(run.state_dict()))  # saved and loaded
         run.shutdown()
         again = Leaky()
-        start_manual(again, timer=VirtualTimer(), state=tree)
+        restored = start_manual(again, timer=VirtualTimer(), state=tree)
         assert torch.equal(again.x, first.x) and again.updates == 1
+        back = restored.state_dict()
+        assert torch.equal(back["nodes"][""]["x"], tree["nodes"][""]["x"])
+        assert back["slots"]["prev/in"][1] == tree["slots"]["prev/in"][1]
 
     def test_runs_once(self, start: Start):
         node = Leaky()
@@ -576,7 +601,7 @@ class TestWrite:
         run = start_manual(node, inputs={node.x: u(1)})
         virtual.advance(H)
         assert run.write({}) == Timestamp(ns=H_NS)
-        slot = run.state_dict()["slots"]["0.x/in"]
+        slot = run.state_dict()["slots"]["x/in"]
         assert torch.equal(slot[0], u(1)) and slot[1] == 0
 
     def test_is_stamped_after_the_inputs(
@@ -605,7 +630,7 @@ class TestWrite:
         written_at = restored.write({node.y: u(4)})
         # The inputs carry the tree's time T and the timer goes on from T.
         assert written_at == Timestamp(ns=tree["timer"]["time_ns"])
-        assert restored.state_dict()["slots"]["0.x/in"][1] == written_at.ns
+        assert restored.state_dict()["slots"]["x/in"][1] == written_at.ns
 
     def test_rejects_ports_it_cannot_write(self, start_manual: StartManual):
         net = Chain()

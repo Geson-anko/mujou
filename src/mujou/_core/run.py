@@ -8,7 +8,13 @@ from typing import Any, Never, Self, cast
 import torch
 
 from mujou._core import _native
-from mujou._core.network import Network, RunCompose, start_once, unbuild
+from mujou._core.network import (
+    Network,
+    RunCompose,
+    build_node,
+    start_once,
+    unbuild,
+)
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
@@ -151,7 +157,8 @@ class Run:
         the path of the port through its owning node (``"body.l1.prev/in"``, not
         an exposed name such as ``"prev/in"``) and holds its latest message:
         ``/out`` what ``read`` returns, ``/ch0``, ``/ch1``, ... each channel, and
-        ``/in`` what the host wrote.
+        ``/in`` what the host wrote. A node run alone is the root: it is keyed
+        ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
         Raises:
             RuntimeError: This is called from a node's hook.
@@ -248,28 +255,31 @@ class ManualRun(Run):
 
 # P: as in Run.write.
 def run[P: Port[Any, Any, Any]](
-    *networks: Node | Network,
+    component: Node | Network,
+    *components: Node | Network,
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> Run:
-    """Build ``networks`` and run them in the background; return once every node
-    has started.
+    """Build the given nodes and networks and run them in the background; return
+    once every node has started.
 
-    One network runs as it is. Anything else runs as ``Compose(*networks)``: a
-    node alone, or several nodes and networks, mixed or not. Their paths then
-    start with their positions: a node given alone or first is ``"0"`` (its
-    ports ``"0.prev"``, ...), and the nodes of a network given second are
-    ``"1.l1"``, .... Either way the host writes and reads the ports themselves
-    (``run.write({node.prev: x})``).
+    One component alone is the root of the run: a network runs as it is (its
+    nodes at ``"l1"``, ...), and a node is at the path ``""`` with its ports at
+    ``"prev"``, ``"next"``, .... Several run as ``Compose(component,
+    *components)``, nodes and networks mixed or not, so their paths start with
+    their positions: ``"0"`` for a node given first, ``"1.l1"``, ... for the
+    nodes of a network given second. Either way the host writes and reads the
+    ports themselves (``run.write({node.prev: x})``).
 
     Every node's thread is set up, ``on_start`` (and, with ``state``, the node's
     ``load_state_dict``) has returned, and the run's timer runs when this
     returns. A network or node runs once.
 
     Args:
-        networks: The networks and nodes to run.
+        component: The node or network to run.
+        components: More nodes and networks to run with it.
         timer: The time axis of the run: every node's ``dt``, every message's
             time and every pause of the run is on it. ``None`` is the global
             timer, which ``mujou.time`` reads and every run without a timer of
@@ -300,20 +310,20 @@ def run[P: Port[Any, Any, Any]](
             alone was refused and is now given with others); or this is called
             from a node's hook. Of runs called at once that share a part, the
             refused ones may give either message.
-        TypeError: Nothing is given, or a value is neither a ``Node`` nor a
-            ``Network``.
+        TypeError: A value is neither a ``Node`` nor a ``Network`` (or none
+            is given).
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) do; or ``state`` does not match the
             networks, or it cannot set the timer back because another run is
             running on it. Nothing started: the same networks, given the same
             way (alone, or together in the same order), may run once the cause
-            is gone; a node given alone may run once the cause is gone, given
-            any way.
+            is gone; a node given alone, or with others, may run once the cause
+            is gone, given any way.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start(
         Run,
-        networks,
+        (component, *components),
         timer=timer,
         inputs=inputs,
         state=state,
@@ -324,7 +334,7 @@ def run[P: Port[Any, Any, Any]](
 
 def start[R: Run](
     kind: type[R],
-    networks: Sequence[Node | Network],
+    components: Sequence[Node | Network],
     *,
     timer: Timer | None,
     inputs: Mapping[Any, object] | None,
@@ -332,24 +342,23 @@ def start[R: Run](
     pause_timeout: float,
     manual: bool,
 ) -> R:
-    """Run ``networks`` as ``mujou.run`` does and return a ``kind`` for it."""
+    """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
     if in_hook():
         raise _from_hook()
-    if not networks:
-        raise TypeError("mujou.run() takes at least one node or network")
-    for given in networks:
+    for given in components:
         # The annotation is not checked at runtime.
         if not isinstance(given, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(
                 f"mujou.run() takes nodes and networks, got {type(given).__name__}"
             )
-    match networks:
+    # ours: a tree mujou.run built only for this run, undone if the run is refused.
+    match components:
         case [Network() as network]:
-            composed = False
+            graph, ours = network.build(), False
+        case [Node() as node]:
+            graph, ours = build_node(node), True
         case _:
-            network = RunCompose(*networks)
-            composed = True
-    graph = network.build()
+            graph, ours = RunCompose(*components).build(), True
 
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.
@@ -362,10 +371,10 @@ def start[R: Run](
     try:
         session = start_once(graph, go)
     except Exception as e:
-        # Refused before any node started: the Compose is ours and is dropped, so
-        # its build must not keep the given networks from being built again.
-        if composed and not isinstance(e, _native.NetworkError):
-            unbuild(network)
+        # Refused before any node started: the tree is ours and is dropped, so its
+        # build must not keep what was given from being built again.
+        if ours and not isinstance(e, _native.NetworkError):
+            unbuild(graph)
         raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module

@@ -250,7 +250,13 @@ class Session:
                 time_ns = int(restored["timer_state"]["time_ns"])
                 for slot, tensors in items:
                     slot.restore(tensors, time_ns)
-        runtime = _native.Runtime(self._nodes, self._paths, timer=self._clock)
+        # The names of the nodes in the runtime's errors and logs: a node that is
+        # itself the root (at the path "") by its class.
+        names = [
+            path or type(node).__name__
+            for path, node in zip(self._paths, self._nodes, strict=True)
+        ]
+        runtime = _native.Runtime(self._nodes, names, timer=self._clock)
         self._runtime = runtime
         for session in list(_RUNNING):
             session._settle()

@@ -114,12 +114,14 @@ class Graph:
         """``(path, node)`` for every node in the tree, depth first in attribute
         definition order.
 
-        A path is the dotted attribute path from the root, e.g. ``"body.l1"``.
+        A path is the dotted attribute path from the root, e.g. ``"body.l1"``;
+        a node that is itself the root (``mujou.run(node)``) is at ``""``.
         """
         return self._nodes
 
     def port_path(self, port: Port[Any, Any, Any]) -> str:
-        """Return the path of ``port`` through its owner, e.g. ``"body.l1.next"``.
+        """Return the path of ``port`` through its owner, e.g. ``"body.l1.next"``
+        (``"next"`` when the owner is itself the root).
 
         Raises:
             ValueError: ``port`` is not owned by a node of this network.
@@ -231,114 +233,120 @@ class Network(Component):
         # graph, and both would run.
         with _BUILD_LOCK:
             if self._graph is None:
-                self._graph = self._build()
+                self._graph = _build(self, by_run=isinstance(self, RunCompose))
             return self._graph
 
-    def _build(self) -> Graph:
-        by_run = isinstance(self, RunCompose)
-        members: list[Component] = []
-        nodes: list[tuple[str, Node]] = []
-        ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
-        # (attribute path, port, indices of the nodes in the exposing subtree)
-        exposed: list[tuple[str, Port[Any, Any, Any], range]] = []
-        seen: dict[int, str] = {}  # id(component) -> path
 
-        def visit(component: Component, path: str) -> None:
-            if id(component) in seen:
-                raise ValueError(
-                    f"{type(component).__name__} appears at both "
-                    f"{_where(seen[id(component)])} and {_where(path)}"
-                )
-            seen[id(component)] = path
-            tree = _tree_of(component)
-            if tree is not None:
-                # What mujou.run was given is named without the path of its
-                # own Compose.
-                given = path == "" or (by_run and "." not in path)
-                name = type(component).__name__
-                if tree.ran or tree.by_run:
-                    at = "" if given else f" at {path!r}"
-                    raise RuntimeError(
-                        f"{name}{at} has already run; create a new instance to "
-                        "run again"
-                    )
-                at = "" if by_run and given else f" at {_where(path)}"
+def _build(root: Component, by_run: bool) -> Graph:
+    """Check the tree of ``root``, freeze it and mark it as built, as
+    ``Network.build`` does; ``by_run`` when ``mujou.run`` builds it only to run.
+    Call it under ``_BUILD_LOCK``."""
+    members: list[Component] = []
+    nodes: list[tuple[str, Node]] = []
+    ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
+    # (attribute path, port, indices of the nodes in the exposing subtree)
+    exposed: list[tuple[str, Port[Any, Any, Any], range]] = []
+    seen: dict[int, str] = {}  # id(component) -> path
+
+    def visit(component: Component, path: str) -> None:
+        if id(component) in seen:
+            raise ValueError(
+                f"{type(component).__name__} appears at both "
+                f"{_where(seen[id(component)])} and {_where(path)}"
+            )
+        seen[id(component)] = path
+        tree = _tree_of(component)
+        if tree is not None:
+            # What mujou.run was given is named without the path of its
+            # own Compose.
+            given = path == "" or (by_run and "." not in path)
+            name = type(component).__name__ if given else _named(component, path)
+            if tree.ran or tree.by_run:
                 raise RuntimeError(
-                    f"{name}{at} belongs to a network that is already built"
+                    f"{name} has already run; create a new instance to run again"
                 )
-            members.append(component)
-            _check_declarations(component, _where(path))
-            if isinstance(component, Node):
-                index = len(nodes)
-                nodes.append((path, component))
-                for name, value in vars(component).items():
-                    if isinstance(value, Component):
-                        raise ValueError(
-                            f"node {_where(path)} holds a {type(value).__name__} at "
-                            f"{name!r}; only networks hold nodes and networks"
-                        )
-                for name, port in _ports(component):
-                    owner = (index, name)
-                    if port in ports:
-                        raise ValueError(
-                            f"the port {_path(nodes, owner)!r} is already owned as "
-                            f"{_path(nodes, ports[port])!r}"
-                        )
-                    ports[port] = owner
-                return
-            first = len(nodes)
+            raise RuntimeError(f"{name} belongs to a network that is already built")
+        members.append(component)
+        _check_declarations(component, path)
+        if isinstance(component, Node):
+            index = len(nodes)
+            nodes.append((path, component))
             for name, value in vars(component).items():
                 if isinstance(value, Component):
-                    visit(value, _child(path, name))
-            for name, port in _ports(component):
-                exposed.append((_child(path, name), port, range(first, len(nodes))))
-
-        visit(self, "")
-        if not nodes:
-            raise ValueError(
-                "the network has no node (only direct attributes are walked, not "
-                "lists or dicts)"
-            )
-        for path, port, subtree in exposed:
-            if port not in ports or ports[port][0] not in subtree:
-                raise ValueError(
-                    f"the port exposed at {path!r} is not owned by a node inside the "
-                    "network that exposes it (only direct attributes are walked)"
-                )
-        for port, owner in ports.items():
-            if is_frozen(port):
-                raise RuntimeError(
-                    f"the port {_path(nodes, owner)!r} belongs to a network that is "
-                    "already built"
-                )
-            for channel in port.channels:
-                if channel.other(port) not in ports:
+                    holder = f"node {path!r}" if path else type(component).__name__
                     raise ValueError(
-                        f"the port {_path(nodes, owner)!r} is connected to a port "
-                        "outside the network (only direct attributes are walked, "
-                        "not lists or dicts)"
+                        f"{holder} holds a {type(value).__name__} at {name!r}; "
+                        "only networks hold nodes and networks"
                     )
-        for port in ports:
-            freeze(port)
-        built = _Tree(by_run)
-        for member in members:
-            _mark_built(member, built)
-        return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members), built)
-
-
-def unbuild(network: Network) -> None:
-    """Undo the ``build`` of ``network``, which has not run, so that its parts can
-    be built again (``mujou.run`` does this for a ``Compose`` of its own whose run
-    was refused)."""
-    with _BUILD_LOCK:
-        graph = network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
-        if graph is None:
+            for name, port in _ports(component):
+                owner = (index, name)
+                if port in ports:
+                    raise ValueError(
+                        f"the port {_path(nodes, owner)!r} is already owned as "
+                        f"{_path(nodes, ports[port])!r}"
+                    )
+                ports[port] = owner
             return
-        for port in graph._ports:  # pyright: ignore[reportPrivateUsage]
+        first = len(nodes)
+        for name, value in vars(component).items():
+            if isinstance(value, Component):
+                visit(value, _child(path, name))
+        for name, port in _ports(component):
+            exposed.append((_child(path, name), port, range(first, len(nodes))))
+
+    visit(root, "")
+    if not nodes:
+        raise ValueError(
+            "the network has no node (only direct attributes are walked, not "
+            "lists or dicts)"
+        )
+    for path, port, subtree in exposed:
+        if port not in ports or ports[port][0] not in subtree:
+            raise ValueError(
+                f"the port exposed at {path!r} is not owned by a node inside the "
+                "network that exposes it (only direct attributes are walked)"
+            )
+    for port, owner in ports.items():
+        if is_frozen(port):
+            raise RuntimeError(
+                f"the port {_path(nodes, owner)!r} belongs to a network that is "
+                "already built"
+            )
+        for channel in port.channels:
+            if channel.other(port) not in ports:
+                raise ValueError(
+                    f"the port {_path(nodes, owner)!r} is connected to a port "
+                    "outside the network (only direct attributes are walked, "
+                    "not lists or dicts)"
+                )
+    for port in ports:
+        freeze(port)
+    built = _Tree(by_run)
+    for member in members:
+        _mark_built(member, built)
+    return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members), built)
+
+
+def build_node(node: Node) -> Graph:
+    """Build the tree of ``node`` alone, the node being the root at the path
+    ``""``, for ``mujou.run`` to run once."""
+    with _BUILD_LOCK:
+        return _build(node, by_run=True)
+
+
+def unbuild(graph: Graph) -> None:
+    """Undo the build of ``graph``, which has not run, so that its parts can be
+    built again (``mujou.run`` does this for a tree it built itself whose run was
+    refused)."""
+    with _BUILD_LOCK:
+        for port in graph._ports:  # pyright: ignore[reportPrivateUsage]  # Graph's own module
             thaw(port)
-        for member in graph._members:  # pyright: ignore[reportPrivateUsage]
+        members = graph._members  # pyright: ignore[reportPrivateUsage]
+        for member in members:
             _BUILT.pop(id(member), None)
-        network._graph = None  # pyright: ignore[reportPrivateUsage]
+        root = members[0]
+        if isinstance(root, Network) and root._graph is graph:  # pyright: ignore[reportPrivateUsage]
+            root._graph = None  # pyright: ignore[reportPrivateUsage]
 
 
 # The nodes and networks of every built tree: a part of one cannot join another.
@@ -377,8 +385,9 @@ class Compose(Network):
     and one given by keyword at its keyword, so the node ``l1`` of
     ``Compose(a, b)`` is ``"1.l1"`` in ``b`` and that of ``Compose(enc=a)`` is
     ``"enc.l1"``; a node ``n`` in ``Compose(n, a)`` is ``"0"``, as if it were an
-    attribute ``"0"`` of a network. ``mujou.run(a, b)`` runs ``Compose(a, b)``,
-    and ``mujou.run(n)`` runs ``Compose(n)``.
+    attribute ``"0"`` of a network. ``Compose(n)`` of one component still puts it
+    at ``"0"``. ``mujou.run(a, b)`` runs ``Compose(a, b)``; ``mujou.run(a)`` runs
+    ``a`` alone as the root.
 
     Example::
 
@@ -394,8 +403,8 @@ class Compose(Network):
             ``Network`` (such as ``build``), or is the path of a position.
     """
 
-    def __init__(self, *networks: Node | Network, **named: Node | Network) -> None:
-        children = {str(i): network for i, network in enumerate(networks)}
+    def __init__(self, *components: Node | Network, **named: Node | Network) -> None:
+        children = {str(i): component for i, component in enumerate(components)}
         for name, network in named.items():
             if (
                 not name
@@ -462,7 +471,7 @@ def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
 def _path(nodes: Sequence[tuple[str, Node]], owner: tuple[int, str]) -> str:
     """Return the path of the port ``owner`` (node index, attribute name) names."""
     index, name = owner
-    return f"{nodes[index][0]}.{name}"
+    return _child(nodes[index][0], name)
 
 
 def _child(path: str, name: str) -> str:
@@ -473,13 +482,19 @@ def _where(path: str) -> str:
     return repr(path) if path else "the root"
 
 
-def _check_declarations(component: Component, where: str) -> None:
+def _named(component: Component, path: str) -> str:
+    """Name ``component`` at ``path`` in an error: by its class alone at the root."""
+    name = type(component).__name__
+    return f"{name} at {path!r}" if path else name
+
+
+def _check_declarations(component: Component, path: str) -> None:
     """Reject ports declared on the class and more than one side of a kind."""
     for klass in type(component).__mro__:
         for name, value in vars(klass).items():
             if isinstance(value, Port):
                 raise ValueError(
-                    f"{type(component).__name__} at {where} declares the port "
+                    f"{_named(component, path)} declares the port "
                     f"{name!r} on the class {klass.__name__}; declare ports as "
                     "instance attributes in __init__"
                 )
@@ -487,7 +502,7 @@ def _check_declarations(component: Component, where: str) -> None:
         n = len(_sides(component, kind))
         if n > 1:
             raise ValueError(
-                f"{type(component).__name__} at {where} has {n} {kind.__name__} "
+                f"{_named(component, path)} has {n} {kind.__name__} "
                 "attributes; at most one is allowed"
             )
 
