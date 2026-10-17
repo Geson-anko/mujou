@@ -1,8 +1,12 @@
-# Examples
+# 💡 Examples
 
-These are working programs that show how to use Mujou. They live in `examples/` in the repository. The documentation pages include these files as they are. The tests run every program, so if the code shown here stops working, the tests fail.
+These are working programs that show how to use Mujou. They live in `examples/` in the repository.
 
-## The list
+!!! tip "Tested code"
+
+    The documentation pages include these files as they are. The tests run every program, so if the code shown here stops working, the tests fail.
+
+## 📋 The list
 
 Pick the row closest to what you want to do. The "Explained in" pages include the program and explain it.
 
@@ -11,7 +15,7 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 | Run something, anything                                             | `quickstart.py`       | [Quickstart](../getting-started/quickstart.md), [Running a Network](../user-guide/running.md)                      |
 | Write a node whose state changes over time                          | `leaky_chain/`        | [Writing a Node](../user-guide/writing-a-node.md), [Global Time](../concepts.md#global-time)                       |
 | Branch a network and merge it again                                 | `branching.py`        | [Building a Network](../user-guide/building-a-network.md), [Ports and Channels](../concepts.md#ports-and-channels) |
-| Run several networks together                                       | `group.py`            | [Composing Networks](../user-guide/group.md), [Networks](../concepts.md#networks)                                  |
+| Run several networks together                                       | `group.py`            | [Grouping Networks](../user-guide/group.md), [Networks](../concepts.md#networks)                                   |
 | Save learned state and continue from it later                       | `save_and_restore.py` | [Saving and Restoring State](../user-guide/state.md), [State](../concepts.md#state)                                |
 | Take the states of several runs at one time                         | `pause.py`            | [Saving and Restoring State](../user-guide/state.md), [Controlling Time](../user-guide/time.md)                    |
 | Keep receiving the latest output (values in between may be skipped) | `subscribe.py`        | [Running a Network](../user-guide/running.md)                                                                      |
@@ -21,7 +25,7 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 | Change how time advances                                            | `timers.py`           | [Controlling Time](../user-guide/time.md), [Global Time](../concepts.md#global-time)                               |
 | See what happens when a node raises an exception                    | `errors.py`           | [Errors and Shutdown](../user-guide/errors.md)                                                                     |
 
-What each program shows:
+### What each program shows
 
 - `quickstart.py`: runs a two-node network with `with mujou.run(...)`, writes input with `write`, and waits with `run.wait_for(..., timeout=...)` until the expected output arrives
 - `leaky_chain/`: a node defined in continuous time (a leaky integrator). The update uses the coefficient of the exact solution, so it is stable for any `dt`. The output is compared with the exact solution at the time elapsed from the write (the time that `run.write` returns) to the output
@@ -38,7 +42,7 @@ What each program shows:
 
 Only `leaky_chain/` is a directory. Its entry point is `main.py`, and the node definitions are in `leaky.py`.
 
-## How to run them
+## ▶️ How to run them
 
 Run them from the root of the repository, in an environment built from source (see [Installation](../getting-started/installation.md)).
 

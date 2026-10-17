@@ -1,4 +1,4 @@
-# PyTorch in Nodes
+# 🔥 PyTorch in Nodes
 
 A node computes with PyTorch inside. This page covers update rules, devices and random numbers, backpropagation (BP) inside a node, CUDA, and the settings that affect the whole process.
 
@@ -68,7 +68,11 @@ For a node given a CUDA `device`, Mujou sets up the following.
 - It creates a CUDA stream for the node alone and makes it the current stream of that thread. All of the node's operations go on this stream
 - It synchronizes the node's stream after each `on_update`, and around taking and restoring the state
 
-So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`). Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
+So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`).
+
+!!! warning "Do not wait for the whole device"
+
+    Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
 
 Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
 
@@ -90,10 +94,14 @@ A node may change only per-thread settings. Write them in `on_thread_start`, a h
 
 ### Internal threads
 
-Each node computes on its own thread. On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down. Mujou does not set the number of internal threads, so the host decides it before `mujou.run`.
+Each node computes on its own thread. On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down.
+
+Mujou does not set the number of internal threads, so the host decides it before `mujou.run`.
 
 ```python
 --8<-- "examples/torch_node.py:threads"
 ```
 
-As a rule of thumb, the number of nodes that compute on the CPU times the `n` of `torch.set_num_threads(n)` should not exceed the number of physical cores. With many nodes on small matrices, `n = 1` is enough.
+!!! tip "Rule of thumb for the number of threads"
+
+    The number of nodes that compute on the CPU times the `n` of `torch.set_num_threads(n)` should not exceed the number of physical cores. With many nodes on small matrices, `n = 1` is enough.

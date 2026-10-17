@@ -1,6 +1,14 @@
-# ネットワークを組む
+# 🕸️ ネットワークを組む
 
-ネットワークは `mujou.Network` を継承したクラスとして書く。このページは、ノードのつなぎ方、外に公開する Port、入れ子、分岐と合流、構築した構造の確かめ方を説明する。ネットワークの考え方は[ネットワーク](../concepts.md#%E3%83%8D%E3%83%83%E3%83%88%E3%83%AF%E3%83%BC%E3%82%AF)と [Port と Channel](../concepts.md#port-%E3%81%A8-channel) にある。
+ネットワークは `mujou.Network` を継承したクラスとして書く。このページは次のことを説明する。
+
+- ノードのつなぎ方
+- 外に公開する Port
+- 入れ子
+- 分岐と合流
+- 構築した構造の確かめ方
+
+ネットワークの考え方は[ネットワーク](../concepts.md#%E3%83%8D%E3%83%83%E3%83%88%E3%83%AF%E3%83%BC%E3%82%AF)と [Port と Channel](../concepts.md#port-%E3%81%A8-channel) にある。
 
 ## 基本の形
 
@@ -14,13 +22,19 @@
 --8<-- "examples/quickstart.py:network"
 ```
 
-`super().__init__()` は最初に呼ぶ。ネットワークは、`nn.Module` がサブモジュールを登録するのと同じく、属性に代入されたノード・ネットワーク・Port をその時点で登録する。`super().__init__()` より前に代入すると `AttributeError` になる。ノードをリストや dict に入れて持たせても登録されず、ネットワークの一部にならない。ノードは 1 つずつ属性に代入する。
+`super().__init__()` は最初に呼ぶ。ネットワークは、`nn.Module` がサブモジュールを登録するのと同じく、属性に代入されたノード・ネットワーク・Port をその時点で登録する。`super().__init__()` より前に代入すると `AttributeError` になる。
+
+!!! warning "ノードは 1 つずつ属性に代入する"
+
+    ノードをリストや dict に入れて持たせても登録されず、ネットワークの一部にならない。ノードは 1 つずつ属性に代入する。
 
 ## つなぐ
 
 2 つの Port を `Port.connect` でつなぐ。`a.next.connect(b.prev)` のように書く。ノードとネットワーク自体は `connect` を持たない。ノードの入出力は複数ありうるので、Port を 2 つとも書けば、どの経路をつなぐかがいつも読み取れる。
 
-慣習では、前のノードの側の Port を `PrevPort` にして `prev` と名付け、次のノードの側の Port を `NextPort` にして `next` と名付ける。こうすると、つないだ列は `a.next.connect(b.prev)` と読める。名前と種類は向きを読みやすくするだけのものである。`PrevPort` と `NextPort` が `Port` と違うのは既定で取る相手の数（`PrevPort` は 1 つ、`NextPort` は複数）だけで、1 つのノードがそれぞれをいくつ持ってもよい。
+慣習では、前のノードの側の Port を `PrevPort` にして `prev` と名付け、次のノードの側の Port を `NextPort` にして `next` と名付ける。こうすると、つないだ列は `a.next.connect(b.prev)` と読める。
+
+名前と種類は向きを読みやすくするだけのものである。`PrevPort` と `NextPort` が `Port` と違うのは既定で取る相手の数（`PrevPort` は 1 つ、`NextPort` は複数）だけで、1 つのノードがそれぞれをいくつ持ってもよい。
 
 つなげるのは、片方の `send` の spec がもう片方の `recv` の spec と一致し、逆向きも一致するときだけである。一致しなければ、`connect` を呼んだ時点で `TypeError` になる。相手を 1 つしか取らない Port に 2 本目の Channel をつなぐと `ValueError` になる。
 
@@ -28,7 +42,9 @@
 
 ## Port を公開する
 
-ネットワークの属性に子の Port を代入すると、その Port を公開できる。外からは短い名前で Port を指せるようになる。慣習では、最初のノードの Port を `prev`、最後のノードの Port を `next` として公開する（`self.prev = self.l1.prev`）。するとネットワークも、`x.next.connect(net.prev)`、`net.next.connect(y.prev)` とノードと同じようにつなげる。ほかの Port は `net.teacher` のように、それぞれの名前で公開する。
+ネットワークの属性に子の Port を代入すると、その Port を公開できる。
+
+外からは短い名前で Port を指せるようになる。慣習では、最初のノードの Port を `prev`、最後のノードの Port を `next` として公開する（`self.prev = self.l1.prev`）。するとネットワークも、`x.next.connect(net.prev)`、`net.next.connect(y.prev)` とノードと同じようにつなげる。ほかの Port は `net.teacher` のように、それぞれの名前で公開する。
 
 公開できるのは、そのネットワークの中のノードが持つ Port に限る。
 
@@ -61,7 +77,11 @@ class Classifier(mujou.Network):
 
 `Hidden` と `Head` は、それぞれ `PrevPort` と `NextPort` を持つノードとする。`Head` は教師信号を受け取る `Port`（`teacher`）も持つ。
 
-ノードは、ルートからの属性名を `.` でつないだパスで区別される。この例のノードのパスは `"body.l1"`、`"body.l2"`、`"head"` である。属性名を変えるとパスが変わり、変える前に保存した状態を復元できなくなる（[状態の保存と復元](state.md)）。
+ノードは、ルートからの属性名を `.` でつないだパスで区別される。この例のノードのパスは `"body.l1"`、`"body.l2"`、`"head"` である。
+
+!!! warning "属性名を変えるとパスが変わる"
+
+    属性名を変えるとパスが変わり、変える前に保存した状態を復元できなくなる（[状態の保存と復元](state.md)）。
 
 ノードは、ほかのノードやネットワークを属性に持てない。代入すると `ValueError` になる。並べたいノードは、ネットワークの属性に並べる。
 
@@ -82,9 +102,17 @@ class Classifier(mujou.Network):
 | `send(value)`             | すべての相手に同じ値     | 更新される            |
 | `send_to(channel, value)` | `channel` の先の相手だけ | 更新されない          |
 
-`send_to` だけを使う Port をホストが `Run.read` で読むと、その Port の初期値（`initial`。無ければゼロ）が返る。`send_to` で送った値そのものをホストが読む方法は無い。`Run.read` は送る型を持つ Port しか読まないので、受け取るだけの Port（各枝の `prev`）も読めない。ホストに読めるのは、枝のノードが受け取った値から計算して `send` した結果（上の例なら `net.double.next` の `2 x`）である。
+`send_to` だけを使う Port をホストが `Run.read` で読むと、その Port の初期値（`initial`。無ければゼロ）が返る。`send_to` で送った値そのものをホストが読む方法は無い。
 
-`send_to` に渡す `Channel` は、送り先ごとに区別して持つ。上の例のように、ネットワークで `connect` が返す `Channel` を、送る側のノードの属性に代入する（`self.split.plus = self.split.next.connect(self.double.prev)`）。`self.next.channels`（つないだ順に並ぶ）から取り出すと、`connect` を書く順を入れ替えたときに、エラーも出ずに値の送り先が入れ替わる。`Channel` を代入した属性は状態に集まらない。
+`Run.read` は送る型を持つ Port しか読まないので、受け取るだけの Port（各枝の `prev`）も読めない。ホストに読めるのは、枝のノードが受け取った値から計算して `send` した結果（上の例なら `net.double.next` の `2 x`）である。
+
+`send_to` に渡す `Channel` は、送り先ごとに区別して持つ。上の例のように、ネットワークで `connect` が返す `Channel` を、送る側のノードの属性に代入する（`self.split.plus = self.split.next.connect(self.double.prev)`）。
+
+!!! warning "Channel を順番で取り出さない"
+
+    `self.next.channels`（つないだ順に並ぶ）から取り出すと、`connect` を書く順を入れ替えたときに、エラーも出ずに値の送り先が入れ替わる。
+
+`Channel` を代入した属性は状態に集まらない。
 
 ### 合流: 受け取る側
 
@@ -104,4 +132,14 @@ class Classifier(mujou.Network):
 --8<-- "examples/branching.py:build"
 ```
 
-`build()` はネットワークを凍結する。その後は木の中のどの Port にも `connect` できず、木のノードとネットワークに Port・ノード・ネットワークを代入することも削除することもできない（どちらも `RuntimeError`）。より大きなネットワークの一部にもできない。そのため、呼ぶのは走らせるネットワークだけにする。構造が不正なら、`build()` が理由を添えて `ValueError` を送出する。`Graph` と不正の原因の一覧は API リファレンスにある。
+!!! warning "`build()` はネットワークを凍結する"
+
+    `build()` の後は、次のことができない。
+
+    - 木の中のどの Port にも `connect` する
+    - 木のノードとネットワークに Port・ノード・ネットワークを代入する、または削除する（どちらも `RuntimeError`）
+    - より大きなネットワークの一部にする
+
+    そのため、呼ぶのは走らせるネットワークだけにする。
+
+構造が不正なら、`build()` が理由を添えて `ValueError` を送出する。`Graph` と不正の原因の一覧は API リファレンスにある。

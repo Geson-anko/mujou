@@ -1,4 +1,4 @@
-# API Reference
+# 📚 API Reference
 
 These pages are generated from the docstrings. The API may still change before the first release.
 

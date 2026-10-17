@@ -1,4 +1,4 @@
-# Quickstart
+# 🚀 Quickstart
 
 Run the smallest program and read its output. The program connects two nodes to compute $y = 2x + 1$.
 

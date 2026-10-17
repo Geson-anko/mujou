@@ -1,6 +1,8 @@
-# Testing
+# 🧪 Testing
 
-In a network run the usual way, `dt` follows the real time that passes, and the order in which the nodes update differs every time. So the results differ slightly from run to run. This page shows how to use `mujou.testing` to run nodes and networks with the same result every time, and test them. Mujou's own tests use the same API.
+In a network run the usual way, `dt` follows the real time that passes, and the order in which the nodes update differs every time. So the results differ slightly from run to run.
+
+This page shows how to use `mujou.testing` to run nodes and networks with the same result every time, and test them. Mujou's own tests use the same API.
 
 ## Tools
 
@@ -28,7 +30,9 @@ The following test compares a network of two leaky integrators in a row with a d
 3. At each step, first move the time `h` seconds forward with `run.timer.advance(h)`, then update the nodes with `run.step(...)`. The `dt` of each node is then exactly `h`
 4. Read the output with `run.read` and compare it with the reference
 
-If the reference and the nodes do the same operations in the same order, the results match to the last bit, so you can compare them with `torch.equal`. If the order of operations differs, compare with `torch.testing.assert_close`.
+!!! tip "Comparing with the reference"
+
+    If the reference and the nodes do the same operations in the same order, the results match to the last bit, so you can compare them with `torch.equal`. If the order of operations differs, compare with `torch.testing.assert_close`.
 
 ## Rules of step
 
@@ -37,7 +41,10 @@ If the reference and the nodes do the same operations in the same order, the res
 - A node whose timer has not moved since its last update is skipped (it would see `dt = 0`). If you forget `advance`, nothing happens, and if you pass the same node twice in one `step`, the second one is skipped
 - The period of a node (`period`) is not used in a manual run
 - `step` does not move the time. Only `advance` moves it
-- Nothing is sent unless `step` is called. So `wait_for` and `subscribe` without a `timeout` on the thread that calls `step` wait forever
+
+!!! warning "Do not wait without a timeout on the stepping thread"
+
+    Nothing is sent unless `step` is called. So `wait_for` and `subscribe` without a `timeout` on the thread that calls `step` wait forever.
 
 ## Choosing the timer
 
@@ -53,7 +60,9 @@ By default, `mujou.testing.run` makes a new `VirtualTimer` for each run, unlike 
 
 ## Testing save and restore
 
-You can check that a run that takes the state midway and continues in a new instance matches a run that went on without stopping. On a `VirtualTimer`, the two match to the last bit. The following test continues the program above. The second half restores onto the same `timer` as the first half; this is allowed because the first half has already ended.
+You can check that a run that takes the state midway and continues in a new instance matches a run that went on without stopping. On a `VirtualTimer`, the two match to the last bit.
+
+The following test continues the program above. The second half restores onto the same `timer` as the first half; this is allowed because the first half has already ended.
 
 ```python
 --8<-- "examples/testing_a_node.py:restore"
@@ -61,7 +70,9 @@ You can check that a run that takes the state midway and continues in a new inst
 
 ## Testing exceptions
 
-When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)). After that, every call of the run raises it again, including the `shutdown` at the end of the `with` block, so put `pytest.raises` around the whole block, in the same `with` statement:
+When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)).
+
+After that, every call of the run raises it again, including the `shutdown` at the end of the `with` block, so put `pytest.raises` around the whole block, in the same `with` statement:
 
 ```python
 import pytest

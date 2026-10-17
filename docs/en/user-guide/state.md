@@ -1,6 +1,8 @@
-# Saving and Restoring State
+# 💾 Saving and Restoring State
 
-This page shows how to take the state of a running network, save it, and later run the network again from that state. What the state tree holds, and how time stops while the state is taken, is in [State](../concepts.md#state).
+This page shows how to take the state of a running network, save it, and later run the network again from that state.
+
+What the state tree holds, and how time stops while the state is taken, is in [State](../concepts.md#state).
 
 ## The basic steps
 
@@ -31,19 +33,29 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 
 ## Taking the states of several runs at one time
 
-`run.state_dict()` takes the state of one run at one time. When several runs share a timer (by default, all of them run on the global timer) and you take their states one after another, each state is of a later time than the one before, because the time goes on in between. To take them all at one time, pause the timer first, take the states, and resume it.
+`run.state_dict()` takes the state of one run at one time. When several runs share a timer (by default, all of them run on the global timer) and you take their states one after another, each state is of a later time than the one before, because the time goes on in between.
+
+To take them all at one time, pause the timer first, take the states, and resume it.
 
 ```python
 --8<-- "examples/pause.py:pause"
 ```
 
-`run.state_dict()` works while the timer is paused, and every tree then holds the time of the pause. While paused, the nodes do not update, and the paused time does not enter the `dt` after `resume` (see [Pausing the time](time.md#pausing-the-time)). Put the `resume` in `finally`, so that an exception does not leave the time stopped.
+`run.state_dict()` works while the timer is paused, and every tree then holds the time of the pause. While paused, the nodes do not update, and the paused time does not enter the `dt` after `resume` (see [Pausing the time](time.md#pausing-the-time)).
+
+!!! tip "Put resume in finally"
+
+    Put the `resume` in `finally`, so that an exception does not leave the time stopped.
 
 To restore the trees, note that a run cannot restore while another run is running on the same timer. Restore them one after another once the previous run has ended, or give each restored run a timer of its own; each timer then starts from the same time of the trees.
 
 ## The state is not saved after an exception
 
-When a run ends with an exception, `run.state_dict()` raises `NetworkError` and returns no state (see [Errors and shutdown](errors.md)). If you do not want to lose the state of a long run, take `run.state_dict()` regularly while it runs and save it.
+When a run ends with an exception, `run.state_dict()` raises `NetworkError` and returns no state (see [Errors and shutdown](errors.md)).
+
+!!! tip "Save regularly during a long run"
+
+    If you do not want to lose the state of a long run, take `run.state_dict()` regularly while it runs and save it.
 
 ## Putting other values in the state
 
@@ -54,7 +66,9 @@ Only `torch.Tensor` and `nn.Module` values assigned directly to attributes are c
 - The state of the random number generator `self.generator`
 - The state of an optimizer (such as moments) and the gradients accumulated in `.grad`
 
-To put these in the state, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected part is handled as before. For a number, you can instead keep it as a 0-dimensional tensor created in `on_start` (`self.count = torch.zeros((), device=self.device)`) and update it in place (`self.count += 1`), without overriding anything. It is then collected automatically.
+To put these in the state, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected part is handled as before.
+
+For a number, you can instead keep it as a 0-dimensional tensor created in `on_start` (`self.count = torch.zeros((), device=self.device)`) and update it in place (`self.count += 1`), without overriding anything. It is then collected automatically.
 
 The following example adds the state of the random number generator. The generator is created again from `seed` every time the run starts. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.
 
@@ -85,11 +99,15 @@ When you override them, follow these rules.
 | `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
 | `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                             |
 
-Do not change the state in `on_stop`. After a normal end, `run.state_dict()` copies the state as the nodes left it, after `on_stop`, with the time at which `shutdown` asked the run to stop. A change made in `on_stop` would go into the tree (the reason is in [State](../concepts.md#state)).
+!!! warning "Do not change the state in on_stop"
+
+    Do not change the state in `on_stop`. After a normal end, `run.state_dict()` copies the state as the nodes left it, after `on_stop`, with the time at which `shutdown` asked the run to stop. A change made in `on_stop` would go into the tree (the reason is in [State](../concepts.md#state)).
 
 ## Formats
 
-The tree `run.state_dict()` returns is a `mujou.StateDict`. It is a subclass of `dict`: you index it as a dict, and you can save it with pickle or with `torch.save`. A tree read back is a `mujou.StateDict` again. For your own files, either will do. To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`. `mujou.run(..., state=)` takes a `mujou.StateDict`, or a plain dict of the same items.
+The tree `run.state_dict()` returns is a `mujou.StateDict`. It is a subclass of `dict`: you index it as a dict, and you can save it with pickle or with `torch.save`. A tree read back is a `mujou.StateDict` again.
+
+For your own files, either will do. To share a tree with others, save it with `torch.save`, so that they can read it with the default `torch.load`. `mujou.run(..., state=)` takes a `mujou.StateDict`, or a plain dict of the same items.
 
 Read a file back the same way it was saved (`pickle.loads` for `pickle.dumps`, `torch.load` for `torch.save`). If you do not know how a file was saved, read it first with the default `torch.load`. If that fails, read it with pickle only when you trust the sender.
 
@@ -102,4 +120,6 @@ torch.save(run.state_dict().cpu(), "state.pt")  # the state of GPU nodes as CPU 
 tree = torch.load("state.pt")  # a mujou.StateDict
 ```
 
-`tree.to(device)` moves every tensor of the tree to `device`, and `cpu()` is `to("cpu")`. It looks into the dicts (including the `OrderedDict` of the `state_dict` of an `nn.Module`), lists and tuples of the tree, and makes these containers anew. Other values are shared with the original tree. As with `torch.Tensor.to`, a tensor already on `device` is not copied but shared with the original tree
+`tree.to(device)` moves every tensor of the tree to `device`, and `cpu()` is `to("cpu")`.
+
+It looks into the dicts (including the `OrderedDict` of the `state_dict` of an `nn.Module`), lists and tuples of the tree, and makes these containers anew. Other values are shared with the original tree. As with `torch.Tensor.to`, a tensor already on `device` is not copied but shared with the original tree
