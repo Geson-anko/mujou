@@ -101,7 +101,7 @@ approve（should-fix は残ってよい）の後に 5 を行う。5 で大きく
 
 - planner の「公開インターフェース案」が**シグネチャレベル**（関数名・引数・戻り値型）で確定していること
 - GPU など占有リソースを奪い合う長時間の学習実験を同時に走らせないこと
-- `tests/conftest.py` の更新は spec-test-author 側に寄せること
+- `tests/mujou/conftest.py` の更新は spec-test-author 側に寄せること
 
 モジュール分割による並列、並列時のファイル分離規約、避けるべきケースは [reference.md](reference.md) を参照。並列発火は 1 メッセージにまとめる（skill `maximize-parallels`）。
 

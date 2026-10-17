@@ -67,7 +67,7 @@ CLAUDE.md の開発原則を補完し、判断基準と具体例を示す。テ�
 ## 検証
 
 ```bash
-just run   # format → test → type
+just run   # format → test → type → docs-build
 ```
 
 すべてパスして完了。lint warning・型エラーを放置しない。

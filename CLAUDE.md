@@ -83,7 +83,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock、cargo fmt、cargo clippy ほか
 - コアは Rust で実装し、Python はインターフェース（PyO3 + maturin で拡張モジュール `mujou._core._native` にする。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
-- 実装は private な `mujou._core` パッケージに置き、利用者が使う名前は `mujou.*` に公開する。torch に依存しないのは Rust の拡張モジュール `mujou._core._native` だけで、それ以外はノード内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
+- 実装は private な `mujou._core` パッケージに置き、利用者が使う名前は `mujou.*` に公開する。PyTorch は必須の依存で（`import mujou` で読み込まれる）、ノード内の計算に全面的に採用する。torch を使わないのは Rust の拡張モジュール `mujou._core._native` と時刻まわり（`mujou.time` など）だけ。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
 
@@ -97,6 +97,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 | `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |
 | `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                   |
 | `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                  |
+| `just stub`            | `_native.pyi` を Rust の signature と doc comment から生成する。bindings を変えたら実行してコミット           |
 | `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run` |
 
 単一テスト: `uv run pytest tests/mujou/test_x.py -v` / キーワード: `uv run pytest -k "<expr>"`

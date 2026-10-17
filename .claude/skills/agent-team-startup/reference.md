@@ -47,7 +47,7 @@ spec-test-author  plan-implementer   ← 並列起動（同じ計画書を入力
 
 - インターフェース未確定で並行実装すると衝突するとき
 - データフロー上で順序依存があるとき
-- `tests/conftest.py` を複数 spec-test-author が同時編集するとき（fixture の追加は逐次）
+- `tests/mujou/conftest.py` を複数 spec-test-author が同時編集するとき（fixture の追加は逐次）
 - 同一ハードウェアリソースに同時アクセスが必要なとき
 - 1 つの中規模タスクを無理に分割することになるとき（並列化は、互いに独立した大きめの作業単位に使う）
 

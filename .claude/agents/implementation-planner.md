@@ -28,7 +28,7 @@ disallowedTools: Edit, NotebookEdit
 
 ## 進め方
 
-1. **現状把握** — 既存コードを読む。`memory/MEMORY.md` で規約・好み・未決定事項を確認する
+1. **現状把握** — 既存コードと、関係する `specs/` を読む。`memory/MEMORY.md` で規約・好み・未決定事項を確認する
 2. **理論との突き合わせ** — 学習則に触れるなら skill `pc-alm`、実行モデル（スケジューリング・通信・状態）に触れるなら skill `locality-and-async` を読み、計画がその不変条件を破らないことを確かめる
 3. **要件の具体化** — 上記「質問の扱い」に従う
 4. **計画書の生成** — 下記フォーマットで `memory/agents/implementation-planner/<task-slug>.md` に書く（単独起動時はユーザーに直接提示）
