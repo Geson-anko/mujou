@@ -1,6 +1,8 @@
 """Type stubs for the native extension module built from crates/mujou-python."""
 
-from typing import Final, final
+from collections.abc import Callable, Mapping, Sequence
+from types import CapsuleType
+from typing import Final, Protocol, Self, final
 
 __version__: str
 
@@ -27,11 +29,6 @@ class GlobalTimer:
 timer: Final[GlobalTimer]
 
 # --- slot (WP-A)
-
-# Imported here rather than at the top so that the sections stay independent.
-from collections.abc import Sequence  # noqa: E402
-from types import CapsuleType  # noqa: E402
-from typing import Protocol  # noqa: E402
 
 type DLDataType = tuple[int, int, int]
 """``(code, bits, lanes)`` of a DLPack dtype."""
@@ -188,3 +185,64 @@ class InputSlot:
         """
 
 # --- runtime (WP-B)
+
+class Node:
+    """The base of every node.
+
+    The runtime calls the hooks on the node's own thread (``state_dict`` on the
+    control thread while the node is paused). They do nothing by default. The
+    hooks other than ``_on_thread_start``, ``on_start`` and ``load_state_dict``
+    are looked up once, after those three, so replacing one there takes effect.
+    """
+
+    def __new__(cls, *args: object, **kwargs: object) -> Self: ...
+    def _on_thread_start(self) -> None: ...
+    def on_start(self) -> None: ...
+    def on_update(self, dt: float) -> None: ...
+    def on_pause(self) -> None: ...
+    def on_resume(self) -> None: ...
+    def on_exception(self) -> None: ...
+    def on_stop(self) -> None: ...
+    def state_dict(self) -> object: ...
+    def load_state_dict(self, state: object) -> None: ...
+
+class NetworkError(RuntimeError):
+    """The network stopped because a node raised.
+
+    ``__cause__`` is the first exception.
+    """
+
+class PauseTimeoutError(TimeoutError):
+    """Some nodes did not pause in time, so the state was not taken."""
+
+@final
+class Runtime:
+    """Runs nodes, each on its own thread, under one control thread."""
+
+    def __init__(self, nodes: Sequence[Node], names: Sequence[str]) -> None: ...
+    def start(
+        self,
+        *,
+        manual: bool = False,
+        states: Sequence[object] | None = None,
+        last_update_ns: Sequence[int] | None = None,
+        timer_state: Mapping[str, int | float] | None = None,
+        pause_timeout: float = 10.0,
+        on_exception_capture: Callable[
+            [dict[int, object], int, str, BaseException], object
+        ]
+        | None = None,
+    ) -> None: ...
+    def step(self, order: Sequence[int] | None = None) -> None: ...
+    def capture[T](
+        self, build: Callable[[list[object]], T], *, timeout: float | None = None
+    ) -> T: ...
+    def shutdown(self) -> None: ...
+    def join(self, timeout: float | None = None) -> bool: ...
+    def check(self) -> None: ...
+    @property
+    def is_running(self) -> bool: ...
+    @property
+    def is_finished(self) -> bool: ...
+    def last_update_ns(self) -> list[int]: ...
+    def exception_state(self) -> object | None: ...

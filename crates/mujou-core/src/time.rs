@@ -55,6 +55,14 @@ impl fmt::Display for TimerError {
 
 impl std::error::Error for TimerError {}
 
+/// How [`GlobalTimer::wait_until_ns_or`] returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    Reached,
+    Interrupted,
+    TimedOut,
+}
+
 /// Converts seconds to the nearest nanosecond.
 pub fn seconds_to_ns(seconds: f64) -> Result<u64, TimerError> {
     if !(seconds.is_finite() && seconds >= 0.0) {
@@ -83,13 +91,20 @@ struct State {
     anchor_ns: u64,
     anchor_instant: Instant,
     scale: f64,
+    /// Paused by [`GlobalTimer::pause`].
     paused: bool,
+    /// The number of live [`PauseHold`]s.
+    holds: usize,
     is_virtual: bool,
 }
 
 impl State {
+    fn is_paused(&self) -> bool {
+        self.paused || self.holds > 0
+    }
+
     fn is_frozen(&self) -> bool {
-        self.paused || self.is_virtual
+        self.is_paused() || self.is_virtual
     }
 
     fn ns_at(&self, instant: Instant) -> u64 {
@@ -127,6 +142,7 @@ impl GlobalTimer {
                 anchor_instant: Instant::now(),
                 scale: 1.0,
                 paused: false,
+                holds: 0,
                 is_virtual: false,
             }),
             changed: Condvar::new(),
@@ -167,7 +183,12 @@ impl GlobalTimer {
         Ok(())
     }
 
-    /// Freezes the time. Pausing while paused leaves the time as it is.
+    /// Freezes the time until [`GlobalTimer::resume`]. For the host and tests.
+    ///
+    /// This is one switch, not a count: pausing twice needs one resume. It is
+    /// independent of the [`PauseHold`]s, so the time stays frozen while this
+    /// switch or any hold is on, and `resume` never undoes a hold. Pausing while
+    /// paused leaves the time as it is.
     pub fn pause(&self) {
         self.update(|s| {
             s.reanchor();
@@ -175,7 +196,8 @@ impl GlobalTimer {
         });
     }
 
-    /// Lets the time run again from where it was frozen.
+    /// Turns off the switch of [`GlobalTimer::pause`]. The time runs again from
+    /// where it was frozen if no [`PauseHold`] is left.
     pub fn resume(&self) {
         self.update(|s| {
             s.reanchor();
@@ -183,8 +205,25 @@ impl GlobalTimer {
         });
     }
 
+    /// Freezes the time until every hold taken so far is dropped (and the
+    /// switch of [`GlobalTimer::pause`] is off).
+    ///
+    /// Each controller of a running system (a runtime pausing to take the state,
+    /// or stopping on an exception) takes its own hold, so that ending one
+    /// freeze cannot let the time run during another one: the timer is a
+    /// singleton shared by every system in the process.
+    pub fn hold(&self) -> PauseHold<'_> {
+        self.update(|s| {
+            s.reanchor();
+            s.holds += 1;
+        });
+        PauseHold { timer: self }
+    }
+
+    /// Whether the time is frozen by [`GlobalTimer::pause`] or a hold. The
+    /// virtual clock alone does not count as paused.
     pub fn is_paused(&self) -> bool {
-        self.lock().paused
+        self.lock().is_paused()
     }
 
     /// The time and scale. Whether paused and which clock is used are not part
@@ -224,7 +263,7 @@ impl GlobalTimer {
             if !s.is_virtual {
                 return Err(TimerError::NotVirtual);
             }
-            if s.paused {
+            if s.is_paused() {
                 return Err(TimerError::Paused);
             }
             s.anchor_ns = s.anchor_ns.saturating_add(dt_ns);
@@ -235,20 +274,41 @@ impl GlobalTimer {
     /// Blocks until the time reaches `target_ns` or `timeout` of real time
     /// passes, and returns whether the target was reached.
     pub fn wait_until_ns(&self, target_ns: u64, timeout: Duration) -> bool {
+        self.wait_until_ns_or(target_ns, timeout, || false) == Wait::Reached
+    }
+
+    /// Blocks until the time reaches `target_ns`, `interrupted` returns true, or
+    /// `timeout` of real time passes.
+    ///
+    /// `interrupted` is checked under the timer's lock, before every wait. A
+    /// waker that makes it true and then calls [`GlobalTimer::interrupt_waiters`]
+    /// is therefore never missed: either the waiter sees the condition before it
+    /// sleeps, or it is already sleeping when the notification comes. Because it
+    /// runs under the timer's lock, `interrupted` must not take a lock that is
+    /// held while calling into the timer (read an atomic instead).
+    pub fn wait_until_ns_or(
+        &self,
+        target_ns: u64,
+        timeout: Duration,
+        interrupted: impl Fn() -> bool,
+    ) -> Wait {
         // A timeout too long to represent never expires.
         let deadline = Instant::now().checked_add(timeout);
         let mut s = self.lock();
         loop {
             let now_ns = s.now_ns();
             if now_ns >= target_ns {
-                return true;
+                return Wait::Reached;
+            }
+            if interrupted() {
+                return Wait::Interrupted;
             }
             let mut wait = match deadline {
                 Some(deadline) => deadline.saturating_duration_since(Instant::now()),
                 None => Duration::MAX,
             };
             if wait.is_zero() {
-                return false;
+                return Wait::TimedOut;
             }
             if !s.is_frozen() {
                 let real_ns = ((target_ns - now_ns) as f64 / s.scale).ceil();
@@ -262,9 +322,32 @@ impl GlobalTimer {
         }
     }
 
+    /// Wakes every [`GlobalTimer::wait_until_ns_or`] so that it checks its
+    /// `interrupted` condition again.
+    pub fn interrupt_waiters(&self) {
+        // Taking the lock orders this after any waiter's check of its condition.
+        let _s = self.lock();
+        self.changed.notify_all();
+    }
+
     /// Blocks for `dt_ns` of global time. Waits through pauses.
     pub fn sleep_ns(&self, dt_ns: u64) {
         let target_ns = self.time_ns().saturating_add(dt_ns);
         while !self.wait_until_ns(target_ns, Duration::MAX) {}
+    }
+}
+
+/// A reason to keep the time frozen; dropping it removes the reason.
+#[must_use = "the time runs again as soon as the hold is dropped"]
+pub struct PauseHold<'a> {
+    timer: &'a GlobalTimer,
+}
+
+impl Drop for PauseHold<'_> {
+    fn drop(&mut self) {
+        self.timer.update(|s| {
+            s.reanchor();
+            s.holds -= 1;
+        });
     }
 }
