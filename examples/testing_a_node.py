@@ -1,8 +1,9 @@
 """Test a node deterministically with ``mujou.testing``.
 
-On a ``VirtualTimer`` the time moves only when the test advances it, and
-``ManualRun.step`` updates the nodes by hand in a fixed order. Every ``dt`` is then
-exactly the step, and the run can be compared with the discrete algorithm.
+``mujou.testing.run`` runs on a ``VirtualTimer``, whose time moves only when the
+test advances it, and ``ManualRun.step`` updates the nodes by hand in a fixed order.
+Every ``dt`` is then exactly the step, and the run can be compared with the discrete
+algorithm.
 """
 
 import math
@@ -13,7 +14,6 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NextPort, Node, PrevPort, TensorSpec
-from mujou.testing import VirtualTimer
 
 VECTOR = TensorSpec((2,), torch.float64)
 
@@ -59,11 +59,11 @@ def test_chain_follows_the_discrete_algorithm() -> None:
         a += (1 - math.exp(-h / tau)) * (u - a)
         b += (1 - math.exp(-h / tau)) * (a - b)  # b reads the new a
 
-    timer = VirtualTimer()
     net = Chain(tau)
-    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}) as run:
+    # On a new VirtualTimer at time 0 (run.timer), which moves only by advance.
+    with mujou.testing.run(net, inputs={net.prev: u}) as run:
         for _ in range(steps):
-            timer.advance(h)  # every node's next dt is exactly h
+            run.timer.advance(h)  # every node's next dt is exactly h
             run.step(net.a, net.b)  # a, then b, which reads a's new value
         y, t = run.read(net.next)
 

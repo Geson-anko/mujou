@@ -48,7 +48,7 @@ class StartManual(Protocol):
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
-    ) -> ManualRun: ...
+    ) -> ManualRun[Any]: ...
 
 
 class Start(Protocol):
@@ -89,7 +89,7 @@ def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
-    ) -> ManualRun:
+    ) -> ManualRun[Any]:
         run = mujou.testing.run(
             component,
             *components,

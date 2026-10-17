@@ -19,7 +19,7 @@ from mujou._core.network import (
 from mujou._core.node import Node, in_hook
 from mujou._core.port import Port
 from mujou._core.session import Session
-from mujou._core.timer import GLOBAL, Timer
+from mujou._core.timer import GLOBAL, Timer, VirtualTimer
 
 
 class Run:
@@ -247,22 +247,31 @@ class Run:
             pass
 
 
-class ManualRun(Run):
+class ManualRun[T: Timer = VirtualTimer](Run):
     """A run whose nodes update only when ``step`` lets them, for tests.
 
     ``mujou.testing.run`` returns it. The nodes start and stop as in any run, but
-    between updates each waits for ``step``. With a ``VirtualTimer``, every
-    ``dt`` is then exactly the time the test advanced, and the result follows
-    the discrete algorithm of the chosen order.
+    between updates each waits for ``step``. On a ``VirtualTimer`` (the default),
+    every ``dt`` is then exactly the time the test advanced with ``timer.advance``,
+    and the result follows the discrete algorithm of the chosen order.
     """
+
+    _timer: T
+
+    @property
+    def timer(self) -> T:
+        """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
+        or the timer given to it."""
+        return self._timer
 
     def step(self, *nodes: Node) -> None:
         """Update each of ``nodes`` once, one after another in the given order (by
         default every node, in the order of the tree), and return when done.
 
-        A node whose time on the run's timer has not advanced since its last
-        update is not updated. A node updated twice sees ``dt = 0`` the second
-        time and is skipped.
+        ``step`` does not move the time: advance the timer first. A node whose
+        time on the run's timer has not moved since its last update is skipped
+        (it would see ``dt = 0``): a ``step`` without an ``advance`` before it
+        updates nothing, and a node given twice in one ``step`` updates once.
 
         Raises:
             ValueError: A node is not in this run.
@@ -402,6 +411,29 @@ def start[R: Run](
         raise
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
+    return handle
+
+
+def start_manual[T: Timer](
+    components: Sequence[Node | Network],
+    *,
+    timer: T,
+    inputs: Mapping[Any, object] | None,
+    state: Mapping[str, Any] | None,
+    pause_timeout: float,
+) -> ManualRun[T]:
+    """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
+    # The class itself: a subscripted generic is not a class to instantiate.
+    handle = start(
+        cast(type[ManualRun[T]], ManualRun),
+        components,
+        timer=timer,
+        inputs=inputs,
+        state=state,
+        pause_timeout=pause_timeout,
+        manual=True,
+    )
+    handle._timer = timer  # pyright: ignore[reportPrivateUsage]  # ManualRun's own module
     return handle
 
 

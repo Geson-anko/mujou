@@ -1259,6 +1259,34 @@ class TestManualRun:
         with mujou.testing.run(Chain(), timer=virtual) as run:
             assert isinstance(run, ManualRun) and isinstance(run, Run)
 
+    def test_runs_on_a_new_virtual_timer_by_default(self):
+        net = Chain()
+        with mujou.testing.run(net, inputs={net.prev: u(1)}) as run:
+            timer = run.timer
+            assert isinstance(timer, VirtualTimer)
+            assert timer.now() == Timestamp(ns=0)
+            for _ in range(3):
+                timer.advance(H)  # the clock moves only here
+                run.step()
+            out, t = run.read(net.next)
+        x = torch.zeros(2, dtype=F64)
+        for _ in range(3):
+            x = euler(x, u(1))
+        assert torch.equal(net.a.x, x)
+        assert t == Timestamp(ns=3 * H_NS) and torch.equal(out, net.b.x)
+
+    def test_each_run_gets_its_own_timer(self):
+        with (
+            mujou.testing.run(Chain()) as first,
+            mujou.testing.run(Chain()) as second,
+        ):
+            assert first.timer is not second.timer
+
+    def test_gives_the_timer_it_was_given(self, start_manual: StartManual):
+        timer = Timer()
+        run = start_manual(Chain(), timer=timer)
+        assert run.timer is timer
+
 
 class TestEndToEnd:
     @pytest.mark.slow

@@ -3,7 +3,7 @@
 """Checked by pyright in strict mode, as users' code and mujou's own nodes are:
 subclassing ``mujou.Node`` and writing to a run must type-check cleanly."""
 
-from typing import TypedDict
+from typing import TypedDict, assert_type
 
 import pytest
 import torch
@@ -11,6 +11,8 @@ import torch
 import mujou
 import mujou.testing
 from mujou import DictSpec, Network, Node, Port, PrevPort, TensorSpec
+from mujou.testing import VirtualTimer
+from mujou.time import Timer
 
 
 class Layer(Node):
@@ -60,6 +62,13 @@ class TestStrictTyping:
         others = {other.prev: msg}
         with mujou.testing.run(other, inputs=others) as manual:
             manual.write(others)
+
+    def test_a_manual_run_gives_back_the_type_of_its_timer(self) -> None:
+        with mujou.testing.run(Layer(2)) as run:
+            assert_type(run.timer, VirtualTimer)
+            run.timer.advance(0.001)  # no cast needed
+        with mujou.testing.run(Layer(2), timer=Timer()) as run:
+            assert_type(run.timer, Timer)
 
     def test_a_run_takes_at_least_one_component(self) -> None:
         # Without the ignore pyright reports the call, and an unneeded ignore is
