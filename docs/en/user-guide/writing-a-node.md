@@ -65,6 +65,22 @@ self.next = NextPort(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y":
 self.prev = PrevPort(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
 ```
 
+Type checkers infer the type of a port from its specs, so you seldom write it. To annotate one (an argument of a helper, say), write `Port[S, R, M]`: `S` is the type it sends, `R` the type it receives, and `M` its number of peers, `Single` or `Multi` from `mujou.typing`. An omitted direction is `Never`. A function that takes any spec takes a `MessageSpec[T]` from `mujou.typing`.
+
+```python
+from typing import Never
+
+from mujou.typing import MessageSpec, Multi
+
+
+def mean_of(port: PrevPort[Never, torch.Tensor, Multi]) -> torch.Tensor:
+    return torch.stack(list(port.recv().values())).mean(0)
+
+
+def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
+    return NextPort(send=spec)
+```
+
 ## 2. Set up the state in `on_start`
 
 Create the state tensors in `on_start`. In `on_update`, do not assign a new tensor to the attribute; update the tensor in place with `+=`, `copy_` and the like.

@@ -17,7 +17,7 @@ import mujou
 import mujou.testing
 from mujou import NetworkError, Run
 from mujou._core import session as session_module
-from mujou._core.network import Compose, Network
+from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
@@ -172,21 +172,21 @@ class TestRun:
         ("make", "again", "message"),
         [
             pytest.param(Chain, lambda c: (c,), "Chain", id="network"),
-            # Not the path "0" of mujou.run's Compose.
+            # Not the path "0" of mujou.run's Group.
             pytest.param(Leaky, lambda c: (c,), "Leaky", id="node"),
             pytest.param(
                 Leaky,
-                lambda c: (Compose(node=c),),
+                lambda c: (Group(node=c),),
                 "Leaky at 'node'",
                 id="node-in-a-network",
             ),
             pytest.param(
-                Leaky, lambda c: (Compose(c),), "Leaky at '0'", id="node-composed"
+                Leaky, lambda c: (Group(c),), "Leaky at '0'", id="node-grouped"
             ),
             # Named by its path in the tree mujou.run makes.
             pytest.param(
                 Chain,
-                lambda c: (Compose(x=c), Chain()),
+                lambda c: (Group(x=c), Chain()),
                 "Chain at '0.x'",
                 id="network-among-several",
             ),
@@ -268,7 +268,7 @@ class TestRun:
                 who = r"^Chain "
             else:
                 node = Leaky()
-                given = [(node,), (Compose(node=node),)]
+                given = [(node,), (Group(node=node),)]
                 who = r"^Leaky (at 'node' )?"
             barrier = threading.Barrier(2)
             outcomes: list[object] = []
@@ -297,15 +297,15 @@ class TestRun:
             assert isinstance(error, RuntimeError)
             assert re.match(who + refused, str(error)), str(error)
 
-    def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
+    def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
         alone, other = Chain(), Chain()
         start_manual(alone)
         with pytest.raises(RuntimeError, match="^Chain has already run"):
             start_manual(alone, other)
-        composed, other = Chain(), Chain()
-        start_manual(composed, other)
+        grouped, other = Chain(), Chain()
+        start_manual(grouped, other)
         with pytest.raises(RuntimeError, match="^Chain has already run"):
-            start_manual(composed)
+            start_manual(grouped)
 
     def test_takes_only_nodes_and_networks(self, start: Start):
         for given in ((object(),), (Chain(), object())):
@@ -349,8 +349,8 @@ class TestRunANode:
         several = start_manual(Leaky(), Chain()).state_dict()
         assert set(several["nodes"]) == {"0", "1.a", "1.b"}
         assert "0.prev/in" in several["slots"]
-        composed = start_manual(Compose(Leaky())).state_dict()
-        assert set(composed["nodes"]) == {"0"}
+        grouped = start_manual(Group(Leaky())).state_dict()
+        assert set(grouped["nodes"]) == {"0"}
 
     def test_names_the_root_node_by_its_class_in_a_structure_error(self, start: Start):
         class Declared(Node):
@@ -453,7 +453,7 @@ class TestRefusedRun:
                 (partial(start_manual, node, inputs={node.prev: wrong}), "shape")
             ]
             # In another way: in a network.
-            retry = partial(start_manual, Compose(node=node), inputs={node.prev: u(1)})
+            retry = partial(start_manual, Group(node=node), inputs={node.prev: u(1)})
             nodes = {"node"}
         else:
             source = start_manual(Chain())
@@ -517,7 +517,7 @@ class TestTimer:
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Pair()
-        run = start_manual(Compose(node=node), timer=virtual)
+        run = start_manual(Group(node=node), timer=virtual)
         virtual.advance(2.5)
         run.write({node.x: u(1)})
         step(run)
@@ -539,7 +539,7 @@ class TestTimer:
                 return held.now() - h0, free.now() - f0, mujou.time.time_ns() - g0
 
         start(Chain(tau=0.01), timer=free)
-        run = start(Compose(node=Measures()), timer=held)
+        run = start(Group(node=Measures()), timer=held)
         on_held, on_free, on_global = run.state_dict()["nodes"]["node"]
         assert on_held == Timestamp(ns=0)
         assert on_free > Timestamp(ns=0) and on_global > 0
@@ -553,7 +553,7 @@ class TestTimer:
                 self.seen = self.timer
 
         node = ReadsTimer()
-        start(Compose(node=node))
+        start(Group(node=node))
         seen = node.seen
         assert seen is not None
         # On one time axis with mujou.time.
@@ -573,7 +573,7 @@ class TestInputs:
         self, step: Step, start_manual: StartManual
     ):
         first = Pair()
-        run = start_manual(Compose(node=first), inputs={first.x: u(1)})
+        run = start_manual(Group(node=first), inputs={first.x: u(1)})
         step(run)
         tree = run.state_dict()
         written_at = tree["slots"]["node.x/in"][1]
@@ -586,7 +586,7 @@ class TestInputs:
             timer.advance(100.0)  # far from the tree's time
             inputs = {node.x: u(3)} if node is replaced else None
             restored = start_manual(
-                Compose(node=node), timer=timer, state=tree, inputs=inputs
+                Group(node=node), timer=timer, state=tree, inputs=inputs
             )
             step(restored)
             restored.shutdown()
@@ -604,7 +604,7 @@ class TestWrite:
         # Manual mode: the write and the update do not overlap, so the node
         # reads both values of one write.
         node = Pair()
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         virtual.advance(H)
         run.write({node.x: u(1), node.y: u(2)})
         written_at = virtual.now()
@@ -617,7 +617,7 @@ class TestWrite:
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Pair()
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         virtual.advance(H)
         written_at = run.write({node.x: u(1), node.y: u(2)})
         assert written_at == virtual.now()
@@ -679,7 +679,7 @@ class TestWrite:
     def test_rejects_ports_it_cannot_write(self, start_manual: StartManual):
         net = Chain()
         pair = Pair()
-        chain, solo = start_manual(net), start_manual(Compose(node=pair))
+        chain, solo = start_manual(net), start_manual(Group(node=pair))
         cases = [
             (chain, net.b.prev, "is connected"),
             (solo, pair.many, "many peers"),
@@ -986,7 +986,7 @@ class TestStateDict:
                     return str(e)
                 return None
 
-        run = start_manual(Compose(node=Receiving()))
+        run = start_manual(Group(node=Receiving()))
         if ended:
             run.shutdown()
         assert "only the node that owns" in run.state_dict()["nodes"]["node"]
@@ -1008,7 +1008,7 @@ class TestHostMethodsFromANode:
                     return str(e)
                 return None
 
-        runs.append(start_manual(Compose(node=Reading())))
+        runs.append(start_manual(Group(node=Reading())))
         if ended:
             runs[0].shutdown()
         assert "host methods" in runs[0].state_dict()["nodes"]["node"]
@@ -1025,7 +1025,7 @@ class TestHostMethodsFromANode:
                 run.state_dict,
                 run.shutdown,
                 run.join,
-                lambda: mujou.run(Compose(node=Pair())),
+                lambda: mujou.run(Group(node=Pair())),
             ):
                 try:
                     call()
@@ -1050,7 +1050,7 @@ class TestState:
         source = start_manual(Chain())
         tree = source.state_dict()
         source.shutdown()
-        other = Compose(node=Pair())
+        other = Group(node=Pair())
         with pytest.raises(ValueError, match="do not match"):
             start_manual(other, state=tree)
         broken: list[tuple[dict[str, Any], str]] = [
@@ -1141,7 +1141,7 @@ class TestShutdown:
         self, start_manual: StartManual
     ):
         node = SlowStop()
-        net = Compose(node=node)
+        net = Group(node=node)
         run = start_manual(net)
         before = threading.active_count()
         try:
@@ -1287,20 +1287,20 @@ class TestEndToEnd:
             assert (out - u(k)).abs().max().item() <= bound
             before = u(k)
 
-    @pytest.mark.parametrize("composed", [False, True])
+    @pytest.mark.parametrize("grouped", [False, True])
     @pytest.mark.parametrize("b_first", [False, True])
     def test_manual_steps_match_the_discrete_algorithm(
         self,
         step: Step,
         start_manual: StartManual,
         b_first: bool,
-        composed: bool,
+        grouped: bool,
     ):
         a, b = Leaky(), Leaky()
-        if composed:
+        if grouped:
             # The same two nodes as two networks: a network is no boundary of the
             # asynchrony, and both run on the one timer of the run.
-            first, second = Compose(node=a), Compose(node=b)
+            first, second = Group(node=a), Group(node=b)
             a.connect(b)
             run = start_manual(first, second)
             assert set(run.state_dict()["last_update_ns"]) == {"0.node", "1.node"}
@@ -1658,7 +1658,7 @@ class TestCuda:
 
     @pytest.mark.slow
     def test_state_dict_is_whole_while_a_node_updates_in_place(self, start: Start):
-        run = start(Compose(node=Counter(CUDA0)))
+        run = start(Group(node=Counter(CUDA0)))
         mujou.time.sleep(0.2)
         trees: list[dict[str, Any]] = []
         for _ in range(40):
@@ -1683,7 +1683,7 @@ class TestAccelerator:
         for _ in range(5):
             # Run each node right after making it, while its work is still queued.
             node = QueuesOnTheHost(accelerator)
-            start_manual(Compose(node=node)).shutdown()
+            start_manual(Group(node=node)).shutdown()
             seen.append(node.seen)
         assert seen == [float(HOST_ADDS)] * 5
 
@@ -1693,7 +1693,7 @@ class TestAccelerator:
     ):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Compose(node=BusyStart(accelerator)))
+            run = start_manual(Group(node=BusyStart(accelerator)))
             w = run.state_dict()["nodes"]["node"]["w"]
             run.shutdown()
             captured.append((w.min().item(), w.max().item()))
@@ -1705,7 +1705,7 @@ class TestAccelerator:
     ):
         captured: list[tuple[float, float]] = []
         for _ in range(5):
-            run = start_manual(Compose(node=BusyStop(accelerator)))
+            run = start_manual(Group(node=BusyStop(accelerator)))
             run.shutdown()
             w = run.state_dict()["nodes"]["node"]["w"]
             captured.append((w.min().item(), w.max().item()))
@@ -1718,7 +1718,7 @@ class TestAccelerator:
         start_manual: StartManual,
         accelerator: torch.device,
     ):
-        net = Compose(node=Counter(accelerator))
+        net = Group(node=Counter(accelerator))
         run = start_manual(net)
         for _ in range(3):
             step(run)
@@ -1726,7 +1726,7 @@ class TestAccelerator:
         run.shutdown()
 
         node = Counter(accelerator)
-        restored = start_manual(Compose(node=node), state=tree)
+        restored = start_manual(Group(node=node), state=tree)
         step(restored)
         assert node.first is not None
         expected = torch.full((BIG,), float(3 * ADDS), device=accelerator)
@@ -1768,9 +1768,7 @@ class TestOneNodeOnMps:
             start_manual(second)
         assert not second.started
         run.shutdown()
-        start_manual(
-            Compose(node=second)
-        )  # the first run has ended: it no longer counts
+        start_manual(Group(node=second))  # the first run has ended: it no longer counts
         assert second.started
 
     def test_allows_one_node_beside_nodes_on_the_cpu(self, start_manual: StartManual):
@@ -1804,7 +1802,7 @@ class TestOneNodeDevice:
     def test_refuses_two_nodes_in_one_run(self, start_manual: StartManual):
         a, b = OnCpu(), OnCpu()
         with pytest.raises(ValueError, match=r"^CPU cannot .* but 'a', 'b' do;"):
-            start_manual(Compose(a=a, b=b))
+            start_manual(Group(a=a, b=b))
         assert not a.started and not b.started
 
     def test_refuses_one_node_in_each_of_two_runs(self, start_manual: StartManual):

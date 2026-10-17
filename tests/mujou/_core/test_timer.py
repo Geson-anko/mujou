@@ -7,7 +7,7 @@ import pytest
 
 import mujou.testing
 import mujou.time
-from mujou import Compose, Node
+from mujou import Group, Node
 from mujou.testing import VirtualTimer
 from mujou.time import Timer, Timestamp
 
@@ -128,7 +128,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         target = virtual if scaled == "timer" else mujou.time
         node = Calls(lambda: target.set_time_scale(1000.0))
-        run = start_manual(Compose(node, Calls()), timer=virtual)
+        run = start_manual(Group(node, Calls()), timer=virtual)
         try:
             virtual.advance(H)
             run.step()
@@ -145,7 +145,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         first = Calls(lambda: virtual.advance(5.0))
         second = Calls()
-        run = start_manual(Compose(first, second), timer=virtual)
+        run = start_manual(Group(first, second), timer=virtual)
         virtual.advance(H)
         run.step(first, second)
         assert isinstance(first.errors[0], RuntimeError)
@@ -159,7 +159,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         wait = virtual.sleep if sleep == "timer" else mujou.time.sleep
         node = Calls(lambda: wait(0.001))
-        run = start_manual(Compose(node, Calls()), timer=virtual)
+        run = start_manual(Group(node, Calls()), timer=virtual)
         virtual.advance(H)
         # Nothing in the step waits for the clock. Should it regress, the step
         # would wait for an advance: fail instead of hanging.

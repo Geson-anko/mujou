@@ -65,6 +65,22 @@ self.next = NextPort(send=SAMPLE)  # 送る側: self.next.send({"x": x, "y": y})
 self.prev = PrevPort(recv=SAMPLE)  # 受け取る側: sample = self.prev.recv(); sample["x"]
 ```
 
+Port の型は型検査器が spec から推論するので、書くことはあまりない。注釈を書くとき（補助関数の引数など）は `Port[S, R, M]` と書く。`S` は送る型、`R` は受け取る型、`M` は相手の数で、`mujou.typing` の `Single` か `Multi` を使う。省いた向きは `Never` になる。どの spec でも受け取る関数は、`mujou.typing` の `MessageSpec[T]` で注釈する。
+
+```python
+from typing import Never
+
+from mujou.typing import MessageSpec, Multi
+
+
+def mean_of(port: PrevPort[Never, torch.Tensor, Multi]) -> torch.Tensor:
+    return torch.stack(list(port.recv().values())).mean(0)
+
+
+def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
+    return NextPort(send=spec)
+```
+
 ## 2. `on_start` で状態を確保する
 
 状態のテンソルは `on_start` で作る。`on_update` では新しいテンソルを代入し直さず、`+=` や `copy_` などでその場で更新する。

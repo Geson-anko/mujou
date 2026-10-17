@@ -11,7 +11,7 @@ The pages are in the order of the work.
 | [Writing a node](writing-a-node.md)         | Write a node class: declaring ports, hooks, updates in proportion to `dt`, the period, setting up state |
 | [Building a network](building-a-network.md) | Connect nodes: branching and merging, nesting, exposed ports, checking the built structure              |
 | [Running a network](running.md)             | Run with `mujou.run`, write input from the host, read output, and end the run                           |
-| [Composing networks](compose.md)            | Run several networks in one run. Decide when to split them into separate runs instead                   |
+| [Grouping networks](group.md)               | Run several networks in one run. Decide when to split them into separate runs instead                   |
 | [Saving and restoring state](state.md)      | Take the state while the network runs, save it, and run again from that state                           |
 | [Controlling time](time.md)                 | Change how fast time runs. Give a run a timer of its own                                                |
 | [PyTorch in nodes](torch.md)                | Write an update rule. Use `nn.Module`, GPUs and BP inside a node                                        |

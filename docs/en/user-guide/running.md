@@ -15,15 +15,15 @@
 
 `mujou.run` takes the following arguments.
 
-| Argument                 | Meaning                                                                                                    | Default                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `component, *components` | The networks or nodes to run. Two or more are combined into one run (see [Composing networks](compose.md)) | Required                  |
-| `timer`                  | The run's timer (see [Controlling time](time.md))                                                          | `None` (the global timer) |
-| `inputs`                 | The initial values of the input. `{port: value}`                                                           | `None`                    |
-| `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                     | `None`                    |
-| `pause_timeout`          | The real time in seconds that `state_dict` waits for every node to pause                                   | `30.0`                    |
+| Argument                 | Meaning                                                                                                 | Default                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `component, *components` | The networks or nodes to run. Two or more are combined into one run (see [Grouping networks](group.md)) | Required                  |
+| `timer`                  | The run's timer (see [Controlling time](time.md))                                                       | `None` (the global timer) |
+| `inputs`                 | The initial values of the input. `{port: value}`                                                        | `None`                    |
+| `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                  | `None`                    |
+| `pause_timeout`          | The real time in seconds that `state_dict` waits for every node to pause                                | `30.0`                    |
 
-To run a single node, pass it as `mujou.run(node)` without wrapping it in a network. The path of the node is then `""`, and the paths of its ports are `"prev"` and so on (see [Composing networks](compose.md)).
+To run a single node, pass it as `mujou.run(node)` without wrapping it in a network. The path of the node is then `""`, and the paths of its ports are `"prev"` and so on (see [Grouping networks](group.md)).
 
 A network runs only once. Passing a network that was once passed to `mujou.run` to `mujou.run` again, whether it is still running or has ended, raises `RuntimeError`. To run again, create new instances, nodes included.
 

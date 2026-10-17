@@ -49,7 +49,7 @@ Give a run its own timer in these cases.
 
 - You want to speed up or slow down only that run (for debugging, or for trials faster than real time)
 - You want to restore a state while another run is running on the global timer (see [Saving and restoring state](state.md))
-- You run several networks in separate runs that should not stop each other (see [Composing networks](compose.md))
+- You run several networks in separate runs that should not stop each other (see [Grouping networks](group.md))
 
 The host then waits on that run with `timer.sleep`, and compares the times from `run.read` with `timer.now()`. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.time()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
 

@@ -1,8 +1,8 @@
-"""Run several networks together with ``Compose``.
+"""Run several networks together with ``Group``.
 
 A network given by keyword is at the path of its keyword (``"enc.scale"``), and
 one given by position at the path of its position (``"0.scale"``).
-``mujou.run(a, b)`` is ``mujou.run(Compose(a, b))``.
+``mujou.run(a, b)`` is ``mujou.run(Group(a, b))``.
 """
 
 from typing import override
@@ -10,7 +10,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import Compose, NextPort, Node, PrevPort, TensorSpec
+from mujou import Group, NextPort, Node, PrevPort, TensorSpec
 
 VECTOR = TensorSpec((2,))
 
@@ -38,12 +38,12 @@ class Stage(mujou.Network):
         self.next = self.scale.next
 
 
-# --8<-- [start:compose]
-# By keyword: two networks connected before they are composed.
+# --8<-- [start:group]
+# By keyword: two networks connected before they are grouped.
 enc, dec = Stage(2.0), Stage(3.0)
 enc.connect(dec)  # enc.next <-> dec.prev, as for nodes
 x = torch.tensor([1.0, -1.0])
-with mujou.run(Compose(enc=enc, dec=dec), inputs={enc.prev: x}) as run:
+with mujou.run(Group(enc=enc, dec=dec), inputs={enc.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given
     # time depends on how the threads get scheduled: follow the output until y
     # arrives (TimeoutError after 5 s).
@@ -63,4 +63,4 @@ with mujou.run(first, second, inputs={first.prev: x, second.prev: x}) as run:
 print(f"position: nodes {nodes}, y1 = {y1}, y2 = {y2}")
 assert nodes == ["0.scale", "1.scale"]
 assert torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x)
-# --8<-- [end:compose]
+# --8<-- [end:group]
