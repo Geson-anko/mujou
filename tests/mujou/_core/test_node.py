@@ -1,10 +1,11 @@
 import threading
+import time
 from typing import TYPE_CHECKING, override
 
 import pytest
 import torch
 
-from mujou import Network, Node, Port, TensorSpec
+from mujou import Network, NetworkError, Node, Port, TensorSpec
 from mujou._core import _native
 from mujou._core.node import thread_ident
 from mujou.testing import VirtualTimer
@@ -175,7 +176,7 @@ class TestTimer:
             assert not isinstance(obj, Timer | _native.Timer), obj
             assert not hasattr(obj, "set_time_scale"), obj
 
-    def test_holds_the_time_of_the_state_in_state_dict_after_the_end(
+    def test_stays_at_the_time_of_the_state_after_a_normal_end(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Timed()
@@ -187,14 +188,50 @@ class TestTimer:
         tree = run.state_dict()
         assert tree["nodes"]["node"] == Timestamp(ns=tree["timer"]["time_ns"])
         assert tree["timer"]["time_ns"] == 500_000_000
-        with pytest.raises(RuntimeError, match="run"):
-            _ = node.timer
+        assert node.timer.now() == Timestamp(ns=500_000_000)
 
-    def test_raises_outside_a_run(self, start_manual: StartManual):
-        node = Timed()
+    def test_stays_stopped_while_another_thread_reads_the_run(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        class Slow(Timed):
+            @override
+            def state_dict(self) -> object:
+                time.sleep(0.05)  # while the host's other thread reads
+                return self.timer.now()
+
+        node = Slow()
+        run = start_manual(Solo(node), timer=virtual)
+        run.shutdown()
+        done = threading.Event()
+
+        def read() -> None:
+            while not done.is_set():
+                run.read(node.out)
+
+        reader = threading.Thread(target=read)
+        reader.start()
+        try:
+            for _ in range(5):
+                assert run.state_dict()["nodes"]["node"] == Timestamp(ns=0)
+        finally:
+            done.set()
+            reader.join()
+
+    def test_raises_before_a_run_and_after_an_end_by_an_exception(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        class Fails(Timed):
+            @override
+            def on_update(self, dt: float) -> None:
+                raise ValueError("boom")
+
+        node = Fails()
         with pytest.raises(RuntimeError, match="run"):
             _ = node.timer
-        start_manual(Solo(node)).shutdown()
+        run = start_manual(Solo(node), timer=virtual)
+        virtual.advance(0.001)
+        with pytest.raises(NetworkError):
+            run.step()
         with pytest.raises(RuntimeError, match="run"):
             _ = node.timer
 

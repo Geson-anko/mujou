@@ -121,9 +121,10 @@ class ReadOnlyTimer:
     nothing reached from it sets the scale, advances the clock or waits on the
     time. A node thus cannot change the ``dt`` of the other nodes.
 
-    In the ``state_dict`` that the host takes after a run has ended normally,
-    a node's ``timer`` holds the time and the scale at which the run stopped,
-    the time of the state.
+    Once the host has seen a run end normally, each node's ``timer`` is replaced
+    by a ``ReadOnlyTimer`` that stays at the time and the scale at which the run
+    stopped, the time of the state. One that a node kept from before the end
+    still reads the running timer.
 
     Example::
 

@@ -290,7 +290,8 @@ def run[P: Port[Any, Any, Any]](
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
             ``Run.write`` (for ``inputs``) do; or ``state`` does not match the
             networks, or it cannot set the timer back because another run is
-            running on it. Nothing started: the networks may run once the cause
+            running on it. Nothing started: the same networks, given the same
+            way (alone, or together in the same order), may run once the cause
             is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """

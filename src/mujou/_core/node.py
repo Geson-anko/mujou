@@ -168,19 +168,21 @@ class Node(_native.Node, Component):
         that name.
 
         It can be read from the start of the run (also in ``on_thread_start``
-        and ``on_start``) until the host has seen the run end, and in the
-        ``state_dict`` that the host takes after a normal end, where it holds
-        the time of the state.
+        and ``on_start``). Once the host has seen a normal end (e.g. after
+        ``Run.shutdown`` returned), it is replaced by a ``ReadOnlyTimer`` that
+        stays at the time of the state, also in the ``state_dict`` that the host
+        takes then. A ``ReadOnlyTimer`` kept from before the end keeps reading
+        the running timer.
 
         Raises:
-            RuntimeError: The node is not in a run: before the run starts its
-                nodes, or once the host has seen the run end (after
-                ``Run.shutdown`` or ``Run.join`` returned).
+            RuntimeError: The node has not run: before its run starts the nodes,
+                after a start that was refused, or once the host has seen an
+                end by an exception.
         """
         if self._timer is None:
             raise RuntimeError(
-                "the node is not in a run; its timer can be read from the start of "
-                "the run until the host sees the run end"
+                "the node has no timer: it is read from the start of a run, and is "
+                "removed when a start is refused or a run ends by an exception"
             )
         return self._timer
 

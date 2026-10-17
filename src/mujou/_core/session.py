@@ -171,6 +171,10 @@ class Session:
         # The timer when shutdown first asked the run to stop.
         self._stop_lock = threading.Lock()
         self._stop_timer: dict[str, int | float] | None = None
+        # Set once by _settle: the nodes' timer after the end (None after an
+        # exception).
+        self._settle_lock = threading.Lock()
+        self._ended: tuple[ReadOnlyTimer | None] | None = None
 
     def _add_outlet(self, port: AnyPort) -> None:
         spec = _spec(port.send_spec)
@@ -268,7 +272,10 @@ class Session:
     def step(self, order: Sequence[Node]) -> None:
         runtime = self._started()
         indices = [self._index(node) for node in order] if order else None
-        runtime.step(indices)
+        try:
+            runtime.step(indices)
+        finally:
+            self._settle()  # a node may have raised: the host sees the end here
 
     def check(self) -> None:
         if self._runtime is not None:
@@ -316,13 +323,48 @@ class Session:
             self._settle()
 
     def _settle(self) -> None:
-        """Once the run has ended, stop keeping the session and forget the nodes'
-        threads."""
-        if self._runtime is not None and self._runtime.is_finished:
+        """Once the run has ended, stop keeping the session, forget the nodes'
+        threads and stop their ``timer``, once.
+
+        After a normal end each node's ``timer`` stays at the time of the state
+        from then on (``state_dict`` after the end is taken at it); after an end
+        by an exception the nodes have no timer.
+        """
+        runtime = self._runtime
+        if runtime is None or not runtime.is_finished:
+            return
+        with self._settle_lock:
+            if self._ended is not None:
+                return
             _RUNNING.discard(self)
+            ended = self._ended_timer(runtime)
             for node in self._nodes:
                 end_thread(node)
-                set_timer(node, None)
+                set_timer(node, ended)
+            self._ended = (ended,)
+
+    def _ended_timer(self, runtime: _native.Runtime) -> ReadOnlyTimer | None:
+        """The timer stopped at the end of a normal end, or ``None`` after an
+        exception.
+
+        The time is the one ``shutdown`` read when it asked the run to stop, as a
+        pause would have frozen it, and not earlier than any update or slot (an
+        ``on_stop`` may still send after the request).
+        """
+        try:
+            runtime.check()
+        except _native.NetworkError:
+            return None
+        # Only shutdown ends a run normally, and it reads the timer first.
+        stop_timer = cast(dict[str, int | float], self._stop_timer)
+        latest = max(
+            [
+                int(stop_timer["time_ns"]),
+                *runtime.last_update_ns(),
+                *(slot.read().time_ns for slot, _ in self._slots.values()),
+            ]
+        )
+        return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
 
     def _started(self) -> _native.Runtime:
         # Only a started session reaches the host (through its Run).
@@ -441,30 +483,13 @@ class Session:
 
         The nodes' threads are gone, so this thread calls their ``state_dict``
         (through ``_capture_state``, which waits for a CUDA node's stream). The
-        timer is the one ``shutdown`` read when it asked the run to stop, as a
-        pause would have frozen it, and not earlier than any update or slot
-        (an ``on_stop`` may still send after the request). The nodes' ``timer``
-        holds that time while their ``state_dict`` runs.
+        tree's timer is the stopped one ``_settle`` gave the nodes.
         """
-        # Only shutdown ends a run normally, and it reads the timer first.
+        ended = cast(tuple[ReadOnlyTimer], self._ended)[0]
         stop_timer = cast(dict[str, int | float], self._stop_timer)
-        last_update_ns = runtime.last_update_ns()
-        latest = max(
-            [
-                int(stop_timer["time_ns"]),
-                *last_update_ns,
-                *(slot.read().time_ns for slot, _ in self._slots.values()),
-            ]
-        )
-        ended = stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
-        for node in self._nodes:
-            set_timer(node, ended)
-        try:
-            states = [capture_state(node) for node in self._nodes]
-        finally:
-            for node in self._nodes:
-                set_timer(node, None)
-        return self._tree(states, last_update_ns, {**stop_timer, "time_ns": latest})
+        states = [capture_state(node) for node in self._nodes]
+        timer = {**stop_timer, "time_ns": ended.now().ns}
+        return self._tree(states, runtime.last_update_ns(), timer)
 
     def _restore(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """Check ``state``, restore the slots and return what ``Runtime.start``

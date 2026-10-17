@@ -12,7 +12,7 @@ from mujou.testing import VirtualTimer
 from mujou.time import Timer, Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import Start, StartManual
+    from tests.mujou.conftest import StartManual
 
 H = 0.001
 
@@ -128,20 +128,23 @@ class TestOnlyTheHostControlsTheTime:
     virtual clock or waiting on the time would reach the other nodes past the
     ports."""
 
-    def test_a_node_cannot_scale_the_time(self, start: Start):
-        timer = Timer()
-        calls = [lambda: timer.set_time_scale(1000.0)]
-        calls.append(lambda: mujou.time.set_time_scale(1000.0))
-        for call in calls:
-            node = Calls(call)
-            run = start(Pair(node, Calls()), timer=timer)
-            while not node.errors:
-                timer.sleep(0.001)
-            run.shutdown()
+    @pytest.mark.parametrize("scaled", ["timer", "global"])
+    def test_a_node_cannot_scale_the_time(
+        self, virtual: VirtualTimer, start_manual: StartManual, scaled: str
+    ):
+        target = virtual if scaled == "timer" else mujou.time
+        node = Calls(lambda: target.set_time_scale(1000.0))
+        run = start_manual(Pair(node, Calls()), timer=virtual)
+        try:
+            virtual.advance(H)
+            run.step()
             assert isinstance(node.errors[0], RuntimeError)
             assert "only the host" in str(node.errors[0])
-        assert timer.get_time_scale() == 1.0
-        assert mujou.time.get_time_scale() == 1.0
+            assert virtual.get_time_scale() == 1.0
+            assert mujou.time.get_time_scale() == 1.0
+        finally:
+            # Should the check regress, leave no scale to the later tests.
+            mujou.time.set_time_scale(1.0)
 
     def test_a_node_cannot_advance_the_virtual_clock(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -164,6 +167,14 @@ class TestOnlyTheHostControlsTheTime:
         node = Calls(lambda: wait(0.001))
         run = start_manual(Pair(node, Calls()), timer=virtual)
         virtual.advance(H)
-        run.step()  # returns: nothing in the step waits for the clock
+        # Nothing in the step waits for the clock. Should it regress, the step
+        # would wait for an advance: fail instead of hanging.
+        stepper = threading.Thread(target=run.step)
+        stepper.start()
+        stepper.join(5.0)
+        if stepper.is_alive():
+            virtual.advance(1.0)  # release the sleeping node
+            stepper.join()
+            pytest.fail("a node's sleep held the step")
         assert isinstance(node.errors[0], RuntimeError)
         run.state_dict()  # the pause does not wait for a sleeping node
