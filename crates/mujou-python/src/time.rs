@@ -6,7 +6,7 @@ use mujou_core::time::{self as core, Timer, TimerState, Timestamp, seconds_to_ns
 use pyo3::exceptions::PyValueError;
 use pyo3::inspect::PyStaticExpr;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::{PyClassInitializer, PyTypeInfo};
 
 use crate::{SIGNAL_CHECK_INTERVAL, timer_error};
@@ -173,7 +173,7 @@ impl<'py> IntoPyObject<'py> for GlobalTimer {
 /// `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
 /// is the exact time in nanoseconds. Timestamps compare and hash by time, so
 /// compare only those of one timer. `later - earlier` is the time between them,
-/// as a `Timestamp`.
+/// as a `Timestamp`. Timestamps pickle and copy.
 #[pyclass(
     frozen,
     eq,
@@ -233,5 +233,17 @@ impl PyTimestamp {
 
     fn __repr__(&self) -> String {
         format!("Timestamp(ns={})", self.0.as_ns())
+    }
+
+    /// Pickles and copies as `Timestamp(ns=...)`.
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        let py = slf.py();
+        // `copyreg.__newobj_ex__(cls, args, kwargs)` is `cls.__new__(cls, *args,
+        // **kwargs)`: the constructor takes `ns` by keyword only.
+        let new = py.import("copyreg")?.getattr("__newobj_ex__")?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("ns", slf.get().0.as_ns())?;
+        let args = (slf.get_type(), PyTuple::empty(py), kwargs);
+        Ok((new, args).into_pyobject(py)?.into_any())
     }
 }

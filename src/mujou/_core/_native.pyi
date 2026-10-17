@@ -528,7 +528,7 @@ class Timestamp:
     `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
     is the exact time in nanoseconds. Timestamps compare and hash by time, so
     compare only those of one timer. `later - earlier` is the time between them,
-    as a `Timestamp`.
+    as a `Timestamp`. Timestamps pickle and copy.
     """
     @override
     def __eq__(self, value: object, /) -> bool: ...
@@ -549,6 +549,11 @@ class Timestamp:
 
         Raises:
             ValueError: `ns` is negative or does not fit in 64 bits.
+        """
+    @override
+    def __reduce__(self, /) -> Any:
+        """
+        Pickles and copies as `Timestamp(ns=...)`.
         """
     @override
     def __repr__(self, /) -> str: ...

@@ -1,3 +1,4 @@
+import copy
 import os
 import pickle
 import subprocess
@@ -189,6 +190,15 @@ class TestTimestamp:
         ts = Timestamp(ns=123)
         assert repr(ts) == "Timestamp(ns=123)"
         assert eval(repr(ts), {"Timestamp": Timestamp}) == ts
+
+    def test_pickles_and_copies(self):
+        ts = Timestamp(ns=2**64 - 1)
+        for again in (
+            pickle.loads(pickle.dumps(ts)),
+            copy.deepcopy(ts),
+            copy.copy(ts),
+        ):
+            assert type(again) is Timestamp and again == ts
 
     def test_takes_nanoseconds_by_keyword_only(self):
         # A bare number could mean seconds or nanoseconds.
