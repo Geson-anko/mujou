@@ -1,6 +1,8 @@
 # Contributing to Mujou
 
-Issues and pull requests are welcome: bug reports, questions, documentation fixes and code. Keep each pull request small and about one thing. For a large change, open an issue first so that we can agree on the design. The issue forms ask for what you need to say: for a bug, a minimal program and your environment.
+Issues and pull requests are welcome: bug reports, questions, documentation fixes and code. Keep each pull request small and about one thing. The issue forms ask for what you need to say: for a bug, a minimal program and your environment. You may write issues and pull requests in English or Japanese.
+
+For a large change, open an issue first so that we can agree on the design before you write the code. A change is large when it changes or adds public API, adds a dependency, changes how nodes run or exchange messages (the execution model), or touches many modules. Bug fixes, documentation fixes and small additions can go straight to a pull request.
 
 Mujou is in early development, and the API may still change.
 
@@ -107,7 +109,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Do not commit to `main` directly, force-push, or skip hooks with `--no-verify`.
 - Before opening a pull request, merge the latest `main` into your branch and run `just run`.
 
-CI runs these workflows on pull requests to `main`. Test, Type Check and Docs run only when files they depend on change.
+CI runs these workflows on pull requests to `main`, except GPU. Test, Type Check and Docs run only when files they depend on change.
 
 | Workflow      | Checks                                                                                                                                                                                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -115,6 +117,7 @@ CI runs these workflows on pull requests to `main`. Test, Type Check and Docs ru
 | Type Check    | `just type` (pyright)                                                                                                                                                                                                                                             |
 | Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                          |
 | Docs          | `just docs-build`                                                                                                                                                                                                                                                 |
+| GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. Started by hand only ([.github/runner/README.md](.github/runner/README.md))                                                                                                                          |
 
 `CLAUDE.md`, `.claude/` and `memory/` configure the AI coding agents used in this repository; human contributors can ignore them.
 
