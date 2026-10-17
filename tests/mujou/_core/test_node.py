@@ -241,12 +241,6 @@ class TestTimer:
             _ = node.timer
 
 
-def is_available(kind: str) -> bool:
-    """Whether ``kind`` is the type of torch's current accelerator, available."""
-    found = torch.accelerator.current_accelerator(check_available=True)
-    return found is not None and found.type == kind
-
-
 class TestDevice:
     def test_defaults_to_the_cpu(self):
         assert Probe().device == torch.device("cpu")
@@ -267,22 +261,12 @@ class TestDevice:
     def test_fixes_the_cuda_index(self):
         assert Node(device="cuda").device.index == torch.cuda.current_device()
 
-    @pytest.mark.parametrize("kind", ["mps", "xpu"])
-    def test_rejects_an_accelerator_that_is_not_available(self, kind: str):
-        if is_available(kind):
-            pytest.skip(f"needs no {kind}")
-        with pytest.raises(ValueError, match=f"{kind.upper()} is not available"):
-            Node(device=kind)
-
-    def test_fixes_the_index_of_an_accelerator(self, accelerator: torch.device):
-        index = torch.accelerator.current_device_index()
-        assert Node(device=accelerator.type).device == torch.device(
-            accelerator.type, index
-        )
-
-    def test_rejects_devices_other_than_the_cpu_and_accelerators(self):
-        with pytest.raises(ValueError, match="CPU or an available accelerator"):
-            Node(device="meta")
+    # Rejected whether or not torch can use them here: MPS crashes when two
+    # threads use it, and the others are not supported.
+    @pytest.mark.parametrize("device", ["meta", "mps", "xpu", "mps:0"])
+    def test_rejects_devices_other_than_the_cpu_and_cuda(self, device: str):
+        with pytest.raises(ValueError, match=r"CPU or CUDA \(only these"):
+            Node(device=device)
 
 
 class Ticker(Node):
@@ -596,15 +580,12 @@ class Learner(Node):
 
 
 class TestRestore:
-    @pytest.mark.parametrize("kind", ["cpu", "accelerator"])
+    @pytest.mark.parametrize(
+        "device", ["cpu", pytest.param("cuda:0", marks=pytest.mark.cuda)]
+    )
     def test_a_restored_node_continues_the_same(
-        self,
-        step: Step,
-        start_manual: StartManual,
-        request: pytest.FixtureRequest,
-        kind: str,
+        self, step: Step, start_manual: StartManual, device: str
     ):
-        device = "cpu" if kind == "cpu" else str(request.getfixturevalue(kind))
         k, m = 4, 6
         node = Learner(0.0, device)
         run = start_manual(Compose(node=node))
@@ -654,51 +635,17 @@ class OnDevice(Node):
         self.grad_enabled = torch.is_grad_enabled()
 
 
-class OnAccelerator(Node):
-    """Records the thread's accelerator settings in ``on_start``, and draws from
-    ``generator`` there."""
+class Draws(Node):
+    """Draws from ``generator`` in ``on_start``."""
 
     def __init__(self, device: torch.device, seed: int) -> None:
         super().__init__(device=device, seed=seed)
-        self.out = Port(send=TensorSpec((3,)))
-        self.current_device: int | None = None
-        self.stream: torch.Stream | None = None
-        self.grad_enabled: bool | None = None
         self.draws: torch.Tensor | None = None
 
     @override
     def on_start(self) -> None:
-        self.current_device = torch.accelerator.current_device_index()
-        self.stream = torch.accelerator.current_stream(self.device)
-        self.grad_enabled = torch.is_grad_enabled()
+        super().on_start()
         self.draws = torch.rand(3, generator=self.generator, device=self.device)
-
-
-class TestAccelerator:
-    def test_hooks_run_on_the_device(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
-        node = OnAccelerator(accelerator, seed=0)
-        start_manual(Compose(node=node))
-        assert node.current_device == accelerator.index
-        assert node.grad_enabled is False
-        # Only CUDA gives a node a stream of its own.
-        host_stream = torch.accelerator.current_stream(accelerator)
-        assert (node.stream != host_stream) == (accelerator.type == "cuda")
-
-    def test_the_generator_is_on_the_device_and_follows_the_seed(
-        self, start_manual: StartManual, accelerator: torch.device
-    ):
-        a, b = OnAccelerator(accelerator, seed=7), OnAccelerator(accelerator, seed=7)
-        for node in (a, b):
-            # One at a time: MPS takes one node at most.
-            start_manual(Compose(node=node)).shutdown()
-        generator = torch.Generator(accelerator).manual_seed(7)
-        expected = torch.rand(3, generator=generator, device=accelerator)
-        assert a.draws is not None and b.draws is not None
-        assert a.draws.device == accelerator
-        assert torch.equal(a.draws, expected)
-        assert torch.equal(b.draws, expected)
 
 
 class Busy(Node):
@@ -733,6 +680,19 @@ class TestCuda:
         assert node.current_device == index
         assert node.own_stream is True
         assert node.grad_enabled is False
+
+    def test_the_generator_is_on_the_device_and_follows_the_seed(
+        self, start_manual: StartManual
+    ):
+        device = torch.device("cuda", 0)
+        a, b = Draws(device, seed=7), Draws(device, seed=7)
+        start_manual(Compose(a=a, b=b))
+        generator = torch.Generator(device).manual_seed(7)
+        expected = torch.rand(3, generator=generator, device=device)
+        assert a.draws is not None and b.draws is not None
+        assert a.draws.device == device
+        assert torch.equal(a.draws, expected)
+        assert torch.equal(b.draws, expected)
 
     @pytest.mark.slow
     def test_waits_for_its_stream_after_each_update(

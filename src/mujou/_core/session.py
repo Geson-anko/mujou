@@ -145,13 +145,11 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
-        # Count and register under one lock: two runs started at once on other
-        # threads must not both pass the check before either counts.
-        with _START_LOCK:
-            for session in lifetime.running(Session):
-                session._settle()  # a run that has ended no longer counts
-            self._check_one_node_devices()
-            lifetime.add(self)
+        # Forget the runs that have ended, and keep this one (a refused start
+        # discards it below).
+        for session in lifetime.running(Session):
+            session._settle()
+        lifetime.add(self)
         try:
             periods = [checked_period(node) for node in self._nodes]
             restored = None if state is None else self._restore(state)
@@ -198,28 +196,6 @@ class Session:
             path or type(node).__name__
             for path, node in zip(self._paths, self._nodes, strict=True)
         ]
-
-    def _check_one_node_devices(self) -> None:
-        """Refuse a second node on a device type of ``_ONE_NODE_DEVICES``, counting
-        the nodes of this run and of every run kept (started, or starting)."""
-        for kind in _ONE_NODE_DEVICES:
-            users = [
-                f"{name!r}"
-                for name, node in zip(self._names(), self._nodes)
-                if node.device.type == kind
-            ]
-            users += [
-                f"{name!r} (of a running run)"
-                for session in lifetime.running(Session)
-                for name, node in zip(session._names(), session._nodes)
-                if node.device.type == kind
-            ]
-            if len(users) > 1:
-                raise ValueError(
-                    f"{kind.upper()} cannot be used from several threads at once, so "
-                    f"only one node may compute on it, but {', '.join(users)} do; put "
-                    "the others on the CPU, or compute them in one node"
-                )
 
     def step(self, order: Sequence[Node]) -> None:
         runtime = self._started()
@@ -519,12 +495,3 @@ def _wait(timeout: float) -> float | None:
     if not timeout >= 0:
         raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
     return None if timeout == math.inf else timeout
-
-
-# The device types that torch cannot use from several threads at once: two threads
-# computing on MPS at the same time crash the process (seen with torch 2.14). Each
-# node computes on its own thread, so at most one node of all the running runs may
-# compute on such a device.
-_ONE_NODE_DEVICES: Final = ("mps",)
-# Held while a run is counted on _ONE_NODE_DEVICES and registered in lifetime.
-_START_LOCK: Final = threading.Lock()
