@@ -8,6 +8,12 @@ use mujou_core::time::{Timer, TimerError, TimerState, Timestamp, Wait, global, s
 
 const SECOND: u64 = 1_000_000_000;
 
+/// Blocks for `dt_ns` of `timer`'s time. Waits through pauses.
+fn sleep_ns(timer: &Timer, dt_ns: u64) {
+    let target_ns = timer.time_ns().saturating_add(dt_ns);
+    while !timer.wait_until_ns(target_ns, Duration::MAX) {}
+}
+
 fn real_ns(d: Duration) -> f64 {
     d.as_nanos() as f64
 }
@@ -83,7 +89,7 @@ mod real_clock {
         let timer = Timer::new();
         timer.set_scale(100.0).unwrap();
         let start = timer.time_ns();
-        timer.sleep_ns(SECOND / 2);
+        sleep_ns(&timer, SECOND / 2);
         assert!(timer.time_ns() - start >= SECOND / 2);
     }
 
@@ -137,7 +143,7 @@ mod pause {
 
         let sleeper = {
             let timer = Arc::clone(&timer);
-            thread::spawn(move || timer.sleep_ns(SECOND))
+            thread::spawn(move || sleep_ns(&timer, SECOND))
         };
         thread::sleep(Duration::from_millis(20));
         assert!(!sleeper.is_finished());
@@ -249,7 +255,7 @@ mod virtual_clock {
             let timer = Arc::clone(&timer);
             thread::spawn(move || {
                 let start = timer.time_ns();
-                timer.sleep_ns(SECOND);
+                sleep_ns(&timer, SECOND);
                 timer.time_ns() - start
             })
         };
@@ -316,7 +322,7 @@ mod virtual_clock {
         timer.advance_ns(SECOND).unwrap();
         let sleeper = {
             let timer = Arc::clone(&timer);
-            thread::spawn(move || timer.sleep_ns(u64::MAX))
+            thread::spawn(move || sleep_ns(&timer, u64::MAX))
         };
         thread::sleep(Duration::from_millis(20));
         assert!(!sleeper.is_finished());

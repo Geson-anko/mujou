@@ -55,7 +55,6 @@ dev = [
     "pyright>=1.1.400",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
-    "pytest-mock>=3.14.0",
     "ruff>=0.8.4",
 ]
 

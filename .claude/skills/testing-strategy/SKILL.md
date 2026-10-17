@@ -65,7 +65,7 @@ src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 - 原則使わない。数値計算は実データ・実テンソルで検証する
 - 内部の private 関数はモックしない（リファクタのたびに壊れ、振る舞いは何も保証しない）
 - 3rd-party のテンソルライブラリはモックしない
-- 外部 I/O（センサーストリーム等）が必要になったら、自前の抽象（ABC / Protocol）を定義し、その実装をテスト用に `tests/mujou/conftest.py` などへ置く。使う場合は `pytest-mock`（`mocker`）
+- 外部 I/O（センサーストリーム等）が必要になったら、自前の抽象（ABC / Protocol）を定義し、その実装をテスト用に `tests/mujou/conftest.py` などへ置く。`pytest-mock` は依存に入っていない（2026-10-17 に未使用のため外した）。どうしても要るときは `uv add --dev pytest-mock` で足す
 
 ## 関連
 

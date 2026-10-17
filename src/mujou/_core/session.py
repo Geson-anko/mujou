@@ -22,8 +22,8 @@ from mujou._core.network import ports
 from mujou._core.node import (
     Node,
     capture_state,
+    checked_period,
     end_thread,
-    period_ns,
     set_timer,
     thread_ident,
 )
@@ -244,7 +244,7 @@ class Session:
         node started.
         """
         self._check_one_node_devices()
-        periods = [period_ns(node) for node in self._nodes]
+        periods = [checked_period(node) for node in self._nodes]
         restored = None if state is None else self._restore(state)
         if inputs:
             items = self._items(inputs)
@@ -272,7 +272,7 @@ class Session:
             runtime.start(
                 manual=manual,
                 pause_timeout=pause_timeout,
-                period_ns=periods,
+                periods=periods,
                 **(restored or {}),
             )
         except _native.NetworkError:
@@ -411,7 +411,7 @@ class Session:
             [
                 int(stop_timer["time_ns"]),
                 *runtime.last_update_ns(),
-                *(slot.read().time_ns for slot, _ in self._slots.values()),
+                *(slot.read().timestamp.ns for slot, _ in self._slots.values()),
             ]
         )
         return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
@@ -632,7 +632,7 @@ class Session:
         slots: dict[str, tuple[object, int]] = {}
         for name, (slot, spec) in self._slots.items():
             message = slot.read()
-            slots[name] = (_value(spec, message, _CPU), message.time_ns)
+            slots[name] = (_value(spec, message, _CPU), message.timestamp.ns)
         tree = {
             "nodes": {
                 path: copy.deepcopy(state)
