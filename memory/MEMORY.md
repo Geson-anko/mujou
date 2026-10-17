@@ -17,6 +17,7 @@
 - [非同期ノードの実行](project_async_node_execution.md) — queue・pipe を使わず lock 付きの値の読み書きだけで共有。その実行のタイマー上の微分方程式として各ノードが独自に更新する
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust、Python はインターフェース。ノードはタスクと専用スレッドの混在で実行。コアの値の型は内部に閉じ、torch とは DLPack で必ずコピー
 - [実行ごとのタイマー](project_timer_per_run.md) — 時間軸は実行ごとに 1 本、既定はグローバルタイマー。1 つの実行のノード・スロット・ホストの入力は同じタイマー。時刻は Timestamp
+- [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer / mujou.time の pause・resume・is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は符号付きの秒
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_core/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ（mujou.Tensor・mujou.dtypes・mujou.default.dtype は廃止）、torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
 - [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）
