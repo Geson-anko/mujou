@@ -60,14 +60,15 @@
 
 ## 例外のテスト
 
-ノードが例外を投げると、その例外は `step` から `NetworkError` として届く。`__cause__` がノードの例外である（[例外と終了](errors.md)）。テストの `with mujou.testing.run(...) as run:` の中で、次のように確かめる。
+ノードが例外を投げると、その例外は `step` から `NetworkError` として届く。`__cause__` がノードの例外である（[例外と終了](errors.md)）。その後は、`with` ブロックの終わりの `shutdown` を含めて、実行のどの呼び出しも同じ例外を送出する。そのため、`pytest.raises` はブロック全体を囲むように、同じ `with` 文に並べる。
 
 ```python
 import pytest
 
 from mujou import NetworkError
 
-with pytest.raises(NetworkError) as info:
-    run.step()
+with pytest.raises(NetworkError) as info, mujou.testing.run(net) as run:
+    run.timer.advance(0.001)
+    run.step()  # ここでノードが ValueError を投げる
 assert isinstance(info.value.__cause__, ValueError)
 ```

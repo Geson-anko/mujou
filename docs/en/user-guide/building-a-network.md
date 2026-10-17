@@ -101,6 +101,8 @@ Keep the `Channel` passed to `send_to` apart for each destination. As in the exa
 
 The receiving node decides how to combine the values (sum them, average them, weight each peer, ...). Mujou does not combine them. `Sum` in the example above sums them.
 
+To treat the peers differently, keep the `Channel` of each on the receiving node, as for `send_to`: `self.sum.from_double = self.double.connect(self.sum)`, then `self.prev.recv()[self.from_double]` in the node.
+
 A `NextPort` also takes many peers by default, so its `recv()` returns a dict. If the node is sure to have only one next node, declare `NextPort(send=..., multi=False)`, and `recv()` returns the value itself.
 
 ## Checking the built structure

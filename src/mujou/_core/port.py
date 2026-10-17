@@ -210,13 +210,14 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
             )
         if other is self:
             raise ValueError(f"cannot connect a port to itself: {self._label()}")
-        if self._send_spec != other._recv_spec or self._recv_spec != other._send_spec:
-            raise TypeError(
-                "port specs do not match: "
-                f"{self._label()} sends {self._send_spec!r} and receives "
-                f"{self._recv_spec!r}, but {other._label()} receives "
-                f"{other._recv_spec!r} and sends {other._send_spec!r}"
-            )
+        mismatches = [
+            f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
+            f"receives {_or_nothing(b._recv_spec)}"
+            for a, b in ((self, other), (other, self))
+            if a._send_spec != b._recv_spec
+        ]
+        if mismatches:
+            raise TypeError("port specs do not match: " + "; ".join(mismatches))
         if self._send_spec is None and self._recv_spec is None:
             raise TypeError(
                 f"neither {self._label()} nor {other._label()} has a spec, so nothing "
@@ -478,6 +479,11 @@ def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
     does not rename the port, and networks never do)."""
     if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
         port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
+
+
+def _or_nothing(spec: object) -> str:
+    """``repr(spec)``, or ``"nothing"`` for a direction without a spec."""
+    return "nothing" if spec is None else repr(spec)
 
 
 def label(port: Port[Any, Any, Any]) -> str:

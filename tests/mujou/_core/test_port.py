@@ -187,8 +187,8 @@ class TestPortNames:
         a, b = self.Shift(), self.Shift()
         with pytest.raises(
             TypeError,
-            match=r"^port specs do not match: Shift\.prev sends None .*, but "
-            r"Shift\.prev receives",
+            match=r"^port specs do not match: Shift\.prev sends nothing, but "
+            r"Shift\.prev receives TensorSpec",
         ):
             a.prev.connect(b.prev)
         with pytest.raises(ValueError, match=r"to itself: Shift\.next$"):
