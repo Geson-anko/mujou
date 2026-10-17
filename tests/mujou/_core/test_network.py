@@ -122,7 +122,7 @@ class TestBuild:
 
     def test_port_path_of_a_foreign_port(self):
         graph = Classifier().build()
-        with pytest.raises(ValueError, match="not a port of this network"):
+        with pytest.raises(ValueError, match="not a port of this graph"):
             graph.port_path(Port(send=h()))
 
     def test_returns_the_same_graph_every_time(self):

@@ -87,13 +87,14 @@ def _side(
 
 @final
 class Graph:
-    """The structure of a built network: what runs when ``mujou.run`` runs the
-    network.
+    """The structure of a built network (or of a node run alone): what runs when
+    ``mujou.run`` runs it.
 
-    ``Network.build`` makes it; it cannot be created directly, and
-    ``mujou.run`` takes nodes and networks, not graphs. It is a different object
-    from the network it was built from: the network declares the structure, and
-    the graph is what runs. A graph runs once.
+    ``Network.build`` makes it, and ``mujou.run`` for a node given alone; it
+    cannot be created directly, and ``mujou.run`` takes nodes and networks, not
+    graphs. It is a different object from the network it was built from: the
+    network declares the structure, and the graph is what runs. A graph runs
+    once.
     """
 
     # Any: ports of every message type are handled alike.
@@ -124,10 +125,10 @@ class Graph:
         (``"next"`` when the owner is itself the root).
 
         Raises:
-            ValueError: ``port`` is not owned by a node of this network.
+            ValueError: ``port`` is not owned by a node of this graph.
         """
         if port not in self._ports:
-            raise ValueError(f"{port!r} is not a port of this network")
+            raise ValueError(f"{port!r} is not a port of this graph")
         return _path(self._nodes, self._ports[port])
 
 
@@ -273,7 +274,11 @@ def _build(root: Component, by_run: bool) -> Graph:
             nodes.append((path, component))
             for name, value in vars(component).items():
                 if isinstance(value, Component):
-                    holder = f"node {path!r}" if path else type(component).__name__
+                    holder = (
+                        f"node {path!r}"
+                        if path
+                        else f"the node {type(component).__name__}"
+                    )
                     raise ValueError(
                         f"{holder} holds a {type(value).__name__} at {name!r}; "
                         "only networks hold nodes and networks"
@@ -316,8 +321,8 @@ def _build(root: Component, by_run: bool) -> Graph:
             if channel.other(port) not in ports:
                 raise ValueError(
                     f"the port {_path(nodes, owner)!r} is connected to a port "
-                    "outside the network (only direct attributes are walked, "
-                    "not lists or dicts)"
+                    "outside the tree being built (only direct attributes are "
+                    "walked, not lists or dicts)"
                 )
     for port in ports:
         freeze(port)
