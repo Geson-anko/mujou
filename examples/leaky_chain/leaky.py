@@ -20,10 +20,13 @@ class Leaky(Node):
     ``x`` moves the fraction ``1 - exp(-dt / tau)`` of the way to ``u``. That
     fraction stays below 1 for any ``dt``, so a long ``dt`` (a busy machine) never
     overshoots ``u``, and none of the elapsed time is lost.
+
+    ``period`` is well below ``tau`` by default: a node downstream sees this
+    output at most about one period late, a small delay next to ``tau``.
     """
 
-    def __init__(self, tau: float) -> None:
-        super().__init__()
+    def __init__(self, tau: float, period: float = 0.001) -> None:
+        super().__init__(period=period)
         self.tau = tau
         self.prev = PrevPort(recv=SCALAR)
         self.next = NextPort(send=SCALAR)
