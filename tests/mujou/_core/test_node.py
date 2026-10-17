@@ -1,5 +1,7 @@
 import copy
+import math
 import pickle
+import queue
 import threading
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, cast, override
@@ -113,6 +115,44 @@ class TestDevice:
     def test_rejects_devices_other_than_cpu_and_cuda(self):
         with pytest.raises(ValueError, match="CPU or CUDA"):
             Node(device="meta")
+
+
+class Ticker(Node):
+    """Puts each ``dt`` it updates with into ``dts``."""
+
+    def __init__(self, period: float | None) -> None:
+        super().__init__(period=period)
+        self.out = Port(send=TensorSpec((1,)))
+        self.dts: queue.Queue[float] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.dts.put(dt)
+
+
+class TestPeriod:
+    def test_defaults_to_none(self):
+        assert Probe().period is None
+        assert Probe(init_base=False).period is None
+
+    def test_is_kept(self):
+        assert Node(period=0.01).period == 0.01
+
+    @pytest.mark.parametrize("period", [0.0, -0.01, math.inf, math.nan])
+    def test_rejects_what_is_not_finite_and_positive(self, period: float):
+        with pytest.raises(ValueError, match="period"):
+            Node(period=period)
+
+    def test_the_node_waits_for_its_period_on_the_timer(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        node = Ticker(period=0.01)
+        run_network(Solo(node))
+        virtual_timer.advance(0.005)
+        with pytest.raises(queue.Empty):
+            node.dts.get(timeout=0.05)
+        virtual_timer.advance(0.005)
+        assert node.dts.get(timeout=5.0) == 0.01
 
 
 class OwnSetup(Probe):

@@ -232,6 +232,7 @@ class Session:
                     manual=manual,
                     states=self._states,
                     last_update_ns=self._last_update_ns,
+                    period_ns=[_period_ns(node) for node in self._nodes],
                     timer_state=self._timer_state,
                     pause_timeout=pause_timeout,
                 )
@@ -564,6 +565,12 @@ def _wait(timeout: float) -> float | None:
     if not timeout >= 0:
         raise ValueError(f"timeout must be a number of seconds >= 0, got {timeout}")
     return None if timeout == math.inf else timeout
+
+
+def _period_ns(node: Node) -> int | None:
+    """The period of ``node`` in ns for the runtime, at least 1 ns."""
+    period = node.period
+    return None if period is None else max(1, round(period * 1e9))
 
 
 def _is_int(value: object) -> bool:

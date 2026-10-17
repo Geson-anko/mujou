@@ -1,5 +1,6 @@
 """The node, the unit of asynchronous computation."""
 
+import math
 import threading
 import types
 from collections.abc import Mapping
@@ -33,9 +34,10 @@ class Node(_native.Node, Component):
       this node's ``state_dict`` returned. By default it copies the state into the
       collected tensors and modules (see below). When ``device`` is CUDA, the
       framework waits for the node's stream after it.
-    - ``on_update(dt)``: repeatedly. ``dt`` is the global time in seconds since
-      the node's last update. Read the ports with ``recv``, update in proportion
-      to ``dt``, and write the ports with ``send``. It never waits for other nodes.
+    - ``on_update(dt)``: repeatedly, every ``period`` (see below). ``dt`` is the
+      global time in seconds since the node's last update. Read the ports with
+      ``recv``, update in proportion to ``dt``, and write the ports with
+      ``send``. It never waits for other nodes.
     - ``on_pause()``: when the node has stopped for a pause of the network (as
       ``Network.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
@@ -79,8 +81,19 @@ class Node(_native.Node, Component):
     ``_capture_state``, which subclasses must not override. So overriding a
     public hook never skips it.
 
+    Without a ``period``, the node updates as fast as it can: as soon as one
+    ``on_update`` returns, the next one is called (once any time has passed).
+    With a ``period``, the framework waits on the run's timer until ``period``
+    seconds have passed since the start of the last update (or since the start
+    of the run), so the time an update takes counts toward the period. The wait
+    follows the time scale and the virtual clock, and ends at once on a pause or
+    a stop. ``dt`` is still the time that actually passed, so it is at least
+    ``period`` and longer when the node is late. A late node is not caught up
+    on: its next period starts at the late update. Stepping by hand in tests
+    ignores the period.
+
     Calling ``super().__init__()`` is optional: without it the node computes on
-    the CPU and seeds its generator nondeterministically.
+    the CPU, seeds its generator nondeterministically and has no period.
 
     Example::
 
@@ -108,22 +121,32 @@ class Node(_native.Node, Component):
         device: Where the node computes: the CPU or a CUDA device. Received
             messages arrive on it.
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
+        period: The least time between two updates, in seconds of the run's
+            timer. ``None`` updates as fast as possible.
 
     Raises:
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
-            while CUDA is not available.
+            while CUDA is not available, or ``period`` is not finite and
+            positive.
     """
 
     # Class-level defaults, so that subclasses need not call super().__init__().
     _device: torch.device = torch.device("cpu")
     _seed: int | None = None
+    _period: float | None = None
     _generator: torch.Generator | None = None
     _thread_ident: int | None = None
     _stream: torch.cuda.Stream | None = None
 
     def __init__(
-        self, *, device: torch.device | str = "cpu", seed: int | None = None
+        self,
+        *,
+        device: torch.device | str = "cpu",
+        seed: int | None = None,
+        period: float | None = None,
     ) -> None:
+        if period is not None and not (math.isfinite(period) and period > 0):
+            raise ValueError(f"the period must be finite and > 0, got {period}")
         device = torch.device(device)
         if device.type not in ("cpu", "cuda"):
             raise ValueError(f"a node computes on the CPU or CUDA, got {device}")
@@ -140,6 +163,7 @@ class Node(_native.Node, Component):
                 device = torch.device("cuda", torch.cuda.current_device())
         self._device = device
         self._seed = seed
+        self._period = period
 
     @property
     def device(self) -> torch.device:
@@ -149,6 +173,12 @@ class Node(_native.Node, Component):
         current device is this one, but an explicit device states the intent.
         """
         return self._device
+
+    @property
+    def period(self) -> float | None:
+        """The least time between two updates, in seconds of the run's timer, or
+        ``None`` to update as fast as possible."""
+        return self._period
 
     @property
     def generator(self) -> torch.Generator:
