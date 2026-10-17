@@ -39,3 +39,26 @@
 .md-typeset .grid > .card > hr {
   margin: 0.4em 0;
 }
+
+/* The logo in the header: the round icon of Mujou. */
+.md-header__button.md-logo img {
+  height: 1.8rem;
+  border-radius: 50%;
+}
+
+/* The image of Mujou on the home page, and its credit. */
+.md-typeset .mujou-hero {
+  width: 100%;
+  border-radius: 0.8rem;
+  box-shadow: var(--md-shadow-z2);
+}
+
+.md-typeset figure.mujou-figure {
+  margin: 1em 0 1.6em;
+}
+
+.md-typeset figure.mujou-figure figcaption {
+  max-width: none;
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}

@@ -3,6 +3,11 @@
 Asynchronous Distributed Deep Learning Library for Continuous Learning
 { .mujou-tagline }
 
+<figure class="mujou-figure" markdown="span">
+  ![mujou のイメージ](../assets/hero.jpg){ .mujou-hero }
+  <figcaption>画像は、落合陽一の作品「リキッドユニバース」をもとに新たに制作したものである。</figcaption>
+</figure>
+
 mujou は、推論と学習を同時に行い続ける深層学習フレームワークである。PyTorch のコードでノードを書き、ノードをつないだネットワークを走らせる。
 
 !!! warning "開発の初期段階"

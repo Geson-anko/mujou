@@ -3,6 +3,8 @@ site_description: Documentation for Mujou - Asynchronous Distributed Deep Learni
 repo_url: https://github.com/Geson-anko/mujou
 repo_name: Geson-anko/mujou
 
+copyright: "Images: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>"
+
 # User documentation. The design specifications for developers are in specs/.
 docs_dir: docs
 # Rebuild on changes to the docstrings and to the included examples too.
@@ -37,10 +39,13 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  # The image of Mujou: a new work based on Yoichi Ochiai's Liquid Universe. The
+  # credit is in copyright (the footer of every page) and under the image on the home
+  # page.
+  logo: assets/icon.jpg
+  favicon: assets/favicon.png
   icon:
-    logo: material/infinity
     repo: fontawesome/brands/github
-  favicon: assets/favicon.svg
 
 markdown_extensions:
   - admonition
@@ -101,6 +106,7 @@ plugins:
         - locale: ja
           name: 日本語
           build: true
+          copyright: "画像: 落合陽一「リキッドユニバース」をもとに新たに制作"
           nav_translations:
             Home: ホーム
             Getting Started: はじめに

@@ -3,6 +3,11 @@
 Asynchronous Distributed Deep Learning Library for Continuous Learning
 { .mujou-tagline }
 
+<figure class="mujou-figure" markdown="span">
+  ![The image of Mujou](../assets/hero.jpg){ .mujou-hero }
+  <figcaption>Image: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>.</figcaption>
+</figure>
+
 Mujou is a deep learning framework that keeps inferring and learning at the same time. You write nodes in PyTorch code and run a network that connects them.
 
 !!! warning "Early development"
