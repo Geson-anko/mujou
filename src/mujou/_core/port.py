@@ -480,6 +480,11 @@ def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
         port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
 
 
+def label(port: Port[Any, Any, Any]) -> str:
+    """Name ``port`` in an error by its owner and attribute (``"Shift.next"``)."""
+    return port._label()  # pyright: ignore[reportPrivateUsage]  # Port's own module
+
+
 def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:
     """The tensors of ``port``'s initial value in field order, or ``None`` (the
     run's ``Session`` writes them in place of the zeros)."""

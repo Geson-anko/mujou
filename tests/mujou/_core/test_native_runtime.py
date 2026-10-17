@@ -427,7 +427,8 @@ class TestFrameworkHooks:
         log = Log()
         node = FrameworkHooks("a", log, raise_in="_on_thread_start")
         runtime = make_runtime([node])
-        with pytest.raises(NetworkError, match="_on_thread_start") as raised:
+        # Reported as the public hook it runs before.
+        with pytest.raises(NetworkError, match="raised in on_thread_start$") as raised:
             runtime.start(manual=True)
         assert raised.value.__cause__ is node.error
         assert "on_thread_start" not in log.of("a")
@@ -488,7 +489,9 @@ class TestFrameworkHooks:
         runtime = make_runtime([node])
         runtime.start(manual=True)
         virtual_timer.advance(H)
-        with pytest.raises(NetworkError, match="_after_update") as raised:
+        # Reported as the public hook it follows (a CUDA error of on_update
+        # surfaces at the synchronization there).
+        with pytest.raises(NetworkError, match="raised in on_update$") as raised:
             runtime.step()
         assert raised.value.__cause__ is node.error
 

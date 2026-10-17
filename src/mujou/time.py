@@ -31,9 +31,20 @@ from mujou._core.timer import (
     host_only as _host_only,
 )
 
-time = _timer.time
-time_ns = _timer.time_ns
-get_time_scale = _timer.time_scale
+
+def time() -> float:
+    """Return the global time now, in seconds."""
+    return _timer.time()
+
+
+def time_ns() -> int:
+    """Return the global time now, in nanoseconds."""
+    return _timer.time_ns()
+
+
+def get_time_scale() -> float:
+    """Return how many global seconds pass per real second."""
+    return _timer.time_scale()
 
 
 def now() -> Timestamp:

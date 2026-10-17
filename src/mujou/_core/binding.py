@@ -44,13 +44,14 @@ class Binding:
     def __init__(
         self,
         owner: Node,
-        path: str,
+        name: str,
         port: AnyPort,
         outlet: _native.Outlet | None,
         sources: Sequence[tuple[Channel | None, AnySlot]],
     ) -> None:
         self._owner = owner
-        self._path = path
+        # How errors name the port.
+        self._name = name
         self._send_spec = as_spec(port.send_spec)
         self._recv_spec = as_spec(port.recv_spec)
         self._multi = port.multi
@@ -64,7 +65,7 @@ class Binding:
         self._check_owner("receives on")
         spec = self._recv_spec
         if spec is None:
-            raise TypeError(f"the port {self._path!r} receives no messages")
+            raise TypeError(f"the port {self._name!r} receives no messages")
         device = self._owner.device
         received: dict[Channel | None, object] = {}
         for channel, slot in self._sources:
@@ -84,7 +85,7 @@ class Binding:
         outlet = self._sending()
         index = self._indices.get(channel)
         if index is None:
-            raise ValueError(f"{channel!r} is not a channel of {self._path!r}")
+            raise ValueError(f"{channel!r} is not a channel of {self._name!r}")
         outlet.send_to(index, self._tensors(msg))
 
     def _check_owner(self, verb: str) -> None:
@@ -92,16 +93,16 @@ class Binding:
         # one writer, and a node to the slots of its own ports (locality).
         if threading.get_ident() != thread_ident(self._owner):
             raise RuntimeError(
-                f"only the node that owns the port {self._path!r} {verb} it, from its "
+                f"only the node that owns the port {self._name!r} {verb} it, from its "
                 "own hooks while the network runs (state_dict runs on another thread)"
             )
 
     def _sending(self) -> _native.Outlet:
         self._check_owner("sends on")
         if self._outlet is None:
-            raise TypeError(f"the port {self._path!r} sends no messages")
+            raise TypeError(f"the port {self._name!r} sends no messages")
         return self._outlet
 
     def _tensors(self, msg: object) -> list[torch.Tensor]:
         spec = cast(Spec, self._send_spec)  # an outlet exists only with a send spec
-        return host_tensors(spec, msg, where=self._path)
+        return host_tensors(spec, msg, where=self._name)

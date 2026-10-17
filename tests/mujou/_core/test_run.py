@@ -364,6 +364,29 @@ class TestRunANode:
             start(node)
         assert "node 'Leaky' raised in on_start" in str(raised.value)
 
+    def test_names_its_ports_by_its_class_in_errors(self, start_manual: StartManual):
+        # Their paths ("x") alone would not say which node they are of.
+        node = Pair()
+        run = start_manual(node)
+        dtype = (
+            r"^Pair\.x: expected dtype torch\.float64, got torch\.float32; dtypes "
+            r"are not converted, use \.to\(torch\.float64\)$"
+        )
+        with pytest.raises(TypeError, match=dtype):
+            run.write({node.x: torch.zeros(2, dtype=torch.float32)})
+        with pytest.raises(ValueError, match=r"^cannot write the port 'Pair\.out'"):
+            run.write({node.out: u(0)})
+        with pytest.raises(RuntimeError, match=r"owns the port 'Pair\.x'"):
+            node.x.recv()  # from the host, not from the node's hooks
+
+    def test_a_node_in_a_network_names_its_ports_by_their_paths(
+        self, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match=r"^cannot write the port 'b\.prev'"):
+            run.write({net.b.prev: u(0)})
+
     def test_restores_a_tree_of_the_same_node_class(
         self, step: Step, start_manual: StartManual
     ):
@@ -658,7 +681,7 @@ class TestWrite:
             (chain, net.b.prev, "is connected"),
             (solo, pair.many, "many peers"),
             (solo, pair.out, "receives no messages"),
-            (chain, pair.x, "not a port of this graph"),
+            (chain, pair.x, "not a port of a node in this run"),
         ]
         for run, port, match in cases:
             with pytest.raises(ValueError, match=match):
@@ -710,6 +733,11 @@ class TestRead:
         run = start_manual(net)
         with pytest.raises(ValueError, match="sends no messages"):
             run.read(net.prev)
+
+    def test_rejects_a_port_outside_the_run(self, start_manual: StartManual):
+        run = start_manual(Chain())
+        with pytest.raises(ValueError, match="is not a port of a node in this run$"):
+            run.read(Chain().next)
 
 
 class TestSubscribe:
@@ -832,7 +860,11 @@ class TestWaitFor:
     def test_names_itself_when_it_times_out(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(TimeoutError, match="condition of wait_for within 0.05 s"):
+        with pytest.raises(
+            TimeoutError,
+            match=r"^no message of the port 'b\.next' met the condition of wait_for "
+            r"within 0\.05 s",
+        ):
             run.wait_for(net.next, lambda _: False, timeout=0.05)
 
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
@@ -840,7 +872,7 @@ class TestWaitFor:
         run = start_manual(net)
         stopper = threading.Timer(0.05, run.shutdown)
         stopper.start()
-        with pytest.raises(RuntimeError, match="shut down before"):
+        with pytest.raises(RuntimeError, match=r"shut down before the port 'b\.next'"):
             run.wait_for(net.next, lambda _: False)
         stopper.join()
 

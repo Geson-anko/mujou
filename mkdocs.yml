@@ -98,7 +98,7 @@ plugins:
             Getting Started: はじめに
             Installation: インストール
             Quickstart: クイックスタート
-            Concepts: 概念
+            How Mujou Works: Mujou の仕組み
             Nodes: ノード
             Ports and Channels: Port と Channel
             Networks: ネットワーク
@@ -154,7 +154,7 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
-  - Concepts: concepts.md
+  - How Mujou Works: concepts.md
   - User Guide:
       - user-guide/index.md
       - Writing a Node: user-guide/writing-a-node.md

@@ -218,6 +218,17 @@ fn attribute(hook: &str) -> &str {
     }
 }
 
+/// The public hook that `hook` belongs to, as errors name it: the framework's
+/// own hooks run right after (`_after_update`) or before (`_on_thread_start`) a
+/// public one, and an error there is reported as that hook's.
+fn public(hook: &'static str) -> &'static str {
+    match hook {
+        "_after_update" => "on_update",
+        "_on_thread_start" => "on_thread_start",
+        _ => hook,
+    }
+}
+
 /// A Python node seen by the runtime.
 struct PyNode {
     node: Py<PyAny>,
@@ -231,6 +242,7 @@ impl PyNode {
     /// Every hook error is logged where it is caught, including the ones that
     /// do not end the system (a second exception, `on_exception`, `on_stop`).
     fn error(&self, py: Python<'_>, hook: &'static str, err: PyErr) -> HookError {
+        let hook = public(hook);
         let message = format!("node '{}' raised in {hook}", self.name);
         log_error(py, &message, &err);
         HookError {

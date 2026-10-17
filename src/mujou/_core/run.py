@@ -118,8 +118,8 @@ class Run:
 
         Any port that sends can be read, so a connected port shows an inner
         node. Only ``send`` (to every peer) updates the value read here; before
-        the first one it is zeros (or the value restored from ``state``). The
-        tensors are new copies on the CPU.
+        the first one it is the port's ``initial`` (zeros by default) or the
+        value restored from ``state``. The tensors are new copies on the CPU.
 
         The time is on the run's timer. A ``Timestamp`` does not say which timer
         it is on: compare it only with times of the same timer (with
@@ -136,8 +136,9 @@ class Run:
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
-        The first step yields the latest message at the time of this call (zeros
-        or the restored value before the first ``send``) without waiting. Each
+        The first step yields the latest message at the time of this call (before
+        the first ``send``, the port's ``initial`` or the restored value) without
+        waiting. Each
         later step waits until a newer message is sent and yields the latest;
         messages sent in between are skipped. Only the consumer waits: the
         sending node never does. The iterator ends when the run shuts down
@@ -198,18 +199,22 @@ class Run:
             RuntimeError: The run shut down normally first.
             NetworkError: The run stopped because a node raised.
         """
+        messages = self.subscribe(port, timeout=timeout)
+        # Valid: subscribe has checked the port.
+        name = _host(self).label(port)
         try:
-            for message, time in self.subscribe(port, timeout=timeout):
+            for message, time in messages:
                 if condition(message):
                     return message, time
         except TimeoutError:
             # Name this call, not the subscribe it is built on.
             raise TimeoutError(
-                f"no message met the condition of wait_for within {timeout} s; the "
-                "run keeps running"
+                f"no message of the port {name!r} met the condition of wait_for "
+                f"within {timeout} s; the run keeps running"
             ) from None
         raise RuntimeError(
-            "the run shut down before the port sent a message that meets the condition"
+            f"the run shut down before the port {name!r} sent a message that meets "
+            "the condition"
         )
 
     def state_dict(self) -> dict[str, Any]:

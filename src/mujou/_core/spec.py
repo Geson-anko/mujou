@@ -317,7 +317,10 @@ def _check_tensor(spec: TensorSpec, value: object, where: str) -> torch.Tensor:
             f"{where}: expected a dense (strided) tensor, got {value.layout}"
         )
     if value.dtype != spec.dtype:
-        raise TypeError(f"{where}: expected dtype {spec.dtype}, got {value.dtype}")
+        raise TypeError(
+            f"{where}: expected dtype {spec.dtype}, got {value.dtype}; dtypes are "
+            f"not converted, use .to({spec.dtype})"
+        )
     return value
 
 
