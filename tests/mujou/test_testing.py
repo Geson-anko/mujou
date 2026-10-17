@@ -18,8 +18,12 @@ class TestPublicNames:
             mujou.run,
             mujou.testing.run,
             mujou.Network.build,
-            mujou.Compose.__init__,
-            *(getattr(mujou.Run, n) for n in vars(mujou.Run) if not n.startswith("_")),
+            mujou.Group.__init__,
+            *(
+                getattr(mujou.Run, n)
+                for n in vars(mujou.Run)
+                if not n.startswith("_") and callable(getattr(mujou.Run, n))
+            ),
             mujou.testing.ManualRun.step,
         ]
         for f in callables:

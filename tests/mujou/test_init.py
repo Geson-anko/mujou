@@ -7,9 +7,9 @@ class TestPublicNames:
         # public API.
         assert sorted(mujou.__all__) == [
             "Channel",
-            "Compose",
             "DictSpec",
             "Graph",
+            "Group",
             "Network",
             "NetworkError",
             "NextPort",
@@ -18,6 +18,7 @@ class TestPublicNames:
             "Port",
             "PrevPort",
             "Run",
+            "StateDict",
             "TensorSpec",
             "__version__",
             "run",
@@ -27,3 +28,8 @@ class TestPublicNames:
         # A star import must not shadow the standard `time`.
         assert "time" not in mujou.__all__
         assert mujou.time.__name__ == "mujou.time"
+
+    def test_typing_is_a_submodule_outside_all(self):
+        # A star import must not shadow the standard `typing`.
+        assert "typing" not in mujou.__all__
+        assert mujou.typing.__name__ == "mujou.typing"

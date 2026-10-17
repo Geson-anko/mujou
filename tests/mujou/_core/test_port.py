@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, over
 import pytest
 import torch
 
-from mujou._core.network import Compose, Network
+from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
 from mujou._core.spec import DictSpec, TensorSpec
@@ -262,7 +262,7 @@ class TestRecv:
     ):
         single, multi = Port(recv=h()), Port(recv=h(), multi=True)
         node = Probe(lambda: (single.recv(), multi.recv()), single=single, multi=multi)
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         step(run)
         ((value, peers),) = cast(list[tuple[torch.Tensor, object]], node.results)
         assert torch.equal(value, torch.zeros(2, 3))
@@ -279,7 +279,7 @@ class TestRecv:
             for k, s in enumerate(senders)
         }
         sink = Probe(merge.recv, prev=merge)
-        run = start_manual(Compose(**nodes, sink=sink))
+        run = start_manual(Group(**nodes, sink=sink))
         step(run, *nodes.values(), sink)
         (received,) = sink.results
         received = cast(dict[Channel, torch.Tensor], received)
@@ -303,14 +303,14 @@ class TestRecv:
 
         sink = Probe(change_what_was_received, prev=inp)
         neighbour = Probe(other.recv, prev=other)
-        run = start_manual(Compose(source=source, sink=sink, nb=neighbour))
+        run = start_manual(Group(source=source, sink=sink, nb=neighbour))
         step(run, source, sink, neighbour)
         ((first, again),) = cast(list[tuple[torch.Tensor, torch.Tensor]], sink.results)
         assert not first.requires_grad and not again.requires_grad
         assert first.device == torch.device("cpu")
         assert torch.equal(again, torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, neighbour.results[0]), torch.ones(2, 3))
-        assert torch.equal(run.read(out)[0], torch.ones(2, 3))
+        assert torch.equal(run.read(out), torch.ones(2, 3))
 
     def test_with_time_gives_the_time_of_the_write(
         self, step: Step, virtual: VirtualTimer, start_manual: StartManual
@@ -319,7 +319,7 @@ class TestRecv:
         out.connect(inp)
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
         sink = Probe(inp.recv_with_time, prev=inp)
-        run = start_manual(Compose(source=source, sink=sink))
+        run = start_manual(Group(source=source, sink=sink))
         step(run, source, sink)
         ((value, written_at),) = cast(
             list[tuple[torch.Tensor, Timestamp]], sink.results
@@ -331,7 +331,7 @@ class TestRecv:
         mine, theirs = Port(recv=h()), Port(recv=h())
         owner = Probe(mine=mine)
         other = Probe(theirs.recv, theirs=Port(recv=h()))  # reads another's port
-        run = start_manual(Compose(owner=Probe(mine=theirs), node=owner, other=other))
+        run = start_manual(Group(owner=Probe(mine=theirs), node=owner, other=other))
         step(run)
         assert isinstance(other.results[0], RuntimeError)
         with pytest.raises(RuntimeError, match="only the node that owns"):
@@ -342,7 +342,7 @@ class TestRecv:
     ):
         out = Port(send=h())
         node = Probe(out.recv, out=out)
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         step(run)
         assert isinstance(node.results[0], TypeError)
 
@@ -356,7 +356,7 @@ class TestHasReceived:
         out.connect(inp)
         source = Probe(lambda: out.send(torch.zeros(2, 3)), next=out)
         sink = Probe(inp.has_received, prev=inp)
-        run = start_manual(Compose(source=source, sink=sink))
+        run = start_manual(Group(source=source, sink=sink))
         step(run, sink)
         step(run, source, sink)  # sends the zeros: a value equal to the initial one
         assert sink.results == [False, True]
@@ -375,7 +375,7 @@ class TestHasReceived:
         sink = Probe(merge.has_received, prev=merge)
         unconnected = Port(recv=h(), multi=True)
         lonely = Probe(unconnected.has_received, prev=unconnected)
-        run = start_manual(Compose(**nodes, sink=sink, lonely=lonely))
+        run = start_manual(Group(**nodes, sink=sink, lonely=lonely))
         step(run, *nodes.values(), sink, lonely)
         assert sink.results == [{to_quiet: False, to_talker: True}]
         assert lonely.results == [{}]
@@ -389,7 +389,7 @@ class TestHasReceived:
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.has_received, prev=a), Probe(b.has_received, prev=b)
-        run = start_manual(Compose(source=source, a=sink_a, b=sink_b))
+        run = start_manual(Group(source=source, a=sink_a, b=sink_b))
         step(run, source, sink_a, sink_b)
         assert (sink_a.results, sink_b.results) == ([True], [False])
 
@@ -400,7 +400,7 @@ class TestHasReceived:
             given=given,
             written=written,
         )
-        run = start_manual(Compose(node=node), inputs={given: torch.ones(2, 3)})
+        run = start_manual(Group(node=node), inputs={given: torch.ones(2, 3)})
         step(run)
         run.write({written: torch.ones(2, 3)})
         step(run)
@@ -410,7 +410,7 @@ class TestHasReceived:
     def test_a_restored_run_keeps_what_was_sent(
         self, step: Step, start_manual: StartManual, with_inputs: bool
     ):
-        def build() -> tuple[Compose, Probe, Probe, Port[Never, torch.Tensor]]:
+        def build() -> tuple[Group, Probe, Probe, Port[Never, torch.Tensor]]:
             out = NextPort(send=h(), initial=torch.ones(2, 3))
             a, b = Port(recv=h()), Port(recv=h())
             to_a = out.connect(a)
@@ -423,7 +423,7 @@ class TestHasReceived:
                 b=b,
                 host=host,
             )
-            return Compose(source=source, sink=sink), source, sink, host
+            return Group(source=source, sink=sink), source, sink, host
 
         net, source, _, _ = build()
         run = start_manual(net)
@@ -442,13 +442,13 @@ class TestHasReceived:
     ):
         out = Port(send=h())
         node = Probe(out.has_received, out=out)
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         step(run)
         assert isinstance(node.results[0], TypeError)
 
     def test_only_the_owning_node_asks(self, start_manual: StartManual):
         inp = Port(recv=h())
-        start_manual(Compose(node=Probe(inp=inp)))
+        start_manual(Group(node=Probe(inp=inp)))
         with pytest.raises(RuntimeError, match="only the node that owns"):
             inp.has_received()  # from the host
 
@@ -462,9 +462,9 @@ class TestSend:
             out.send(value)
             value.add_(1.0)
 
-        run = start_manual(Compose(node=Probe(send_then_change, out=out)))
+        run = start_manual(Group(node=Probe(send_then_change, out=out)))
         step(run)
-        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
 
     def test_to_one_channel_changes_only_that_peer(
         self, step: Step, start_manual: StartManual
@@ -474,19 +474,19 @@ class TestSend:
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
-        run = start_manual(Compose(source=source, a=sink_a, b=sink_b))
+        run = start_manual(Group(source=source, a=sink_a, b=sink_b))
         step(run, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), torch.zeros(2, 3))
         # The output the host reads changes only with send to every peer.
-        assert torch.equal(run.read(out)[0], torch.zeros(2, 3))
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
 
     def test_to_a_channel_of_another_port(self, step: Step, start_manual: StartManual):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         foreign = Port(send=h()).connect(Port(recv=h()))
         out.connect(inp)
         node = Probe(lambda: out.send_to(foreign, torch.ones(2, 3)), next=out)
-        run = start_manual(Compose(node=node, sink=Probe(prev=inp)))
+        run = start_manual(Group(node=node, sink=Probe(prev=inp)))
         step(run)
         assert isinstance(node.results[0], ValueError)
 
@@ -496,13 +496,13 @@ class TestSend:
         inp = Port(recv=h())
         # The type checker rejects it too: the port's message type is Never.
         node = Probe(lambda: inp.send(torch.ones(2, 3)), inp=inp)  # pyright: ignore[reportArgumentType]
-        run = start_manual(Compose(node=node))
+        run = start_manual(Group(node=node))
         step(run)
         assert isinstance(node.results[0], TypeError)
 
     def test_only_the_owning_node_sends(self, start_manual: StartManual):
         out = Port(send=h())
-        start_manual(Compose(node=Probe(out=out)))
+        start_manual(Group(node=Probe(out=out)))
         with pytest.raises(RuntimeError, match="only the node that owns"):
             out.send(torch.ones(2, 3))
 
@@ -517,7 +517,7 @@ class TestInitial:
         out.connect(a)
         out.connect(b)
         sink_a, sink_b = Probe(a.recv_with_time, prev=a), Probe(b.recv, prev=b)
-        run = start_manual(Compose(source=Probe(next=out), a=sink_a, b=sink_b))
+        run = start_manual(Group(source=Probe(next=out), a=sink_a, b=sink_b))
         step(run, sink_a, sink_b)  # the source does not send
         ((value, written_at),) = cast(
             list[tuple[torch.Tensor, Timestamp]], sink_a.results
@@ -526,7 +526,7 @@ class TestInitial:
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
         # Stamped as the zeros would be: with the time the run started (0).
         assert written_at.ns == 0
-        assert torch.equal(run.read(out)[0], twos)
+        assert torch.equal(run.read(out), twos)
 
     def test_send_to_replaces_it_for_that_peer_only(
         self, step: Step, start_manual: StartManual
@@ -538,18 +538,18 @@ class TestInitial:
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
-        run = start_manual(Compose(source=source, a=sink_a, b=sink_b))
+        run = start_manual(Group(source=source, a=sink_a, b=sink_b))
         step(run, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
-        assert torch.equal(run.read(out)[0], twos)
+        assert torch.equal(run.read(out), twos)
 
     def test_of_a_dict_message(self, step: Step, start_manual: StartManual):
         out = Port(send=fb(), initial={"error": torch.ones(2, 3)})
         inp = Port(recv=fb())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)
-        run = start_manual(Compose(source=Probe(out=out), sink=sink))
+        run = start_manual(Group(source=Probe(out=out), sink=sink))
         step(run, sink)
         received = cast(Feedback, sink.results[0])
         assert torch.equal(received["error"], torch.ones(2, 3))
@@ -561,21 +561,21 @@ class TestInitial:
         out = Port(send=h(), initial=value)
         with torch.no_grad():
             value.add_(1.0)  # after the declaration: must not reach the slots
-        run = start_manual(Compose(node=Probe(out=out)))
-        received = run.read(out)[0]
+        run = start_manual(Group(node=Probe(out=out)))
+        received = run.read(out)
         assert torch.equal(received, torch.ones(2, 3))
         assert not received.requires_grad
 
     def test_a_restored_run_takes_the_value_from_the_state(
         self, step: Step, start_manual: StartManual
     ):
-        def build(initial: float) -> tuple[Compose, Probe, Probe]:
+        def build(initial: float) -> tuple[Group, Probe, Probe]:
             out = NextPort(send=h(), initial=torch.full((2, 3), initial))
             inp = PrevPort(recv=h())
             out.connect(inp)
             source = Probe(lambda: out.send(torch.full((2, 3), 5.0)), next=out)
             sink = Probe(inp.recv, prev=inp)
-            return Compose(source=source, sink=sink), source, sink
+            return Group(source=source, sink=sink), source, sink
 
         net, source, _ = build(2.0)
         run = start_manual(net)
@@ -612,49 +612,43 @@ class TestInitial:
             Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
 
 
-class TestAccelerator:
+@pytest.mark.cuda
+class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self,
-        step: Step,
-        start_manual: StartManual,
-        accelerator: torch.device,
+        self, step: Step, start_manual: StartManual
     ):
         out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
 
-        class OnAccelerator(Probe):
+        class OnCuda(Probe):
             def __init__(self, update: Callable[[], object], **ports: Any) -> None:
                 super().__init__(update, **ports)
-                Node.__init__(self, device=accelerator.type)
+                Node.__init__(self, device="cuda")
 
         def update() -> torch.Tensor:
             x = inp.recv()
             back.send(2 * x)
             return x
 
-        # The source stays on the CPU: MPS takes one node at most.
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
-        sink = OnAccelerator(update, prev=inp, back=back)
-        run = start_manual(Compose(source=source, sink=sink))
+        sink = OnCuda(update, prev=inp, back=back)
+        run = start_manual(Group(source=source, sink=sink))
         step(run, source, sink)
         received = cast(torch.Tensor, sink.results[0])
         # The index-less device is fixed, so the message compares equal to it.
-        assert received.device == sink.device == accelerator
+        assert received.device == sink.device == torch.device("cuda", 0)
         assert torch.equal(received.cpu(), torch.ones(2, 3))
-        sent, _ = run.read(back)
+        sent = run.read(back)
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
 
     def test_takes_an_initial_value_on_the_device(
-        self,
-        step: Step,
-        start_manual: StartManual,
-        accelerator: torch.device,
+        self, step: Step, start_manual: StartManual
     ):
-        out = Port(send=h(), initial=torch.ones(2, 3, device=accelerator))
+        out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))
         inp = Port(recv=h())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)
-        run = start_manual(Compose(source=Probe(out=out), sink=sink))
+        run = start_manual(Group(source=Probe(out=out), sink=sink))
         step(run, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.ones(2, 3))

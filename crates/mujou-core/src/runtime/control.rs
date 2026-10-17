@@ -25,7 +25,6 @@ pub(super) enum Message<N: NodeHooks> {
 pub(super) struct Controller<N: NodeHooks> {
     pub(super) shared: Arc<Shared<N>>,
     pub(super) threads: Vec<JoinHandle<()>>,
-    pub(super) pause_timeout: Duration,
     pub(super) done: bool,
 }
 
@@ -98,6 +97,7 @@ impl<N: NodeHooks> Controller<N> {
     pub(super) fn capture<R>(
         &mut self,
         build: impl FnOnce(Vec<N::State>) -> R,
+        timeout: Duration,
     ) -> Result<R, RuntimeError> {
         self.ensure_running()?;
         let s = Arc::clone(&self.shared);
@@ -108,7 +108,7 @@ impl<N: NodeHooks> Controller<N> {
         s.set_command(&mut c, Command::Pause);
         let epoch = c.epoch;
         c.freeze.hold(FreezeReason::Capture, &s.timer);
-        let deadline = Instant::now().checked_add(self.pause_timeout);
+        let deadline = Instant::now().checked_add(timeout);
         while !c.failed && !c.nodes.iter().all(|r| r.paused_at == Some(epoch)) {
             let remaining = remaining(deadline);
             if remaining.is_zero() {

@@ -41,12 +41,13 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
     start = run.write({net.prev: torch.tensor(1.0, dtype=torch.float64)})
     for _ in range(4):
         mujou.time.sleep(TAU / 2)
-        (a, t_a), (b, t_b) = run.read(net.a.next), run.read(net.b.next)
+        a, t_a = run.read_with_time(net.a.next)
+        b, t_b = run.read_with_time(net.b.next)
         # Each output against the exact one at the time it was sent. On a busy
         # machine a node may not have sent since the step: its time is then
-        # earlier than start, and a Timestamp difference would raise.
-        exact_a, _ = step_response(float(t_a) - float(start))
-        _, exact_b = step_response(float(t_b) - float(start))
+        # earlier than start, and the difference is negative.
+        exact_a, _ = step_response(t_a - start)
+        _, exact_b = step_response(t_b - start)
         print(
             f"a = {a.item():.3f} (exact {exact_a:.3f}), "
             f"b = {b.item():.3f} (exact {exact_b:.3f})"
@@ -55,6 +56,6 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
 
     # Hold the input for 10 time constants: both reach the equilibrium x = u.
     mujou.time.sleep(10 * TAU)
-    b, _ = run.read(net.next)
+    b = run.read(net.next)
     print(f"after {10 * TAU:.1f} s more: b = {b.item():.4f}")
     assert abs(b.item() - 1.0) < 1e-3

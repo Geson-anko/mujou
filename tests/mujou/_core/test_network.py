@@ -7,7 +7,7 @@ from typing import Any, override
 import pytest
 
 from mujou._core.graph import Graph
-from mujou._core.network import Compose, Network
+from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
@@ -86,7 +86,7 @@ class TestComponentConnect:
         ):
             Classifier().connect(Hidden())
         with pytest.raises(ValueError, match=r"self\.prev = self\.<child>\.prev"):
-            Hidden().connect(Compose(Hidden()))
+            Hidden().connect(Group(Hidden()))
 
     def test_the_same_port_under_two_names_is_one_side(self):
         class Aliased(Network):
@@ -338,10 +338,10 @@ class TestBuild:
             Empty().build()
 
 
-class TestCompose:
+class TestGroup:
     def test_paths_by_position_and_by_keyword(self):
         first, second, named = Stack(), Stack(), Classifier()
-        graph = Compose(first, second, enc=named).build()
+        graph = Group(first, second, enc=named).build()
         assert [path for path, _ in graph.nodes] == [
             "0.l1",
             "0.l2",
@@ -354,35 +354,35 @@ class TestCompose:
         assert graph.port_path(named.teacher) == "enc.head.teacher"
 
     def test_nests(self):
-        inner = Compose(a=Stack())
-        graph = Compose(inner).build()
+        inner = Group(a=Stack())
+        graph = Group(inner).build()
         assert [path for path, _ in graph.nodes] == ["0.a.l1", "0.a.l2"]
 
     def test_the_networks_may_be_connected(self):
         source, sink = Stack(), Stack()
         source.connect(sink)
-        graph = Compose(source, sink).build()
+        graph = Group(source, sink).build()
         assert graph.port_path(sink.prev) == "1.l1.prev"
 
     def test_takes_nodes_and_networks_alike(self):
         node, named = Hidden(), Hidden()
-        graph = Compose(node, Stack(), n=named).build()
+        graph = Group(node, Stack(), n=named).build()
         assert [path for path, _ in graph.nodes] == ["0", "1.l1", "1.l2", "n"]
         assert graph.port_path(node.prev) == "0.prev"
         assert graph.port_path(named.next) == "n.next"
 
     def test_rejects_what_is_neither_a_node_nor_a_network(self):
         with pytest.raises(TypeError, match="object"):
-            Compose(object())  # pyright: ignore[reportArgumentType]
+            Group(object())  # pyright: ignore[reportArgumentType]
         with pytest.raises(TypeError, match="'x'"):
-            Compose(x=1)  # pyright: ignore[reportArgumentType]
+            Group(x=1)  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.parametrize("name", ["build", "connect", "_private", "", "a.b"])
     def test_rejects_names_that_would_hide_its_own(self, name: str):
         with pytest.raises(ValueError, match=repr(name)):
-            Compose(**{name: Stack()})
+            Group(**{name: Stack()})
 
     def test_rejects_the_same_network_twice(self):
         stack = Stack()
         with pytest.raises(ValueError, match="'0' and 'enc'"):
-            Compose(stack, enc=stack).build()
+            Group(stack, enc=stack).build()

@@ -3,16 +3,17 @@
 """Checked by pyright in strict mode, as users' code and mujou's own nodes are:
 subclassing ``mujou.Node`` and writing to a run must type-check cleanly."""
 
-from typing import TypedDict, assert_type
+from typing import Never, TypedDict, assert_type, override
 
 import pytest
 import torch
 
 import mujou
 import mujou.testing
-from mujou import DictSpec, Network, Node, Port, PrevPort, TensorSpec
+from mujou import DictSpec, Network, NextPort, Node, Port, PrevPort, TensorSpec
 from mujou.testing import VirtualTimer
 from mujou.time import Timer
+from mujou.typing import Multi, Single
 
 
 class Layer(Node):
@@ -36,7 +37,25 @@ class DictSink(Node):
         self.prev = PrevPort(recv=FEEDBACK)
 
 
-class Single(Network):
+class Fan(Node):
+    """Ports annotated with the names of ``mujou.typing``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev: PrevPort[Never, torch.Tensor, Multi] = PrevPort(
+            recv=TensorSpec((2,)), multi=True
+        )
+        self.next: NextPort[torch.Tensor, Never, Single] = NextPort(
+            send=TensorSpec((2,)), multi=False
+        )
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.next.send(sum(self.prev.recv().values(), torch.zeros(2)))
+
+
+class Wrapped(Network):
     def __init__(self) -> None:
         self.layer = Layer(2)
         self.prev = self.layer.prev
@@ -44,11 +63,11 @@ class Single(Network):
 
 class TestStrictTyping:
     def test_a_subclass_and_a_prebuilt_write(self) -> None:
-        net = Single()
+        net = Wrapped()
         values = {net.prev: torch.ones(2)}  # a dict built before the call
         with mujou.run(net, inputs=values) as run:
             run.write(values)
-            _, t = run.read(net.layer.out)
+            _, t = run.read_with_time(net.layer.out)
             assert t.ns >= 0
 
     def test_a_typed_dict_message_is_written(self) -> None:
@@ -69,6 +88,15 @@ class TestStrictTyping:
             run.timer.advance(0.001)  # no cast needed
         with mujou.testing.run(Layer(2), timer=Timer()) as run:
             assert_type(run.timer, Timer)
+
+    def test_ports_annotated_with_mujou_typing(self) -> None:
+        a, b, fan = Layer(2), Layer(2), Fan()
+        a.out.connect(fan.prev)
+        b.out.connect(fan.prev)
+        with mujou.testing.run(a, b, fan) as run:
+            run.step()
+            value, _ = run.read(fan.next)
+            assert_type(value, torch.Tensor)
 
     def test_a_run_takes_at_least_one_component(self) -> None:
         # Without the ignore pyright reports the call, and an unneeded ignore is

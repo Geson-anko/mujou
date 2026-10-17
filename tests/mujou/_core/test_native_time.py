@@ -77,10 +77,18 @@ class TestTimestamp:
         assert early != late
         assert len({early, Timestamp(ns=1), late}) == 2
 
-    def test_difference_is_the_time_between(self):
-        assert Timestamp(ns=10) - Timestamp(ns=3) == Timestamp(ns=7)
-        with pytest.raises(ValueError, match="later"):
-            _ = Timestamp(ns=3) - Timestamp(ns=10)
+    def test_float_is_the_time_in_seconds(self):
+        ts = Timestamp(ns=2_500_000_001)
+        assert ts.float() == float(ts) == 2_500_000_001 / 1e9
+
+    @pytest.mark.parametrize(
+        ("a", "b"), [(10, 3), (3, 10), (7, 7), (2**64 - 1, 0), (0, 2**64 - 1)]
+    )
+    def test_difference_is_the_signed_seconds_between(self, a: int, b: int):
+        difference = Timestamp(ns=a) - Timestamp(ns=b)
+        assert type(difference) is float
+        # Rounded as the difference of the exact nanoseconds is.
+        assert difference == (a - b) / 1e9
 
     @pytest.mark.parametrize("ns", [-1, 2**64])
     def test_rejects_nanoseconds_out_of_range(self, ns: int):

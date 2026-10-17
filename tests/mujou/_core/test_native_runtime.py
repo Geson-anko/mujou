@@ -154,7 +154,7 @@ class TestStart:
         runtime.start(manual=True, states=[{"s": 0}, {"s": 1}])
         virtual_timer.advance(H)
         runtime.step()
-        runtime.capture(lambda states: None)
+        runtime.capture(lambda states: None, WAIT)
         runtime.shutdown()
 
         for i, node in enumerate(nodes):
@@ -214,7 +214,7 @@ class TestStart:
         runtime.start(manual=True)
         virtual_timer.advance(H)
         runtime.step()
-        runtime.capture(lambda states: None)
+        runtime.capture(lambda states: None, WAIT)
         runtime.shutdown()
 
         on_start_thread = seen["on_start"][2]
@@ -244,7 +244,7 @@ class TestStart:
             seen.append((getattr(local, "value", None), threading.current_thread()))
 
         for _ in range(2):
-            runtime.capture(build)
+            runtime.capture(build, WAIT)
         # state_dict, build, state_dict, build: all on one thread state.
         assert [value for value, _ in seen] == [None, "set", "set", "set"]
         assert len({id(thread) for _, thread in seen}) == 1
@@ -465,7 +465,7 @@ class TestFrameworkHooks:
         node = FrameworkHooks("a", log)
         runtime = make_runtime([node])
         runtime.start(manual=True)
-        states = runtime.capture(lambda states: states)
+        states = runtime.capture(lambda states: states, WAIT)
         runtime.shutdown()
         assert states == [{"captured": {"name": "a", "updates": 0}}]
         assert log.of("a").count("_capture_state") == 1
@@ -479,7 +479,7 @@ class TestFrameworkHooks:
         runtime = make_runtime([node])
         runtime.start(manual=True)
         with pytest.raises(NetworkError, match="state_dict"):
-            runtime.capture(lambda states: states)
+            runtime.capture(lambda states: states, WAIT)
 
     def test_an_error_after_an_update_stops_the_network(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -529,7 +529,7 @@ class TestFreeRun:
         assert time.process_time() - cpu_start < 0.05
         assert log.count("a", "on_update") == 0
         # The waiting node wakes on control requests, not only on the time.
-        states = runtime.capture(lambda states: states)
+        states = runtime.capture(lambda states: states, WAIT)
         assert states == [{"name": "a", "updates": 0}]
         start = time.monotonic()
         runtime.shutdown()
@@ -553,13 +553,13 @@ class TestCapture:
         log = Log()
         stuck, other = Stuck("stuck", log), Recorder("other", log)
         runtime = make_runtime([stuck, other])
-        runtime.start(pause_timeout=0.1)
+        runtime.start()
         virtual_timer.advance(H)
         assert entered.wait(WAIT)
         log.wait_for(lambda: len(other.dts) == 1)
 
         with pytest.raises(PauseTimeoutError, match="stuck") as exc_info:
-            runtime.capture(lambda states: None)
+            runtime.capture(lambda states: None, 0.1)
         assert "other" not in str(exc_info.value)
         # The network keeps running on a running timer.
         assert runtime.join(timeout=0) is False
@@ -580,7 +580,7 @@ class TestCapture:
             raise KeyError("build")
 
         with pytest.raises(KeyError, match="build"):
-            runtime.capture(build)
+            runtime.capture(build, WAIT)
         runtime.check()
         assert runtime.join(timeout=0) is False
         assert not virtual_timer.is_paused()
@@ -592,7 +592,7 @@ class TestCapture:
         runtime.start()
         # Waiting from the control thread for the control thread would deadlock.
         with pytest.raises(RuntimeError, match="own threads"):
-            runtime.capture(lambda states: runtime.shutdown())
+            runtime.capture(lambda states: runtime.shutdown(), WAIT)
         assert runtime.join(timeout=0) is False
 
 
@@ -617,7 +617,7 @@ class TestException:
         runtime.start()
         # `on_resume` raises after the capture has returned, so wait for the end.
         with pytest.raises(NetworkError) as exc_info:
-            runtime.capture(lambda states: None)
+            runtime.capture(lambda states: None, WAIT)
             runtime.join(WAIT)
         assert exc_info.value.__cause__ is nodes[1].error
         # The hold of the capture is released at the end.

@@ -11,7 +11,7 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
 | `mujou._core` のほか（`spec` / `port` / `component` / `node` / `network` / `graph` / `binding` / `state` / `session` / `run`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
 | `mujou._core` の `timer` / `hooks` / `lifetime` | しない（import しない） | タイマー、hook の中かどうかの判定、動いている実行の登録と終了時の停止 |
-| `mujou` / `mujou.time` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
+| `mujou` / `mujou.time` / `mujou.typing` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
 | `mujou.pc`（予定） | する | PC-ALM のノード |
 
 torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
@@ -27,7 +27,7 @@ torch は mujou の必須の依存である。実装は private な `mujou._core
 | `component` | `Node` と `Network` の共通の基底 `Component`（`connect`）と、属性の Port の列挙 | `port` |
 | `node` | `mujou.Node` | `component` / `hooks` / `port` / `timer` |
 | `graph` | ネットワークの構築（木の走査・検査・凍結・構築済みの印）と `Graph`、1 回だけの起動（`start_once`） | `component` / `node` / `port` |
-| `network` | `Network` / `Compose` / `RunCompose` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
+| `network` | `Network` / `Group` / `RunGroup` と、構築の取り消し（`unbuild`。根の `Network` が覚えた `Graph` を忘れるため、`graph` ではなくここに置く） | `component` / `graph` / `node` |
 | `binding` | 動いている実行での Port の読み書き（`Binding`） | `node` / `port` / `spec` |
 | `state` | 状態の木（`Run.state_dict` の形）を作る・検査して読む。木の形を定めるのはここだけ | `binding` / `spec` |
 | `lifetime` | 動いている実行の登録と、インタープリタの終了時の停止。`session` を import しないように、実行を小さな Protocol で持つ | なし |
@@ -51,7 +51,7 @@ mujou のコアとメッセージは GPU をサポートしない。コアはス
 - スロットの値をデバイス上に置くと、スロットにバッファと CUDA event の組を持たせることになる。ストリームをまたぐ同期、バッファの再利用の安全性、タイムスタンプの意味（公開した時刻か、計算が完了した時刻か）を、すべてコアが背負うことになる
 - ストリームから 1 サンプルずつ学ぶ非同期のノードでは、計算は小さな行列×ベクトル積の連続になり、もともと GPU の効率は出にくい
 
-対象とするデバイスは CPU と、torch の現在のアクセラレータ（CUDA、MPS、XPU など）である。CUDA のノードには自分のストリームを持たせる（[ノード間の独立性](#ノード間の独立性)）。CUDA 以外のアクセラレータではストリームを分けず、デバイスの現在のストリームをそのまま使う（[CUDA 以外のアクセラレータ](#cuda-以外のアクセラレータ)）。
+対象とするデバイスは CPU と CUDA だけである。CUDA のノードには自分のストリームを持たせる（[ノード間の独立性](#ノード間の独立性)）。MPS などほかのアクセラレータはサポートしない（[CUDA 以外のアクセラレータ](#cuda-以外のアクセラレータ)）。
 
 ## ノード間の独立性
 
@@ -60,8 +60,6 @@ mujou のコアとメッセージは GPU をサポートしない。コアはス
 1. ノードごとに自分の CUDA ストリームを持つ。既定のストリームを共有すると、ホストへ書き出す前の同期が、ほかのノードが積んだ仕事まで待つ
 2. 同期は自分のストリームに対してだけ行う。デバイス全体を待つ `torch.cuda.synchronize()` は使わない
 3. プロセス全体に効く設定や状態を、ノードの中で変えない（[プロセス全体に効くもの](#プロセス全体に効くもの)）
-
-この 3 つは CUDA の場合である。CUDA 以外のアクセラレータではノードがストリームを持たず、デバイス全体を同期するので、同じデバイスのほかのノードが積んだ仕事を待つことがある（[CUDA 以外のアクセラレータ](#cuda-以外のアクセラレータ)）。待つのは積まれた分だけで、メッセージを待つわけではないので、正しさは変わらない。
 
 GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノードで取り合う。これは CPU のコアの取り合いと同じで、各ノードの $\Delta t$ の伸びとして連続時間の定式化が吸収する（[実行モデル](execution-model.md)）。
 
@@ -81,10 +79,9 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 | デバイス | CUDA のときは `torch.cuda.set_device` でノードのデバイスをこのスレッドの現在のデバイスにする | `device="cuda"` と書いた確保や演算が、ノードのデバイスに載る |
 | ストリーム | CUDA のときは自分の `torch.cuda.Stream` を作り、`torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | ステップの終わりの同期 | CUDA のときは、各 `on_update` の直後に呼ばれる `_after_update()` で自分のストリームを `synchronize` する | CPU が GPU を追い越さない |
-| CUDA 以外のアクセラレータ | `torch.accelerator.set_device_index` でノードのデバイスをこのスレッドの現在のデバイスにし、各 `on_update` の直後に `torch.accelerator.synchronize` でデバイスを同期する。ストリームは作らない | CUDA と同じく、確保がノードのデバイスに載り、CPU が GPU を追い越さない |
 | 乱数生成器 | ノードごとの `torch.Generator` を、渡された seed で作る | 既定の乱数生成器はプロセス全体で共有されるので、テストが決定的でなくなる |
 
-デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か、使える状態の torch の現在のアクセラレータで、それ以外は `ValueError`。seed を省略すると、乱数生成器を決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
+デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。seed を省略すると、乱数生成器を決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
 
 乱数生成器は `self.generator` で使う。ノードのスレッドの上で作るので、`on_start` より前（`__init__` の中など）に読むと `RuntimeError` になる。生成器は起動のたびに seed から作り直すので、復元しても生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
@@ -117,27 +114,11 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 ### CUDA 以外のアクセラレータ
 
-2026-10-17 にユーザーの判断で、CUDA 以外のアクセラレータ（MPS、XPU など）でもノードが計算できるようにした。ただし、ノードごとのストリームは CUDA だけに持たせる。
+ノードが計算できるのは CPU と CUDA だけで、MPS・XPU などほかのアクセラレータはサポートしない。それらのデバイスを渡すと、torch がそのデバイスを使えるかどうかに関わらず、構築時に `ValueError` にする。
 
-- 受け付けるのは、torch の現在のアクセラレータ（`torch.accelerator.current_accelerator(check_available=True)`）と同じ種類のデバイスだけである。torch は 1 つのプロセスで 1 種類のアクセラレータしか扱わないので、それ以外は使えない
-- 使えない種類（CUDA・MPS・XPU・MTIA・HPU）を渡すと「`MPS is not available`」の形で、それ以外（`meta` など）を渡すと「CPU か使えるアクセラレータ」の形で、構築時に `ValueError` にする
-- 添字の無いデバイス（`"mps"`）は、構築時に `torch.accelerator.current_device_index()` の添字を付けて固定する。スレッドのデバイスを設定するのに添字が要るうえ、受け取ったテンソルのデバイスは `mps:0` で、`torch.device("mps")` とは等しくならないからである
-- ノードのスレッドでは `torch.accelerator.set_device_index` でデバイスを設定し、乱数生成器をデバイスの上に作る（`torch.Generator("mps:0")` は使える）
-- 同期は CUDA でストリームを同期する箇所（各 `on_update` の直後、`load_state_dict` の後、`state_dict` の前後）で、`torch.accelerator.synchronize(device)` でデバイス全体を待つ。ノードがストリームを持たないので、自分の仕事だけを待つ手段がない。同じデバイスのほかのノードの仕事も待つが、正しさは変わらない
-- ストリームを分けない理由: `torch.accelerator` の汎用 API でストリームを作れても、バックエンドごとに意味と性能が確かめられない。MPS は実質 1 本のコマンドキューで、分けても並列にならない
-- ホストのスレッドでの同期（`Session._synchronize_current_streams`）は CUDA のままにした。ノードがストリームを分けないので、ホストのスレッドとノードのスレッドは同じストリームに積み、順序は保たれる
+経緯: 2026-10-17 に一度、`torch.accelerator` を使って CUDA 以外のアクセラレータ（MPS など）でもノードが計算できるようにした（ストリームは CUDA だけに持たせ、ほかはデバイス全体を同期し、MPS のノードは動いている実行全体で 1 つに限っていた）。同じ日にユーザーの決定で MPS のサポートを取りやめ、CPU と CUDA だけに戻した。理由: PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち（torch 2.14.1、Apple Silicon。GIL ありのビルドでも 10/10 で再現。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）、ノードごとのスレッドで計算する mujou の実行モデルと合わない。MPS 以外のアクセラレータは確かめる環境が無く、ストリームの意味と性能も確かめられないので、あわせて対象から外した。
 
-制約: PyTorch の MPS は、2 つのスレッドから同時に使うとプロセスが落ちる（torch 2.14.1、Apple Silicon で確認。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）。mujou のノードはそれぞれ自分のスレッドで計算するので、MPS のノードを 2 つ以上置いたネットワーク、または MPS のノードが動いている間にホストが MPS で計算すると、プロセスが落ちる。MPS のノード 1 つとホストからの読み書き（CPU の値）は動く。
-
-この制約への対処として、2026-10-17 に（orchestrator の推奨案で。ロックで直列にする案はユーザーに後で確認する）、MPS のノードを 1 つに限ることにした。`Session.start` は、どのノードも起動する前に、この実行と、登録済みのすべての実行（`lifetime.running`。動いている実行と起動中の実行。終わった実行は先に `_settle` して数えない）を合わせて、`_ONE_NODE_DEVICES`（今は `("mps",)`）の種類のデバイスのノードを数える。2 つ以上なら、ノードの名前（パス、根ならクラス名）を挙げて `ValueError` にする。拒んだ実行は何も起動しないので、ほかの拒否と同じく、原因が無くなれば同じネットワークを後で起動できる。実行をまたいで数えるのは、MPS のノードを 1 つずつ持つ 2 つの実行でも落ちるからである。ホストのコードが MPS を使うことは止められないので、利用者向けの文書で注意する。2 つのスレッドから同時に `mujou.run` を呼んでも 2 つとも通らないように、終わった実行の `_settle`、数える検査、`lifetime.add` による登録をモジュールのロック `_START_LOCK` の中で続けて行う。登録は復元やランタイムの生成より前に済ませ、その後に起動を拒んだときは `lifetime.discard` で登録を外す。
-
-状態の木にも同じ制約が残る（既知、2026-10-17 のアルゴリズムレビューで指摘）。`Run.state_dict()` が返す木のテンソルはノードのデバイスに置いたままなので、MPS のノードが動いている間にホストが木の MPS のテンソルを触る（`.cpu()`、比較、保存）と、2 つ目のスレッドから MPS を使う。終わった実行の `state_dict()` は、ノードの `state_dict` をホストのスレッドで呼んでコピーするので、ほかの実行の MPS のノードが動いていればやはり 2 つのスレッドになる。今は利用者向けの文書（`docs/*/user-guide/torch.md`）と docstring で注意するだけで、振る舞いは変えていない。木を CPU に移して返すかどうかは未決で、オーナーの判断を待つ。
-
-MPS は float64 も持たないので、float64 の spec のメッセージを MPS のノードが受け取ると torch の `TypeError` になる。
-
-> 状態: MPS の経路は 2026-10-17 に Apple Silicon の Mac（torch 2.14.1、3.14t）で確かめた。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestAccelerator` と、`test_node.py` の `TestRestore`・`TestDevice` で、アクセラレータの無い環境では skip になる。CUDA のマシンでは同じテストが CUDA で走る。MPS ではストリームの状態を問い合わせられない（`Stream.query` が未対応）ので、各 `on_update` の後の同期を直接確かめるテストは無い。
-
-> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py` の `TestCuda` と、CUDA のマシンでは CUDA で走る `TestAccelerator`（2026-10-17 にストリームに依らないテストを `TestCuda` から移した。`test_port.py` のものを含む）で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる（移す前の 2026-10-16 に確かめた。移した後の CUDA での確認はまだ）。
+> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestCuda` と、`test_node.py` の `TestRestore` の CUDA の場合で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる（2026-10-16 に確かめた。2026-10-17 にアクセラレータ用に分けたテストを `TestCuda` に戻した後の CUDA での確認はまだ）。
 
 ### 境界の変換
 

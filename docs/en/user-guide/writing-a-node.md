@@ -65,6 +65,22 @@ self.next = NextPort(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y":
 self.prev = PrevPort(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
 ```
 
+Type checkers infer the type of a port from its specs, so you seldom write it. To annotate one (an argument of a helper, say), write `Port[S, R, M]`: `S` is the type it sends, `R` the type it receives, and `M` its number of peers, `Single` or `Multi` from `mujou.typing`. An omitted direction is `Never`. A function that takes any spec takes a `MessageSpec[T]` from `mujou.typing`.
+
+```python
+from typing import Never
+
+from mujou.typing import MessageSpec, Multi
+
+
+def mean_of(port: PrevPort[Never, torch.Tensor, Multi]) -> torch.Tensor:
+    return torch.stack(list(port.recv().values())).mean(0)
+
+
+def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
+    return NextPort(send=spec)
+```
+
 ## 2. Set up the state in `on_start`
 
 Create the state tensors in `on_start`. In `on_update`, do not assign a new tensor to the attribute; update the tensor in place with `+=`, `copy_` and the like.
@@ -150,11 +166,11 @@ Pass `period` only as an argument of `super().__init__`. Setting a default with 
 
 `super().__init__` takes the following arguments. All of them are keyword arguments and can be left out.
 
-| Argument | Meaning                                                                                         | Default                       |
-| -------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
-| `device` | The device the node computes on. `"cpu"`, a CUDA device, or another accelerator such as `"mps"` | `"cpu"`                       |
-| `seed`   | The seed of the node's own random number generator `self.generator`                             | `None` (different every time) |
-| `period` | The period of updates, in seconds                                                               | `0.01`                        |
+| Argument | Meaning                                                             | Default                       |
+| -------- | ------------------------------------------------------------------- | ----------------------------- |
+| `device` | The device the node computes on. `"cpu"` or a CUDA device           | `"cpu"`                       |
+| `seed`   | The seed of the node's own random number generator `self.generator` | `None` (different every time) |
+| `period` | The period of updates, in seconds                                   | `0.01`                        |
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share. `self.generator` can be used in the hooks from `on_start` on. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 
