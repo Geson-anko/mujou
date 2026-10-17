@@ -10,6 +10,8 @@
 - コード・コマンド・ファイルパス・識別子・ログ/エラーの引用は原語のまま残す
 - コミットメッセージ・PR タイトルは「Git 運用」の規約に従い、日本語化しない
 - 仕様書・計画書・skill・memory は日本語で書く
+- ユーザー向けドキュメント（`docs/`）の本文は英語（`docs/en/`）と日本語（`docs/ja/`）の両方で書く
+- docstring とコードのコメントは英語。API リファレンスは docstring から生成し、日本語のサイトでも英語のまま出す
 
 ## プロジェクト概要
 
@@ -47,7 +49,7 @@
 
 ### ノード間の局所性・非同期性を壊さない
 
-mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`docs/execution-model.md`）。
+mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、グローバルタイマーごと止める（`specs/execution-model.md`）。
 
 - ノードの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
 - 更新手法は差し替え可能にする。ノード・メッセージ・スケジューラに特定の学習則を焼き付けない
@@ -61,6 +63,13 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - 乱数とスケジュールを固定して決定的に保つ。`class TestXxx` に集約し、`tests/mujou/` は `src/mujou/` をミラーする
 - 詳細: skill `testing-strategy`
 
+### ドキュメント
+
+- `specs/` は開発者向けの設計仕様（日本語）。設計判断とその理由を書き、まだ実装していない仕様も含む
+- `docs/` は利用者向けのドキュメント（mkdocs、英語と日本語）。実装済みの公開 API の使い方を書く。API リファレンスは docstring から生成する
+- 利用者向けのサンプルは `examples/` に置き、ページには snippets（`--8<--`）で取り込む。`tests/test_examples.py` が全部を実行する
+- 詳細: [memory/project_docs_site.md](memory/project_docs_site.md)
+
 ### カプセル化
 
 - 内部実装と `__init__` で設定する属性は原則 `_` prefix。外部から必要なものだけ public にする
@@ -73,7 +82,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock、cargo fmt、cargo clippy ほか
-- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`docs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
 - torch に依存しないのは private な `mujou._core` だけで、それ以外はノード内の計算に PyTorch を全面的に採用する。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
@@ -85,7 +94,9 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 | `just test`            | cargo test と pytest（slow を含む全テスト、coverage 付き）                                                    |
 | `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                              |
 | `just type`            | pyright strict                                                                                                |
-| `just run`             | format → test → type。**コミット前の検証はこれ**                                                              |
+| `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |
+| `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                   |
+| `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                  |
 | `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run` |
 
 単一テスト: `uv run pytest tests/mujou/test_x.py -v` / キーワード: `uv run pytest -k "<expr>"`

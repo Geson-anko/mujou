@@ -24,6 +24,6 @@ metadata:
 - ノードに目標周期を持たせる場合、スケジューラは期限順に実行する
 - 複数マシンにまたがる実行は、現状は想定しない（2026-10-13 決定）
 - コアとの変換（DLPack、必ずコピー）は torch に依存する側（`mujou.Node` とネットワーク）が受け持つ。ゼロコピー共有はしない（[[project-message-types]]）
-- ツールチェーンは 2026-10-15 に整えた。純 Rust の `crates/mujou-core` と PyO3 の `crates/mujou-python` に分け、maturin でビルドする。版数は Cargo workspace の version だけ（詳細は `docs/native-core.md` のツールチェーン節）
+- ツールチェーンは 2026-10-15 に整えた。純 Rust の `crates/mujou-core` と PyO3 の `crates/mujou-python` に分け、maturin でビルドする。版数は Cargo workspace の version だけ（詳細は `specs/native-core.md` のツールチェーン節）
 
 関連: [[project-core-message-framework]], [[project-async-node-execution]], [[project-open-decisions]]

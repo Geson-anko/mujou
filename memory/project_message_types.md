@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-2026-10-13 決定。詳細は `docs/messages.md`。
+2026-10-13 決定。詳細は `specs/messages.md`。
 
 - **双方向通信は片方向スロット 2 本。** 各スロットの書き手は所有ノード 1 つ、読み手は N 個可
 - **利用者が扱う値は `torch.Tensor` だけ（2026-10-15 変更）。** Port の `recv()` / `send()`、ホストの `write` / `read`、`TensorSpec.zeros()` / `rand()` はすべて `torch.Tensor`。コアの値の型（旧 `mujou.Tensor`）は `mujou._core` の内部に閉じ、`mujou.dtypes` と `mujou.default.dtype` は廃止。NumPy との変換と `ml_dtypes` も不要になった

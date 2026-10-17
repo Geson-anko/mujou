@@ -59,7 +59,7 @@ effort: medium
 - 用語は 1 つの意味に 1 つの語を使い、途中で言い換えない
 - 読者が作業中に参照する順に並べる
 - 既存の文書の構成・文体を尊重する。直す必要のない節には触らない
-- 日本語 docstring は 1 文を 1 行に収める（`just format` の整形で読みにくく折られるのを避けるため）
+- docstring とコードのコメントは英語で書く（2026-10-16 のユーザーの決定。`memory/feedback_doc_language.md`）
 - 対象が `.claude/` 配下なら skill `edit-dot-claude` の手順で編集する
 
 ### 短く保つ

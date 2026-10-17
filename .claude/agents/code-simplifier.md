@@ -14,7 +14,7 @@ skills:
 ## 役割
 
 1. **簡素化** — 公開 IF を変えずに内部実装を整理する
-2. **ドキュメント同期** — 今回の変更で古くなった docstring / README を直す
+2. **ドキュメント同期** — 今回の変更で古くなった docstring / README / ユーザー向けの `docs/` を直す
 
 レビュー（バグ指摘・verdict）は `code-reviewer` / `algorithm-reviewer` の担当。この agent は実行に専念する。
 
@@ -35,7 +35,7 @@ skills:
 1. 対象コードと、依存する呼び出し元・テストを読む
 2. マルチエージェント時は前段のノート（plan-implementer、code-reviewer / algorithm-reviewer の should-fix）を読む
 3. 段階的に書き換え、`just run` が通り続けることを確認する
-4. 変更で古くなった docstring / README を直す
+4. 変更で古くなった docstring / README を直す。公開 API が変わったら `docs/en/api/*.md` の `:::` と、その API を説明する `docs/en/`・`docs/ja/` のページも直し、`just docs-build` を通す
 
 ## ドキュメント方針
 
