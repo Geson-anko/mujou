@@ -990,3 +990,235 @@ class Net(Network):
         done = self.run_script(body, marker)
         assert done.returncode == 0, done.stderr
         assert marker.read_text() == "stopped"
+
+
+def needs_gpus(n: int) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(
+        not torch.cuda.is_available() or torch.cuda.device_count() < n,
+        reason=f"needs {n} CUDA device(s)",
+    )
+
+
+# Large enough that the GPU is still working when the CPU moves on: a missing wait
+# for a stream shows as a value in the middle of an update.
+BIG = 1 << 26  # 256 MB of float32
+ADDS = 20  # in-place updates of the whole tensor per on_update
+
+
+class CudaLeaky(Node):
+    """``Leaky`` with ``tau=1`` on ``cuda:0``."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+        self.prev = PrevPort(recv=vec())
+        self.next = NextPort(send=vec())
+
+    @override
+    def on_start(self) -> None:
+        self.x = torch.zeros(2, dtype=F64, device=self.device)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.x += min(dt, 1.0) * (self.prev.recv() - self.x)
+        self.next.send(self.x)
+
+
+class CudaChain(Network):
+    def __init__(self) -> None:
+        self.a = CudaLeaky()
+        self.b = CudaLeaky()
+        self.a.connect(self.b)
+        self.prev = self.a.prev
+        self.next = self.b.next
+
+
+class CudaSource(Node):
+    def __init__(self, device: str) -> None:
+        super().__init__(device=device)
+        self.next = NextPort(send=vec())
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.next.send(torch.tensor([1.0, 2.0], dtype=F64, device=self.device))
+
+
+class CudaSink(Node):
+    def __init__(self, device: str) -> None:
+        super().__init__(device=device)
+        self.prev = PrevPort(recv=vec())
+        self.received: torch.Tensor | None = None
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.received = self.prev.recv()
+
+
+class SourceToSink(Network):
+    def __init__(self, source: Node, sink: Node) -> None:
+        self.source = source
+        self.sink = sink
+        source.connect(sink)
+
+
+class Counter(Node):
+    """Keeps ``BIG`` floats that all equal ``k`` between updates; each update adds
+    1 to every float ``ADDS`` times, in place."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+        self.first: torch.Tensor | None = None  # w as the first update finds it
+
+    @override
+    def on_start(self) -> None:
+        self.w = torch.zeros(BIG, device=self.device)
+        self.k = 0
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.first is None:
+            self.first = self.w.clone()
+        for _ in range(ADDS):
+            self.w.add_(1.0)
+        self.k += ADDS
+
+    @override
+    def state_dict(self) -> object:
+        return {"w": self.w, "k": self.k}
+
+    @override
+    def load_state_dict(self, state: object) -> None:
+        loaded = cast(dict[str, Any], state)
+        self.w.copy_(loaded["w"])
+        self.k = loaded["k"]
+
+
+def is_uniform(tree: dict[str, Any]) -> bool:
+    """Whether every float of the captured ``Counter`` equals its ``k``."""
+    state = tree["nodes"]["node"]
+    w, k = state["w"], state["k"]
+    return w.min().item() == k and w.max().item() == k
+
+
+HOST_ADDS = 50
+
+
+class QueuesOnTheHost(Node):
+    """Queues ``HOST_ADDS`` updates of a large tensor on the host's stream in
+    ``__init__`` and reads it in ``on_start``."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+        self.w = torch.zeros(BIG, device=self.device)
+        for _ in range(HOST_ADDS):
+            self.w.add_(1.0)
+        self.seen: float | None = None
+
+    @override
+    def on_start(self) -> None:
+        self.seen = self.w.min().item()
+
+
+class BusyStart(Node):
+    """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
+    ``on_start`` (no ``on_update`` waits for them)."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+
+    @override
+    def on_start(self) -> None:
+        self.w = torch.zeros(BIG, device=self.device)
+        for _ in range(HOST_ADDS):
+            self.w.add_(1.0)
+
+    @override
+    def state_dict(self) -> object:
+        return {"w": self.w}
+
+
+@needs_gpus(1)
+class TestCuda:
+    @needs_gpus(2)
+    def test_a_message_goes_from_one_gpu_to_another(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        source, sink = CudaSource("cuda:0"), CudaSink("cuda:1")
+        net = run_network(SourceToSink(source, sink), _manual=True)
+        step(net, virtual_timer, source, sink)
+        received = sink.received
+        assert received is not None
+        assert received.device == torch.device("cuda", 1)
+        assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
+
+    def test_manual_steps_match_the_discrete_algorithm(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(CudaChain(), _manual=True)
+        xa = torch.zeros(2, dtype=F64, device="cuda:0")
+        xb = torch.zeros(2, dtype=F64, device="cuda:0")
+        for k in range(20):
+            net.write({net.prev: u(k)})
+            step(net, virtual_timer, net.a, net.b)
+            xa = euler(xa, u(k).to("cuda:0"))
+            xb = euler(xb, xa)
+        assert torch.equal(net.read(net.next)[0], xb.cpu())
+
+    @pytest.mark.slow
+    def test_on_start_sees_the_work_the_host_queued(self, run_network: RunNetwork):
+        seen: list[float | None] = []
+        for _ in range(5):
+            # Run each node right after making it, while its work is still queued.
+            node = QueuesOnTheHost()
+            run_network(Solo(node), _manual=True).shutdown()
+            seen.append(node.seen)
+        assert seen == [float(HOST_ADDS)] * 5
+
+    @pytest.mark.slow
+    def test_state_dict_waits_for_the_work_of_on_start(self, run_network: RunNetwork):
+        captured: list[tuple[float, float]] = []
+        for _ in range(5):
+            net = run_network(Solo(BusyStart()), _manual=True)
+            w = net.state_dict()["nodes"]["node"]["w"]
+            net.shutdown()
+            captured.append((w.min().item(), w.max().item()))
+        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
+
+    @pytest.mark.slow
+    def test_state_dict_is_whole_while_a_node_updates_in_place(
+        self, run_network: RunNetwork
+    ):
+        net = run_network(Solo(Counter()))
+        mujou.time.sleep(0.2)
+        trees: list[dict[str, Any]] = []
+        for _ in range(40):
+            trees.append(net.state_dict())
+            mujou.time.sleep(0.01)
+        torn = [i for i, tree in enumerate(trees) if not is_uniform(tree)]
+        # The copies stay as taken while the node goes on updating in place.
+        mujou.time.sleep(0.2)
+        changed = [i for i, tree in enumerate(trees) if not is_uniform(tree)]
+        net.shutdown()
+        assert torn == []
+        assert changed == []
+        assert trees[-1]["nodes"]["node"]["k"] > 0
+
+    @pytest.mark.slow
+    def test_a_restored_node_starts_from_the_tree(
+        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+    ):
+        net = run_network(Solo(Counter()), _manual=True)
+        for _ in range(3):
+            step(net, virtual_timer)
+        tree = net.state_dict()
+        net.shutdown()
+
+        node = Counter()
+        restored = Solo(node)
+        restored.build()
+        restored.load_state_dict(tree)
+        run_network(restored, _manual=True)
+        step(restored, virtual_timer)
+        assert node.first is not None
+        expected = torch.full((BIG,), float(3 * ADDS), device="cuda:0")
+        assert torch.equal(node.first, expected)
+        assert torch.equal(tree["nodes"]["node"]["w"].to("cuda:0"), expected)
