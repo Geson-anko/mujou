@@ -275,7 +275,8 @@ impl<N: NodeHooks> Shared<N> {
             // make the running ones jump (or stall) by the difference in their
             // next Δt.
             return Err(RuntimeError::InvalidArgument(
-                "cannot restore the time while another runtime is running on the same timer"
+                "cannot set the timer back to the time of the state while another run is \
+                 running on it; give this run a timer of its own"
                     .to_owned(),
             ));
         }

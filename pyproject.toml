@@ -69,6 +69,7 @@ addopts = [
 ]
 markers = [
     "slow: long-running convergence / training checks (deselect with -m 'not slow')",
+    "cuda(n=1): needs n CUDA devices; skipped otherwise",
 ]
 
 [tool.coverage.run]

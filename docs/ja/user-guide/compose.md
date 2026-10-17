@@ -10,7 +10,7 @@
 
 `mujou.run(a, b)` は `mujou.run(Compose(a, b))` と同じである。名前を付けたいときは `Compose` をキーワード引数で使う。
 
-束ねたネットワークは、`Compose` の名前の下にパスを持つ。
+束ねたネットワークは、`Compose` が付けた名前の下にパスを持つ。
 
 | 書き方                  | `a` の中のノード `l1` のパス |
 | ----------------------- | ---------------------------- |
@@ -19,9 +19,9 @@
 | `Compose(a, b)`         | `"0.l1"`                     |
 | `Compose(enc=a, dec=b)` | `"enc.l1"`                   |
 
-ノード 1 つを渡す `mujou.run(node)` も、ネットワーク 1 つのときと同じく名前を足さない。ノードのパスは `""`、その Port のパスは `"prev"` などになる。`Compose(node)` は名前を足すので、ノードのパスは `"0"` になる。
+パスは状態の木のキーになる。位置で渡すかキーワードで渡すかでパスは変わる。保存した状態を復元するときは、保存したときと同じ形で束ねる。順を同じにし、キーワードは保存したときに使ったところでだけ使う。形が違うとパスが合わず、`mujou.run(..., state=tree)` が `ValueError` になる（[状態の保存と復元](state.md)）。
 
-パスは状態の木のキーになる。保存した状態を復元するときは、保存したときと同じ形（同じ順、同じキーワード）で束ねる（[状態の保存と復元](state.md)）。
+ノード 1 つを渡す `mujou.run(node)` も、ネットワーク 1 つのときと同じく名前を足さない。ノードのパスは `""`、その Port のパスは `"prev"` などになる。`Compose(node)` は名前を足すので、ノードのパスは `"0"` になる。
 
 空の名前や `.` を含む名前など、使えない名前をキーワードにすると `ValueError` になる。
 
@@ -53,9 +53,9 @@
 別々の実行でも、`timer` を渡さなければ、どちらもグローバルタイマーを共有する。その場合、一方で状態を取るともう一方の時間も止まる。止め合いたくないなら、別々の `Timer` を渡す。
 
 ```python
-timer = mujou.time.Timer()
-with mujou.run(net, timer=timer) as run:
-    timer.sleep(2.0)   # この実行のタイマーで待つ
+timer_a, timer_b = mujou.time.Timer(), mujou.time.Timer()
+with mujou.run(a, timer=timer_a) as run_a, mujou.run(b, timer=timer_b) as run_b:
+    timer_a.sleep(2.0)   # a の実行のタイマーで待つ
 ```
 
 `Timer` の使い方は[時間の制御](time.md)にある。

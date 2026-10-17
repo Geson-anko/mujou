@@ -38,11 +38,11 @@
 自動で集まるのは、属性に直接代入した `torch.Tensor` と `nn.Module` だけである（[Mujou の仕組み](../concepts.md#%E7%8A%B6%E6%85%8B)）。次のものは自動では集まらない。
 
 - 数値の属性（ステップ数のカウンタなど）
-- Tensor のリストや dict
+- テンソルのリストや dict
 - 乱数生成器 `self.generator` の状態
 - optimizer の状態（モーメントなど）と、`.grad` に溜めた勾配
 
-これらを状態に入れるには、`state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分はそのまま扱える。数値なら override せずに、`on_start` で 0 次元の Tensor として作り（`self.count = torch.zeros((), device=self.device)`）、その場で更新してもよい（`self.count += 1`）。そうすれば自動で集まる。
+これらを状態に入れるには、`state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分はそのまま扱える。数値なら override せずに、`on_start` で 0 次元のテンソルとして作り（`self.count = torch.zeros((), device=self.device)`）、その場で更新してもよい（`self.count += 1`）。そうすれば自動で集まる。
 
 次の例では、乱数生成器の状態を足す。生成器は起動のたびに `seed` から作り直される。そのため生成器の状態を足さないと、復元した後の乱数列は止めずに続けたときと違う列になる。
 
@@ -81,6 +81,6 @@ override するときは次を守る。
 
 読むときは、保存したときと同じ方法を使う（`pickle.dumps` なら `pickle.loads`、`torch.save` なら `torch.load`）。保存の方法が分からないファイルは、まず既定の `torch.load` で読む。それが失敗したら、送り手を信頼できるときだけ pickle で読む。
 
-- `torch.load` は既定（`weights_only=True`）で、Tensor・数値・文字列・dict・list・tuple だけからなる木を読める。`state_dict` を override して独自のクラスのオブジェクトを木に入れると、既定の `torch.load` では読めない
+- `torch.load` は既定（`weights_only=True`）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。`state_dict` を override して独自のクラスのオブジェクトを木に入れると、既定の `torch.load` では読めない
 - `pickle.load` と `torch.load(..., weights_only=False)` は、読むときにファイルの中のコードを実行できる。信頼できないファイルをこれらで読まない
-- CUDA で計算するノードの状態は、CUDA の Tensor のまま木に入る。GPU の無いマシンで読むときは `torch.load(..., map_location="cpu")` を使う。既定の `load_state_dict` はノードのデバイスへコピーするので、CPU の Tensor のまま `state=` に渡してよい
+- CUDA で計算するノードの状態は、CUDA のテンソルのまま木に入る。GPU の無いマシンで読むときは `torch.load(..., map_location="cpu")` を使う。既定の `load_state_dict` はノードのデバイスへコピーするので、CPU のテンソルのまま `state=` に渡してよい

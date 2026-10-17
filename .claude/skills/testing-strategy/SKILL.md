@@ -49,8 +49,15 @@ src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 
 ## マーカー
 
-- `--strict-markers` が有効。登録済みは `slow` だけ。新しいマーカーは `pyproject.toml` の `[tool.pytest.ini_options].markers` に登録してから使う
+- `--strict-markers` が有効。登録済みは `slow` と `cuda`。新しいマーカーは `pyproject.toml` の `[tool.pytest.ini_options].markers` に登録してから使う
 - `slow`: 収束・学習を伴う長いテスト。`just test-fast` で除外、`just test` / `just run` では実行する
+- `cuda(n=1)`: CUDA デバイスが `n` 個以上ないと skip する（`tests/mujou/conftest.py` の `pytest_runtest_setup`）。クラスとメソッドの両方に付けたら大きい方の `n` が効く。CUDA に限らないアクセラレータのテストは fixture `accelerator` を使う
+
+## 共通の fixture（`tests/mujou/conftest.py`）
+
+- `virtual`: テストごとの新しい `VirtualTimer`。`start_manual` / `start` は実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
+- `step`: `step(run, *order)` で `run.timer`（`VirtualTimer`）を `H`（1 ms）進め、`run.step(*order)` を呼ぶ
+- ノードを入れるだけのネットワークは公開の `Compose(node=...)` で作る。専用のクラスを書かない
 
 ## 何をテストするか / しないか
 

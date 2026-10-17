@@ -1,6 +1,6 @@
 # Contributing to Mujou
 
-Issues and pull requests are welcome: bug reports, questions, documentation fixes and code. Keep each pull request small and about one thing. For a large change, open an issue first so that we can agree on the design.
+Issues and pull requests are welcome: bug reports, questions, documentation fixes and code. Keep each pull request small and about one thing. For a large change, open an issue first so that we can agree on the design. The issue forms ask for what you need to say: for a bug, a minimal program and your environment.
 
 Mujou is in early development, and the API may still change.
 

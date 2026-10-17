@@ -21,6 +21,8 @@ The following node learns a linear map from its input to the target online, and 
 --8<-- "examples/torch_node.py:node"
 ```
 
+In `online_learning.py` in [Examples](../examples/index.md), a node like this learns from a stream whose target changes partway through the run, and keeps up with the change.
+
 ## Device and seed
 
 Pass the device and the random seed in `__init__`, with `super().__init__(device=..., seed=...)`.
@@ -69,10 +71,6 @@ For a node given a CUDA `device`, Mujou sets up the following.
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`). Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
 
 Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
-
-??? tip "A CUDA error names `_after_update`"
-
-    A CUDA error raised in `on_update` (a device-side assert, for example) surfaces at the synchronization right after it. So the message of `NetworkError` names `_after_update`, an internal hook of Mujou. The cause is in `on_update`.
 
 ## Other accelerators (MPS, ...)
 

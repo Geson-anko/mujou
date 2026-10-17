@@ -80,41 +80,23 @@ class Node(_native.Node, Component):
     only through its own ports.
 
     Before ``on_start``, the framework sets up the node's thread: it turns off
-    gradient recording (for backpropagation inside the node, wrap both the forward
+    gradient recording (to backpropagate inside the node, wrap the forward
     computation and ``backward`` in ``with torch.enable_grad():`` marked
-    ``# mujou: local-autograd``), creates
-    ``generator`` from ``seed`` on ``device``, and, when ``device`` is an
-    accelerator, makes it the thread's current device. On CUDA it also makes a
-    stream of the node's own current; another accelerator (MPS, ...) computes
-    on its current stream, with no stream of the node's own. On an accelerator
-    the framework waits for the node's work (its stream on CUDA, the whole
-    device otherwise) after each ``on_update``, after ``load_state_dict`` and
-    around ``state_dict``. It does all this in hooks of its own,
-    ``_on_thread_start``, ``_after_update``, ``_restore_state`` and
-    ``_capture_state``, which subclasses must not override. So overriding a
-    public hook never skips it.
+    ``# mujou: local-autograd``), creates ``generator`` from ``seed`` on
+    ``device``, and makes an accelerator ``device`` the thread's current device
+    (on CUDA with a stream of the node's own). On an accelerator it also waits
+    for the node's work after ``on_update``, after ``load_state_dict`` and around
+    ``state_dict``. It does this in hooks of its own, whose names start with
+    ``_``: do not override those, and overriding a public hook never skips them.
 
-    Without a ``period``, the node updates as fast as it can: as soon as one
-    ``on_update`` returns, the next one is called (once any time has passed).
-    With a ``period``, the framework waits on the run's timer for the next
-    target before each update. The first target is ``period`` after the start
-    of the run, and each next one is ``period`` after the previous target, so
-    the time an update takes and a late wake-up count toward the period: as
-    long as the two together fit in ``period``, the node updates once every
-    ``period`` on average. A node a whole ``period`` or more late (at or past
-    the target after its own) updates once and counts again from that update:
-    it never updates several times in a row to catch up. The state of a run
-    does not hold the target, so a restored run puts the first target
-    ``period`` after the last update before the state was taken; the next
-    update may then come later than if the run had gone on. The wait follows
-    the time scale and the virtual clock, and ends at once on a pause or a
-    stop; the time does not run while paused, so a pause does not count.
-    ``dt`` is still the time that actually passed since the last update: about
-    ``period``, longer when the node is late, and shorter right after, down to
-    almost 0 when it was nearly a ``period`` late. ``on_update`` must stay
-    stable for the longest ``dt`` it can get; split the step inside the node if
-    needed (cutting ``dt`` would lose time). A manual run
-    (``mujou.testing.run``, stepped by ``ManualRun.step``) ignores the period.
+    Without a ``period``, the node updates as fast as it can. With one, it updates
+    once every ``period`` of the run's timer on average: the time an update takes
+    counts toward the period, and a node that falls a whole ``period`` behind does
+    not update several times in a row to catch up. A pause does not count. ``dt``
+    is still the time that actually passed since the last update, longer than
+    ``period`` when the node is late, so keep updating in proportion to it and
+    stay stable for the longest ``dt`` it can get. A manual run
+    (``ManualRun.step``) ignores the period.
 
     ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
     run's timer) are reserved names: do not assign attributes of those names

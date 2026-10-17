@@ -118,8 +118,8 @@ class Run:
 
         Any port that sends can be read, so a connected port shows an inner
         node. Only ``send`` (to every peer) updates the value read here; before
-        the first one it is zeros (or the value restored from ``state``). The
-        tensors are new copies on the CPU.
+        the first one it is the port's ``initial`` (zeros by default) or the
+        value restored from ``state``. The tensors are new copies on the CPU.
 
         The time is on the run's timer. A ``Timestamp`` does not say which timer
         it is on: compare it only with times of the same timer (with
@@ -136,8 +136,9 @@ class Run:
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
-        The first step yields the latest message at the time of this call (zeros
-        or the restored value before the first ``send``) without waiting. Each
+        The first step yields the latest message at the time of this call (before
+        the first ``send``, the port's ``initial`` or the restored value) without
+        waiting. Each
         later step waits until a newer message is sent and yields the latest;
         messages sent in between are skipped. Only the consumer waits: the
         sending node never does. The iterator ends when the run shuts down
@@ -202,11 +203,26 @@ class Run:
             RuntimeError: The run shut down normally first.
             NetworkError: The run stopped because a node raised.
         """
-        for message, time in self.subscribe(port, timeout=timeout):
+        messages = self.subscribe(port, timeout=timeout)
+        # Valid: subscribe has checked the port.
+        name = _host(self).label(port)
+        while True:
+            try:
+                message, time = next(messages)
+            except StopIteration:
+                break
+            except TimeoutError:
+                # Name this call, not the subscribe it is built on. Only the
+                # iteration's own timeout: one that condition raises goes as it is.
+                raise TimeoutError(
+                    f"no message of the port {name!r} met the condition of "
+                    f"wait_for within {timeout} s; the run keeps running"
+                ) from None
             if condition(message):
                 return message, time
         raise RuntimeError(
-            "the run shut down before the port sent a message that meets the condition"
+            f"the run shut down before the port {name!r} sent a message that meets "
+            "the condition"
         )
 
     def state_dict(self) -> dict[str, Any]:
@@ -397,23 +413,17 @@ def run[P: Port[Any, Any, Any]](
             error, t = run.read(node.next)
 
     Raises:
-        RuntimeError: A network or node has already run, or belongs to a tree
-            that has (``"Leaky has already run; create a new instance to run
-            again"``); part of a network belongs to another built network that
-            has not run (e.g. a network that was only built, or one whose run
-            alone was refused and is now given with others); or this is called
-            from a node's hook. Of runs called at once that share a part, the
-            refused ones may give either message.
-        TypeError: A value is neither a ``Node`` nor a ``Network`` (or none
-            is given).
+        RuntimeError: A network or node has already run (``"Leaky has already
+            run; create a new instance to run again"``), or part of one belongs
+            to another network that was built but has not run; or this is called
+            from a node's hook.
+        TypeError: A value is neither a ``Node`` nor a ``Network``.
         ValueError, TypeError: As ``Network.build``, ``Compose`` and
-            ``Run.write`` (for ``inputs``) do; ``pause_timeout`` is not finite
-            and > 0 (``ValueError``); or ``state`` does not match the
-            networks, or it cannot set the timer back because another run is
-            running on it. Nothing started: the same networks, given the same
-            way (alone, or together in the same order), may run once the cause
-            is gone; a node given alone, or with others, may run once the cause
-            is gone, given any way.
+            ``Run.write`` (for ``inputs``) raise; ``pause_timeout`` is not finite
+            and > 0; ``state`` does not match the networks, or the timer it would
+            set back has another run on it; or the run would have a second node
+            on MPS, counting the runs still running. Nothing has started: the
+            same networks, given the same way, may run once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(

@@ -61,14 +61,16 @@ You can check that a run that takes the state midway and continues in a new inst
 
 ## Testing exceptions
 
-When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)). In the `with mujou.testing.run(...) as run:` block of a test, check it as follows.
+When a node raises, the exception reaches you from `step` as a `NetworkError`. Its `__cause__` is the node's exception (see [Errors and shutdown](errors.md)). After that, every call of the run raises it again, including the `shutdown` at the end of the `with` block, so put `pytest.raises` around the whole block, in the same `with` statement:
 
 ```python
 import pytest
 
+import mujou.testing
 from mujou import NetworkError
 
-with pytest.raises(NetworkError) as info:
-    run.step()
+with pytest.raises(NetworkError) as info, mujou.testing.run(net) as run:
+    run.timer.advance(0.001)
+    run.step()  # a node raises ValueError here
 assert isinstance(info.value.__cause__, ValueError)
 ```

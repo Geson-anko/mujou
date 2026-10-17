@@ -11,8 +11,8 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 | Read the time scale   | `mujou.time.get_time_scale()`                                                                | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
 | Change the time scale | `mujou.time.set_time_scale(scale)`                                                           | `timer.set_time_scale(scale)`      | Not allowed                   |
 
-- The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time, so it ignores changes of the time scale and pauses (a run pauses while its state is taken)
-- The scale is a finite number greater than 0. Anything else raises `ValueError`
+- The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time: it ignores the time scale, and it goes on counting while the run pauses (a run pauses while its state is taken)
+- The scale is how many seconds of the timer pass per real second (at 5, one real second is 5 seconds of the timer). It is a finite number greater than 0. Anything else raises `ValueError`
 
 ## Timestamp
 
@@ -70,7 +70,7 @@ A node's `self.timer` is the read-only side of the run's timer (`mujou.time.Read
 Calling `mujou.time.sleep`, `mujou.time.set_time_scale`, `Timer.sleep`, `Timer.set_time_scale` or `VirtualTimer.advance` in a hook raises `RuntimeError`. If one node stopped the time or changed its speed, it would change the `dt` of the other nodes in the same run too.
 
 - To update a node at regular intervals, do not wait in a hook. Pass a period with `super().__init__(period=seconds)`. The period is the average time between two updates, in seconds of the run's timer (see [Writing a node](writing-a-node.md))
-- `self.timer` can be read once the run has started the node. Reading it in `__init__` raises `RuntimeError`
+- `self.timer` can be read in every hook, `on_thread_start` and `on_start` included. Reading it in `__init__` raises `RuntimeError`
 
 ## Restoring sets the time back
 

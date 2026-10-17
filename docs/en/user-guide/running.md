@@ -82,7 +82,7 @@ All of them read from any port that has a send type, and return the time as a `m
 3. When the run ends normally, the iteration ends. When the run ends with a node's exception, the iteration raises `NetworkError`
 4. With `timeout=seconds`, the iteration raises `TimeoutError` once that many seconds of real time have passed since the call to `subscribe`, the time spent in the body of the loop included. The run keeps running. The default is forever
 
-Only the host waits; the sending node does not wait for the host. Without a `timeout`, the iteration ends only when the run ends. It blocks the thread that iterates, so call `shutdown()` from another thread to stop it, as in the following example.
+Only the host waits; the sending node does not wait for the host. The following example leaves the loop with `break` after 20 values. Without `break` or `timeout`, the loop blocks its thread until the run ends; another thread can end it by calling `shutdown()`.
 
 ```python
 --8<-- "examples/subscribe.py:subscribe"

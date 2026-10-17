@@ -25,7 +25,7 @@ from mujou._core.node import (
     end_thread,
     set_timer,
 )
-from mujou._core.port import Channel, bind, initial
+from mujou._core.port import Channel, bind, initial, label
 from mujou._core.spec import Spec, fields, host_tensors
 from mujou._core.state import make_tree, read_tree
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
@@ -60,6 +60,8 @@ class Session:
         self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
         # Every slot by name, in the order of the graph's ports, for the state tree.
         self._slots: dict[str, tuple[AnySlot, Spec]] = {}
+        # Every port of the run by how its errors name it.
+        self._labels: dict[AnyPort, str] = {}
 
         owners = ports(graph)
         # Every outlet first: a port reads the channel slots of its peers' outlets.
@@ -68,8 +70,11 @@ class Session:
         for port, (index, _) in owners.items():
             path = graph.port_path(port)
             sources = self._sources(port, path)
-            owner = graph.nodes[index][1]
-            bind(port, Binding(owner, path, port, self._outlets.get(port), sources))
+            owner_path, owner = graph.nodes[index]
+            # The path alone ("next") would not say which node a root's port is of.
+            name = path if owner_path else label(port)
+            self._labels[port] = name
+            bind(port, Binding(owner, name, port, self._outlets.get(port), sources))
 
         self._runtime: _native.Runtime | None = None
         # The timer when shutdown first asked the run to stop.
@@ -340,9 +345,7 @@ class Session:
         items: list[tuple[_native.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
-            items.append(
-                (slot, host_tensors(spec, value, where=self._graph.port_path(port)))
-            )
+            items.append((slot, host_tensors(spec, value, where=self._labels[port])))
         return items
 
     def read(self, port: AnyPort) -> tuple[object, _native.Timestamp]:
@@ -400,21 +403,33 @@ class Session:
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         if port in self._inputs:
             return self._inputs[port]
-        path = self._graph.port_path(port)  # ValueError for a port outside the tree
+        name = self.label(port)
         if port.recv_spec is None:
             reason = "receives no messages"
         elif port.channels:
             reason = "is connected (only unconnected ports can be written)"
         else:
             reason = "takes many peers (only single-peer ports can be written)"
-        raise ValueError(f"cannot write the port {path!r}: it {reason}")
+        raise ValueError(f"cannot write the port {name!r}: it {reason}")
 
     def _outbox(self, port: AnyPort) -> tuple[_native.Slot, Spec]:
-        path = self._graph.port_path(port)  # ValueError for a port outside the tree
+        name = self.label(port)
         outlet = self._outlets.get(port)
         if outlet is None:
-            raise ValueError(f"cannot read the port {path!r}: it sends no messages")
+            raise ValueError(f"cannot read the port {name!r}: it sends no messages")
         return outlet.outbox, cast(Spec, port.send_spec)
+
+    def label(self, port: AnyPort) -> str:
+        """Name ``port`` in the host's errors: by its path, or as ``"Owner.attr"``
+        when its owner is the root.
+
+        Raises:
+            ValueError: ``port`` is not a port of a node in this run.
+        """
+        name = self._labels.get(port)
+        if name is None:
+            raise ValueError(f"{port!r} is not a port of a node in this run")
+        return name
 
     # --- state
 

@@ -114,7 +114,7 @@ class TestTensorSpec:
             assert x.device == torch.device("meta")
             assert x.shape == (2, 3) and x.dtype == torch.float32
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.cuda
     def test_rand_on_cuda_is_deterministic(self):
         spec = TensorSpec((1000,), torch.float32)
         x = spec.rand(seed=7, device="cuda")

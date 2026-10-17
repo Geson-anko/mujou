@@ -1,0 +1,29 @@
+name: Bug report
+description: Something in Mujou does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include the full error and traceback.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal program
+      description: The smallest program that shows the problem.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        The output of:
+        `uv run python -c "import sys, torch, mujou; print(sys.version, torch.__version__, mujou.__version__)"`
+        and your OS. Say whether the node computes on the CPU, CUDA or MPS.
+    validations:
+      required: true

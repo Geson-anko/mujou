@@ -21,6 +21,8 @@
 --8<-- "examples/torch_node.py:node"
 ```
 
+[サンプル](../examples/index.md)の `online_learning.py` では、同じようなノードが、走らせている途中で目標の変わるストリームから学び、その変化に追従する。
+
 ## デバイスと seed
 
 デバイスと乱数の seed は、`__init__` で `super().__init__(device=..., seed=...)` に渡す。
@@ -69,10 +71,6 @@ BP はノードの中に閉じる。ほかのノードへ勾配を流すこと�
 そのため、ノードの作者は同期を書かなくてよい。自分で同期するときは、自分のストリーム（`torch.cuda.current_stream().synchronize()`）だけを同期する。デバイス全体を待つ `torch.cuda.synchronize()` は、ほかのノードの仕事まで待つので使わない。
 
 `device="cuda"` のように番号を付けないと、ノードを作ったときのホストの現在のデバイスに決まる。
-
-??? tip "CUDA のエラーに `_after_update` と出る"
-
-    `on_update` で起きた CUDA のエラー（device-side assert など）は、直後の同期で表に出る。そのため `NetworkError` のメッセージには、mujou の内部の hook の名前 `_after_update` が出る。原因は `on_update` の中にある。
 
 ## ほかのアクセラレータ（MPS など）
 

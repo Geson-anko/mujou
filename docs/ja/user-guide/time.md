@@ -11,8 +11,8 @@
 | 時間の速さを読む   | `mujou.time.get_time_scale()`                                                       | `timer.get_time_scale()`                | `self.timer.get_time_scale()` |
 | 時間の速さを変える | `mujou.time.set_time_scale(scale)`                                                  | `timer.set_time_scale(scale)`           | できない                      |
 
-- ホストは、Python 標準の `time.sleep` ではなく、その実行のタイマーの `sleep` で待つ（入力を一定の時間見せるときなど）。Python 標準の `time.sleep` は実時間で待つので、時間の速さの変更と一時停止（状態を取る間、実行は止まる）に合わない
-- `scale` は有限で 0 より大きい数である。それ以外は `ValueError` になる
+- ホストは、Python 標準の `time.sleep` ではなく、その実行のタイマーの `sleep` で待つ（入力を一定の時間見せるときなど）。Python 標準の `time.sleep` は実時間で待つので、時間の速さを無視し、実行が一時停止している間も数え続ける（状態を取る間、実行は止まる）
+- `scale` は、実時間の 1 秒にタイマーが何秒進むかである（5 なら、実時間の 1 秒がタイマーの 5 秒）。有限で 0 より大きい数で、それ以外は `ValueError` になる
 
 ## Timestamp
 
@@ -51,7 +51,7 @@ if t_out >= t_in:               # y は x を書いた後に送られた
 - 状態から復元したいが、同じグローバルタイマーでほかの実行が走っている（[状態の保存と復元](state.md)）
 - 互いに止め合わない別々の実行で、複数のネットワークを走らせる（[ネットワークを束ねる](compose.md)）
 
-このとき、ホストはその実行を `timer.sleep` で待ち、`run.read` の時刻は `timer.now()` と比べる。`mujou.time` の関数（`mujou.time.sleep`、`mujou.time.time()` など）はグローバルタイマーで働き、この実行のタイマーには効かない。そのため、この実行には使わない。
+このとき、ホストはその実行を `timer.sleep` で待ち、`run.read` の時刻は `timer.now()` と比べる。`mujou.time` の関数（`mujou.time.sleep`、`mujou.time.time()` など）が扱うのはグローバルタイマーで、この実行のタイマーではない。そのため、この実行には使わない。
 
 ## グローバルタイマーの速さを変える
 
@@ -70,7 +70,7 @@ if t_out >= t_in:               # y は x を書いた後に送られた
 hook の中から `mujou.time.sleep`・`mujou.time.set_time_scale`・`Timer.sleep`・`Timer.set_time_scale`・`VirtualTimer.advance` を呼ぶと、`RuntimeError` になる。1 つのノードが時間を止めたり速さを変えたりすると、同じ実行のほかのノードの `dt` まで変わるからである。
 
 - ノードを一定の間隔で更新したいときは、hook の中で待たずに、`super().__init__(period=seconds)` で周期を渡す。周期は、2 回の更新の間の平均の時間（実行のタイマーの秒）である（[ノードを書く](writing-a-node.md)）
-- `self.timer` は、実行がノードを起動してから読める。`__init__` の中で読むと `RuntimeError` になる
+- `self.timer` はどの hook の中でも読める（`on_thread_start` と `on_start` を含む）。`__init__` の中で読むと `RuntimeError` になる
 
 ## 復元すると時刻が戻る
 
