@@ -35,7 +35,7 @@ def run[P: Port[Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,
-    inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
+    inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> ManualRun:

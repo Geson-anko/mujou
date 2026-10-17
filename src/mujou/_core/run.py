@@ -64,9 +64,10 @@ class Run:
         raise TypeError("a Run is made by mujou.run() or mujou.testing.run()")
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any] would reject (Mapping keys are invariant).
+    # Port[Any, Any, Any] would reject (Mapping keys are invariant). A dict message
+    # is a Mapping[str, object]: a TypedDict is not a Mapping[str, torch.Tensor].
     def write[P: Port[Any, Any, Any]](
-        self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
+        self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
     ) -> Timestamp:
         """Write messages to unconnected single-peer ports that receive, and
         return the time they carry.
@@ -257,7 +258,7 @@ def run[P: Port[Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,
-    inputs: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]] | None = None,
+    inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
     pause_timeout: float = 30.0,
 ) -> Run:

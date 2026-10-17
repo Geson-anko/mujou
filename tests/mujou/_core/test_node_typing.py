@@ -3,12 +3,14 @@
 """Checked by pyright in strict mode, as users' code and mujou's own nodes are:
 subclassing ``mujou.Node`` and writing to a run must type-check cleanly."""
 
+from typing import TypedDict
+
 import pytest
 import torch
 
 import mujou
 import mujou.testing
-from mujou import Network, Node, Port, PrevPort, TensorSpec
+from mujou import DictSpec, Network, Node, Port, PrevPort, TensorSpec
 
 
 class Layer(Node):
@@ -16,6 +18,20 @@ class Layer(Node):
         super().__init__(seed=0)
         self.prev = PrevPort(recv=TensorSpec((n,)))
         self.out = Port(send=TensorSpec((n,)))
+
+
+class Feedback(TypedDict):
+    error: torch.Tensor
+    target: torch.Tensor
+
+
+FEEDBACK = DictSpec(Feedback, error=TensorSpec((2,)), target=TensorSpec((2,)))
+
+
+class DictSink(Node):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=FEEDBACK)
 
 
 class Single(Network):
@@ -32,6 +48,18 @@ class TestStrictTyping:
             run.write(values)
             _, t = run.read(net.layer.out)
             assert t.ns >= 0
+
+    def test_a_typed_dict_message_is_written(self) -> None:
+        node = DictSink()
+        msg: Feedback = FEEDBACK.zeros()
+        values = {node.prev: msg}  # a dict built before the call
+        with mujou.run(node, inputs={node.prev: msg}) as run:
+            run.write({node.prev: msg})
+            run.write(values)
+        other = DictSink()
+        others = {other.prev: msg}
+        with mujou.testing.run(other, inputs=others) as manual:
+            manual.write(others)
 
     def test_a_run_takes_at_least_one_component(self) -> None:
         # Without the ignore pyright reports the call, and an unneeded ignore is
