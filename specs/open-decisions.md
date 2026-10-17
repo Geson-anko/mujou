@@ -57,7 +57,6 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 
 - MPS のノードを複数許すために、MPS のノードの hook を 1 本のロックで直列にするか（ノード同士が計算を待ち合うことになる）
 - `Run.state_dict()` の木のテンソルを常に CPU へ移すか（今はノードのデバイスのまま。MPS のノードが走っている間にホストで触ると落ちうる）
-- `Timer.pause` / `resume` / `is_paused`（手動の一時停止）は src で使っておらず、テストの基盤だけが使う。残すか消すか
 - `pause_timeout` を `mujou.run` の引数から `Run.state_dict(timeout=)` へ移すか
 - `Compose` の名前（torchvision の `Compose` は直列につなぐ意味で使われる）
 - 相手がまだ送っていないことを判定する API（今は `on_start` で `recv_with_time()` の時刻を読む書き方を案内している）

@@ -574,10 +574,11 @@ class Timestamp:
     """
     A time on a timer.
 
-    `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
-    is the exact time in nanoseconds. Timestamps compare and hash by time, so
-    compare only those of one timer. `later - earlier` is the time between them,
-    as a `Timestamp`. Timestamps pickle and copy.
+    `ts.float()` (or `float(ts)`) is the time in seconds and `int(ts)` its whole
+    seconds; `ts.ns` is the exact time in nanoseconds. Timestamps compare and
+    hash by time, so compare only those of one timer. `a - b` is the time from
+    `b` to `a` in seconds, a `float` that is negative when `b` is later.
+    Timestamps pickle and copy.
     """
     @override
     def __eq__(self, value: object, /) -> bool: ...
@@ -606,12 +607,14 @@ class Timestamp:
         """
     @override
     def __repr__(self, /) -> str: ...
-    def __sub__(self, earlier: Timestamp, /) -> Timestamp:
+    def __sub__(self, other: Timestamp, /) -> float:
         """
-        The time from `earlier` to this one.
-
-        Raises:
-            ValueError: `earlier` is later than this one.
+        The time from `other` to this one, in seconds: `(self.ns - other.ns) /
+        1e9`, negative when `other` is later.
+        """
+    def float(self, /) -> float:
+        """
+        The time in seconds.
         """
     @property
     def ns(self, /) -> int:

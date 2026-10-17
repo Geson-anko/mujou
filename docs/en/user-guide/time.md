@@ -4,12 +4,14 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 
 ## What to use where
 
-| To                    | Host (default global timer)                                                                  | Host (run on a `Timer` of its own) | In a node's hook              |
-| --------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------- |
-| Read the time         | `mujou.time.now()` (a `Timestamp`), `mujou.time.time()` (seconds), `time_ns()` (nanoseconds) | `timer.now()`                      | `self.timer.now()`            |
-| Wait on the time      | `mujou.time.sleep(seconds)`                                                                  | `timer.sleep(seconds)`             | Not allowed                   |
-| Read the time scale   | `mujou.time.get_time_scale()`                                                                | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
-| Change the time scale | `mujou.time.set_time_scale(scale)`                                                           | `timer.set_time_scale(scale)`      | Not allowed                   |
+| To                       | Host (default global timer)                  | Host (run on a `Timer` of its own) | In a node's hook              |
+| ------------------------ | -------------------------------------------- | ---------------------------------- | ----------------------------- |
+| Read the time            | `mujou.time.now()` (a `Timestamp`)           | `timer.now()`                      | `self.timer.now()`            |
+| Wait on the time         | `mujou.time.sleep(seconds)`                  | `timer.sleep(seconds)`             | Not allowed                   |
+| Read the time scale      | `mujou.time.get_time_scale()`                | `timer.get_time_scale()`           | `self.timer.get_time_scale()` |
+| Change the time scale    | `mujou.time.set_time_scale(scale)`           | `timer.set_time_scale(scale)`      | Not allowed                   |
+| Stop and restart time    | `mujou.time.pause()` / `mujou.time.resume()` | `timer.pause()` / `timer.resume()` | Not allowed                   |
+| See whether time stopped | `mujou.time.is_paused()`                     | `timer.is_paused()`                | Not available                 |
 
 - The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time: it ignores the time scale, and it goes on counting while the run pauses (a run pauses while its state is taken)
 - The scale is how many seconds of the timer pass per real second (at 5, one real second is 5 seconds of the timer). It is a finite number greater than 0. Anything else raises `ValueError`
@@ -18,12 +20,12 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 
 The times that `run.write`, `run.read`, `run.subscribe` and `run.wait_for` return, and the values of `mujou.time.now()`, `timer.now()` and `self.timer.now()`, are all `mujou.time.Timestamp`.
 
-| Form              | Value                                           |
-| ----------------- | ----------------------------------------------- |
-| `float(ts)`       | Seconds (`float`)                               |
-| `ts.ns`           | Nanoseconds (`int`). The exact value            |
-| `later - earlier` | The difference of two times. Also a `Timestamp` |
-| `a < b` and so on | Which time is earlier                           |
+| Form              | Value                                                                           |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `ts.float()`      | Seconds (`float`). `float(ts)` is the same                                      |
+| `ts.ns`           | Nanoseconds (`int`). The exact value                                            |
+| `later - earlier` | The seconds from `earlier` to `later` (`float`). Negative if `later` is earlier |
+| `a < b` and so on | Which time is earlier                                                           |
 
 A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer.
 
@@ -34,7 +36,7 @@ t_in = run.write({net.prev: x})
 mujou.time.sleep(0.1)
 y, t_out = run.read(net.next)
 if t_out >= t_in:               # y was sent after x was written
-    print(float(t_out - t_in))  # seconds from writing x until y was sent
+    print(t_out - t_in)  # seconds from writing x until y was sent
 ```
 
 ## A timer for one run
@@ -51,7 +53,7 @@ Give a run its own timer in these cases.
 - You want to restore a state while another run is running on the global timer (see [Saving and restoring state](state.md))
 - You run several networks in separate runs that should not stop each other (see [Composing networks](compose.md))
 
-The host then waits on that run with `timer.sleep`, and compares the times from `run.read` with `timer.now()`. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.time()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
+The host then waits on that run with `timer.sleep`, and compares the times from `run.read` with `timer.now()`. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.now()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
 
 ## Changing the speed of the global timer
 
@@ -63,18 +65,31 @@ The host then waits on that run with `timer.sleep`, and compares the times from 
 
 The global time starts at 0 when the process first uses it.
 
+## Pausing the time
+
+`timer.pause()` stops the time of the timer until `timer.resume()`; `mujou.time.pause()` and `mujou.time.resume()` do the same for the global timer. Use it when the host does something that should happen at one time, such as taking the states of several runs on the same timer (see [Saving and restoring state](state.md#taking-the-states-of-several-runs-at-one-time)).
+
+While the time is paused:
+
+- The nodes of every run on the timer do not update. They wait until the time moves again, and the first `dt` after `resume` does not count the pause
+- `sleep` on the timer does not return until the time moves again
+- `VirtualTimer.advance` raises `RuntimeError`
+- `run.state_dict()` still works, and gives the state at the time of the pause
+
+`pause` is a switch, not a count: calling it twice still needs only one `resume`. Taking the state pauses the timer too, apart from this switch, so `resume` does not cut that short, and the end of taking the state does not end your pause. `is_paused()` is true while either one stops the time.
+
 ## Nodes only read the time
 
 A node's `self.timer` is the read-only side of the run's timer (`mujou.time.ReadOnlyTimer`). It has only `now()` and `get_time_scale()`.
 
-Calling `mujou.time.sleep`, `mujou.time.set_time_scale`, `Timer.sleep`, `Timer.set_time_scale` or `VirtualTimer.advance` in a hook raises `RuntimeError`. If one node stopped the time or changed its speed, it would change the `dt` of the other nodes in the same run too.
+Calling `sleep`, `set_time_scale`, `pause` or `resume` of `mujou.time` or of a `Timer`, or `VirtualTimer.advance`, in a hook raises `RuntimeError`. If one node stopped the time or changed its speed, it would change the `dt` of the other nodes in the same run too.
 
 - To update a node at regular intervals, do not wait in a hook. Pass a period with `super().__init__(period=seconds)`. The period is the average time between two updates, in seconds of the run's timer (see [Writing a node](writing-a-node.md))
 - `self.timer` can be read in every hook, `on_thread_start` and `on_start` included. Reading it in `__init__` raises `RuntimeError`
 
 ## Restoring sets the time back
 
-Restoring with `mujou.run(..., state=tree)` sets the run's timer back to the time the tree was taken. On the global timer, `mujou.time.time()` goes back too. Details are in [Saving and restoring state](state.md).
+Restoring with `mujou.run(..., state=tree)` sets the run's timer back to the time the tree was taken. On the global timer, `mujou.time.now()` goes back too. Details are in [Saving and restoring state](state.md).
 
 ## Use a virtual timer in tests
 

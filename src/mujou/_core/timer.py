@@ -27,9 +27,14 @@ class Timer:
     ``time.sleep`` wherever a duration should follow this time, e.g. to present
     an input to a run on this timer.
 
-    Only the host controls a timer: ``sleep`` and ``set_time_scale`` raise
-    ``RuntimeError`` in a node's hook, where a node would wait for (or change the
-    ``dt`` of) the other nodes.
+    Only the host controls a timer: ``sleep``, ``set_time_scale``, ``pause`` and
+    ``resume`` raise ``RuntimeError`` in a node's hook, where a node would wait
+    for (or change the ``dt`` of) the other nodes.
+
+    ``pause`` stops the time of every run on the timer at one time T until
+    ``resume``. Take the states of several runs on one timer while it is paused,
+    so that all of them are of the same time T: taken one after another on a
+    running timer, each would be of a later time.
 
     Example, with the node ``Error`` of the example of ``mujou.Run``::
 
@@ -65,6 +70,49 @@ class Timer:
     def get_time_scale(self) -> float:
         """Return how many seconds of this timer pass per real second."""
         return self._timer.time_scale()
+
+    def pause(self) -> None:
+        """Stop the time of this timer until ``resume``.
+
+        While paused, the time does not move: the nodes of the runs on this
+        timer do not update (they wait until the time moves, and the first
+        ``dt`` after ``resume`` does not count the pause), ``sleep`` does not
+        return until resumed, and ``VirtualTimer.advance`` raises
+        ``RuntimeError``. ``Run.state_dict`` still works, so take the states of
+        several runs on this timer at one time like this::
+
+            timer.pause()
+            try:
+                trees = [run.state_dict() for run in runs]  # all at one time
+            finally:
+                timer.resume()
+
+        This is a switch, not a count: pausing twice needs one ``resume``. A
+        run that takes its state holds the time paused on its own, apart from
+        this switch, so ``resume`` does not end that and its end does not end
+        this pause.
+
+        Raises:
+            RuntimeError: This is called from a node's hook.
+        """
+        host_only("Timer.pause")
+        self._timer.pause()
+
+    def resume(self) -> None:
+        """Turn off the switch of ``pause``: the time moves again from where it
+        stopped, unless a run on this timer is taking its state.
+
+        Raises:
+            RuntimeError: This is called from a node's hook.
+        """
+        host_only("Timer.resume")
+        self._timer.resume()
+
+    def is_paused(self) -> bool:
+        """Return whether the time is stopped, by ``pause`` or by a run on this
+        timer that is taking its state. The virtual clock of a ``VirtualTimer``
+        alone does not count as paused."""
+        return self._timer.is_paused()
 
     def set_time_scale(self, scale: float) -> None:
         """Set how many seconds of this timer pass per real second.
@@ -109,8 +157,8 @@ class VirtualTimer(Timer):
 
         Raises:
             ValueError: ``seconds`` is negative or not finite.
-            RuntimeError: A run on this timer holds it paused (e.g. while it
-                takes its state), or this is called from a node's hook.
+            RuntimeError: The timer is paused (by ``pause``, or by a run on it
+                that takes its state), or this is called from a node's hook.
         """
         host_only("VirtualTimer.advance")
         self._timer.advance(seconds)
