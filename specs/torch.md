@@ -131,9 +131,9 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 MPS は float64 も持たないので、float64 の spec のメッセージを MPS のノードが受け取ると torch の `TypeError` になる。
 
-> 状態: MPS の経路は 2026-10-17 に Apple Silicon の Mac（torch 2.14.1、3.14t）で確かめた。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestAccelerator`（と `TestRestore`、`TestDevice`）で、アクセラレータの無い環境では skip になる。CUDA のマシンでは同じテストが CUDA で走る。MPS ではストリームの状態を問い合わせられない（`Stream.query` が未対応）ので、各 `on_update` の後の同期を直接確かめるテストは無い。
+> 状態: MPS の経路は 2026-10-17 に Apple Silicon の Mac（torch 2.14.1、3.14t）で確かめた。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestAccelerator` と、`test_node.py` の `TestRestore`・`TestDevice` で、アクセラレータの無い環境では skip になる。CUDA のマシンでは同じテストが CUDA で走る。MPS ではストリームの状態を問い合わせられない（`Stream.query` が未対応）ので、各 `on_update` の後の同期を直接確かめるテストは無い。
 
-> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestCuda` で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる。
+> 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py` の `TestCuda` と、CUDA のマシンでは CUDA で走る `TestAccelerator`（2026-10-17 にストリームに依らないテストを `TestCuda` から移した。`test_port.py` のものを含む）で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる（移す前の 2026-10-16 に確かめた。移した後の CUDA での確認はまだ）。
 
 ### 境界の変換
 
