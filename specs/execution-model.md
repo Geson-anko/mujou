@@ -248,7 +248,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 テスト用の口は `mujou.testing` に公開する。mujou 自身のテスト（既定のノードのテストを含む）と利用者のテストは、同じ口を使う。
 
 - `VirtualTimer()`: 時刻 0 の仮想時計のタイマー。`advance(seconds)` で進めた分だけ進む
-- `run(*networks, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数は `mujou.run` と同じで、`ManualRun` を返す。仮想時計と手動のステップは独立に選べる。`timer` の既定は `mujou.run` と同じくグローバルタイマーなので、$\Delta t$ を決めたいテストは `VirtualTimer` を渡す
+- `run(component, *components, timer=None, inputs=None, state=None, pause_timeout=30.0)`: 引数は `mujou.run` と同じで、`ManualRun` を返す。仮想時計と手動のステップは独立に選べる。`timer` の既定は `mujou.run` と同じくグローバルタイマーなので、$\Delta t$ を決めたいテストは `VirtualTimer` を渡す
 - `ManualRun.step(*nodes)`: 渡した順に各ノードを 1 回ずつ更新し、終わってから戻る。引数なしなら木の順に全ノード。時計は進めないので、`timer.advance(dt)` と組み合わせる
 
 ```python
