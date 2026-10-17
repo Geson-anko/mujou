@@ -3,6 +3,7 @@ import math
 import pickle
 import queue
 import threading
+import time
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, cast, override
 
@@ -10,12 +11,15 @@ import pytest
 import torch
 from torch import nn
 
-from mujou import Network, Node, Port, TensorSpec
-from mujou._core._native import GlobalTimer
+import mujou
+from mujou import Network, NetworkError, Node, Port, TensorSpec
+from mujou._core import _native
 from mujou._core.node import thread_ident
+from mujou.testing import ManualRun, VirtualTimer
+from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import RunNetwork
+    from tests.mujou.conftest import Start, StartManual
 
 
 class Probe(Node):
@@ -48,48 +52,205 @@ class Solo(Network):
 
 class TestThreadSetup:
     def test_on_start_runs_without_gradients_on_its_own_thread(
-        self, run_network: RunNetwork
+        self, start_manual: StartManual
     ):
         node = Probe(seed=0)
-        run_network(Solo(node), _manual=True)
+        start_manual(Solo(node))
         assert node.grad_enabled is False
         assert node.ident not in (None, threading.get_ident())
         # The setting is per thread: the host still records gradients.
         assert torch.is_grad_enabled()
 
-    def test_the_generator_follows_the_seed(self, run_network: RunNetwork):
+    def test_the_generator_follows_the_seed(self, start_manual: StartManual):
         a, b, c = Probe(seed=7), Probe(seed=7), Probe(seed=8)
         for node in (a, b, c):
-            run_network(Solo(node), _manual=True)
+            start_manual(Solo(node))
         assert a.draws is not None and b.draws is not None and c.draws is not None
         expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
         assert torch.equal(a.draws, expected)
         assert torch.equal(b.draws, expected)
         assert not torch.equal(c.draws, expected)
 
-    def test_works_without_calling_the_base_init(self, run_network: RunNetwork):
+    def test_works_without_calling_the_base_init(self, start_manual: StartManual):
         node = Probe(init_base=False)
-        run_network(Solo(node), _manual=True)
+        start_manual(Solo(node))
         assert node.device == torch.device("cpu")
         assert node.grad_enabled is False
         assert node.draws is not None
 
-    def test_the_thread_is_forgotten_after_the_end(self, run_network: RunNetwork):
+    def test_the_thread_is_forgotten_after_the_end(self, start_manual: StartManual):
         node = Probe()
-        net = run_network(Solo(node), _manual=True)
+        run = start_manual(Solo(node))
         assert thread_ident(node) == node.ident
-        net.shutdown()
+        run.shutdown()
         assert thread_ident(node) is None
 
-    def test_leaves_the_hooks_of_the_node_alone(self, run_network: RunNetwork):
+    def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
         node = Probe(seed=0)
-        net = run_network(Solo(node), _manual=True)
-        net.state_dict()
+        run = start_manual(Solo(node))
+        run.state_dict()
         assert not {"on_update", "state_dict"} & set(vars(node))
 
     def test_the_generator_is_made_on_the_thread(self):
         with pytest.raises(RuntimeError, match="node's thread"):
             _ = Probe(seed=0).generator
+
+
+def reachable(root: object) -> list[object]:
+    """Every object reached from ``root`` through instance attributes, the
+    object a builtin or bound method is bound to, and closure cells."""
+    found: list[object] = []
+    todo = [root]
+    while todo:
+        obj = todo.pop()
+        if any(obj is f for f in found) or isinstance(obj, type):
+            continue
+        found.append(obj)
+        todo.extend(getattr(obj, "__dict__", {}).values())
+        for name in ("__self__", "__func__", "__wrapped__"):
+            if hasattr(obj, name):
+                todo.append(getattr(obj, name))
+        for cell in getattr(obj, "__closure__", None) or ():
+            todo.append(cell.cell_contents)
+    return found
+
+
+class Timed(Node):
+    """Keeps the time of its run's timer in each hook."""
+
+    def __init__(self) -> None:
+        self.out = Port(send=TensorSpec((3,)))
+        self.timers: list[ReadOnlyTimer] = []
+        self.times: list[Timestamp] = []
+
+    def keep(self) -> None:
+        self.timers.append(self.timer)
+        self.times.append(self.timer.now())
+
+    @override
+    def on_start(self) -> None:
+        self.keep()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.keep()
+
+    @override
+    def on_stop(self) -> None:
+        self.keep()
+
+    @override
+    def state_dict(self) -> object:
+        return self.timer.now()
+
+
+class TestTimer:
+    def test_is_the_timer_of_the_run_from_on_start_to_on_stop(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Timed()
+        virtual.advance(1.0)
+        run = start_manual(Solo(node), timer=virtual)
+        virtual.advance(0.5)
+        run.step()
+        run.shutdown()
+        assert all(isinstance(timer, ReadOnlyTimer) for timer in node.timers)
+        assert node.times == [
+            Timestamp(ns=1_000_000_000),
+            Timestamp(ns=1_500_000_000),
+            Timestamp(ns=1_500_000_000),
+        ]
+
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_reaches_nothing_that_changes_the_timer(
+        self, virtual: VirtualTimer, start_manual: StartManual, ended: bool
+    ):
+        node = Timed()
+        seen: list[ReadOnlyTimer] = []
+        node.state_dict = lambda: seen.append(node.timer)  # type: ignore[method-assign]
+        run = start_manual(Solo(node), timer=virtual)
+        if ended:
+            run.shutdown()  # the state_dict after the end sees a stopped timer
+        run.state_dict()
+        (timer,) = seen
+        # Only the reading methods, public or private, on the instance.
+        assert set(vars(timer)) == {"now", "get_time_scale"}
+        assert timer.now() == virtual.now()
+        assert timer.get_time_scale() == 1.0
+        # Nothing reached from them (bound objects, closures) is a timer. The
+        # class's own functions still lead to module globals, as any class's do.
+        for obj in reachable(timer):
+            assert not isinstance(obj, Timer | _native.Timer), obj
+            assert not hasattr(obj, "set_time_scale"), obj
+
+    def test_stays_at_the_time_of_the_state_after_a_normal_end(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        node = Timed()
+        run = start_manual(Solo(node), timer=virtual)
+        virtual.advance(0.5)
+        run.step()
+        run.shutdown()
+        virtual.advance(100.0)  # after the end: not part of the state
+        tree = run.state_dict()
+        assert tree["nodes"]["node"] == Timestamp(ns=tree["timer"]["time_ns"])
+        assert tree["timer"]["time_ns"] == 500_000_000
+        assert node.timer.now() == Timestamp(ns=500_000_000)
+
+    def test_stays_stopped_while_another_thread_reads_the_run(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        class Slow(Timed):
+            @override
+            def state_dict(self) -> object:
+                time.sleep(0.05)  # while the host's other thread reads
+                return self.timer.now()
+
+        node = Slow()
+        run = start_manual(Solo(node), timer=virtual)
+        run.shutdown()
+        done = threading.Event()
+
+        def read() -> None:
+            while not done.is_set():
+                run.read(node.out)
+
+        reader = threading.Thread(target=read)
+        reader.start()
+        try:
+            for _ in range(5):
+                assert run.state_dict()["nodes"]["node"] == Timestamp(ns=0)
+        finally:
+            done.set()
+            reader.join()
+
+    def test_raises_before_a_run_and_after_an_end_by_an_exception(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
+        class Fails(Timed):
+            @override
+            def on_update(self, dt: float) -> None:
+                raise ValueError("boom")
+
+        node = Fails()
+        with pytest.raises(RuntimeError, match="run"):
+            _ = node.timer
+        run = start_manual(Solo(node), timer=virtual)
+        virtual.advance(0.001)
+        with pytest.raises(NetworkError):
+            run.step()
+        with pytest.raises(RuntimeError, match="run"):
+            _ = node.timer
+
+    def test_is_released_when_a_run_is_refused(self, start_manual: StartManual):
+        tree = start_manual(Solo(Timed())).state_dict()
+        node = Timed()
+        with pytest.raises(ValueError):
+            # Refused at the start: the timer of the run that is still running
+            # cannot be set back.
+            start_manual(Solo(node), state=tree)
+        with pytest.raises(RuntimeError, match="run"):
+            _ = node.timer
 
 
 class TestDevice:
@@ -144,24 +305,24 @@ class TestPeriod:
             Node(period=period)
 
     def test_the_node_waits_for_its_period_on_the_timer(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start: Start
     ):
+        # Free running: a manual run (mujou.testing.run) ignores the period.
         node = Ticker(period=0.01)
-        run_network(Solo(node))
-        virtual_timer.advance(0.005)
+        start(Solo(node), timer=virtual)
+        virtual.advance(0.005)
         with pytest.raises(queue.Empty):
             node.dts.get(timeout=0.05)
-        virtual_timer.advance(0.005)
+        virtual.advance(0.005)
         assert node.dts.get(timeout=5.0) == 0.01
 
 
 class OwnSetup(Probe):
     """Overrides ``on_thread_start`` without calling the base, and tries a host
-    method of its network there."""
+    method there."""
 
     def __init__(self, seed: int) -> None:
         super().__init__(seed=seed)
-        self.networks: list[Network] = []  # A list: build does not walk it.
         self.host_error: str | None = None
 
     @override
@@ -170,19 +331,17 @@ class OwnSetup(Probe):
         self.draws_at_thread_start = torch.rand(3, generator=self.generator)
         self.ident_at_thread_start = thread_ident(self)
         try:
-            self.networks[0].read(self.out)
+            mujou.run(Solo(Probe()))
         except RuntimeError as e:
             self.host_error = str(e)
 
 
 class TestOnThreadStart:
     def test_runs_after_the_settings_without_calling_the_base(
-        self, run_network: RunNetwork
+        self, start_manual: StartManual
     ):
         node = OwnSetup(seed=7)
-        net = Solo(node)
-        node.networks.append(net)
-        run_network(net, _manual=True)
+        start_manual(Solo(node))
         assert node.grad_at_thread_start is False
         assert node.grad_enabled is False
         generator = torch.Generator().manual_seed(7)
@@ -410,10 +569,10 @@ class Learner(Node):
         self.steps.add_(1)
 
 
-def steps(net: Network, timer: GlobalTimer, n: int) -> None:
+def steps(run: ManualRun, timer: VirtualTimer, n: int) -> None:
     for _ in range(n):
         timer.advance(0.001)
-        net._step()  # pyright: ignore[reportPrivateUsage]
+        run.step()
 
 
 class TestRestore:
@@ -430,26 +589,25 @@ class TestRestore:
         ],
     )
     def test_a_restored_node_continues_the_same(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork, device: str
+        self, virtual: VirtualTimer, start_manual: StartManual, device: str
     ):
         k, m = 4, 6
-        net = run_network(Solo(Learner(0.0, device)), _manual=True)
-        steps(net, virtual_timer, k)
-        tree = pickle.loads(pickle.dumps(net.state_dict()))
-        steps(net, virtual_timer, m)
-        node = cast(Learner, net.node)
+        node = Learner(0.0, device)
+        run = start_manual(Solo(node))
+        steps(run, virtual, k)
+        tree = pickle.loads(pickle.dumps(run.state_dict()))
+        steps(run, virtual, m)
         expected = copy.deepcopy(node.state_dict())
-        net.shutdown()
+        run.shutdown()
         assert int(at(expected, "steps")) == k + m
 
         restored_node = Learner(5.0, device)
         weight = restored_node.linear.weight
-        restored = Solo(restored_node)
-        restored.build()
-        restored.load_state_dict(tree)
-        run_network(restored, _manual=True)
+        timer = VirtualTimer()  # the first run's timer cannot be set back
+        timer.advance(100.0)  # far from the tree's time
+        restored = start_manual(Solo(restored_node), timer=timer, state=tree)
         x = restored_node._x  # pyright: ignore[reportPrivateUsage]  # made in on_start
-        steps(restored, virtual_timer, m)
+        steps(restored, timer, m)
         actual = restored_node.state_dict()
         assert torch.equal(at(actual, "_x"), at(expected, "_x"))
         assert torch.equal(at(actual, "_last"), at(expected, "_last"))
@@ -510,24 +668,24 @@ def needs_gpus(n: int) -> pytest.MarkDecorator:
 class TestCuda:
     @pytest.mark.parametrize("index", [0, pytest.param(1, marks=needs_gpus(2))])
     def test_hooks_run_on_the_device_on_a_stream_of_their_own(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork, index: int
+        self, virtual: VirtualTimer, start_manual: StartManual, index: int
     ):
         node = OnDevice(f"cuda:{index}")
-        net = run_network(Solo(node), _manual=True)
-        virtual_timer.advance(0.001)
-        net._step()  # pyright: ignore[reportPrivateUsage]
+        run = start_manual(Solo(node))
+        virtual.advance(0.001)
+        run.step()
         assert node.current_device == index
         assert node.own_stream is True
         assert node.grad_enabled is False
 
     @pytest.mark.slow
     def test_waits_for_its_stream_after_each_update(
-        self, virtual_timer: GlobalTimer, run_network: RunNetwork
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Busy()
-        net = run_network(Solo(node), _manual=True)
+        run = start_manual(Solo(node))
         for _ in range(5):
-            virtual_timer.advance(0.001)
-            net._step()  # pyright: ignore[reportPrivateUsage]
+            virtual.advance(0.001)
+            run.step()
         # The first update follows on_start, after which nothing waits.
         assert node.idle_at_update[1:] == [True] * 4

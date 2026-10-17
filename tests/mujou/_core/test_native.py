@@ -1,3 +1,4 @@
+import copy
 import os
 import pickle
 import subprocess
@@ -38,6 +39,7 @@ class TestCoreModule:
         [
             "Timer",
             "GlobalTimer",
+            "TimerReader",
             "Timestamp",
             "Schema",
             "BufferView",
@@ -160,6 +162,22 @@ class TestTimer:
             GlobalTimer()
 
 
+class TestTimerReader:
+    def test_reads_the_time_and_the_scale_of_its_timer(self):
+        t = virtual(Timer())
+        reader = t.reader()
+        t.advance(1.5)
+        t.set_time_scale(3.0)
+        assert reader.now() == Timestamp(ns=1_500_000_000)
+        assert reader.time_scale() == 3.0
+
+    def test_has_nothing_that_changes_the_timer(self):
+        public = {n for n in dir(Timer().reader()) if not n.startswith("_")}
+        assert public == {"now", "time_scale"}
+        with pytest.raises(TypeError):
+            _native.TimerReader()
+
+
 class TestTimestamp:
     def test_float_is_seconds_and_int_is_whole_seconds(self):
         ts = Timestamp(ns=2_500_000_001)
@@ -189,6 +207,15 @@ class TestTimestamp:
         ts = Timestamp(ns=123)
         assert repr(ts) == "Timestamp(ns=123)"
         assert eval(repr(ts), {"Timestamp": Timestamp}) == ts
+
+    def test_pickles_and_copies(self):
+        ts = Timestamp(ns=2**64 - 1)
+        for again in (
+            pickle.loads(pickle.dumps(ts)),
+            copy.deepcopy(ts),
+            copy.copy(ts),
+        ):
+            assert type(again) is Timestamp and again == ts
 
     def test_takes_nanoseconds_by_keyword_only(self):
         # A bare number could mean seconds or nanoseconds.

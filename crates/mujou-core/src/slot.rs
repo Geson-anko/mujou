@@ -8,6 +8,14 @@
 //! when the last message that holds it is dropped, so in a steady state writing
 //! does not allocate.
 //!
+//! Each slot keeps its message behind its own mutex, held only to clone or swap
+//! the `Arc`, never while a buffer is filled or a message dropped. A lock-free
+//! swap through `arc-swap` was used before, and broke memory safety: its readers
+//! record the pointers they load in a list shared by every `ArcSwap` in the
+//! process, so once a message is freed and its address reused for a value of
+//! another slot (even of another type), a writer of that slot could hand the
+//! value to a reader of this one (`specs/native-core.md`).
+//!
 //! - [`Outlet`]: the sending side of one port, writing its outward slot and the
 //!   slot of each channel
 //! - [`InputGroup`] / [`InputSlot`]: the slots the host writes from outside, where
@@ -16,11 +24,9 @@
 
 use std::collections::HashSet;
 use std::fmt;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering, fence};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
-
-use arc_swap::ArcSwap;
 
 pub use crate::dlpack::DLDataType as DType;
 use crate::dlpack::{format_dtype, format_shape};
@@ -378,67 +384,17 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Wakes the readers blocked in [`Slot::wait_newer`].
-///
-/// A writer takes the lock only when someone is waiting, so writing to a slot
-/// nobody waits on stays lock-free.
-#[derive(Default)]
-struct Waiters {
-    count: AtomicUsize,
-    lock: Mutex<()>,
-    changed: Condvar,
-}
-
-impl Waiters {
-    /// Called by the writer after it swapped the new value in.
-    fn notify(&self) {
-        // Pairs with the fence in `wait_while`: either the writer sees the waiter
-        // counted, or the waiter sees the new value before it sleeps.
-        fence(Ordering::SeqCst);
-        if self.count.load(Ordering::Relaxed) > 0 {
-            // Taking the lock orders the notification after a waiter that checked
-            // the old value has gone to sleep, so the wakeup is not lost.
-            drop(lock(&self.lock));
-            self.changed.notify_all();
-        }
-    }
-
-    /// Blocks while `unchanged()` holds, up to `timeout`. Returns whether it stopped
-    /// holding.
-    fn wait_while(&self, timeout: Duration, unchanged: impl Fn() -> bool) -> bool {
-        let deadline = Instant::now().checked_add(timeout);
-        self.count.fetch_add(1, Ordering::Relaxed);
-        fence(Ordering::SeqCst);
-        let mut guard = lock(&self.lock);
-        let changed = loop {
-            if !unchanged() {
-                break true;
-            }
-            let wait = match deadline {
-                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
-                None => Duration::MAX,
-            };
-            if wait.is_zero() {
-                break false;
-            }
-            guard = self
-                .changed
-                .wait_timeout(guard, wait)
-                .unwrap_or_else(|e| e.into_inner())
-                .0;
-        };
-        drop(guard);
-        self.count.fetch_sub(1, Ordering::Relaxed);
-        changed
-    }
-}
-
 /// The latest message of one writer, read by any number of readers.
 pub struct Slot {
     name: String,
     messages: Arc<Messages>,
-    value: ArcSwap<Message>,
-    waiters: Waiters,
+    /// Held only to clone or replace the `Arc`, and by a reader in
+    /// [`Slot::wait_newer`] while it checks the value (it sleeps without it).
+    value: Mutex<Arc<Message>>,
+    /// How many readers are in [`Slot::wait_newer`]. A writer notifies only when
+    /// it is not zero.
+    waiters: AtomicUsize,
+    changed: Condvar,
 }
 
 impl Slot {
@@ -446,8 +402,9 @@ impl Slot {
         Self {
             name,
             messages,
-            value: ArcSwap::new(initial),
-            waiters: Waiters::default(),
+            value: Mutex::new(initial),
+            waiters: AtomicUsize::new(0),
+            changed: Condvar::new(),
         }
     }
 
@@ -459,9 +416,10 @@ impl Slot {
         &self.messages.schema
     }
 
-    /// The latest message. Never blocks.
+    /// The latest message. Waits only for another reader or the writer to clone or
+    /// replace the pointer.
     pub fn load(&self) -> Arc<Message> {
-        self.value.load_full()
+        Arc::clone(&lock(&self.value))
     }
 
     /// Waits until the slot holds a message other than `last`, up to `timeout` of
@@ -477,10 +435,31 @@ impl Slot {
         let Some(last) = last else {
             return Some(self.load());
         };
-        let unchanged = || Arc::ptr_eq(&self.value.load(), last);
-        self.waiters
-            .wait_while(timeout, unchanged)
-            .then(|| self.load())
+        let deadline = Instant::now().checked_add(timeout);
+        // Counted before taking the lock: a writer that takes the lock after this
+        // reader has checked the value therefore sees the count and notifies.
+        self.waiters.fetch_add(1, Ordering::Relaxed);
+        let mut value = lock(&self.value);
+        let newer = loop {
+            if !Arc::ptr_eq(&value, last) {
+                break Some(Arc::clone(&value));
+            }
+            let wait = match deadline {
+                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
+                None => Duration::MAX,
+            };
+            if wait.is_zero() {
+                break None;
+            }
+            value = self
+                .changed
+                .wait_timeout(value, wait)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        };
+        drop(value);
+        self.waiters.fetch_sub(1, Ordering::Relaxed);
+        newer
     }
 
     /// Sets the value and its time as they were when the state was taken.
@@ -495,8 +474,13 @@ impl Slot {
     }
 
     fn publish(&self, msg: Arc<Message>) {
-        self.value.store(msg);
-        self.waiters.notify();
+        let old = std::mem::replace(&mut *lock(&self.value), msg);
+        if self.waiters.load(Ordering::Relaxed) > 0 {
+            self.changed.notify_all();
+        }
+        // Dropping the last holder of a message returns its buffers to the pools,
+        // which is done without the slot's lock.
+        drop(old);
     }
 }
 
@@ -592,8 +576,9 @@ impl Outlet {
 ///
 /// A write places the new value of each slot as its next value tagged with
 /// version `V + 1`, then increments `V`. A reader takes the next value only if its
-/// version is at most `V`, so the single increment switches all slots together,
-/// without the writer or any reader waiting.
+/// version is at most `V`, so the single increment switches all slots together.
+/// Neither the writer nor a reader waits for the other to make progress: each waits
+/// only while the lock of one slot is held to read or replace its pair.
 pub struct InputGroup {
     version: AtomicU64,
     /// Serializes writers (the host may write from several threads). Readers never
@@ -623,7 +608,8 @@ pub struct InputSlot {
     name: String,
     group: Arc<InputGroup>,
     messages: Arc<Messages>,
-    pair: ArcSwap<Pair>,
+    /// Held only to read or replace the pair.
+    pair: Mutex<Pair>,
 }
 
 impl InputGroup {
@@ -649,7 +635,7 @@ impl InputGroup {
             name: format!("{name}/in"),
             group: Arc::clone(self),
             messages,
-            pair: ArcSwap::from_pointee(Pair {
+            pair: Mutex::new(Pair {
                 current,
                 next: None,
             }),
@@ -688,12 +674,12 @@ impl InputGroup {
         // published (its version is at most `version`) and becomes current.
         let version = self.version.load(Ordering::Relaxed);
         for (slot, buffers) in slots.iter().zip(filled) {
-            let next = Arc::new(Message { buffers, time_ns });
-            let current = Arc::clone(slot.pair.load().resolve(version));
-            slot.pair.store(Arc::new(Pair {
-                current,
-                next: Some((version + 1, next)),
-            }));
+            let next = Some((version + 1, Arc::new(Message { buffers, time_ns })));
+            let mut pair = lock(&slot.pair);
+            let current = Arc::clone(pair.resolve(version));
+            let old = std::mem::replace(&mut *pair, Pair { current, next });
+            drop(pair);
+            drop(old);
         }
         // Release: a reader that sees the new version also sees every pair above.
         self.version.store(version + 1, Ordering::Release);
@@ -715,11 +701,12 @@ impl InputSlot {
         std::ptr::eq(&*self.group, group)
     }
 
-    /// The latest value whose write has completed. Never blocks.
+    /// The latest value whose write has completed. Waits only for another reader
+    /// or the writer to read or replace the pair.
     pub fn load(&self) -> Arc<Message> {
         // The pair first, then the version: a version at least as new as the pair
         // can only promote its next value, never skip past it.
-        let pair = self.pair.load();
+        let pair = lock(&self.pair);
         let version = self.group.version.load(Ordering::Acquire);
         Arc::clone(pair.resolve(version))
     }
@@ -732,10 +719,14 @@ impl InputSlot {
     pub fn restore<E>(&self, time_ns: u64, fill: impl Fill<E>) -> Result<(), E> {
         let current = self.messages.build(time_ns, fill)?;
         let _guard = lock(&self.group.write_lock);
-        self.pair.store(Arc::new(Pair {
-            current,
-            next: None,
-        }));
+        let old = std::mem::replace(
+            &mut *lock(&self.pair),
+            Pair {
+                current,
+                next: None,
+            },
+        );
+        drop(old);
         Ok(())
     }
 }
@@ -744,7 +735,6 @@ impl InputSlot {
 mod tests {
     use std::convert::Infallible;
     use std::sync::atomic::AtomicBool;
-    use std::sync::mpsc;
     use std::thread;
 
     use super::*;
@@ -931,6 +921,57 @@ mod tests {
         }
     }
 
+    /// A probabilistic smoke test against slots handing a reader the value of
+    /// another slot, as the lock-free `arc-swap` once did. A message or input pair
+    /// freed by one slot is often allocated again, at the same address, for the
+    /// next write to another slot, and writing every slot from one thread makes
+    /// that likely. Readers of `pairs` and of `input` (whose pairs have the same
+    /// allocation size as messages) must still see only their own messages.
+    ///
+    /// Passing proves little: against `arc-swap` it failed in about half of the runs
+    /// (`specs/native-core.md`).
+    #[test]
+    fn readers_never_see_a_message_of_another_slot() {
+        const WRITES: i64 = 100_000;
+        let pairs = Outlet::new(pair_schema(), 0, "pairs", timer());
+        let scalars = Outlet::new(scalar_schema(), 0, "scalars", timer());
+        let group = InputGroup::new(timer());
+        let input = group.input(pair_schema(), "input");
+        let done = Arc::new(AtomicBool::new(false));
+        let reader = |load: Box<dyn Fn() -> Arc<Message> + Send>| {
+            let done = Arc::clone(&done);
+            thread::spawn(move || {
+                while !done.load(Ordering::Relaxed) {
+                    let msg = load();
+                    let fields: Vec<_> = msg
+                        .buffers()
+                        .iter()
+                        .map(|b| b.field().name.as_str())
+                        .collect();
+                    assert_eq!(fields, ["a", "b"], "read a message of another slot");
+                }
+            })
+        };
+        let readers: Vec<_> = (0..4)
+            .flat_map(|_| {
+                let (slot, input) = (Arc::clone(pairs.outbox()), Arc::clone(&input));
+                [
+                    reader(Box::new(move || slot.load())),
+                    reader(Box::new(move || input.load())),
+                ]
+            })
+            .collect();
+        for k in 1..=WRITES {
+            pairs.send_with(Target::All, fill_k(k)).unwrap();
+            scalars.send_with(Target::All, fill_k(k)).unwrap();
+            group.write(&[&input], |_, bytes| fill_k(k)(bytes)).unwrap();
+        }
+        done.store(true, Ordering::Relaxed);
+        for r in readers {
+            r.join().unwrap();
+        }
+    }
+
     #[test]
     fn wait_newer_returns_on_write_or_timeout() {
         let outlet = Outlet::new(scalar_schema(), 0, "p", timer());
@@ -953,23 +994,6 @@ mod tests {
         outlet.send_with(Target::All, fill_k(3)).unwrap();
         let newer = waiter.join().unwrap().expect("woken by the write");
         assert_eq!(values(&newer), [3]);
-    }
-
-    #[test]
-    fn write_without_waiters_takes_no_lock() {
-        let outlet = Arc::new(Outlet::new(scalar_schema(), 0, "p", timer()));
-        let _held = lock(&outlet.outbox().waiters.lock);
-        let (done, finished) = mpsc::channel();
-        let writer = {
-            let outlet = Arc::clone(&outlet);
-            thread::spawn(move || {
-                outlet.send_with(Target::All, fill_k(1)).unwrap();
-                done.send(()).unwrap();
-            })
-        };
-        // Would time out if the write waited for the lock held above.
-        finished.recv_timeout(Duration::from_secs(5)).unwrap();
-        writer.join().unwrap();
     }
 
     #[test]

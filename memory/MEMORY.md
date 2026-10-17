@@ -29,7 +29,7 @@
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — 実装は private な mujou._core パッケージ、torch 非依存は拡張モジュール mujou._core._native だけ、それ以外は PyTorch を全面採用（mujou.torch に分けない）。利用者が継承する mujou.Node が on_start で勾配停止・ノードごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA のみ、MPS は考えない。JAX は多数スレッドで伸びず不採用
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語）。サンプルは examples/ でテストが実行。今は公開しない
-- [テスト用の公開の口](project_testing_api.md) — 仮想時計と手動ステップを mujou.testing などで公開し、mujou 自身と利用者のテストが同じ口を使う。実装は後
+- [テスト用の公開の口](project_testing_api.md) — 仮想時計と手動ステップを mujou.testing などで公開し、mujou 自身と利用者のテストが同じ口を使う。2026-10-16 実装（run / ManualRun / VirtualTimer）
 - [実行の API とモジュール構成の見直し](project_runtime_api_revision.md) — 2026-10-16 の決定。実装は mujou._core パッケージ、Rust は _core._native。build が Graph、mujou.run がハンドル、Compose、自動の状態収集、hook の名前など
 - [ノードの実行周期](project_node_period.md) — `Node(period=...)`、タイマーの秒、待つのはランタイム。pamiq-core に倣い計算時間は周期に含め、遅れは取り戻さず数え直す。Δt は実経過。手動モードは周期を無視。推奨案で実装、ユーザー確認待ち
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断

@@ -2,22 +2,29 @@
 
 A network is the structure of a run: nodes and nested networks as attributes, and
 ports connected into channels. ``Network.build`` walks the tree once, checks it,
-and freezes it (``specs/network.md``).
+freezes it and returns its ``Graph``, which ``mujou.run`` runs
+(``specs/network.md``).
 """
 
-import math
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+import threading
+import weakref
+from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, Never, cast, final
 
-import torch
-
-from mujou._core.port import Channel, NextPort, Port, PrevPort, freeze, is_frozen
+from mujou._core import _native
+from mujou._core.port import (
+    Channel,
+    NextPort,
+    Port,
+    PrevPort,
+    freeze,
+    is_frozen,
+    thaw,
+)
 
 if TYPE_CHECKING:
     from mujou._core.node import Node
-    from mujou._core.session import Session
 
 
 class Component:
@@ -81,21 +88,38 @@ def _side(
     return found[0]
 
 
-@dataclass(frozen=True)
+@final
 class Graph:
-    """The structure of a built network.
+    """The structure of a built network: what runs when ``mujou.run`` runs the
+    network.
 
-    Attributes:
-        nodes: ``(path, node)`` for every node in the tree, depth first in attribute
-            definition order. A path is the dotted attribute path from the root,
-            e.g. ``"body.l1"``.
-        ports: For every port owned by a node, the index of the owner in ``nodes``
-            and the attribute name of the port.
+    ``Network.build`` makes it; it cannot be created directly, and
+    ``mujou.run`` takes networks, not graphs. It is a different object from the
+    network it was built from: the network declares the structure, and the
+    graph is what runs. A graph runs once.
     """
 
-    nodes: tuple[tuple[str, Node], ...]
     # Any: ports of every message type are handled alike.
-    ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
+    _nodes: tuple[tuple[str, Node], ...]
+    _ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
+    # Every node and network of the tree, marked as built.
+    _members: tuple[Component, ...]
+    # Whether a run has started (or tried to start and failed in a node), and the
+    # lock that makes the check and the start one step for concurrent callers.
+    _ran: bool
+    _lock: threading.Lock
+
+    def __init__(self) -> Never:
+        raise TypeError("a Graph is made by Network.build()")
+
+    @property
+    def nodes(self) -> tuple[tuple[str, Node], ...]:
+        """``(path, node)`` for every node in the tree, depth first in attribute
+        definition order.
+
+        A path is the dotted attribute path from the root, e.g. ``"body.l1"``.
+        """
+        return self._nodes
 
     def port_path(self, port: Port[Any, Any, Any]) -> str:
         """Return the path of ``port`` through its owner, e.g. ``"body.l1.next"``.
@@ -103,9 +127,29 @@ class Graph:
         Raises:
             ValueError: ``port`` is not owned by a node of this network.
         """
-        if port not in self.ports:
+        if port not in self._ports:
             raise ValueError(f"{port!r} is not a port of this network")
-        return _path(self.nodes, self.ports[port])
+        return _path(self._nodes, self._ports[port])
+
+
+def _make_graph(
+    nodes: tuple[tuple[str, Node], ...],
+    ports: Mapping[Port[Any, Any, Any], tuple[int, str]],
+    members: tuple[Component, ...],
+) -> Graph:
+    graph = object.__new__(Graph)
+    graph._nodes = nodes  # pyright: ignore[reportPrivateUsage]  # Graph's own module
+    graph._ports = ports  # pyright: ignore[reportPrivateUsage]
+    graph._members = members  # pyright: ignore[reportPrivateUsage]
+    graph._ran = False  # pyright: ignore[reportPrivateUsage]
+    graph._lock = threading.Lock()  # pyright: ignore[reportPrivateUsage]
+    return graph
+
+
+def ports(graph: Graph) -> Mapping[Port[Any, Any, Any], tuple[int, str]]:
+    """For every port owned by a node of ``graph``, the index of the owner in
+    ``graph.nodes`` and the attribute name of the port."""
+    return graph._ports  # pyright: ignore[reportPrivateUsage]  # Graph's own module
 
 
 class Network(Component):
@@ -121,33 +165,8 @@ class Network(Component):
     Declare ports as instance attributes (in ``__init__``), not class attributes,
     and do not use the names of the methods below for attributes.
 
-    The host (the Python code outside the nodes) uses the root network, the one
-    it called ``build`` on, in this order:
-
-    1. ``build()``: once, to check and freeze the structure.
-    2. Optionally, before ``run``: ``write`` the initial inputs, or
-       ``load_state_dict`` a saved tree.
-    3. ``run()``: once; the nodes then run in the background. ``mujou.run(net)``
-       does 1 and 3 in one call.
-    4. While it runs: ``write`` inputs, ``read`` / ``subscribe`` outputs, take a
-       ``state_dict``. ``read`` also works before ``run``.
-    5. ``shutdown()`` to stop it, or ``join()`` to wait until it stops.
-    6. Optionally, after a normal end: take the final ``state_dict``.
-
-    These methods are for the host: calling them from a node's hook raises
-    ``RuntimeError``.
-
-    If a node raises, the whole network stops. If that happens while ``run``
-    starts the nodes, ``run`` raises ``NetworkError``; otherwise every later call
-    of ``write``, ``read``, ``subscribe`` (and its iterator), ``state_dict``,
-    ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's exception.
-    The state at the exception is not kept.
-
-    A running network keeps running when the host drops it, until ``shutdown``
-    or, at the latest, the interpreter's exit (which waits for ``on_stop``). At
-    the exit, the networks start stopping once the main thread has ended, before
-    the interpreter joins the non-daemon threads, and the exit waits until they
-    have stopped.
+    ``mujou.run(net)`` builds the network (``build``) and runs it; the ``Run`` it
+    returns is how the host talks to the running nodes.
 
     Example::
 
@@ -168,27 +187,26 @@ class Network(Component):
 
 
         net = Classifier()
-        net.build()
-        net.write({net.prev: x0, net.teacher: y0})  # initial values
-        net.run()  # returns once every node has started
-        net.write({net.prev: x, net.teacher: y})  # switch together
-        mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
-        prediction, t = net.read(net.head.next)
-        net.shutdown()
-        state = net.state_dict()  # the state at the end, to save
+        with mujou.run(net, inputs={net.prev: x0, net.teacher: y0}) as run:
+            run.write({net.prev: x, net.teacher: y})  # switch together
+            mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
+            prediction, t = run.read(net.head.next)
+            state = run.state_dict()
     """
 
     _graph: Graph | None = None
-    _session: Session | None = None
 
-    def build(self) -> None:
-        """Check the structure of this network as the root and freeze it.
+    def build(self) -> Graph:
+        """Check the structure of this network as the root, freeze it and return
+        its graph.
 
-        After ``build``, no port in the tree takes new connections.
+        After ``build``, no port in the tree takes new connections. Calling it
+        again returns the same graph. ``mujou.run`` calls it.
 
         Raises:
-            RuntimeError: This network is already built, or part of the tree belongs
-                to another built network.
+            RuntimeError: Part of the tree (a node, a network or a port) belongs
+                to another built network, or this network is part of a built
+                one.
             ValueError: The structure is invalid: the tree has no node; a component
                 appears at two paths; a port is owned by two nodes (or under two
                 names); a port is declared as a class attribute; a node holds a
@@ -197,12 +215,18 @@ class Network(Component):
                 a component has more than one ``PrevPort`` or ``NextPort`` as
                 direct attributes.
         """
+        # One build at a time: two threads building one tree would each make a
+        # graph, and both would run.
+        with _BUILD_LOCK:
+            if self._graph is None:
+                self._graph = self._build()
+            return self._graph
+
+    def _build(self) -> Graph:
         # Imported here: _node imports Component from this module.
         from mujou._core.node import Node
 
-        if self._graph is not None:
-            raise RuntimeError("the network is already built")
-
+        members: list[Component] = []
         nodes: list[tuple[str, Node]] = []
         ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
         # (attribute path, port, indices of the nodes in the exposing subtree)
@@ -216,6 +240,12 @@ class Network(Component):
                     f"{_where(seen[id(component)])} and {_where(path)}"
                 )
             seen[id(component)] = path
+            if _is_built(component):
+                raise RuntimeError(
+                    f"{type(component).__name__} at {_where(path)} belongs to a "
+                    "network that is already built"
+                )
+            members.append(component)
             _check_declarations(component, _where(path))
             if isinstance(component, Node):
                 index = len(nodes)
@@ -269,239 +299,127 @@ class Network(Component):
                     )
         for port in ports:
             freeze(port)
-        self._graph = Graph(tuple(nodes), MappingProxyType(ports))
-        # Imported here: _session imports _node, which imports this module.
-        from mujou._core.session import Session
-
-        self._session = Session(self._graph)
-
-    def run(self, *, pause_timeout: float = 30.0, _manual: bool = False) -> None:
-        """Start running the nodes in the background and return once they started.
-
-        Every node's thread is set up, ``on_start`` (and, after
-        ``load_state_dict``, the node's ``load_state_dict``) has returned, and the
-        global timer runs when this returns. A network runs once.
-
-        Args:
-            pause_timeout: Real seconds that ``state_dict`` waits for every node
-                to pause (the end of its current ``on_update``).
-            _manual: For tests: the nodes update only in ``_step``.
-
-        Raises:
-            RuntimeError: The network is not built, or has already run.
-            ValueError: The network was restored by ``load_state_dict`` while
-                another network runs in this process (the global time cannot be
-                set back under it). Nothing started; stop the other network and
-                call ``run`` again.
-            NetworkError: A node raised while starting; the network has stopped.
-        """
-        _session(self).run(manual=_manual, pause_timeout=pause_timeout)
-
-    # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any] would reject (Mapping keys are invariant).
-    def write[P: Port[Any, Any, Any]](
-        self, values: Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
-    ) -> None:
-        """Write messages to unconnected single-peer ports that receive.
-
-        The values are detached and copied. All of them switch together and carry
-        the same time: at any one moment, a node sees either all of them or none.
-        (A node that reads two of them one after the other may still see a later
-        write in between; compare the times to tell.) Written before ``run``, they
-        are the initial values. ``load_state_dict`` replaces what was written
-        before it; what is written after it replaces the tree's values and carries
-        the tree's time.
-
-        Raises:
-            RuntimeError: The network is not built, or has stopped normally (no
-                node reads what is written then).
-            ValueError: A port is outside the network, connected, takes many
-                peers, or receives nothing; or a shape or the keys differ.
-            TypeError: A message or dtype differs from the spec.
-            NetworkError: The network stopped because a node raised.
-        """
-        _session(self).write(values)
-
-    def read[S](self, port: Port[S, Any, Any]) -> tuple[S, float]:
-        """Return the latest message ``port`` sent and its global time in seconds.
-
-        Any port that sends can be read, so a connected port shows an inner
-        node. Only ``send`` (to every peer) updates the value read here; before
-        the first one it is zeros (or the value restored by ``load_state_dict``).
-        The tensors are new copies on the CPU.
-
-        Raises:
-            RuntimeError: The network is not built.
-            ValueError: ``port`` is outside the network or sends nothing.
-            NetworkError: The network stopped because a node raised.
-        """
-        return cast(tuple[S, float], _session(self).read(port))
-
-    def subscribe[S](self, port: Port[S, Any, Any]) -> Iterator[tuple[S, float]]:
-        """Iterate over the messages ``port`` sends, with their times.
-
-        The first step yields the latest message at the time of this call (zeros
-        or the restored value before the first ``send``) without waiting. Each
-        later step waits until a newer message is sent and yields the latest;
-        messages sent in between are skipped. Only the consumer waits: the
-        sending node never does. The iterator ends when the network shuts down
-        normally. Shut the network down before the program ends: a thread
-        iterating here ends only with the network.
-
-        Raises:
-            RuntimeError: The network is not built or not run yet.
-            ValueError: ``port`` is outside the network or sends nothing.
-            NetworkError: The network stopped because a node raised (also from
-                the iterator).
-        """
-        return cast(Iterator[tuple[S, float]], _session(self).subscribe(port))
-
-    def state_dict(self) -> dict[str, Any]:
-        """Copy the network's state at one global time, while it runs or after
-        it ended normally.
-
-        While it runs, this pauses the network, copies the state and resumes, and
-        returns once the network has resumed. After a normal end, this copies the
-        state as the nodes left it, calling each node's ``state_dict`` on this
-        thread (an exception it raises reaches the caller as it is). The tree's
-        timer holds the time at which ``shutdown`` asked the network to stop, as
-        if the network had paused then (or a later update or send of an
-        ``on_stop``), so that a restored network goes on from there without the
-        time that passed after the end.
-
-        The tree is a copy (later updates of the nodes do not change it) and
-        pickles; saving it is up to the host::
-
-            {
-                "nodes": {"body.l1": ..., ...},  # each node's state_dict()
-                "slots": {"body.l1.next/out": (value, time_ns), ...},
-                "last_update_ns": {"body.l1": int, ...},
-                "timer": {"time_ns": int, "scale": float},
-            }
-
-        A node is keyed by its attribute path from the root. A slot is keyed by
-        the path of the port through its owning node (``"body.l1.prev/in"``, not
-        an exposed name such as ``"prev/in"``) and holds its latest message:
-        ``/out`` what ``read`` returns, ``/ch0``, ``/ch1``, ... each channel, and
-        ``/in`` what the host wrote.
-
-        Raises:
-            RuntimeError: The network has not run (also after ``load_state_dict``
-                until ``run``), or this is called from a node's hook.
-            PauseTimeoutError: A node did not pause within ``pause_timeout``; the
-                network keeps running.
-            NetworkError: The network stopped because a node raised; its state is
-                not kept.
-        """
-        return _session(self).state_dict()
-
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Restore a tree from ``state_dict`` before ``run``.
-
-        The slots are restored now; the nodes' states, their last update times
-        and the global time when ``run`` starts. ``run`` passes each node a copy
-        of ``state["nodes"][path]`` through its ``load_state_dict``, after its
-        ``on_start``, and the network continues from the time the tree was taken.
-        Build the network as the one the tree came from: it must have the same
-        node paths and slots.
-
-        Raises:
-            RuntimeError: The network is not built, or has already run.
-            ValueError: The tree does not match the network.
-        """
-        _session(self).load_state_dict(state)
-
-    def shutdown(self, timeout: float = math.inf) -> None:
-        """Stop every node and return once every ``on_stop`` has returned.
-
-        Does nothing before ``run`` or after a normal end.
-
-        Args:
-            timeout: Real seconds to wait for the end. ``math.inf`` waits as
-                long as it takes.
-
-        Raises:
-            RuntimeError: The network is not built.
-            ValueError: ``timeout`` is negative or NaN; nothing was asked.
-            TimeoutError: The network did not stop within ``timeout``. The stop
-                stays asked: the nodes take no more updates and the network goes
-                on stopping in the background (an ``on_stop`` may still be
-                running). ``join`` waits for the end.
-            NetworkError: The network stopped because a node raised.
-        """
-        _session(self).shutdown(timeout)
-
-    def join(self, timeout: float = math.inf) -> None:
-        """Wait until the network stops, without asking it to stop.
-
-        It returns once another thread called ``shutdown`` and every ``on_stop``
-        has returned; if a node raises, it raises instead. If nothing stops the
-        network and ``timeout`` is ``math.inf``, it never returns.
-
-        Args:
-            timeout: Real seconds to wait for the end. ``math.inf`` waits as
-                long as it takes.
-
-        Raises:
-            RuntimeError: The network has not run.
-            ValueError: ``timeout`` is negative or NaN.
-            TimeoutError: The network did not stop within ``timeout``. Nothing
-                changes: a running network keeps running.
-            NetworkError: The network stopped because a node raised.
-        """
-        _session(self).join(timeout)
-
-    def _step(self, order: Sequence[Node] | None = None) -> None:
-        """For tests with ``run(_manual=True)``: update each node once, in
-        ``order`` (by default the order of the tree), and return when done.
-
-        A node whose global time has not advanced since its last update is not
-        updated.
-        """
-        _session(self).step(order)
+        for member in members:
+            _mark_built(member)
+        return _make_graph(tuple(nodes), MappingProxyType(ports), tuple(members))
 
 
-def run[N: Network](
-    network: N, *, pause_timeout: float = 30.0, _manual: bool = False
-) -> N:
-    """Build ``network`` unless it is built, run it, and return it.
+def unbuild(network: Network) -> None:
+    """Undo the ``build`` of ``network``, which has not run, so that its parts can
+    be built again (``mujou.run`` does this for a ``Compose`` of its own whose run
+    was refused)."""
+    with _BUILD_LOCK:
+        graph = network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
+        if graph is None:
+            return
+        for port in graph._ports:  # pyright: ignore[reportPrivateUsage]
+            thaw(port)
+        for member in graph._members:  # pyright: ignore[reportPrivateUsage]
+            _BUILT.pop(id(member), None)
+        network._graph = None  # pyright: ignore[reportPrivateUsage]
+
+
+# The nodes and networks of every built tree: a part of one cannot join another.
+# Ports are marked too (frozen), but a node without ports has only this mark.
+# Keyed by id and checked by identity, so that a component's own __eq__ / __hash__
+# (e.g. a dataclass, which is unhashable) plays no part.
+_BUILT: Final[dict[int, weakref.ref[Component]]] = {}
+_BUILD_LOCK: Final = threading.Lock()
+
+
+def _is_built(component: Component) -> bool:
+    ref = _BUILT.get(id(component))
+    return ref is not None and ref() is component
+
+
+def _mark_built(component: Component) -> None:
+    key = id(component)
+
+    def forget(ref: weakref.ref[Component]) -> None:
+        # Only this mark: a later component may have reused the id.
+        if _BUILT.get(key) is ref:
+            _BUILT.pop(key, None)
+
+    _BUILT[key] = weakref.ref(component, forget)
+
+
+class Compose(Network):
+    """A network of the given networks side by side, unconnected unless they were
+    connected before.
+
+    A network given by position is at the path of its position (``"0"``,
+    ``"1"``, ...) and one given by keyword at its keyword, so the node ``l1`` of
+    ``Compose(a, b)`` is ``"1.l1"`` in ``b`` and that of ``Compose(enc=a)`` is
+    ``"enc.l1"``. ``mujou.run(a, b)`` runs ``Compose(a, b)``.
 
     Example::
 
-        net = mujou.run(Classifier())
-        net.write({net.prev: x, net.teacher: y})
-
-    Raises as ``Network.build`` and ``Network.run`` do.
-    """
-    if network._graph is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
-        network.build()
-    network.run(pause_timeout=pause_timeout, _manual=_manual)
-    return network
-
-
-def _session(network: Network) -> Session:
-    # Imported here: _node imports this module.
-    from mujou._core.node import in_hook
-
-    if in_hook():
-        raise RuntimeError(
-            "a node's hook cannot call the network's host methods; a node talks "
-            "only through its own ports"
-        )
-    if network._session is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
-        raise RuntimeError("the network is not built; call build() first")
-    return network._session  # pyright: ignore[reportPrivateUsage]  # Network's own module
-
-
-def graph(network: Network) -> Graph:
-    """Return the graph of a built ``network``.
+        enc, dec = Encoder(), Decoder()
+        enc.connect(dec)
+        with mujou.run(Compose(enc=enc, dec=dec)) as run:
+            state = run.state_dict()  # nodes "enc.l1", ..., "dec.l1", ...
 
     Raises:
-        RuntimeError: ``network`` is not built.
+        TypeError: A value is not a ``Network``.
+        ValueError: A keyword is empty, holds a ``.`` (a path would be
+            ambiguous), starts with ``_``, is the name of an attribute of
+            ``Network`` (such as ``build``), or is the path of a position.
     """
-    if network._graph is None:  # pyright: ignore[reportPrivateUsage]  # Network's own module
-        raise RuntimeError("the network is not built; call build() first")
-    return network._graph  # pyright: ignore[reportPrivateUsage]  # Network's own module
+
+    def __init__(self, *networks: Network, **named: Network) -> None:
+        children = {str(i): network for i, network in enumerate(networks)}
+        for name, network in named.items():
+            if (
+                not name
+                or "." in name
+                or name.startswith("_")
+                or hasattr(Compose, name)
+                or name in children
+            ):
+                raise ValueError(
+                    f"cannot compose a network as {name!r}: the name is empty, "
+                    "holds a '.', is private, is an attribute of Network, or is a "
+                    "position"
+                )
+            children[name] = network
+        for name, network in children.items():
+            # The annotation is not checked at runtime; a node here would be walked
+            # as a child, not composed.
+            if not isinstance(network, Network):  # pyright: ignore[reportUnnecessaryIsInstance]
+                raise TypeError(
+                    f"Compose takes networks, got {type(network).__name__} at {name!r}"
+                )
+            setattr(self, name, network)
+
+
+def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
+    """Call ``start`` to run ``graph`` unless it has run, and mark it as run.
+
+    A start refused before any node started (an ``Exception`` other than
+    ``NetworkError``) does not count, so the graph may run once the cause is
+    gone. An interruption (``KeyboardInterrupt``) counts, wherever it came: the
+    start may go on in the background, and a run interrupted before it started
+    the runtime is counted too, to be safe.
+
+    Raises:
+        RuntimeError: ``graph`` has already run.
+    """
+    with graph._lock:  # pyright: ignore[reportPrivateUsage]  # Graph's own module
+        if graph._ran:  # pyright: ignore[reportPrivateUsage]
+            raise RuntimeError(
+                "the network has already run; build a new instance to run again"
+            )
+        try:
+            started = start()
+        except Exception as e:
+            if isinstance(e, _native.NetworkError):
+                graph._ran = True  # pyright: ignore[reportPrivateUsage]
+            raise
+        except BaseException:
+            graph._ran = True  # pyright: ignore[reportPrivateUsage]
+            raise
+        graph._ran = True  # pyright: ignore[reportPrivateUsage]
+        return started
 
 
 def _path(nodes: Sequence[tuple[str, Node]], owner: tuple[int, str]) -> str:
