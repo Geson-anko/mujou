@@ -297,7 +297,7 @@ class TestRun:
             assert isinstance(error, RuntimeError)
             assert re.match(who + refused, str(error)), str(error)
 
-    def test_a_network_runs_either_alone_or_composed(self, start_manual: StartManual):
+    def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
         alone, other = Chain(), Chain()
         start_manual(alone)
         with pytest.raises(RuntimeError, match="^Chain has already run"):
