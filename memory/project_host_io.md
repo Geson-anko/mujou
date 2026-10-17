@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**2026-10-16 の [[project-runtime-api-revision]] と 2026-10-17 の [[project-run-node-and-write-time]] で、run の戻り値・初期値・復元の渡し方が上書きされた。** 今の形は `h = mujou.run(component, *components, timer=..., inputs={port: x}, state=tree)` がハンドル `Run` を返し、`Run` が write / read / subscribe / state_dict / shutdown / join を持つ。以下の打ち消し線と注記はその前の記録。
+**2026-10-16 の [[project-runtime-api-revision]] と 2026-10-17 の [[project-run-node-and-write-time]] で、run の戻り値・初期値・復元の渡し方が上書きされた。** 今の形は `h = mujou.run(component, *components, timer=..., inputs={port: x}, state=tree)` がハンドル `Run` を返し、`Run` が write / read / subscribe / state_dict / shutdown / join を持つ。2026-10-17 に推奨案で `subscribe(port, *, timeout=)` と `wait_for(port, condition, *, timeout=)`（条件を満たす最初の値まで待つ。例の読み直しループを 1 行に）を足した（ユーザー確認待ち）。以下の打ち消し線と注記はその前の記録。
 
 2026-10-14 決定（暫定）。ユーザーが方針（バックグラウンド実行、run 前の初期値書き込み、複数 Port の同時書き込み、read と subscribe）を決め、細部はユーザーの指示で Claude が暫定案として考案した。詳細は `specs/network.md` のネットワークの入力と出力の節。
 

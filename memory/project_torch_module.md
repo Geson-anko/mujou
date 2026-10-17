@@ -1,6 +1,6 @@
 ---
 name: project-torch-module
-description: 実装は private な mujou._core パッケージに置き、PyTorch を必須の依存として全面的に採用する（mujou.torch に分けない）。torch を使わないのは Rust の拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node（コアの Node を継承）が勾配の記録の停止・ノードごとの CUDA ストリーム・乱数生成器をノードのスレッドの上で設定する（2026-10-17 から内部の hook _on_thread_start）。対象は CPU と CUDA、MPS は考えない
+description: 実装は private な mujou._core パッケージに置き、PyTorch を必須の依存として全面的に採用する（mujou.torch に分けない）。torch を使わないのは Rust の拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node（コアの Node を継承）が勾配の記録の停止・ノードごとの CUDA ストリーム・乱数生成器をノードのスレッドの上で設定する（2026-10-17 から内部の hook _on_thread_start）。対象は CPU と CUDA（2026-10-17 から CUDA 以外のアクセラレータも。[[project-gpu-policy]]）
 metadata:
   type: project
 ---
@@ -14,7 +14,7 @@ metadata:
 - パラメータは `nn.Module` / `nn.Parameter` を使わず、`requires_grad=False` のテンソルで持つ。`inference_mode` は既定にしない（ノード内 BP で入力を backward に使えなくなるため）
 - 状態は `add_`・`addmm_` などで**その場で更新する**。毎ステップ新しいテンソルを確保すると、多数のスレッドでメモリ確保が律速になる（7950X、n=1024、16 スレッドで 1.1k → 36.9k ステップ/秒）
 - torch のノードの専用スレッドは物理コア数を超えないようにする（論理コア数まで増やすと遅くなった）
-- 対象デバイスは CPU と CUDA。**Apple の MPS は考えない**
+- 対象デバイスは CPU と CUDA。~~**Apple の MPS は考えない**~~（2026-10-17、ユーザーの依頼で MPS など CUDA 以外のアクセラレータもストリーム無しで使えるようにした。MPS は 2 スレッドから同時に使うと落ちるので、走っている実行の全体で MPS のノードは 1 つまで。[[project-gpu-policy]]）
 
 **Why:** GPU をコアでサポートしない（[[project-gpu-policy]]）代わりに、ノードの内側で GPU を使うときにノード間の独立性を保つ設定を、作者が毎回書かずに済むようにするため。PC-ALM は更新式を直接計算するので autograd は要らない。
 
