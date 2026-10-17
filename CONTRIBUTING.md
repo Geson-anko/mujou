@@ -10,7 +10,7 @@ Mujou is in early development, and the API may still change.
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [uv](https://docs.astral.sh/uv/)    | Manages Python, the virtualenv and the dependencies                                                                                                                         |
 | [just](https://just.systems/)       | 1.58 or later. On Windows, the recipes run through Git Bash (`C:/Program Files/Git/bin/bash.exe`), so install [Git for Windows](https://gitforwindows.org/) there           |
-| Rust ([rustup](https://rustup.rs/)) | 1.85 or later (`rust-version` in `Cargo.toml`). Builds the native core                                                                                                      |
+| Rust ([rustup](https://rustup.rs/)) | The version pinned in `rust-toolchain.toml`; rustup installs it. The code also builds with 1.85 (`rust-version` in `Cargo.toml`)                                            |
 | Python                              | 3.14 or later. Development uses the free-threaded build 3.14t, set in `.python-version`; uv installs it. The regular build with the GIL is supported too, and CI tests both |
 
 ## Setup
@@ -43,7 +43,9 @@ just container just run   # start the container if needed, then run `just run` i
 | ---------------------- | --------------------------------------------------------------------------------------------------- |
 | `just setup`           | Recreate `.venv/`, install the dependencies and the pre-commit hooks                                |
 | `just format`          | Run every pre-commit hook on all files (ruff, mdformat, codespell, cargo fmt, cargo clippy, ...)    |
-| `just test`            | `cargo test --workspace`, then pytest on all tests, including slow ones, with coverage              |
+| `just test`            | `just test-rs`, then `just test-py`                                                                 |
+| `just test-rs`         | `cargo test --workspace`                                                                            |
+| `just test-py`         | pytest on all tests, including slow ones, with coverage                                             |
 | `just test-fast`       | `cargo test --workspace`, then pytest without the slow tests. Use it while you iterate              |
 | `just type`            | pyright, strict on `src/`                                                                           |
 | `just run`             | `format`, `test`, `type` and `docs-build`, in this order                                            |
@@ -107,12 +109,12 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 
 CI runs these workflows on pull requests to `main`. Test, Type Check and Docs run only when files they depend on change.
 
-| Workflow      | Checks                                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Test          | `just test` on Ubuntu and macOS, with Python 3.14t and 3.14; then that the committed `_native.pyi` matches `just stub` |
-| Type Check    | `just type` (pyright)                                                                                                  |
-| Format & Lint | All pre-commit hooks except `mujou-stub`                                                                               |
-| Docs          | `just docs-build`                                                                                                      |
+| Workflow      | Checks                                                                                                                                                                                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test          | `just test-py` on Ubuntu and macOS, with Python 3.14t and 3.14, and that the committed `_native.pyi` matches `just stub`; `just test-rs` and `cargo doc` (warnings are errors) on Ubuntu and macOS; `cargo check` with the oldest supported Rust (`rust-version`) |
+| Type Check    | `just type` (pyright)                                                                                                                                                                                                                                             |
+| Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                          |
+| Docs          | `just docs-build`                                                                                                                                                                                                                                                 |
 
 `CLAUDE.md`, `.claude/` and `memory/` configure the AI coding agents used in this repository; human contributors can ignore them.
 

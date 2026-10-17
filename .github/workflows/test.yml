@@ -11,6 +11,7 @@ on:
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
@@ -25,12 +26,57 @@ on:
       - "**/*.rs"
       - "**/Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
       - ".github/workflows/test.yml"
 
 jobs:
+  rust:
+    name: rust / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest"]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # PyO3 (mujou-python) looks for a Python interpreter at build time.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: extractions/setup-just@v4
+
+      # rustup installs the toolchain pinned in rust-toolchain.toml on first use.
+      - name: Run cargo test
+        run: just test-rs
+
+      - name: Check the doc comments (broken intra-doc links fail)
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+  msrv:
+    name: rust / MSRV
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check the workspace with the rust-version of Cargo.toml
+        run: |
+          msrv="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check --workspace --all-targets
+
   run_tests:
     name: ${{ matrix.os }} / ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
@@ -54,8 +100,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      # cargo test runs once per OS in the rust job.
       - name: Run pytest with coverage
-        run: just test
+        run: just test-py
 
       - name: Check that the committed type stub is up to date
         run: just stub && git diff --exit-code src/mujou/_core/_native.pyi
