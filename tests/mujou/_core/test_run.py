@@ -860,7 +860,11 @@ class TestWaitFor:
     def test_names_itself_when_it_times_out(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(TimeoutError, match="condition of wait_for within 0.05 s"):
+        with pytest.raises(
+            TimeoutError,
+            match=r"^no message of the port 'b\.next' met the condition of wait_for "
+            r"within 0\.05 s",
+        ):
             run.wait_for(net.next, lambda _: False, timeout=0.05)
 
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
@@ -868,7 +872,7 @@ class TestWaitFor:
         run = start_manual(net)
         stopper = threading.Timer(0.05, run.shutdown)
         stopper.start()
-        with pytest.raises(RuntimeError, match="shut down before"):
+        with pytest.raises(RuntimeError, match=r"shut down before the port 'b\.next'"):
             run.wait_for(net.next, lambda _: False)
         stopper.join()
 
