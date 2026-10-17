@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use crate::hint::{Values, Views};
 use crate::time::{PyTimer, PyTimestamp};
-use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
-use mujou_core::slot::{self as core, DType, FieldSpec, Message, Schema, SlotError, Target};
+use mujou_core::dlpack::{self, DLDataType, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
+use mujou_core::slot::{self as core, FieldSpec, Message, Schema, SlotError, Target};
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
@@ -229,8 +229,8 @@ fn check_index(index: isize, len: usize) -> PyResult<usize> {
         })
 }
 
-/// `(code, bits, lanes)`, as in DLPack.
-type DLDataType = (u8, u8, u16);
+/// A [`DLDataType`] as the tuple `(code, bits, lanes)` that Python passes.
+type DTypeTuple = (u8, u8, u16);
 
 /// The fields of a message, fixed when the network is built.
 ///
@@ -248,13 +248,13 @@ pub struct PySchema(Arc<Schema>);
 #[pymethods]
 impl PySchema {
     #[new]
-    fn new(fields: Vec<(String, Vec<i64>, DLDataType)>) -> PyResult<Self> {
+    fn new(fields: Vec<(String, Vec<i64>, DTypeTuple)>) -> PyResult<Self> {
         let fields = fields
             .into_iter()
             .map(|(name, shape, (code, bits, lanes))| FieldSpec {
                 name,
                 shape,
-                dtype: DType { code, bits, lanes },
+                dtype: DLDataType { code, bits, lanes },
             })
             .collect();
         Ok(Self(Arc::new(Schema::new(fields).map_err(to_py_err)?)))

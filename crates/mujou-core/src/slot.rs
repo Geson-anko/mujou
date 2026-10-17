@@ -28,8 +28,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-pub use crate::dlpack::DLDataType as DType;
-use crate::dlpack::{format_dtype, format_shape};
+use crate::dlpack::{DLDataType, format_dtype, format_shape};
 use crate::time::{Timer, Timestamp};
 
 /// One named tensor of a message.
@@ -37,21 +36,21 @@ use crate::time::{Timer, Timestamp};
 pub struct FieldSpec {
     pub name: String,
     pub shape: Vec<i64>,
-    pub dtype: DType,
+    pub dtype: DLDataType,
 }
 
 impl FieldSpec {
-    pub fn numel(&self) -> usize {
+    pub(crate) fn numel(&self) -> usize {
         self.shape.iter().product::<i64>() as usize
     }
 
-    pub fn elem_bytes(&self) -> usize {
+    pub(crate) fn elem_bytes(&self) -> usize {
         usize::from(self.dtype.bits / 8) * usize::from(self.dtype.lanes)
     }
 
     /// The size of the field as compact row-major bytes. Cannot overflow for the
     /// fields of a [`Schema`], which checks it.
-    pub fn nbytes(&self) -> usize {
+    pub(crate) fn nbytes(&self) -> usize {
         self.numel() * self.elem_bytes()
     }
 
@@ -96,7 +95,7 @@ impl Schema {
                     format_shape(&f.shape)
                 )));
             }
-            let DType { bits, lanes, .. } = f.dtype;
+            let DLDataType { bits, lanes, .. } = f.dtype;
             if lanes != 1 || bits == 0 || bits % 8 != 0 {
                 return Err(SlotError::InvalidSchema(format!(
                     "field '{}': unsupported dtype {}",
@@ -261,11 +260,11 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub fn field(&self) -> &FieldSpec {
+    pub(crate) fn field(&self) -> &FieldSpec {
         &self.pool.field
     }
 
-    pub fn bytes(&self) -> &[u8] {
+    pub(crate) fn bytes(&self) -> &[u8] {
         let storage = self
             .storage
             .as_deref()
@@ -734,7 +733,7 @@ mod tests {
     use crate::dlpack::{self, DLTensor};
     use crate::time::TimerState;
 
-    const I64: DType = DType {
+    const I64: DLDataType = DLDataType {
         code: 0,
         bits: 64,
         lanes: 1,
@@ -796,7 +795,7 @@ mod tests {
 
     #[test]
     fn schema_rejects_invalid_fields() {
-        let bool8 = DType {
+        let bool8 = DLDataType {
             code: 6,
             bits: 8,
             lanes: 1,
