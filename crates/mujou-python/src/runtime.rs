@@ -368,6 +368,12 @@ fn duration(seconds: f64) -> PyResult<Duration> {
     ))
 }
 
+/// A period in seconds as the runtime's ns: rounded as `seconds_to_ns` rounds,
+/// and at least 1 ns, since a period of 0 ns is invalid.
+fn period_to_ns(seconds: f64) -> PyResult<u64> {
+    Ok(seconds_to_ns(seconds).map_err(timer_error)?.max(1))
+}
+
 /// Runs nodes, each on its own thread, under one control thread.
 #[pyclass(frozen, module = "mujou._core._native")]
 pub struct Runtime {
@@ -441,10 +447,11 @@ impl Runtime {
     /// (`Timer.state_dict()`), so the time does not run while the nodes start.
     /// Loading it raises `ValueError` while another runtime runs on the same
     /// timer, whose time would jump. `last_update_ns` is where each node's
-    /// first Δt starts (the time at the start by default). `period_ns` is each
-    /// node's period on the timer in ns (> 0), or `None` to update as soon as
-    /// any time has passed; the manual mode ignores it. `pause_timeout` is how
-    /// many real seconds `capture` waits for every node to pause.
+    /// first Δt starts (the time at the start by default). `periods` is each
+    /// node's period on the timer in seconds (> 0), rounded to the nearest ns
+    /// and at least 1 ns, or `None` to update as soon as any time has passed;
+    /// the manual mode ignores it. `pause_timeout` is how many real seconds
+    /// `capture` waits for every node to pause.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -453,7 +460,7 @@ impl Runtime {
         manual = false,
         states = None,
         last_update_ns = None,
-        period_ns = None,
+        periods = None,
         timer_state: "dict[str, int | float] | None" = None,
         pause_timeout = 30.0,
     ))]
@@ -464,7 +471,7 @@ impl Runtime {
         manual: bool,
         states: Option<Vec<Py<PyAny>>>,
         last_update_ns: Option<Vec<u64>>,
-        period_ns: Option<Vec<Option<u64>>>,
+        periods: Option<Vec<Option<f64>>>,
         timer_state: Option<Bound<'_, PyAny>>,
         pause_timeout: f64,
     ) -> PyResult<()> {
@@ -478,6 +485,14 @@ impl Runtime {
             }
         }
         let timer_state = timer_state.as_ref().map(extract_state).transpose()?;
+        let period_ns = periods
+            .map(|periods| {
+                periods
+                    .into_iter()
+                    .map(|p| p.map(period_to_ns).transpose())
+                    .collect::<PyResult<Vec<_>>>()
+            })
+            .transpose()?;
         let config = RuntimeConfig {
             manual,
             pause_timeout: duration(pause_timeout)?,

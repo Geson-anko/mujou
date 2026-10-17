@@ -365,7 +365,8 @@ class Runtime:
         manual: bool = False,
         states: SupportsGetItem[int, Any] | None = None,
         last_update_ns: SupportsGetItem[int, SupportsIndex] | None = None,
-        period_ns: SupportsGetItem[int, SupportsIndex | None] | None = None,
+        periods: SupportsGetItem[int, SupportsFloat | SupportsIndex | None]
+        | None = None,
         timer_state: "dict[str, int | float] | None" = None,
         pause_timeout: SupportsFloat | SupportsIndex = 30.0,
     ) -> None:
@@ -380,10 +381,11 @@ class Runtime:
         (`Timer.state_dict()`), so the time does not run while the nodes start.
         Loading it raises `ValueError` while another runtime runs on the same
         timer, whose time would jump. `last_update_ns` is where each node's
-        first Δt starts (the time at the start by default). `period_ns` is each
-        node's period on the timer in ns (> 0), or `None` to update as soon as
-        any time has passed; the manual mode ignores it. `pause_timeout` is how
-        many real seconds `capture` waits for every node to pause.
+        first Δt starts (the time at the start by default). `periods` is each
+        node's period on the timer in seconds (> 0), rounded to the nearest ns
+        and at least 1 ns, or `None` to update as soon as any time has passed;
+        the manual mode ignores it. `pause_timeout` is how many real seconds
+        `capture` waits for every node to pause.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

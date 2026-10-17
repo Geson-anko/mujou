@@ -524,9 +524,9 @@ def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
-def period_ns(node: Node) -> int | None:
-    """Return the period of ``node`` in ns for the runtime, at least 1 ns and
-    rounded as the core rounds seconds (half away from zero).
+def checked_period(node: Node) -> float | None:
+    """Return the period of ``node`` in seconds for the runtime, which rounds it
+    to ns.
 
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved ``period``.
@@ -536,12 +536,7 @@ def period_ns(node: Node) -> int | None:
             f"{type(node).__qualname__} replaces period, a reserved name of Node: "
             "pass the period to Node.__init__ instead"
         )
-    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
-    if period is None:
-        return None
-    ns = period * 1e9
-    whole = math.floor(ns)
-    return max(1, whole + int(ns - whole >= 0.5))
+    return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
 def capture_state(node: Node) -> object:

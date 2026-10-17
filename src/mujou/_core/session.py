@@ -22,8 +22,8 @@ from mujou._core.network import ports
 from mujou._core.node import (
     Node,
     capture_state,
+    checked_period,
     end_thread,
-    period_ns,
     set_timer,
     thread_ident,
 )
@@ -243,7 +243,7 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
-        periods = [period_ns(node) for node in self._nodes]
+        periods = [checked_period(node) for node in self._nodes]
         restored = None if state is None else self._restore(state)
         if inputs:
             items = self._items(inputs)
@@ -277,7 +277,7 @@ class Session:
             runtime.start(
                 manual=manual,
                 pause_timeout=pause_timeout,
-                period_ns=periods,
+                periods=periods,
                 **(restored or {}),
             )
         except _native.NetworkError:
