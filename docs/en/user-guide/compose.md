@@ -19,7 +19,7 @@ The composed networks have paths under the names given by `Compose`.
 | `Compose(a, b)`         | `"0.l1"`                     |
 | `Compose(enc=a, dec=b)` | `"enc.l1"`                   |
 
-`mujou.run(node)` with a single node is the same as `Compose(node)`, so the path of the node is `"0"`.
+`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on. `Compose(node)` adds a name, so there the path of the node is `"0"`.
 
 The paths are the keys of the state tree. To restore a saved state, compose the networks the same way as when the state was saved (the same order, the same keywords) (see [Saving and restoring state](state.md)).
 

@@ -42,7 +42,7 @@ Because `mujou.run` calls `build()`, you normally do not call `build()` yourself
 
 A `Graph` exposes only `nodes`, the list of paths and nodes, and `port_path(port)`, which returns the path of a port. Running and input/output go through `mujou.run` and `Run`, so you normally do not need the `Graph`.
 
-`mujou.run` also takes a single node. Its path is described in "Paths" below.
+You can also pass nodes to `mujou.run` in place of networks. If you pass a single node, `mujou.run` runs that node alone, without wrapping it in a network. Its path is described in "Paths" below.
 
 Once the network runs, the host talks to it only through the methods of `Run`.
 
@@ -67,7 +67,9 @@ To run several networks in one run, combine them with `mujou.Compose`.
 | `Compose(a, b)`, with `l1` in `b`         | `"1.l1"`          |
 | `Compose(enc=a, dec=b)`, with `l1` in `a` | `"enc.l1"`        |
 
-A network passed by position is named `"0"`, `"1"`, ...; a network passed by keyword is named after the keyword. `mujou.run(a, b)` is the same as `mujou.run(Compose(a, b))`. `mujou.run(net)` with a single network adds no name in front of its paths. `mujou.run(node)` with a single node is the same as `mujou.run(Compose(node))`, so it adds the name `"0"`. The path of the node is `"0"`, and the path of its port `prev` is `"0.prev"`. A network can be the root of the tree without wrapping. A node cannot: as the root, its path would be `""`, and the path of its port would start with `.`, as in `".prev"`. A `Compose` always adds the names, even around one network: in `mujou.run(Compose(enc=a))`, the path of `l1` is `"enc.l1"`.
+A network passed by position is named `"0"`, `"1"`, ...; a network passed by keyword is named after the keyword. `mujou.run(a, b)` is the same as `mujou.run(Compose(a, b))`. `Compose` also takes nodes, and a node gets a name by the same rule (the path of the node in `Compose(node)` is `"0"`). A `Compose` always adds the names, even around one network or node: in `mujou.run(Compose(enc=a))`, the path of `l1` is `"enc.l1"`.
+
+`mujou.run` with a single network or a single node adds no name in front of the paths. In `mujou.run(node)`, the path of the node is `""`, and the path of its port `prev` is `"prev"`. The state tree also tells this node apart by the path `""` (see [State](state.md)).
 
 Renaming an attribute that holds a node or a network, or changing a connection, changes the paths of nodes and the names of the value slots. A state taken before such a change can then no longer be restored (see [State](state.md)).
 
