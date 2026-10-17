@@ -50,7 +50,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     Declare ports as attributes of a node (or expose a port of a child as an
     attribute of a network). ``send`` is the spec of what this port sends and
     ``recv`` the spec of what it receives; either may be omitted for a one-way port
-    (omit it rather than pass ``None``, so that type checkers infer ``Never``).
+    (omit it: type checkers reject ``None`` and infer ``Never`` for an omitted
+    spec).
     ``multi=True`` lets the port take any number of peers (``Multi``) and
     ``multi=False`` at most one (``Single``). The default is one peer for ``Port``
     and ``PrevPort``, and many for ``NextPort``. ``multi`` fixes what ``recv``
@@ -104,8 +105,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     @overload
     def __init__[S2, R2](
         self: Port[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
@@ -113,8 +114,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
     @overload
     def __init__[S2, R2](
         self: Port[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
@@ -347,8 +348,8 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
     @overload
     def __init__[S2, R2](
         self: PrevPort[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
@@ -356,8 +357,8 @@ class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M])
     @overload
     def __init__[S2, R2](
         self: PrevPort[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
@@ -390,8 +391,8 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     @overload
     def __init__[S2, R2](
         self: NextPort[S2, R2, Multi],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True] = True,
         initial: S2 | None = None,
@@ -399,8 +400,8 @@ class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     @overload
     def __init__[S2, R2](
         self: NextPort[S2, R2, Single],
-        send: MessageSpec[S2] | None = _NO_SPEC,
-        recv: MessageSpec[R2] | None = _NO_SPEC,
+        send: MessageSpec[S2] = _NO_SPEC,
+        recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False],
         initial: S2 | None = None,

@@ -57,6 +57,12 @@ class TestPortTypes:
         assert not single.multi and not prev.multi and not nxt_single.multi
         assert multi.multi and prev_multi.multi and nxt.multi
 
+    def test_an_explicit_none_spec_is_a_static_error(self):
+        # Omit a direction instead: an explicit None leaves its type unknown. Without
+        # the ignore pyright reports the call; at runtime None is still accepted.
+        port = Port(send=None)  # pyright: ignore[reportArgumentType]
+        assert port.send_spec is None
+
 
 class TestPortSpecs:
     @pytest.mark.parametrize("spec", [(2, 3), torch.zeros(3), TensorSpec])
