@@ -253,6 +253,12 @@ class TestTimer:
             _ = node.timer
 
 
+def is_available(kind: str) -> bool:
+    """Whether ``kind`` is the type of torch's current accelerator, available."""
+    found = torch.accelerator.current_accelerator(check_available=True)
+    return found is not None and found.type == kind
+
+
 class TestDevice:
     def test_defaults_to_the_cpu(self):
         assert Probe().device == torch.device("cpu")
@@ -273,8 +279,21 @@ class TestDevice:
     def test_fixes_the_cuda_index(self):
         assert Node(device="cuda").device.index == torch.cuda.current_device()
 
-    def test_rejects_devices_other_than_cpu_and_cuda(self):
-        with pytest.raises(ValueError, match="CPU or CUDA"):
+    @pytest.mark.parametrize("kind", ["mps", "xpu"])
+    def test_rejects_an_accelerator_that_is_not_available(self, kind: str):
+        if is_available(kind):
+            pytest.skip(f"needs no {kind}")
+        with pytest.raises(ValueError, match=f"{kind.upper()} is not available"):
+            Node(device=kind)
+
+    def test_fixes_the_index_of_an_accelerator(self, accelerator: torch.device):
+        index = torch.accelerator.current_device_index()
+        assert Node(device=accelerator.type).device == torch.device(
+            accelerator.type, index
+        )
+
+    def test_rejects_devices_other_than_the_cpu_and_accelerators(self):
+        with pytest.raises(ValueError, match="CPU or an available accelerator"):
             Node(device="meta")
 
 
@@ -595,21 +614,15 @@ def steps(run: ManualRun, timer: VirtualTimer, n: int) -> None:
 
 
 class TestRestore:
-    @pytest.mark.parametrize(
-        "device",
-        [
-            "cpu",
-            pytest.param(
-                "cuda:0",
-                marks=pytest.mark.skipif(
-                    not torch.cuda.is_available(), reason="needs CUDA"
-                ),
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("kind", ["cpu", "accelerator"])
     def test_a_restored_node_continues_the_same(
-        self, virtual: VirtualTimer, start_manual: StartManual, device: str
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        request: pytest.FixtureRequest,
+        kind: str,
     ):
+        device = "cpu" if kind == "cpu" else str(request.getfixturevalue(kind))
         k, m = 4, 6
         node = Learner(0.0, device)
         run = start_manual(Solo(node))
@@ -654,6 +667,52 @@ class OnDevice(Node):
         default = torch.cuda.default_stream(self.device)
         self.own_stream = torch.cuda.current_stream() != default
         self.grad_enabled = torch.is_grad_enabled()
+
+
+class OnAccelerator(Node):
+    """Records the thread's accelerator settings in ``on_start``, and draws from
+    ``generator`` there."""
+
+    def __init__(self, device: torch.device, seed: int) -> None:
+        super().__init__(device=device, seed=seed)
+        self.out = Port(send=TensorSpec((3,)))
+        self.current_device: int | None = None
+        self.stream: torch.Stream | None = None
+        self.grad_enabled: bool | None = None
+        self.draws: torch.Tensor | None = None
+
+    @override
+    def on_start(self) -> None:
+        self.current_device = torch.accelerator.current_device_index()
+        self.stream = torch.accelerator.current_stream(self.device)
+        self.grad_enabled = torch.is_grad_enabled()
+        self.draws = torch.rand(3, generator=self.generator, device=self.device)
+
+
+class TestAccelerator:
+    def test_hooks_run_on_the_device(
+        self, start_manual: StartManual, accelerator: torch.device
+    ):
+        node = OnAccelerator(accelerator, seed=0)
+        start_manual(Solo(node))
+        assert node.current_device == accelerator.index
+        assert node.grad_enabled is False
+        # Only CUDA gives a node a stream of its own.
+        host_stream = torch.accelerator.current_stream(accelerator)
+        assert (node.stream != host_stream) == (accelerator.type == "cuda")
+
+    def test_the_generator_is_on_the_device_and_follows_the_seed(
+        self, start_manual: StartManual, accelerator: torch.device
+    ):
+        a, b = OnAccelerator(accelerator, seed=7), OnAccelerator(accelerator, seed=7)
+        for node in (a, b):
+            start_manual(Solo(node))
+        generator = torch.Generator(accelerator).manual_seed(7)
+        expected = torch.rand(3, generator=generator, device=accelerator)
+        assert a.draws is not None and b.draws is not None
+        assert a.draws.device == accelerator
+        assert torch.equal(a.draws, expected)
+        assert torch.equal(b.draws, expected)
 
 
 class Busy(Node):

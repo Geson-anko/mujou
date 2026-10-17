@@ -361,24 +361,29 @@ class TestSend:
             out.send(torch.ones(2, 3))
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-class TestCuda:
+class TestAccelerator:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        accelerator: torch.device,
     ):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         out.connect(inp)
 
-        class OnCuda(Probe):
+        class OnAccelerator(Probe):
             def __init__(self, update: Callable[[], object], **ports: Any) -> None:
                 super().__init__(update, **ports)
-                Node.__init__(self, device="cuda")
+                Node.__init__(self, device=accelerator.type)
 
-        source = OnCuda(lambda: out.send(torch.ones(2, 3, device="cuda")), next=out)
-        sink = OnCuda(inp.recv, prev=inp)
+        source = OnAccelerator(
+            lambda: out.send(torch.ones(2, 3, device=accelerator)), next=out
+        )
+        sink = OnAccelerator(inp.recv, prev=inp)
         run = start_manual(Net(source=source, sink=sink))
         step(run, virtual, source, sink)
         received = cast(torch.Tensor, sink.results[0])
-        assert received.device.type == "cuda"
+        # The index-less device is fixed, so the message compares equal to it.
+        assert received.device == sink.device == accelerator
         assert torch.equal(received.cpu(), torch.ones(2, 3))
         assert torch.equal(run.read(out)[0], torch.ones(2, 3))

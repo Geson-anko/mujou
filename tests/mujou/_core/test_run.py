@@ -1415,13 +1415,14 @@ def needs_gpus(n: int) -> pytest.MarkDecorator:
 # for a stream shows as a value in the middle of an update.
 BIG = 1 << 26  # 256 MB of float32
 ADDS = 20  # in-place updates of the whole tensor per on_update
+CUDA0 = torch.device("cuda", 0)
 
 
-class CudaLeaky(Node):
-    """``Leaky`` with ``tau=1`` on ``cuda:0``."""
+class DeviceLeaky(Node):
+    """``Leaky`` with ``tau=1`` on ``device``."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
+    def __init__(self, device: torch.device) -> None:
+        super().__init__(device=device)
         self.prev = PrevPort(recv=vec())
         self.next = NextPort(send=vec())
 
@@ -1435,10 +1436,10 @@ class CudaLeaky(Node):
         self.next.send(self.x)
 
 
-class CudaChain(Network):
-    def __init__(self) -> None:
-        self.a = CudaLeaky()
-        self.b = CudaLeaky()
+class DeviceChain(Network):
+    def __init__(self, device: torch.device) -> None:
+        self.a = DeviceLeaky(device)
+        self.b = DeviceLeaky(device)
         self.a.connect(self.b)
         self.prev = self.a.prev
         self.next = self.b.next
@@ -1476,8 +1477,8 @@ class Counter(Node):
     """Keeps ``BIG`` floats that all equal ``k`` between updates; each update adds
     1 to every float ``ADDS`` times, in place."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
+    def __init__(self, device: torch.device) -> None:
+        super().__init__(device=device)
         self.first: torch.Tensor | None = None  # w as the first update finds it
 
     @override
@@ -1518,8 +1519,8 @@ class QueuesOnTheHost(Node):
     """Queues ``HOST_ADDS`` updates of a large tensor on the host's stream in
     ``__init__`` and reads it in ``on_start``."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
+    def __init__(self, device: torch.device) -> None:
+        super().__init__(device=device)
         self.w = torch.zeros(BIG, device=self.device)
         for _ in range(HOST_ADDS):
             self.w.add_(1.0)
@@ -1534,8 +1535,8 @@ class BusyStart(Node):
     """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
     ``on_start`` (no ``on_update`` waits for them)."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
+    def __init__(self, device: torch.device) -> None:
+        super().__init__(device=device)
 
     @override
     def on_start(self) -> None:
@@ -1552,8 +1553,8 @@ class BusyStop(Node):
     """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
     ``on_stop``."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
+    def __init__(self, device: torch.device) -> None:
+        super().__init__(device=device)
 
     @override
     def on_start(self) -> None:
@@ -1584,55 +1585,26 @@ class TestCuda:
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
 
+    # The two tests below cannot run on MPS: it has no float64, and its work from
+    # two threads at once (here, the host's reading while the node updates) aborts
+    # the process.
     def test_manual_steps_match_the_discrete_algorithm(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
-        net = CudaChain()
+        net = DeviceChain(CUDA0)
         run = start_manual(net)
-        xa = torch.zeros(2, dtype=F64, device="cuda:0")
-        xb = torch.zeros(2, dtype=F64, device="cuda:0")
+        xa = torch.zeros(2, dtype=F64, device=CUDA0)
+        xb = torch.zeros(2, dtype=F64, device=CUDA0)
         for k in range(20):
             run.write({net.prev: u(k)})
             step(run, virtual, net.a, net.b)
-            xa = euler(xa, u(k).to("cuda:0"))
+            xa = euler(xa, u(k).to(CUDA0))
             xb = euler(xb, xa)
         assert torch.equal(run.read(net.next)[0], xb.cpu())
 
     @pytest.mark.slow
-    def test_on_start_sees_the_work_the_host_queued(self, start_manual: StartManual):
-        seen: list[float | None] = []
-        for _ in range(5):
-            # Run each node right after making it, while its work is still queued.
-            node = QueuesOnTheHost()
-            start_manual(Solo(node)).shutdown()
-            seen.append(node.seen)
-        assert seen == [float(HOST_ADDS)] * 5
-
-    @pytest.mark.slow
-    def test_state_dict_waits_for_the_work_of_on_start(self, start_manual: StartManual):
-        captured: list[tuple[float, float]] = []
-        for _ in range(5):
-            run = start_manual(Solo(BusyStart()))
-            w = run.state_dict()["nodes"]["node"]["w"]
-            run.shutdown()
-            captured.append((w.min().item(), w.max().item()))
-        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
-
-    @pytest.mark.slow
-    def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
-        self, start_manual: StartManual
-    ):
-        captured: list[tuple[float, float]] = []
-        for _ in range(5):
-            run = start_manual(Solo(BusyStop()))
-            run.shutdown()
-            w = run.state_dict()["nodes"]["node"]["w"]
-            captured.append((w.min().item(), w.max().item()))
-        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
-
-    @pytest.mark.slow
     def test_state_dict_is_whole_while_a_node_updates_in_place(self, start: Start):
-        run = start(Solo(Counter()))
+        run = start(Solo(Counter(CUDA0)))
         mujou.time.sleep(0.2)
         trees: list[dict[str, Any]] = []
         for _ in range(40):
@@ -1647,21 +1619,62 @@ class TestCuda:
         assert changed == []
         assert trees[-1]["nodes"]["node"]["k"] > 0
 
+
+class TestAccelerator:
+    @pytest.mark.slow
+    def test_on_start_sees_the_work_the_host_queued(
+        self, start_manual: StartManual, accelerator: torch.device
+    ):
+        seen: list[float | None] = []
+        for _ in range(5):
+            # Run each node right after making it, while its work is still queued.
+            node = QueuesOnTheHost(accelerator)
+            start_manual(Solo(node)).shutdown()
+            seen.append(node.seen)
+        assert seen == [float(HOST_ADDS)] * 5
+
+    @pytest.mark.slow
+    def test_state_dict_waits_for_the_work_of_on_start(
+        self, start_manual: StartManual, accelerator: torch.device
+    ):
+        captured: list[tuple[float, float]] = []
+        for _ in range(5):
+            run = start_manual(Solo(BusyStart(accelerator)))
+            w = run.state_dict()["nodes"]["node"]["w"]
+            run.shutdown()
+            captured.append((w.min().item(), w.max().item()))
+        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
+
+    @pytest.mark.slow
+    def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
+        self, start_manual: StartManual, accelerator: torch.device
+    ):
+        captured: list[tuple[float, float]] = []
+        for _ in range(5):
+            run = start_manual(Solo(BusyStop(accelerator)))
+            run.shutdown()
+            w = run.state_dict()["nodes"]["node"]["w"]
+            captured.append((w.min().item(), w.max().item()))
+        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
+
     @pytest.mark.slow
     def test_a_restored_node_starts_from_the_tree(
-        self, virtual: VirtualTimer, start_manual: StartManual
+        self,
+        virtual: VirtualTimer,
+        start_manual: StartManual,
+        accelerator: torch.device,
     ):
-        net = Solo(Counter())
+        net = Solo(Counter(accelerator))
         run = start_manual(net)
         for _ in range(3):
             step(run, virtual)
         tree = run.state_dict()
         run.shutdown()
 
-        node = Counter()
+        node = Counter(accelerator)
         restored = start_manual(Solo(node), state=tree)
         step(restored, virtual)
         assert node.first is not None
-        expected = torch.full((BIG,), float(3 * ADDS), device="cuda:0")
+        expected = torch.full((BIG,), float(3 * ADDS), device=accelerator)
         assert torch.equal(node.first, expected)
-        assert torch.equal(tree["nodes"]["node"]["w"].to("cuda:0"), expected)
+        assert torch.equal(tree["nodes"]["node"]["w"].to(accelerator), expected)
