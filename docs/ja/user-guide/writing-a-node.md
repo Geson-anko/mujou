@@ -1,6 +1,6 @@
 # ノードを書く
 
-ノードは `mujou.Node` を継承したクラスとして書く。このページは、その書き方を手順の順に説明する。ノードとは何か、hook がどの順に呼ばれるかは[ノード](../concepts/nodes.md)にある。
+ノードは `mujou.Node` を継承したクラスとして書く。このページは、その書き方を手順の順に説明する。ノードとは何かは[ノード](../concepts/nodes.md)にある。
 
 ## 例: リーク積分器
 
@@ -18,7 +18,7 @@
 
 以下、この順に説明する。
 
-継承したクラスの常として、`__init__` では最初に `super().__init__()` を呼び、override した hook でも最初に `super()` の同じ hook を呼ぶ。`mujou.Node` の hook は、`state_dict` と `load_state_dict` を除いて何もしない（[状態](state.md)）。それでも呼んでおけば、何かをする自作のノードのクラスを継承したときにも正しく動く。
+継承したクラスの常として、`__init__` では最初に `super().__init__()` を呼び、override した hook でも最初に `super()` の同じ hook を呼ぶ。`mujou.Node` の hook は、`state_dict` と `load_state_dict` を除いて何もしない（[状態](state.md)）。それでも呼んでおく。そうすれば、後で hook が何かをする自作のノードのクラスを継承しても、正しく動き続ける。
 
 ## 1. `__init__` で Port を宣言する
 

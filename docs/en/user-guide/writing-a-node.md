@@ -1,6 +1,6 @@
 # Writing a Node
 
-You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. What a node is, and in what order the hooks are called, is in [Nodes](../concepts/nodes.md).
+You write a node as a class that inherits from `mujou.Node`. This page shows how, step by step. For what a node is, see [Nodes](../concepts/nodes.md).
 
 ## Example: a leaky integrator
 
@@ -18,7 +18,7 @@ The node writes three things.
 
 The sections below follow this order.
 
-As in any subclass, `__init__` first calls `super().__init__()`, and each overridden hook first calls the same hook of `super()`. The hooks of `mujou.Node` do nothing, except `state_dict` and `load_state_dict` (see [State](state.md)). Calling them still keeps the node right when it inherits from a node class of your own that does something there.
+As in any subclass, `__init__` first calls `super().__init__()`, and each overridden hook first calls the same hook of `super()`. The hooks of `mujou.Node` do nothing, except `state_dict` and `load_state_dict` (see [State](state.md)). Call them anyway: then your node keeps working when it later inherits from a node class of your own whose hooks do something.
 
 ## 1. Declare the ports in `__init__`
 
@@ -79,7 +79,7 @@ Mujou calls `on_update(dt)` again and again. The node's author does not write a 
 
 `dt` is the time in seconds since this node's previous update. For a differential equation $\frac{dx}{dt} = f(x)$, write `x += dt * f(x)` (explicit Euler). If the update size is not proportional to `dt`, a node that loops faster changes faster (see [Global time](../concepts/time.md)).
 
-`dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The cut-off time is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
+`dt` is not constant. It gets longer when the machine is busy. Write `on_update` so that it does not diverge even with the longest `dt` that can come. Do not cut `dt` itself. The time you cut off is lost, and the result drifts from the continuous-time solution. There are two ways to update stably with a long `dt`.
 
 - If the system has an exact solution, advance the state by `dt` with that solution. The `Leaky` above does not use explicit Euler. It moves $x$ by the fraction `1 - exp(-dt / tau)` of its distance to $u$. This fraction is exact while the input stays constant. It is below 1 for any `dt`, so $x$ never overshoots $u$
 - If the system has no exact solution, split the step inside one call of `on_update`. Choose `n` so that one step `dt / n` is no longer than a length that updates stably, and update `n` times in a `for` loop (see the example in [PyTorch in nodes](torch.md))

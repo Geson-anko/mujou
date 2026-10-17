@@ -56,7 +56,7 @@ for x in stream:
     y, t = run.read(net.next)      # take the output at the end of showing as the response to x
 ```
 
-The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time.
+The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time. If you know the output to expect, wait for it with `wait_for` instead (see "Reading output" below).
 
 ## Reading output
 
