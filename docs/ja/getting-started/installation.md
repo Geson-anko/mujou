@@ -23,7 +23,7 @@ uv sync
 
 `uv sync` は free-threaded 版の Python 3.14t を用意して `.venv/` を作り、依存を入れ、Rust で書かれたコアをビルドする。GIL ありの通常版を使うなら、代わりに `uv sync --python 3.14` を実行する。
 
-Linux では、`uv sync` は PyTorch を CPU 版の配布元から入れる。mujou のコアは GPU を使わないからである。ノードの中で GPU を使いたいなら、[PyTorch のインストール案内](https://pytorch.org/get-started/locally/)に従って CUDA 版の PyTorch に入れ替える。
+PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は [PyTorch のインストール案内](https://pytorch.org/get-started/locally/)を参照。
 
 !!! note "PyPI に公開した後"
 
