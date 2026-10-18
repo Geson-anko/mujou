@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use super::{NodeHooks, RUNTIME_OF_THREAD, Shared};
+use super::{Control, NodeHooks, RUNTIME_OF_THREAD, Shared};
 
 /// The instruction from the control thread to the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +18,23 @@ pub(super) enum Command {
 /// one atomic load: `epoch << 2 | command`.
 pub(super) fn control_word(epoch: u64, command: Command) -> u64 {
     epoch << 2 | command as u64
+}
+
+/// The target of a free-running node's next update, after an update at
+/// `now_ns` for the target `target_ns`.
+///
+/// Each target is one period after the previous one, so that waking up late
+/// does not delay the following updates. Only an update a period or more late
+/// (already at or past the target after its own) starts counting again from its
+/// own time, so the node never updates several times in a row to catch up.
+/// Without a period (`period_ns` = 1), the target is 1 ns after the update.
+pub(super) fn next_target_ns(target_ns: u64, now_ns: u64, period_ns: u64) -> u64 {
+    let next_ns = target_ns.saturating_add(period_ns);
+    if now_ns >= next_ns {
+        now_ns.saturating_add(period_ns)
+    } else {
+        next_ns
+    }
 }
 
 fn is_run(word: u64) -> bool {
@@ -81,13 +98,8 @@ impl<N: NodeHooks> Shared<N> {
     ///
     /// Running freely, the node updates once the time reaches its target. The
     /// first target is one period after the last update (the start, or the
-    /// restored one); each next target is one period after the previous target,
-    /// so that waking up late does not delay the following updates. Only an
-    /// update a period or more late (already at or past the target after its
-    /// own) starts counting again from its own time, so the node never updates
-    /// several times in a row to catch up. Without a period, the target is 1 ns
-    /// after the last update. The manual mode updates on every step that has
-    /// Δt > 0.
+    /// restored one), and the next ones follow [`next_target_ns`]. The manual
+    /// mode updates on every step that has Δt > 0.
     fn node_loop(&self, i: usize) {
         let mut last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
         let period_ns = self.period_ns[i];
@@ -106,7 +118,7 @@ impl<N: NodeHooks> Shared<N> {
             if now_ns < next_ns {
                 if self.manual {
                     // Nothing to do for a step without time passing.
-                    self.end_step();
+                    self.end_step(&mut self.lock());
                 } else {
                     // Wait for the time to reach the next update instead of
                     // spinning, but wake up on any control request.
@@ -124,12 +136,9 @@ impl<N: NodeHooks> Shared<N> {
             }
             last_ns = now_ns;
             self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
-            target_ns = target_ns.saturating_add(period_ns);
-            if now_ns >= target_ns {
-                target_ns = now_ns.saturating_add(period_ns);
-            }
+            target_ns = next_target_ns(target_ns, now_ns, period_ns);
             if self.manual {
-                self.end_step();
+                self.end_step(&mut self.lock());
             }
         }
     }
@@ -203,8 +212,8 @@ impl<N: NodeHooks> Shared<N> {
         resumed && self.call(i, "on_resume", |n| n.resume()).is_ok()
     }
 
-    fn end_step(&self) {
-        let mut c = self.lock();
+    /// Manual mode: the step of the granted node is over.
+    pub(super) fn end_step(&self, c: &mut Control) {
         c.grant = None;
         self.changed.notify_all();
     }
@@ -232,5 +241,35 @@ impl<N: NodeHooks> Shared<N> {
         }
         drop(c);
         let _ = self.invoke(i, "on_stop", |n| n.stop());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const P: u64 = 10;
+
+    #[test]
+    fn late_by_less_than_a_period_keeps_the_grid() {
+        // Target P, updated at 1.5 P: the next target is 2 P, not 2.5 P.
+        assert_eq!(next_target_ns(P, 3 * P / 2, P), 2 * P);
+    }
+
+    #[test]
+    fn late_by_more_than_a_period_counts_again_from_the_update() {
+        // Target P, updated at 2.5 P: 3.5 P, not 3 P on the grid.
+        assert_eq!(next_target_ns(P, 5 * P / 2, P), 7 * P / 2);
+    }
+
+    #[test]
+    fn exactly_a_period_late_counts_again_from_the_update() {
+        // Target 2 P, updated at 3 P: 4 P, so that the next Δt is not 0.
+        assert_eq!(next_target_ns(2 * P, 3 * P, P), 4 * P);
+    }
+
+    #[test]
+    fn without_a_period_the_target_is_1_ns_after_the_update() {
+        assert_eq!(next_target_ns(1, 1_000, 1), 1_001);
     }
 }

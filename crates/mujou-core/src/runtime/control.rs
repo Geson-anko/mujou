@@ -63,6 +63,7 @@ impl<N: NodeHooks> Controller<N> {
         c.freeze.release(FreezeReason::Startup);
         c.go = true;
         s.changed.notify_all();
+        s.wake_pool(&mut c);
         Ok(())
     }
 
@@ -82,6 +83,7 @@ impl<N: NodeHooks> Controller<N> {
             if !c.failed {
                 c.grant = Some(i);
                 s.changed.notify_all();
+                s.wake_node(&mut c, i);
             }
             while c.grant.is_some() && !c.failed {
                 c = s.wait(c);
@@ -127,9 +129,10 @@ impl<N: NodeHooks> Controller<N> {
         if failed {
             return Err(self.end());
         }
-        // Every node waits at its loop boundary without holding its lock, and
+        // Every node waits at its loop boundary (or parked in the pool) without
+        // holding its lock, and
         // the time stands at T: the states are consistent at T.
-        let states = (0..s.hooks.len()).map(|i| s.call(i, "state_dict", N::state_dict));
+        let states = (0..s.hooks.len()).map(|i| s.state_dict(i));
         let Ok(states) = states.collect::<Result<Vec<_>, ()>>() else {
             return Err(self.end());
         };
@@ -157,9 +160,10 @@ impl<N: NodeHooks> Controller<N> {
         }
         c.stop_allowed = true;
         s.changed.notify_all();
+        s.wake_pool(&mut c);
         drop(c);
         for thread in self.threads.drain(..) {
-            // A node thread does not panic: hook panics are caught.
+            // A runtime thread does not panic: hook panics are caught.
             let _ = thread.join();
         }
         s.mark_finished(s.lock());
