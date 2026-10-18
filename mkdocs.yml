@@ -15,6 +15,8 @@ watch:
 
 theme:
   name: material
+  # Adds the Open Graph and Twitter Card tags (link previews).
+  custom_dir: overrides
   features:
     - navigation.tracking
     - navigation.tabs
@@ -108,6 +110,7 @@ plugins:
           name: 日本語
           build: true
           copyright: "画像: 落合陽一「リキッドユニバース」をもとに新たに制作"
+          site_description: 連続的継続学習のための非同期分散型深層学習フレームワーク
           nav_translations:
             Home: ホーム
             Getting Started: はじめに
