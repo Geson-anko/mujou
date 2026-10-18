@@ -6,7 +6,9 @@
 
 ノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で記述してスキーマオブジェクトを作ることは決定済み。Port・Channel による双方向接続の仕組み、Node と Network の Composite、PrevPort・NextPort も決定済み。接続は Port 同士だけ（`a.next.connect(b.prev)`）で、Port と子は代入時に登録する（2026-10-17、[属性の登録](network.md#属性の登録)）。
 
-クラス名・メソッド名と、実行と外からの読み書き（`mujou.run`、`write`・`read`・`subscribe`、版番号による一斉切り替え、例外の伝え方）は、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](network.md#実装)）。そのうち次の 3 点は仕様書（specs/）の当初の案から変えた。`run()` は全ノードの起動が終わってから戻る（当初は「すぐに戻る」）。`state_dict()` は実行中と正常に終了した後に呼べる（当初は「いつでも」。2026-10-16 にユーザーの決定で終了後も呼べるようにした）。相手 1 つの Port への 2 本目の接続は `connect` の時点でエラーにする（当初は「構築時」）。また、`send_to` だけを使う Port を外から読むと初期値が返る。
+`mujou.run` が実行のハンドル `Run` を返し、`Run` が `write`・`read`・`subscribe`・`state_dict`・`shutdown`・`join` を持つこと、初期値と復元を `mujou.run(..., inputs=..., state=...)` で渡すことは決定済み（2026-10-16、ユーザーの決定）。`mujou.run(component, *components, ...)` の形（2026-10-17、ユーザーの決定）と、下の「2026-10-17 の推奨案」の節に書いた `Run` の API の整理も決定済み。版番号による一斉切り替えと例外の伝え方は、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](network.md#実装)）。
+
+仕様書（specs/）の当初の案から次の 3 点を変えた。`run()` は全ノードの起動が終わってから戻る（当初は「すぐに戻る」。起動中の例外を `run()` 自身が送出する形は 2026-10-16 にユーザーが承認した）。`state_dict()` は実行中と正常に終了した後に呼べる（当初は「いつでも」。2026-10-16 にユーザーの決定で終了後も呼べるようにした）。相手 1 つの Port への 2 本目の接続は `connect` の時点でエラーにする（当初は「構築時」。ユーザー確認待ち）。また、`send_to` だけを使う Port を外から読むと初期値が返る（ユーザー確認待ち）。
 
 shape の決め方は未決定。すべての値を記録する読み出しは future work。関連: [ネットワーク](network.md)
 
@@ -34,7 +36,9 @@ hook の構成（`on_thread_start`・`on_start`・`on_update`・`on_pause`・`on
 
 GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を設定することは決定済み。
 
-次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Group, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, run`（と `mujou.time` と `mujou.typing`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)）。関連: [PyTorch の利用](torch.md)
+次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は `on_start` の前に同じスレッドで呼ぶ内部の hook `_on_thread_start()` で行い（2026-10-17 に、その後に呼ぶ公開の `on_thread_start()` と分けた）、`on_start` の override で漏れないようにした。トップレベルの公開名は `Node, Network, Group, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, StateDict, run, __version__`（と `mujou.time` と `mujou.typing`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)。`mujou.pc` は未実装）。
+
+Port の受け渡しに pinned memory を使うかどうかは未決定。今の実装は使っておらず、測定もしていない（[境界の変換](torch.md#境界の変換)）。関連: [PyTorch の利用](torch.md)
 
 ## グローバルタイマーとスケジューラの境界
 
@@ -51,6 +55,7 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 - ホストの待ち方: `Run.wait_for(port, condition, timeout=)` と `Run.subscribe(port, timeout=)`（[ネットワーク](network.md)）
 - テスト: `mujou.testing.run` の既定のタイマーを新しい `VirtualTimer` にし、`ManualRun.timer` で返す。`mujou.time.now()`
 - Port: エラーと repr に `Owner.attr` の名前を出す。`Channel` は `connect` だけが作る。型付きの overload は `None` の spec を受け付けない
+- 相手が送ったかを調べる `Port.has_received()`（[Port の読み書き](network.md#port-の読み書き)）
 
 次はまだ決めていない。
 
@@ -59,6 +64,8 @@ PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #
 LICENSE は MIT に決めた（2026-10-17、ユーザーの決定）。
 
 `Run` の API は次のように整理した（2026-10-17、ユーザーの決定。[ネットワーク](network.md#実装)）。停止のタイムアウトは `mujou.run(..., pause_timeout=)` から `Run.state_dict(timeout=30.0)` に移した。`subscribe` と `wait_for` の `timeout` は位置でも渡せる。`Run.timer` はすべての実行が持ち、既定はグローバルタイマーである。`Run.read(port)` は値だけを返し、時刻との組は `Run.read_with_time(port)` が返す。
+
+`Run.state_dict()` は木を `mujou.StateDict` で返し、木の中のノードの状態のテンソルは各ノードのデバイスに置いたままにする（スロットの値は CPU のテンソル）。CPU へ移したいときは利用者が `tree.cpu()` か `tree.to(device)` を呼ぶ（2026-10-17、ユーザーの決定。[`StateDict`](execution-model.md#statedict)）。
 
 ノードのデバイスは CPU と CUDA だけにし、MPS など CUDA 以外のアクセラレータのサポートを取りやめた（2026-10-17、ユーザーの決定）。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、ノードごとのスレッドで計算する実行モデルと合わないためである。これに伴い、MPS のノードを 1 つに限る規則と、MPS のノードの hook をロックで直列にする案は不要になった（[PyTorch の利用](torch.md#cuda-以外のアクセラレータ)）。
 

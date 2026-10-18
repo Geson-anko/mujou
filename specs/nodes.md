@@ -73,9 +73,11 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 サブクラスは、継承の慣習どおり `__init__` の最初で `super().__init__()` を、override した hook の最初で `super()` の同じ hook を呼ぶ。ドキュメント・サンプル・docstring の例は常にそう書く（2026-10-17、ユーザーの決定）。呼ばなくても動くように、`mujou.Node` は `__init__` で設定する値の既定をクラスに置く。
 
-ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`pause`・`resume`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale`・`mujou.time.pause`・`mujou.time.resume` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。
+フレームワークは起動の hook（`_on_thread_start`・`on_thread_start`・`on_start`・`load_state_dict`）を呼んだ後、残りの hook（`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop` と内部の `_after_update`・`_capture_state`）の関数を 1 回だけ探して持っておく。起動の hook の中でインスタンス属性に差し替えれば反映されるが、起動の後に差し替えても反映されない。`state_dict` だけは既定の `_capture_state` が取得のたびに探すので、後で差し替えても反映される。
 
-`timer` は、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から読める。ホストが正常な終了を見たとき（`shutdown`・`join` などが戻ったとき）に、状態の時刻（終了を要求した時刻）で止まった `ReadOnlyTimer` に一度だけ差し替わり、以後はそれを返す。正常に終了した後にホストが取る `state_dict` の中でも同じものを読む。差し替える前にノードが取っておいた `ReadOnlyTimer` は、元のタイマーを読み続ける。実行の前、起動が断られた後、例外で終了した後に読むと `RuntimeError` になる。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
+ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`pause`・`resume`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale`・`mujou.time.pause`・`mujou.time.resume` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。hook の中から `mujou.run`・`mujou.testing.run` や、`Run` のホスト向けのメソッド（`write`・`read`・`state_dict`・`shutdown`・`join`・`step` など）を呼んでも `RuntimeError` になる。ノードは自分の Port だけでやり取りする。
+
+`timer` は、実行がノードを起動するとき（公開の `on_thread_start` と `on_start` を含む）から読める。ホストが正常な終了を見たとき（`shutdown`・`join` などが戻ったとき）に、状態の時刻（終了を要求した時刻）で止まった `ReadOnlyTimer` に一度だけ差し替わり、以後はそれを返す。正常に終了した後にホストが取る `state_dict` の中でも同じものを読む。差し替える前にノードが取っておいた `ReadOnlyTimer` は、元のタイマーを読み続ける。実行の前と起動が断られた後に読むと `RuntimeError` になる。例外で終了したときも、ホストが終了を見た後（起動中の例外なら `mujou.run` が、実行中の例外なら `write`・`state_dict`・`shutdown` などが例外を送出した後）に読むと `RuntimeError` になる。例外が起きてからホストが終了を見るまでの間は読める。`timer` は予約された名前なので、ノードの属性に同じ名前を使わない。
 
 `on_pause` と `on_resume` は引数を取らない。停止している間、その実行のタイマーは進まないので、その時間で測ると停止と再開は同じ時刻に起きる（[停止と状態の取得・復元](execution-model.md#停止と状態の取得復元)）。必要ならその時刻は、その実行のタイマー（`self.timer`）から読める。停止していた実時間の長さはダイナミクスの外の量なので、それが必要な I/O のノードは自分で測る。
 
@@ -130,7 +132,7 @@ class Linear(Node):
 | `0.0` | できるかぎり速く回す。`on_update` が戻るとすぐ次を呼ぶ。ただし $\Delta t > 0$ になるまで（時刻が進むまで）は待つ |
 | 正の有限の数 $P$（既定は 0.01） | 更新ごとに目標の時刻を決め、タイマーの時刻がそこに達するまで待ってから呼ぶ。`on_update` の時間と起床の遅れの和が $P$ に収まる間は、平均で $P$ に 1 回更新する |
 
-負・無限大・NaN は `ValueError`、`None` と `bool` は `TypeError` にする（`None` のメッセージで `period=0.0` を案内する）。`super().__init__()` を呼ばないノードの周期は既定の 0.01 になる。
+負・無限大・NaN は `ValueError`、`None` と `bool` は `TypeError` にする（`None` のメッセージで `period=0.0` を案内する）。上限は無く、ns にすると `u64::MAX`（約 584 年）を超える周期もエラーにならない。そのときは ns への変換が `u64::MAX` に飽和し、目標の時刻が上限に張り付くので、実質的に更新されない。`super().__init__()` を呼ばないノードの周期は既定の 0.01 になる。
 
 既定を 0.01 秒にし、周期を持たないノードは `period=0.0` を明示したときだけにした（2026-10-17、ユーザーの決定）。周期を持たないノードは CPU のコアを 1 つ使い切り、ほかのノードの計算時間を奪ってその $\Delta t$ を乱す。周期を持たないノードを想定の既定にせず、必要なノードだけが明示して選ぶ。以前の既定は `None`（できるかぎり速く）で、`None` はもう受け付けない。
 
