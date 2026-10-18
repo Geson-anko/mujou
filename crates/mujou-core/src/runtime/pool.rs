@@ -4,7 +4,8 @@
 //! A pool node is a small state machine ([`Task`]) kept under the control lock.
 //! A worker takes a piece of work for one node under that lock, runs the hook
 //! outside every lock, and puts the node back. The lifecycle work (start,
-//! pause, resume, exception, stop) goes first, in the order it became due; then
+//! pause, resume, exception, stop) goes first, in the order it became due
+//! except that a node whose hook failed goes ahead with its `exception`; then
 //! the updates, earliest target first and by index on a tie. A node is taken
 //! only under the lock, from a queue, and only the worker that took it puts it
 //! back, so no node runs on two workers at once.
@@ -231,7 +232,7 @@ impl<N: NodeHooks> Shared<N> {
             return;
         }
         let next = self.advance(i, c);
-        self.place(i, next, c);
+        self.place(i, next, false, c);
     }
 
     /// Takes node `i` out of the ready queue: the hook to run now, if any.
@@ -246,17 +247,23 @@ impl<N: NodeHooks> Shared<N> {
                 Some(work)
             }
             next => {
-                self.place(i, next, c);
+                self.place(i, next, false, c);
                 None
             }
         }
     }
 
-    fn place(&self, i: usize, next: Next, c: &mut Control) {
+    /// Puts node `i` where `next` says: a hook goes to the back of the ready
+    /// queue, or to its front if `first`.
+    fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) {
         match next {
             Next::Hook(_) => {
                 c.sched.tasks[i].at = At::Ready;
-                c.sched.ready.push_back(i);
+                if first {
+                    c.sched.ready.push_front(i);
+                } else {
+                    c.sched.ready.push_back(i);
+                }
                 self.sched_changed.notify_one();
                 // With every other worker busy, the timekeeper takes it.
                 self.interrupt_timekeeper(c);
@@ -382,7 +389,10 @@ impl<N: NodeHooks> Shared<N> {
         let mut c = self.lock();
         self.record(i, work, ok, &mut c);
         c.sched.tasks[i].at = At::Parked;
-        self.schedule(i, &mut c);
+        let next = self.advance(i, &mut c);
+        // A failed hook is followed by `exception` ahead of the nodes the
+        // failure woke, as a dedicated thread calls it right after catching.
+        self.place(i, next, !ok, &mut c);
         c
     }
 

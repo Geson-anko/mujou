@@ -1784,6 +1784,29 @@ mod pool {
         assert_exception_then_stop_once(&events(&log, 1));
     }
 
+    /// The failed node calls `exception` first, as a dedicated thread does
+    /// right after catching, even though its failure queued the others first.
+    #[test]
+    fn the_failed_node_calls_exception_before_the_nodes_its_failure_woke() {
+        let timer = virtual_timer();
+        let Probes {
+            log,
+            mut nodes,
+            names,
+        } = probes(3);
+        nodes[0].fail_on_update = Some(1);
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), pool(1, manual())).unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        assert!(rt.step(Some(&[0])).wait().is_err());
+        let exceptions: Vec<_> = (log.lock().unwrap().iter())
+            .filter(|(_, e, _)| *e == Event::Exception)
+            .map(|(i, _, _)| *i)
+            .collect();
+        assert_eq!(exceptions, [0, 1, 2]);
+    }
+
     /// While one worker is held in an update, another one takes over the
     /// timekeeping and updates the other node on time.
     #[test]
