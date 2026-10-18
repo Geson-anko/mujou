@@ -40,9 +40,9 @@ nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
 noise = torch.randn(4, generator=self.generator, device=self.device)
 ```
 
-- `self.generator` はノードのスレッドで作られるので、`on_start` から使える。`__init__` の中で使うと `RuntimeError` になる
+- `self.generator` は `super().__init__()` が作るので、`__init__` の中から使える
 - ノードの中で `torch.manual_seed` を呼ばない。既定の生成器はプロセス全体で共有されるので、ほかのノードの乱数まで変わる
-- 生成器は起動のたびに `seed` から作り直される。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（[状態の保存と復元](state.md)）
+- 復元した実行は新しいインスタンスで走り、生成器も `seed` から作り直される。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（[状態の保存と復元](state.md)）
 
 ## ノードの中の BP
 

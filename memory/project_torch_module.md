@@ -1,6 +1,6 @@
 ---
 name: project-torch-module
-description: 実装は private な mujou._core パッケージに置き、PyTorch を必須の依存として全面的に採用する（mujou.torch に分けない）。torch を使わないのは Rust の拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node（コアの Node を継承）が勾配の記録の停止・ノードごとの CUDA ストリーム・乱数生成器をノードのスレッドの上で設定する（2026-10-17 から内部の hook _on_thread_start）。対象は CPU と CUDA（2026-10-17 から CUDA 以外のアクセラレータも。[[project-gpu-policy]]）
+description: 実装は private な mujou._core パッケージに置き、PyTorch を必須の依存として全面的に採用する（mujou.torch に分けない）。torch を使わないのは Rust の拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node（コアの Node を継承）が勾配の記録の停止・ノードごとの CUDA ストリームをノードのスレッドの上で設定する（2026-10-17 から内部の hook _on_thread_start）。乱数生成器は 2026-10-18 から super().__init__ で作り、__init__ の中から使える（ユーザーの決定）。対象は CPU と CUDA（2026-10-17 から CUDA 以外のアクセラレータも。[[project-gpu-policy]]）
 metadata:
   type: project
 ---
