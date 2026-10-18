@@ -72,7 +72,7 @@ print(f"y = {y} at t = {float(t):.3f} s")  # y = tensor([3., 5., 7.]) at t = ...
 
 ## Documentation
 
-The documentation site is not published yet. Run `just docs` (needs [just](https://just.systems/)) to serve it at <http://127.0.0.1:8000>, or read the Markdown in [`docs/en/`](docs/en/) (English) and [`docs/ja/`](docs/ja/) (Japanese). Working programs are in [`examples/`](examples/), and the tests run every one of them.
+The documentation is at <https://geson-anko.github.io/mujou/> (English and Japanese). To serve it locally, run `just docs` (needs [just](https://just.systems/)) and open <http://127.0.0.1:8000>. You can also read the Markdown in [`docs/en/`](docs/en/) (English) and [`docs/ja/`](docs/ja/) (Japanese). Working programs are in [`examples/`](examples/), and the tests run every one of them.
 
 ## Contributing
 

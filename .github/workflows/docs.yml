@@ -1,10 +1,20 @@
 name: Docs
 
-# Build the user documentation strictly (broken links and missing API objects fail).
-# Deploying the site is not set up yet.
+# Build the user documentation strictly (broken links and missing API objects fail)
+# on every pull request, and deploy versioned docs to GitHub Pages with mike:
+#   - push to main              -> the "dev" version
+#   - push a stable v* tag      -> "<X.Y.Z>", and move the "latest" alias to it and
+#                                  make it the default (the site root redirects there)
+#   - push a prerelease v* tag  -> "<X.Y.Z>" only ("latest" stays where it is)
+# Until the first stable release, the site root redirects to "dev".
+#
+# mike keeps every version in the gh-pages branch; this workflow then publishes that
+# branch with actions/deploy-pages (Pages source: GitHub Actions).
 on:
   push:
     branches: [main]
+    # Path filters do not apply to tag pushes.
+    tags: ["v*"]
     paths:
       - "docs/**"
       - "examples/**"
@@ -29,13 +39,29 @@ on:
       - "uv.lock"
       - "justfile"
       - ".github/workflows/docs.yml"
+  # Deploys by hand: on main for "dev", on a tag for that version.
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build_docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      # mike pushes the built version to the gh-pages branch.
+      contents: write
+    # Deployments commit to gh-pages one at a time; pull requests do not wait for them.
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('docs-{0}', github.ref) || 'docs-deploy' }}
+      cancel-in-progress: false
+    env:
+      DEPLOY: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v7
@@ -50,3 +76,56 @@ jobs:
 
       - name: Build the documentation
         run: just docs-build
+
+      - name: Deploy the version with mike
+        if: env.DEPLOY == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Start from the published versions (absent before the first deployment).
+          git fetch origin gh-pages:gh-pages || true
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ ]]; then
+              uv run mike deploy --push "${VERSION}"
+            else
+              uv run mike deploy --push --update-aliases "${VERSION}" latest
+              uv run mike set-default --push latest
+            fi
+          else
+            uv run mike deploy --push dev
+            # Before the first stable release there is no "latest" to point to.
+            if ! uv run mike list --json | python3 -c 'import json, sys; sys.exit(not any("latest" in v["aliases"] for v in json.load(sys.stdin)))'; then
+              uv run mike set-default --push dev
+            fi
+          fi
+          mkdir _pages
+          git archive gh-pages | tar -x -C _pages
+
+      - name: Upload the site
+        if: env.DEPLOY == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _pages
+
+  deploy_docs:
+    needs: build_docs
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Let a running deployment finish; a newer one waits for it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
