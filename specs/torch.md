@@ -20,7 +20,7 @@ torch は mujou の必須の依存である。実装は private な `mujou._core
 
 | モジュール | 中身 | import する `_core` のモジュール（`_native` を除く） |
 | --- | --- | --- |
-| `hooks` | 呼んだスレッドがノードの hook の中かどうか（`in_hook`） | なし |
+| `hooks` | 呼んだスレッドがノードの hook の中かどうか（`in_hook`）と、そのスレッドが今走らせているノード（`current_node`） | なし |
 | `timer` | `Timer` / `ReadOnlyTimer` / `VirtualTimer`、ホスト専用の操作の検査 | `hooks` |
 | `spec` | `TensorSpec` / `DictSpec`、メッセージとテンソルの分解・組み立て、ホストのメモリへのコピー（`host_tensors`） | なし |
 | `port` | Port と `Channel` | `spec` |
@@ -67,28 +67,30 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ## mujou.Node
 
-`mujou.Node` は、利用者が継承するノードの基底クラスである。コアの `mujou._core._native.Node` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ノードの作者に代わって行う。PyTorch を使うノードは、専用スレッドで実行する（[ネイティブコア](native-core.md#mn-スケジューリング)）。
+`mujou.Node` は、利用者が継承するノードの基底クラスである。コアの `mujou._core._native.Node` を継承する。上の 3 つの条件と、mujou で要らない機能を切る設定を、ノードの作者に代わって行う。PyTorch を使うノードも、既定でワーカーに載る（[ネイティブコア](native-core.md#mn-スケジューリング)）。
 
-### 実行スレッドの設定
+### 切り替えごとの設定
 
-フレームワークは、ノードを実行するスレッドの上で、まず内部の hook `_on_thread_start()` を呼び、次に公開の `on_thread_start()`、`on_start()` の順に呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` は `_on_thread_start()` で次を設定する。公開の hook とは別にしたので、サブクラスが `on_thread_start` や `on_start` を override して `super()` を呼ばなくても、設定は漏れない。どれもスレッドごとの設定なので、ほかのノードには影響しない。
+フレームワークは、スレッドがノードに切り替わるたび（最初に走らせるとき、ワーカーが間に別のノードを走らせたとき）、次の hook の直前に内部の hook `_on_enter()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` は `_on_enter()` で次を設定する。公開の hook とは別にしたので、サブクラスが公開の hook を override して `super()` を呼ばなくても設定は漏れない。どれもスレッドごとの設定でほかのノードには影響しない。ワーカーは間にほかのノードを走らせるので、切り替わるたびに設定し直す。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
 | 勾配の記録を止める | `torch.set_grad_enabled(False)` | mujou の更新手法は更新式を直接計算するので、autograd のグラフは要らない |
 | デバイス | CUDA のときは `torch.cuda.set_device` でノードのデバイスをこのスレッドの現在のデバイスにする | `device="cuda"` と書いた確保や演算が、ノードのデバイスに載る |
-| ストリーム | CUDA のときは自分の `torch.cuda.Stream` を作り、`torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
+| ストリーム | CUDA のときは最初の `_on_enter` で自分の `torch.cuda.Stream` を作り、毎回 `torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | ステップの終わりの同期 | CUDA のときは、各 `on_update` の直後に呼ばれる `_after_update()` で自分のストリームを `synchronize` する | CPU が GPU を追い越さない |
+
+hook の間で保たれるのは、この勾配モード・CUDA の device と stream と、ノードごとの `contextvars.Context` だけである。hook はすべてそのノードの `Context` の中で呼ぶ。ノードはワーカーの間を移るので、`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドのノードでは保たれる）。ほかのスレッドごとの設定に頼るノードは、`dedicated_thread=True` にして `on_thread_start` で設定する。
 
 デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。乱数生成器はスレッドの設定ではなく、`super().__init__()` がノードごとの `torch.Generator` を seed で作る。既定の乱数生成器はプロセス全体で共有されるので、そのままではテストが決定的にならない。seed を省略すると、決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
 
-乱数生成器は `self.generator` で使う。`super().__init__()` の中で作るので、`__init__` の中から使え、モジュールの初期化にも使える（2026-10-18、ユーザーの決定）。生成器はノードのスレッドに結び付かない。`super().__init__()` を呼ばないサブクラスでは、ノードのスレッドの起動時に作る。復元した実行は新しいインスタンスで走り、生成器も seed から作り直すので、生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
+乱数生成器は `self.generator` で使う。`super().__init__()` の中で作るので、`__init__` の中から使え、モジュールの初期化にも使える（2026-10-18、ユーザーの決定）。生成器はスレッドに結び付かない。`super().__init__()` を呼ばないサブクラスでは、最初の `_on_enter` で作る。復元した実行は新しいインスタンスで走り、生成器も seed から作り直すので、生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
-`_on_thread_start` はスレッドの ID（`threading.get_ident()`）を記録する。Port の `recv` / `send` は、この ID を使って、呼んだのが所有ノードのスレッドかを確かめる。あわせて、このスレッドを「hook の中」として印を付け、ネットワークのホスト用のメソッドを呼べないようにする。
+`_on_enter` は、スレッドが今走らせているノードとして自分を記録する（`hooks` の `threading.local` に持ち、`current_node()` で読む）。Port の `recv` / `send` は、呼んだスレッドが今走らせているノードが所有ノードかを確かめる。同じワーカーの上でも、ほかのノードの Port を呼ぶと `RuntimeError` になる。あわせて、このスレッドを「hook の中」として印を付け、ネットワークのホスト用のメソッドを呼べないようにする。
 
-`_on_thread_start`・`_after_update`・`_restore_state`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_thread_start`・`on_start`・`on_update`・`load_state_dict`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
+`_on_enter`・`_after_update`・`_restore_state`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_thread_start`・`on_start`・`on_update`・`load_state_dict`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
 
-`state_dict()` は、ノードのスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。これらのスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
+`state_dict()` は、ノードの hook を走らせるスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。これらのスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
 
 1. `with torch.cuda.stream(自分のストリーム):` の下で、まず自分のストリームを同期する。`on_update` に限らず、`on_start`・`load_state_dict`・`on_pause` などのどの hook が積んだ仕事も、ここで終わる
 2. `state_dict()` を呼ぶ。中で作るコピーは自分のストリームに積まれる
@@ -98,11 +100,11 @@ CUDA のときにどこで何を同期するかを次の表にまとめる。ど
 
 | いつ | どのスレッドで | 何を同期するか | 同期しないと |
 | --- | --- | --- | --- |
-| 各 `on_update` の直後（`_after_update`） | ノードのスレッド | 自分のストリーム | CPU が GPU を追い越し、$\Delta t$ と実際に計算した時間がずれる |
+| 各 `on_update` の直後（`_after_update`） | ノードの hook を走らせるスレッド | 自分のストリーム | CPU が GPU を追い越し、$\Delta t$ と実際に計算した時間がずれる |
 | 状態の取得（`_capture_state`） | 制御スレッド（終了した後はホストのスレッド） | 自分のストリーム（上の 1〜3） | `state_dict()` が、ほかの hook の仕事が終わる前の値を返す |
 | 状態の取得で、木をコピーした後、ノードを再開する前 | 制御スレッド（終了した後はホストのスレッド） | 制御スレッドの現在のストリーム | 再開したノードがその場で更新した重みが、木のコピーに混ざる |
 | 復元で、`mujou.run(..., state=...)` が木をコピーした後 | `mujou.run` を呼んだホストのスレッド | そのスレッドの現在のストリーム | ノードが、コピーが終わる前の値を使う |
-| 復元で、ノードの `load_state_dict` の後（`_restore_state`） | ノードのスレッド | 自分のストリーム | `mujou.run` が戻った後にホストが木を手放すと、ノードのストリームがまだ読んでいる記憶域を、キャッシュアロケータがほかの確保に回す |
+| 復元で、ノードの `load_state_dict` の後（`_restore_state`） | ノードの hook を走らせるスレッド | 自分のストリーム | `mujou.run` が戻った後にホストが木を手放すと、ノードのストリームがまだ読んでいる記憶域を、キャッシュアロケータがほかの確保に回す |
 | `mujou.run` がノードを起動する前 | `mujou.run` を呼んだホストのスレッド | そのスレッドの現在のストリーム | ノードが、`__init__` で確保した Tensor を確保が終わる前に使う |
 
 `mujou.run` が同期するのは、`mujou.run` を呼んだスレッドのストリームだけである。ほかのホストのスレッドで確保した Tensor は、そのスレッドで同期してから `mujou.run` する。
@@ -115,7 +117,7 @@ PyTorch は `torch.cuda.Stream()` をデバイスごとのプール（32 本）�
 
 ノードが計算できるのは CPU と CUDA だけで、MPS・XPU などほかのアクセラレータはサポートしない。それらのデバイスを渡すと、torch がそのデバイスを使えるかどうかに関わらず、構築時に `ValueError` にする。
 
-経緯: 2026-10-17 に一度、`torch.accelerator` を使って CUDA 以外のアクセラレータ（MPS など）でもノードが計算できるようにした（ストリームは CUDA だけに持たせ、ほかはデバイス全体を同期し、MPS のノードは動いている実行全体で 1 つに限っていた）。同じ日にユーザーの決定で MPS のサポートを取りやめ、CPU と CUDA だけに戻した。理由: PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち（torch 2.14.1、Apple Silicon。GIL ありのビルドでも 10/10 で再現。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）、ノードごとのスレッドで計算する mujou の実行モデルと合わない。MPS 以外のアクセラレータは確かめる環境が無く、ストリームの意味と性能も確かめられないので、あわせて対象から外した。
+経緯: 2026-10-17 に一度、`torch.accelerator` を使って CUDA 以外のアクセラレータ（MPS など）でもノードが計算できるようにした（ストリームは CUDA だけに持たせ、ほかはデバイス全体を同期し、MPS のノードは動いている実行全体で 1 つに限っていた）。同じ日にユーザーの決定で MPS のサポートを取りやめ、CPU と CUDA だけに戻した。理由: PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち（torch 2.14.1、Apple Silicon。GIL ありのビルドでも 10/10 で再現。Metal の `failed assertion _status < MTLCommandBufferStatusCommitted` か SIGSEGV）、複数のスレッドが並行してノードを計算する mujou の実行モデルと合わない。MPS 以外のアクセラレータは確かめる環境が無く、ストリームの意味と性能も確かめられないので、あわせて対象から外した。
 
 > 状態: CUDA の経路（デバイスとストリームの設定、ステップの終わり・起動・取得・復元の同期）は、2026-10-16 に RTX 4090 と RTX 4060 の 2 枚で確かめた（torch 2.14.1+cu130、3.14t の GIL なし・あり）。テストは `tests/mujou/_core/test_node.py`・`test_run.py`・`test_port.py` の `TestCuda` と、`test_node.py` の `TestRestore` の CUDA の場合で、CUDA の無い環境では skip になる。どの同期を 1 つ外しても、少なくとも 1 件のテストが落ちる（2026-10-16 に確かめた。2026-10-17 にアクセラレータ用に分けたテストを `TestCuda` に戻した後の CUDA での確認はまだ）。
 
@@ -150,9 +152,9 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 - `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
-CPU で計算する torch の演算は、呼び出したスレッドごとに内部でスレッドを立てる。ノードの数と内部のスレッド数の積がコア数を大きく超えると、CPU を取り合って全体が遅くなる。内部のスレッド数は小さく設定しておく。
+CPU で計算する torch の演算は、呼び出したスレッドごとに内部でスレッドを立てる。ノードの hook を走らせるスレッド（ワーカーと専用スレッド）の数と内部のスレッド数の積がコア数を大きく超えると、CPU を取り合って全体が遅くなる。内部のスレッド数は小さく設定しておく。
 
-mujou は内部のスレッド数を設定しない。プロセス全体の設定なので、ホストが `mujou.run` の前に決める。目安は、CPU で計算するノードの数と `torch.set_num_threads(n)` の `n` の積が、物理コア数を超えないようにすることである。小さな行列を扱うノードが多いときは `n = 1` でよい。
+mujou は内部のスレッド数を設定しない。プロセス全体の設定なので、ホストが `mujou.run` の前に決める。目安は `torch.set_num_threads(n)` の `n` について「(ワーカー数 + 専用スレッドのノード数) × n ≤ 物理コア数」とすることである。小さな行列を扱うノードが多いときは `n = 1` でよい。
 
 ## 性能の測定
 
@@ -178,4 +180,4 @@ mujou は内部のスレッド数を設定しない。プロセス全体の設�
 - JAX は、XLA の設定（非同期ディスパッチ・内部スレッド数）を変えても、合計が 4〜8 スレッドで頭打ちになった。スレッド数が論理コア数に達すると 1 ステップ 10ms まで落ちた。GPU でもストリームを分けられないので、スレッド数にかかわらず合計が一定だった。このため JAX は採らない
 - torch は、状態をその場で更新するかどうかで大きく変わった。新しいテンソルを確保する書き方では、CPU、n=1024、16 スレッドの合計が 1.1k に落ちた（その場で更新すると 36.9k）
 - GPU でノードごとにストリームを分けると、既定のストリームを共有するより約 2 倍速かった（n=1024、8 スレッド）
-- torch でも、スレッド数を論理コア数（32）まで増やすと、16 スレッドのときより遅くなった。torch のノードを動かす専用スレッドの数は、物理コア数を超えないようにする
+- torch でも、スレッド数を論理コア数（32）まで増やすと、16 スレッドのときより遅くなった。torch のノードを動かすスレッド（ワーカーと専用スレッド）の数は、物理コア数を超えないようにする。`workers` の既定は論理 CPU 数までなので、既定をどうするかはベンチマークで確かめる（[未決定事項](open-decisions.md#実行の配置)）
