@@ -24,7 +24,7 @@ A/B/C は scaffold から別 worktree で並列に実装し、stack にすると
 
 - Q-a: docs は `net.run()`、指示は `mujou.run(network)`。両方を用意し、`mujou.run` は未 build なら build してネットワークを返す形にした
 - Q-b: PC-ALM（`mujou.pc`）は「`mujou.run` まで」の範囲外として今回入れていない
-- Q-c: タスク実行クラス（ワーカープール）はネイティブノードが無いので future work にした。今は全ノードが専用スレッド
+- Q-c: タスク実行クラス（ワーカープール）はネイティブノードが無いので future work にした。今は全ノードが専用スレッド。→ 2026-10-18 に実装（Python のノードも既定でワーカープールに載せる、`memory/project_mn_scheduler.md`）
 - Q-d: pre-commit のフック環境が Python 3.12 で作られており、`debug-statements` が 3.13 以降の構文（型パラメータの既定値）を parse できない。WP-C は旧式の `TypeVar(default=...)` で回避した。`.pre-commit-config.yaml` で `python3.14` を指定するかどうか
 - Q-e: torch が import 時に「NumPy を初期化できない」UserWarning を出す。numpy を依存に足すか、警告を無視する設定にするか（今は放置）
 
