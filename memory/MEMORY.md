@@ -29,7 +29,7 @@
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由。ノードのデバイスは CPU と CUDA だけ（MPS などは 2026-10-17 に取りやめ）
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — 実装は private な mujou._core パッケージ、PyTorch を必須の依存として全面採用（mujou.torch に分けない）、torch を使わないのは拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node が内部の hook _on_thread_start で勾配停止・ノードごとのストリーム・乱数生成器を設定。状態はその場で更新。CPU と CUDA だけ。JAX は多数スレッドで伸びず不採用
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
-- [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語）。サンプルは examples/ でテストが実行。GitHub Pages に公開（2026-10-18〜、Actions でデプロイ）
+- [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語）。サンプルは examples/ でテストが実行。GitHub Pages に公開（2026-10-18〜）。mike でバージョンごと（main は dev、タグは X.Y.Z と latest）
 - [テスト用の公開の口](project_testing_api.md) — 仮想時計と手動ステップを mujou.testing などで公開し、mujou 自身と利用者のテストが同じ口を使う。2026-10-16 実装（run / ManualRun / VirtualTimer）
 - [実行の API とモジュール構成の見直し](project_runtime_api_revision.md) — 2026-10-16 の決定。実装は mujou._core パッケージ、Rust は _core._native。build が Graph、mujou.run がハンドル、Group、自動の状態収集、hook の名前など
 - [ノードの実行周期](project_node_period.md) — `Node(period=0.01)` が既定、`0.0` は明示したときだけ、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す（平均 1/P、まとめて回らない）。Δt は実経過。`period` は予約名。手動モードは周期を無視
