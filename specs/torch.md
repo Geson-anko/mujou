@@ -79,9 +79,8 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 | デバイス | CUDA のときは `torch.cuda.set_device` でノードのデバイスをこのスレッドの現在のデバイスにする | `device="cuda"` と書いた確保や演算が、ノードのデバイスに載る |
 | ストリーム | CUDA のときは自分の `torch.cuda.Stream` を作り、`torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | ステップの終わりの同期 | CUDA のときは、各 `on_update` の直後に呼ばれる `_after_update()` で自分のストリームを `synchronize` する | CPU が GPU を追い越さない |
-| 乱数生成器 | ノードごとの `torch.Generator` を、渡された seed で作る | 既定の乱数生成器はプロセス全体で共有されるので、テストが決定的でなくなる |
 
-デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。seed を省略すると、乱数生成器を決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
+デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。乱数生成器はスレッドの設定ではなく、`super().__init__()` がノードごとの `torch.Generator` を seed で作る。既定の乱数生成器はプロセス全体で共有されるので、そのままではテストが決定的にならない。seed を省略すると、決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
 
 乱数生成器は `self.generator` で使う。`super().__init__()` の中で作るので、`__init__` の中から使え、モジュールの初期化にも使える（2026-10-18、ユーザーの決定）。生成器はノードのスレッドに結び付かない。`super().__init__()` を呼ばないサブクラスでは、ノードのスレッドの起動時に作る。復元した実行は新しいインスタンスで走り、生成器も seed から作り直すので、生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 

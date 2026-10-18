@@ -84,6 +84,15 @@ class TestThreadSetup:
         expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
         assert torch.equal(node.draws_in_init, expected)
 
+    def test_reading_the_generator_before_the_base_init_raises(self):
+        class Early(Node):
+            def __init__(self) -> None:
+                _ = self.generator
+                super().__init__()
+
+        with pytest.raises(RuntimeError, match=r"super\(\).__init__"):
+            Early()
+
     def test_on_start_continues_the_sequence_from_init(self, start_manual: StartManual):
         node = InitDraws(seed=7)
         start_manual(Group(node=node))

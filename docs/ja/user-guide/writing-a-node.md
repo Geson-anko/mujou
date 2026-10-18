@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 設定値（時定数、層の大きさなど）は `__init__` で数値として持たせてよい。数値は状態に集まらない。
 
-`nn.Module` は `__init__` でも `on_start` でも作れる。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`self.generator` で初期化し直す（`__init__` の中から使える）。
+`nn.Module` は `__init__` でも `on_start` でも作れる。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`__init__` の中でも使える `self.generator` で初期化し直す。
 
 ## 3. `on_update(dt)` で `dt` に比例して更新する
 
@@ -217,7 +217,7 @@ class Sensor(mujou.Node):
 
 乱数は `self.generator` から引く（`torch.randn(..., generator=self.generator)`）。`torch.manual_seed` は全ノードが共有する乱数生成器を変えてしまうので、ノードの中で呼ばない。
 
-`self.generator` は `super().__init__()` の後から使える（`__init__` の中でもよい）。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)を参照。
+`self.generator` は `super().__init__()` の直後から、`__init__` の中でも使える。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)を参照。
 
 `device`・`generator`・`period`・`timer` は予約された名前なので、この名前で属性を代入しない。
 

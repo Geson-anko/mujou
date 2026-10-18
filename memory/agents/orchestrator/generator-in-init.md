@@ -23,3 +23,10 @@
 
 ## 段階 5: ドキュメント
 - node.py の docstring、specs/torch.md、docs/{en,ja} の writing-a-node・torch・state、memory 3 件（project_torch_module、MEMORY.md、project_runtime_api_revision）
+
+## レビュー（code-reviewer、request-changes）の裁定
+- must-fix: specs/torch.md の表の「乱数生成器」行 → 表から外し、表の後の段落に `super().__init__` で作ることを書いた
+- should-fix 採用: memory/project_torch_module.md の本文、`super().__init__()` より前に読むと RuntimeError のテスト、日本語の直訳調（「新しいインスタンスで走り」）
+- should-fix 却下: 「状態のテンソルは on_start で作る」の言い切り。docstring は「by on_start」で、テンソルの話は今回の要求（生成器）の外。節の見出しはアンカーでもあるので変えない
+- nit 採用: 補足のカッコを地の文に、Raises の条件を正確に
+- nit 記録のみ: copy.copy(node) で生成器を共有する（浅いコピーで走らせる使い方は想定外。Port も共有される）

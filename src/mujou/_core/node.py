@@ -201,7 +201,8 @@ class Node(_native.Node, Component):
         and ``set_state`` it before passing the rest to ``super()``.
 
         Raises:
-            RuntimeError: ``super().__init__()`` has not been called yet.
+            RuntimeError: ``super().__init__()`` has not been called (and the node's
+                thread has not started).
         """
         if self._generator is None:
             raise RuntimeError(
