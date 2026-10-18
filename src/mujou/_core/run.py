@@ -1,6 +1,7 @@
 """Running networks: ``mujou.run`` and the ``Run`` it returns (``specs/network.md``)."""
 
 import math
+import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Never, Self, cast, override
@@ -458,7 +459,7 @@ def run[P: Port[Any, Any, Any]](
             ``workers`` is not an ``int`` (a ``bool`` included); or a node on
             the workers overrides ``on_thread_start``, which only a node with
             ``dedicated_thread=True`` gets (nothing has started).
-        ValueError: ``workers`` is less than 1.
+        ValueError: ``workers`` is less than 1 (or more than ``sys.maxsize``).
         ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
             networks, or the timer it would set back has another run on it.
@@ -496,8 +497,11 @@ def start_run[R: Run](
             raise TypeError(
                 f"workers must be an int or None, got {type(workers).__name__}"
             )
-        if workers < 1:
-            raise ValueError(f"workers must be at least 1, got {workers}")
+        # The upper bound: the core counts the workers in a pointer-sized int.
+        if not 1 <= workers <= sys.maxsize:
+            raise ValueError(
+                f"workers must be at least 1 and at most {sys.maxsize}, got {workers}"
+            )
     for given in components:
         # The annotation is not checked at runtime.
         if not isinstance(given, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]

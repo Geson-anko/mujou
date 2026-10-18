@@ -531,7 +531,13 @@ def more_nodes_than_cpus() -> int:
 class TestWorkers:
     @pytest.mark.parametrize(
         ("workers", "error"),
-        [(True, TypeError), (1.0, TypeError), (0, ValueError), (-1, ValueError)],
+        [
+            (True, TypeError),
+            (1.0, TypeError),
+            (0, ValueError),
+            (-1, ValueError),
+            (2**70, ValueError),  # more than the core can count
+        ],
     )
     def test_rejects_what_is_not_a_positive_int_before_starting(
         self, virtual: VirtualTimer, start: Start, workers: object, error: type
