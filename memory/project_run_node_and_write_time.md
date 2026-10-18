@@ -8,7 +8,7 @@ metadata:
 2026-10-17、サンプルを書いた担当の「API の気づき」から orchestrator が推奨案として決め、パスと引数名はユーザーが決めた。
 
 - `Run.write(values) -> Timestamp`: 書いた値に付いた時刻（その実行のタイマー）。1 回の write の全 Port に同じ時刻。ノードの `recv_with_time` と状態の木の `/in` の時刻と一致する。`read` の時刻は送った時刻で別物。空の write も時刻を返す
-- **ユーザーの決定:** `mujou.run(component, *components, timer=..., inputs=..., state=..., pause_timeout=...)`、`mujou.testing.run` も同じ形、`Group(*components, **named)`。引数なしは型検査でも実行時でもエラー
+- **ユーザーの決定:** `mujou.run(component, *components, timer=..., inputs=..., state=..., pause_timeout=...)`（`pause_timeout` は同日 `Run.state_dict(timeout=30.0)` へ移した）、`mujou.testing.run` も同じ形、`Group(*components, **named)`。引数なしは型検査でも実行時でもエラー
 - **ユーザーの決定（理由は「その方がシンプル」）:** コンポーネントが 1 つだけならパスの先頭に位置を足さない。ネットワーク 1 つはそのまま、ノード 1 つも包まずに根にする（ノードのパス `""`、Port は `"prev"`。根が空のパスなら区切りの `.` を入れない）。2 つ以上は `Group(component, *components)` と同じで `"0.l1"` など。`Group` は 1 つでも位置を付ける
 - ノード 1 つの状態の木: `{"nodes": {"": ...}, "slots": {"prev/in": ..., "next/out": ...}, "last_update_ns": {"": ...}, "timer": ...}`。pickle して復元すれば往復する
 - 根のノードはエラーとログでクラス名だけで呼ぶ（`"Leaky has already run; ..."`、`"Leaky declares the port ..."`）。ランタイム（Rust）に渡す名前は、パスが空のノードだけクラス名にする（`"node 'Leaky' raised in on_update"`）
