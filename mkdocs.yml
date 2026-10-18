@@ -1,5 +1,6 @@
 site_name: Mujou
 site_description: Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning
+site_url: https://geson-anko.github.io/mujou/
 repo_url: https://github.com/Geson-anko/mujou
 repo_name: Geson-anko/mujou
 
@@ -184,6 +185,11 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
 
 extra:
+  # Versioned docs via mike (deployed by .github/workflows/docs.yml): a version menu
+  # in the header. "dev" follows main, "latest" the newest stable release.
+  version:
+    provider: mike
+    default: latest
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/Geson-anko/mujou
