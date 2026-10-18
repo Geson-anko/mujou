@@ -48,8 +48,8 @@ use node::{Command, Report, control_word};
 /// The lifecycle hooks of a node, called by the runtime.
 ///
 /// Every hook except `state_dict` runs on the node's own thread. `state_dict`
-/// runs on the control thread while the node is paused (or has stopped after an
-/// exception), so it never overlaps with the other hooks.
+/// runs on the control thread while the node is paused, so it never overlaps
+/// with the other hooks. It is not called after an exception.
 ///
 /// A hook that panics is treated like one that returned an error, under the
 /// hook's name as the node's author knows it (`on_update` for `update`, ...).
