@@ -1505,7 +1505,7 @@
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync
 </code></pre></div>
 <p><code>uv sync</code> は free-threaded 版の Python 3.14t を用意して <code>.venv/</code> を作り、依存を入れ、Rust で書かれたコアをビルドする。GIL ありの通常版を使うなら、代わりに <code>uv sync --python 3.14</code> を実行する。</p>
-<p>Linux では、<code>uv sync</code> は PyTorch を CPU 版の配布元から入れる。mujou のコアは GPU を使わないからである。ノードの中で GPU を使いたいなら、<a href="https://pytorch.org/get-started/locally/">PyTorch のインストール案内</a>に従って CUDA 版の PyTorch に入れ替える。</p>
+<p>PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は <a href="https://pytorch.org/get-started/locally/">PyTorch のインストール案内</a>を参照。</p>
 <div class="admonition note">
 <p class="admonition-title">PyPI に公開した後</p>
 <p>PyPI に公開した後は、次のコマンドで入れられるようになる。uv のプロジェクトなら <code>uv add mujou</code>、pip なら Python 3.14 以上の仮想環境で <code>pip install mujou</code> である。</p>

@@ -1503,7 +1503,7 @@
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync
 </code></pre></div>
 <p><code>uv sync</code> sets up the free-threaded Python 3.14t, creates <code>.venv/</code>, installs the dependencies, and builds the core, which is written in Rust. For the regular build with the GIL, run <code>uv sync --python 3.14</code> instead.</p>
-<p>On Linux, <code>uv sync</code> installs PyTorch from the CPU-only index, because the Mujou core does not use the GPU. To use a GPU inside your nodes, replace PyTorch with a CUDA build by following the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a>.</p>
+<p><code>uv sync</code> installs PyTorch from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a>.</p>
 <div class="admonition note">
 <p class="admonition-title">After the release on PyPI</p>
 <p>These commands will work once Mujou is on PyPI: <code>uv add mujou</code> in a uv project, or <code>pip install mujou</code> in a virtual environment with Python 3.14 or later.</p>
