@@ -5,14 +5,14 @@ Values cross the boundary to the core as copies: a received message is a new
 tensor, and a sent one is copied into the core.
 """
 
-import threading
 from collections.abc import Sequence
 from typing import Any, cast, final
 
 import torch
 
 from mujou._core import _native
-from mujou._core.node import Node, thread_ident
+from mujou._core.hooks import current_node
+from mujou._core.node import Node
 from mujou._core.port import Channel, Port
 from mujou._core.spec import Spec, host_tensors, join
 
@@ -100,8 +100,9 @@ class Binding:
 
     def _check_owner(self, verb: str) -> None:
         # A port is read and written only by its owner: this keeps each slot to
-        # one writer, and a node to the slots of its own ports (locality).
-        if threading.get_ident() != thread_ident(self._owner):
+        # one writer, and a node to the slots of its own ports (locality). The
+        # node, not the thread: a worker runs other nodes too.
+        if current_node() is not self._owner:
             raise RuntimeError(
                 f"only the node that owns the port {self._name!r} {verb} it, from its "
                 "own hooks while the network runs (state_dict runs on another thread)"

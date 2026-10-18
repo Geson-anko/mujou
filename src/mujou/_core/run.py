@@ -399,6 +399,7 @@ def run[P: Port[Any, Any, Any]](
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
+    workers: int | None = None,
 ) -> Run:
     """Build the given nodes and networks and run them in the background; return
     once every node has started.
@@ -411,9 +412,15 @@ def run[P: Port[Any, Any, Any]](
     nodes of a network given second. Either way the host writes and reads the
     ports themselves (``run.write({node.prev: x})``).
 
-    Every node's thread is set up, ``on_start`` (and, with ``state``, the node's
+    Every node's ``on_start`` (and, with ``state``, the node's
     ``load_state_dict``) has returned, and the run's timer runs when this
     returns. A network or node runs once.
+
+    The run's nodes share a pool of ``workers`` threads, which it creates for
+    itself; a node with ``dedicated_thread=True`` runs on a thread of its own
+    instead. A worker runs one hook of one node at a time, the updates that are
+    due earliest first. A hook that blocks holds its worker, so the other
+    nodes' ``dt`` grows meanwhile.
 
     Args:
         component: The node or network to run.
@@ -431,6 +438,9 @@ def run[P: Port[Any, Any, Any]](
             ``on_start``), their last update times and the timer continue from
             the time the tree was taken. Build the networks as the ones the tree
             came from: the same node paths and slots.
+        workers: The number of worker threads of the run (>= 1). ``None`` is
+            as many as the CPUs (the logical cores), never more than the nodes
+            on the workers. With no such node, the run has no worker.
 
     Example, with the node ``Error`` of the example of ``Run``::
 
@@ -444,7 +454,11 @@ def run[P: Port[Any, Any, Any]](
             run; create a new instance to run again"``), or part of one belongs
             to another network that was built but has not run; or this is called
             from a node's hook.
-        TypeError: A value is neither a ``Node`` nor a ``Network``.
+        TypeError: A value is neither a ``Node`` nor a ``Network``;
+            ``workers`` is not an ``int`` (a ``bool`` included); or a node on
+            the workers overrides ``on_thread_start``, which only a node with
+            ``dedicated_thread=True`` gets (nothing has started).
+        ValueError: ``workers`` is less than 1.
         ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
             networks, or the timer it would set back has another run on it.
@@ -459,6 +473,7 @@ def run[P: Port[Any, Any, Any]](
         inputs=inputs,
         state=state,
         manual=False,
+        workers=workers,
     )
 
 
@@ -470,10 +485,19 @@ def start_run[R: Run](
     inputs: Mapping[Any, object] | None,
     state: Mapping[str, Any] | None,
     manual: bool,
+    workers: int | None,
 ) -> R:
     """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
     if in_hook():
         raise _from_hook()
+    if workers is not None:
+        # The annotation is not checked at runtime.
+        if isinstance(workers, bool) or not isinstance(workers, int):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"workers must be an int or None, got {type(workers).__name__}"
+            )
+        if workers < 1:
+            raise ValueError(f"workers must be at least 1, got {workers}")
     for given in components:
         # The annotation is not checked at runtime.
         if not isinstance(given, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -493,7 +517,7 @@ def start_run[R: Run](
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.
         session = Session(graph, run_timer)
-        session.start(manual=manual, state=state, inputs=inputs)
+        session.start(manual=manual, state=state, inputs=inputs, workers=workers)
         return session
 
     try:
@@ -526,6 +550,7 @@ def start_manual[T: Timer](
         inputs=inputs,
         state=state,
         manual=True,
+        workers=None,
     )
 
 

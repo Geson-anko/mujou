@@ -21,8 +21,8 @@ from mujou._core.graph import Graph, ports
 from mujou._core.node import (
     Node,
     capture_state,
+    checked_dedicated,
     checked_period,
-    end_thread,
     set_timer,
 )
 from mujou._core.port import Channel, bind, initial, label
@@ -138,8 +138,11 @@ class Session:
         manual: bool,
         state: Mapping[str, Any] | None,
         inputs: Mapping[AnyPort, object] | None,
+        workers: int | None,
     ) -> None:
-        """Restore ``state``, write ``inputs`` and start the nodes.
+        """Restore ``state``, write ``inputs`` and start the nodes, the ones not on
+        a thread of their own on ``workers`` threads (by default as many as the
+        CPUs).
 
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
@@ -151,6 +154,7 @@ class Session:
         lifetime.add(self)
         try:
             periods = [checked_period(node) for node in self._nodes]
+            dedicated = [checked_dedicated(node) for node in self._nodes]
             restored = None if state is None else self._restore(state)
             if inputs:
                 items = self._items(inputs)
@@ -173,6 +177,8 @@ class Session:
             runtime.start(
                 manual=manual,
                 periods=periods,
+                workers=workers,
+                dedicated=dedicated,
                 **(restored or {}),
             )
         except _native.NetworkError:
@@ -249,8 +255,8 @@ class Session:
             self._settle()
 
     def _settle(self) -> None:
-        """Once the run has ended, stop keeping the session, forget the nodes'
-        threads and stop their ``timer``, once.
+        """Once the run has ended, stop keeping the session and stop the nodes'
+        ``timer``, once.
 
         After a normal end each node's ``timer`` stays at the time of the state
         from then on (``state_dict`` after the end is taken at it); after an end
@@ -265,7 +271,6 @@ class Session:
             lifetime.discard(self)
             ended = self._ended_timer(runtime)
             for node in self._nodes:
-                end_thread(node)
                 set_timer(node, ended)
             self._ended = (ended,)
 

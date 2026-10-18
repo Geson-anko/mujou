@@ -173,13 +173,16 @@ class Node:
     """
     The base of every node.
 
-    The runtime calls the hooks on the node's own thread (`state_dict`, through
-    `_capture_state`, on the control thread while the node is paused). They do
-    nothing by default. The hooks other than `_on_thread_start`,
-    `on_thread_start`, `on_start` and `load_state_dict` are looked up once, after
-    those four, so replacing one there takes effect. `state_dict` itself is
-    looked up by the default `_capture_state` at each capture, so replacing it
-    later takes effect too.
+    The runtime calls the hooks on the thread that runs the node: a worker of
+    the run's pool, which may differ from one hook to the next, or the node's
+    own thread if it was started as dedicated (`state_dict`, through
+    `_capture_state`, on the control thread while the node is paused). The hooks
+    of a node never overlap, and each runs in the node's own
+    `contextvars.Context` (but `_capture_state`). They do nothing by default.
+    The hooks other than `_on_enter`, `on_thread_start`, `on_start` and
+    `load_state_dict` are looked up once, after those four, so replacing one
+    there takes effect. `state_dict` itself is looked up by the default
+    `_capture_state` at each capture, so replacing it later takes effect too.
     """
     def __new__(cls, /, *_args: Any, **_kwargs: Any) -> Self:
         """
@@ -188,8 +191,8 @@ class Node:
         """
     def _after_update(self, /) -> None:
         """
-        Called on the node's thread right after each `on_update`, for the
-        framework's per-step work (so that overriding `on_update` cannot skip it).
+        Called right after each `on_update`, for the framework's per-step work
+        (so that overriding `on_update` cannot skip it).
         """
     def _capture_state(self, /) -> "object":
         """
@@ -197,22 +200,24 @@ class Node:
         control thread, while the node is paused), for the framework's work
         around it. Returns `self.state_dict()` by default.
         """
-    def _on_thread_start(self, /) -> None:
+    def _on_enter(self, /) -> None:
         """
-        Called on the node's thread first, before `on_thread_start`, for the
-        framework's per-thread settings (so that no override of a public hook
-        can skip them).
+        Called right before a hook whenever a thread switches to this node (the
+        first time a thread runs it, and on a worker whenever it ran another
+        node in between), for the framework's per-thread settings, so that no
+        override of a public hook can skip them. An error here is reported as
+        the error of the hook that was to follow.
         """
     def _restore_state(self, /, state: "object") -> None:
         """
         Called instead of `load_state_dict` when the runtime restores the state
-        (on the node's thread, after `on_start`), for the framework's work around
-        it. Calls `self.load_state_dict(state)` by default.
+        (after `on_start`), for the framework's work around it. Calls
+        `self.load_state_dict(state)` by default.
         """
     def load_state_dict(self, /, state: "object") -> None:
         """
-        Restores `state`, a copy of what `state_dict` returned, on the node's
-        thread after `on_start` when the run is restored. Does nothing by default.
+        Restores `state`, a copy of what `state_dict` returned, after `on_start`
+        when the run is restored. Does nothing by default.
         """
     def on_exception(self, /) -> None:
         """
@@ -230,26 +235,25 @@ class Node:
         """
     def on_start(self, /) -> None:
         """
-        Called once on the node's thread when the run starts (also when it is
-        restored), before any other public hook but `on_thread_start`. Allocate
-        and initialize the state here.
+        Called once when the run starts (also when it is restored), before any
+        other public hook but `on_thread_start`. Allocate and initialize the
+        state here.
         """
     def on_stop(self, /) -> None:
         """
-        Called once on the node's thread when the run stops, also after an
-        exception. It must not change what `state_dict` returns. What it raises
-        is logged and ignored.
+        Called once when the run stops, also after an exception. It must not
+        change what `state_dict` returns. What it raises is logged and ignored.
         """
     def on_thread_start(self, /) -> None:
         """
-        Called on the node's thread right before `on_start`, after the
-        framework's own per-thread settings, for the node's per-thread settings.
+        Called only on a dedicated node's own thread, right before `on_start`,
+        for the node's per-thread settings.
         """
     def on_update(self, /, dt: "float") -> None:
         """
-        Called repeatedly on the node's thread with `dt`, the seconds on the
-        run's timer since the node's last update (always > 0). Read the ports,
-        update in proportion to `dt` and send.
+        Called repeatedly with `dt`, the seconds on the run's timer since the
+        node's last update (always > 0). Read the ports, update in proportion to
+        `dt` and send.
         """
     def state_dict(self, /) -> "object":
         """
@@ -314,7 +318,8 @@ class PauseTimeoutError(TimeoutError):
 @final
 class Runtime:
     """
-    Runs nodes, each on its own thread, under one control thread.
+    Runs nodes on a pool of worker threads, or each dedicated node on a thread
+    of its own, under one control thread.
     """
     def __new__(
         cls,
@@ -382,13 +387,15 @@ class Runtime:
         periods: SupportsGetItem[int, SupportsFloat | SupportsIndex | None]
         | None = None,
         timer_state: "dict[str, int | float] | None" = None,
+        workers: SupportsIndex | None = None,
+        dedicated: SupportsGetItem[int, bool] | None = None,
     ) -> None:
         """
-        Starts every node on its own thread and returns once all of them have
-        started (and restored `states`) and the timer runs again. If a node
-        raised meanwhile, raises `NetworkError` after the network has stopped.
-        If an argument is invalid, raises `ValueError` and nothing starts, so
-        `start` can be called again.
+        Starts every node and returns once all of them have started (and
+        restored `states`) and the timer runs again. If a node raised meanwhile,
+        raises `NetworkError` after the network has stopped. If an argument is
+        invalid, raises `ValueError` and nothing starts, so `start` can be
+        called again.
 
         The timer is frozen first and loaded from `timer_state`
         (`Timer.state_dict()`), so the time does not run while the nodes start.
@@ -398,6 +405,11 @@ class Runtime:
         node's period on the timer in seconds (> 0), rounded to the nearest ns
         and at least 1 ns, or `None` to update as soon as any time has passed;
         the manual mode ignores it.
+
+        `dedicated` tells which nodes run on a thread of their own (and get
+        `on_thread_start`); the others, all of them by default, share a pool of
+        `workers` threads (>= 1), by default as many as the available
+        parallelism, never more than the nodes in the pool.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.
