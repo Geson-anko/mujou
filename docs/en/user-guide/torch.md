@@ -40,9 +40,9 @@ nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
 noise = torch.randn(4, generator=self.generator, device=self.device)
 ```
 
-- `self.generator` is created on the node's thread, so you can use it from `on_start` on. Using it in `__init__` raises `RuntimeError`
+- `super().__init__()` creates `self.generator`, so you can use it in `__init__` already
 - Do not call `torch.manual_seed` in a node. The default generator is shared by the whole process, so it would change the random numbers of other nodes too
-- The generator is created again from `seed` every time the run starts. To continue the same random sequence after a restore, put the generator's state in the state tree (see [Saving and restoring state](state.md))
+- A restored run uses new node instances, whose generators start again from `seed`. To continue the same random sequence after a restore, put the generator's state in the state tree (see [Saving and restoring state](state.md))
 
 ## BP inside a node
 
@@ -69,8 +69,6 @@ For a node given a CUDA `device`, Mujou sets up the following.
 - It synchronizes the node's stream after each `on_update`, and around taking and restoring the state
 
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`).
-
-`__init__` runs on the host's thread, outside the node's stream, so create tensors and `nn.Module`s in `on_start` or later.
 
 !!! warning "Do not wait for the whole device"
 

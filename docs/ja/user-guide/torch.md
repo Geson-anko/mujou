@@ -40,9 +40,9 @@ nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
 noise = torch.randn(4, generator=self.generator, device=self.device)
 ```
 
-- `self.generator` はノードのスレッドで作られるので、`on_start` から使える。`__init__` の中で使うと `RuntimeError` になる
+- `self.generator` は `super().__init__()` が作るので、`__init__` の中から使える
 - ノードの中で `torch.manual_seed` を呼ばない。既定の生成器はプロセス全体で共有されるので、ほかのノードの乱数まで変わる
-- 生成器は起動のたびに `seed` から作り直される。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（[状態の保存と復元](state.md)）
+- 復元では新しいインスタンスを使うので、生成器も `seed` から作り直す。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（[状態の保存と復元](state.md)）
 
 ## ノードの中の BP
 
@@ -69,8 +69,6 @@ BP はノードの中に閉じ、ほかのノードへ勾配を流すことは�
 - 各 `on_update` の後と状態の取得・復元の前後に、ノードのストリームを同期する
 
 そのためノードの作者は同期を書かなくてよい。自分で同期するときは自分のストリーム（`torch.cuda.current_stream().synchronize()`）だけを同期する。
-
-`__init__` はホストのスレッドで動きノードのストリームの外にあるので、テンソルや `nn.Module` は `on_start` 以降で作る。
 
 !!! warning "デバイス全体を待たない"
 
