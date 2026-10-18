@@ -3,15 +3,15 @@
 //!
 //! The nodes of a runtime share a pool of worker threads (M nodes on N
 //! workers), except those given a dedicated thread, which loops over the
-//! node's hooks. A worker runs one hook of one node at a time and then picks the
-//! next work, the updates earliest target first; a node never runs on two
+//! node's hooks. A worker runs one hook of one node at a time and then picks
+//! the next work, the updates earliest target first; a node never runs on two
 //! threads at once, and its hooks keep their order. Which thread runs a node
 //! does not change what the node sees.
 //!
-//! The nodes never wait for each other; the only barriers are the control operations
-//! (pausing to capture the state, stepping by hand, and stopping), which
-//! `specs/execution-model.md` allows because the time of the runtime's timer
-//! stands still while they hold.
+//! The nodes never wait for each other; the only barriers are the control
+//! operations (pausing to capture the state, stepping by hand, and stopping),
+//! which `specs/execution-model.md` allows because the time of the runtime's
+//! timer stands still while they hold.
 //!
 //! All control goes through a single control thread, as in pamiq-core's
 //! `ThreadController`. The host submits requests to it and waits for the reply;
@@ -70,8 +70,9 @@ pub trait NodeHooks: Send + 'static {
     type State: Send + 'static;
 
     /// Runs the whole body of a runtime thread (a dedicated thread, a worker
-    /// or the control thread). The bindings of a language with per-thread state wrap it here,
-    /// so that the state lives as long as the thread instead of one hook call.
+    /// or the control thread). The bindings of a language with per-thread
+    /// state wrap it here, so that the state lives as long as the thread
+    /// instead of one hook call.
     /// The body waits a lot, so the wrapper must not hold a lock others need.
     fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
         body()
@@ -84,9 +85,16 @@ pub trait NodeHooks: Send + 'static {
     /// Called when a thread switches to this node, right before the hook
     /// `next_hook` (named as the node's author knows it) and in the same call:
     /// the first time a thread runs the node, and on a worker whenever it ran
-    /// another node in between. A dedicated thread calls it once, before
-    /// `start`. The node sets up the per-thread state its hooks rely on here.
-    /// An error stands for `next_hook`'s; `state_dict` is called without it.
+    /// another node in between. The node sets up the per-thread state its
+    /// hooks rely on here. `state_dict` on the control thread is called
+    /// without it.
+    ///
+    /// An error or a panic counts as a failure of `next_hook`, under that
+    /// name whatever [`HookError::hook`] says, and the thread enters again
+    /// before the next hook. `next_hook` is then not called, except
+    /// `exception` and `stop`, which still run so that the node can release
+    /// its resources. As for the hooks, the node logs its own errors. A
+    /// dedicated thread whose `enter` succeeds calls it once, before `start`.
     fn enter(&mut self, _next_hook: &'static str) -> Result<(), HookError> {
         Ok(())
     }
@@ -240,21 +248,32 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Calls a hook on the thread that runs node `i`, with the node locked,
     /// turning a panic into an error. Enters the node first if the thread ran
-    /// another one last.
+    /// another one last; if that fails, the hook is not called.
     fn invoke<T>(
         &self,
         i: usize,
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, HookError> {
-        self.invoke_as(i, hook, true, f)
+        self.invoke_as(i, hook, Entry::Required, f)
+    }
+
+    /// Calls `exception` or `stop`, whose errors are ignored: even if
+    /// entering the node fails, so that the node can release its resources.
+    fn clean_up(
+        &self,
+        i: usize,
+        hook: &'static str,
+        f: impl FnOnce(&mut N) -> Result<(), HookError>,
+    ) {
+        let _ = self.invoke_as(i, hook, Entry::BestEffort, f);
     }
 
     fn invoke_as<T>(
         &self,
         i: usize,
         hook: &'static str,
-        enter: bool,
+        entry: Entry,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, HookError> {
         let mut node = match self.hooks[i].try_lock() {
@@ -268,21 +287,21 @@ impl<N: NodeHooks> Shared<N> {
             }
         };
         let this = (self.id(), i);
-        let body = || {
-            if enter && LAST_NODE.get() != this {
-                node.enter(hook)?;
-                LAST_NODE.set(this);
+        if entry != Entry::Skip && LAST_NODE.get() != this {
+            match guarded(&mut *node, hook, |n| n.enter(hook)) {
+                // Entered: no `enter` until the thread runs another node.
+                Ok(()) => LAST_NODE.set(this),
+                Err(e) if entry == Entry::Required => {
+                    // Reported as the hook's, under the name the core knows.
+                    return Err(HookError {
+                        hook,
+                        source: e.source,
+                    });
+                }
+                Err(_) => {}
             }
-            f(&mut node)
-        };
-        panic::catch_unwind(AssertUnwindSafe(body)).unwrap_or_else(|payload| {
-            let error = HookError {
-                hook,
-                source: Arc::new(Panicked(panic_message(payload))),
-            };
-            node.panicked(&error);
-            Err(error)
-        })
+        }
+        guarded(&mut *node, hook, f)
     }
 
     /// Calls a hook whose error ends the system.
@@ -303,7 +322,7 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Calls `state_dict` on the control thread, without entering the node.
     fn state_dict(&self, i: usize) -> Result<N::State, ()> {
-        self.invoke_as(i, "state_dict", false, N::state_dict)
+        self.invoke_as(i, "state_dict", Entry::Skip, N::state_dict)
             .map_err(|e| {
                 self.fail(NodeFailure {
                     node: i,
@@ -380,6 +399,34 @@ impl<N: NodeHooks> Shared<N> {
         c.finished = true;
         self.changed.notify_all();
     }
+}
+
+/// Whether a hook call enters the node first ([`NodeHooks::enter`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    /// Enter if the thread ran another node last. A failure stands for the
+    /// hook's, which is not called.
+    Required,
+    /// Enter like `Required`, but call the hook even if entering fails.
+    BestEffort,
+    /// Do not enter (`state_dict` on the control thread).
+    Skip,
+}
+
+/// Calls a hook of `node`, turning a panic into an error named `hook`.
+fn guarded<N: NodeHooks, T>(
+    node: &mut N,
+    hook: &'static str,
+    f: impl FnOnce(&mut N) -> Result<T, HookError>,
+) -> Result<T, HookError> {
+    panic::catch_unwind(AssertUnwindSafe(|| f(node))).unwrap_or_else(|payload| {
+        let error = HookError {
+            hook,
+            source: Arc::new(Panicked(panic_message(payload))),
+        };
+        node.panicked(&error);
+        Err(error)
+    })
 }
 
 /// What is left of a wait until `deadline` (no end if `None`).
@@ -693,8 +740,8 @@ fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64
 
 /// Gives up a start whose threads could not all be spawned: lets the time run
 /// and lets the threads already spawned end on their own (they call `on_stop`
-/// after `on_start`, also for the pool nodes if a worker was spawned). Does not wait for them, since the caller may hold a lock
-/// they need.
+/// after `on_start`, also for the pool nodes if a worker was spawned). Does
+/// not wait for them, since the caller may hold a lock they need.
 fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> RuntimeError {
     let mut c = s.lock();
     s.set_command(&mut c, Command::Stop);

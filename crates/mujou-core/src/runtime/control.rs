@@ -130,8 +130,8 @@ impl<N: NodeHooks> Controller<N> {
             return Err(self.end());
         }
         // Every node waits at its loop boundary (or parked in the pool) without
-        // holding its lock, and
-        // the time stands at T: the states are consistent at T.
+        // holding its lock, and the time stands at T: the states are
+        // consistent at T.
         let states = (0..s.hooks.len()).map(|i| s.state_dict(i));
         let Ok(states) = states.collect::<Result<Vec<_>, ()>>() else {
             return Err(self.end());

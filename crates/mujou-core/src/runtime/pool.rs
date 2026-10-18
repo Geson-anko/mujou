@@ -370,8 +370,14 @@ impl<N: NodeHooks> Shared<N> {
             Work::Pause(_) => self.call(i, "on_pause", |n| n.pause()).is_ok(),
             Work::Resume => self.call(i, "on_resume", |n| n.resume()).is_ok(),
             // Their errors are ignored.
-            Work::Exception => self.invoke(i, "on_exception", |n| n.exception()).is_ok(),
-            Work::Stop => self.invoke(i, "on_stop", |n| n.stop()).is_ok(),
+            Work::Exception => {
+                self.clean_up(i, "on_exception", |n| n.exception());
+                true
+            }
+            Work::Stop => {
+                self.clean_up(i, "on_stop", |n| n.stop());
+                true
+            }
         };
         let mut c = self.lock();
         self.record(i, work, ok, &mut c);

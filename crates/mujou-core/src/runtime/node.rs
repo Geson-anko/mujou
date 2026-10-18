@@ -231,7 +231,7 @@ impl<N: NodeHooks> Shared<N> {
                 c.nodes[i].exception = ExceptionHook::Calling;
                 drop(c);
                 // Called without waiting for the others, for an early safe stop.
-                let _ = self.invoke(i, "on_exception", |n| n.exception());
+                self.clean_up(i, "on_exception", |n| n.exception());
                 c = self.lock();
                 c.nodes[i].exception = ExceptionHook::Done;
                 self.changed.notify_all();
@@ -240,7 +240,7 @@ impl<N: NodeHooks> Shared<N> {
             }
         }
         drop(c);
-        let _ = self.invoke(i, "on_stop", |n| n.stop());
+        self.clean_up(i, "on_stop", |n| n.stop());
     }
 }
 
