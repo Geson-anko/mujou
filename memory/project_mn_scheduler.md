@@ -13,7 +13,7 @@ metadata:
 - **Q2 プールは実行ごと。** `mujou.run(..., workers=None)` で指定する。既定は `min(ワーカーに載るノードの数, 論理 CPU 数)`。`mujou.testing.run` には足さない
 - **Q3 ノードはワーカーの間を移ってよい（pinning しない）。** hook の間で保つのは `contextvars`（ノードごとの `contextvars.Context`）と、フレームワークが hook の前に戻す勾配モード・CUDA の device と stream だけ。`threading.local`・`threading.current_thread()` は保たない
 
-実装（PR 2）: 内部の hook `_on_thread_start` を `_on_enter` に置き換え、スレッドがノードに切り替わるたびに設定し直す（コアの `NodeHooks::enter`）。Port の所有はスレッド ID でなく「スレッドが今走らせているノード」（`hooks.current_node()`）で判定する。
+実装（PR 2）: 内部の hook `_on_thread_start` を `_on_enter` に置き換え、スレッドがノードに切り替わるたびに設定し直す（コアの `NodeHooks::enter`）。Port の所有はスレッド ID でなく「スレッドが今走らせているノード」（`hooks.current_node()`）で判定する。レビューを受けて、勾配の記録は切り替えのときだけでなく、`state_dict` 以外の公開の hook の前に毎回切るようにした（内部の hook `_before_hook`。決定性のため、2026-10-18 の orchestrator の裁定）。CUDA の device と stream は切り替えのたび。hook の中で変えたほかのスレッドごとの設定（`torch.autocast` など）は、利用者が hook を抜ける前に戻す（戻さないと同じワーカーの次のノードに漏れる）
 
 **Why:** ノードごとに OS スレッドを立てると、ノードが多いときにコンテキストスイッチとスレッド数に縛られる。ブロッキングする I/O のノードはワーカーを占有するので、逃げ道として専用スレッドを残した。プロセス共有のプールや pinning は、実行ごとの停止・終了の分離が複雑になる・負荷の偏りを直せないので採らなかった。
 
