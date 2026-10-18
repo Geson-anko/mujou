@@ -8,10 +8,12 @@ class TestPublicNames:
     def test_testing_exports(self):
         assert sorted(mujou.testing.__all__) == ["ManualRun", "VirtualTimer", "run"]
 
-    def test_run_takes_the_arguments_of_mujou_run(self):
+    def test_run_takes_the_arguments_of_mujou_run_but_workers(self):
+        # A manual run updates one node at a time, so the default workers do.
         ours = inspect.signature(mujou.testing.run).parameters
         theirs = inspect.signature(mujou.run).parameters
-        assert list(ours) == list(theirs)
+        assert list(ours) == [name for name in theirs if name != "workers"]
+        assert "workers" in theirs
 
     def test_no_private_parameter_is_shown(self):
         callables = [

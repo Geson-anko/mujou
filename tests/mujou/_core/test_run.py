@@ -1,6 +1,8 @@
 import io
 import math
+import os
 import pickle
+import queue
 import re
 import subprocess
 import sys
@@ -473,6 +475,117 @@ class TestRefusedRun:
                 call()
         assert not (net.a.started or other.a.started or node.started)
         assert set(retry().state_dict()["nodes"]) == nodes
+
+
+class Noisy(Node):
+    """``dx/dt = u + xi - x`` by explicit Euler, ``xi ~ U[0, 1)^2`` drawn from the
+    node's own generator at each update.
+
+    ``u`` comes from the previous side and ``x`` goes to the next side. Records
+    the OS thread of each update and signals it.
+    """
+
+    def __init__(self, seed: int, *, dedicated_thread: bool = False) -> None:
+        super().__init__(seed=seed, dedicated_thread=dedicated_thread)
+        self.prev = PrevPort(recv=vec())
+        self.next = NextPort(send=vec())
+        self.x = torch.zeros(2, dtype=F64)
+        self.idents: list[int] = []
+        self.updated: queue.Queue[None] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.idents.append(threading.get_ident())
+        xi = torch.rand(2, dtype=F64, generator=self.generator)
+        self.x += dt * (self.prev.recv() + xi - self.x)
+        self.next.send(self.x)
+        self.updated.put(None)
+
+
+def noisy_chain(n: int, *, dedicated_thread: bool = False) -> list[Noisy]:
+    """``n`` ``Noisy`` nodes seeded ``0..n-1``, each sending to the next."""
+    nodes = [Noisy(seed=k, dedicated_thread=dedicated_thread) for k in range(n)]
+    for sender, receiver in zip(nodes, nodes[1:]):
+        sender.next.connect(receiver.prev)
+    return nodes
+
+
+def noisy_reference(n: int, steps: int, dt: float, chained: bool) -> list[torch.Tensor]:
+    """The states of ``noisy_chain(n)`` (or of ``n`` unconnected ``Noisy``) after
+    ``steps`` updates of every node in the order of the chain, each by ``dt``."""
+    generators = [torch.Generator().manual_seed(k) for k in range(n)]
+    xs = [torch.zeros(2, dtype=F64) for _ in range(n)]
+    for _ in range(steps):
+        for k in range(n):
+            inp = xs[k - 1] if chained and k > 0 else torch.zeros(2, dtype=F64)
+            xi = torch.rand(2, dtype=F64, generator=generators[k])
+            xs[k] = xs[k] + dt * (inp + xi - xs[k])
+    return xs
+
+
+def more_nodes_than_cpus() -> int:
+    """A node count above the default number of workers, the logical CPUs."""
+    return (os.cpu_count() or 1) + 2
+
+
+class TestWorkers:
+    @pytest.mark.parametrize(
+        ("workers", "error"),
+        [(True, TypeError), (1.0, TypeError), (0, ValueError), (-1, ValueError)],
+    )
+    def test_rejects_what_is_not_a_positive_int_before_starting(
+        self, virtual: VirtualTimer, start: Start, workers: object, error: type
+    ):
+        net = Chain()
+        with pytest.raises(error, match="workers"):
+            start(net, timer=virtual, workers=workers)  # pyright: ignore[reportArgumentType]
+        assert not (net.a.started or net.b.started)
+        start(net, timer=virtual, workers=1)
+        assert net.a.started and net.b.started
+
+    def test_more_nodes_than_workers_all_update_exactly(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # Unconnected, so the order of the updates within a period does not
+        # matter: each node's state is a function of its own seed and dt only.
+        n, steps, period = 8, 3, 0.01
+        nodes = [Noisy(seed=k) for k in range(n)]
+        start(Group(*nodes), timer=virtual, workers=2)
+        for _ in range(steps):
+            virtual.advance(period)
+            for node in nodes:
+                node.updated.get(timeout=5.0)
+        # dt is 10_000_000 ns / 1e9, the same float as the period.
+        expected = noisy_reference(n, steps, period, chained=False)
+        for node, x in zip(nodes, expected, strict=True):
+            assert len(node.idents) == steps
+            assert torch.equal(node.x, x)
+        assert len({i for node in nodes for i in node.idents}) <= 2
+
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_a_manual_run_gives_the_same_bits_on_workers_and_dedicated_threads(
+        self, step: Step, start_manual: StartManual, dedicated_thread: bool
+    ):
+        n, steps = more_nodes_than_cpus(), 4
+        nodes = noisy_chain(n, dedicated_thread=dedicated_thread)
+        run = start_manual(Group(*nodes))
+        for _ in range(steps):
+            step(run, *nodes)  # each node reads what the previous one just sent
+        expected = noisy_reference(n, steps, H, chained=True)
+        for node, x in zip(nodes, expected, strict=True):
+            assert torch.equal(node.x, x)
+
+    def test_the_default_shares_threads_among_more_nodes_than_cpus(
+        self, step: Step, start_manual: StartManual
+    ):
+        n = more_nodes_than_cpus()
+        nodes = noisy_chain(n)
+        run = start_manual(Group(*nodes))
+        for _ in range(2):
+            step(run, *nodes)
+        idents = {i for node in nodes for i in node.idents}
+        assert len(idents) <= (os.cpu_count() or 1) < n
+        assert threading.get_ident() not in idents
 
 
 class TestWith:

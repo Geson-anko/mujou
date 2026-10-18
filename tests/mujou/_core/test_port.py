@@ -1,3 +1,4 @@
+import queue
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, override
 
@@ -12,7 +13,7 @@ from mujou.testing import VirtualTimer
 from mujou.time import Timestamp
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import StartManual, Step
+    from tests.mujou.conftest import Start, StartManual, Step
 
 
 class Feedback(TypedDict):
@@ -508,6 +509,53 @@ class TestSend:
         start_manual(Group(node=Probe(out=out)))
         with pytest.raises(RuntimeError, match="only the node that owns"):
             out.send(torch.ones(2, 3))
+
+
+class Signalling(Probe):
+    """A ``Probe`` that also signals each update it finished."""
+
+    def __init__(
+        self,
+        update: Callable[[], object] = lambda: None,
+        **ports: Port[Any, Any, Any],
+    ) -> None:
+        super().__init__(update, **ports)
+        self.updated: queue.Queue[None] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.updated.put(None)
+
+
+class TestOwnerOnAWorker:
+    def test_only_the_owning_node_reads_and_writes_on_a_shared_worker(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: the owner is "the node the thread runs now", not the thread: one
+        # worker runs all three nodes, one after another.
+        inp, out = Port(recv=h()), Port(send=h())
+        owner = Signalling(inp.recv, inp=inp, out=out)
+        reader = Signalling(inp.recv, own=Port(recv=h()))
+        writer = Signalling(lambda: out.send(torch.ones(2, 3)), own=Port(send=h()))
+        run = start(
+            Group(owner=owner, reader=reader, writer=writer), timer=virtual, workers=1
+        )
+        for _ in range(2):
+            virtual.advance(0.01)
+            for node in (owner, reader, writer):
+                node.updated.get(timeout=5.0)
+        run.shutdown()
+        assert all(
+            torch.equal(cast(torch.Tensor, r), torch.zeros(2, 3)) for r in owner.results
+        )
+        for node in (reader, writer):
+            assert len(node.results) == 2
+            for result in node.results:
+                assert isinstance(result, RuntimeError)
+                assert "only the node that owns" in str(result)
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
+        assert len(owner.results) == 2
 
 
 class TestInitial:

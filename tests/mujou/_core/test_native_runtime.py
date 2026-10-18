@@ -146,13 +146,13 @@ def assert_ended_by_exception(log: Log, name: str) -> None:
 
 
 class TestStart:
-    def test_hooks_run_in_order_on_the_node_thread(
+    def test_hooks_run_in_order_on_a_dedicated_thread(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         log = Log()
         nodes = recorders(log, "a", "b")
         runtime = make_runtime(nodes)
-        runtime.start(manual=True, states=[{"s": 0}, {"s": 1}])
+        runtime.start(manual=True, states=[{"s": 0}, {"s": 1}], dedicated=[True, True])
         virtual_timer.advance(H)
         runtime.step()
         runtime.capture(lambda states: None, WAIT)
@@ -172,15 +172,59 @@ class TestStart:
             assert len(node_thread) == 1
             assert node.threads["state_dict"] not in node_thread
 
-    @pytest.mark.parametrize("hook", ["on_thread_start", "on_start", "load_state_dict"])
+    def test_hooks_on_the_workers_run_in_order_without_on_thread_start(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        # specs: on_thread_start is called only for the nodes on a dedicated
+        # thread; the nodes go on the workers by default.
+        log = Log()
+        nodes = recorders(log, "a", "b")
+        runtime = make_runtime(nodes)
+        runtime.start(manual=True, states=[{"s": 0}, {"s": 1}])
+        virtual_timer.advance(H)
+        runtime.step()
+        runtime.capture(lambda states: None, WAIT)
+        runtime.shutdown()
+
+        for i, node in enumerate(nodes):
+            assert log.of(node.name) == [
+                "on_start",
+                "load_state_dict",
+                "on_update",
+                "on_pause",
+                "state_dict",
+                "on_resume",
+                "on_stop",
+            ]
+            assert node.loaded == {"s": i}
+
+    def test_on_thread_start_is_called_only_for_the_dedicated_nodes(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        dedicated, pooled = recorders(log, "dedicated", "pooled")
+        runtime = make_runtime([dedicated, pooled])
+        runtime.start(manual=True, dedicated=[True, False])
+        runtime.shutdown()
+        assert log.of("dedicated") == ["on_thread_start", "on_start", "on_stop"]
+        assert log.of("pooled") == ["on_start", "on_stop"]
+
+    @pytest.mark.parametrize(
+        ("hook", "dedicated"),
+        [("on_thread_start", True), ("on_start", False), ("load_state_dict", False)],
+    )
     def test_an_error_while_starting_stops_before_any_update(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, hook: str
+        self,
+        virtual_timer: GlobalTimer,
+        make_runtime: MakeRuntime,
+        hook: str,
+        dedicated: bool,
     ):
         log = Log()
         nodes = [Recorder("a", log), Recorder("b", log, raise_in=hook)]
         runtime = make_runtime(nodes)
         with pytest.raises(NetworkError, match="'b'") as exc_info:
-            runtime.start(states=[None, None])
+            runtime.start(states=[None, None], dedicated=[dedicated, dedicated])
         assert exc_info.value.__cause__ is nodes[1].error
         # `start` raised after the network had stopped.
         assert runtime.is_finished
@@ -189,9 +233,11 @@ class TestStart:
             assert_ended_by_exception(log, node.name)
         assert not virtual_timer.is_paused()
 
-    def test_hooks_share_one_python_thread_state(
+    def test_the_hooks_of_a_dedicated_node_share_one_python_thread_state(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
+        # Only a dedicated thread keeps threading.local and current_thread
+        # between the hooks; a worker keeps only the contextvars (below).
         local = threading.local()
         var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
             "var", default=None
@@ -212,7 +258,7 @@ class TestStart:
                 super().hook(event)
 
         runtime = make_runtime([ThreadLocal("a", Log())])
-        runtime.start(manual=True)
+        runtime.start(manual=True, dedicated=[True])
         virtual_timer.advance(H)
         runtime.step()
         runtime.capture(lambda states: None, WAIT)
@@ -316,8 +362,10 @@ class TestStart:
             lambda runtime: runtime.start(last_update_ns=[1, 2]),
             lambda runtime: runtime.start(states=[None, None]),
             lambda runtime: runtime.start(timer_state={"time_ns": 0, "scale": 0.0}),
+            lambda runtime: runtime.start(workers=0),
+            lambda runtime: runtime.start(dedicated=[True, True]),
         ],
-        ids=["last_update_ns", "states", "scale"],
+        ids=["last_update_ns", "states", "scale", "workers", "dedicated"],
     )
     def test_invalid_arguments_start_nothing(
         self,
@@ -381,12 +429,78 @@ def wait_until_no_runtime_runs() -> None:
             time.sleep(0.001)
 
 
+class TestWorkers:
+    def test_each_node_keeps_its_own_contextvars_on_a_shared_worker(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+            "var", default=None
+        )
+        seen: list[tuple[str, str, str | None]] = []
+
+        class Context(Recorder):
+            @override
+            def hook(self, event: str) -> None:
+                if event == "on_start":
+                    var.set(self.name)
+                seen.append((self.name, event, var.get()))
+                super().hook(event)
+
+        log = Log()
+        runtime = make_runtime([Context("a", log), Context("b", log)])
+        # One worker runs both nodes, one after the other.
+        runtime.start(manual=True, workers=1)
+        for order in ([0], [1], [0]):
+            virtual_timer.advance(H)
+            runtime.step(order)
+        runtime.capture(lambda states: None, WAIT)
+        runtime.shutdown()
+
+        # state_dict runs on the control thread, outside the node's context.
+        in_context = [(n, e, v) for n, e, v in seen if e != "state_dict"]
+        assert {e for _, e, _ in in_context} == {
+            "on_start",
+            "on_update",
+            "on_pause",
+            "on_resume",
+            "on_stop",
+        }
+        for name, event, value in in_context:
+            assert value == name, (name, event)
+        # Nor does the host see what a node set.
+        assert var.get() is None
+
+    def test_the_hooks_run_on_at_most_the_given_number_of_threads(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        idents: list[int] = []
+
+        class Ident(Recorder):
+            @override
+            def on_update(self, dt: float) -> None:
+                idents.append(threading.get_ident())
+                super().on_update(dt)
+
+        log = Log()
+        nodes = [Ident(f"n{k}", log) for k in range(32)]
+        runtime = make_runtime(nodes)
+        runtime.start(manual=True, workers=2)
+        for _ in range(2):
+            virtual_timer.advance(H)
+            runtime.step()
+        runtime.shutdown()
+        assert all(len(node.dts) == 2 for node in nodes)
+        assert len(idents) == 64
+        assert len(set(idents)) <= 2
+        assert threading.get_ident() not in idents
+
+
 class FrameworkHooks(Recorder):
     """Records the framework's hooks too, and wraps the state in _capture_state."""
 
     @override
-    def _on_thread_start(self) -> None:
-        self.hook("_on_thread_start")
+    def _on_enter(self) -> None:
+        self.hook("_on_enter")
 
     @override
     def _restore_state(self, state: object) -> None:
@@ -404,7 +518,7 @@ class FrameworkHooks(Recorder):
 
 
 class TestFrameworkHooks:
-    def test_the_framework_starts_the_thread_before_the_node(
+    def test_the_framework_enters_a_node_on_a_worker_before_its_hooks(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         log = Log()
@@ -412,28 +526,87 @@ class TestFrameworkHooks:
         runtime = make_runtime([node])
         runtime.start(manual=True, states=[{"s": 0}])
         runtime.shutdown()
-        assert log.of("a")[:5] == [
-            "_on_thread_start",
-            "on_thread_start",
+        assert log.of("a")[:4] == [
+            "_on_enter",
             "on_start",
             "_restore_state",
             "load_state_dict",  # called by the default
         ]
         assert node.loaded == {"s": 0}
-        assert len({node.threads[e] for e in log.of("a")[:5]}) == 1
 
-    def test_an_error_in_the_framework_thread_start_stops_before_the_node_hooks(
+    def test_the_framework_enters_a_dedicated_node_before_on_thread_start(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         log = Log()
-        node = FrameworkHooks("a", log, raise_in="_on_thread_start")
+        node = FrameworkHooks("a", log)
+        runtime = make_runtime([node])
+        runtime.start(manual=True, states=[{"s": 0}], dedicated=[True])
+        for _ in range(2):
+            virtual_timer.advance(H)
+            runtime.step()
+        runtime.shutdown()
+        # Entered once: a dedicated thread runs no other node.
+        assert log.of("a")[:5] == [
+            "_on_enter",
+            "on_thread_start",
+            "on_start",
+            "_restore_state",
+            "load_state_dict",
+        ]
+        assert log.count("a", "_on_enter") == 1
+        assert len({node.threads[e] for e in log.of("a")[:5]}) == 1
+
+    def test_a_worker_enters_a_node_only_when_it_switches_to_it(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        a, b = FrameworkHooks("a", log), FrameworkHooks("b", log)
+        runtime = make_runtime([a, b])
+        runtime.start(manual=True, workers=1)
+        for order in ([1], [0], [0], [1]):  # b, a, a, b
+            virtual_timer.advance(H)
+            runtime.step(order)
+        runtime.shutdown()
+        events = log.of("a")
+        after_start = events[events.index("on_start") + 1 :]
+        # One worker: a is entered after b ran, not for its second update right
+        # after its first, and again before on_stop since b ran last.
+        assert [
+            e for e in after_start if e in ("_on_enter", "on_update", "on_stop")
+        ] == [
+            "_on_enter",
+            "on_update",
+            "on_update",
+            "_on_enter",
+            "on_stop",
+        ]
+
+    def test_an_error_in_the_first_enter_is_reported_as_on_start(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = FrameworkHooks("a", log, raise_in="_on_enter")
         runtime = make_runtime([node])
         # Reported as the public hook it runs before.
-        with pytest.raises(NetworkError, match="raised in on_thread_start$") as raised:
+        with pytest.raises(NetworkError, match="raised in on_start$") as raised:
             runtime.start(manual=True)
         assert raised.value.__cause__ is node.error
-        assert "on_thread_start" not in log.of("a")
         assert "on_start" not in log.of("a")
+
+    def test_an_error_in_a_later_enter_is_reported_as_on_update(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        a = FrameworkHooks("a", log, raise_in="_on_enter", at=2)
+        b = FrameworkHooks("b", log)
+        runtime = make_runtime([a, b])
+        runtime.start(manual=True, workers=1)
+        virtual_timer.advance(H)
+        runtime.step([1])  # the only worker last ran b
+        with pytest.raises(NetworkError, match="raised in on_update$") as raised:
+            runtime.step([0])
+        assert raised.value.__cause__ is a.error
+        assert "on_update" not in log.of("a")
 
     def test_an_error_in_load_state_dict_still_names_load_state_dict(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
