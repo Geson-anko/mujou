@@ -63,9 +63,9 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated` に、`mujou.run(..., workers=None)` の `workers` を `RuntimeConfig::workers` に渡す。`None` なら `min(ワーカーに載るノード数, available_parallelism)`。`workers` が `int` でなければ（`bool` も）`TypeError`、1 未満なら `ValueError`。`mujou.testing.run` に `workers` は無い。
 
 - `on_thread_start` は専用スレッドのノードにだけ、そのスレッドで `on_start` の直前に 1 回呼ぶ。ワーカーではスレッドごとの設定が hook の間で残らないので、黙って呼ぶと罠になる。そのためワーカーに載るノードのクラスが `on_thread_start` を override していたら、`mujou.run` は何も起動しないうちに `TypeError` を投げる
-- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここで勾配の記録を切り（`torch.set_grad_enabled(False)`）、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行い、今走らせているノードとして自分を記録する。どれもスレッドごとの設定なので、切り替わるたびに設定し直す（[PyTorch の利用](torch.md#切り替えごとの設定)）
+- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録は、bindings が `state_dict` 以外の公開の hook の直前に毎回呼ぶ内部の hook `_before_hook` で切る（[PyTorch の利用](torch.md#切り替えごとの設定)）
 - hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。`state_dict`（`_capture_state`）は文脈の外で呼ぶ
-- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す勾配モード・CUDA の device と stream だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
+- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す勾配モード（hook の前に毎回）・CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
 - GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すのでワーカーが複数あれば並列に進む。GIL を取り合うスレッドはノードの数でなく N 本に減る。`workers` の既定は両方のビルドで同じ
 
 ### スロットの実装
