@@ -21,4 +21,4 @@ The script downloads the latest [actions/runner](https://github.com/actions/runn
 
 The GPU workflow runs only when a maintainer starts it: in the Actions tab, choose "GPU" and "Run workflow", or run `gh workflow run gpu.yml --ref <branch>`. It does not run on pull requests, because the code of a pull request from a fork would run on the self-hosted machine.
 
-On Linux, `pyproject.toml` takes torch from the CPU-only index. The workflow installs with `uv sync --no-sources`, which takes torch from PyPI instead, where the Linux wheels are built with CUDA.
+The workflow installs torch from PyPI with `uv sync`; its Linux wheels are built with CUDA.
