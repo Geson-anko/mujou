@@ -128,8 +128,13 @@ impl Mode {
 }
 
 /// Runs `test` in every [`Mode`]; a failure prints the mode it failed in.
-fn each_mode(mut test: impl FnMut(Mode)) {
-    for mode in [Mode::Dedicated, Mode::Pool, Mode::OneWorker] {
+fn each_mode(test: impl FnMut(Mode)) {
+    in_modes(&[Mode::Dedicated, Mode::Pool, Mode::OneWorker], test);
+}
+
+/// Runs `test` in each of `modes`; a failure prints the mode it failed in.
+fn in_modes(modes: &[Mode], mut test: impl FnMut(Mode)) {
+    for &mode in modes {
         eprintln!("mode: {mode:?}");
         test(mode);
     }
@@ -1022,7 +1027,8 @@ mod period {
     /// running would update far more often) nor drifting behind.
     #[test]
     fn on_the_real_clock_it_updates_about_once_per_period() {
-        each_mode(|mode| {
+        // One node: the default pool has a single worker too.
+        in_modes(&[Mode::Dedicated, Mode::OneWorker], |mode| {
             let period_ns = 200 * H_NS;
             let (dts, elapsed) = tick_for(mode, period_ns, 1.0);
             // The targets are P apart, so the updates cannot outnumber them.
@@ -1038,7 +1044,8 @@ mod period {
     /// real second: a period of 800 ms at scale 4 is 200 ms of real time.
     #[test]
     fn the_time_scale_scales_the_updates_per_real_second() {
-        each_mode(|mode| {
+        // One node: the default pool has a single worker too.
+        in_modes(&[Mode::Dedicated, Mode::OneWorker], |mode| {
             let (period_ns, scale) = (800 * H_NS, 4.0);
             let (dts, elapsed) = tick_for(mode, period_ns, scale);
             let at_most = elapsed.as_nanos() as f64 * scale / period_ns as f64;
@@ -1075,9 +1082,9 @@ mod period {
 
 mod pool {
     use std::collections::BTreeSet;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::thread;
+    use std::time::Instant;
 
     use super::*;
 
@@ -1087,12 +1094,21 @@ mod pool {
 
     type Log = Arc<Mutex<Vec<(usize, Event, String)>>>;
 
-    /// Records its hook calls with the name of the thread that ran them, and
-    /// counts the calls that overlapped with another of its calls.
+    /// How `enter` fails.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum EnterFailure {
+        Error,
+        Panic,
+    }
+
+    /// Records its hook calls with the name of the thread that ran them.
     struct Probe {
         id: usize,
         log: Log,
         updates: usize,
+        enters: usize,
+        /// Fails every `enter` from the `k`-th on (counting from 1).
+        fail_enter: Option<(usize, EnterFailure)>,
         fail_on_start: bool,
         fail_on_update: Option<usize>,
         fail_on_state_dict: bool,
@@ -1102,8 +1118,6 @@ mod pool {
         advance: Option<(Arc<Timer>, usize)>,
         /// Tells when it enters an update, then waits there until released.
         gate: Option<(Sender<()>, Receiver<()>)>,
-        busy: AtomicBool,
-        overlaps: Arc<AtomicUsize>,
     }
 
     fn boom(hook: &'static str) -> HookError {
@@ -1115,19 +1129,25 @@ mod pool {
 
     impl Probe {
         fn hook(&mut self, event: Event) -> Result<(), HookError> {
-            if self.busy.swap(true, Ordering::SeqCst) {
-                self.overlaps.fetch_add(1, Ordering::SeqCst);
-            }
             let thread = thread::current().name().unwrap_or_default().to_owned();
             let entry = (self.id, event.clone(), thread);
             self.log.lock().unwrap().push(entry);
-            let result = self.react(&event);
-            self.busy.store(false, Ordering::SeqCst);
-            result
+            self.react(&event)
         }
 
         fn react(&mut self, event: &Event) -> Result<(), HookError> {
             match event {
+                Event::Enter(_) => {
+                    self.enters += 1;
+                    match self.fail_enter {
+                        Some((k, failure)) if self.enters >= k => match failure {
+                            // A name of its own: the core reports the next hook.
+                            EnterFailure::Error => Err(boom("enter")),
+                            EnterFailure::Panic => panic!("panic in enter"),
+                        },
+                        _ => Ok(()),
+                    }
+                }
                 Event::Start if self.fail_on_start => Err(boom("on_start")),
                 Event::StateDict if self.fail_on_state_dict => Err(boom("state_dict")),
                 Event::Update(dt) => {
@@ -1194,34 +1214,27 @@ mod pool {
         log: Log,
         nodes: Vec<Probe>,
         names: Vec<String>,
-        overlaps: Arc<AtomicUsize>,
     }
 
     fn probes(n: usize) -> Probes {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let overlaps = Arc::new(AtomicUsize::new(0));
         let nodes = (0..n)
             .map(|id| Probe {
                 id,
                 log: Arc::clone(&log),
                 updates: 0,
+                enters: 0,
+                fail_enter: None,
                 fail_on_start: false,
                 fail_on_update: None,
                 fail_on_state_dict: false,
                 ticks: None,
                 advance: None,
                 gate: None,
-                busy: AtomicBool::new(false),
-                overlaps: Arc::clone(&overlaps),
             })
             .collect();
         let names = (0..n).map(|i| format!("p{i}")).collect();
-        Probes {
-            log,
-            nodes,
-            names,
-            overlaps,
-        }
+        Probes { log, nodes, names }
     }
 
     fn pool(workers: usize, config: RuntimeConfig) -> RuntimeConfig {
@@ -1297,7 +1310,8 @@ mod pool {
     }
 
     /// Updates that take longer than the time between the targets: the node
-    /// that just updated waits behind the others, so they take turns.
+    /// that just updated waits behind the others, so they take turns, and only
+    /// their Δt grows (the real time since each one's last update).
     #[test]
     fn an_overloaded_worker_serves_the_nodes_in_turn() {
         let timer = virtual_timer();
@@ -1314,8 +1328,21 @@ mod pool {
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
         started.wait().unwrap();
         timer.advance_ns(1).unwrap();
-        let order: Vec<usize> = receive(&ticks, 9).into_iter().map(|(id, _)| id).collect();
-        assert_eq!(order, [0, 1, 2, 0, 1, 2, 0, 1, 2]);
+        let h = H_NS;
+        // The updates start at 1 ns, 1 ms + 1 ns, 2 ms + 1 ns, and so on, each
+        // first two moving the time by 1 ms; the last three all at 6 ms + 1 ns.
+        let expected = [
+            (0, 1),
+            (1, h + 1),
+            (2, 2 * h + 1),
+            (0, 3 * h),
+            (1, 3 * h),
+            (2, 3 * h),
+            (0, 3 * h),
+            (1, 2 * h),
+            (2, h),
+        ];
+        assert_eq!(receive(&ticks, 9), expected);
         assert_eq!(ticks.recv_timeout(QUIET), Err(RecvTimeoutError::Timeout));
         rt.shutdown().wait().unwrap();
     }
@@ -1342,6 +1369,8 @@ mod pool {
         assert!(threads(&log).is_subset(&numbered("mujou-worker-", 2)));
     }
 
+    /// Sees only the threads that ran a hook: an extra idle worker would go
+    /// unnoticed unless it happened to take some work.
     #[test]
     fn spawns_no_more_workers_than_nodes_in_the_pool() {
         let timer = virtual_timer();
@@ -1356,8 +1385,10 @@ mod pool {
         assert!(threads(&log).is_subset(&numbered("mujou-worker-", 2)));
     }
 
+    /// Sees only the threads that ran a hook: a worker would run none here, so
+    /// this checks that the dedicated threads run every hook.
     #[test]
-    fn spawns_no_worker_without_nodes_in_the_pool() {
+    fn the_dedicated_threads_run_every_hook_without_nodes_in_the_pool() {
         let timer = virtual_timer();
         let Probes {
             log, nodes, names, ..
@@ -1543,6 +1574,8 @@ mod pool {
         timer.advance_ns(H_NS).unwrap();
         entered.recv_timeout(LONG).unwrap();
         // Node 1 leaves its loop for the stop while node 0 is still updating.
+        // The sleep only makes that order likely: the outcome is the same if
+        // the exception comes first.
         rt.request_stop();
         thread::sleep(QUIET);
         release.send(()).unwrap();
@@ -1663,25 +1696,163 @@ mod pool {
     }
 
     /// A smoke test on the real clock, after the deterministic ones: free
-    /// running nodes on several workers never run two hooks of a node at once.
+    /// running nodes on several workers update and stop. The hooks of a node
+    /// cannot overlap here even if the scheduling broke, since a node is
+    /// called under its lock; a node taken by two workers would trip the
+    /// `debug_assert` in the core instead and leave the runtime hanging.
     #[test]
-    fn a_node_never_runs_on_two_workers_at_once() {
+    fn free_running_nodes_on_several_workers_update_and_stop() {
         let timer = Arc::new(Timer::new());
         let Probes {
-            log,
-            nodes,
-            names,
-            overlaps,
+            log, nodes, names, ..
         } = probes(16);
         let config = pool(4, RuntimeConfig::default());
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
         started.wait().unwrap();
         thread::sleep(Duration::from_millis(200));
         rt.shutdown().wait().unwrap();
-        assert_eq!(overlaps.load(Ordering::SeqCst), 0);
         assert!(threads(&log).is_subset(&numbered("mujou-worker-", 4)));
         for id in 0..16 {
             assert!(events(&log, id).len() > 2);
         }
+    }
+
+    #[test]
+    fn a_failed_enter_fails_the_next_hook_and_still_lets_the_node_clean_up() {
+        for failure in [EnterFailure::Error, EnterFailure::Panic] {
+            in_modes(&[Mode::Dedicated, Mode::OneWorker], |mode| {
+                let timer = virtual_timer();
+                let Probes {
+                    log,
+                    mut nodes,
+                    names,
+                } = probes(2);
+                nodes[0].fail_enter = Some((1, failure));
+                let started = mode.start(nodes, names, Arc::clone(&timer), manual());
+                let (rt, started) = started.unwrap();
+                let result = started.wait();
+                let Err(RuntimeError::Failed(failure)) = result else {
+                    panic!("expected a failure, got {result:?}");
+                };
+                // Under the name of the hook it stands for, not "enter".
+                assert_eq!((failure.node, failure.hook), (0, "on_start"));
+                assert!(rt.is_finished());
+                // `start` is not called; `exception` and `stop` still are.
+                assert_eq!(events(&log, 0), [Event::Exception, Event::Stop]);
+                assert_exception_then_stop_once(&events(&log, 1));
+            });
+        }
+    }
+
+    #[test]
+    fn a_failed_enter_on_a_switch_fails_the_update() {
+        let timer = virtual_timer();
+        let Probes {
+            log,
+            mut nodes,
+            names,
+        } = probes(2);
+        // The first `enter` (before `start`) succeeds, the next ones fail.
+        nodes[0].fail_enter = Some((2, EnterFailure::Error));
+        let (rt, started) =
+            Runtime::start(nodes, names, Arc::clone(&timer), pool(1, manual())).unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        // The worker ran node 1 last (its start), so it enters node 0 again.
+        let result = rt.step(Some(&[0])).wait();
+        let Err(RuntimeError::Failed(failure)) = result else {
+            panic!("expected a failure, got {result:?}");
+        };
+        assert_eq!((failure.node, failure.hook), (0, "on_update"));
+        assert_eq!(
+            events(&log, 0),
+            [Event::Start, Event::Exception, Event::Stop]
+        );
+        assert_exception_then_stop_once(&events(&log, 1));
+    }
+
+    /// While one worker is held in an update, another one takes over the
+    /// timekeeping and updates the other node on time.
+    #[test]
+    fn another_worker_keeps_the_time_while_one_is_held() {
+        let timer = virtual_timer();
+        let Probes {
+            mut nodes, names, ..
+        } = probes(2);
+        let (entered_tx, entered) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        nodes[0].gate = Some((entered_tx, release_rx));
+        let (tx, ticks) = mpsc::channel();
+        nodes[1].ticks = Some(tx);
+        let config = RuntimeConfig {
+            period_ns: Some(vec![Some(H_NS); 2]),
+            ..pool(2, RuntimeConfig::default())
+        };
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        entered.recv_timeout(LONG).unwrap();
+        assert_eq!(ticks.recv_timeout(LONG), Ok((1, H_NS)));
+        for _ in 0..3 {
+            timer.advance_ns(H_NS).unwrap();
+            assert_eq!(ticks.recv_timeout(LONG), Ok((1, H_NS)));
+        }
+        // Node 0 returns at once from its later updates.
+        drop(release);
+        rt.shutdown().wait().unwrap();
+    }
+
+    /// A capture while the only worker is in an update: the update runs to its
+    /// end, no update starts after the freeze, and every node's last update is
+    /// at or before the frozen time.
+    #[test]
+    fn a_capture_freezes_the_time_before_any_later_update_in_the_pool() {
+        let timer = virtual_timer();
+        let Probes {
+            log,
+            mut nodes,
+            names,
+        } = probes(2);
+        let (entered_tx, entered) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        nodes[0].gate = Some((entered_tx, release_rx));
+        let config = pool(1, RuntimeConfig::default());
+        let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
+        started.wait().unwrap();
+        let t0 = timer.time_ns();
+        timer.advance_ns(H_NS).unwrap();
+        // Node 0 holds the worker; node 1 is due and waits for it.
+        entered.recv_timeout(LONG).unwrap();
+        let capture = rt.capture(|states| states, PAUSE);
+        // The control thread freezes the time right after the pause request.
+        let deadline = Instant::now() + LONG;
+        while !timer.is_paused() {
+            assert!(Instant::now() < deadline, "the capture did not freeze");
+            thread::sleep(Duration::from_millis(1));
+        }
+        let frozen_ns = timer.time_ns();
+        release.send(()).unwrap();
+        assert_eq!(capture.wait().unwrap(), [1, 0]);
+        let dt = Event::Update(H_NS as f64 / 1e9);
+        let expected = [
+            (0, Event::Start),
+            (1, Event::Start),
+            (0, dt),
+            // Node 1 was due but pauses without updating.
+            (1, Event::Pause),
+            (0, Event::Pause),
+            (0, Event::StateDict),
+            (1, Event::StateDict),
+        ];
+        let log_now: Vec<_> = (log.lock().unwrap().iter())
+            .filter(|(_, e, _)| !matches!(e, Event::Enter(_)))
+            .map(|(i, e, _)| (*i, e.clone()))
+            .take(expected.len())
+            .collect();
+        assert_eq!(log_now, expected);
+        assert_eq!(frozen_ns, t0 + H_NS);
+        assert!(rt.last_update_ns().iter().all(|&ns| ns <= frozen_ns));
+        drop(release);
+        rt.shutdown().wait().unwrap();
     }
 }
