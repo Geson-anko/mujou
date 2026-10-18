@@ -209,23 +209,45 @@ A manual run (see [Testing](testing.md)) does not use the period.
 
 `super().__init__` takes the following arguments. All of them are keyword arguments and can be left out.
 
-| Argument | Meaning                                                             | Default                       |
-| -------- | ------------------------------------------------------------------- | ----------------------------- |
-| `device` | The device the node computes on. `"cpu"` or a CUDA device           | `"cpu"`                       |
-| `seed`   | The seed of the node's own random number generator `self.generator` | `None` (different every time) |
-| `period` | The period of updates, in seconds                                   | `0.01`                        |
+| Argument           | Meaning                                                                                                     | Default                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `device`           | The device the node computes on. `"cpu"` or a CUDA device                                                   | `"cpu"`                       |
+| `seed`             | The seed of the node's own random number generator `self.generator`                                         | `None` (different every time) |
+| `period`           | The period of updates, in seconds                                                                           | `0.01`                        |
+| `dedicated_thread` | Run the node on a thread of its own instead of the run's workers (see [below](#run-on-a-thread-of-its-own)) | `False`                       |
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share.
 
 `self.generator` can be used right after `super().__init__()`, in `__init__` too. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 
-`device`, `generator`, `period` and `timer` are reserved names. Do not assign attributes with these names.
+`device`, `generator`, `period`, `dedicated_thread` and `timer` are reserved names. Do not assign attributes with these names.
+
+## Run on a thread of its own
+
+By default the node runs on the run's worker threads, which it shares with the other nodes (see [Running a network](running.md#threads-of-a-run)). Each hook may then run on a different thread. So what a hook sets per thread does not carry over to the next hook:
+
+- `threading.local`, `threading.current_thread()` and `threading.get_ident()` may differ from hook to hook
+- Per-thread settings of torch, such as `torch.autocast`, belong inside a `with` in the hook. Gradient recording, and on CUDA the current device and stream, are set back by Mujou before each hook (see [PyTorch in nodes](torch.md))
+- `contextvars` do carry over: each node runs its hooks in a `contextvars.Context` of its own
+
+Pass `dedicated_thread=True` to `super().__init__` when the node needs a thread of its own:
+
+- Its hooks block, waiting for a device, a socket or a lock. On a worker, the wait would hold the worker, and the other nodes' `dt` would grow
+- It relies on per-thread state set once, in `on_thread_start`
+
+```python
+class Camera(Node):
+    def __init__(self) -> None:
+        super().__init__(period=1 / 30, dedicated_thread=True)
+```
+
+`on_thread_start` is called only for such a node. A node on the workers that overrides it makes `mujou.run` raise `TypeError` before anything starts.
 
 ## The hooks and their order
 
 Mujou calls the hooks of a node in this order. Override only the ones you need.
 
-1. `on_thread_start()`: once, before `on_start`. Per-thread settings (see [PyTorch in nodes](torch.md))
+1. `on_thread_start()`: once, before `on_start`, only for a node with `dedicated_thread=True`. Per-thread settings (see [Run on a thread of its own](#run-on-a-thread-of-its-own))
 2. `on_start()`: once. Create the state
 3. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
 4. `on_update(dt)`: again and again until the run ends

@@ -97,7 +97,7 @@ When you override them, follow these rules.
 | Hook                     | Rules                                                                                                                                                               |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
-| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called on the node's thread, after `on_start` and before the first `on_update`                             |
+| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called after `on_start` and before the first `on_update`                                                   |
 
 !!! warning "Do not change the state in on_stop"
 

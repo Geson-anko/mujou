@@ -1,6 +1,6 @@
 """A node that learns with PyTorch: backpropagation inside one node.
 
-The framework turns gradient recording off on every node's thread. A node that
+The framework turns gradient recording off before every hook. A node that
 backpropagates within itself turns it on for that part, marked
 ``# mujou: local-autograd``. The update follows the gradient flow
 dW/dt = -rate * dL/dW over the whole ``dt``, in explicit Euler steps no longer
@@ -62,8 +62,8 @@ class Regressor(Node):
 
 
 # --8<-- [start:threads]
-# Each node computes on its own thread, and torch adds threads of its own for
-# each: keep those few (a setting of the whole process, made by the host).
+# The nodes compute on the run's worker threads, and torch adds threads of its
+# own for each: keep those few (a setting of the whole process, made by the host).
 torch.set_num_threads(1)
 # --8<-- [end:threads]
 
@@ -75,7 +75,7 @@ y = x @ teacher.T
 regressor = Regressor(rate=20.0)  # a node runs by itself, without a network
 with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as run:
     losses: list[float] = []
-    # How far the node has learned by a given time depends on how its thread gets
+    # How far the node has learned by a given time depends on how it gets
     # scheduled: read every 0.1 s until the loss has fallen, giving up after 5 s.
     for _ in range(50):
         prediction, t = run.read_with_time(regressor.next)

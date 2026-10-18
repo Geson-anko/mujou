@@ -91,7 +91,7 @@ class Learner(Node):
         self.elapsed = 0.0
 
 
-torch.set_num_threads(1)  # each node computes on a thread of its own
+torch.set_num_threads(1)  # the nodes compute on the run's worker threads
 
 
 def learned(loss: torch.Tensor) -> bool:
@@ -102,8 +102,8 @@ teacher, learner = Teacher(), Learner(rate=5.0)
 teacher.next.connect(learner.prev)
 net = mujou.Group(teacher=teacher, learner=learner)
 with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
-    # How fast the learner learns depends on time, not on how often its thread
-    # runs: follow its loss, giving each phase up to 5 s of real time.
+    # How fast the learner learns depends on time, not on how often it runs:
+    # follow its loss, giving each phase up to 5 s of real time.
     loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
     print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_BEFORE})")
     # The world changes: the same learner keeps learning, with no new phase.

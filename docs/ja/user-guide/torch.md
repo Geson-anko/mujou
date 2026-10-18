@@ -46,7 +46,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## ノードの中の BP
 
-既定の更新手法 PC-ALM は更新式を直接計算し、autograd のグラフを必要としない。そのため mujou はノードのスレッドで勾配の記録を切っている（`torch.set_grad_enabled(False)`）。
+既定の更新手法 PC-ALM は更新式を直接計算し、autograd のグラフを必要としない。そのため mujou はどのノードでも hook の前に勾配の記録を切っている（`torch.set_grad_enabled(False)`）。
 
 ノードの中で autograd を使うときは次のように書く。
 
@@ -64,8 +64,8 @@ BP はノードの中に閉じ、ほかのノードへ勾配を流すことは�
 
 `device` に CUDA を渡したノードには mujou が次を設定する。
 
-- ノードのスレッドの現在のデバイスをノードのデバイスにする
-- ノード専用の CUDA ストリームを作り、そのスレッドの現在のストリームにする。ノードの演算はすべてこのストリームに積まれる
+- ノードの hook の中の現在のデバイスをノードのデバイスにする
+- ノード専用の CUDA ストリームを作り、ノードの hook の中の現在のストリームにする。ノードの演算はすべてこのストリームに積まれる
 - 各 `on_update` の後と状態の取得・復元の前後に、ノードのストリームを同期する
 
 そのためノードの作者は同期を書かなくてよい。自分で同期するときは自分のストリーム（`torch.cuda.current_stream().synchronize()`）だけを同期する。
@@ -90,11 +90,11 @@ torch.save(run.state_dict().cpu(), "state.pt")
 - `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
-ノードの中で変えてよいのはスレッドごとの設定だけで、`on_thread_start` に書く。`on_thread_start` はノードのスレッドで `on_start` の直前に 1 回呼ばれる hook である。
+ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（[専用のスレッドで動かす](writing-a-node.md#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）。設定は hook の中の `with` に閉じる（`with torch.autocast(...):`）。勾配の記録と、CUDA の現在のデバイス・ストリームは、mujou が hook の前に毎回ノードの設定に戻すので、hook の中で変えてもほかのノードには響かない。`dedicated_thread=True` のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を `on_thread_start`（そのスレッドで `on_start` の直前に 1 回呼ばれる hook）に 1 回だけ書ける。
 
 ### 内部のスレッド数
 
-各ノードは自分のスレッドで計算し、CPU 上の torch の演算はそのスレッドごとにさらに内部のスレッドを使う。内部のスレッドが多いとノード同士で CPU を取り合い、全体が遅くなる。
+ノードは実行のワーカースレッド（と `dedicated_thread=True` のノードのスレッド）で計算し、CPU 上の torch の演算はそのスレッドごとにさらに内部のスレッドを使う。内部のスレッドが多いとノード同士で CPU を取り合い、全体が遅くなる。
 
 mujou は内部のスレッド数を設定しないので、ホストが `mujou.run` の前に決める。
 
@@ -104,4 +104,4 @@ mujou は内部のスレッド数を設定しないので、ホストが `mujou.
 
 !!! tip "スレッド数の目安"
 
-    CPU で計算するノードの数と `torch.set_num_threads(n)` の `n` の積が、物理コア数を超えないようにする。小さな行列を扱うノードが多いときは `n = 1` でよい。
+    ワーカーの数（と `dedicated_thread=True` のノードの数）の和と `torch.set_num_threads(n)` の `n` の積が、物理コア数を超えないようにする。小さな行列を扱うノードが多いときは `n = 1` でよい。

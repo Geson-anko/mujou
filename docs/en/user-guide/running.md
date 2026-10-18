@@ -9,7 +9,7 @@
 ```
 
 1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` (and `load_state_dict` on a restore) has finished on every node
-2. From then on, each node repeats `on_update` on its own thread, once every period. The host's thread does not stop
+2. From then on, each node repeats `on_update` once every period, on the run's worker threads (see [Threads of a run](#threads-of-a-run)). The host's thread does not stop
 3. The host writes input with `write` and reads output with `read`, `read_with_time`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
@@ -21,6 +21,7 @@
 | `timer`                  | The run's timer (see [Controlling time](time.md))                                                        | `None` (the global timer) |
 | `inputs`                 | The initial values of the input. `{port: value}`                                                         | `None`                    |
 | `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                   | `None`                    |
+| `workers`                | The number of worker threads of the run (see [Threads of a run](#threads-of-a-run))                      | `None` (the CPUs)         |
 
 `run.timer` returns the run's timer: the `timer` you passed, or the global timer that `mujou.time` reads.
 
@@ -29,6 +30,16 @@ To run a single node, pass it as `mujou.run(node)` without wrapping it in a netw
 !!! warning "A network runs only once"
 
     Passing a network that was once passed to `mujou.run` to `mujou.run` again, whether it is still running or has ended, raises `RuntimeError`. To run again, create new instances, nodes included.
+
+## Threads of a run
+
+A run does not start a thread per node. It starts a pool of worker threads for itself, and the workers share the nodes: a worker runs one hook of one node, then takes the next work, the updates due earliest first. With many nodes, the number of threads stays small, and the OS does not spend its time switching between them.
+
+- `workers` sets the number of workers. `None`, the default, is the number of CPUs (logical cores), and never more than the nodes on the workers
+- The hooks of a node never run at the same time, and each hook sees what the previous one wrote. Which worker runs the node may change from one hook to the next
+- A hook that blocks (`time.sleep`, waiting for I/O or a lock) holds its worker meanwhile, and the other nodes' `dt` grows. Give such a node `dedicated_thread=True` (see [Writing a node](writing-a-node.md#run-on-a-thread-of-its-own)): it runs on a thread of its own instead of the workers
+
+On a build of Python with the GIL, only one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. For nodes that spend most of their time in Python, a smaller `workers` is about as fast there.
 
 ## Writing input
 

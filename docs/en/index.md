@@ -26,7 +26,7 @@ The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as i
 
 - 🔄 **Inference and learning at once**: no training mode, no inference mode, no epochs
 - 🧩 **Nodes in PyTorch**: write each node in ordinary PyTorch code, run synchronously inside the node
-- ⚡ **Asynchronous nodes**: each node updates on a thread of its own and never waits for another
+- ⚡ **Asynchronous nodes**: each node updates on its own schedule and never waits for another
 - ⏱️ **Continuous time**: nodes update in proportion to `dt`, the time that really passed
 - 💾 **State without stopping**: take the state of a running network and run again from it later
 - 🧪 **Deterministic tests**: a virtual timer and manual updates for testing nodes
@@ -40,7 +40,7 @@ flowchart LR
     B -->|"reads outputs"| H
 ```
 
-Each node repeats its update on a thread of its own and never waits for another node; it reads the latest value its neighbor sent.
+Each node repeats its update on its own schedule and never waits for another node; it reads the latest value its neighbor sent.
 
 The host (the program that runs the network) writes inputs to the running network and reads its outputs.
 

@@ -209,23 +209,45 @@ class Sensor(mujou.Node):
 
 `super().__init__` は次の引数を取る。いずれもキーワード引数で省略可能。
 
-| 引数     | 意味                                                 | 既定               |
-| -------- | ---------------------------------------------------- | ------------------ |
-| `device` | ノードが計算するデバイス。`"cpu"` か CUDA のデバイス | `"cpu"`            |
-| `seed`   | ノード専用の乱数生成器 `self.generator` のシード     | `None`（毎回違う） |
-| `period` | 実行の周期（秒）                                     | `0.01`             |
+| 引数               | 意味                                                                                                                                                     | 既定               |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `device`           | ノードが計算するデバイス。`"cpu"` か CUDA のデバイス                                                                                                     | `"cpu"`            |
+| `seed`             | ノード専用の乱数生成器 `self.generator` のシード                                                                                                         | `None`（毎回違う） |
+| `period`           | 実行の周期（秒）                                                                                                                                         | `0.01`             |
+| `dedicated_thread` | 実行のワーカーでなく専用のスレッドで動かす（[下](#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)） | `False`            |
 
 乱数は `self.generator` から引く（`torch.randn(..., generator=self.generator)`）。`torch.manual_seed` は全ノードが共有する乱数生成器を変えてしまうので、ノードの中で呼ばない。
 
 `self.generator` は `super().__init__()` の直後から、`__init__` の中でも使える。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)を参照。
 
-`device`・`generator`・`period`・`timer` は予約された名前なので、この名前で属性を代入しない。
+`device`・`generator`・`period`・`dedicated_thread`・`timer` は予約された名前なので、この名前で属性を代入しない。
+
+## 専用のスレッドで動かす
+
+ノードは既定で、ほかのノードと共有する実行のワーカースレッドの上で動く（[ネットワークを走らせる](running.md#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89)）。hook ごとに別のスレッドで走りうるので、hook がスレッドに設定したものは次の hook に持ち越されない。
+
+- `threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる
+- `torch.autocast` などスレッドごとの torch の設定は、hook の中の `with` に閉じる。勾配の記録と、CUDA の現在のデバイス・ストリームは、mujou が hook の前に毎回ノードの設定に戻す（[ノードの中の PyTorch](torch.md)）
+- `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する
+
+次のノードには `super().__init__` に `dedicated_thread=True` を渡す。
+
+- hook がデバイス・ソケット・lock を待ってブロッキングする。ワーカーの上だとその間ワーカーをふさぎ、ほかのノードの `dt` が伸びる
+- `on_thread_start` で 1 回だけ設定するスレッドごとの状態に頼る
+
+```python
+class Camera(Node):
+    def __init__(self) -> None:
+        super().__init__(period=1 / 30, dedicated_thread=True)
+```
+
+`on_thread_start` が呼ばれるのはこのノードだけ。ワーカーに載るノードが override していると、`mujou.run` は何も起動しないうちに `TypeError` を投げる。
 
 ## hook とその順序
 
 mujou はノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。
 
-1. `on_thread_start()`: `on_start` の前に 1 回。スレッドごとの設定を書く（[ノードの中の PyTorch](torch.md)）
+1. `on_thread_start()`: `dedicated_thread=True` のノードだけ、`on_start` の前に 1 回。スレッドごとの設定を書く（[専用のスレッドで動かす](#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）
 2. `on_start()`: 1 回。状態を作る
 3. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
 4. `on_update(dt)`: 実行が終わるまで繰り返し

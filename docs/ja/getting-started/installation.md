@@ -13,7 +13,7 @@
 | Rust    | 1.85 以上を [rustup](https://rustup.rs/) でインストール。ソースからのビルド用 |
 | uv      | [uv](https://docs.astral.sh/uv/)。ソースからのビルド用                        |
 
-各ノードは自分のスレッドで動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。
+ノードは複数のワーカースレッドで同時に動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。
 
 ## ソースからビルドする
 

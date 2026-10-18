@@ -33,7 +33,7 @@ y = tensor([3., 5., 7.]) at t = 0.017 s
 
 - `Scale` and `Shift` are nodes: classes that inherit from `mujou.Node`. Each declares its ports in `__init__` and writes one step of work in `on_update(dt)`. As in any subclass, they call `super().__init__()` and `super().on_update(dt)` first
 - `Affine` is a network: it holds the nodes as attributes, connects their ports with `connect`, and exposes the unconnected port `prev` of `scale` as its input and `next` of `shift` as its output
-- `mujou.run(net)` starts the nodes, each repeating `on_update` on a thread of its own, and returns once they are running. In `on_update`, `recv()` reads the latest value without waiting, so `shift` keeps sending values computed from older inputs (zeros at first) until `x` has passed through `scale`
+- `mujou.run(net)` starts the nodes, each repeating `on_update` on the run's worker threads, and returns once they are running. In `on_update`, `recv()` reads the latest value without waiting, so `shift` keeps sending values computed from older inputs (zeros at first) until `x` has passed through `scale`
 - So the output read right after `run.write` may still be old. `run.write` writes `x`, and `run.wait_for` waits until the output meets the condition, giving up with `TimeoutError` after 5 seconds of real time. Leaving the `with` block stops the network
 
 ## Next steps
