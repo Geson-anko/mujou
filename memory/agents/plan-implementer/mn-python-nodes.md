@@ -26,3 +26,29 @@
 ## 確認事項
 
 なし（ユーザーの決定の範囲で実装した）。
+
+## レビュー対応（2026-10-18）
+
+記録: `memory/agents/code-reviewer/mn-python-nodes.md`（request-changes、must-fix 1）、`memory/agents/algorithm-reviewer/mn-python-nodes.md`（approve、should-fix 3）。orchestrator の裁定に従った。
+
+### 対応したもの
+
+1. code M1・algo N1: `_on_enter` の先頭で `enter_node(self)` を呼ぶようにした。CUDA や generator の設定で失敗しても、コアが続けて呼ぶ `on_exception` / `on_stop` は自分として走る。テスト `TestThreadSetup.test_a_node_whose_setup_failed_cleans_up_as_itself`（generator の作成を失敗させ、別のノードの Port を読むと `RuntimeError`、勾配の記録は無効）。直す前の順序に戻すと落ちることを確かめた
+   - 裁定は「先頭で勾配の記録も切る」だったが、2 の `_before_hook` が `on_exception` / `on_stop` を含む全公開 hook の前に毎回切るので、`_on_enter` からは消した（二重になるだけ。`enter` が失敗しても bindings は hook の前に `_before_hook` を呼ぶ）
+2. S1（両者）: 勾配の記録を各 hook の前に毎回切る。bindings に内部の hook `_before_hook` を足し、`state_dict` 以外の公開の hook（`on_thread_start`・`on_start`・`load_state_dict`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`）の直前に毎回呼ぶ（`Context.run` の外、同じ attach の中）。エラーはその hook の名前で報告する。`mujou.Node._before_hook` が `torch.set_grad_enabled(False)`。bindings は torch を知らないので、Python 側の内部の hook にした。テスト `test_gradients_are_off_at_the_start_of_every_hook_of_the_same_node`（workers=1、ノード 1 つ。`_before_hook` を空にすると落ちる）。docstring・specs（torch.md・native-core.md・nodes.md）・skill・memory を「勾配は毎回、CUDA の device と stream は切り替えのたび」に揃えた
+3. algo S2・code S3: スレッドごとの設定は hook を抜ける前に戻す（戻さないと同じワーカーの次のノードに漏れる。フレームワークが戻すのは勾配と CUDA の device・stream だけ）を、Node の docstring、docs（en/ja の writing-a-node・torch）、skill の局所性の不変条件に書いた。「次の hook に持ち越されない」の言い過ぎを「スケジュール次第」に直した。autocast をフレームワークで切るかはユーザーに確認中なので、「フレームワークが戻すのは〜だけ」と今の実装の事実だけを書いた
+4. code S2: `Run` の docstring、`Port.recv` / `send` の Raises、`slot.rs` の `Outlet` の doc から「ノードのスレッド」を消した
+5. algo S3: skill の既定のワーカー数を `min(ワーカーに載るノード数, 論理 CPU 数)` に、`_on_enter` / `_before_hook` は「フレームワーク側の設定を書く内部の hook（利用者は override しない）」と読めるようにした
+6. nit
+   - code N1: docs（running.md en/ja）と `mujou.run` の docstring に、既定はプロセスが使える CPU の数（affinity や割り当ての上限で論理コア数より少ないことがある）と書いた
+   - code N3: `StreamRecorder` の docstring を直した（替えるのはストリームだけ）
+   - code N4・algo N3: docs の torch.md（en/ja）と specs/torch.md に、CPU のノードは CUDA の device と stream を設定しないので直前の CUDA のノードのストリームが残る、CPU のノードは CUDA を使わない、と書いた
+   - code N5: `workers > sys.maxsize` も `ValueError` にした（コアは `usize` で数える）。`TestWorkers` に `2**70` の場合を足した
+   - code N6: ja の 3 か所（running.md の体言止め、torch.md の tip の「の和」、writing-a-node.md の読点）
+   - code N7・algo N4: docs の writing-a-node（en/ja）に、ノードの `Context` は空から始まりホストの文脈を引き継がないこと、`state_dict` はその文脈の外で呼ばれることを書いた。Node の docstring にも
+   - algo N2: docs の torch.md（en/ja）と Node の docstring に、CUDA のノードは `_after_update` の同期の間ワーカーを占有すると書いた
+
+### 対応しなかったもの
+
+- code N2（既定のワーカー数のテストが `os.cpu_count()` で近似している）: bindings にも `Run` にも、実際のワーカー数を読む口が無い。テストのためだけに公開の口を足すのは要求外なので直さない。`PYTHON_CPU_COUNT` などで `os.cpu_count()` を小さくした環境でしか落ちない
+- 原文書にあった `Runtime` の docstring「The hooks other than ... are looked up once」は不正確だった（`_on_enter` も start の後は 1 回だけ引く）ので、`_before_hook` を足すついでに「`on_start`（と `load_state_dict`）が戻るまでは名前で、その後は 1 回だけ引く」に直した
