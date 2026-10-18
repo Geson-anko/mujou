@@ -46,7 +46,7 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## BP inside a node
 
-Mujou turns gradient recording off before the hooks of every node (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.
+Mujou turns gradient recording off before every hook of every node (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.
 
 To use autograd in a node, write it as follows.
 
@@ -66,7 +66,9 @@ For a node given a CUDA `device`, Mujou sets up the following.
 
 - It makes the node's device the current device in the node's hooks
 - It creates a CUDA stream for the node alone and makes it the current stream in the node's hooks. All of the node's operations go on this stream
-- It synchronizes the node's stream after each `on_update`, and around taking and restoring the state
+- It synchronizes the node's stream after each `on_update`, and around taking and restoring the state. The worker waits meanwhile, as in a hook that blocks (see [Running a network](running.md#threads-of-a-run))
+
+Mujou sets the device and the stream whenever a worker switches to a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.
 
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`).
 
@@ -90,7 +92,7 @@ The following settings are shared by the whole process. Do not change them in a 
 - `torch.set_num_threads`, `torch.use_deterministic_algorithms`, and the flags in `torch.backends.*`
 - Operations on a whole device, such as `torch.cuda.synchronize()` and `torch.cuda.empty_cache()`
 
-A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Keep such a setting inside a `with` in the hook (`with torch.autocast(...):`). Mujou itself sets gradient recording, and on CUDA the current device and stream, back to the node's before each of its hooks, so a hook that changed them does not affect other nodes. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_thread_start`, a hook called on that thread just before `on_start`.
+A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Set such a setting back before the hook returns, by keeping it inside a `with` in the hook (`with torch.autocast(...):`); a setting left behind leaks into the next node on the same worker. Mujou itself sets back only gradient recording, before every hook, and on CUDA the current device and stream, whenever a worker switches to the node. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_thread_start`, a hook called on that thread just before `on_start`.
 
 ### Internal threads
 

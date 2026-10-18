@@ -35,7 +35,7 @@ To run a single node, pass it as `mujou.run(node)` without wrapping it in a netw
 
 A run does not start a thread per node. It starts a pool of worker threads for itself, and the workers share the nodes: a worker runs one hook of one node, then takes the next work, the updates due earliest first. With many nodes, the number of threads stays small, and the OS does not spend its time switching between them.
 
-- `workers` sets the number of workers. `None`, the default, is the number of CPUs (logical cores), and never more than the nodes on the workers
+- `workers` sets the number of workers. `None`, the default, is the number of CPUs the process may use (the logical cores, or fewer when the CPU affinity or a quota limits them), and never more than the nodes on the workers
 - The hooks of a node never run at the same time, and each hook sees what the previous one wrote. Which worker runs the node may change from one hook to the next
 - A hook that blocks (`time.sleep`, waiting for I/O or a lock) holds its worker meanwhile, and the other nodes' `dt` grows. Give such a node `dedicated_thread=True` (see [Writing a node](writing-a-node.md#run-on-a-thread-of-its-own)): it runs on a thread of its own instead of the workers
 
