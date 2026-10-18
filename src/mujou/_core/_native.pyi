@@ -179,10 +179,10 @@ class Node:
     `_capture_state`, on the control thread while the node is paused). The hooks
     of a node never overlap, and each runs in the node's own
     `contextvars.Context` (but `_capture_state`). They do nothing by default.
-    The hooks other than `_on_enter`, `on_thread_start`, `on_start` and
-    `load_state_dict` are looked up once, after those four, so replacing one
-    there takes effect. `state_dict` itself is looked up by the default
-    `_capture_state` at each capture, so replacing it later takes effect too.
+    The hooks are looked up by name until `on_start` (and `load_state_dict`)
+    has returned, and once after that, so replacing one in those hooks takes
+    effect. `state_dict` itself is looked up by the default `_capture_state` at
+    each capture, so replacing it later takes effect too.
     """
     def __new__(cls, /, *_args: Any, **_kwargs: Any) -> Self:
         """
@@ -193,6 +193,13 @@ class Node:
         """
         Called right after each `on_update`, for the framework's per-step work
         (so that overriding `on_update` cannot skip it).
+        """
+    def _before_hook(self, /) -> None:
+        """
+        Called right before every public hook but `state_dict` (after
+        `_on_enter` when the thread switches to this node), for the framework's
+        settings that must hold at the start of each hook whatever the previous
+        hook left. An error here is reported as the error of that hook.
         """
     def _capture_state(self, /) -> "object":
         """

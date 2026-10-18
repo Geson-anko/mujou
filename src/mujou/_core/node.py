@@ -81,22 +81,26 @@ class Node(_native.Node, Component):
     the run shares among its nodes (``mujou.run(..., workers=...)``). Each hook
     may then run on a different thread from the previous one, but the hooks of
     a node never run at the same time, and each sees what the previous one
-    wrote. What a hook sets per thread (``threading.local``,
-    ``threading.current_thread()``, settings of torch such as
-    ``torch.autocast``) does not carry over to the next hook: keep such settings
-    inside a ``with`` in the hook. ``contextvars`` do carry over: each node runs
-    its hooks in a ``contextvars.Context`` of its own. A hook that blocks
-    (``time.sleep``, waiting for I/O or a lock) holds its worker meanwhile, and
-    the other nodes' ``dt`` grows; give such a node ``dedicated_thread=True``,
-    so that it runs on a thread of its own, with every hook on that thread.
+    wrote. Whether the next hook sees what a hook set per thread
+    (``threading.local``, ``threading.current_thread()``, settings of torch
+    such as ``torch.autocast``) depends on the schedule, and the next node on
+    the same worker may see it too: set such settings back before the hook
+    returns (inside a ``with``, say). ``contextvars`` do carry over: each node
+    runs its hooks in a ``contextvars.Context`` of its own, which starts empty
+    (it does not inherit the host's) and does not hold for ``state_dict``. A
+    hook that blocks (``time.sleep``, waiting for I/O or a lock) holds its
+    worker meanwhile, and the other nodes' ``dt`` grows; give such a node
+    ``dedicated_thread=True``, so that it runs on a thread of its own, with
+    every hook on that thread.
 
-    Before every hook that a thread runs after another node's (or as its
-    first), the framework sets the thread up for the node: it turns off
-    gradient recording (to backpropagate inside the node, wrap the forward
-    computation and ``backward`` in ``with torch.enable_grad():`` marked
-    ``# mujou: local-autograd``), and, when ``device`` is CUDA, makes the device and
-    a stream of the node's own current. On CUDA it also waits for that stream after
-    ``on_update``, after ``load_state_dict`` and around ``state_dict``. It does
+    Before every hook but ``state_dict``, the framework turns off gradient
+    recording (to backpropagate inside the node, wrap the forward computation
+    and ``backward`` in ``with torch.enable_grad():`` marked
+    ``# mujou: local-autograd``). Whenever a thread switches to the node, when
+    ``device`` is CUDA, it also makes the device and a stream of the node's own
+    current. These are the only per-thread settings it sets back. On CUDA it
+    also waits for that stream after ``on_update`` (holding its worker
+    meanwhile), after ``load_state_dict`` and around ``state_dict``. It does
     this in hooks of its own, whose names start with ``_``: do not override
     those, and overriding a public hook never skips them.
 
@@ -387,8 +391,10 @@ class Node(_native.Node, Component):
     def _on_enter(self) -> None:
         # Every setting here is per thread, so it does not touch other nodes; the
         # thread switches to this node, so set them all again (a worker ran
-        # other nodes in between).
-        torch.set_grad_enabled(False)
+        # other nodes in between). The node first: if a setting below fails, the
+        # hooks the runtime still calls (on_exception, on_stop) run as this node,
+        # not as the one the thread ran before.
+        enter_node(self)
         if self._device.type == "cuda":
             torch.cuda.set_device(self._device)
             if self._stream is None:
@@ -397,7 +403,12 @@ class Node(_native.Node, Component):
         # Normally made by __init__; a subclass that skipped it still gets one.
         if self._generator is None:
             self._generator = self._make_generator()
-        enter_node(self)
+
+    @override
+    def _before_hook(self) -> None:
+        # Before every hook, not only on a switch, so that whether a hook starts
+        # with gradients on does not depend on the schedule.
+        torch.set_grad_enabled(False)
 
     @override
     def _after_update(self) -> None:

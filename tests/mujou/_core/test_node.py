@@ -5,7 +5,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
@@ -129,6 +129,78 @@ class TestThreadSetup:
         assert threading.get_ident() not in leaky.idents
         assert torch.is_grad_enabled()
 
+    def test_gradients_are_off_at_the_start_of_every_hook_of_the_same_node(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: gradient recording is turned off before every hook, not only on a
+        # switch, so a hook that left it on does not decide the next one's, even
+        # when the same worker runs the node again right away.
+        leaky = GradSetter(leak=True)
+        run = start(Group(leaky=leaky), timer=virtual, workers=1)
+        for _ in range(3):
+            virtual.advance(0.01)
+            leaky.updated.get(timeout=5.0)
+        run.shutdown()
+        assert leaky.grad_enabled == {
+            "on_start": [False],
+            "on_update": [False, False, False],
+            "on_stop": [False],
+        }
+
+    def test_a_node_whose_setup_failed_cleans_up_as_itself(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: when the framework's setup of a node fails, the runtime still calls
+        # on_exception and on_stop; they run as that node (not as the node the
+        # worker ran before), with gradients off.
+        leaky = GradSetter(leak=True)
+        broken = BrokenSetup(leaky.inp)
+        with pytest.raises(NetworkError, match="raised in on_start"):
+            start(Group(leaky=leaky, broken=broken), timer=virtual, workers=1)
+        assert set(broken.results) == {"on_exception", "on_stop"}
+        for hook, (grad_enabled, result) in broken.results.items():
+            assert grad_enabled is False, hook
+            assert isinstance(result, RuntimeError), hook
+            assert "only the node that owns" in str(result)
+
+
+class BrokenSetup(Node):
+    """Fails in the framework's setup (creating the generator) every time a
+    thread enters it, and tries to read another node's port while it cleans up."""
+
+    failing = False  # not while super().__init__ creates the generator
+
+    def __init__(self, other: Port[Any, Any, Any]) -> None:
+        super().__init__(period=0.01)
+        self.out = Port(send=TensorSpec((1,)))
+        # From now on the setup creates the generator again, and fails.
+        self._generator = None
+        self.failing = True
+        vars(self)["other"] = other  # not registered as one of its ports
+        self.results: dict[str, tuple[bool, object]] = {}
+
+    @override
+    def _make_generator(self) -> torch.Generator:
+        if self.failing:
+            raise RuntimeError("setup failed")
+        return super()._make_generator()
+
+    def clean_up(self, hook: str) -> None:
+        other = cast(Port[Any, Any, Any], vars(self)["other"])
+        try:
+            result: object = other.recv()
+        except RuntimeError as e:
+            result = e
+        self.results[hook] = (torch.is_grad_enabled(), result)
+
+    @override
+    def on_exception(self) -> None:
+        self.clean_up("on_exception")
+
+    @override
+    def on_stop(self) -> None:
+        self.clean_up("on_stop")
+
 
 class GradSetter(Node):
     """Records whether gradients are recorded at the entry of each hook, and,
@@ -137,6 +209,7 @@ class GradSetter(Node):
     def __init__(self, *, leak: bool) -> None:
         super().__init__(period=0.01)
         self.out = Port(send=TensorSpec((1,)))
+        self.inp = Port(recv=TensorSpec((1,)))
         self.leak = leak
         self.grad_enabled: dict[str, list[bool]] = {}
         self.idents: set[int] = set()
@@ -818,7 +891,8 @@ class OnDevice(Node):
 
 class StreamRecorder(Node):
     """Records the current CUDA device and stream in each ``on_update``, and
-    switches both away at its end without restoring them."""
+    switches the stream away (to its device's default stream) at its end without
+    restoring it."""
 
     def __init__(self, device: str) -> None:
         super().__init__(device=device, period=0.01)

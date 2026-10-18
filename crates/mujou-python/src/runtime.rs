@@ -50,10 +50,10 @@ create_exception!(
 /// `_capture_state`, on the control thread while the node is paused). The hooks
 /// of a node never overlap, and each runs in the node's own
 /// `contextvars.Context` (but `_capture_state`). They do nothing by default.
-/// The hooks other than `_on_enter`, `on_thread_start`, `on_start` and
-/// `load_state_dict` are looked up once, after those four, so replacing one
-/// there takes effect. `state_dict` itself is looked up by the default
-/// `_capture_state` at each capture, so replacing it later takes effect too.
+/// The hooks are looked up by name until `on_start` (and `load_state_dict`)
+/// has returned, and once after that, so replacing one in those hooks takes
+/// effect. `state_dict` itself is looked up by the default `_capture_state` at
+/// each capture, so replacing it later takes effect too.
 #[pyclass(subclass, frozen, module = "mujou._core._native")]
 pub struct Node;
 
@@ -73,6 +73,12 @@ impl Node {
     /// override of a public hook can skip them. An error here is reported as
     /// the error of the hook that was to follow.
     fn _on_enter(&self) {}
+
+    /// Called right before every public hook but `state_dict` (after
+    /// `_on_enter` when the thread switches to this node), for the framework's
+    /// settings that must hold at the start of each hook whatever the previous
+    /// hook left. An error here is reported as the error of that hook.
+    fn _before_hook(&self) {}
 
     /// Called only on a dedicated node's own thread, right before `on_start`,
     /// for the node's per-thread settings.
@@ -176,6 +182,7 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
 /// instead of by name at every call.
 struct Methods {
     on_enter: Py<PyAny>,
+    before_hook: Py<PyAny>,
     on_update: Py<PyAny>,
     after_update: Py<PyAny>,
     on_pause: Py<PyAny>,
@@ -190,6 +197,7 @@ impl Methods {
         let get = |hook: &str| node.getattr(attribute(hook)).map(Bound::unbind);
         Ok(Self {
             on_enter: get("_on_enter")?,
+            before_hook: get("_before_hook")?,
             on_update: get("on_update")?,
             after_update: get("_after_update")?,
             on_pause: get("on_pause")?,
@@ -203,6 +211,7 @@ impl Methods {
     fn get(&self, hook: &str) -> Option<&Py<PyAny>> {
         match hook {
             "_on_enter" => Some(&self.on_enter),
+            "_before_hook" => Some(&self.before_hook),
             "on_update" => Some(&self.on_update),
             "_after_update" => Some(&self.after_update),
             "on_pause" => Some(&self.on_pause),
@@ -284,11 +293,15 @@ impl PyNode {
         // (`on_thread`), so this attach only takes the GIL (on a GIL build).
         Python::attach(|py| {
             let result = (|| {
-                let method = match self.methods.as_ref().and_then(|m| m.get(hook)) {
-                    Some(method) => method.bind(py).clone(),
+                let method = |hook: &str| match self.methods.as_ref().and_then(|m| m.get(hook)) {
+                    Some(method) => Ok(method.bind(py).clone()),
                     // Before the lookup, or if it failed: by name.
-                    None => self.node.bind(py).getattr(attribute(hook))?,
+                    None => self.node.bind(py).getattr(attribute(hook)),
                 };
+                if !matches!(hook, "_on_enter" | "_after_update") {
+                    method("_before_hook")?.call0()?;
+                }
+                let method = method(hook)?;
                 // `Context.run(method, *args)`.
                 let mut call = vec![method];
                 call.extend(args(py));
