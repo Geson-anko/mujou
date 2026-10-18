@@ -500,10 +500,11 @@ pub enum Target {
 /// slot, which the host reads, and one slot per channel, which the peer reads.
 ///
 /// Being the only writer is up to the caller: `send_with` takes `&self`, and the
-/// port that owns the outlet accepts sends only from its node's thread. Sends
-/// from two threads at once stay memory safe, but the slots may then keep their
-/// messages out of time order, and `Target::All` may leave the outward slot and
-/// the channels holding different messages.
+/// port that owns the outlet accepts sends only from its node's hooks, which
+/// never run on two threads at once. Sends from two threads at once stay memory
+/// safe, but the slots may then keep their messages out of time order, and
+/// `Target::All` may leave the outward slot and the channels holding different
+/// messages.
 pub struct Outlet {
     messages: Arc<Messages>,
     outbox: Arc<Slot>,

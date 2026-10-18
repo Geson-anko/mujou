@@ -24,8 +24,8 @@ class Run:
     """A run of networks, as ``mujou.run`` returns it: what the host uses to talk
     to the running nodes.
 
-    The nodes run in the background, each on its own thread; the host's thread
-    only writes inputs, reads outputs and takes the state:
+    The nodes run in the background, on the run's worker threads (or threads of
+    their own); the host's thread only writes inputs, reads outputs and takes the state:
 
     - ``write`` inputs, ``read`` / ``read_with_time`` / ``subscribe`` outputs,
       take a ``state_dict``.
@@ -440,8 +440,10 @@ def run[P: Port[Any, Any, Any]](
             the time the tree was taken. Build the networks as the ones the tree
             came from: the same node paths and slots.
         workers: The number of worker threads of the run (>= 1). ``None`` is
-            as many as the CPUs (the logical cores), never more than the nodes
-            on the workers. With no such node, the run has no worker.
+            as many as the CPUs the process may use (the logical cores, or
+            fewer when the CPU affinity or a quota limits them), never more
+            than the nodes on the workers. With no such node, the run has no
+            worker.
 
     Example, with the node ``Error`` of the example of ``Run``::
 

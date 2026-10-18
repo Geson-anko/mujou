@@ -261,9 +261,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not running, or the caller is not the owning
-                node's thread (only the owner reads its port; ``state_dict`` runs
-                on another thread).
+            RuntimeError: The network is not running, or the caller is not a hook
+                of the owning node (only the owner reads its port; ``state_dict``
+                runs on another thread).
             TypeError: The port receives no messages.
         """
         return self._bound().recv(with_time=False)
@@ -315,8 +315,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not running, or the caller is not the owning
-                node's thread (only the owner writes its port).
+            RuntimeError: The network is not running, or the caller is not a hook
+                of the owning node (only the owner writes its port).
             TypeError: The port sends no messages, a value is not a dense
                 ``torch.Tensor`` of the spec's dtype, or a ``DictSpec`` message is
                 not a dict.
