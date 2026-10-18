@@ -25,7 +25,7 @@ uv sync
 
 `uv sync` sets up the free-threaded Python 3.14t, creates `.venv/`, installs the dependencies, and builds the core, which is written in Rust. For the regular build with the GIL, run `uv sync --python 3.14` instead.
 
-On Linux, `uv sync` installs PyTorch from the CPU-only index, because the Mujou core does not use the GPU. To use a GPU inside your nodes, replace PyTorch with a CUDA build by following the [PyTorch installation guide](https://pytorch.org/get-started/locally/).
+`uv sync` installs PyTorch from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the [PyTorch installation guide](https://pytorch.org/get-started/locally/).
 
 !!! note "After the release on PyPI"
 
