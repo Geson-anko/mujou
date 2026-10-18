@@ -1,4 +1,4 @@
-# Running a Network
+# 🏃 Running a Network
 
 `mujou.run` runs a network in the background and returns `Run`, the handle of the run. The host (the Python program that runs the network) writes input, reads output and ends the run with the methods of `Run`. This page shows how.
 
@@ -8,8 +8,8 @@
 --8<-- "examples/quickstart.py:run"
 ```
 
-1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
-2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
+1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` (and `load_state_dict` on a restore) has finished on every node
+2. From then on, each node repeats `on_update` on its own thread, once every period. The host's thread does not stop
 3. The host writes input with `write` and reads output with `read`, `read_with_time`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
@@ -26,18 +26,30 @@
 
 To run a single node, pass it as `mujou.run(node)` without wrapping it in a network. The path of the node is then `""`, and the paths of its ports are `"prev"` and so on (see [Composing networks](group.md)).
 
-A network runs only once. Passing a network that was once passed to `mujou.run` to `mujou.run` again, whether it is still running or has ended, raises `RuntimeError`. To run again, create new instances, nodes included.
+!!! warning "A network runs only once"
+
+    Passing a network that was once passed to `mujou.run` to `mujou.run` again, whether it is still running or has ended, raises `RuntimeError`. To run again, create new instances, nodes included.
 
 ## Writing input
 
-The host can write to a port that is unconnected, takes one peer, and has a receive type. Nodes write to connected ports, so the host cannot write to them.
+The host can write to a port that:
+
+- is unconnected
+- takes one peer
+- has a receive type
+
+Nodes write to connected ports, so the host cannot write to them.
 
 | Way                                    | When to use it                                               |
 | -------------------------------------- | ------------------------------------------------------------ |
 | `mujou.run(net, inputs={port: value})` | Input to show from the first `on_update` (the initial value) |
 | `run.write({port: value, ...})`        | To switch the input while the network runs                   |
 
-Without `inputs`, the initial value of the input is zeros. When `mujou.run` returns, the nodes are already repeating `on_update`. So even if you `write` right after `mujou.run`, the nodes read zeros in the updates before the `write`. To show a non-zero input from the first update, pass it with `inputs`.
+Without `inputs`, the initial value of the input is zeros.
+
+!!! tip "Pass the first input with `inputs`"
+
+    Once `mujou.run` returns, the nodes start repeating `on_update` right away. So if you `write` after `mujou.run`, the nodes may read zeros in the updates before the `write`. To show a non-zero input from the first update, pass it with `inputs`.
 
 `write` behaves as follows.
 
@@ -48,7 +60,11 @@ Without `inputs`, the initial value of the input is zeros. When `mujou.run` retu
 
 ### Showing an input for a set time
 
-Decide how long to show an input by waiting on the run's timer. If the run is on the global timer, use `mujou.time.sleep(seconds)`. Do not use the standard `time.sleep`, because it ignores changes of the time scale and the pauses for taking the state.
+Decide how long to show an input by waiting on the run's timer. If the run is on the global timer, use `mujou.time.sleep(seconds)`.
+
+!!! warning "Do not use `time.sleep`"
+
+    Do not use the standard `time.sleep`, because it ignores changes of the time scale and the pauses for taking the state.
 
 ```python
 for x in stream:
@@ -57,7 +73,9 @@ for x in stream:
     y = run.read(net.next)         # take the output at the end of showing as the response to x
 ```
 
-The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up. Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time. If you know the output to expect, wait for it with `wait_for` instead (see "Reading output" below).
+The output catches up with a change of input after a delay. The network's dynamics (the time constants of the nodes, the number of stages) decide the length of the delay; Mujou does not. You choose a showing time long enough for the output to catch up.
+
+Reading right after `write` returns the output for the previous input. To match inputs with outputs, read at the end of the showing time. If you know the output to expect, wait for it with `wait_for` instead (see "Reading output" below).
 
 ## Reading output
 
@@ -70,7 +88,9 @@ There are four ways to read output.
 | `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
 | `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)). Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
+All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)).
+
+Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
 `read` and `read_with_time` behave as follows.
 
@@ -108,6 +128,8 @@ y, t = run.wait_for(net.next, lambda y: torch.equal(y, expected), timeout=5.0)
 
 Calling `shutdown` after a normal end does nothing. After a normal end, `run.state_dict()` still takes the last state (see [Saving and restoring state](state.md)). Calling `write` on a run that has ended raises `RuntimeError`.
 
-Letting go of `Run` does not stop the run. Always end the run with `shutdown` or a `with` statement.
+!!! warning "Letting go of `Run` does not stop the run"
+
+    Always end the run with `shutdown` or a `with` statement.
 
 If any node raises, the whole network stops, and the later methods of `Run` raise `NetworkError`. Details are in [Errors and shutdown](errors.md).

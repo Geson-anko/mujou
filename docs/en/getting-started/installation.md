@@ -1,6 +1,8 @@
-# Installation
+# 📦 Installation
 
-Mujou is not on PyPI yet. For now, build it from source.
+!!! note "Not on PyPI yet"
+
+    Mujou is not on PyPI yet. For now, build it from source.
 
 ## Requirements
 

@@ -25,12 +25,13 @@ class Integrator(Node):
         super().__init__()
         self.prev = PrevPort(recv=VECTOR1)
         self.next = NextPort(send=VECTOR1)
-        self.readout = nn.Linear(1, 1)  # a module: part of the state
 
     @override
     def on_start(self) -> None:
         super().on_start()
         self.x = VECTOR1.zeros()  # a tensor: part of the state
+        # A module: part of the state.
+        self.readout = nn.Linear(1, 1, device=self.device)
 
     @override
     def on_update(self, dt: float) -> None:

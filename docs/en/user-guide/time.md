@@ -1,6 +1,8 @@
-# Controlling Time
+# ⏱️ Controlling Time
 
-This page shows how to read the time, wait on it, change how fast it runs, and give a run its own timer. Why a node updates in proportion to `dt`, and why a pause does not make time jump, is in [Global time](../concepts.md#global-time).
+This page shows how to read the time, wait on it, change how fast it runs, and give a run its own timer.
+
+Why a node updates in proportion to `dt`, and why a pause does not make time jump, is in [Global time](../concepts.md#global-time).
 
 ## What to use where
 
@@ -13,8 +15,11 @@ This page shows how to read the time, wait on it, change how fast it runs, and g
 | Stop and restart time    | `mujou.time.pause()` / `mujou.time.resume()` | `timer.pause()` / `timer.resume()` | Not allowed                   |
 | See whether time stopped | `mujou.time.is_paused()`                     | `timer.is_paused()`                | Not available                 |
 
-- The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time: it ignores the time scale, and it goes on counting while the run pauses (a run pauses while its state is taken)
-- The scale is how many seconds of the timer pass per real second (at 5, one real second is 5 seconds of the timer). It is a finite number greater than 0. Anything else raises `ValueError`
+!!! warning "Do not wait with time.sleep"
+
+    The host waits with the `sleep` of the run's timer (to show an input for a certain time, for example), not with the standard `time.sleep` of Python. The standard `time.sleep` waits in real time: it ignores the time scale, and it goes on counting while the run pauses (a run pauses while its state is taken).
+
+The scale is how many seconds of the timer pass per real second (at 5, one real second is 5 seconds of the timer). It is a finite number greater than 0. Anything else raises `ValueError`.
 
 ## Timestamp
 
@@ -27,7 +32,9 @@ The times that `run.write`, `run.read_with_time`, `run.subscribe` and `run.wait_
 | `later - earlier` | The seconds from `earlier` to `later` (`float`). Negative if `later` is earlier |
 | `a < b` and so on | Which time is earlier                                                           |
 
-A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer.
+!!! warning "Compare only times from the same timer"
+
+    A `Timestamp` does not record which timer it is from. Compare only times from the same timer. Compare with `mujou.time.now()` only the times of a run on the global timer.
 
 Comparing the time that `write` returns with the time that `read_with_time` returns tells whether an output was sent after the input was switched.
 
@@ -53,7 +60,11 @@ Give a run its own timer in these cases.
 - You want to restore a state while another run is running on the global timer (see [Saving and restoring state](state.md))
 - You run several networks in separate runs that should not stop each other (see [Grouping networks](group.md))
 
-The host then waits on that run with `timer.sleep`, and compares the times from `run.read_with_time` with `timer.now()`. `run.timer` returns the timer of a run, the global timer if you passed none. The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.now()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
+The host then waits on that run with `timer.sleep`, and compares the times from `run.read_with_time` with `timer.now()`. `run.timer` returns the timer of a run, the global timer if you passed none.
+
+!!! warning "Do not use the functions of mujou.time for this run"
+
+    The functions of `mujou.time` (`mujou.time.sleep`, `mujou.time.now()`, ...) work on the global timer, not on this run's timer, so do not use them for this run.
 
 ## Changing the speed of the global timer
 
@@ -67,7 +78,9 @@ The global time starts at 0 when the process first uses it.
 
 ## Pausing the time
 
-`timer.pause()` stops the time of the timer until `timer.resume()`; `mujou.time.pause()` and `mujou.time.resume()` do the same for the global timer. Use it when the host does something that should happen at one time, such as taking the states of several runs on the same timer (see [Saving and restoring state](state.md#taking-the-states-of-several-runs-at-one-time)).
+`timer.pause()` stops the time of the timer until `timer.resume()`; `mujou.time.pause()` and `mujou.time.resume()` do the same for the global timer.
+
+Use it when the host does something that should happen at one time, such as taking the states of several runs on the same timer (see [Saving and restoring state](state.md#taking-the-states-of-several-runs-at-one-time)).
 
 While the time is paused:
 
@@ -76,7 +89,9 @@ While the time is paused:
 - `VirtualTimer.advance` raises `RuntimeError`
 - `run.state_dict()` still works, and gives the state at the time of the pause
 
-`pause` is a switch, not a count: calling it twice still needs only one `resume`. Taking the state pauses the timer too, apart from this switch, so `resume` does not cut that short, and the end of taking the state does not end your pause. `is_paused()` is true while either one stops the time.
+!!! note "pause is a switch, not a count"
+
+    `pause` is a switch, not a count: calling it twice still needs only one `resume`. Taking the state pauses the timer too, apart from this switch, so `resume` does not cut that short, and the end of taking the state does not end your pause. `is_paused()` is true while either one stops the time.
 
 ## Nodes only read the time
 
