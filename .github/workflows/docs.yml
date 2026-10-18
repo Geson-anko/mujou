@@ -22,6 +22,8 @@ on:
       - "src/**/*.pyi"
       - "mkdocs.yml"
       - "hooks/**"
+      - "overrides/**"
+      - ".github/docs/**"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
@@ -35,6 +37,8 @@ on:
       - "src/**/*.pyi"
       - "mkdocs.yml"
       - "hooks/**"
+      - "overrides/**"
+      - ".github/docs/**"
       - "pyproject.toml"
       - "uv.lock"
       - "justfile"
@@ -92,13 +96,13 @@ jobs:
               uv run mike deploy --push "${VERSION}"
             else
               uv run mike deploy --push --update-aliases "${VERSION}" latest
-              uv run mike set-default --push latest
+              uv run mike set-default --push -T .github/docs/redirect.html latest
             fi
           else
             uv run mike deploy --push dev
             # Before the first stable release there is no "latest" to point to.
             if ! uv run mike list --json | python3 -c 'import json, sys; sys.exit(not any("latest" in v["aliases"] for v in json.load(sys.stdin)))'; then
-              uv run mike set-default --push dev
+              uv run mike set-default --push -T .github/docs/redirect.html dev
             fi
           fi
           mkdir _pages
