@@ -1764,9 +1764,22 @@ mod pool {
             panic!("expected a failure, got {result:?}");
         };
         assert_eq!((failure.node, failure.hook), (0, "on_update"));
+        // Every hook after the failed `enter` is preceded by another `enter`.
+        let node_0: Vec<_> = (log.lock().unwrap().iter())
+            .filter(|(i, _, _)| *i == 0)
+            .map(|(_, e, _)| e.clone())
+            .collect();
         assert_eq!(
-            events(&log, 0),
-            [Event::Start, Event::Exception, Event::Stop]
+            node_0,
+            [
+                Event::Enter("on_start"),
+                Event::Start,
+                Event::Enter("on_update"),
+                Event::Enter("on_exception"),
+                Event::Exception,
+                Event::Enter("on_stop"),
+                Event::Stop,
+            ]
         );
         assert_exception_then_stop_once(&events(&log, 1));
     }
