@@ -1,7 +1,7 @@
 name: Docs
 
-# Build the user documentation strictly (broken links and missing API objects fail).
-# Deploying the site is not set up yet.
+# Build the user documentation strictly (broken links and missing API objects fail),
+# and deploy it to GitHub Pages on pushes to main.
 on:
   push:
     branches: [main]
@@ -29,6 +29,11 @@ on:
       - "uv.lock"
       - "justfile"
       - ".github/workflows/docs.yml"
+  # Deploys the site by hand, e.g. right after Pages is enabled.
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build_docs:
@@ -50,3 +55,29 @@ jobs:
 
       - name: Build the documentation
         run: just docs-build
+
+      - name: Upload the site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy_docs:
+    needs: build_docs
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Let a running deployment finish; a newer one waits for it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

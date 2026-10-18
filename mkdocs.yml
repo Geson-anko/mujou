@@ -1,5 +1,6 @@
 site_name: Mujou
 site_description: Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning
+site_url: https://geson-anko.github.io/mujou/
 repo_url: https://github.com/Geson-anko/mujou
 repo_name: Geson-anko/mujou
 
