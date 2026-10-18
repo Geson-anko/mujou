@@ -8,8 +8,8 @@
 --8<-- "examples/quickstart.py:run"
 ```
 
-1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` has finished on every node
-2. When it returns, each node is repeating `on_update` on its own thread. The host's thread does not stop
+1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` (and `load_state_dict` on a restore) has finished on every node
+2. From then on, each node repeats `on_update` on its own thread, once every period. The host's thread does not stop
 3. The host writes input with `write` and reads output with `read`, `read_with_time`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node
 
@@ -49,7 +49,7 @@ Without `inputs`, the initial value of the input is zeros.
 
 !!! tip "Pass the first input with `inputs`"
 
-    When `mujou.run` returns, the nodes are already repeating `on_update`. So even if you `write` right after `mujou.run`, the nodes read zeros in the updates before the `write`. To show a non-zero input from the first update, pass it with `inputs`.
+    Once `mujou.run` returns, the nodes start repeating `on_update` right away. So if you `write` after `mujou.run`, the nodes may read zeros in the updates before the `write`. To show a non-zero input from the first update, pass it with `inputs`.
 
 `write` behaves as follows.
 
