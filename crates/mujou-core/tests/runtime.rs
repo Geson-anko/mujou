@@ -183,6 +183,14 @@ fn events_of(log: &Mutex<Vec<(usize, Event)>>, id: usize) -> Vec<Event> {
         .collect()
 }
 
+/// `exception` and `stop` once each, and nothing after them.
+fn assert_exception_then_stop_once(events: &[Event]) {
+    let count = |event: Event| events.iter().filter(|e| **e == event).count();
+    assert_eq!((count(Event::Exception), count(Event::Stop)), (1, 1));
+    let n = events.len();
+    assert_eq!(&events[n - 2..], &[Event::Exception, Event::Stop]);
+}
+
 mod manual_mode {
     use super::*;
 
@@ -366,17 +374,6 @@ mod capture {
 
 mod failure {
     use super::*;
-
-    fn assert_exception_then_stop_once(events: &[Event]) {
-        let exception = events.iter().position(|e| *e == Event::Exception);
-        let stop = events.iter().position(|e| *e == Event::Stop);
-        assert_eq!(events.iter().filter(|e| **e == Event::Exception).count(), 1);
-        assert_eq!(events.iter().filter(|e| **e == Event::Stop).count(), 1);
-        let (exception, stop) = (exception.unwrap(), stop.unwrap());
-        assert!(exception < stop);
-        // Nothing but `stop` after `exception`.
-        assert_eq!(events.len(), stop + 1);
-    }
 
     #[test]
     fn an_update_error_ends_every_node_with_exception_then_stop() {
@@ -1260,13 +1257,6 @@ mod pool {
 
     fn numbered(prefix: &str, k: usize) -> BTreeSet<String> {
         (0..k).map(|i| format!("{prefix}{i}")).collect()
-    }
-
-    fn assert_exception_then_stop_once(events: &[Event]) {
-        let count = |event: Event| events.iter().filter(|e| **e == event).count();
-        assert_eq!((count(Event::Exception), count(Event::Stop)), (1, 1));
-        let n = events.len();
-        assert_eq!(&events[n - 2..], &[Event::Exception, Event::Stop]);
     }
 
     /// The updates of one step of the virtual time: receives exactly `k`.

@@ -246,18 +246,6 @@ impl<N: NodeHooks> Shared<N> {
         self.wake_pool(c);
     }
 
-    /// Calls a hook on the thread that runs node `i`, with the node locked,
-    /// turning a panic into an error. Enters the node first if the thread ran
-    /// another one last; if that fails, the hook is not called.
-    fn invoke<T>(
-        &self,
-        i: usize,
-        hook: &'static str,
-        f: impl FnOnce(&mut N) -> Result<T, HookError>,
-    ) -> Result<T, HookError> {
-        self.invoke_as(i, hook, Entry::Required, f)
-    }
-
     /// Calls `exception` or `stop`, whose errors are ignored: even if
     /// entering the node fails, so that the node can release its resources.
     fn clean_up(
@@ -266,10 +254,12 @@ impl<N: NodeHooks> Shared<N> {
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<(), HookError>,
     ) {
-        let _ = self.invoke_as(i, hook, Entry::BestEffort, f);
+        let _ = self.invoke(i, hook, Entry::BestEffort, f);
     }
 
-    fn invoke_as<T>(
+    /// Calls a hook on the thread that runs node `i`, with the node locked,
+    /// turning a panic into an error. Enters the node first as `entry` says.
+    fn invoke<T>(
         &self,
         i: usize,
         hook: &'static str,
@@ -311,7 +301,7 @@ impl<N: NodeHooks> Shared<N> {
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, ()> {
-        self.invoke(i, hook, f).map_err(|e| {
+        self.invoke(i, hook, Entry::Required, f).map_err(|e| {
             self.fail(NodeFailure {
                 node: i,
                 hook: e.hook,
@@ -322,7 +312,7 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Calls `state_dict` on the control thread, without entering the node.
     fn state_dict(&self, i: usize) -> Result<N::State, ()> {
-        self.invoke_as(i, "state_dict", Entry::Skip, N::state_dict)
+        self.invoke(i, "state_dict", Entry::Skip, N::state_dict)
             .map_err(|e| {
                 self.fail(NodeFailure {
                     node: i,

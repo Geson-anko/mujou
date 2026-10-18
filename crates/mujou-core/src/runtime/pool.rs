@@ -167,9 +167,7 @@ impl<N: NodeHooks> Shared<N> {
     /// Re-evaluates every pool node after a change of the control state.
     pub(super) fn wake_pool(&self, c: &mut Control) {
         for i in 0..self.dedicated.len() {
-            if !self.dedicated[i] {
-                self.schedule(i, c);
-            }
+            self.wake_node(c, i);
         }
     }
 
@@ -397,22 +395,19 @@ impl<N: NodeHooks> Shared<N> {
     }
 
     /// Records that `work` for node `i` returned (`ok` if without an error).
+    /// A failed hook takes the node out of its loop.
     fn record(&self, i: usize, work: Work, ok: bool, c: &mut Control) {
+        if let Work::Start = work {
+            c.nodes[i].started = true;
+            self.changed.notify_all();
+        }
+        if !ok {
+            self.leave_loop(i, c);
+            return;
+        }
         match work {
-            Work::Start => {
-                c.nodes[i].started = true;
-                self.changed.notify_all();
-                if ok {
-                    c.sched.tasks[i].phase = Phase::WaitGo;
-                } else {
-                    self.leave_loop(i, c);
-                }
-            }
+            Work::Start => c.sched.tasks[i].phase = Phase::WaitGo,
             Work::Update { now_ns, .. } => {
-                if !ok {
-                    self.leave_loop(i, c);
-                    return;
-                }
                 self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
                 let task = &mut c.sched.tasks[i];
                 task.last_ns = now_ns;
@@ -422,21 +417,11 @@ impl<N: NodeHooks> Shared<N> {
                 }
             }
             Work::Pause(epoch) => {
-                if ok {
-                    c.nodes[i].paused_at = Some(epoch);
-                    self.changed.notify_all();
-                    c.sched.tasks[i].phase = Phase::Paused(epoch);
-                } else {
-                    self.leave_loop(i, c);
-                }
+                c.nodes[i].paused_at = Some(epoch);
+                self.changed.notify_all();
+                c.sched.tasks[i].phase = Phase::Paused(epoch);
             }
-            Work::Resume => {
-                if ok {
-                    c.sched.tasks[i].phase = Phase::Loop;
-                } else {
-                    self.leave_loop(i, c);
-                }
-            }
+            Work::Resume => c.sched.tasks[i].phase = Phase::Loop,
             Work::Exception => {
                 c.nodes[i].exception = ExceptionHook::Done;
                 self.changed.notify_all();
