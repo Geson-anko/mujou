@@ -17,7 +17,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
     2. レイヤー（1 レイヤーを 1 ノード）。わかりやすさのため既定
     3. スタック（複数のレイヤーを 1 ノード。モデル全体を 1 ノードにしてもよい）
 - 非同期の境界（ノードのクラスで決まる）と実行の配置（どのワーカーでどの順に回すか）を混同しない。複数ノードを同じワーカーで決まった順に回しても、非同期の境界は変わらない
-- ノードはライフサイクル hook（`on_thread_start` / `on_start` / `on_update(dt)` / `on_pause` / `on_resume` / `on_exception` / `on_stop` / `state_dict` / `load_state_dict`）を override して書く。ループはフレームワークが持つ。エポック・モード切替・受信ごとに呼ぶ hook は持たない（`specs/nodes.md`）
+- ノードはライフサイクル hook（`on_thread_start`（専用スレッドのノードだけ）/ `on_start` / `on_update(dt)` / `on_pause` / `on_resume` / `on_exception` / `on_stop` / `state_dict` / `load_state_dict`）を override して書く。ループはフレームワークが持つ。エポック・モード切替・受信ごとに呼ぶ hook は持たない（`specs/nodes.md`）
 - ネットワークは構築時だけの構造で、hook を持たない。実行時の単位はノードだけ
 - ノードの内側の計算方法は自由に選べる。ニューロンノードの合成、行列演算、BP など
 - ノード間のメッセージは「結合ごとの値の束」として定義する。ノードの大きさを変えても、ノード間の契約（何を送り何を受け取るか）が変わらないようにする
@@ -40,10 +40,13 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 
 | 実行クラス | 載る場所 | 向いているノード |
 | --- | --- | --- |
-| タスク | 共有ワーカープール | ネイティブの小さく大量のノード（ニューロンノードなど） |
-| 専用スレッド | 自分の OS スレッド | Python/PyTorch のノード、ノード内 BP、I/O、重いスタック |
+| ワーカー（既定） | 実行ごとのワーカープール（`mujou.run(workers=None)`、既定は論理 CPU 数） | Python/PyTorch のノードを含むほとんどのノード |
+| 専用スレッド（opt-in） | 自分の OS スレッド（`Node(dedicated_thread=True)`） | ブロッキングする I/O、スレッドごとの状態に頼るノード（`on_thread_start` はこれだけに呼ぶ） |
 
-- Python のコードを動かすノードは GIL を要するので、タスクのプールに載せない
+- ワーカーは期限の早い更新から 1 hook ずつ実行し、ノードはワーカーの間を移る。1 つのノードの hook は重ならず、前の hook の書き込みは次の hook から見える（2026-10-18 ユーザー決定、`memory/project_mn_scheduler.md`）
+- hook の間で保たれるのは `contextvars`（ノードごとの `Context`）と、フレームワークが hook の前に戻す勾配モード・CUDA の device と stream だけ。`threading.local`・`threading.current_thread()` に頼らない。スレッドごとの設定は hook の中の `with` に閉じるか、内部の hook `_on_enter`（切り替えのたびに呼ぶ）に書く
+- ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは専用スレッドにする
+- Port の所有は「スレッドが今走らせているノード」で判定する。同じワーカーでも、ほかのノードの Port は読み書きできない
 - スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。相手の更新の進み具合は待たない。待つのは、スロットごとの lock の下で `Arc` を複製・差し替える短い区間だけ。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない
 - 利用者が扱う値は `torch.Tensor` だけ。コアの値は `mujou._core._native` の内部のホストバッファで、`mujou.Node` が DLPack を介して読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
 
