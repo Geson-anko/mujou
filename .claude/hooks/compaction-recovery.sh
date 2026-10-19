@@ -7,7 +7,7 @@
 
 set -uo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/_common.sh" 2>/dev/null || exit 0
+source "${BASH_SOURCE[0]%/*}/_common.sh" 2>/dev/null || exit 0
 sid=$(read_session_id) || sid=""
 [[ -z "$sid" ]] && exit 0
 
