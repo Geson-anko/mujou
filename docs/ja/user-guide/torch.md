@@ -93,7 +93,7 @@ torch.save(run.state_dict().cpu(), "state.pt")
 - `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
-ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（[専用のスレッドで動かす](writing-a-node.md#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）。設定は hook の中の `with` に閉じ（`with torch.autocast(...):`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou 自身が戻すのは、`state_dict` 以外の hook の前に毎回切る勾配の記録と、ワーカーがノードに切り替わるたびに設定する CUDA の現在のデバイス・ストリームだけである。`dedicated_thread=True` のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を `on_thread_start`（そのスレッドで `on_start` の直前に 1 回呼ばれる hook）に 1 回だけ書ける。
+ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（[専用のスレッドで動かす](writing-a-node.md#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）。設定は hook の中の `with` に閉じ（`with torch.autocast(...):`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou 自身が戻すのは、`state_dict` 以外の hook の前に毎回切る勾配の記録と、ワーカーがノードに切り替わるたびに設定する CUDA の現在のデバイス・ストリームだけである。`dedicated_thread=True` のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を `on_start` に 1 回だけ書ける。
 
 ### 内部のスレッド数
 

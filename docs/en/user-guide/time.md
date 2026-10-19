@@ -100,7 +100,7 @@ A node's `self.timer` is the read-only side of the run's timer (`mujou.time.Read
 Calling `sleep`, `set_time_scale`, `pause` or `resume` of `mujou.time` or of a `Timer`, or `VirtualTimer.advance`, in a hook raises `RuntimeError`. If one node stopped the time or changed its speed, it would change the `dt` of the other nodes in the same run too.
 
 - To update a node at regular intervals, do not wait in a hook. Pass a period with `super().__init__(period=seconds)`. The period is the average time between two updates, in seconds of the run's timer (see [Writing a node](writing-a-node.md))
-- `self.timer` can be read in every hook, `on_thread_start` and `on_start` included. Reading it in `__init__` raises `RuntimeError`
+- `self.timer` can be read in every hook, `on_start` included. Reading it in `__init__` raises `RuntimeError`
 
 ## Restoring sets the time back
 

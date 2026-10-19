@@ -233,7 +233,7 @@ class Sensor(mujou.Node):
 次のノードには `super().__init__` に `dedicated_thread=True` を渡す。
 
 - hook がデバイス・ソケット・lock を待ってブロッキングする。ワーカーの上だとその間ワーカーをふさぎ、ほかのノードの `dt` が伸びる
-- `on_thread_start` で 1 回だけ設定するスレッドごとの状態に頼る
+- 1 回だけ設定するスレッドごとの状態に頼る。`on_start` はこのノードのスレッドで呼ばれるので、そこで設定する
 
 ```python
 class Camera(Node):
@@ -241,19 +241,16 @@ class Camera(Node):
         super().__init__(period=1 / 30, dedicated_thread=True)
 ```
 
-`on_thread_start` が呼ばれるのはこのノードだけ。ワーカーに載るノードが override していると、`mujou.run` は何も起動しないうちに `TypeError` を投げる。
-
 ## hook とその順序
 
 mujou はノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。
 
-1. `on_thread_start()`: `dedicated_thread=True` のノードだけ、`on_start` の前に 1 回。スレッドごとの設定を書く（[専用のスレッドで動かす](#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）
-2. `on_start()`: 1 回。状態を作る
-3. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
-4. `on_update(dt)`: 実行が終わるまで繰り返し
-5. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる
-6. `on_exception()`: どれかのノードのどれかの hook が例外を投げたとき、全ノードで 1 回（[例外と終了](errors.md)）
-7. `on_stop()`: 終了のときに 1 回。正常な終了でも例外による終了でも呼ばれる
+1. `on_start()`: 1 回。状態を作る
+2. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
+3. `on_update(dt)`: 実行が終わるまで繰り返し
+4. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる
+5. `on_exception()`: どれかのノードのどれかの hook が例外を投げたとき、全ノードで 1 回（[例外と終了](errors.md)）
+6. `on_stop()`: 終了のときに 1 回。正常な終了でも例外による終了でも呼ばれる
 
 ## hook の中でしてはいけないこと
 
