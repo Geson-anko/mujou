@@ -255,20 +255,18 @@ class Node(_native.Node, Component):
 
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
-            names = _state_names(self)
             if isinstance(value, _STATE_TYPES):
+                names = _state_names(self)
                 # A property is not registered: what its setter stores is. Looked
                 # up only for a new name, as the lookup walks the MRO.
                 if name not in names and not is_data_descriptor(type(self), name):
                     _set_state_names(self, {**names, name: None})
-            elif name in names:
-                _set_state_names(self, {k: v for k, v in names.items() if k != name})
+            else:
+                _forget_state_name(self, name)
 
         def __delattr__(self, name: str) -> None:
             super().__delattr__(name)
-            names = _state_names(self)
-            if name in names:
-                _set_state_names(self, {k: v for k, v in names.items() if k != name})
+            _forget_state_name(self, name)
 
     @override
     def state_dict(self) -> Any:  # Any: an override returns any picklable object.
@@ -488,6 +486,12 @@ def _set_state_names(node: Node, names: dict[str, None]) -> None:
     vars(node)[_STATE_NAMES] = names  # Not through __setattr__.
 
 
+def _forget_state_name(node: Node, name: str) -> None:
+    names = _state_names(node)
+    if name in names:
+        _set_state_names(node, {k: v for k, v in names.items() if k != name})
+
+
 def _state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
     """Return ``(attribute name, value)`` for the tensors and modules registered on
     ``node``, in the order of registration."""
@@ -555,11 +559,7 @@ def checked_period(node: Node) -> float:
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved ``period``.
     """
-    if inspect.getattr_static(type(node), "period") is not vars(Node)["period"]:
-        raise TypeError(
-            f"{type(node).__qualname__} replaces period, a reserved name of Node: "
-            "pass the period to Node.__init__ instead"
-        )
+    _check_reserved(node, "period")
     return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
@@ -570,15 +570,16 @@ def checked_dedicated(node: Node) -> bool:
         TypeError: A subclass of ``Node`` replaced the reserved
             ``dedicated_thread``.
     """
-    if (
-        inspect.getattr_static(type(node), "dedicated_thread")
-        is not vars(Node)["dedicated_thread"]
-    ):
-        raise TypeError(
-            f"{type(node).__qualname__} replaces dedicated_thread, a reserved name of "
-            "Node: pass dedicated_thread to Node.__init__ instead"
-        )
+    _check_reserved(node, "dedicated_thread")
     return node._dedicated_thread  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def _check_reserved(node: Node, name: str) -> None:
+    if inspect.getattr_static(type(node), name) is not vars(Node)[name]:
+        raise TypeError(
+            f"{type(node).__qualname__} replaces {name}, a reserved name of Node: "
+            f"pass {name} to Node.__init__ instead"
+        )
 
 
 def capture_state(node: Node) -> object:
