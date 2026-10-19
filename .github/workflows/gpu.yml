@@ -1,14 +1,38 @@
 name: GPU
 
 # The tests marked `cuda`, on a self-hosted runner with the label `gpu`
-# (.github/runner/README.md). Started by hand only: a pull request from a fork must
-# not run code on the self-hosted machine.
+# (.github/runner/README.md). It runs on pushes to main and on pull requests, but
+# never for a pull request from a fork: that code must not run on the
+# self-hosted machine.
 on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "**/*.py"
+      - "**/*.pyi"
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/gpu.yml"
+  pull_request:
+    branches: [main]
+    paths: *paths
   workflow_dispatch:
+
+# One runner: a newer push to the same branch replaces the run still waiting or
+# running.
+concurrency:
+  group: gpu-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   cuda:
     name: cuda / 3.14t
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, gpu]
     timeout-minutes: 60
     steps:

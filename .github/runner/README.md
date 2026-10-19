@@ -1,6 +1,6 @@
 # GPU runner
 
-The tests marked `cuda` run only on a machine with CUDA devices, so the regular CI skips them. The GPU workflow (`.github/workflows/gpu.yml`) runs them on a self-hosted runner with the label `gpu`. No such runner is registered yet: until one is, the workflow waits in the queue.
+The tests marked `cuda` run only on a machine with CUDA devices, so the regular CI skips them. The GPU workflow (`.github/workflows/gpu.yml`) runs them on a self-hosted runner with the label `gpu`. With no such runner online, the workflow waits in the queue.
 
 ## Set up a runner
 
@@ -19,6 +19,6 @@ The script downloads the latest [actions/runner](https://github.com/actions/runn
 
 ## Run the workflow
 
-The GPU workflow runs only when a maintainer starts it: in the Actions tab, choose "GPU" and "Run workflow", or run `gh workflow run gpu.yml --ref <branch>`. It does not run on pull requests, because the code of a pull request from a fork would run on the self-hosted machine.
+The GPU workflow runs on pushes to `main` and on pull requests to `main` that change code (the same paths as the Test workflow). It skips a pull request from a fork, whose code would otherwise run on the self-hosted machine. With one runner, a newer push to the same branch cancels the run before it. A maintainer can also start it by hand: in the Actions tab, choose "GPU" and "Run workflow", or run `gh workflow run gpu.yml --ref <branch>`.
 
 The workflow installs torch from PyPI with `uv sync`; its Linux wheels are built with CUDA.

@@ -117,7 +117,7 @@ CI runs these workflows on pull requests to `main`, except GPU. Test, Type Check
 | Type Check    | `just type` (pyright)                                                                                                                                                                                                                                             |
 | Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                          |
 | Docs          | `just docs-build`                                                                                                                                                                                                                                                 |
-| GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. Started by hand only ([.github/runner/README.md](.github/runner/README.md))                                                                                                                          |
+| GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. On pushes and pull requests, but not from forks ([.github/runner/README.md](.github/runner/README.md))                                                                                               |
 
 `CLAUDE.md`, `.claude/` and `memory/` configure the AI coding agents used in this repository; human contributors can ignore them.
 
