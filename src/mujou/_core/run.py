@@ -457,10 +457,8 @@ def run[P: Port[Any, Any, Any]](
             run; create a new instance to run again"``), or part of one belongs
             to another network that was built but has not run; or this is called
             from a node's hook.
-        TypeError: A value is neither a ``Node`` nor a ``Network``;
-            ``workers`` is not an ``int`` (a ``bool`` included); or a node on
-            the workers overrides ``on_thread_start``, which only a node with
-            ``dedicated_thread=True`` gets (nothing has started).
+        TypeError: A value is neither a ``Node`` nor a ``Network``, or
+            ``workers`` is not an ``int`` (a ``bool`` included).
         ValueError: ``workers`` is less than 1 (or more than ``sys.maxsize``).
         ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the

@@ -29,13 +29,10 @@ class Node(_native.Node, Component):
     first in each override. The framework calls the hooks on the thread that
     runs the node (see "Threads" below), except ``state_dict``:
 
-    - ``on_thread_start()``: only for a node with ``dedicated_thread=True``,
-      once, on the node's own thread right before ``on_start``, after the
-      framework has set up the thread (see below). Make the node's own
-      per-thread settings here. A node that runs on the workers must not
-      override it: the run raises ``TypeError`` before anything starts.
     - ``on_start()``: once, when the network runs (also when it was restored).
-      Allocate and initialize the state here.
+      Allocate and initialize the state here. A node with
+      ``dedicated_thread=True`` gets it on its own thread, so it can also make
+      its per-thread settings here.
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned. By default it copies the state into the
@@ -156,7 +153,7 @@ class Node(_native.Node, Component):
             run's timer. ``0.0`` updates as soon as any time has passed.
         dedicated_thread: Run the node on a thread of its own instead of the
             run's workers: for a node whose hooks block, or that relies on
-            per-thread state (``on_thread_start``).
+            per-thread state set once (in ``on_start``).
 
     Raises:
         TypeError: ``period`` is ``None`` or a ``bool``, or
@@ -368,8 +365,7 @@ class Node(_native.Node, Component):
         ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a
         reserved name: do not assign an attribute of that name.
 
-        It can be read from the start of the run (also in ``on_thread_start``
-        and ``on_start``). Once the host has seen a normal end (e.g. after
+        It can be read from the start of the run (also in ``on_start``). Once the host has seen a normal end (e.g. after
         ``Run.shutdown`` returned), it is replaced by a ``ReadOnlyTimer`` that
         stays at the time of the state, also in the ``state_dict`` that the host
         takes then. A ``ReadOnlyTimer`` kept from before the end keeps reading
@@ -577,8 +573,7 @@ def checked_dedicated(node: Node) -> bool:
 
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved
-            ``dedicated_thread``, or ``node`` runs on the workers while its class
-            overrides ``on_thread_start``, which only a dedicated thread calls.
+            ``dedicated_thread``.
     """
     if (
         inspect.getattr_static(type(node), "dedicated_thread")
@@ -588,17 +583,7 @@ def checked_dedicated(node: Node) -> bool:
             f"{type(node).__qualname__} replaces dedicated_thread, a reserved name of "
             "Node: pass dedicated_thread to Node.__init__ instead"
         )
-    dedicated = node._dedicated_thread  # pyright: ignore[reportPrivateUsage]  # Node's own module
-    if not dedicated and (
-        inspect.getattr_static(type(node), "on_thread_start")
-        is not vars(_native.Node)["on_thread_start"]
-    ):
-        raise TypeError(
-            f"{type(node).__qualname__} overrides on_thread_start, which only a node "
-            "on a thread of its own gets: pass dedicated_thread=True to "
-            "Node.__init__, or make the settings inside each hook"
-        )
-    return dedicated
+    return node._dedicated_thread  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
 def capture_state(node: Node) -> object:

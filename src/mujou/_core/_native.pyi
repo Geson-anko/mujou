@@ -247,18 +247,12 @@ class Node:
     def on_start(self, /) -> None:
         """
         Called once when the run starts (also when it is restored), before any
-        other public hook but `on_thread_start`. Allocate and initialize the
-        state here.
+        other public hook. Allocate and initialize the state here.
         """
     def on_stop(self, /) -> None:
         """
         Called once when the run stops, also after an exception. It must not
         change what `state_dict` returns. What it raises is logged and ignored.
-        """
-    def on_thread_start(self, /) -> None:
-        """
-        Called only on a dedicated node's own thread, right before `on_start`,
-        for the node's per-thread settings.
         """
     def on_update(self, /, dt: "float") -> None:
         """
@@ -417,10 +411,10 @@ class Runtime:
         and at least 1 ns, or `None` to update as soon as any time has passed;
         the manual mode ignores it.
 
-        `dedicated` tells which nodes run on a thread of their own (and get
-        `on_thread_start`); the others, all of them by default, share a pool of
-        `workers` threads (>= 1), by default as many as the available
-        parallelism, never more than the nodes in the pool.
+        `dedicated` tells which nodes run on a thread of their own; the others,
+        all of them by default, share a pool of `workers` threads (>= 1), by
+        default as many as the available parallelism, never more than the nodes
+        in the pool.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

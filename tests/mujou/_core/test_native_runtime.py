@@ -71,10 +71,6 @@ class Recorder(Node):
             raise self.error
 
     @override
-    def on_thread_start(self) -> None:
-        self.hook("on_thread_start")
-
-    @override
     def on_start(self) -> None:
         self.hook("on_start")
 
@@ -160,23 +156,24 @@ class TestStart:
 
         for i, node in enumerate(nodes):
             events = log.of(node.name)
-            assert events[:4] == [
-                "on_thread_start",
+            assert events == [
                 "on_start",
                 "load_state_dict",
                 "on_update",
+                "on_pause",
+                "state_dict",
+                "on_resume",
+                "on_stop",
             ]
-            assert events[4:] == ["on_pause", "state_dict", "on_resume", "on_stop"]
             assert node.loaded == {"s": i}
             node_thread = {t for e, t in node.threads.items() if e != "state_dict"}
             assert len(node_thread) == 1
             assert node.threads["state_dict"] not in node_thread
 
-    def test_hooks_on_the_workers_run_in_order_without_on_thread_start(
+    def test_hooks_on_the_workers_run_in_order(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
-        # specs: on_thread_start is called only for the nodes on a dedicated
-        # thread; the nodes go on the workers by default.
+        # The nodes go on the workers by default.
         log = Log()
         nodes = recorders(log, "a", "b")
         runtime = make_runtime(nodes)
@@ -198,20 +195,9 @@ class TestStart:
             ]
             assert node.loaded == {"s": i}
 
-    def test_on_thread_start_is_called_only_for_the_dedicated_nodes(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        log = Log()
-        dedicated, pooled = recorders(log, "dedicated", "pooled")
-        runtime = make_runtime([dedicated, pooled])
-        runtime.start(manual=True, dedicated=[True, False])
-        runtime.shutdown()
-        assert log.of("dedicated") == ["on_thread_start", "on_start", "on_stop"]
-        assert log.of("pooled") == ["on_start", "on_stop"]
-
     @pytest.mark.parametrize(
         ("hook", "dedicated"),
-        [("on_thread_start", True), ("on_start", False), ("load_state_dict", False)],
+        [("on_start", True), ("on_start", False), ("load_state_dict", False)],
     )
     def test_an_error_while_starting_stops_before_any_update(
         self,
@@ -542,7 +528,7 @@ class TestFrameworkHooks:
         ]
         assert node.loaded == {"s": 0}
 
-    def test_the_framework_enters_a_dedicated_node_before_on_thread_start(
+    def test_the_framework_enters_a_dedicated_node_once_before_on_start(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
     ):
         log = Log()
@@ -554,15 +540,14 @@ class TestFrameworkHooks:
             runtime.step()
         runtime.shutdown()
         # Entered once: a dedicated thread runs no other node.
-        assert log.of("a")[:5] == [
+        assert log.of("a")[:4] == [
             "_on_enter",
-            "on_thread_start",
             "on_start",
             "_restore_state",
             "load_state_dict",
         ]
         assert log.count("a", "_on_enter") == 1
-        assert len({node.threads[e] for e in log.of("a")[:5]}) == 1
+        assert len({node.threads[e] for e in log.of("a")[:4]}) == 1
 
     def test_a_worker_enters_a_node_only_when_it_switches_to_it(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -691,8 +676,6 @@ class TestFrameworkHooks:
         assert log.of("a") == [
             "_on_enter",  # first, when the thread switches to the node
             "_before_hook",
-            "on_thread_start",
-            "_before_hook",
             "on_start",
             "_before_hook",
             "_restore_state",
@@ -713,12 +696,11 @@ class TestFrameworkHooks:
     @pytest.mark.parametrize(
         ("at", "hook"),
         [
-            (1, "on_thread_start"),
-            (2, "on_start"),
-            (3, "load_state_dict"),
-            (4, "on_update"),
-            (5, "on_pause"),
-            (6, "on_resume"),
+            (1, "on_start"),
+            (2, "load_state_dict"),
+            (3, "on_update"),
+            (4, "on_pause"),
+            (5, "on_resume"),
         ],
     )
     def test_an_error_in_before_hook_is_reported_as_the_hook_and_skips_it(

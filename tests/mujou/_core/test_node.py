@@ -11,7 +11,6 @@ import pytest
 import torch
 from torch import nn
 
-import mujou
 from mujou import Group, NetworkError, Node, Port, TensorSpec
 from mujou._core import _native
 from mujou.testing import VirtualTimer
@@ -550,73 +549,6 @@ class ThreadRecorder(Node):
     @override
     def on_stop(self) -> None:
         self.idents.add(threading.get_ident())
-
-
-class OwnSetup(Probe):
-    """On a dedicated thread, overrides ``on_thread_start`` without calling the
-    base, and tries a host method there."""
-
-    def __init__(self, seed: int) -> None:
-        super().__init__(seed=seed, dedicated_thread=True)
-        self.host_error: str | None = None
-        self.update_idents: list[int] = []
-
-    @override
-    def on_thread_start(self) -> None:
-        self.grad_at_thread_start = torch.is_grad_enabled()
-        self.draws_at_thread_start = torch.rand(3, generator=self.generator)
-        self.ident_at_thread_start = threading.get_ident()
-        self.started_before_thread_start = self.ident is not None
-        try:
-            mujou.run(Group(node=Probe()))
-        except RuntimeError as e:
-            self.host_error = str(e)
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.update_idents.append(threading.get_ident())
-
-
-class TestOnThreadStart:
-    def test_runs_on_the_dedicated_thread_after_the_settings_and_before_on_start(
-        self, step: Step, start_manual: StartManual
-    ):
-        node = OwnSetup(seed=7)
-        run = start_manual(Group(node=node))
-        for _ in range(2):
-            step(run)
-        assert node.started_before_thread_start is False
-        assert node.grad_at_thread_start is False
-        assert node.grad_enabled is False
-        generator = torch.Generator().manual_seed(7)
-        expected = torch.rand(3, generator=generator)
-        assert torch.equal(node.draws_at_thread_start, expected)
-        # on_start draws next from the same generator.
-        assert node.draws is not None
-        assert torch.equal(node.draws, torch.rand(3, generator=generator))
-        # A dedicated thread runs every hook of the node.
-        assert node.update_idents == [node.ident_at_thread_start] * 2
-        assert node.ident == node.ident_at_thread_start != threading.get_ident()
-        # The guard against the host methods holds in it too.
-        assert node.host_error is not None and "host methods" in node.host_error
-
-    def test_overriding_it_on_the_workers_is_refused_before_anything_starts(
-        self, virtual: VirtualTimer, start: Start
-    ):
-        class Overrides(Probe):  # on the workers, as by default
-            @override
-            def on_thread_start(self) -> None:
-                pass
-
-        node, other = Overrides(seed=0), Probe(seed=0)
-        group = Group(node=node, other=other)
-        with pytest.raises(TypeError, match="dedicated_thread=True"):
-            start(group, timer=virtual)
-        assert node.ident is None and other.ident is None
-        # Nothing was used up: once the cause is gone, the same nodes run.
-        del Overrides.on_thread_start
-        start(group, timer=virtual)
-        assert node.ident is not None and other.ident is not None
 
 
 class Stateful(Node):

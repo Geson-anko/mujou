@@ -84,13 +84,8 @@ impl Node {
     /// except `on_exception` and `on_stop`, which still run.
     fn _before_hook(&self) {}
 
-    /// Called only on a dedicated node's own thread, right before `on_start`,
-    /// for the node's per-thread settings.
-    fn on_thread_start(&self) {}
-
     /// Called once when the run starts (also when it is restored), before any
-    /// other public hook but `on_thread_start`. Allocate and initialize the
-    /// state here.
+    /// other public hook. Allocate and initialize the state here.
     fn on_start(&self) {}
 
     /// Called repeatedly with `dt`, the seconds on the run's timer since the
@@ -258,8 +253,6 @@ struct PyNode {
     /// The node's own `contextvars.Context`, which every hook runs in, so that
     /// context variables stay with the node whichever worker runs it.
     context: Py<PyAny>,
-    /// Runs on a thread of its own, and so gets `on_thread_start`.
-    dedicated: bool,
     /// The state to restore in `start`.
     state: Option<Py<PyAny>>,
     methods: Option<Methods>,
@@ -369,9 +362,6 @@ impl NodeHooks for PyNode {
 
     fn start(&mut self) -> Result<(), HookError> {
         let state = self.state.take();
-        if self.dedicated {
-            self.call0("on_thread_start")?;
-        }
         self.call0("on_start")?;
         if let Some(state) = state {
             self.call("load_state_dict", |py| vec![state.into_bound(py)])?;
@@ -528,10 +518,10 @@ impl Runtime {
     /// and at least 1 ns, or `None` to update as soon as any time has passed;
     /// the manual mode ignores it.
     ///
-    /// `dedicated` tells which nodes run on a thread of their own (and get
-    /// `on_thread_start`); the others, all of them by default, share a pool of
-    /// `workers` threads (>= 1), by default as many as the available
-    /// parallelism, never more than the nodes in the pool.
+    /// `dedicated` tells which nodes run on a thread of their own; the others,
+    /// all of them by default, share a pool of `workers` threads (>= 1), by
+    /// default as many as the available parallelism, never more than the nodes
+    /// in the pool.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -567,7 +557,6 @@ impl Runtime {
                     .ok_or_else(|| PyValueError::new_err("workers must be at least 1, got 0"))
             })
             .transpose()?;
-        let flags = dedicated.clone().unwrap_or_else(|| vec![false; n]);
         if let Some(states) = &states {
             if states.len() != n {
                 return Err(PyValueError::new_err(format!(
@@ -607,13 +596,10 @@ impl Runtime {
         let mut states = states.map(Vec::into_iter);
         let hooks = (nodes.into_iter().zip(self.names.iter().cloned()))
             .zip(contexts)
-            .enumerate()
-            .map(|(i, ((node, name), context))| PyNode {
+            .map(|((node, name), context)| PyNode {
                 node,
                 name,
                 context,
-                // A length mismatch is the core's to report, below.
-                dedicated: flags.get(i).copied().unwrap_or(false),
                 state: states.as_mut().and_then(Iterator::next),
                 methods: None,
             })
