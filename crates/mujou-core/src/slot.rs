@@ -40,10 +40,6 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
-    pub(crate) fn numel(&self) -> usize {
-        self.shape.iter().product::<i64>() as usize
-    }
-
     pub(crate) fn elem_bytes(&self) -> usize {
         usize::from(self.dtype.bits / 8) * usize::from(self.dtype.lanes)
     }
@@ -51,7 +47,7 @@ impl FieldSpec {
     /// The size of the field as compact row-major bytes. Cannot overflow for the
     /// fields of a [`Schema`], which checks it.
     pub(crate) fn nbytes(&self) -> usize {
-        self.numel() * self.elem_bytes()
+        self.shape.iter().product::<i64>() as usize * self.elem_bytes()
     }
 
     /// `nbytes`, or `None` if it exceeds `isize::MAX`, the most one allocation
