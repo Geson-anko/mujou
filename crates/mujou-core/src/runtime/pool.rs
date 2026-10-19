@@ -60,8 +60,6 @@ struct Task {
     phase: Phase,
     at: At,
     generation: u64,
-    /// The time of the last update, where the next Δt starts.
-    last_ns: u64,
     /// The time of the next free-running update (see [`next_target_ns`]).
     target_ns: u64,
 }
@@ -118,7 +116,6 @@ impl Sched {
                 phase: Phase::Start,
                 at,
                 generation: 0,
-                last_ns: 0,
                 target_ns: 0,
             });
         }
@@ -149,10 +146,10 @@ impl<N: NodeHooks> Shared<N> {
                 let now_ns = self.timer.time_ns();
                 if now_ns >= target_ns {
                     c.sched.heap.pop();
-                    let task = &mut c.sched.tasks[i];
-                    task.at = At::Running;
+                    c.sched.tasks[i].at = At::Running;
                     // From the nanosecond difference, as on a dedicated thread.
-                    let dt = (now_ns - task.last_ns) as f64 / 1e9;
+                    let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
+                    let dt = (now_ns - last_ns) as f64 / 1e9;
                     c = self.run_work(i, Work::Update { now_ns, dt }, c);
                     continue;
                 }
@@ -332,7 +329,6 @@ impl<N: NodeHooks> Shared<N> {
                     }
                     let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
                     let task = &mut c.sched.tasks[i];
-                    task.last_ns = last_ns;
                     task.target_ns = last_ns.saturating_add(self.period_ns[i]);
                     task.phase = Phase::Loop;
                 }
@@ -346,7 +342,7 @@ impl<N: NodeHooks> Shared<N> {
                         // Under the control lock, the freeze cannot come in
                         // between.
                         let now_ns = self.timer.time_ns();
-                        let last_ns = c.sched.tasks[i].last_ns;
+                        let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
                         if now_ns <= last_ns {
                             // Nothing to do for a step without time passing.
                             self.end_step(c);
@@ -441,7 +437,6 @@ impl<N: NodeHooks> Shared<N> {
             Work::Update { now_ns, .. } => {
                 self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
                 let task = &mut c.sched.tasks[i];
-                task.last_ns = now_ns;
                 task.target_ns = next_target_ns(task.target_ns, now_ns, self.period_ns[i]);
                 if self.manual {
                     self.end_step(c);
