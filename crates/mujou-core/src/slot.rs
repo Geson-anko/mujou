@@ -876,22 +876,6 @@ mod tests {
     }
 
     #[test]
-    fn restore_sets_whether_sent() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
-        outlet.channel(0).restore(1, true, fill_k(4)).unwrap();
-        assert!(outlet.channel(0).load().sent());
-        outlet.channel(0).restore(1, false, fill_k(4)).unwrap();
-        assert!(!outlet.channel(0).load().sent());
-
-        let group = InputGroup::new(timer());
-        let input = group.input(scalar_schema(), "i");
-        input.restore(1, true, fill_k(5)).unwrap();
-        assert!(input.load().sent());
-        input.restore(1, false, fill_k(5)).unwrap();
-        assert!(!input.load().sent());
-    }
-
-    #[test]
     fn send_to_one_channel_changes_only_it() {
         let outlet = Outlet::new(scalar_schema(), 3, "p", timer());
         outlet.send_with(Target::Channel(1), fill_k(9)).unwrap();
@@ -1030,12 +1014,18 @@ mod tests {
     }
 
     #[test]
-    fn restore_sets_value_and_time() {
+    fn restore_sets_value_time_and_whether_sent() {
         let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
-        outlet.channel(0).restore(123, true, fill_k(4)).unwrap();
-        let msg = outlet.channel(0).load();
-        assert_eq!((values(&msg), msg.time_ns()), (vec![4], 123));
+        let slot = outlet.channel(0);
+        slot.restore(123, true, fill_k(4)).unwrap();
+        let msg = slot.load();
+        assert_eq!(
+            (values(&msg), msg.time_ns(), msg.sent()),
+            (vec![4], 123, true)
+        );
         assert_eq!(values(&outlet.outbox().load()), [0]);
+        slot.restore(1, false, fill_k(4)).unwrap();
+        assert!(!slot.load().sent());
     }
 
     #[test]
@@ -1082,7 +1072,12 @@ mod tests {
         group.write(&[&a], |_, bytes| fill_k(1)(bytes)).unwrap();
         a.restore(9, true, fill_k(2)).unwrap();
         let msg = a.load();
-        assert_eq!((values(&msg), msg.time_ns()), (vec![2], 9));
+        assert_eq!(
+            (values(&msg), msg.time_ns(), msg.sent()),
+            (vec![2], 9, true)
+        );
+        a.restore(9, false, fill_k(2)).unwrap();
+        assert!(!a.load().sent());
     }
 
     /// The observable form of "no reader ever sees a mix of old and new values":
