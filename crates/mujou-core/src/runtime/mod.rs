@@ -301,31 +301,25 @@ impl<N: NodeHooks> Shared<N> {
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, ()> {
-        self.invoke(i, hook, Entry::Required, f).map_err(|e| {
-            self.fail(NodeFailure {
-                node: i,
-                hook: e.hook,
-                error: e.source,
-            })
-        })
+        self.invoke(i, hook, Entry::Required, f)
+            .map_err(|e| self.fail(i, e))
     }
 
     /// Calls `state_dict` on the control thread, without entering the node.
     fn state_dict(&self, i: usize) -> Result<N::State, ()> {
         self.invoke(i, "state_dict", Entry::Skip, N::state_dict)
-            .map_err(|e| {
-                self.fail(NodeFailure {
-                    node: i,
-                    hook: e.hook,
-                    error: e.source,
-                })
-            })
+            .map_err(|e| self.fail(i, e))
     }
 
-    /// Records the first failure and asks everything to stop, right where the
-    /// error was caught: the nodes see the stop at their next loop boundary
-    /// without the control thread having to poll.
-    fn fail(&self, failure: NodeFailure) {
+    /// Records the failure of node `i` if it is the first and asks everything
+    /// to stop, right where the error was caught: the nodes see the stop at
+    /// their next loop boundary without the control thread having to poll.
+    fn fail(&self, i: usize, e: HookError) {
+        let failure = NodeFailure {
+            node: i,
+            hook: e.hook,
+            error: e.source,
+        };
         // Only the first failure is reported; the hooks log every error.
         if self.failure.set(failure).is_err() {
             return;
@@ -674,33 +668,24 @@ impl<N: NodeHooks> Runtime<N> {
 /// Checks the arguments of [`Runtime::start`] for `n` nodes and returns each
 /// node's period in ns when running freely (1 ns by default).
 fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64>, RuntimeError> {
-    if names != n {
-        return Err(RuntimeError::InvalidArgument(format!(
-            "got {n} nodes but {names} names"
-        )));
-    }
-    if let Some(dedicated) = &config.dedicated {
-        if dedicated.len() != n {
+    let lengths = [
+        ("names", Some(names)),
+        ("dedicated flags", config.dedicated.as_ref().map(Vec::len)),
+        (
+            "last update times",
+            config.last_update_ns.as_ref().map(Vec::len),
+        ),
+        ("periods", config.period_ns.as_ref().map(Vec::len)),
+    ];
+    for (what, len) in lengths {
+        if let Some(len) = len.filter(|&len| len != n) {
             return Err(RuntimeError::InvalidArgument(format!(
-                "got {n} nodes but {} dedicated flags",
-                dedicated.len()
-            )));
-        }
-    }
-    if let Some(last) = &config.last_update_ns {
-        if last.len() != n {
-            return Err(RuntimeError::InvalidArgument(format!(
-                "got {n} nodes but {} last update times",
-                last.len()
+                "got {n} nodes but {len} {what}"
             )));
         }
     }
     match &config.period_ns {
         None => Ok(vec![1; n]),
-        Some(periods) if periods.len() != n => Err(RuntimeError::InvalidArgument(format!(
-            "got {n} nodes but {} periods",
-            periods.len()
-        ))),
         Some(periods) if periods.contains(&0) => Err(RuntimeError::InvalidArgument(
             "a period must be > 0 ns".to_owned(),
         )),
