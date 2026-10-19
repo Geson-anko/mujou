@@ -133,6 +133,11 @@ impl<N: NodeHooks> Shared<N> {
         RUNTIME_OF_THREAD.set(self.id());
         let mut c = self.lock();
         while c.sched.left > 0 {
+            // Work in the ready queue means the timekeeper, if any, is already
+            // woken: the control side wakes it when it queues work, a worker
+            // takes the hook it queues itself under the same lock, and a worker
+            // keeps the time only with the queue empty. So a target this worker
+            // just put back is not missed while it runs a hook first.
             if let Some(i) = c.sched.ready.pop_front() {
                 if let Some(work) = self.take(i, &mut c) {
                     c = self.run_work(i, work, c);
@@ -270,7 +275,9 @@ impl<N: NodeHooks> Shared<N> {
     /// run (with every other worker busy, the timekeeper takes it) or an update
     /// due before the timekeeper's target. A worker that puts a node back looks
     /// at the queues itself right after, so it ignores this, and only the
-    /// control side wakes the timekeeper. Waking it wakes every waiter on the
+    /// control side wakes the timekeeper (the worker may run a hook from the
+    /// ready queue first; see [`Self::run_worker`] for why that misses no
+    /// target). Waking it wakes every waiter on the
     /// timer (the other runs' timekeepers, dedicated threads, the host), so a
     /// node of period 0 putting itself back after each update must not.
     fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) -> bool {

@@ -98,7 +98,7 @@ impl NodeHooks for Recorder {
     }
 }
 
-/// Where the nodes of a test run: every test runs in each of these.
+/// Where the nodes of a test run: [`each_mode`] runs a test in the first three.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Mode {
     /// Each node on a dedicated thread.
@@ -107,6 +107,9 @@ enum Mode {
     Pool,
     /// The pool with a single worker, fewer than the nodes.
     OneWorker,
+    /// The pool with two workers, for a test that needs a second one whatever
+    /// the number of CPUs.
+    TwoWorkers,
 }
 
 impl Mode {
@@ -120,7 +123,11 @@ impl Mode {
     ) -> Result<(Runtime<N>, Reply<()>), RuntimeError> {
         let config = RuntimeConfig {
             dedicated: Some(vec![self == Mode::Dedicated; nodes.len()]),
-            workers: (self == Mode::OneWorker).then_some(NonZeroUsize::MIN),
+            workers: match self {
+                Mode::OneWorker => Some(NonZeroUsize::MIN),
+                Mode::TwoWorkers => NonZeroUsize::new(2),
+                Mode::Dedicated | Mode::Pool => None,
+            },
             ..config
         };
         Runtime::start(nodes, names, timer, config)
@@ -701,11 +708,22 @@ mod period {
     const QUIET: Duration = Duration::from_millis(50);
     const LONG: Duration = Duration::from_secs(5);
 
-    /// Sends each Δt (in ns) as it updates, and blocks in the update while
-    /// `hold` has a message for it to wait for.
+    /// Sends each Δt (in ns) as it updates, and blocks in the update (or in
+    /// `resume`, for `hold_resume`) until its receiver gets a message.
     struct Ticker {
         dts: Sender<u64>,
         hold: Option<Receiver<()>>,
+        hold_resume: Option<Receiver<()>>,
+    }
+
+    impl Ticker {
+        fn new(dts: Sender<u64>) -> Self {
+            Self {
+                dts,
+                hold: None,
+                hold_resume: None,
+            }
+        }
     }
 
     impl NodeHooks for Ticker {
@@ -728,6 +746,9 @@ mod period {
         }
 
         fn resume(&mut self) -> Result<(), HookError> {
+            if let Some(hold) = &self.hold_resume {
+                let _ = hold.recv();
+            }
             Ok(())
         }
 
@@ -764,7 +785,13 @@ mod period {
             .map(|_| {
                 let (dts, rx) = mpsc::channel();
                 let hold = hold.take();
-                (Ticker { dts, hold }, rx)
+                (
+                    Ticker {
+                        hold,
+                        ..Ticker::new(dts)
+                    },
+                    rx,
+                )
             })
             .unzip();
         let names = (0..n).map(|i| format!("ticker{i}")).collect();
@@ -963,7 +990,7 @@ mod period {
     #[test]
     fn a_target_a_worker_puts_back_before_the_timekeepers_is_kept() {
         // Needs a second worker to keep the time while the first one updates.
-        in_modes(&[Mode::Pool], |mode| {
+        in_modes(&[Mode::TwoWorkers], |mode| {
             let timer = virtual_timer();
             let (release, hold) = mpsc::channel();
             let config = RuntimeConfig {
@@ -982,6 +1009,42 @@ mod period {
             assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
             release.send(()).unwrap();
             assert_quiet(&dts[1]);
+            rt.shutdown().wait().unwrap();
+        });
+    }
+
+    /// A worker that puts a node back and then runs a hook from the ready
+    /// queue must not leave the timekeeper waiting for a later target: the
+    /// node's update is due while the hook blocks.
+    #[test]
+    fn a_blocking_resume_does_not_delay_another_nodes_update() {
+        in_modes(&[Mode::TwoWorkers], |mode| {
+            let timer = virtual_timer();
+            let (release, hold) = mpsc::channel();
+            let (mut tickers, dts): (Vec<_>, Vec<_>) = (0..3)
+                .map(|_| {
+                    let (dts, rx) = mpsc::channel();
+                    (Ticker::new(dts), rx)
+                })
+                .unzip();
+            tickers[2].hold_resume = Some(hold);
+            let config = RuntimeConfig {
+                period_ns: Some(vec![P_NS, 1_000 * P_NS, P_NS]),
+                ..RuntimeConfig::default()
+            };
+            let names = (0..3).map(|i| format!("ticker{i}")).collect();
+            let (rt, started) = mode
+                .start(tickers, names, Arc::clone(&timer), config)
+                .unwrap();
+            started.wait().unwrap();
+            // Every node gets `resume`; that of node 2 blocks a worker.
+            rt.capture(|states: Vec<()>| states.len(), PAUSE)
+                .wait()
+                .unwrap();
+            thread::sleep(QUIET);
+            timer.advance_ns(P_NS).unwrap();
+            assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
+            release.send(()).unwrap();
             rt.shutdown().wait().unwrap();
         });
     }
@@ -1095,7 +1158,7 @@ mod period {
                 };
                 let (dts, _) = mpsc::channel();
                 let started = mode.start(
-                    vec![Ticker { dts, hold: None }],
+                    vec![Ticker::new(dts)],
                     vec!["ticker".to_owned()],
                     Arc::clone(&timer),
                     config,
