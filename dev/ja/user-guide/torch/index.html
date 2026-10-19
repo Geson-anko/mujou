@@ -1697,7 +1697,6 @@
 <li>各 <code>on_update</code> の後と状態の取得・復元の前後に、ノードのストリームを同期する</li>
 </ul>
 <p>そのためノードの作者は同期を書かなくてよい。自分で同期するときは自分のストリーム（<code>torch.cuda.current_stream().synchronize()</code>）だけを同期する。</p>
-<p><code>__init__</code> はホストのスレッドで動きノードのストリームの外にあるので、テンソルや <code>nn.Module</code> は <code>on_start</code> 以降で作る。</p>
 <div class="admonition warning">
 <p class="admonition-title">デバイス全体を待たない</p>
 <p>デバイス全体を待つ <code>torch.cuda.synchronize()</code> はほかのノードの仕事まで待つので使わない。</p>
