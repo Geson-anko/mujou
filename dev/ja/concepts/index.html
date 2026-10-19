@@ -1542,7 +1542,7 @@
 <h2 id="ノード">ノード<a class="headerlink" href="#ノード" title="Permanent link">&para;</a></h2>
 <p>ノードは計算の単位で、<code>mujou.Node</code> を継承したクラスとして書く。</p>
 <p>ノードの内側では PyTorch のコードを同期的に実行する。ノードの内側に閉じていれば誤差逆伝播法（BP）も使える。</p>
-<p>ノード同士はすべて非同期に動く。mujou はノードごとのスレッドで <code>on_update(dt)</code> を繰り返し呼び、ノードはほかのノードを待たない。<code>on_update</code> のたびにノードは次のことをする。</p>
+<p>ノード同士はすべて非同期に動く。mujou はノード同士で共有するスレッドの上で <code>on_update(dt)</code> を繰り返し呼び、ノードはほかのノードを待たない。<code>on_update</code> のたびにノードは次のことをする。</p>
 <ol>
 <li>隣のノードが送った最新の値を読む</li>
 <li>自分の状態を更新する</li>

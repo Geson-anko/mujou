@@ -841,6 +841,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run-on-a-thread-of-its-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run on a thread of its own
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-hooks-and-their-order" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1548,6 +1559,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run-on-a-thread-of-its-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run on a thread of its own
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-hooks-and-their-order" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1735,13 +1757,13 @@
 <p>Updating in place keeps every reference on the one tensor. Restoring a state also writes in place into that tensor.</p>
 </div>
 <p><code>torch.Tensor</code> and <code>nn.Module</code> values assigned to attributes are collected into the state automatically. What is collected, and how to save it, is in <a href="../state/">Saving and restoring state</a>.</p>
-<p>When the node computes on a GPU, create the tensors with <code>device=self.device</code>.</p>
+<p>When the node computes on a GPU, create the tensors with <code>device=self.device</code>, in <code>on_start</code> or later (why: <a href="../torch/#cuda">PyTorch in nodes</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@override</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 <p>You may keep settings (a time constant, the size of a layer, ...) as numbers set in <code>__init__</code>. Numbers are not collected into the state.</p>
-<p>An <code>nn.Module</code> may be built in <code>__init__</code> or in <code>on_start</code>. The default initialization of a module such as <code>nn.Linear</code> draws from the global generator that all nodes share, so <code>seed</code> does not reproduce it: initialize it again from <code>self.generator</code>, which can be used in <code>__init__</code> already.</p>
+<p>An <code>nn.Module</code> may be built in <code>__init__</code> or in <code>on_start</code> (on CUDA, prefer <code>on_start</code>). The default initialization of a module such as <code>nn.Linear</code> draws from the global generator that all nodes share, so <code>seed</code> does not reproduce it: initialize it again from <code>self.generator</code>, which can be used in <code>__init__</code> already.</p>
 <h2 id="3-update-in-proportion-to-dt-in-on_updatedt">3. Update in proportion to <code>dt</code> in <code>on_update(dt)</code><a class="headerlink" href="#3-update-in-proportion-to-dt-in-on_updatedt" title="Permanent link">&para;</a></h2>
 <p>Mujou calls <code>on_update(dt)</code> again and again. The node's author does not write a loop; write the work of one call only. One call does the following, in this order.</p>
 <ol>
@@ -1826,15 +1848,35 @@
 <td>The period of updates, in seconds</td>
 <td><code>0.01</code></td>
 </tr>
+<tr>
+<td><code>dedicated_thread</code></td>
+<td>Run the node on a thread of its own instead of the run's workers (see <a href="#run-on-a-thread-of-its-own">below</a>)</td>
+<td><code>False</code></td>
+</tr>
 </tbody>
 </table>
 <p>Draw random numbers from <code>self.generator</code> (<code>torch.randn(..., generator=self.generator)</code>). Do not call <code>torch.manual_seed</code> in a node, because it changes the random number generator that all nodes share.</p>
 <p><code>self.generator</code> can be used right after <code>super().__init__()</code>, in <code>__init__</code> too. How it works with PyTorch is in <a href="../torch/">PyTorch in nodes</a>.</p>
-<p><code>device</code>, <code>generator</code>, <code>period</code> and <code>timer</code> are reserved names. Do not assign attributes with these names.</p>
+<p><code>device</code>, <code>generator</code>, <code>period</code>, <code>dedicated_thread</code> and <code>timer</code> are reserved names. Do not assign attributes with these names.</p>
+<h2 id="run-on-a-thread-of-its-own">Run on a thread of its own<a class="headerlink" href="#run-on-a-thread-of-its-own" title="Permanent link">&para;</a></h2>
+<p>By default the node runs on the run's worker threads, which it shares with the other nodes (see <a href="../running/#threads-of-a-run">Running a network</a>). Each hook may then run on a different thread, and the thread runs other nodes in between. So whether the next hook sees what a hook set per thread depends on the schedule, and the next node on the same worker may see it too:</p>
+<ul>
+<li><code>threading.local</code>, <code>threading.current_thread()</code> and <code>threading.get_ident()</code> may differ from hook to hook</li>
+<li>Set a per-thread setting of torch, such as <code>torch.autocast</code>, back before the hook returns, by keeping it inside a <code>with</code> in the hook. A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only gradient recording (before every hook) and, on CUDA, the current device and stream (whenever a worker switches to the node; see <a href="../torch/">PyTorch in nodes</a>)</li>
+<li><code>contextvars</code> do carry over: each node runs its hooks in a <code>contextvars.Context</code> of its own. It starts empty, without the variables of the host's context, and <code>state_dict</code> runs outside it</li>
+</ul>
+<p>Pass <code>dedicated_thread=True</code> to <code>super().__init__</code> when the node needs a thread of its own:</p>
+<ul>
+<li>Its hooks block, waiting for a device, a socket or a lock. On a worker, the wait would hold the worker, and the other nodes' <code>dt</code> would grow</li>
+<li>It relies on per-thread state set once. Its <code>on_start</code> runs on its own thread, so make such settings there</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Camera</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">30</span><span class="p">,</span> <span class="n">dedicated_thread</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
 <h2 id="the-hooks-and-their-order">The hooks and their order<a class="headerlink" href="#the-hooks-and-their-order" title="Permanent link">&para;</a></h2>
 <p>Mujou calls the hooks of a node in this order. Override only the ones you need.</p>
 <ol>
-<li><code>on_thread_start()</code>: once, before <code>on_start</code>. Per-thread settings (see <a href="../torch/">PyTorch in nodes</a>)</li>
 <li><code>on_start()</code>: once. Create the state</li>
 <li><code>load_state_dict(state)</code>: once, only when the run is restored (see <a href="../state/">Saving and restoring state</a>)</li>
 <li><code>on_update(dt)</code>: again and again until the run ends</li>

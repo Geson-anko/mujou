@@ -1540,7 +1540,7 @@
 <h2 id="nodes">Nodes<a class="headerlink" href="#nodes" title="Permanent link">&para;</a></h2>
 <p>A node is the unit of computation. You write a node as a class that inherits from <code>mujou.Node</code>.</p>
 <p>Inside a node, ordinary PyTorch code runs synchronously. It may even use backpropagation (BP), as long as the BP stays inside the node.</p>
-<p>Between nodes, everything is asynchronous. Mujou calls the node's <code>on_update(dt)</code> over and over on a thread of its own, and a node never waits for another node. In each <code>on_update</code>, the node does three things.</p>
+<p>Between nodes, everything is asynchronous. Mujou calls the node's <code>on_update(dt)</code> over and over, on threads it shares among the nodes, and a node never waits for another node. In each <code>on_update</code>, the node does three things.</p>
 <ol>
 <li>It reads the latest values its neighbors sent</li>
 <li>It updates its state</li>

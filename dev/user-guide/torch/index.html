@@ -1674,7 +1674,7 @@
 <li>A restored run uses new node instances, whose generators start again from <code>seed</code>. To continue the same random sequence after a restore, put the generator's state in the state tree (see <a href="../state/">Saving and restoring state</a>)</li>
 </ul>
 <h2 id="bp-inside-a-node">BP inside a node<a class="headerlink" href="#bp-inside-a-node" title="Permanent link">&para;</a></h2>
-<p>Mujou turns gradient recording off on every node's thread (<code>torch.set_grad_enabled(False)</code>). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.</p>
+<p>Mujou turns gradient recording off before every hook but <code>state_dict</code>, in every node (<code>torch.set_grad_enabled(False)</code>). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.</p>
 <p>To use autograd in a node, write it as follows.</p>
 <ol>
 <li>Wrap both the forward pass and the gradient computation (<code>torch.autograd.grad</code> or <code>.backward()</code>) in <code>with torch.enable_grad():</code></li>
@@ -1690,16 +1690,22 @@
 <h2 id="cuda">CUDA<a class="headerlink" href="#cuda" title="Permanent link">&para;</a></h2>
 <p>For a node given a CUDA <code>device</code>, Mujou sets up the following.</p>
 <ul>
-<li>It makes the node's device the current device of the node's thread</li>
-<li>It creates a CUDA stream for the node alone and makes it the current stream of that thread. All of the node's operations go on this stream</li>
-<li>It synchronizes the node's stream after each <code>on_update</code>, and around taking and restoring the state</li>
+<li>It makes the node's device the current device in the node's hooks</li>
+<li>It creates a CUDA stream for the node alone and makes it the current stream in the node's hooks. All of the node's operations go on this stream</li>
+<li>It synchronizes the node's stream after each <code>on_update</code> and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see <a href="../running/#threads-of-a-run">Running a network</a>)</li>
+<li>When the state is taken, it synchronizes the node's stream before and after <code>state_dict</code>. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it</li>
 </ul>
+<p>Mujou sets the device and the stream whenever a worker switches to a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.</p>
 <p>So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (<code>torch.cuda.current_stream().synchronize()</code>).</p>
 <div class="admonition warning">
 <p class="admonition-title">Do not wait for the whole device</p>
 <p>Do not use <code>torch.cuda.synchronize()</code>, which waits for the whole device, including the work of other nodes.</p>
 </div>
 <p>Without an index, as in <code>device="cuda"</code>, the device is the host's current device at the time the node is created.</p>
+<div class="admonition tip">
+<p class="admonition-title">Create CUDA tensors and modules in <code>on_start</code></p>
+<p>Tensors and modules created on CUDA in <code>__init__</code> work correctly: <code>mujou.run</code> synchronizes the host's stream before it starts the nodes. Still, create them in <code>on_start</code> or later. PyTorch's caching allocator ties memory to the stream current when it was allocated, so memory allocated in <code>__init__</code> stays tied to the host's stream. When the node drops such a tensor, the memory may be reused for an allocation of the host before the work of the node's stream on it has finished. Either way the kernels run on the node's stream, in parallel with the other nodes.</p>
+</div>
 <p>In the tree <code>run.state_dict()</code> returns, the state of a CUDA node stays in CUDA tensors. Move every tensor of the tree to the CPU with <code>cpu()</code> before saving it, and a machine without a GPU can read it too. On a restore, the default <code>load_state_dict</code> copies the tensors back to the node's device (see <a href="../state/#formats">Saving and restoring state</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">(),</span> <span class="s2">"state.pt"</span><span class="p">)</span>
 </code></pre></div>
@@ -1710,17 +1716,17 @@
 <li><code>torch.set_num_threads</code>, <code>torch.use_deterministic_algorithms</code>, and the flags in <code>torch.backends.*</code></li>
 <li>Operations on a whole device, such as <code>torch.cuda.synchronize()</code> and <code>torch.cuda.empty_cache()</code></li>
 </ul>
-<p>A node may change only per-thread settings. Write them in <code>on_thread_start</code>, a hook called once on the node's thread just before <code>on_start</code>.</p>
+<p>A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see <a href="../writing-a-node/#run-on-a-thread-of-its-own">Run on a thread of its own</a>). Set such a setting back before the hook returns, by keeping it inside a <code>with</code> in the hook (<code>with torch.autocast(...):</code>); a setting left behind leaks into the next node on the same worker. Mujou itself sets back only gradient recording, before every hook but <code>state_dict</code>, and on CUDA the current device and stream, whenever a worker switches to the node. A node with <code>dedicated_thread=True</code> runs every hook on one thread, and can make its per-thread settings once, in <code>on_start</code>.</p>
 <h3 id="internal-threads">Internal threads<a class="headerlink" href="#internal-threads" title="Permanent link">&para;</a></h3>
-<p>Each node computes on its own thread. On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down.</p>
+<p>The nodes compute on the run's worker threads (and the threads of the nodes with <code>dedicated_thread=True</code>). On the CPU, torch operations use further internal threads for each of those threads. With too many internal threads, the nodes compete for the CPU and everything slows down.</p>
 <p>Mujou does not set the number of internal threads, so the host decides it before <code>mujou.run</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Each node computes on its own thread, and torch adds threads of its own for</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># each: keep those few (a setting of the whole process, made by the host).</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># The nodes compute on the run's worker threads, and torch adds threads of its</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># own for each: keep those few (a setting of the whole process, made by the host).</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Rule of thumb for the number of threads</p>
-<p>The number of nodes that compute on the CPU times the <code>n</code> of <code>torch.set_num_threads(n)</code> should not exceed the number of physical cores. With many nodes on small matrices, <code>n = 1</code> is enough.</p>
+<p>The number of workers (plus the nodes with <code>dedicated_thread=True</code>) times the <code>n</code> of <code>torch.set_num_threads(n)</code> should not exceed the number of physical cores. With many nodes on small matrices, <code>n = 1</code> is enough.</p>
 </div>
 
 

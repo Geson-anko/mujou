@@ -1536,7 +1536,7 @@
 <ul>
 <li>🔄 <strong>Inference and learning at once</strong>: no training mode, no inference mode, no epochs</li>
 <li>🧩 <strong>Nodes in PyTorch</strong>: write each node in ordinary PyTorch code, run synchronously inside the node</li>
-<li>⚡ <strong>Asynchronous nodes</strong>: each node updates on a thread of its own and never waits for another</li>
+<li>⚡ <strong>Asynchronous nodes</strong>: each node updates on its own schedule and never waits for another</li>
 <li>⏱️ <strong>Continuous time</strong>: nodes update in proportion to <code>dt</code>, the time that really passed</li>
 <li>💾 <strong>State without stopping</strong>: take the state of a running network and run again from it later</li>
 <li>🧪 <strong>Deterministic tests</strong>: a virtual timer and manual updates for testing nodes</li>
@@ -1546,7 +1546,7 @@
     H["Host (your program)"] --&gt;|"writes inputs"| A["Node A"]
     A --&gt;|"latest value"| B["Node B"]
     B --&gt;|"reads outputs"| H</code></pre>
-<p>Each node repeats its update on a thread of its own and never waits for another node; it reads the latest value its neighbor sent.</p>
+<p>Each node repeats its update on its own schedule and never waits for another node; it reads the latest value its neighbor sent.</p>
 <p>The host (the program that runs the network) writes inputs to the running network and reads its outputs.</p>
 <h2 id="-the-smallest-program">🚀 The smallest program<a class="headerlink" href="#-the-smallest-program" title="Permanent link">&para;</a></h2>
 <p>The program below runs a network of two nodes that computes <span class="arithmatex">\(y = 2x + 1\)</span> and reads the output. The <a href="getting-started/quickstart/">Quickstart</a> explains what it does.</p>
@@ -1614,7 +1614,7 @@
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>
 <a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">()</span>
 <a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on threads of their own until the end of the `with` block.</span>
+<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
 <a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># the unconnected input port of scale</span>
 <a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>

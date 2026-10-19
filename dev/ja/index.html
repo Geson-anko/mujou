@@ -1538,7 +1538,7 @@
 <ul>
 <li>🔄 <strong>推論と学習を同時に</strong>: 学習のモードも推論のモードも、エポックも無い</li>
 <li>🧩 <strong>PyTorch で書くノード</strong>: 各ノードは PyTorch で書き実行する</li>
-<li>⚡ <strong>非同期のノード</strong>: 各ノードは自分のスレッドで更新し、ほかのノードを待たない</li>
+<li>⚡ <strong>非同期のノード</strong>: 各ノードは自分の周期で更新し、ほかのノードを待たない</li>
 <li>⏱️ <strong>連続時間</strong>: 実際に経った時間 <code>dt</code> に比例して更新する</li>
 <li>💾 <strong>状態を保存</strong>: ネットワークの状態を取得、後でその状態からリスタート</li>
 <li>🧪 <strong>決定的なテスト</strong>: 仮想のタイマーと手動の更新でノードをテスト可能</li>
@@ -1548,7 +1548,7 @@
     H["ホスト（あなたのプログラム）"] --&gt;|"入力を書く"| A["ノード A"]
     A --&gt;|"最新の値"| B["ノード B"]
     B --&gt;|"出力を読む"| H</code></pre>
-<p>各ノードは自分のスレッドで更新を繰り返し、ほかのノードを待たない。読むのは、隣のノードが最後に送った値である。</p>
+<p>各ノードは自分の周期で更新を繰り返し、ほかのノードを待たない。読むのは、隣のノードが最後に送った値である。</p>
 <p>ホスト（ネットワークを走らせるプログラム）は、走っているネットワークに入力を書き、出力を読む。</p>
 <h2 id="-最小のプログラム">🚀 最小のプログラム<a class="headerlink" href="#-最小のプログラム" title="Permanent link">&para;</a></h2>
 <p>次のプログラムは、2 つのノードで <span class="arithmatex">\(y = 2x + 1\)</span> を計算するネットワークを走らせ、出力を読む。何をしているかは<a href="getting-started/quickstart/">クイックスタート</a>で説明する。</p>
@@ -1616,7 +1616,7 @@
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>
 <a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">()</span>
 <a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on threads of their own until the end of the `with` block.</span>
+<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
 <a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># the unconnected input port of scale</span>
 <a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>

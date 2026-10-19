@@ -1550,7 +1550,7 @@
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>
 <a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">()</span>
 <a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on threads of their own until the end of the `with` block.</span>
+<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
 <a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># the unconnected input port of scale</span>
 <a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
@@ -1571,7 +1571,7 @@
 <ul>
 <li><code>Scale</code> と <code>Shift</code> は <code>mujou.Node</code> を継承したノード。それぞれ <code>__init__</code> で Port を宣言し、1 回分の処理を <code>on_update(dt)</code> に書く。どのサブクラスとも同じく、最初に <code>super().__init__()</code> と <code>super().on_update(dt)</code> を呼ぶ</li>
 <li><code>Affine</code> はネットワーク。ノードを属性として持ち、その Port 同士を <code>connect</code> でつなぐ。どこにも接続していない <code>scale</code> の <code>prev</code> を入力として、<code>shift</code> の <code>next</code> を出力として公開する</li>
-<li><code>mujou.run(net)</code> はノードを動かし始め、ノードが動き出すと戻る。各ノードは自分のスレッドで <code>on_update</code> を繰り返す。<code>on_update</code> の中の <code>recv()</code> は待たずに最新の値を読むので、<code>x</code> が <code>scale</code> を通り抜けるまで <code>shift</code> は前の入力（最初はゼロ）から計算した値を送り続ける</li>
+<li><code>mujou.run(net)</code> はノードを動かし始め、ノードが動き出すと戻る。各ノードは実行のワーカースレッドの上で <code>on_update</code> を繰り返す。<code>on_update</code> の中の <code>recv()</code> は待たずに最新の値を読むので、<code>x</code> が <code>scale</code> を通り抜けるまで <code>shift</code> は前の入力（最初はゼロ）から計算した値を送り続ける</li>
 <li>そのため <code>run.write</code> の直後に読んだ出力はまだ古いことがある。<code>run.write</code> で <code>x</code> を書き、出力が条件を満たすまで <code>run.wait_for</code> で待つ。実時間で 5 秒たっても満たさなければ <code>TimeoutError</code> になる。<code>with</code> ブロックを抜けるとネットワークが止まる</li>
 </ul>
 <h2 id="次に読むもの">次に読むもの<a class="headerlink" href="#次に読むもの" title="Permanent link">&para;</a></h2>

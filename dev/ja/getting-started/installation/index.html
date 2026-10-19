@@ -1513,7 +1513,7 @@
 </tr>
 </tbody>
 </table>
-<p>各ノードは自分のスレッドで動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。</p>
+<p>ノードは複数のワーカースレッドで同時に動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。</p>
 <h2 id="ソースからビルドする">ソースからビルドする<a class="headerlink" href="#ソースからビルドする" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>mujou

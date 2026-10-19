@@ -842,6 +842,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#threads-of-a-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threads of a run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#writing-input" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1466,6 +1477,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#threads-of-a-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threads of a run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#writing-input" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1540,7 +1562,7 @@
 <h2 id="the-basic-form">The basic form<a class="headerlink" href="#the-basic-form" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">()</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># The nodes run on threads of their own until the end of the `with` block.</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># the unconnected input port of scale</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
@@ -1551,7 +1573,7 @@
 </code></pre></div>
 <ol>
 <li><code>mujou.run(net)</code> builds the network and starts every node. It returns after <code>on_start</code> (and <code>load_state_dict</code> on a restore) has finished on every node</li>
-<li>From then on, each node repeats <code>on_update</code> on its own thread, once every period. The host's thread does not stop</li>
+<li>From then on, each node repeats <code>on_update</code> once every period, on the run's worker threads (see <a href="#threads-of-a-run">Threads of a run</a>). The host's thread does not stop</li>
 <li>The host writes input with <code>write</code> and reads output with <code>read</code>, <code>read_with_time</code>, <code>subscribe</code> or <code>wait_for</code>. The example above waits with <code>wait_for</code> until the expected value arrives</li>
 <li>When the <code>with</code> statement exits, <code>shutdown()</code> is called, and it waits until <code>on_stop</code> has finished on every node</li>
 </ol>
@@ -1585,6 +1607,11 @@
 <td>The state tree to restore (see <a href="../state/">Saving and restoring state</a>)</td>
 <td><code>None</code></td>
 </tr>
+<tr>
+<td><code>workers</code></td>
+<td>The number of worker threads of the run (see <a href="#threads-of-a-run">Threads of a run</a>)</td>
+<td><code>None</code> (the CPUs; half while the GIL is enabled)</td>
+</tr>
 </tbody>
 </table>
 <p><code>run.timer</code> returns the run's timer: the <code>timer</code> you passed, or the global timer that <code>mujou.time</code> reads.</p>
@@ -1593,6 +1620,14 @@
 <p class="admonition-title">A network runs only once</p>
 <p>Passing a network that was once passed to <code>mujou.run</code> to <code>mujou.run</code> again, whether it is still running or has ended, raises <code>RuntimeError</code>. To run again, create new instances, nodes included.</p>
 </div>
+<h2 id="threads-of-a-run">Threads of a run<a class="headerlink" href="#threads-of-a-run" title="Permanent link">&para;</a></h2>
+<p>A run does not start a thread per node. It starts a pool of worker threads for itself, and the workers share the nodes: a worker runs one hook of one node, then takes the next work, the updates due earliest first. With many nodes, the number of threads stays small, and the OS does not spend its time switching between them.</p>
+<ul>
+<li><code>workers</code> sets the number of workers. <code>None</code>, the default, is the number of CPUs the process may use (the logical cores, or fewer when the CPU affinity or a quota limits them), or half of it (at least 1) while the GIL is enabled at run time (<code>sys._is_gil_enabled()</code>), and never more than the nodes on the workers</li>
+<li>The hooks of a node never run at the same time, and each hook sees what the previous one wrote. Which worker runs the node may change from one hook to the next</li>
+<li>A hook that blocks (<code>time.sleep</code>, waiting for I/O or a lock) holds its worker meanwhile, and the other nodes' <code>dt</code> grows. Give such a node <code>dedicated_thread=True</code> (see <a href="../writing-a-node/#run-on-a-thread-of-its-own">Writing a node</a>): it runs on a thread of its own instead of the workers</li>
+</ul>
+<p>While the GIL is enabled (on a build of Python with it, or on the free-threaded build with <code>PYTHON_GIL=1</code>), only one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. More workers than half the CPUs mostly contend for the GIL, which is why the default is half there. For nodes that spend most of their time in Python, an even smaller <code>workers</code> is about as fast.</p>
 <h2 id="writing-input">Writing input<a class="headerlink" href="#writing-input" title="Permanent link">&para;</a></h2>
 <p>The host can write to a port that:</p>
 <ul>

@@ -2401,7 +2401,8 @@ a node that is itself the root (<code>mujou.run(node)</code>) is at <code>""</co
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">timer</span><span class="p">:</span> <span class="n">Timer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Run</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Run</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -2415,9 +2416,14 @@ nodes at <code>"l1"</code>, ...), and a node is at the path <code>""</code> with
 their positions: <code>"0"</code> for a node given first, <code>"1.l1"</code>, ... for the
 nodes of a network given second. Either way the host writes and reads the
 ports themselves (<code>run.write({node.prev: x})</code>).</p>
-<p>Every node's thread is set up, <code>on_start</code> (and, with <code>state</code>, the node's
+<p>Every node's <code>on_start</code> (and, with <code>state</code>, the node's
 <code>load_state_dict</code>) has returned, and the run's timer runs when this
 returns. A network or node runs once.</p>
+<p>The run's nodes share a pool of <code>workers</code> threads, which it creates for
+itself; a node with <code>dedicated_thread=True</code> runs on a thread of its own
+instead. A worker runs one hook of one node at a time, the updates that are
+due earliest first. A hook that blocks holds its worker, so the other
+nodes' <code>dt</code> grows meanwhile.</p>
 
 
 <table>
@@ -2516,16 +2522,42 @@ replace its values and carry its time.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>A tree from <code>Run.state_dict</code> to restore: the <code>StateDict</code>,
-or any mapping of the same items (such as a plain <code>dict</code>). The slots, the nodes'
-states (through each node's <code>load_state_dict</code>, after its
-<code>on_start</code>), their last update times and the timer continue from
-the time the tree was taken. Build the networks as the ones the tree
-came from: the same node paths and slots.</p>
+or any mapping of the same items (such as a plain <code>dict</code>). The
+slots, the nodes' states (through each node's <code>load_state_dict</code>,
+after its <code>on_start</code>), their last update times and the timer
+continue from the time the tree was taken. Build the networks as the
+ones the tree came from: the same node paths and slots.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
                       <code><span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>workers</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The number of worker threads of the run (&gt;= 1). <code>None</code> is
+as many as the CPUs the process may use (the logical cores, or
+fewer when the CPU affinity or a quota limits them), or half of
+them (at least 1) while the GIL is enabled at run time
+(<code>sys._is_gil_enabled()</code>), never more than the nodes on the
+workers. With no such node, the run has no
+worker.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span> | None</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -2575,7 +2607,20 @@ from a node's hook.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>A value is neither a <code>Node</code> nor a <code>Network</code>.</p>
+                <p>A value is neither a <code>Node</code> nor a <code>Network</code>, or
+<code>workers</code> is not an <code>int</code> (a <code>bool</code> included).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>workers</code> is less than 1 (or more than <code>sys.maxsize</code>).</p>
               </div>
             </td>
           </tr>
@@ -2633,8 +2678,8 @@ once the cause is gone.</p>
 
         <p>A run of networks, as <code>mujou.run</code> returns it: what the host uses to talk
 to the running nodes.</p>
-<p>The nodes run in the background, each on its own thread; the host's thread
-only writes inputs, reads outputs and takes the state:</p>
+<p>The nodes run in the background, on the run's worker threads (or threads of
+their own); the host's thread only writes inputs, reads outputs and takes the state:</p>
 <ul>
 <li><code>write</code> inputs, <code>read</code> / <code>read_with_time</code> / <code>subscribe</code> outputs,
   take a <code>state_dict</code>.</li>
@@ -2646,8 +2691,9 @@ the host: calling them from a node's hook raises <code>RuntimeError</code>.</p>
 <p>If a node raises, the whole run stops. If that happens while <code>mujou.run</code>
 starts the nodes, <code>mujou.run</code> raises <code>NetworkError</code>; otherwise every later
 call of <code>write</code>, <code>read</code>, <code>read_with_time</code>, <code>subscribe</code> (and its
-iterator), <code>state_dict</code>, <code>shutdown</code> and <code>join</code> raises it. Its <code>__cause__</code> is the node's
-exception. The state at the exception is not kept.</p>
+iterator), <code>state_dict</code>, <code>shutdown</code> and <code>join</code> raises it. Its
+<code>__cause__</code> is the node's exception. The state at the exception is not
+kept.</p>
 <p>A run keeps running when the host drops it, until <code>shutdown</code> or, at the
 latest, the interpreter's exit (which waits for <code>on_stop</code>). At the exit,
 the runs start stopping once the main thread has ended, before the
@@ -2755,8 +2801,8 @@ write in between; compare the times to tell.) Any port of the tree can be
 written, exposed by the root or not.</p>
 <p>The time is the run's timer at the write, as a node's <code>recv_with_time</code>
 and the <code>/in</code> slots of <code>state_dict</code> show it; <code>read_with_time</code> shows
-the times of sends, not of writes. An empty <code>values</code> changes nothing and returns
-the time all the same.</p>
+the times of sends, not of writes. An empty <code>values</code> changes nothing
+and returns the time all the same.</p>
 
 
 <table>

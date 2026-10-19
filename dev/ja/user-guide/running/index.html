@@ -844,6 +844,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#実行のスレッド" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        実行のスレッド
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#入力を書く" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1468,6 +1479,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#実行のスレッド" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        実行のスレッド
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#入力を書く" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1542,7 +1564,7 @@
 <h2 id="基本の形">基本の形<a class="headerlink" href="#基本の形" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">()</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># The nodes run on threads of their own until the end of the `with` block.</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># the unconnected input port of scale</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
@@ -1553,7 +1575,7 @@
 </code></pre></div>
 <ol>
 <li><code>mujou.run(net)</code> でネットワークを構築し、全ノードを起動する。全ノードの <code>on_start</code>（復元なら <code>load_state_dict</code> も）が終わってから戻る</li>
-<li>以後、各ノードは自分のスレッドで周期ごとに <code>on_update</code> を繰り返す。ホストのスレッドは止まらない</li>
+<li>以後、各ノードは実行のワーカースレッドの上で周期ごとに <code>on_update</code> を繰り返す（<a href="#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89">実行のスレッド</a>）。ホストのスレッドは止まらない</li>
 <li>ホストは <code>write</code> で入力を書き、<code>read</code>・<code>read_with_time</code>・<code>subscribe</code>・<code>wait_for</code> で出力を読む。上の例では期待した値が届くまで <code>wait_for</code> で待つ</li>
 <li><code>with</code> 文を抜けると <code>shutdown()</code> が呼ばれ、全ノードの <code>on_stop</code> が終わるまで待つ</li>
 </ol>
@@ -1587,6 +1609,11 @@
 <td>復元する状態の木（<a href="../state/">状態の保存と復元</a>）</td>
 <td><code>None</code></td>
 </tr>
+<tr>
+<td><code>workers</code></td>
+<td>実行のワーカースレッドの数（<a href="#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89">実行のスレッド</a>）</td>
+<td><code>None</code>（CPU の数。GIL が有効なら半分）</td>
+</tr>
 </tbody>
 </table>
 <p><code>run.timer</code> は実行のタイマーを返す。<code>timer</code> を渡していればそれ、渡していなければ <code>mujou.time</code> が読むグローバルタイマーである。</p>
@@ -1595,6 +1622,14 @@
 <p class="admonition-title">ネットワークは 1 回しか走らせられない</p>
 <p>一度 <code>mujou.run</code> に渡したネットワークをもう一度 <code>mujou.run</code> に渡すと、実行中でも終了後でも <code>RuntimeError</code> になる。再び走らせるときはノードも含めて新しいインスタンスを作る。</p>
 </div>
+<h2 id="実行のスレッド">実行のスレッド<a class="headerlink" href="#実行のスレッド" title="Permanent link">&para;</a></h2>
+<p>実行はノードごとにスレッドを立てない。実行ごとにワーカースレッドのプールを作り、ワーカーがノードを分け合って動かす。ワーカーは 1 つのノードの hook を 1 回実行したら、期限の早い更新から次の仕事を取る。ノードが多くてもスレッドは少ないままで、OS がスレッドの切り替えに時間を取られない。</p>
+<ul>
+<li>ワーカーの数は <code>workers</code> で決める。既定の <code>None</code> はプロセスが使える CPU の数（論理コア数。CPU の affinity や割り当ての上限があればそれより少ない）、実行時に GIL が有効なら（<code>sys._is_gil_enabled()</code>）その半分（最低 1）で、ワーカーに載るノードの数を超えない</li>
+<li>1 つのノードの hook が同時に走ることはなく、前の hook が書いた値は次の hook から見える。どのワーカーがノードを動かすかは hook ごとに変わりうる</li>
+<li>ブロッキングする hook（<code>time.sleep</code>、I/O や lock の待ち）はその間ワーカーをふさぎ、ほかのノードの <code>dt</code> が伸びる。そういうノードには <code>dedicated_thread=True</code> を渡し、ワーカーでなく専用のスレッドで動かす（<a href="../writing-a-node/#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99">ノードを書く</a>）</li>
+</ul>
+<p>GIL が有効なとき（GIL ありのビルド、または free-threaded のビルドで <code>PYTHON_GIL=1</code> のとき）は、Python のコードを同時に実行できるスレッドが 1 本だけなので、ノードが並列に動くのは torch の演算の中に限られる。CPU の数の半分を超えてワーカーを増やしても GIL を取り合うだけなので、既定を半分にしている。Python の処理が大半を占めるノードなら、<code>workers</code> をさらに小さくしても速さはほとんど変わらない。</p>
 <h2 id="入力を書く">入力を書く<a class="headerlink" href="#入力を書く" title="Permanent link">&para;</a></h2>
 <p>ホストが書けるのは次の条件をすべて満たす Port である。</p>
 <ul>

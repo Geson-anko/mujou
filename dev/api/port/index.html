@@ -2863,9 +2863,9 @@ gradients, so changing them in place changes nothing else.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner reads its port; <code>state_dict</code> runs
-on another thread).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner reads its port; <code>state_dict</code>
+runs on another thread).</p>
               </div>
             </td>
           </tr>
@@ -2978,8 +2978,8 @@ stream. It never waits for the peers to read.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner writes its port).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner writes its port).</p>
               </div>
             </td>
           </tr>
@@ -3321,9 +3321,9 @@ gradients, so changing them in place changes nothing else.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner reads its port; <code>state_dict</code> runs
-on another thread).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner reads its port; <code>state_dict</code>
+runs on another thread).</p>
               </div>
             </td>
           </tr>
@@ -3436,8 +3436,8 @@ stream. It never waits for the peers to read.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner writes its port).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner writes its port).</p>
               </div>
             </td>
           </tr>
@@ -3781,9 +3781,9 @@ gradients, so changing them in place changes nothing else.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner reads its port; <code>state_dict</code> runs
-on another thread).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner reads its port; <code>state_dict</code>
+runs on another thread).</p>
               </div>
             </td>
           </tr>
@@ -3896,8 +3896,8 @@ stream. It never waits for the peers to read.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The network is not running, or the caller is not the owning
-node's thread (only the owner writes its port).</p>
+                <p>The network is not running, or the caller is not a hook
+of the owning node (only the owner writes its port).</p>
               </div>
             </td>
           </tr>

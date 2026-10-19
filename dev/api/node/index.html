@@ -1218,6 +1218,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.Node.dedicated_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dedicated_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.Node.generator" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1288,17 +1299,6 @@
     <span class="md-ellipsis">
       
         on_stop
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.Node.on_thread_start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        on_thread_start
       
     </span>
   </a>
@@ -1588,6 +1588,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.Node.dedicated_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dedicated_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.Node.generator" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1665,17 +1676,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujou.Node.on_thread_start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        on_thread_start
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#mujou.Node.on_update" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1745,7 +1745,13 @@
 
 
 <a href="#mujou.Node" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Node</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Node</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">dedicated_thread</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1763,14 +1769,13 @@ side in a <code>Network</code> instead.</p>
 <p>Override the lifecycle hooks below; each does nothing by default, except
 <code>state_dict</code> and <code>load_state_dict</code>. As in any subclass, call
 <code>super().__init__()</code> first in <code>__init__</code> and the same hook of <code>super()</code>
-first in each override. The framework calls the hooks on the node's own
-thread, except <code>state_dict</code>:</p>
+first in each override. The framework calls the hooks on the thread that
+runs the node (see "Threads" below), except <code>state_dict</code>:</p>
 <ul>
-<li><code>on_thread_start()</code>: once, right before <code>on_start</code>, after the
-  framework has set up the thread (see below). Make the node's own
-  per-thread settings here.</li>
 <li><code>on_start()</code>: once, when the network runs (also when it was restored).
-  Allocate and initialize the state here.</li>
+  Allocate and initialize the state here. A node with
+  <code>dedicated_thread=True</code> gets it on its own thread, so it can also make
+  its per-thread settings here.</li>
 <li><code>load_state_dict(state)</code>: only when the network was restored, after
   <code>on_start</code> and before the first <code>on_update</code>. <code>state</code> is a copy of what
   this node's <code>state_dict</code> returned. By default it copies the state into the
@@ -1810,13 +1815,31 @@ afterwards: the default <code>load_state_dict</code> copies into them in place.<
 <code>mujou.run</code> or the methods of any <code>Run</code> (<code>write</code>, <code>read</code>,
 <code>state_dict</code>, ...): they raise <code>RuntimeError</code> there, because a node talks
 only through its own ports.</p>
-<p>Before <code>on_start</code>, the framework sets up the node's thread: it turns off
-gradient recording (to backpropagate inside the node, wrap the forward
-computation and <code>backward</code> in <code>with torch.enable_grad():</code> marked
-<code># mujou: local-autograd</code>), and, when <code>device</code> is CUDA, makes the device and
-a stream of the node's own current. On CUDA it also waits for that stream after
-<code>on_update</code>, after <code>load_state_dict</code> and around <code>state_dict</code>. It does this in hooks of its own, whose names start with
-<code>_</code>: do not override those, and overriding a public hook never skips them.</p>
+<p>Threads: by default the node runs on the workers, a pool of threads that
+the run shares among its nodes (<code>mujou.run(..., workers=...)</code>). Each hook
+may then run on a different thread from the previous one, but the hooks of
+a node never run at the same time, and each sees what the previous one
+wrote. Whether the next hook sees what a hook set per thread
+(<code>threading.local</code>, <code>threading.current_thread()</code>, settings of torch
+such as <code>torch.autocast</code>) depends on the schedule, and the next node on
+the same worker may see it too: set such settings back before the hook
+returns (inside a <code>with</code>, say). <code>contextvars</code> do carry over: each node
+runs its hooks in a <code>contextvars.Context</code> of its own, which starts empty
+(it does not inherit the host's) and does not hold for <code>state_dict</code>. A
+hook that blocks (<code>time.sleep</code>, waiting for I/O or a lock) holds its
+worker meanwhile, and the other nodes' <code>dt</code> grows; give such a node
+<code>dedicated_thread=True</code>, so that it runs on a thread of its own, with
+every hook on that thread.</p>
+<p>Before every hook but <code>state_dict</code>, the framework turns off gradient
+recording (to backpropagate inside the node, wrap the forward computation
+and <code>backward</code> in <code>with torch.enable_grad():</code> marked
+<code># mujou: local-autograd</code>). Whenever a thread switches to the node, when
+<code>device</code> is CUDA, it also makes the device and a stream of the node's own
+current. These are the only per-thread settings it sets back. On CUDA it
+also waits for that stream after <code>on_update</code> (holding its worker
+meanwhile), after <code>load_state_dict</code> and around <code>state_dict</code>. It does
+this in hooks of its own, whose names start with <code>_</code>: do not override
+those, and overriding a public hook never skips them.</p>
 <p>The node updates once every <code>period</code> (0.01 s by default) of the run's timer
 on average: the time an update takes
 counts toward the period, and a node that falls a whole <code>period</code> behind does
@@ -1828,9 +1851,10 @@ stay stable for the longest <code>dt</code> it can get. A manual run
 <p><code>period=0.0</code> updates as soon as any time has passed since the last update.
 Set it only when the node must: such a node keeps a CPU core busy, and takes
 time from the other nodes, whose <code>dt</code> it makes irregular.</p>
-<p><code>device</code>, <code>generator</code>, <code>period</code> and <code>timer</code> (the reading side of the
-run's timer) are reserved names: do not assign attributes of those names
-(a class attribute <code>period</code> makes the run raise <code>TypeError</code>).</p>
+<p><code>device</code>, <code>generator</code>, <code>period</code>, <code>dedicated_thread</code> and <code>timer</code>
+(the reading side of the run's timer) are reserved names: do not assign
+attributes of those names (a class attribute <code>period</code> or
+<code>dedicated_thread</code> makes the run raise <code>TypeError</code>).</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>class Hidden(Node):
     def __init__(self, n_in: int, n_out: int) -&gt; None:
@@ -1928,6 +1952,28 @@ run's timer. <code>0.0</code> updates as soon as any time has passed.</p>
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dedicated_thread</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Run the node on a thread of its own instead of the
+run's workers: for a node whose hooks block, or that relies on
+per-thread state set once (in <code>on_start</code>).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1948,7 +1994,8 @@ run's timer. <code>0.0</code> updates as soon as any time has passed.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>period</code> is <code>None</code> or a <code>bool</code>.</p>
+                <p><code>period</code> is a <code>bool</code>, or <code>dedicated_thread</code> is not a
+<code>bool</code>.</p>
               </div>
             </td>
           </tr>
@@ -2006,8 +2053,9 @@ finite.</p>
     <div class="doc doc-contents ">
 
         <p>The device the node computes on and receives messages on.</p>
-<p>Allocate with it (<code>torch.zeros(..., device=self.device)</code>): the thread's
-current device is this one, but an explicit device states the intent.</p>
+<p>Allocate with it (<code>torch.zeros(..., device=self.device)</code>): the current
+device in the hooks is this one, but an explicit device states the
+intent.</p>
 
     </div>
 
@@ -2033,6 +2081,31 @@ current device is this one, but an explicit device states the intent.</p>
 
         <p>The time between two updates on average, in seconds of the run's
 timer. <code>0.0</code> updates as soon as any time has passed.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.dedicated_thread" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">dedicated_thread</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.dedicated_thread" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dedicated_thread</span><span class="p">:</span> <span class="nb">bool</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the node runs on a thread of its own instead of the run's
+workers.</p>
 
     </div>
 
@@ -2083,8 +2156,8 @@ and <code>set_state</code> it before passing the rest to <code>super()</code>.</
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>super().__init__()</code> has not been called (and the node's
-thread has not started).</p>
+                <p><code>super().__init__()</code> has not been called (and the node
+has not started).</p>
               </div>
             </td>
           </tr>
@@ -2121,9 +2194,9 @@ measures its <code>dt</code>.</p>
 change the time of its run (<code>Timer.sleep</code>, <code>set_time_scale</code> and
 <code>VirtualTimer.advance</code> raise <code>RuntimeError</code> in a hook). <code>timer</code> is a
 reserved name: do not assign an attribute of that name.</p>
-<p>It can be read from the start of the run (also in <code>on_thread_start</code>
-and <code>on_start</code>). Once the host has seen a normal end (e.g. after
-<code>Run.shutdown</code> returned), it is replaced by a <code>ReadOnlyTimer</code> that
+<p>It can be read from the start of the run (also in <code>on_start</code>). Once the
+host has seen a normal end (e.g. after <code>Run.shutdown</code> returned), it is
+replaced by a <code>ReadOnlyTimer</code> that
 stays at the time of the state, also in the <code>state_dict</code> that the host
 takes then. A <code>ReadOnlyTimer</code> kept from before the end keeps reading
 the running timer.</p>
@@ -2252,9 +2325,8 @@ state), at the end of its current <code>on_update</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Called once on the node's thread when the run starts (also when it is
-restored), before any other public hook but <code>on_thread_start</code>. Allocate
-and initialize the state here.</p>
+        <p>Called once when the run starts (also when it is restored), before any
+other public hook. Allocate and initialize the state here.</p>
 
 
     </div>
@@ -2278,34 +2350,8 @@ and initialize the state here.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Called once on the node's thread when the run stops, also after an
-exception. It must not change what <code>state_dict</code> returns. What it raises
-is logged and ignored.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="mujou.Node.on_thread_start" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">on_thread_start</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
-  </span>
-
-<a href="#mujou.Node.on_thread_start" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_thread_start</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Called on the node's thread right before <code>on_start</code>, after the
-framework's own per-thread settings, for the node's per-thread settings.</p>
+        <p>Called once when the run stops, also after an exception. It must not
+change what <code>state_dict</code> returns. What it raises is logged and ignored.</p>
 
 
     </div>
@@ -2329,9 +2375,9 @@ framework's own per-thread settings, for the node's per-thread settings.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Called repeatedly on the node's thread with <code>dt</code>, the seconds on the
-run's timer since the node's last update (always &gt; 0). Read the ports,
-update in proportion to <code>dt</code> and send.</p>
+        <p>Called repeatedly with <code>dt</code>, the seconds on the run's timer since the
+node's last update (always &gt; 0). Read the ports, update in proportion to
+<code>dt</code> and send.</p>
 
 
     </div>

@@ -1753,7 +1753,7 @@
 <p>1 つのノードが時間を止めたり速さを変えたりすると同じ実行のほかのノードの <code>dt</code> まで変わるので、hook の中から <code>mujou.time</code> や <code>Timer</code> の <code>sleep</code>・<code>set_time_scale</code>・<code>pause</code>・<code>resume</code>、<code>VirtualTimer.advance</code> を呼ぶと <code>RuntimeError</code> になる。</p>
 <ul>
 <li>ノードを一定間隔で更新したいときは、hook の中で待たずに <code>super().__init__(period=seconds)</code> で周期を渡す。周期は更新と更新の間の平均時間（実行のタイマーの秒）である（<a href="../writing-a-node/">ノードを書く</a>）</li>
-<li><code>self.timer</code> は <code>on_thread_start</code> と <code>on_start</code> を含むどの hook の中でも読める。<code>__init__</code> の中で読むと <code>RuntimeError</code> になる</li>
+<li><code>self.timer</code> は <code>on_start</code> を含むどの hook の中でも読める。<code>__init__</code> の中で読むと <code>RuntimeError</code> になる</li>
 </ul>
 <h2 id="復元すると時刻が戻る">復元すると時刻が戻る<a class="headerlink" href="#復元すると時刻が戻る" title="Permanent link">&para;</a></h2>
 <p><code>mujou.run(..., state=tree)</code> で復元すると、その実行のタイマーの時刻は木を取得した時刻に戻る。グローバルタイマーなら <code>mujou.time.now()</code> も巻き戻る。詳しくは<a href="../state/">状態の保存と復元</a>を参照。</p>

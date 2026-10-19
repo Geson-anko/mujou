@@ -1751,7 +1751,7 @@
 <p>Calling <code>sleep</code>, <code>set_time_scale</code>, <code>pause</code> or <code>resume</code> of <code>mujou.time</code> or of a <code>Timer</code>, or <code>VirtualTimer.advance</code>, in a hook raises <code>RuntimeError</code>. If one node stopped the time or changed its speed, it would change the <code>dt</code> of the other nodes in the same run too.</p>
 <ul>
 <li>To update a node at regular intervals, do not wait in a hook. Pass a period with <code>super().__init__(period=seconds)</code>. The period is the average time between two updates, in seconds of the run's timer (see <a href="../writing-a-node/">Writing a node</a>)</li>
-<li><code>self.timer</code> can be read in every hook, <code>on_thread_start</code> and <code>on_start</code> included. Reading it in <code>__init__</code> raises <code>RuntimeError</code></li>
+<li><code>self.timer</code> can be read in every hook, <code>on_start</code> included. Reading it in <code>__init__</code> raises <code>RuntimeError</code></li>
 </ul>
 <h2 id="restoring-sets-the-time-back">Restoring sets the time back<a class="headerlink" href="#restoring-sets-the-time-back" title="Permanent link">&para;</a></h2>
 <p>Restoring with <code>mujou.run(..., state=tree)</code> sets the run's timer back to the time the tree was taken. On the global timer, <code>mujou.time.now()</code> goes back too. Details are in <a href="../state/">Saving and restoring state</a>.</p>
