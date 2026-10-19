@@ -136,3 +136,61 @@ must-fix は 1 件だけ。エラー経路に限られ、直し方も行の並�
 - just run: pass（cargo test・pytest 589 passed / 20 skipped・pyright 0 errors・mkdocs build --strict）
 - 作業ツリー: just run の後、`memory/agents/algorithm-reviewer/mn-python-nodes.md` に未コミットの追記がある。algorithm-reviewer が同時に書いた再監査で、just run の整形によるものではない
 - 成果物の汚染（`</content>` など）: なし
+
+---
+
+# 再レビュー 2（2026-10-19、`git diff b39257e..HEAD`、c89a408 まで。`on_thread_start` の廃止と CUDA の推奨）
+
+## verdict: approve
+
+must-fix と should-fix は無い。決定 (1)(2) は範囲どおりに入っている。指摘は nit だけ。
+
+## 見てほしい点への所見
+
+- `on_thread_start` の消し残し
+  - コード（`crates/`、`src/`）、テスト、docs（en/ja）、specs、skill には、現役の記述として残っていない
+  - 残っているのは、経緯として書いた次の箇所だけで、どれも打ち消し線か「廃止した」の注記が付いている。正しい残し方
+    - `memory/project_*.md`、`memory/MEMORY.md`
+    - `specs/native-core.md:65`（廃止の記録）
+    - `specs/open-decisions.md:37`（`_on_thread_start` の経緯）
+  - 決定どおり、検出も案内もしない。`checked_dedicated` に残したのは予約名の検査だけ
+- 消したテストが押さえていた性質の行き先
+  - 最初の公開 hook の時点で勾配が切れていること: `TestThreadSetup`（`Probe.on_start`）と `_before_hook` のテスト
+  - generator が続けて使えること: 既存の `InitDraws` などのテスト
+  - 専用スレッドが全 hook を 1 本のスレッドで走らせること: `TestDedicatedThread`
+  - 専用スレッドで `on_start` に設定した `threading.local` が後の hook でも保たれること: `test_the_hooks_of_a_dedicated_node_share_one_python_thread_state`。決定の前提「スレッドごとの設定は `on_start` に書く」はこれで保証される
+  - 「専用スレッドの中でもホスト用のメソッドを断る」: 実装者の判断（既存のテストで足りる）は妥当。根拠は 2 本のテストの組み合わせで、次の 2 点が確かめられているから
+    - 専用スレッドでも `on_start` の前に `_on_enter` が 1 回だけ呼ばれる（bindings の `test_the_framework_enters_a_dedicated_node_once_before_on_start`）
+    - `mujou.Node._on_enter` が `enter_node` を呼ぶ（ワーカーの上の in_hook のテストと M1 のテスト）
+  - ただし推論が 2 段になるので、補強の案を N14 に挙げた
+- `PyNode` の `dedicated` を消し、コアの `RuntimeConfig::dedicated` だけにした変更: 妥当
+  - bindings の `dedicated` は `on_thread_start` を呼び分けるためだけにあった。今はどのノードでも同じ hook の列になる
+  - 長さの検査は今までどおりコアが行い、`test_invalid_arguments_start_nothing[dedicated]` が残っている
+  - `flags` の複製と `enumerate` も無くなり、簡単になった
+- CUDA の推奨の記述: PyTorch の仕様に照らして正確
+  - キャッシュアロケータは、確保した時点の現在のストリームにブロックを結び付ける。解放すると、`record_stream` が無ければ、そのストリームの次の確保にすぐ再利用されうる
+  - ノードのストリームの仕事が残っているうちにホストのストリームで再利用される危険は、確かに `__init__` で確保したときに生じる
+  - `on_start` 以降で作ればノードのストリームに結び付き、ストリームの順序で守られる。この利点も正しく書けている
+  - 「`__init__` でも `mujou.run` の同期で正しく動く」は、specs/torch.md の同期の表の最後の行と一致する
+  - specs には「実機で確かめていない」の注記がある
+  - examples の 3 つ（`torch_node.py`、`online_learning.py`、`save_and_restore.py`）はもともと `on_start` で `nn.Linear(..., device=self.device)` を作っているので、推奨と食い違わない
+  - `torch.md#cuda` のアンカーは en/ja とも見出し `## CUDA` で、ビルドも通る
+
+## must-fix
+
+なし
+
+## should-fix
+
+なし
+
+## nit
+
+- N14. 専用スレッドでのホスト用メソッドの拒否を直接確かめるテストが無い（上の 2 段の推論で足りてはいる）。既存の `TestHostMethodsFromANode.test_raise`（`test_run.py`）を `dedicated_thread` の True/False でパラメータ化すれば、1 行で直接押さえられる。確信度: 中
+- N15. `src/mujou/_core/node.py:368`（`timer` の docstring）の 1 行が 120 桁ある。「(also in ``on_thread_start`` and ``on_start``)」を消したときに折り返し直していない。ruff format は docstring を折り返さないので、just run は通る。確信度: 高
+- N16. ja の文体: `docs/ja/user-guide/torch.md` の tip「…正しく動く。`mujou.run` がノードを起動する前にホストのストリームを同期するからである。」は、memory/feedback_japanese_style.md が避けるとしている「理由を『〜からである』で付け足す」形になっている。「`mujou.run` がノードを起動する前にホストのストリームを同期するので、`__init__` で CUDA に確保しても正しく動く。」のように、理由を前に置けば直る。確信度: 中
+
+## 検証結果
+
+- just run: pass（cargo test・pytest 594 passed / 20 skipped・pyright 0 errors・mkdocs build --strict）。作業ツリーに変更は無い
+- `on_thread_start` の grep（`.git`・`target`・`.venv`・`site`・`memory/agents/` を除く）: 現役の記述は 0 件。経緯の記述は上のとおり
