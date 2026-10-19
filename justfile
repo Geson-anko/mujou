@@ -30,8 +30,7 @@ test-py:
     uv run pytest -v --cov
 
 # Run cargo test and pytest without slow convergence / training checks
-test-fast:
-    cargo test --workspace
+test-fast: test-rs
     uv run pytest -v -m "not slow"
 
 # Run pyright strict over src/
