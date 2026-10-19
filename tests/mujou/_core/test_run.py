@@ -165,6 +165,35 @@ def euler(x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return x + min(H / 1.0, 1.0) * (target - x)
 
 
+def run_together(
+    started: list[Run], *given: tuple[Node | Network, ...]
+) -> RuntimeError:
+    """Call ``mujou.testing.run(*components)`` for each of ``given`` on threads of
+    their own at once; check that exactly one run started and return the error of
+    the other."""
+    barrier = threading.Barrier(len(given))
+    outcomes: list[Run | RuntimeError] = []
+
+    def run(components: tuple[Node | Network, ...]) -> None:
+        barrier.wait()
+        try:
+            handle = mujou.testing.run(*components, timer=VirtualTimer())
+        except RuntimeError as e:
+            outcomes.append(e)
+            return
+        started.append(handle)
+        outcomes.append(handle)
+
+    threads = [threading.Thread(target=run, args=(g,)) for g in given]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(outcomes) == len(given)
+    (error,) = (o for o in outcomes if isinstance(o, RuntimeError))
+    return error
+
+
 class TestRun:
     def test_returns_once_every_node_has_started(self, start: Start):
         net = Chain()
@@ -236,28 +265,7 @@ class TestRun:
     ):
         for _ in range(20):
             net = make()
-            barrier = threading.Barrier(2)
-            outcomes: list[object] = []
-
-            def run(
-                net: Node | Network = net, barrier: threading.Barrier = barrier
-            ) -> None:
-                barrier.wait()
-                try:
-                    handle = mujou.testing.run(net, timer=VirtualTimer())
-                except RuntimeError as e:
-                    outcomes.append(e)
-                    return
-                started.append(handle)
-                outcomes.append(handle)
-
-            threads = [threading.Thread(target=run) for _ in range(2)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            assert sum(isinstance(o, Run) for o in outcomes) == 1
-            (error,) = (o for o in outcomes if not isinstance(o, Run))
+            error = run_together(started, (net,), (net,))
             assert str(error) == message
 
     @pytest.mark.parametrize("shared", ["network", "node"])
@@ -280,31 +288,7 @@ class TestRun:
                 node = Leaky()
                 given = [(node,), (Group(node=node),)]
                 who = r"^Leaky (at 'node' )?"
-            barrier = threading.Barrier(2)
-            outcomes: list[object] = []
-
-            def run(
-                components: tuple[Node | Network, ...],
-                barrier: threading.Barrier = barrier,
-                outcomes: list[object] = outcomes,
-            ) -> None:
-                barrier.wait()
-                try:
-                    handle = mujou.testing.run(*components, timer=VirtualTimer())
-                except RuntimeError as e:
-                    outcomes.append(e)
-                    return
-                started.append(handle)
-                outcomes.append(handle)
-
-            threads = [threading.Thread(target=run, args=(g,)) for g in given]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            assert sum(isinstance(o, Run) for o in outcomes) == 1
-            (error,) = (o for o in outcomes if not isinstance(o, Run))
-            assert isinstance(error, RuntimeError)
+            error = run_together(started, *given)
             assert re.match(who + refused, str(error)), str(error)
 
     def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
@@ -1235,10 +1219,9 @@ class TestHostMethodsFromANode:
                     node.errors.append(e)
 
         node = Calls(call_every_host_method, dedicated_thread=dedicated_thread)
-        chain = Chain()
-        chain.caller = node  # pyright: ignore[reportAttributeAccessIssue]
-        net = chain
-        run = start_manual(chain)
+        net = Chain()
+        net.caller = node  # pyright: ignore[reportAttributeAccessIssue]
+        run = start_manual(net)
         runs.append(run)
         step(run)
         assert len(node.errors) == 7
@@ -1279,8 +1262,7 @@ class TestState:
         run.shutdown()
         x = tree["nodes"]["a"]["x"].clone()
         net = Chain()
-        restored = start_manual(net, timer=VirtualTimer(), state=tree)
-        assert restored is not None
+        start_manual(net, timer=VirtualTimer(), state=tree)
         net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
 
