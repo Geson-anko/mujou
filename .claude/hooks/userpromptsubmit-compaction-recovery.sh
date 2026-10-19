@@ -6,19 +6,8 @@
 
 set -uo pipefail
 
-input=$(cat)
-sid=$(
-  printf '%s' "$input" | python3 -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("session_id") or "" if isinstance(data, dict) else "")
-except Exception:
-    pass
-' 2>/dev/null
-) || sid=""
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh" 2>/dev/null || exit 0
+sid=$(read_session_id) || sid=""
 [[ -z "$sid" ]] && exit 0
 
 marker="${TMPDIR:-/tmp}/claude-compacted/$sid"
@@ -37,19 +26,5 @@ ctx+=$'\n'"- plan mode が解除されていないか確認し、計画の途中
 ctx+=$'\n'"- 却下済みのアプローチを再提案していないか、CLAUDE.md の決定事項と照合せよ"
 ctx+=$'\n'"- 委譲済みのサブエージェント / worktree の存在を忘れて自分で着手していないか確認せよ"
 
-printf '%s' "$ctx" | python3 -c '
-import json
-import sys
-
-print(
-    json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": sys.stdin.read(),
-            }
-        }
-    )
-)
-' 2>/dev/null || true
+printf '%s' "$ctx" | print_prompt_context || true
 exit 0

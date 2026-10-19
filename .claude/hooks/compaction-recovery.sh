@@ -7,19 +7,8 @@
 
 set -uo pipefail
 
-input=$(cat)
-sid=$(
-  printf '%s' "$input" | python3 -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("session_id") or "" if isinstance(data, dict) else "")
-except Exception:
-    pass
-' 2>/dev/null
-) || sid=""
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh" 2>/dev/null || exit 0
+sid=$(read_session_id) || sid=""
 [[ -z "$sid" ]] && exit 0
 
 # 圧縮発生 marker を書く (UserPromptSubmit が検出して指示注入 → 削除する)
