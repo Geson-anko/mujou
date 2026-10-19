@@ -34,7 +34,7 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## mujou.Node の細部
 
-GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、勾配の記録の停止・ノードごとのストリーム・乱数生成器を設定することは決定済み。
+GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、ノードごとのストリーム・乱数生成器を設定することは決定済み。勾配の記録は切り替えない（2026-10-19、ユーザーの決定。[PyTorch の利用](torch.md#切り替えごとの設定)）。
 
 次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は内部の hook `_on_enter()` で行い、`on_start` の override で漏れないようにした。`_on_enter()` はスレッドがそのノードに切り替わるたびに次の hook の直前で呼ぶ（2026-10-18 に、起動時に 1 回だけ呼ぶ `_on_thread_start()` から置き換えた）。トップレベルの公開名は `Node, Network, Group, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, StateDict, run, __version__`（と `mujou.time` と `mujou.typing`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)。`mujou.pc` は未実装）。
 

@@ -36,7 +36,8 @@
 - [run がノードを受け付け、write が時刻を返す](project_run_node_and_write_time.md) — 2026-10-17。`Run.write` が `Timestamp` を返す。`mujou.run(component, *components)` / `Group(*components)` がノードを受け付け混在可。1 つだけなら包まず根にする（ノードのパス `""`、ユーザーの決定）
 - [Compose を Group に、型は mujou.typing に](project_group_and_typing.md) — 2026-10-17 のユーザーの決定。並べるだけなので直列の合成に読める名前を避けた。`Single` / `Multi` / `MessageSpec` を `mujou.typing` から公開
 - [接続は Port 同士だけ、Port と子は代入時に登録](project_port_registry.md) — 2026-10-17。Component.connect と PrevPort / NextPort を 1 つずつに限る制約を廃止。nn.Module と同じく __setattr__ で登録し build は vars() を探索しない。init 前の代入は AttributeError、構築後の変更は RuntimeError
-- [M:N スケジューリング](project_mn_scheduler.md) — 2026-10-18 のユーザーの要求。Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True) で opt-in（on_thread_start は 2026-10-19 に廃止）、mujou.run(workers=None)、ノードはワーカー間を移ってよい（保つのは contextvars と勾配モード・CUDA の device/stream）
+- [M:N スケジューリング](project_mn_scheduler.md) — 2026-10-18 のユーザーの要求。Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True) で opt-in（on_thread_start は 2026-10-19 に廃止）、mujou.run(workers=None)、ノードはワーカー間を移ってよい（保つのは contextvars と CUDA の device/stream）
+- [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。_before_hook を廃止、hook は通常の PyTorch と同じく勾配を記録
 - [未決定事項](project_open_decisions.md) — ネットワークスキーマの API・時定数・双対の持ち越しなど、まだ決めていない設計判断
 
 ## feedback

@@ -49,8 +49,7 @@ create_exception!(
 /// own thread if it was started as dedicated (`state_dict`, through
 /// `_capture_state`, on the control thread while the node is paused). The hooks
 /// of a node never overlap, and each runs in the node's own
-/// `contextvars.Context` (but `_capture_state` and `_before_hook`). They do
-/// nothing by default.
+/// `contextvars.Context` (but `_capture_state`). They do nothing by default.
 ///
 /// The hooks are looked up by name until `on_start` (and `load_state_dict`)
 /// has returned, and once after that, so replacing one in those hooks takes
@@ -75,15 +74,6 @@ impl Node {
     /// override of a public hook can skip them. An error here is reported as
     /// the error of the hook that was to follow.
     fn _on_enter(&self) {}
-
-    /// Called right before every public hook but `state_dict` (after
-    /// `_on_enter` when the thread switches to this node), for the framework's
-    /// settings that must hold at the start of each hook whatever the previous
-    /// hook left. It runs outside the node's `contextvars.Context`, so a
-    /// setting held in a context variable does not take effect here. An error
-    /// here is reported as the error of that hook, which is then not called,
-    /// except `on_exception` and `on_stop`, which still run.
-    fn _before_hook(&self) {}
 
     /// Called once when the run starts (also when it is restored), before any
     /// other public hook. Allocate and initialize the state here.
@@ -180,9 +170,8 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
 
 /// The hooks called more than once, looked up once at the end of `start`
 /// instead of by name at every call. `PyNode::methods` holds them in this order.
-const CACHED_HOOKS: [&str; 9] = [
+const CACHED_HOOKS: [&str; 8] = [
     "_on_enter",
-    "_before_hook",
     "on_update",
     "_after_update",
     "on_pause",
@@ -261,18 +250,6 @@ impl PyNode {
         // (`on_thread`), so this attach only takes the GIL (on a GIL build).
         Python::attach(|py| {
             let result = (|| {
-                // Outside the node's context (see `Node::_before_hook`).
-                if !matches!(hook, "_on_enter" | "_after_update") {
-                    match self.method(py, "_before_hook").and_then(|m| m.call0()) {
-                        Ok(_) => {}
-                        // Like a failed `enter`: logged, and the hook still
-                        // runs so that the node can release its resources.
-                        Err(e) if matches!(hook, "on_exception" | "on_stop") => {
-                            self.error(py, reported, e);
-                        }
-                        Err(e) => return Err(e),
-                    }
-                }
                 // `Context.run(method, *args)`.
                 let mut call = vec![self.method(py, hook)?];
                 call.extend(args(py));

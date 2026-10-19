@@ -50,15 +50,15 @@ class Probe(Node):
 
 
 class TestThreadSetup:
-    def test_on_start_runs_without_gradients_on_its_own_thread(
+    def test_on_start_runs_on_a_worker_recording_gradients(
         self, start_manual: StartManual
     ):
+        # specs: the framework does not change gradient recording; a new thread
+        # records gradients, as in plain PyTorch.
         node = Probe(seed=0)
         start_manual(Group(node=node))
-        assert node.grad_enabled is False
+        assert node.grad_enabled is True
         assert node.ident not in (None, threading.get_ident())
-        # The setting is per thread: the host still records gradients.
-        assert torch.is_grad_enabled()
 
     def test_the_generator_follows_the_seed(self, start_manual: StartManual):
         a, b, c = Probe(seed=7), Probe(seed=7), Probe(seed=8)
@@ -74,7 +74,6 @@ class TestThreadSetup:
         node = Probe(init_base=False)
         start_manual(Group(node=node))
         assert node.device == torch.device("cpu")
-        assert node.grad_enabled is False
         assert node.draws is not None
 
     def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
@@ -105,35 +104,22 @@ class TestThreadSetup:
         assert node.draws is not None
         assert torch.equal(node.draws, torch.rand(3, generator=generator))
 
-    def test_gradients_stay_off_in_every_hook_of_a_node_sharing_a_worker(
-        self, virtual: VirtualTimer, start: Start
+    def test_a_hook_backpropagates_without_turning_gradients_on(
+        self, step: Step, start_manual: StartManual
     ):
-        # specs: the framework turns gradient recording off again whenever a
-        # thread switches to a node, so what a hook of another node left on the
-        # same worker does not reach it.
-        leaky, clean = GradSetter(leak=True), GradSetter(leak=False)
-        run = start(Group(leaky=leaky, clean=clean), timer=virtual, workers=1)
-        for _ in range(3):
-            virtual.advance(0.01)
-            for node in (leaky, clean):
-                node.updated.get(timeout=5.0)
+        node = Backprop()
+        run = start_manual(Group(node=node))
+        step(run)
         run.shutdown()
-        assert clean.grad_enabled == {
-            "on_start": [False],
-            "on_update": [False, False, False],
-            "on_stop": [False],
-        }
-        # The hooks of both nodes ran on the one worker, not on the host.
-        assert len(leaky.idents | clean.idents) == 1
-        assert threading.get_ident() not in leaky.idents
-        assert torch.is_grad_enabled()
+        assert node.grad is not None
+        assert torch.equal(node.grad, torch.full((3,), 2.0))  # d(sum(2w))/dw
 
-    def test_gradients_are_off_at_the_start_of_every_hook_of_the_same_node(
+    def test_leaves_what_a_hook_set_to_the_next_hook_on_the_thread(
         self, virtual: VirtualTimer, start: Start
     ):
-        # specs: gradient recording is turned off before every hook, not only on a
-        # switch, so a hook that left it on does not decide the next one's, even
-        # when the same worker runs the node again right away.
+        # specs: the framework does not set gradient recording back, like any
+        # other per-thread setting: a hook that turns it off without ``with``
+        # turns it off for the next hook on the same worker too.
         leaky = GradSetter(leak=True)
         run = start(Group(leaky=leaky), timer=virtual, workers=1)
         for _ in range(3):
@@ -141,28 +127,48 @@ class TestThreadSetup:
             leaky.updated.get(timeout=5.0)
         run.shutdown()
         assert leaky.grad_enabled == {
-            "on_start": [False],
+            "on_start": [True],
             "on_update": [False, False, False],
             "on_stop": [False],
         }
+        # The setting is per thread: the host still records gradients.
+        assert threading.get_ident() not in leaky.idents
+        assert torch.is_grad_enabled()
 
     def test_a_node_whose_setup_failed_cleans_up_as_itself(
         self, virtual: VirtualTimer, start: Start
     ):
         # specs: when the framework's setup of a node fails, the runtime still calls
         # on_exception and on_stop; they run as that node (not as the node the
-        # worker ran before), with gradients off. BrokenSetup fails through a
+        # worker ran before). BrokenSetup fails through a
         # private override: the real failure (setting up CUDA) needs a GPU, and no
         # public way makes the setup fail.
-        leaky = GradSetter(leak=True)
-        broken = BrokenSetup(leaky.inp)
+        other = GradSetter(leak=False)
+        broken = BrokenSetup(other.inp)
         with pytest.raises(NetworkError, match="raised in on_start"):
-            start(Group(leaky=leaky, broken=broken), timer=virtual, workers=1)
+            start(Group(other=other, broken=broken), timer=virtual, workers=1)
         assert set(broken.results) == {"on_exception", "on_stop"}
-        for hook, (grad_enabled, result) in broken.results.items():
-            assert grad_enabled is False, hook
+        for hook, result in broken.results.items():
             assert isinstance(result, RuntimeError), hook
             assert "only the node that owns" in str(result)
+
+
+class Backprop(Node):
+    """Backpropagates through ``sum(2 * w)`` in each update, as in plain PyTorch."""
+
+    def __init__(self) -> None:
+        super().__init__(period=0.0)
+        self.grad: torch.Tensor | None = None
+
+    @override
+    def on_start(self) -> None:
+        self.w = torch.ones(3, requires_grad=True)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.w.grad = None
+        (2 * self.w).sum().backward()
+        self.grad = self.w.grad
 
 
 class BrokenSetup(Node):
@@ -178,7 +184,7 @@ class BrokenSetup(Node):
         self._generator = None
         self.failing = True
         vars(self)["other"] = other  # not registered as one of its ports
-        self.results: dict[str, tuple[bool, object]] = {}
+        self.results: dict[str, object] = {}
 
     @override
     def _make_generator(self) -> torch.Generator:
@@ -192,7 +198,7 @@ class BrokenSetup(Node):
             result: object = other.recv()
         except RuntimeError as e:
             result = e
-        self.results[hook] = (torch.is_grad_enabled(), result)
+        self.results[hook] = result
 
     @override
     def on_exception(self) -> None:
@@ -205,7 +211,7 @@ class BrokenSetup(Node):
 
 class GradSetter(Node):
     """Records whether gradients are recorded at the entry of each hook, and,
-    with ``leak``, turns them on without ``with`` at the end of each hook."""
+    with ``leak``, turns them off without ``with`` at the end of each hook."""
 
     def __init__(self, *, leak: bool) -> None:
         super().__init__(period=0.01)
@@ -220,7 +226,7 @@ class GradSetter(Node):
         self.grad_enabled.setdefault(hook, []).append(torch.is_grad_enabled())
         self.idents.add(threading.get_ident())
         if self.leak:
-            torch.set_grad_enabled(True)
+            torch.set_grad_enabled(False)
 
     @override
     def on_start(self) -> None:
@@ -594,8 +600,7 @@ class TestStateCollection:
 
     def test_the_tree_pickles_even_with_a_tensor_in_a_graph(self):
         node = Stateful(0.0)
-        with torch.enable_grad():  # mujou: local-autograd
-            y = node.p * 2
+        y = node.p * 2
         assert y.grad_fn is not None
         setattr(node, "y", y)  # noqa: B010  # not declared by Stateful
         state = pickle.loads(pickle.dumps(node.state_dict()))
@@ -749,12 +754,12 @@ class Learner(Node):
     @override
     def on_update(self, dt: float) -> None:
         params = list(self.linear.parameters())
-        with torch.enable_grad():  # mujou: local-autograd
-            output = self.linear(INPUT.to(self.device))
-            loss = (output - TARGET.to(self.device)).pow(2).sum()
-            grads = torch.autograd.grad(loss, params)
-        for p, g in zip(params, grads, strict=True):
-            p.sub_(100.0 * dt * g)
+        output = self.linear(INPUT.to(self.device))
+        loss = (output - TARGET.to(self.device)).pow(2).sum()
+        grads = torch.autograd.grad(loss, params)
+        with torch.no_grad():
+            for p, g in zip(params, grads, strict=True):
+                p.sub_(100.0 * dt * g)
         x = self._x.clone()
         self._x.add_(dt * (1 - self._x))
         if self._last is not None:
@@ -809,14 +814,12 @@ class OnDevice(Node):
         self.out = Port(send=TensorSpec((3,)))
         self.current_device: int | None = None
         self.own_stream: bool | None = None
-        self.grad_enabled: bool | None = None
 
     @override
     def on_update(self, dt: float) -> None:
         self.current_device = torch.cuda.current_device()
         default = torch.cuda.default_stream(self.device)
         self.own_stream = torch.cuda.current_stream() != default
-        self.grad_enabled = torch.is_grad_enabled()
 
 
 class StreamRecorder(Node):
@@ -884,7 +887,6 @@ class TestCuda:
         step(run)
         assert node.current_device == index
         assert node.own_stream is True
-        assert node.grad_enabled is False
 
     @pytest.mark.parametrize(
         "indices", [(0, 0), pytest.param((0, 1), marks=pytest.mark.cuda(2))]
