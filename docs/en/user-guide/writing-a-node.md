@@ -114,7 +114,7 @@ Create the state tensors in `on_start`.
 
 `torch.Tensor` and `nn.Module` values assigned to attributes are collected into the state automatically. What is collected, and how to save it, is in [Saving and restoring state](state.md).
 
-When the node computes on a GPU, create the tensors with `device=self.device`.
+When the node computes on a GPU, create the tensors with `device=self.device`, in `on_start` or later (why: [PyTorch in nodes](torch.md#cuda)).
 
 ```python
 @override
@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 You may keep settings (a time constant, the size of a layer, ...) as numbers set in `__init__`. Numbers are not collected into the state.
 
-An `nn.Module` may be built in `__init__` or in `on_start`. The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
+An `nn.Module` may be built in `__init__` or in `on_start` (on CUDA, prefer `on_start`). The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
 
 ## 3. Update in proportion to `dt` in `on_update(dt)`
 

@@ -79,6 +79,10 @@ So the node's author does not have to write any synchronization. If you synchron
 
 Without an index, as in `device="cuda"`, the device is the host's current device at the time the node is created.
 
+!!! tip "Create CUDA tensors and modules in `on_start`"
+
+    Tensors and modules created on CUDA in `__init__` work correctly: `mujou.run` synchronizes the host's stream before it starts the nodes. Still, create them in `on_start` or later. PyTorch's caching allocator ties memory to the stream current when it was allocated, so memory allocated in `__init__` stays tied to the host's stream. When the node drops such a tensor, the memory may be reused for an allocation of the host before the work of the node's stream on it has finished. Either way the kernels run on the node's stream, in parallel with the other nodes.
+
 In the tree `run.state_dict()` returns, the state of a CUDA node stays in CUDA tensors. Move every tensor of the tree to the CPU with `cpu()` before saving it, and a machine without a GPU can read it too. On a restore, the default `load_state_dict` copies the tensors back to the node's device (see [Saving and restoring state](state.md#formats)).
 
 ```python

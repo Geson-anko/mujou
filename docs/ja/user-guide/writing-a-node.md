@@ -114,7 +114,7 @@ def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
 
 属性に代入した `torch.Tensor` と `nn.Module` は自動で状態に集まる。何が集まり、どう保存されるかは[状態の保存と復元](state.md)を参照。
 
-GPU で計算するノードでは、テンソルを `device=self.device` で作る。
+GPU で計算するノードでは、テンソルを `on_start` 以降に `device=self.device` で作る（理由は[ノードの中の PyTorch](torch.md#cuda)）。
 
 ```python
 @override
@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 設定値（時定数、層の大きさなど）は `__init__` で数値として持たせてよい。数値は状態に集まらない。
 
-`nn.Module` は `__init__` でも `on_start` でも作れる。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`__init__` の中でも使える `self.generator` で初期化し直す。
+`nn.Module` は `__init__` でも `on_start` でも作れる（CUDA なら `on_start` がよい）。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`__init__` の中でも使える `self.generator` で初期化し直す。
 
 ## 3. `on_update(dt)` で `dt` に比例して更新する
 
