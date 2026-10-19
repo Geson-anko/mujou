@@ -53,7 +53,7 @@ import torch
 from mujou._core.network import Network
 from mujou._core.node import Node
 from mujou._core.port import Port
-from mujou._core.run import ManualRun, start_manual
+from mujou._core.run import ManualRun, start_run
 from mujou._core.timer import Timer, VirtualTimer
 
 __all__ = ["ManualRun", "VirtualTimer", "run"]
@@ -79,9 +79,13 @@ def run[P: Port[Any, Any, Any], T: Timer = VirtualTimer](
 
     The other arguments and the errors are those of ``mujou.run``.
     """
-    return start_manual(
+    # The class itself: a subscripted generic is not a class to instantiate.
+    return start_run(
+        cast(type[ManualRun[T]], ManualRun),
         (component, *components),
         timer=cast(T, VirtualTimer()) if timer is None else timer,
         inputs=inputs,
         state=state,
+        manual=True,
+        workers=None,
     )

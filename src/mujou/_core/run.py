@@ -373,7 +373,7 @@ class ManualRun[T: Timer = VirtualTimer](Run):
     def timer(self) -> T:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
         or the timer given to it."""
-        # The T that start_manual gave start_run.
+        # The T that mujou.testing.run gave start_run.
         return cast(T, self._timer)
 
     def step(self, *nodes: Node) -> None:
@@ -538,26 +538,6 @@ def start_run[R: Run](
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
     handle._timer = run_timer  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle
-
-
-def start_manual[T: Timer](
-    components: Sequence[Node | Network],
-    *,
-    timer: T,
-    inputs: Mapping[Any, object] | None,
-    state: Mapping[str, Any] | None,
-) -> ManualRun[T]:
-    """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
-    # The class itself: a subscripted generic is not a class to instantiate.
-    return start_run(
-        cast(type[ManualRun[T]], ManualRun),
-        components,
-        timer=timer,
-        inputs=inputs,
-        state=state,
-        manual=True,
-        workers=None,
-    )
 
 
 def _host(run: Run) -> Session:
