@@ -49,7 +49,8 @@ create_exception!(
 /// own thread if it was started as dedicated (`state_dict`, through
 /// `_capture_state`, on the control thread while the node is paused). The hooks
 /// of a node never overlap, and each runs in the node's own
-/// `contextvars.Context` (but `_capture_state`). They do nothing by default.
+/// `contextvars.Context` (but `_capture_state` and `_before_hook`). They do
+/// nothing by default.
 /// The hooks are looked up by name until `on_start` (and `load_state_dict`)
 /// has returned, and once after that, so replacing one in those hooks takes
 /// effect. `state_dict` itself is looked up by the default `_capture_state` at
@@ -77,9 +78,10 @@ impl Node {
     /// Called right before every public hook but `state_dict` (after
     /// `_on_enter` when the thread switches to this node), for the framework's
     /// settings that must hold at the start of each hook whatever the previous
-    /// hook left. An error here is reported as the error of that hook, which
-    /// is then not called, except `on_exception` and `on_stop`, which still
-    /// run.
+    /// hook left. It runs outside the node's `contextvars.Context`, so a
+    /// setting held in a context variable does not take effect here. An error
+    /// here is reported as the error of that hook, which is then not called,
+    /// except `on_exception` and `on_stop`, which still run.
     fn _before_hook(&self) {}
 
     /// Called only on a dedicated node's own thread, right before `on_start`,
@@ -300,6 +302,7 @@ impl PyNode {
                     // Before the lookup, or if it failed: by name.
                     None => self.node.bind(py).getattr(attribute(hook)),
                 };
+                // Outside the node's context (see `Node::_before_hook`).
                 if !matches!(hook, "_on_enter" | "_after_update") {
                     match method("_before_hook").and_then(|m| m.call0()) {
                         Ok(_) => {}
