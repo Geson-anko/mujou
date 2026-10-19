@@ -136,7 +136,7 @@ class Node(_native.Node, Component):
             run's timer. ``0.0`` updates as soon as any time has passed.
 
     Raises:
-        TypeError: ``period`` is ``None`` or a ``bool``.
+        TypeError: ``period`` is a ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
             while CUDA is not available, or ``period`` is negative or not
             finite.
@@ -158,11 +158,6 @@ class Node(_native.Node, Component):
         seed: int | None = None,
         period: float = 0.01,
     ) -> None:
-        if period is None:  # pyright: ignore[reportUnnecessaryComparison]
-            raise TypeError(
-                "the period must be a number of seconds, got None; pass period=0.0 "
-                "to update as soon as any time has passed"
-            )
         if isinstance(period, bool):
             raise TypeError(f"the period must be a number of seconds, got {period}")
         if not (math.isfinite(period) and period >= 0):
