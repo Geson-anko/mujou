@@ -38,8 +38,9 @@ class Run:
     If a node raises, the whole run stops. If that happens while ``mujou.run``
     starts the nodes, ``mujou.run`` raises ``NetworkError``; otherwise every later
     call of ``write``, ``read``, ``read_with_time``, ``subscribe`` (and its
-    iterator), ``state_dict``, ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's
-    exception. The state at the exception is not kept.
+    iterator), ``state_dict``, ``shutdown`` and ``join`` raises it. Its
+    ``__cause__`` is the node's exception. The state at the exception is not
+    kept.
 
     A run keeps running when the host drops it, until ``shutdown`` or, at the
     latest, the interpreter's exit (which waits for ``on_stop``). At the exit,
@@ -112,8 +113,8 @@ class Run:
 
         The time is the run's timer at the write, as a node's ``recv_with_time``
         and the ``/in`` slots of ``state_dict`` show it; ``read_with_time`` shows
-        the times of sends, not of writes. An empty ``values`` changes nothing and returns
-        the time all the same.
+        the times of sends, not of writes. An empty ``values`` changes nothing
+        and returns the time all the same.
 
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
@@ -350,13 +351,11 @@ class Run:
         """Shut the run down. When the body raised, its exception goes on and a
         ``NetworkError`` of the shutdown is dropped (the node's exception is in
         the log)."""
-        if exc is None:
-            self.shutdown()
-            return
         try:
             self.shutdown()
         except _native.NetworkError:
-            pass
+            if exc is None:
+                raise
 
 
 class ManualRun[T: Timer = VirtualTimer](Run):
@@ -373,7 +372,7 @@ class ManualRun[T: Timer = VirtualTimer](Run):
     def timer(self) -> T:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
         or the timer given to it."""
-        # The T that start_manual gave start_run.
+        # The T that mujou.testing.run gave start_run.
         return cast(T, self._timer)
 
     def step(self, *nodes: Node) -> None:
@@ -434,11 +433,11 @@ def run[P: Port[Any, Any, Any]](
             receive, as ``Run.write`` takes them. Written after ``state``, they
             replace its values and carry its time.
         state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
-            or any mapping of the same items (such as a plain ``dict``). The slots, the nodes'
-            states (through each node's ``load_state_dict``, after its
-            ``on_start``), their last update times and the timer continue from
-            the time the tree was taken. Build the networks as the ones the tree
-            came from: the same node paths and slots.
+            or any mapping of the same items (such as a plain ``dict``). The
+            slots, the nodes' states (through each node's ``load_state_dict``,
+            after its ``on_start``), their last update times and the timer
+            continue from the time the tree was taken. Build the networks as the
+            ones the tree came from: the same node paths and slots.
         workers: The number of worker threads of the run (>= 1). ``None`` is
             as many as the CPUs the process may use (the logical cores, or
             fewer when the CPU affinity or a quota limits them), or half of
@@ -538,26 +537,6 @@ def start_run[R: Run](
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
     handle._timer = run_timer  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle
-
-
-def start_manual[T: Timer](
-    components: Sequence[Node | Network],
-    *,
-    timer: T,
-    inputs: Mapping[Any, object] | None,
-    state: Mapping[str, Any] | None,
-) -> ManualRun[T]:
-    """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
-    # The class itself: a subscripted generic is not a class to instantiate.
-    return start_run(
-        cast(type[ManualRun[T]], ManualRun),
-        components,
-        timer=timer,
-        inputs=inputs,
-        state=state,
-        manual=True,
-        workers=None,
-    )
 
 
 def _host(run: Run) -> Session:

@@ -149,10 +149,9 @@ def read_tree(
     copy it, changing nothing.
 
     Returns ``(slot, tensors in host memory, time_ns, sent)`` for each slot to
-    restore,
-    and what ``Runtime.start`` restores: the nodes' states (copies, so that the
-    nodes' updates in place never reach ``state``), their last update times and
-    the timer. The copies queue on the calling thread's current streams.
+    restore, and what ``Runtime.start`` restores: the nodes' states (copies, so
+    that the nodes' updates in place never reach ``state``), their last update
+    times and the timer. The copies queue on the calling thread's current streams.
 
     Raises:
         ValueError: The tree does not match the run.

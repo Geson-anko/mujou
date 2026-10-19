@@ -62,10 +62,7 @@ class Binding:
         self._indices = {channel: k for k, channel in enumerate(port.channels)}
 
     def recv(self, with_time: bool) -> object:
-        self._check_owner("receives on")
-        spec = self._recv_spec
-        if spec is None:
-            raise TypeError(f"the port {self._name!r} receives no messages")
+        spec = self._receiving()
         device = self._owner.device
         received: dict[Channel | None, object] = {}
         for channel, slot in self._sources:
@@ -78,9 +75,7 @@ class Binding:
         return value
 
     def has_received(self) -> object:
-        self._check_owner("receives on")
-        if self._recv_spec is None:
-            raise TypeError(f"the port {self._name!r} receives no messages")
+        self._receiving()
         received = {channel: slot.read().sent for channel, slot in self._sources}
         if self._multi:
             return received
@@ -107,6 +102,12 @@ class Binding:
                 f"only the node that owns the port {self._name!r} {verb} it, from its "
                 "own hooks while the network runs (state_dict runs on another thread)"
             )
+
+    def _receiving(self) -> Spec:
+        self._check_owner("receives on")
+        if self._recv_spec is None:
+            raise TypeError(f"the port {self._name!r} receives no messages")
+        return self._recv_spec
 
     def _sending(self) -> _native.Outlet:
         self._check_owner("sends on")

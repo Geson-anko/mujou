@@ -605,9 +605,7 @@ class TestInitial:
         received = cast(Feedback, sink.results[0])
         assert torch.equal(received["error"], torch.ones(2, 3))
 
-    def test_is_copied_when_the_port_is_made(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
+    def test_is_copied_when_the_port_is_made(self, start_manual: StartManual):
         value = torch.ones(2, 3, requires_grad=True)
         out = Port(send=h(), initial=value)
         with torch.no_grad():
@@ -635,8 +633,7 @@ class TestInitial:
         run.shutdown()
 
         restored, _, sink = build(7.0)
-        timer = VirtualTimer()
-        run = start_manual(restored, timer=timer, state=tree)
+        run = start_manual(restored, timer=VirtualTimer(), state=tree)
         step(run, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.full((2, 3), 5.0))
 

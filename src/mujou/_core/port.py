@@ -499,8 +499,8 @@ def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
 
 def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
     """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
-    (a node calls this as the port is assigned; the first assignment wins, so a second name
-    does not rename the port, and networks never do)."""
+    (a node calls this as the port is assigned; the first assignment wins, so a
+    second name does not rename the port, and networks never do)."""
     if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
         port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
 

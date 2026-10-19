@@ -103,28 +103,28 @@ def _register(
         ValueError: ``component`` is a node and ``value`` a node or network.
         RuntimeError: ``component`` is built.
     """
-    ports, children = ports_of(component), children_of(component)
     is_port = isinstance(value, Port)
-    if ports is _NOT_INITIALIZED:
+    # A node: every component but a network is one (Node cannot be imported here).
+    is_node = isinstance(component, _native.Node)
+    if ports_of(component) is _NOT_INITIALIZED:
         what = "port" if is_port else type(value).__name__
-        base = "Node" if isinstance(component, _native.Node) else "Network"
+        base = "Node" if is_node else "Network"
         raise AttributeError(
             f"cannot assign a {what} before {base}.__init__() call; call "
             "super().__init__() first"
         )
     if is_data_descriptor(type(component), name):
         return
-    # A node: every component but a network is one (Node cannot be imported here).
-    if not is_port and isinstance(component, _native.Node):
+    if is_node and not is_port:
         raise ValueError(
             f"the node {type(component).__name__} holds a {type(value).__name__} at "
             f"{name!r}; only networks hold nodes and networks"
         )
     _check_not_built(component, name, "assign")
-    if is_port and isinstance(component, _native.Node):
+    if is_node and is_port:
         assign_owner(value, type(component).__name__, name)
     # A name assigned again keeps its place in the order.
-    ports, children = dict(ports), dict(children)
+    ports, children = dict(ports_of(component)), dict(children_of(component))
     if is_port:
         children.pop(name, None)
         ports[name] = value
