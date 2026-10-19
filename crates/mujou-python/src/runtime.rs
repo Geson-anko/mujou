@@ -77,7 +77,9 @@ impl Node {
     /// Called right before every public hook but `state_dict` (after
     /// `_on_enter` when the thread switches to this node), for the framework's
     /// settings that must hold at the start of each hook whatever the previous
-    /// hook left. An error here is reported as the error of that hook.
+    /// hook left. An error here is reported as the error of that hook, which
+    /// is then not called, except `on_exception` and `on_stop`, which still
+    /// run.
     fn _before_hook(&self) {}
 
     /// Called only on a dedicated node's own thread, right before `on_start`,
@@ -299,7 +301,15 @@ impl PyNode {
                     None => self.node.bind(py).getattr(attribute(hook)),
                 };
                 if !matches!(hook, "_on_enter" | "_after_update") {
-                    method("_before_hook")?.call0()?;
+                    match method("_before_hook").and_then(|m| m.call0()) {
+                        Ok(_) => {}
+                        // Like a failed `enter`: logged, and the hook still
+                        // runs so that the node can release its resources.
+                        Err(e) if matches!(hook, "on_exception" | "on_stop") => {
+                            self.error(py, reported, e);
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
                 let method = method(hook)?;
                 // `Context.run(method, *args)`.

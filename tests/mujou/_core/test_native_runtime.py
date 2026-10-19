@@ -740,6 +740,30 @@ class TestFrameworkHooks:
         assert raised.value.__cause__ is node.error
         assert hook not in log.of("a")
 
+    @pytest.mark.parametrize(("at", "hook"), [(2, "on_exception"), (3, "on_stop")])
+    def test_an_error_in_before_hook_still_runs_the_clean_up_hook(
+        self,
+        virtual_timer: GlobalTimer,
+        make_runtime: MakeRuntime,
+        caplog: pytest.LogCaptureFixture,
+        at: int,
+        hook: str,
+    ):
+        log = Log()
+        # a's _before_hook runs before on_start (1), on_exception (2), on_stop (3).
+        a = BeforeHook("a", log, raise_in="_before_hook", at=at)
+        b = Recorder("b", log, raise_in="on_update")
+        runtime = make_runtime([a, b])
+        runtime.start(manual=True)
+        virtual_timer.advance(H)
+        with pytest.raises(NetworkError) as raised:
+            runtime.step([1])  # only b
+        # Like a failed _on_enter: logged under the hook, which still runs.
+        assert raised.value.__cause__ is b.error
+        assert f"node 'a' raised in {hook}" in caplog.text
+        events = [e for e in log.of("a") if e in ("on_exception", "on_stop")]
+        assert events == ["on_exception", "on_stop"]
+
 
 class TestFreeRun:
     def test_dt_sums_to_the_time_since_the_start(

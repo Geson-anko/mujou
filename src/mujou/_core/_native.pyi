@@ -199,7 +199,9 @@ class Node:
         Called right before every public hook but `state_dict` (after
         `_on_enter` when the thread switches to this node), for the framework's
         settings that must hold at the start of each hook whatever the previous
-        hook left. An error here is reported as the error of that hook.
+        hook left. An error here is reported as the error of that hook, which
+        is then not called, except `on_exception` and `on_stop`, which still
+        run.
         """
     def _capture_state(self, /) -> "object":
         """
