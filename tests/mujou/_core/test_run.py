@@ -535,7 +535,8 @@ def default_workers() -> int:
     or half of them (at least 1) with the GIL. The CPUs this process may use
     stand for the core's available parallelism (which also counts a quota)."""
     cpus = os.process_cpu_count() or 1
-    return max(1, cpus // 2) if sys._is_gil_enabled() else cpus
+    gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
+    return max(1, cpus // 2) if gil else cpus
 
 
 class Holding(Node):
