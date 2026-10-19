@@ -244,9 +244,11 @@ class Probe(Node):
     def __init__(
         self,
         update: Callable[[], object] = lambda: None,
+        *,
+        device: str = "cpu",
         **ports: Port[Any, Any, Any],
     ) -> None:
-        super().__init__()
+        super().__init__(device=device)
         for name, port in ports.items():
             setattr(self, name, port)
         self.update = update
@@ -668,18 +670,13 @@ class TestCuda:
         out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
 
-        class OnCuda(Probe):
-            def __init__(self, update: Callable[[], object], **ports: Any) -> None:
-                super().__init__(update, **ports)
-                Node.__init__(self, device="cuda")
-
         def update() -> torch.Tensor:
             x = inp.recv()
             back.send(2 * x)
             return x
 
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
-        sink = OnCuda(update, prev=inp, back=back)
+        sink = Probe(update, device="cuda", prev=inp, back=back)
         run = start_manual(Group(source=source, sink=sink))
         step(run, source, sink)
         received = cast(torch.Tensor, sink.results[0])
