@@ -1,6 +1,8 @@
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 use mujou_core::runtime::{HookError, NodeHooks, Reply, Runtime, RuntimeConfig, RuntimeError};
@@ -9,6 +11,9 @@ use mujou_core::time::Timer;
 const H_NS: u64 = 1_000_000;
 /// How long a capture waits for the nodes to pause.
 const PAUSE: Duration = Duration::from_secs(30);
+const LONG: Duration = Duration::from_secs(5);
+/// How long to watch for an update that must not come.
+const QUIET: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, PartialEq)]
 enum Event {
@@ -34,68 +39,163 @@ impl fmt::Display for Boom {
 
 impl std::error::Error for Boom {}
 
-/// Records its hook calls; fails (or panics) on the `n`-th update if asked.
-struct Recorder {
-    id: usize,
-    log: Arc<Mutex<Vec<(usize, Event)>>>,
-    updates: usize,
-    fail_on_update: Option<usize>,
-    panic_on_update: Option<usize>,
-}
-
-impl Recorder {
-    fn record(&self, event: Event) {
-        self.log.lock().unwrap().push((self.id, event));
+fn boom(hook: &'static str) -> HookError {
+    HookError {
+        hook,
+        source: Arc::new(Boom),
     }
 }
 
-impl NodeHooks for Recorder {
+/// How a hook of a [`Probe`] fails.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Failure {
+    Error,
+    Panic,
+}
+
+type Log = Arc<Mutex<Vec<(usize, Event, String)>>>;
+
+/// Records its hook calls with the name of the thread that ran them.
+struct Probe {
+    id: usize,
+    log: Log,
+    updates: usize,
+    enters: usize,
+    /// Fails every `enter` from the `k`-th on (counting from 1).
+    fail_enter: Option<(usize, Failure)>,
+    fail_on_start: bool,
+    /// Fails the `k`-th update (counting from 1).
+    fail_on_update: Option<(usize, Failure)>,
+    fail_on_state_dict: bool,
+    /// Sends `(id, Δt in ns)` on every update.
+    ticks: Option<Sender<(usize, u64)>>,
+    /// Moves the virtual timer by `H_NS` in each of its first `k` updates.
+    advance: Option<(Arc<Timer>, usize)>,
+    /// Tells when it enters an update, then waits there until released.
+    gate: Option<(Sender<()>, Receiver<()>)>,
+}
+
+impl Probe {
+    fn hook(&mut self, event: Event) -> Result<(), HookError> {
+        let thread = thread::current().name().unwrap_or_default().to_owned();
+        let entry = (self.id, event.clone(), thread);
+        self.log.lock().unwrap().push(entry);
+        self.react(&event)
+    }
+
+    fn react(&mut self, event: &Event) -> Result<(), HookError> {
+        match event {
+            Event::Enter(_) => {
+                self.enters += 1;
+                match self.fail_enter {
+                    // A name of its own: the core reports the next hook.
+                    Some((k, failure)) if self.enters >= k => self.fail("enter", failure),
+                    _ => Ok(()),
+                }
+            }
+            Event::Start if self.fail_on_start => Err(boom("on_start")),
+            Event::StateDict if self.fail_on_state_dict => Err(boom("state_dict")),
+            Event::Update(dt) => {
+                self.updates += 1;
+                if let Some(ticks) = &self.ticks {
+                    let _ = ticks.send((self.id, (dt * 1e9).round() as u64));
+                }
+                if let Some((timer, k)) = &self.advance {
+                    if self.updates <= *k {
+                        timer.advance_ns(H_NS).unwrap();
+                    }
+                }
+                if let Some((entered, release)) = &self.gate {
+                    let _ = entered.send(());
+                    let _ = release.recv();
+                }
+                match self.fail_on_update {
+                    Some((k, failure)) if self.updates == k => self.fail("on_update", failure),
+                    _ => Ok(()),
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn fail(&self, hook: &'static str, failure: Failure) -> Result<(), HookError> {
+        match failure {
+            Failure::Error => Err(boom(hook)),
+            Failure::Panic => panic!("panic in {hook} of node {}", self.id),
+        }
+    }
+}
+
+impl NodeHooks for Probe {
     type State = usize;
 
+    fn enter(&mut self, next_hook: &'static str) -> Result<(), HookError> {
+        self.hook(Event::Enter(next_hook))
+    }
+
     fn start(&mut self) -> Result<(), HookError> {
-        self.record(Event::Start);
-        Ok(())
+        self.hook(Event::Start)
     }
 
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
-        self.record(Event::Update(dt));
-        self.updates += 1;
-        if self.panic_on_update == Some(self.updates) {
-            panic!("panic in node {}", self.id);
-        }
-        if self.fail_on_update == Some(self.updates) {
-            return Err(HookError {
-                hook: "on_update",
-                source: Arc::new(Boom),
-            });
-        }
-        Ok(())
+        self.hook(Event::Update(dt))
     }
 
     fn pause(&mut self) -> Result<(), HookError> {
-        self.record(Event::Pause);
-        Ok(())
+        self.hook(Event::Pause)
     }
 
     fn resume(&mut self) -> Result<(), HookError> {
-        self.record(Event::Resume);
-        Ok(())
+        self.hook(Event::Resume)
     }
 
     fn exception(&mut self) -> Result<(), HookError> {
-        self.record(Event::Exception);
-        Ok(())
+        self.hook(Event::Exception)
     }
 
     fn stop(&mut self) -> Result<(), HookError> {
-        self.record(Event::Stop);
-        Ok(())
+        self.hook(Event::Stop)
     }
 
     fn state_dict(&mut self) -> Result<usize, HookError> {
-        self.record(Event::StateDict);
-        Ok(self.updates)
+        self.hook(Event::StateDict).map(|()| self.updates)
     }
+}
+
+struct Probes {
+    log: Log,
+    nodes: Vec<Probe>,
+    names: Vec<String>,
+}
+
+fn probes(n: usize) -> Probes {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let nodes = (0..n)
+        .map(|id| Probe {
+            id,
+            log: Arc::clone(&log),
+            updates: 0,
+            enters: 0,
+            fail_enter: None,
+            fail_on_start: false,
+            fail_on_update: None,
+            fail_on_state_dict: false,
+            ticks: None,
+            advance: None,
+            gate: None,
+        })
+        .collect();
+    let names = (0..n).map(|i| format!("p{i}")).collect();
+    Probes { log, nodes, names }
+}
+
+/// The hooks of node `id`, without the calls of `enter`.
+fn events(log: &Log, id: usize) -> Vec<Event> {
+    let log = log.lock().unwrap();
+    log.iter()
+        .filter(|(i, e, _)| *i == id && !matches!(e, Event::Enter(_)))
+        .map(|(_, e, _)| e.clone())
+        .collect()
 }
 
 /// Where the nodes of a test run: [`each_mode`] runs a test in the first three.
@@ -154,40 +254,11 @@ fn virtual_timer() -> Arc<Timer> {
     timer
 }
 
-struct Setup {
-    log: Arc<Mutex<Vec<(usize, Event)>>>,
-    nodes: Vec<Recorder>,
-    names: Vec<String>,
-}
-
-fn recorders(n: usize) -> Setup {
-    let log = Arc::new(Mutex::new(Vec::new()));
-    let nodes = (0..n)
-        .map(|id| Recorder {
-            id,
-            log: Arc::clone(&log),
-            updates: 0,
-            fail_on_update: None,
-            panic_on_update: None,
-        })
-        .collect();
-    let names = (0..n).map(|i| format!("n{i}")).collect();
-    Setup { log, nodes, names }
-}
-
 fn manual() -> RuntimeConfig {
     RuntimeConfig {
         manual: true,
         ..RuntimeConfig::default()
     }
-}
-
-fn events_of(log: &Mutex<Vec<(usize, Event)>>, id: usize) -> Vec<Event> {
-    let log = log.lock().unwrap();
-    log.iter()
-        .filter(|(i, _)| *i == id)
-        .map(|(_, e)| e.clone())
-        .collect()
 }
 
 /// `exception` and `stop` once each, and nothing after them.
@@ -205,7 +276,7 @@ mod manual_mode {
     fn steps_in_the_given_order_with_the_advanced_dt() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { log, nodes, names } = recorders(3);
+            let Probes { log, nodes, names } = probes(3);
             let t0 = timer.time_ns();
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
@@ -217,7 +288,10 @@ mod manual_mode {
             }
             rt.shutdown().wait().unwrap();
 
-            let order: Vec<usize> = log.lock().unwrap().iter().map(|(i, _)| *i).collect();
+            let order: Vec<usize> = (log.lock().unwrap().iter())
+                .filter(|(_, e, _)| !matches!(e, Event::Enter(_)))
+                .map(|(i, _, _)| *i)
+                .collect();
             // 3 starts in any order, then the updates in the given order, then 3 stops.
             assert_eq!(&order[3..9], &[2, 0, 1, 2, 0, 1]);
             for id in 0..3 {
@@ -228,7 +302,7 @@ mod manual_mode {
                     Event::Update(dt),
                     Event::Stop,
                 ];
-                assert_eq!(events_of(&log, id), expected);
+                assert_eq!(events(&log, id), expected);
             }
             assert_eq!(rt.last_update_ns(), vec![t0 + 2 * H_NS; 3]);
         });
@@ -238,14 +312,14 @@ mod manual_mode {
     fn a_step_without_time_passing_does_not_update() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { log, nodes, names } = recorders(1);
+            let Probes { log, nodes, names } = probes(1);
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
             started.wait().unwrap();
             rt.step(None).wait().unwrap();
             rt.shutdown().wait().unwrap();
-            assert_eq!(events_of(&log, 0), [Event::Start, Event::Stop]);
+            assert_eq!(events(&log, 0), [Event::Start, Event::Stop]);
         });
     }
 
@@ -253,7 +327,7 @@ mod manual_mode {
     fn step_needs_the_manual_mode() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let config = RuntimeConfig::default();
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), config)
@@ -352,7 +426,7 @@ mod capture {
     fn builds_from_every_state_while_the_time_is_frozen() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { log, nodes, names } = recorders(2);
+            let Probes { log, nodes, names } = probes(2);
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
@@ -369,7 +443,7 @@ mod capture {
             assert!(!timer.is_paused());
             rt.shutdown().wait().unwrap();
             for id in 0..2 {
-                let events = events_of(&log, id);
+                let events = events(&log, id);
                 assert_eq!(
                     &events[2..5],
                     &[Event::Pause, Event::StateDict, Event::Resume]
@@ -386,12 +460,12 @@ mod failure {
     fn an_update_error_ends_every_node_with_exception_then_stop() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup {
+            let Probes {
                 log,
                 mut nodes,
                 names,
-            } = recorders(3);
-            nodes[1].fail_on_update = Some(3);
+            } = probes(3);
+            nodes[1].fail_on_update = Some((3, Failure::Error));
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
@@ -410,7 +484,7 @@ mod failure {
             assert_eq!((failure.node, failure.hook), (1, "on_update"));
             assert!(rt.is_finished());
             for id in 0..3 {
-                assert_exception_then_stop_once(&events_of(&log, id));
+                assert_exception_then_stop_once(&events(&log, id));
             }
             // Later requests report the same failure.
             assert!(matches!(rt.shutdown().wait(), Err(RuntimeError::Failed(_))));
@@ -422,12 +496,12 @@ mod failure {
     fn a_panic_is_a_failure() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup {
+            let Probes {
                 log,
                 mut nodes,
                 names,
-            } = recorders(2);
-            nodes[0].panic_on_update = Some(1);
+            } = probes(2);
+            nodes[0].fail_on_update = Some((1, Failure::Panic));
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
@@ -438,9 +512,14 @@ mod failure {
                 panic!("expected a failure, got {result:?}");
             };
             assert_eq!((failure.node, failure.hook), (0, "on_update"));
-            assert!(failure.error.to_string().contains("panic in node 0"));
+            assert!(
+                failure
+                    .error
+                    .to_string()
+                    .contains("panic in on_update of node 0")
+            );
             for id in 0..2 {
-                assert_exception_then_stop_once(&events_of(&log, id));
+                assert_exception_then_stop_once(&events(&log, id));
             }
         });
     }
@@ -464,14 +543,14 @@ mod restore {
     fn the_time_is_not_restored_under_a_running_runtime() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let (running, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
             started.wait().unwrap();
             let before = timer.time_ns();
 
-            let Setup { log, nodes, names } = recorders(1);
+            let Probes { log, nodes, names } = probes(1);
             let result = mode.start(nodes, names, Arc::clone(&timer), restoring());
             assert!(matches!(result, Err(RuntimeError::InvalidArgument(_))));
             // Nothing started, and the running runtime's time did not move.
@@ -481,7 +560,7 @@ mod restore {
 
             // Once it has finished, the time can be restored.
             running.shutdown().wait().unwrap();
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let (restored, started) = mode
                 .start(nodes, names, Arc::clone(&timer), restoring())
                 .unwrap();
@@ -500,18 +579,18 @@ mod separate_timers {
     fn each_runtime_measures_dt_on_its_own_timer() {
         each_mode(|mode| {
             let (ta, tb) = (virtual_timer(), virtual_timer());
-            let Setup {
+            let Probes {
                 log: la,
                 nodes,
                 names,
-            } = recorders(1);
+            } = probes(1);
             let (a, started) = mode.start(nodes, names, Arc::clone(&ta), manual()).unwrap();
             started.wait().unwrap();
-            let Setup {
+            let Probes {
                 log: lb,
                 nodes,
                 names,
-            } = recorders(1);
+            } = probes(1);
             let (b, started) = mode.start(nodes, names, Arc::clone(&tb), manual()).unwrap();
             started.wait().unwrap();
 
@@ -521,8 +600,8 @@ mod separate_timers {
             b.step(None).wait().unwrap();
             a.shutdown().wait().unwrap();
             b.shutdown().wait().unwrap();
-            assert_eq!(events_of(&la, 0)[1], Event::Update(2.0 * H_NS as f64 / 1e9));
-            assert_eq!(events_of(&lb, 0)[1], Event::Update(5.0 * H_NS as f64 / 1e9));
+            assert_eq!(events(&la, 0)[1], Event::Update(2.0 * H_NS as f64 / 1e9));
+            assert_eq!(events(&lb, 0)[1], Event::Update(5.0 * H_NS as f64 / 1e9));
         });
     }
 
@@ -530,14 +609,14 @@ mod separate_timers {
     fn a_capture_freezes_only_its_own_timer() {
         each_mode(|mode| {
             let (ta, tb) = (virtual_timer(), virtual_timer());
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let (a, started) = mode.start(nodes, names, Arc::clone(&ta), manual()).unwrap();
             started.wait().unwrap();
-            let Setup {
+            let Probes {
                 log: lb,
                 nodes,
                 names,
-            } = recorders(1);
+            } = probes(1);
             let (b, started) = mode.start(nodes, names, Arc::clone(&tb), manual()).unwrap();
             started.wait().unwrap();
             let b = Arc::new(b);
@@ -557,7 +636,7 @@ mod separate_timers {
                 .unwrap();
             assert!(own_paused);
             assert!(!other_paused);
-            assert_eq!(events_of(&lb, 0)[1], Event::Update(H_NS as f64 / 1e9));
+            assert_eq!(events(&lb, 0)[1], Event::Update(H_NS as f64 / 1e9));
             a.shutdown().wait().unwrap();
             b.shutdown().wait().unwrap();
         });
@@ -567,7 +646,7 @@ mod separate_timers {
     fn a_runtime_on_another_timer_does_not_block_a_restore() {
         each_mode(|mode| {
             let (ta, tb) = (virtual_timer(), virtual_timer());
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let (running, started) = mode.start(nodes, names, Arc::clone(&ta), manual()).unwrap();
             started.wait().unwrap();
             let before = ta.time_ns();
@@ -579,7 +658,7 @@ mod separate_timers {
                 }),
                 ..manual()
             };
-            let Setup { nodes, names, .. } = recorders(1);
+            let Probes { nodes, names, .. } = probes(1);
             let (restored, started) = mode.start(nodes, names, Arc::clone(&tb), config).unwrap();
             started.wait().unwrap();
             assert_eq!(tb.time_ns(), 7 * H_NS);
@@ -591,85 +670,38 @@ mod separate_timers {
 }
 
 mod stop_request {
-    use std::sync::mpsc::{self, Receiver, Sender};
+    use std::sync::mpsc;
 
     use super::*;
-
-    /// Tells when it enters an update, then blocks there until released.
-    struct Gate {
-        entered: Sender<()>,
-        release: Receiver<()>,
-        stopped: Arc<Mutex<bool>>,
-    }
-
-    impl NodeHooks for Gate {
-        type State = ();
-
-        fn start(&mut self) -> Result<(), HookError> {
-            Ok(())
-        }
-
-        fn update(&mut self, _dt: f64) -> Result<(), HookError> {
-            let _ = self.entered.send(());
-            let _ = self.release.recv();
-            Ok(())
-        }
-
-        fn pause(&mut self) -> Result<(), HookError> {
-            Ok(())
-        }
-
-        fn resume(&mut self) -> Result<(), HookError> {
-            Ok(())
-        }
-
-        fn exception(&mut self) -> Result<(), HookError> {
-            Ok(())
-        }
-
-        fn stop(&mut self) -> Result<(), HookError> {
-            *self.stopped.lock().unwrap() = true;
-            Ok(())
-        }
-
-        fn state_dict(&mut self) -> Result<(), HookError> {
-            Ok(())
-        }
-    }
 
     #[test]
     fn returns_while_a_node_is_still_updating_and_join_sees_the_end() {
         each_mode(|mode| {
             let timer = virtual_timer();
+            let Probes {
+                log,
+                mut nodes,
+                names,
+            } = probes(1);
             let (entered_tx, entered) = mpsc::channel();
             let (release, release_rx) = mpsc::channel();
-            let stopped = Arc::new(Mutex::new(false));
-            let gate = Gate {
-                entered: entered_tx,
-                release: release_rx,
-                stopped: Arc::clone(&stopped),
-            };
+            nodes[0].gate = Some((entered_tx, release_rx));
             let config = RuntimeConfig::default();
             let (rt, started) = mode
-                .start(
-                    vec![gate],
-                    vec!["gate".to_owned()],
-                    Arc::clone(&timer),
-                    config,
-                )
+                .start(nodes, names, Arc::clone(&timer), config)
                 .unwrap();
             started.wait().unwrap();
             timer.advance_ns(H_NS).unwrap();
-            entered.recv_timeout(Duration::from_secs(5)).unwrap();
+            entered.recv_timeout(LONG).unwrap();
 
             // The node is blocked in its update, so a waiting stop would not return.
             rt.request_stop();
-            assert!(!rt.join(Some(Duration::from_millis(50))).unwrap());
-            assert!(!*stopped.lock().unwrap());
+            assert!(!rt.join(Some(QUIET)).unwrap());
+            assert!(!events(&log, 0).contains(&Event::Stop));
 
             release.send(()).unwrap();
-            assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
-            assert!(*stopped.lock().unwrap());
+            assert!(rt.join(Some(LONG)).unwrap());
+            assert!(events(&log, 0).contains(&Event::Stop));
             assert!(rt.is_finished());
         });
     }
@@ -678,7 +710,7 @@ mod stop_request {
     fn does_nothing_once_the_system_has_ended() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let Setup { log, nodes, names } = recorders(2);
+            let Probes { log, nodes, names } = probes(2);
             let (rt, started) = mode
                 .start(nodes, names, Arc::clone(&timer), manual())
                 .unwrap();
@@ -688,15 +720,14 @@ mod stop_request {
             rt.request_stop();
             rt.shutdown().wait().unwrap();
             for id in 0..2 {
-                assert_eq!(events_of(&log, id), [Event::Start, Event::Stop]);
+                assert_eq!(events(&log, id), [Event::Start, Event::Stop]);
             }
         });
     }
 }
 
 mod period {
-    use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-    use std::thread;
+    use std::sync::mpsc::{self, RecvTimeoutError};
     use std::time::Instant;
 
     use mujou_core::time::TimerState;
@@ -704,9 +735,6 @@ mod period {
     use super::*;
 
     const P_NS: u64 = 10 * H_NS;
-    /// How long to watch for an update that must not come.
-    const QUIET: Duration = Duration::from_millis(50);
-    const LONG: Duration = Duration::from_secs(5);
 
     /// Sends each Δt (in ns) as it updates, and blocks in the update (or in
     /// `resume`, for `hold_resume`) until its receiver gets a message.
@@ -1171,175 +1199,16 @@ mod period {
 
 mod pool {
     use std::collections::BTreeSet;
-    use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-    use std::thread;
+    use std::sync::mpsc::{self, RecvTimeoutError};
     use std::time::Instant;
 
     use super::*;
-
-    const LONG: Duration = Duration::from_secs(5);
-    /// How long to watch for an update that must not come.
-    const QUIET: Duration = Duration::from_millis(50);
-
-    type Log = Arc<Mutex<Vec<(usize, Event, String)>>>;
-
-    /// How `enter` fails.
-    #[derive(Debug, Clone, Copy, PartialEq)]
-    enum EnterFailure {
-        Error,
-        Panic,
-    }
-
-    /// Records its hook calls with the name of the thread that ran them.
-    struct Probe {
-        id: usize,
-        log: Log,
-        updates: usize,
-        enters: usize,
-        /// Fails every `enter` from the `k`-th on (counting from 1).
-        fail_enter: Option<(usize, EnterFailure)>,
-        fail_on_start: bool,
-        fail_on_update: Option<usize>,
-        fail_on_state_dict: bool,
-        /// Sends `(id, Δt in ns)` on every update.
-        ticks: Option<Sender<(usize, u64)>>,
-        /// Moves the virtual timer by `H_NS` in each of its first `k` updates.
-        advance: Option<(Arc<Timer>, usize)>,
-        /// Tells when it enters an update, then waits there until released.
-        gate: Option<(Sender<()>, Receiver<()>)>,
-    }
-
-    fn boom(hook: &'static str) -> HookError {
-        HookError {
-            hook,
-            source: Arc::new(Boom),
-        }
-    }
-
-    impl Probe {
-        fn hook(&mut self, event: Event) -> Result<(), HookError> {
-            let thread = thread::current().name().unwrap_or_default().to_owned();
-            let entry = (self.id, event.clone(), thread);
-            self.log.lock().unwrap().push(entry);
-            self.react(&event)
-        }
-
-        fn react(&mut self, event: &Event) -> Result<(), HookError> {
-            match event {
-                Event::Enter(_) => {
-                    self.enters += 1;
-                    match self.fail_enter {
-                        Some((k, failure)) if self.enters >= k => match failure {
-                            // A name of its own: the core reports the next hook.
-                            EnterFailure::Error => Err(boom("enter")),
-                            EnterFailure::Panic => panic!("panic in enter"),
-                        },
-                        _ => Ok(()),
-                    }
-                }
-                Event::Start if self.fail_on_start => Err(boom("on_start")),
-                Event::StateDict if self.fail_on_state_dict => Err(boom("state_dict")),
-                Event::Update(dt) => {
-                    self.updates += 1;
-                    if let Some(ticks) = &self.ticks {
-                        let _ = ticks.send((self.id, (dt * 1e9).round() as u64));
-                    }
-                    if let Some((timer, k)) = &self.advance {
-                        if self.updates <= *k {
-                            timer.advance_ns(H_NS).unwrap();
-                        }
-                    }
-                    if let Some((entered, release)) = &self.gate {
-                        let _ = entered.send(());
-                        let _ = release.recv();
-                    }
-                    if self.fail_on_update == Some(self.updates) {
-                        return Err(boom("on_update"));
-                    }
-                    Ok(())
-                }
-                _ => Ok(()),
-            }
-        }
-    }
-
-    impl NodeHooks for Probe {
-        type State = usize;
-
-        fn enter(&mut self, next_hook: &'static str) -> Result<(), HookError> {
-            self.hook(Event::Enter(next_hook))
-        }
-
-        fn start(&mut self) -> Result<(), HookError> {
-            self.hook(Event::Start)
-        }
-
-        fn update(&mut self, dt: f64) -> Result<(), HookError> {
-            self.hook(Event::Update(dt))
-        }
-
-        fn pause(&mut self) -> Result<(), HookError> {
-            self.hook(Event::Pause)
-        }
-
-        fn resume(&mut self) -> Result<(), HookError> {
-            self.hook(Event::Resume)
-        }
-
-        fn exception(&mut self) -> Result<(), HookError> {
-            self.hook(Event::Exception)
-        }
-
-        fn stop(&mut self) -> Result<(), HookError> {
-            self.hook(Event::Stop)
-        }
-
-        fn state_dict(&mut self) -> Result<usize, HookError> {
-            self.hook(Event::StateDict).map(|()| self.updates)
-        }
-    }
-
-    struct Probes {
-        log: Log,
-        nodes: Vec<Probe>,
-        names: Vec<String>,
-    }
-
-    fn probes(n: usize) -> Probes {
-        let log = Arc::new(Mutex::new(Vec::new()));
-        let nodes = (0..n)
-            .map(|id| Probe {
-                id,
-                log: Arc::clone(&log),
-                updates: 0,
-                enters: 0,
-                fail_enter: None,
-                fail_on_start: false,
-                fail_on_update: None,
-                fail_on_state_dict: false,
-                ticks: None,
-                advance: None,
-                gate: None,
-            })
-            .collect();
-        let names = (0..n).map(|i| format!("p{i}")).collect();
-        Probes { log, nodes, names }
-    }
 
     fn pool(workers: usize, config: RuntimeConfig) -> RuntimeConfig {
         RuntimeConfig {
             workers: NonZeroUsize::new(workers),
             ..config
         }
-    }
-
-    /// The hooks of node `id`, without the calls of `enter`.
-    fn events(log: &Log, id: usize) -> Vec<Event> {
-        let log = log.lock().unwrap();
-        log.iter()
-            .filter(|(i, e, _)| *i == id && !matches!(e, Event::Enter(_)))
-            .map(|(_, e, _)| e.clone())
-            .collect()
     }
 
     fn threads(log: &Log) -> BTreeSet<String> {
@@ -1592,7 +1461,7 @@ mod pool {
             names,
             ..
         } = probes(8);
-        nodes[3].fail_on_update = Some(2);
+        nodes[3].fail_on_update = Some((2, Failure::Error));
         let config = pool(2, RuntimeConfig::default());
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
         started.wait().unwrap();
@@ -1649,7 +1518,7 @@ mod pool {
         let (entered_tx, entered) = mpsc::channel();
         let (release, release_rx) = mpsc::channel();
         nodes[0].gate = Some((entered_tx, release_rx));
-        nodes[0].fail_on_update = Some(1);
+        nodes[0].fail_on_update = Some((1, Failure::Error));
         let config = pool(2, RuntimeConfig::default());
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
         started.wait().unwrap();
@@ -1801,7 +1670,7 @@ mod pool {
 
     #[test]
     fn a_failed_enter_fails_the_next_hook_and_still_lets_the_node_clean_up() {
-        for failure in [EnterFailure::Error, EnterFailure::Panic] {
+        for failure in [Failure::Error, Failure::Panic] {
             in_modes(&[Mode::Dedicated, Mode::OneWorker], |mode| {
                 let timer = virtual_timer();
                 let Probes {
@@ -1835,7 +1704,7 @@ mod pool {
             names,
         } = probes(2);
         // The first `enter` (before `start`) succeeds, the next ones fail.
-        nodes[0].fail_enter = Some((2, EnterFailure::Error));
+        nodes[0].fail_enter = Some((2, Failure::Error));
         let (rt, started) =
             Runtime::start(nodes, names, Arc::clone(&timer), pool(1, manual())).unwrap();
         started.wait().unwrap();
@@ -1876,7 +1745,7 @@ mod pool {
             mut nodes,
             names,
         } = probes(3);
-        nodes[0].fail_on_update = Some(1);
+        nodes[0].fail_on_update = Some((1, Failure::Error));
         let (rt, started) =
             Runtime::start(nodes, names, Arc::clone(&timer), pool(1, manual())).unwrap();
         started.wait().unwrap();
