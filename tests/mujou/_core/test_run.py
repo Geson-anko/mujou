@@ -19,6 +19,7 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
+from mujou._core._native import _available_parallelism  # pyright: ignore[reportPrivateUsage]
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
@@ -531,10 +532,9 @@ def more_nodes_than_cpus() -> int:
 
 
 def default_workers() -> int:
-    """The default number of workers for more nodes than CPUs: the logical CPUs,
-    or half of them (at least 1) with the GIL. The CPUs this process may use
-    stand for the core's available parallelism (which also counts a quota)."""
-    cpus = os.process_cpu_count() or 1
+    """The default number of workers for more nodes than CPUs: the core's
+    available parallelism, or half of it (at least 1) with the GIL."""
+    cpus = _available_parallelism()
     gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
     return max(1, cpus // 2) if gil else cpus
 

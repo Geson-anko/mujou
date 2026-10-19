@@ -38,6 +38,7 @@ __all__ = [
     "Timer",
     "TimerReader",
     "Timestamp",
+    "_available_parallelism",
 ]
 
 __version__: Final[str]
@@ -652,3 +653,10 @@ class Timestamp:
         """
         The time in nanoseconds.
         """
+
+def _available_parallelism() -> int:
+    """
+    The available parallelism as the core reads it (on Linux it also counts a
+    CPU quota): the default number of workers for at least as many pool nodes
+    without the GIL. Private, for the tests.
+    """

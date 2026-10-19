@@ -461,8 +461,15 @@ fn default_workers(py: Python<'_>) -> PyResult<Option<NonZeroUsize>> {
     if !gil {
         return Ok(None);
     }
-    let cores = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    Ok(NonZeroUsize::new((cores / 2).max(1)))
+    Ok(NonZeroUsize::new((available_parallelism() / 2).max(1)))
+}
+
+/// The available parallelism as the core reads it (on Linux it also counts a
+/// CPU quota): the default number of workers for at least as many pool nodes
+/// without the GIL. Private, for the tests.
+#[pyfunction(name = "_available_parallelism")]
+pub fn available_parallelism() -> usize {
+    std::thread::available_parallelism().map_or(1, NonZeroUsize::get)
 }
 
 /// Runs nodes on a pool of worker threads, or each dedicated node on a thread
