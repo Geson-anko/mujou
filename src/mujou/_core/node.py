@@ -365,8 +365,9 @@ class Node(_native.Node, Component):
         ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a
         reserved name: do not assign an attribute of that name.
 
-        It can be read from the start of the run (also in ``on_start``). Once the host has seen a normal end (e.g. after
-        ``Run.shutdown`` returned), it is replaced by a ``ReadOnlyTimer`` that
+        It can be read from the start of the run (also in ``on_start``). Once the
+        host has seen a normal end (e.g. after ``Run.shutdown`` returned), it is
+        replaced by a ``ReadOnlyTimer`` that
         stays at the time of the state, also in the ``state_dict`` that the host
         takes then. A ``ReadOnlyTimer`` kept from before the end keeps reading
         the running timer.
