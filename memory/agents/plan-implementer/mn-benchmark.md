@@ -162,3 +162,22 @@ GIL あり（修正後）: 2 個の場合の `interrupt_waiters` は 0 回/s、�
 ## 作業環境のメモ
 
 - セッションの scratchpad にあった `venv-gil`（PR 2 の worktree の拡張が入っていた）を、誤ってこの worktree のビルドで上書きし、`venv-gil-mn3` に名前を変えた。PR 2 の確認で GIL ありの環境を使うなら、作り直す必要がある
+
+## 続き（2026-10-19、orchestrator の依頼）
+
+### 取り込み
+- `origin/feature/2026-10-18/mn-python-nodes`（#76、`on_thread_start` の削除・`_before_hook` など）を merge した。衝突なし
+- `origin/refactor/2026-10-19/drop-compat-shims`（#75）を merge した。衝突は 2 か所で、両方の意図を残した
+  - `src/mujou/_core/node.py` の `Node` の docstring の Raises: #75 の「`period` が `None` なら `TypeError`」の削除と、M:N 側の「`dedicated_thread` が `bool` でなければ `TypeError`」の追加を合わせ、「``period`` is a ``bool``, or ``dedicated_thread`` is not a ``bool``」にした
+  - `specs/execution-model.md` の周期の段落: #75 の「`0.0` もそのまま渡す」の文を採り、M:N 側が足した末尾の 1 文（プールのノードは同じ規則の目標を期限としてヒープに入れる）を残した
+
+### native の周期の `Option` を消した（#75 で後回しにした分）
+- bindings の `Runtime.start(periods=)` は `list[float] | None`、コアの `RuntimeConfig::period_ns` は `Option<Vec<u64>>`。ノードごとの `None`（「周期なし」）は無くし、0.0 秒は bindings の `period_to_ns` が 1 ns に丸める（振る舞いは今と同じ）
+- 外側の `Option` は残した。省いたときに全ノードが 1 ns になる既定で、`dedicated`・`workers`・`last_update_ns` と同じ形。Python は常に渡すので、使うのは Rust のテストの `RuntimeConfig::default()` だけ
+- Rust のテスト: `with_period(None, false)` は `with_period(1, false)` にし、テスト名を `with_a_period_of_1_ns_any_time_passing_is_enough` に変えた。周期の数の検査のテストは `[vec![0], vec![1, 1]]`
+
+### GIL ありの既定のワーカー数を変えた（推奨案 1）
+- 判定は bindings の `Runtime.start` で、`workers` が無いときに `sys._is_gil_enabled()` を呼ぶ。真なら `max(1, available_parallelism / 2)` をコアに渡し、偽ならコアの既定（`available_parallelism`）。コアの `min(プールのノード数)` はそのまま効く
+- bindings で見る理由: free-threaded のビルドでも、実行時に GIL が有効になることがある（`PYTHON_GIL=1`、free-threaded に対応しない拡張の import）。コンパイル時の `Py_GIL_DISABLED` では判定できない。コアは Python を知らない
+- テスト `TestWorkers.test_the_default_number_of_workers_all_take_updates`: 更新のたびに 5 ms 眠るノードを CPU 数 + 2 個、実時間で 0.5 s 回し、更新を走らせたスレッドの数が既定のワーカー数（`os.process_cpu_count()` から求め、GIL ありなら半分）と等しいこと。両方のビルドで 5 回ずつ通した。GIL ありのビルドで `tests/mujou` と `tests/test_examples.py` が通る（560 passed）
+- 推奨案 2（物理コア数にしない）は記録だけ（`specs/native-core.md#ベンチマーク`、`memory/project_mn_scheduler.md` の Q2）
