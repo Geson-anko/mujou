@@ -70,7 +70,7 @@ To put these in the state, override both `state_dict` and `load_state_dict`. Cal
 
 For a number, you can instead keep it as a 0-dimensional tensor created in `on_start` (`self.count = torch.zeros((), device=self.device)`) and update it in place (`self.count += 1`), without overriding anything. It is then collected automatically.
 
-The following example adds the state of the random number generator. The generator is created again from `seed` every time the run starts. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.
+The following example adds the state of the random number generator. A restored run uses new node instances, whose generators start again from `seed`. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.
 
 ```python
 from typing import Any, override

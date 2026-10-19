@@ -79,9 +79,35 @@ class TestThreadSetup:
         run.state_dict()
         assert not {"on_update", "state_dict"} & set(vars(node))
 
-    def test_the_generator_is_made_on_the_thread(self):
-        with pytest.raises(RuntimeError, match="node's thread"):
-            _ = Probe(seed=0).generator
+    def test_the_generator_is_ready_in_init(self):
+        node = InitDraws(seed=7)
+        expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
+        assert torch.equal(node.draws_in_init, expected)
+
+    def test_reading_the_generator_before_the_base_init_raises(self):
+        class Early(Node):
+            def __init__(self) -> None:
+                _ = self.generator
+                super().__init__()
+
+        with pytest.raises(RuntimeError, match=r"super\(\).__init__"):
+            Early()
+
+    def test_on_start_continues_the_sequence_from_init(self, start_manual: StartManual):
+        node = InitDraws(seed=7)
+        start_manual(Group(node=node))
+        generator = torch.Generator().manual_seed(7)
+        _ = torch.rand(3, generator=generator)  # what __init__ drew
+        assert node.draws is not None
+        assert torch.equal(node.draws, torch.rand(3, generator=generator))
+
+
+class InitDraws(Probe):
+    """Draws from ``generator`` in ``__init__``, right after the base's."""
+
+    def __init__(self, seed: int) -> None:
+        super().__init__(seed)
+        self.draws_in_init = torch.rand(3, generator=self.generator)
 
 
 def reachable(root: object) -> list[object]:

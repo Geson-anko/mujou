@@ -79,9 +79,8 @@ class Node(_native.Node, Component):
     Before ``on_start``, the framework sets up the node's thread: it turns off
     gradient recording (to backpropagate inside the node, wrap the forward
     computation and ``backward`` in ``with torch.enable_grad():`` marked
-    ``# mujou: local-autograd``), creates ``generator`` from ``seed`` on
-    ``device``, and, when ``device`` is CUDA, makes the device and a stream of the
-    node's own current. On CUDA it also waits for that stream after
+    ``# mujou: local-autograd``), and, when ``device`` is CUDA, makes the device and
+    a stream of the node's own current. On CUDA it also waits for that stream after
     ``on_update``, after ``load_state_dict`` and around ``state_dict``. It does this in hooks of its own, whose names start with
     ``_``: do not override those, and overriding a public hook never skips them.
 
@@ -171,6 +170,7 @@ class Node(_native.Node, Component):
         self._device = _check_device(torch.device(device))
         self._seed = seed
         self._period = period
+        self._generator = self._make_generator()
 
     @property
     def device(self) -> torch.device:
@@ -192,21 +192,31 @@ class Node(_native.Node, Component):
         """The node's own random generator on ``device``, seeded with ``seed``.
 
         Use it instead of the global generator, which all nodes share (do not
-        call ``torch.manual_seed`` in a node). It is created anew from ``seed``
-        whenever the network starts, also when it is restored; to continue the
-        same sequence after a restore, add ``self.generator.get_state()`` to what
+        call ``torch.manual_seed`` in a node). ``super().__init__`` creates it, so
+        it can be used in ``__init__`` already (to initialize modules, say), and the
+        hooks go on with the same sequence. A restored network runs new instances,
+        whose generators start again from ``seed``; to continue the same sequence
+        after a restore, add ``self.generator.get_state()`` to what
         ``super().state_dict()`` returns, and in ``load_state_dict`` take it out
         and ``set_state`` it before passing the rest to ``super()``.
 
         Raises:
-            RuntimeError: The node's thread has not started yet.
+            RuntimeError: ``super().__init__()`` has not been called (and the node's
+                thread has not started).
         """
         if self._generator is None:
             raise RuntimeError(
-                "the generator is created on the node's thread; use it from on_start "
-                "or a later hook"
+                "the generator is created by super().__init__(); call it first"
             )
         return self._generator
+
+    def _make_generator(self) -> torch.Generator:
+        generator = torch.Generator(self._device)
+        if self._seed is None:
+            generator.seed()
+        else:
+            generator.manual_seed(self._seed)
+        return generator
 
     if not TYPE_CHECKING:
         # Hidden from the type checker, which would otherwise accept assignments
@@ -347,12 +357,9 @@ class Node(_native.Node, Component):
             stream = torch.cuda.Stream(self._device)
             torch.cuda.set_stream(stream)
             self._stream = stream
-        generator = torch.Generator(self._device)
-        if self._seed is None:
-            generator.seed()
-        else:
-            generator.manual_seed(self._seed)
-        self._generator = generator
+        # Normally made by __init__; a subclass that skipped it still gets one.
+        if self._generator is None:
+            self._generator = self._make_generator()
         # The OS thread id: the Python thread object may differ between hooks.
         self._thread_ident = threading.get_ident()
         enter_node_thread()
