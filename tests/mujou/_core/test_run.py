@@ -169,8 +169,8 @@ def run_together(
     started: list[Run], *given: tuple[Node | Network, ...]
 ) -> RuntimeError:
     """Call ``mujou.testing.run(*components)`` for each of ``given`` on threads of
-    their own at once; check that exactly one run started and return the error of
-    the other."""
+    their own at once; check that all but one raised ``RuntimeError`` and return one
+    of those errors."""
     barrier = threading.Barrier(len(given))
     outcomes: list[Run | RuntimeError] = []
 
