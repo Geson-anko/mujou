@@ -273,9 +273,9 @@ impl<N: NodeHooks> Shared<N> {
     /// at the queues itself right after, so it ignores this, and only the
     /// control side wakes the timekeeper (the worker may run a hook from the
     /// ready queue first; see [`Self::run_worker`] for why that misses no
-    /// target). Waking it wakes every waiter on the
-    /// timer (the other runs' timekeepers, dedicated threads, the host), so a
-    /// node of period 0 putting itself back after each update must not.
+    /// target). Waking it wakes every waiter on the timer (the other runs'
+    /// timekeepers, dedicated threads, the host), so a node of period 1 ns
+    /// putting itself back after each update must not.
     fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) -> bool {
         match next {
             Next::Hook(_) => {
