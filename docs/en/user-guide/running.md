@@ -15,13 +15,13 @@
 
 `mujou.run` takes the following arguments.
 
-| Argument                 | Meaning                                                                                                  | Default                              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `component, *components` | The networks or nodes to run. Two or more are combined into one run (see [Composing networks](group.md)) | Required                             |
-| `timer`                  | The run's timer (see [Controlling time](time.md))                                                        | `None` (the global timer)            |
-| `inputs`                 | The initial values of the input. `{port: value}`                                                         | `None`                               |
-| `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                   | `None`                               |
-| `workers`                | The number of worker threads of the run (see [Threads of a run](#threads-of-a-run))                      | `None` (the CPUs; half with the GIL) |
+| Argument                 | Meaning                                                                                                  | Default                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `component, *components` | The networks or nodes to run. Two or more are combined into one run (see [Composing networks](group.md)) | Required                                         |
+| `timer`                  | The run's timer (see [Controlling time](time.md))                                                        | `None` (the global timer)                        |
+| `inputs`                 | The initial values of the input. `{port: value}`                                                         | `None`                                           |
+| `state`                  | The state tree to restore (see [Saving and restoring state](state.md))                                   | `None`                                           |
+| `workers`                | The number of worker threads of the run (see [Threads of a run](#threads-of-a-run))                      | `None` (the CPUs; half while the GIL is enabled) |
 
 `run.timer` returns the run's timer: the `timer` you passed, or the global timer that `mujou.time` reads.
 
@@ -35,11 +35,11 @@ To run a single node, pass it as `mujou.run(node)` without wrapping it in a netw
 
 A run does not start a thread per node. It starts a pool of worker threads for itself, and the workers share the nodes: a worker runs one hook of one node, then takes the next work, the updates due earliest first. With many nodes, the number of threads stays small, and the OS does not spend its time switching between them.
 
-- `workers` sets the number of workers. `None`, the default, is the number of CPUs the process may use (the logical cores, or fewer when the CPU affinity or a quota limits them), or half of it (at least 1) with the GIL, and never more than the nodes on the workers
+- `workers` sets the number of workers. `None`, the default, is the number of CPUs the process may use (the logical cores, or fewer when the CPU affinity or a quota limits them), or half of it (at least 1) while the GIL is enabled at run time (`sys._is_gil_enabled()`), and never more than the nodes on the workers
 - The hooks of a node never run at the same time, and each hook sees what the previous one wrote. Which worker runs the node may change from one hook to the next
 - A hook that blocks (`time.sleep`, waiting for I/O or a lock) holds its worker meanwhile, and the other nodes' `dt` grows. Give such a node `dedicated_thread=True` (see [Writing a node](writing-a-node.md#run-on-a-thread-of-its-own)): it runs on a thread of its own instead of the workers
 
-On a build of Python with the GIL, only one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. More workers than half the CPUs mostly contend for the GIL, which is why the default is half there. For nodes that spend most of their time in Python, an even smaller `workers` is about as fast.
+While the GIL is enabled (on a build of Python with it, or on the free-threaded build with `PYTHON_GIL=1`), only one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. More workers than half the CPUs mostly contend for the GIL, which is why the default is half there. For nodes that spend most of their time in Python, an even smaller `workers` is about as fast.
 
 ## Writing input
 
