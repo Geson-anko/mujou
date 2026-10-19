@@ -498,6 +498,9 @@ impl Runtime {
             last_update_ns,
             period_ns,
             timer_state,
+            workers: None,
+            // Every node on a thread of its own, as before the worker pool.
+            dedicated: Some(vec![true; n]),
         };
         let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         let nodes = pending

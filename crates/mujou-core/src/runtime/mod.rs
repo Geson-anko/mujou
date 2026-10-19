@@ -1,10 +1,17 @@
-//! Running nodes on their own threads, and controlling them from the host.
+//! Running nodes on worker threads or their own threads, and controlling them
+//! from the host.
 //!
-//! Each node runs on a dedicated thread that loops over its update hook. The
-//! nodes never wait for each other; the only barriers are the control operations
-//! (pausing to capture the state, stepping by hand, and stopping), which
-//! `specs/execution-model.md` allows because the time of the runtime's timer
-//! stands still while they hold.
+//! The nodes of a runtime share a pool of worker threads (M nodes on N
+//! workers), except those given a dedicated thread, which loops over the
+//! node's hooks. A worker runs one hook of one node at a time and then picks
+//! the next work, the updates earliest target first; a node never runs on two
+//! threads at once, and its hooks keep their order. Which thread runs a node
+//! does not change what the node sees.
+//!
+//! The nodes never wait for each other; the only barriers are the control
+//! operations (pausing to capture the state, stepping by hand, and stopping),
+//! which `specs/execution-model.md` allows because the time of the runtime's
+//! timer stands still while they hold.
 //!
 //! All control goes through a single control thread, as in pamiq-core's
 //! `ThreadController`. The host submits requests to it and waits for the reply;
@@ -19,20 +26,22 @@
 //!
 //! This module holds the host's side (the [`Runtime`] handle and its
 //! [`Reply`]) and the state shared by every thread of a runtime. The rest is in
-//! submodules: `node` is the loop of a node's thread, `control` the
-//! control thread, `freeze` how the timer is held frozen, and `error` what the
-//! runtime reports.
+//! submodules: `node` is the loop of a dedicated thread, `pool` the worker
+//! pool, `control` the control thread, `freeze` how the timer is held frozen,
+//! and `error` what the runtime reports.
 
 mod control;
 mod error;
 mod freeze;
 mod node;
+mod pool;
 
 use std::cell::Cell;
+use std::num::NonZeroUsize;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, TryLockError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -44,21 +53,26 @@ use control::{Controller, Message};
 use error::{Ended, Panicked, panic_message, stopped, unavailable};
 use freeze::{Freeze, FreezeReason, Live, lock_live};
 use node::{Command, Report, control_word};
+use pool::Sched;
 
 /// The lifecycle hooks of a node, called by the runtime.
 ///
-/// Every hook except `state_dict` runs on the node's own thread. `state_dict`
-/// runs on the control thread while the node is paused (or has stopped after an
-/// exception), so it never overlaps with the other hooks.
+/// Every hook except `state_dict` runs on the thread that runs the node: its
+/// dedicated thread, or any worker of the pool (a different one from call to
+/// call). The hooks of a node never overlap, and each one sees what the
+/// previous one wrote. `state_dict` runs on the control thread while the node
+/// is paused (or has stopped after an exception), so it never overlaps with the
+/// other hooks either.
 ///
 /// A hook that panics is treated like one that returned an error, under the
 /// hook's name as the node's author knows it (`on_update` for `update`, ...).
 pub trait NodeHooks: Send + 'static {
     type State: Send + 'static;
 
-    /// Runs the whole body of a runtime thread (a node's or the control
-    /// thread). The bindings of a language with per-thread state wrap it here,
-    /// so that the state lives as long as the thread instead of one hook call.
+    /// Runs the whole body of a runtime thread (a dedicated thread, a worker
+    /// or the control thread). The bindings of a language with per-thread
+    /// state wrap it here, so that the state lives as long as the thread
+    /// instead of one hook call.
     /// The body waits a lot, so the wrapper must not hold a lock others need.
     fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
         body()
@@ -67,6 +81,23 @@ pub trait NodeHooks: Send + 'static {
     /// Told that a hook panicked, with the error that will stand for it, so
     /// that the node can log it. The node may be in an inconsistent state.
     fn panicked(&mut self, _error: &HookError) {}
+
+    /// Called when a thread switches to this node, right before the hook
+    /// `next_hook` (named as the node's author knows it) and in the same call:
+    /// the first time a thread runs the node, and on a worker whenever it ran
+    /// another node in between. The node sets up the per-thread state its
+    /// hooks rely on here. `state_dict` on the control thread is called
+    /// without it.
+    ///
+    /// An error or a panic counts as a failure of `next_hook`, under that
+    /// name whatever [`HookError::hook`] says, and the thread enters again
+    /// before the next hook. `next_hook` is then not called, except
+    /// `exception` and `stop`, which still run so that the node can release
+    /// its resources. As for the hooks, the node logs its own errors. A
+    /// dedicated thread whose `enter` succeeds calls it once, before `start`.
+    fn enter(&mut self, _next_hook: &'static str) -> Result<(), HookError> {
+        Ok(())
+    }
 
     /// Prepares the node on its thread before the first update, and restores
     /// its state if there is one. The time is frozen meanwhile, so the time this
@@ -98,11 +129,20 @@ pub struct RuntimeConfig {
     pub period_ns: Option<Vec<Option<u64>>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
+    /// The number of worker threads for the nodes in the pool. Defaults to
+    /// the available parallelism; never more than the nodes in the pool.
+    pub workers: Option<NonZeroUsize>,
+    /// Which nodes run on a dedicated thread instead of the pool. `None`: all
+    /// in the pool.
+    pub dedicated: Option<Vec<bool>>,
 }
 
 thread_local! {
     /// The runtime (the address of its shared state) whose thread this is, or 0.
     static RUNTIME_OF_THREAD: Cell<usize> = const { Cell::new(0) };
+    /// The runtime and the index of the node this thread entered last
+    /// ([`NodeHooks::enter`]).
+    static LAST_NODE: Cell<(usize, usize)> = const { Cell::new((0, usize::MAX)) };
 }
 
 /// The state shared by the control thread and the nodes, under one lock.
@@ -125,6 +165,8 @@ struct Control {
     /// Counts this runtime as live on its timer until it finishes.
     live: Option<Live>,
     finished: bool,
+    /// The nodes in the pool and the work for them.
+    sched: Sched,
 }
 
 struct Shared<N: NodeHooks> {
@@ -147,6 +189,13 @@ struct Shared<N: NodeHooks> {
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
     to_controller: Sender<Message<N>>,
+    /// Which nodes run on a dedicated thread (the others in the pool).
+    dedicated: Vec<bool>,
+    /// Notified when the pool has new work, on the control lock.
+    sched_changed: Condvar,
+    /// Bumped to wake the worker that waits on the timer (the timekeeper):
+    /// read with `word` in its interrupt condition.
+    sched_epoch: AtomicU64,
 }
 
 impl<N: NodeHooks> Shared<N> {
@@ -180,7 +229,7 @@ impl<N: NodeHooks> Shared<N> {
     }
 
     /// Changes the command and wakes every node, including one waiting on the
-    /// timer for its Δt to become positive.
+    /// timer for its Δt to become positive, and the pool.
     fn set_command(&self, c: &mut Control, command: Command) {
         if c.command == Command::Stop || c.command == command {
             return;
@@ -194,24 +243,55 @@ impl<N: NodeHooks> Shared<N> {
             .store(control_word(c.epoch, command), Ordering::SeqCst);
         self.changed.notify_all();
         self.timer.interrupt_waiters();
+        self.wake_pool(c);
     }
 
-    /// Calls a hook with the node locked, turning a panic into an error.
+    /// Calls `exception` or `stop`, whose errors are ignored: even if
+    /// entering the node fails, so that the node can release its resources.
+    fn clean_up(
+        &self,
+        i: usize,
+        hook: &'static str,
+        f: impl FnOnce(&mut N) -> Result<(), HookError>,
+    ) {
+        let _ = self.invoke(i, hook, Entry::BestEffort, f);
+    }
+
+    /// Calls a hook on the thread that runs node `i`, with the node locked,
+    /// turning a panic into an error. Enters the node first as `entry` says.
     fn invoke<T>(
         &self,
         i: usize,
         hook: &'static str,
+        entry: Entry,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, HookError> {
-        let mut node = self.hooks[i].lock().unwrap_or_else(|e| e.into_inner());
-        panic::catch_unwind(AssertUnwindSafe(|| f(&mut node))).unwrap_or_else(|payload| {
-            let error = HookError {
-                hook,
-                source: Arc::new(Panicked(panic_message(payload))),
-            };
-            node.panicked(&error);
-            Err(error)
-        })
+        let mut node = match self.hooks[i].try_lock() {
+            Ok(node) => node,
+            // Hooks run outside the runtime's locks, so the node is consistent.
+            Err(TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                // The scheduling never lets two threads run a node at once.
+                debug_assert!(false, "node #{i} is already running");
+                self.hooks[i].lock().unwrap_or_else(|e| e.into_inner())
+            }
+        };
+        let this = (self.id(), i);
+        if entry != Entry::Skip && LAST_NODE.get() != this {
+            match guarded(&mut *node, hook, |n| n.enter(hook)) {
+                // Entered: no `enter` until the thread runs another node.
+                Ok(()) => LAST_NODE.set(this),
+                Err(e) if entry == Entry::Required => {
+                    // Reported as the hook's, under the name the core knows.
+                    return Err(HookError {
+                        hook,
+                        source: e.source,
+                    });
+                }
+                Err(_) => {}
+            }
+        }
+        guarded(&mut *node, hook, f)
     }
 
     /// Calls a hook whose error ends the system.
@@ -221,13 +301,25 @@ impl<N: NodeHooks> Shared<N> {
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, ()> {
-        self.invoke(i, hook, f).map_err(|e| {
+        self.invoke(i, hook, Entry::Required, f).map_err(|e| {
             self.fail(NodeFailure {
                 node: i,
                 hook: e.hook,
                 error: e.source,
             })
         })
+    }
+
+    /// Calls `state_dict` on the control thread, without entering the node.
+    fn state_dict(&self, i: usize) -> Result<N::State, ()> {
+        self.invoke(i, "state_dict", Entry::Skip, N::state_dict)
+            .map_err(|e| {
+                self.fail(NodeFailure {
+                    node: i,
+                    hook: e.hook,
+                    error: e.source,
+                })
+            })
     }
 
     /// Records the first failure and asks everything to stop, right where the
@@ -244,6 +336,7 @@ impl<N: NodeHooks> Shared<N> {
         // Wake the nodes that already left their loops, so they call
         // `exception` too (`set_command` does not notify if already stopping).
         self.changed.notify_all();
+        self.wake_pool(&mut c);
         drop(c);
         // The control thread is gone only after the system finished.
         let _ = self.to_controller.send(Message::Failed);
@@ -296,6 +389,34 @@ impl<N: NodeHooks> Shared<N> {
         c.finished = true;
         self.changed.notify_all();
     }
+}
+
+/// Whether a hook call enters the node first ([`NodeHooks::enter`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    /// Enter if the thread ran another node last. A failure stands for the
+    /// hook's, which is not called.
+    Required,
+    /// Enter like `Required`, but call the hook even if entering fails.
+    BestEffort,
+    /// Do not enter (`state_dict` on the control thread).
+    Skip,
+}
+
+/// Calls a hook of `node`, turning a panic into an error named `hook`.
+fn guarded<N: NodeHooks, T>(
+    node: &mut N,
+    hook: &'static str,
+    f: impl FnOnce(&mut N) -> Result<T, HookError>,
+) -> Result<T, HookError> {
+    panic::catch_unwind(AssertUnwindSafe(|| f(node))).unwrap_or_else(|payload| {
+        let error = HookError {
+            hook,
+            source: Arc::new(Panicked(panic_message(payload))),
+        };
+        node.panicked(&error);
+        Err(error)
+    })
 }
 
 /// What is left of a wait until `deadline` (no end if `None`).
@@ -352,9 +473,10 @@ pub struct Runtime<N: NodeHooks> {
 }
 
 impl<N: NodeHooks> Runtime<N> {
-    /// Starts every node on its own thread. The reply comes after every node
-    /// started and the timer runs again; if a node failed to start, it comes
-    /// after the system ended.
+    /// Starts every node, on the worker pool or on a dedicated thread
+    /// (`config.dedicated`). The reply comes after every node started and the
+    /// timer runs again; if a node failed to start, it comes after the system
+    /// ended.
     ///
     /// The timer is frozen first and then loaded from `config.timer_state`, so
     /// that the time is restored before the nodes restore their states and
@@ -371,6 +493,13 @@ impl<N: NodeHooks> Runtime<N> {
     ) -> Result<(Self, Reply<()>), RuntimeError> {
         let n = nodes.len();
         let period_ns = check_start(n, names.len(), &config)?;
+        let dedicated = config.dedicated.unwrap_or_else(|| vec![false; n]);
+        let pool = dedicated.iter().filter(|&&own| !own).count();
+        let workers = config
+            .workers
+            .or_else(|| thread::available_parallelism().ok())
+            .map_or(1, NonZeroUsize::get)
+            .min(pool);
         let (to_controller, messages) = mpsc::channel();
         let shared = Arc::new(Shared {
             timer,
@@ -388,6 +517,7 @@ impl<N: NodeHooks> Runtime<N> {
                 freeze: Freeze::default(),
                 live: None,
                 finished: false,
+                sched: Sched::new(&dedicated),
             }),
             changed: Condvar::new(),
             word: AtomicU64::new(control_word(0, Command::Run)),
@@ -396,6 +526,9 @@ impl<N: NodeHooks> Runtime<N> {
             failure: Arc::new(OnceLock::new()),
             hooks: nodes.into_iter().map(Mutex::new).collect(),
             to_controller,
+            dedicated,
+            sched_changed: Condvar::new(),
+            sched_epoch: AtomicU64::new(0),
         });
         shared.freeze_for_startup(config.timer_state)?;
         // Where each first Δt starts: set before any thread exists, so that it
@@ -407,8 +540,8 @@ impl<N: NodeHooks> Runtime<N> {
             last.store(ns, Ordering::SeqCst);
         }
 
-        let mut threads = Vec::with_capacity(n);
-        for i in 0..n {
+        let mut threads = Vec::with_capacity(n - pool + workers);
+        for i in (0..n).filter(|&i| shared.dedicated[i]) {
             let node_shared = Arc::clone(&shared);
             let spawned = thread::Builder::new()
                 .name(format!("mujou-node-{}", shared.names[i]))
@@ -416,6 +549,16 @@ impl<N: NodeHooks> Runtime<N> {
             match spawned {
                 Ok(thread) => threads.push(thread),
                 Err(e) => return Err(abandon(&shared, "a node", &e)),
+            }
+        }
+        for k in 0..workers {
+            let worker_shared = Arc::clone(&shared);
+            let spawned = thread::Builder::new()
+                .name(format!("mujou-worker-{k}"))
+                .spawn(move || N::on_thread(move || worker_shared.run_worker()));
+            match spawned {
+                Ok(thread) => threads.push(thread),
+                Err(e) => return Err(abandon(&shared, "a worker", &e)),
             }
         }
         let controller = Controller {
@@ -550,6 +693,14 @@ fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64
             "got {n} nodes but {names} names"
         )));
     }
+    if let Some(dedicated) = &config.dedicated {
+        if dedicated.len() != n {
+            return Err(RuntimeError::InvalidArgument(format!(
+                "got {n} nodes but {} dedicated flags",
+                dedicated.len()
+            )));
+        }
+    }
     if let Some(last) = &config.last_update_ns {
         if last.len() != n {
             return Err(RuntimeError::InvalidArgument(format!(
@@ -579,12 +730,14 @@ fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64
 
 /// Gives up a start whose threads could not all be spawned: lets the time run
 /// and lets the threads already spawned end on their own (they call `on_stop`
-/// after `on_start`). Does not wait for them, since the caller may hold a lock
-/// they need.
+/// after `on_start`, also for the pool nodes if a worker was spawned). Does
+/// not wait for them, since the caller may hold a lock they need.
 fn abandon<N: NodeHooks>(s: &Shared<N>, which: &str, e: &std::io::Error) -> RuntimeError {
     let mut c = s.lock();
     s.set_command(&mut c, Command::Stop);
     c.stop_allowed = true;
+    // The workers already spawned run the pool nodes to their end.
+    s.wake_pool(&mut c);
     s.mark_finished(c);
     RuntimeError::Internal(format!("failed to spawn {which} thread: {e}"))
 }
