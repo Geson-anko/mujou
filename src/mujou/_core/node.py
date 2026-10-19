@@ -37,7 +37,7 @@ class Node(_native.Node, Component):
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned. By default it copies the state into the
       collected tensors and modules (see below). When ``device`` is CUDA, the
-      framework waits for the node's stream after it.
+      framework waits for the work queued on the node's stream after it.
     - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
       below). ``dt`` is the time in seconds on the run's ``timer`` since the
       node's last update. Read the ports with ``recv``, update in proportion to
@@ -96,10 +96,10 @@ class Node(_native.Node, Component):
     ``# mujou: local-autograd``). Whenever a thread switches to the node, when
     ``device`` is CUDA, it also makes the device and a stream of the node's own
     current. These are the only per-thread settings it sets back. On CUDA it
-    also waits for that stream after ``on_update`` (holding its worker
-    meanwhile), after ``load_state_dict`` and around ``state_dict``. It does
-    this in hooks of its own, whose names start with ``_``: do not override
-    those, and overriding a public hook never skips them.
+    also waits for the work queued on that stream after ``on_update`` (holding
+    its worker meanwhile), after ``load_state_dict`` and around ``state_dict``.
+    It does this in hooks of its own, whose names start with ``_``: do not
+    override those, and overriding a public hook never skips them.
 
     The node updates once every ``period`` (0.01 s by default) of the run's timer
     on average: the time an update takes
@@ -420,19 +420,26 @@ class Node(_native.Node, Component):
             stream = self._stream
             if stream is None:
                 return self.state_dict()
-            # Copies that state_dict makes queue on the node's stream, after the
-            # work of every hook (not only on_update); wait for them before the
-            # framework copies the tree on its own stream.
+            # Wait for the work of every hook (not only on_update) before
+            # state_dict reads it, and for the copies that state_dict queues on
+            # the node's stream before the framework copies the tree on its own.
             with torch.cuda.stream(stream):
-                stream.synchronize()
+                self._synchronize()
                 state = self.state_dict()
-                stream.synchronize()
+                self._synchronize()
             return state
 
     def _synchronize(self) -> None:
-        """Wait for the node's own stream on CUDA; nothing on the CPU."""
+        """Wait for the work queued so far on the node's stream on CUDA; nothing
+        on the CPU.
+
+        It records an event on the stream and waits for that, not for the whole
+        stream: nodes past PyTorch's pool of 32 streams per device share one, and
+        CUDA guarantees that the event does not wait for work that another node
+        queues on it later.
+        """
         if self._stream is not None:
-            self._stream.synchronize()
+            self._stream.record_event().synchronize()
 
 
 def _check_device(device: torch.device) -> torch.device:
