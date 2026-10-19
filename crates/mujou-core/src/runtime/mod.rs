@@ -61,8 +61,8 @@ use pool::Sched;
 /// dedicated thread, or any worker of the pool (a different one from call to
 /// call). The hooks of a node never overlap, and each one sees what the
 /// previous one wrote. `state_dict` runs on the control thread while the node
-/// is paused (or has stopped after an exception), so it never overlaps with the
-/// other hooks either.
+/// is paused, so it never overlaps with the other hooks either. It is not
+/// called after an exception.
 ///
 /// A hook that panics is treated like one that returned an error, under the
 /// hook's name as the node's author knows it (`on_update` for `update`, ...).

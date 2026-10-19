@@ -19,3 +19,7 @@ GIL ありの環境では、ワーカーと専用スレッドが hook を呼ぶ�
 Rust 拡張では、PyO3 で free-threaded 対応を明示する（`#[pymodule(gil_used = false)]`）。また、テストでも実装でも、GIL による暗黙の排他に頼らない。
 
 pre-commit のフックも Python 3.14 の環境で動かす（`.pre-commit-config.yaml` の `default_language_version`）。フックはソースを parse するので、3.13 以降の構文（型パラメータの既定値など）を読めるバージョンでなければならない。CI の pre-commit ジョブは、`python3.14` という名前の実行ファイルを確実に用意するために GIL ありの 3.14 を使う。
+
+## 依存
+
+実行時の依存は `torch` と `numpy` である（`pyproject.toml` の `dependencies`）。

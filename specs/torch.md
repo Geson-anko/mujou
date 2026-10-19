@@ -11,8 +11,9 @@ mujou は、ノードの内側の計算に PyTorch を全面的に採用する�
 | `mujou._core._native` | しない | Rust の拡張モジュール。コアの Python インターフェース。値のバッファ・スロット・コアのノード `Node`・スケジューラ・グローバルタイマー・DLPack での受け渡しなど |
 | `mujou._core` のほか（`spec` / `port` / `component` / `node` / `network` / `graph` / `binding` / `state` / `session` / `run`） | する | `TensorSpec`・Port・Network・`mujou.Node` の実装と、Port での `torch.Tensor` の読み書き |
 | `mujou._core` の `timer` / `hooks` / `lifetime` | しない（import しない） | タイマー、hook の中かどうかの判定、動いている実行の登録と終了時の停止 |
-| `mujou` / `mujou.time` / `mujou.typing` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
-| `mujou.pc`（予定） | する | PC-ALM のノード |
+| `mujou` / `mujou.typing` / `mujou.testing` | する | 利用者に公開する名前（`mujou._core` から再公開する） |
+| `mujou.time` | しない（import しない） | 時刻まわりの公開名（`mujou._core` の `timer` と `_native` から再公開する） |
+| `mujou.pc`（未実装） | する | PC-ALM のノード |
 
 torch は mujou の必須の依存である。実装は private な `mujou._core` パッケージに集め、その中の拡張モジュール `mujou._core._native` だけは torch を import しない。コアを特定のテンソルライブラリに依存させないためである（[ネイティブコア](native-core.md#メッセージの値の型)）。
 
@@ -32,7 +33,7 @@ torch は mujou の必須の依存である。実装は private な `mujou._core
 | `state` | 状態の木（`Run.state_dict` の形）を作る・検査して読む。木の形を定めるのはここだけ | `binding` / `spec` |
 | `lifetime` | 動いている実行の登録と、インタープリタの終了時の停止。`session` を import しないように、実行を小さな Protocol で持つ | なし |
 | `session` | 1 つの実行のスロットの配置、ランタイムの制御、ホストの読み書き | `binding` / `graph` / `lifetime` / `node` / `port` / `spec` / `state` / `timer` |
-| `run` | `mujou.run` と `Run` / `ManualRun` | `graph` / `hooks` / `network` / `node` / `port` / `session` / `timer` |
+| `run` | `mujou.run` と `Run` / `ManualRun` | `graph` / `hooks` / `network` / `node` / `port` / `session` / `state` / `timer` |
 
 `mujou._core` は private なパッケージで、利用者は直接使わない。`TensorSpec` など利用者が使うものは、mujou のトップレベル（`mujou.*`）に公開する。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型は公開しない（[メッセージ](messages.md#値の型)）。
 
@@ -86,7 +87,7 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 フレームワークが hook の前に戻すのは、この勾配モード（毎回）と CUDA の device と stream（切り替えのたび）だけ。hook の間で保たれるのは、これらとノードごとの `contextvars.Context` である。`Context` は空で作り、ホストの文脈を引き継がない。hook の中で変えたほかのスレッドごとの設定（`torch.autocast` など）は、hook を抜ける前に戻す。戻さないと、同じワーカーで次に走るほかのノードに漏れる（局所性を壊す）。CPU のノードは CUDA の device と stream を設定しないので、直前に CUDA のノードを走らせたワーカーではそのストリームが残る。CPU のノードは CUDA を使わない契約なので問題にしない。hook はすべてそのノードの `Context` の中で呼ぶ（`state_dict` と `_before_hook` は外。[ネイティブコア](native-core.md#python-のノードの載せ方)）。ノードはワーカーの間を移るので、`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドのノードでは保たれる）。ほかのスレッドごとの設定に頼るノードは、`dedicated_thread=True` にして `on_start` で設定する。
 
-デバイスと seed は、`mujou.Node` の構築時に `super().__init__(device=..., seed=...)` で渡す。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。乱数生成器はスレッドの設定ではなく、`super().__init__()` がノードごとの `torch.Generator` を seed で作る。既定の乱数生成器はプロセス全体で共有されるので、そのままではテストが決定的にならない。seed を省略すると、決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU になり、seed は省略したのと同じになる。
+デバイスと seed と周期は、`mujou.Node` の構築時に `super().__init__(device=..., seed=..., period=...)` で渡す（周期は [実行の周期](nodes.md#実行の周期)）。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。乱数生成器はスレッドの設定ではなく、`super().__init__()` がノードごとの `torch.Generator` を seed で作る。既定の乱数生成器はプロセス全体で共有されるので、そのままではテストが決定的にならない。seed を省略すると、決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU、周期は既定の 0.01 秒になり、seed は省略したのと同じになる。ノードは実行のタイマーの読み取り側を `self.timer` として持つ（[ライフサイクル hook](nodes.md#ライフサイクル-hook)）。`device`・`generator`・`period`・`dedicated_thread`・`timer` は予約名で、同じ名前の属性を代入しない。
 
 乱数生成器は `self.generator` で使う。`super().__init__()` の中で作るので、`__init__` の中から使え、モジュールの初期化にも使える（2026-10-18、ユーザーの決定）。生成器はスレッドに結び付かない。`super().__init__()` を呼ばないサブクラスでは、最初の `_on_enter` で作る。復元した実行は新しいインスタンスで走り、生成器も seed から作り直すので、生成器の状態は戻らない。再開後も同じ乱数列にしたいノードは、`state_dict()` に `self.generator.get_state()` を入れ、`load_state_dict()` で `set_state` する。
 
@@ -134,7 +135,7 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 - 読むとき: コアのバッファの中身を、ノードのデバイスの新しい `torch.Tensor` へコピーする
 - 書くとき: 値を `detach()` する（ノード内 BP の中で計算した値でも、勾配はノードをまたがない）。GPU 上の値は自分のストリームでホストへコピーし、自分のストリームだけを同期する。そのうえで、コアがプールのバッファへコピーする
 
-転送に pinned memory を使うかどうかは、実装するときに測って決める。
+今の実装は転送に pinned memory を使わない。読むときはコアのバッファを DLPack で受け取ってノードのデバイスへコピーし、書くときは GPU 上の値を `detach().to("cpu")` で通常の（pinned でない）ホストのメモリへコピーする。pinned memory を使うかどうかは決めておらず、測定もしていない（[未決定事項](open-decisions.md#mujounode-の細部)）。
 
 ### 状態
 
@@ -154,9 +155,11 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 
 次の設定と状態はプロセス全体で共有されるので、ノードの中で変えない。必要ならホスト（またはテスト）が実行の前に 1 回だけ設定する。
 
-- `torch.manual_seed` と既定の乱数生成器
+- `torch.manual_seed` と既定の乱数生成器。`TensorSpec.rand` も、seed も `generator` も渡さなければ既定の乱数生成器を使うので、ノードの中ではどちらかを渡す
 - `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
+
+mujou 自身は、import したときに `StateDict` を `torch.serialization.add_safe_globals` へ登録する。これはプロセス全体の torch の設定を変える（[`StateDict`](execution-model.md#statedict)）。
 
 CPU で計算する torch の演算は、呼び出したスレッドごとに内部でスレッドを立てる。ノードの hook を走らせるスレッド（ワーカーと専用スレッド）の数と内部のスレッド数の積がコア数を大きく超えると、CPU を取り合って全体が遅くなる。内部のスレッド数は小さく設定しておく。
 

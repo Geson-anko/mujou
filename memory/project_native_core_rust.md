@@ -7,7 +7,7 @@ metadata:
 
 2026-10-11 決定。
 
-- **コアは Rust で実装する。Python はインターフェース。** Python からは PyO3 + maturin で呼ぶ想定。コアの処理中は GIL を解放する
+- **コアは Rust で実装する。Python はインターフェース。** Python からは PyO3 + maturin で呼ぶ想定。スロットへの書き込みと待機は GIL を外して行う（`Slot.read` と `InputSlot.read` は GIL を持ったまま短い lock を取る）
 - **実行モデルは M:N スケジューリング。** M 個のノードを N 本のワーカースレッド（既定は論理 CPU 数。実行時に GIL が有効なときはその半分、[[project-mn-scheduler]]）に載せる。ノードは実行クラスを持つ
   - **ワーカー（既定）**: 実行ごとのワーカープールで、期限の早い更新から 1 hook ずつ実行する。Python/PyTorch のノードも載せる（2026-10-18 にユーザーの要求で改めた、[[project-mn-scheduler]]）。~~Python のコードを動かすノードは GIL を要するので、タスクのプールに載せない~~
   - **専用スレッド（opt-in）**: `Node(dedicated_thread=True)` のノードだけ自分の OS スレッドを持つ。ブロッキングする I/O や、スレッドごとの状態に頼るノード向け
@@ -21,7 +21,7 @@ metadata:
 
 **How to apply:**
 
-- 負荷が高いときは各ノードの $\Delta t$ が伸びるだけで、連続時間の定式化がそれを吸収する。$\Delta t$ の上限は別に持つ
+- 負荷が高いときは各ノードの $\Delta t$ が伸びるだけで、連続時間の定式化がそれを吸収する。$\Delta t$ の上限（`max_dt`）は今は持たない（未決定。`specs/execution-model.md`）
 - ノードに目標周期を持たせる場合、スケジューラは期限順に実行する
 - 複数マシンにまたがる実行は、現状は想定しない（2026-10-13 決定）
 - コアとの変換（DLPack、必ずコピー）は torch に依存する側（`mujou.Node` とネットワーク）が受け持つ。ゼロコピー共有はしない（[[project-message-types]]）
