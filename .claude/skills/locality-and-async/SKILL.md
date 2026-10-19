@@ -44,7 +44,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 | 専用スレッド（opt-in） | 自分の OS スレッド（`Node(dedicated_thread=True)`） | ブロッキングする I/O、スレッドごとの状態に頼るノード（その設定は自分のスレッドで呼ばれる `on_start` に書く） |
 
 - ワーカーは期限の早い更新から 1 hook ずつ実行し、ノードはワーカーの間を移る。1 つのノードの hook は重ならず、前の hook の書き込みは次の hook から見える（2026-10-18 ユーザー決定、`memory/project_mn_scheduler.md`）
-- hook の間で保たれるのは `contextvars`（ノードごとの空の `Context`）と、フレームワークが戻す勾配モード（hook の前に毎回、内部の hook `_before_hook`）・CUDA の device と stream（CUDA のノードに切り替わるたび、内部の hook `_on_enter`）だけ。`threading.local`・`threading.current_thread()` に頼らない。フレームワーク側で毎回要る設定を足すときは、これらの内部の hook に書く（利用者は override しない）
+- hook の間で保たれるのは `contextvars`（ノードごとの空の `Context`）と、フレームワークが戻す CUDA の device と stream（CUDA のノードに切り替わるたび、内部の hook `_on_enter`）だけ。勾配の記録はフレームワークが切り替えない（通常の PyTorch と同じく記録する。2026-10-19）。`threading.local`・`threading.current_thread()` に頼らない。フレームワーク側で毎回要る設定を足すときは、これらの内部の hook に書く（利用者は override しない）
 - ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは専用スレッドにする
 - Port の所有は「スレッドが今走らせているノード」で判定する。同じワーカーでも、ほかのノードの Port は読み書きできない
 - スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。相手の更新の進み具合は待たない。待つのは、スロットごとの lock の下で `Arc` を複製・差し替える短い区間だけ。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない

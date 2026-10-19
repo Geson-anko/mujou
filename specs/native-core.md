@@ -66,8 +66,8 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated` に、`mujou.run(..., workers=None)` の `workers` を `RuntimeConfig::workers` に渡す。`None` なら `min(ワーカーに載るノード数, available_parallelism)`。GIL が有効なとき（bindings が `sys._is_gil_enabled()` で判定する）は `min(ワーカーに載るノード数, max(1, available_parallelism / 2))`（2026-10-19、[ベンチマーク](#ベンチマーク)）。`workers` が `int` でなければ（`bool` も）`TypeError`、1 未満なら `ValueError`。`mujou.testing.run` に `workers` は無い。
 
 - 公開の hook `on_thread_start` は 2026-10-19 にユーザーの決定で廃止した（正式公開前なので、移行の案内も検出もせずに消した）。専用スレッドのノードは `on_start` も自分のスレッドで呼ばれるので、スレッドごとの設定はそこに書く。ワーカーではスレッドごとの設定が hook の間で残らないので、そういう hook を持つこと自体が罠になっていた
-- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録は、bindings が `state_dict` 以外の公開の hook の直前に毎回呼ぶ内部の hook `_before_hook` で切る（[PyTorch の利用](torch.md#切り替えごとの設定)）。`_before_hook` の失敗はその hook の失敗として扱い、その hook は呼ばない。ただし `on_exception` と `on_stop` は `enter` の失敗と同じく、失敗をログに出したうえで呼ぶ
-- hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。例外は文脈の外で呼ぶ `state_dict`（`_capture_state`）と `_before_hook` の 2 つ。勾配モードは torch のスレッドローカルで `contextvars` に依らないので、`_before_hook` は文脈の外でよい。`contextvars` に依る設定を `_before_hook` に足すと効かない
+- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録には触れない（[PyTorch の利用](torch.md#切り替えごとの設定)）
+- hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。例外は文脈の外で呼ぶ `state_dict`（`_capture_state`）
 - ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す勾配モード（hook の前に毎回）・CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
 - GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すのでワーカーが複数あれば並列に進む。GIL を取り合うスレッドはノードの数でなく N 本に減る。`workers` の既定は、実行時に GIL が有効なら（`sys._is_gil_enabled()`）、無効なときの半分にする。計画では両方のビルドで同じにしていたが、ベンチマークで GIL ありは論理コア数の半分ほどが最速で、論理コア数では約半分の速さだった（2026-10-19、ユーザーへの確認待ち）
 
@@ -84,7 +84,7 @@ bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated`
 
 - M が論理コア数以下なら、両者の更新頻度は同程度。M が大きいと、専用スレッドではノードの間の不公平が大きく、届かないノードが出る。ワーカーは期限の早い順に回すので、全ノードの頻度がそろう
 - コンテキストスイッチの数は、ワーカーにしても桁では減らない。周期のあるノードでは更新ごとにワーカーが眠って起きるため。減るのは、ワーカーの数を減らしたとき（軽い負荷・M = 256・周期 0.01 s で、14 本なら約 1.6 万回/s、1 本なら約 100 回/s）
-- 切り替えの費用は 1 回あたり約 0.4 µs（そのうち `_on_enter` の中の Python の処理が約 0.13 µs）、`_before_hook` は hook ごとに約 0.17 µs（ワーカー 1 本で 2 ノードを交互に回した場合と 1 ノードの場合の差）。計画の見込み（1〜2 µs）より小さく、絞る必要は無い
+- 切り替えの費用は 1 回あたり約 0.4 µs（そのうち `_on_enter` の中の Python の処理が約 0.13 µs。ワーカー 1 本で 2 ノードを交互に回した場合と 1 ノードの場合の差）。計画の見込み（1〜2 µs）より小さく、絞る必要は無い
 - 制御の lock は、軽い負荷の周期 0 では律速になる。ワーカーを 7 本以上にすると全体で約 36 万回/s に頭打ちし、ワーカー 1 本（約 80 万回/s）より遅い。ワーカーが 14 本と 28 本のとき、lock の取得の約 2 割が待ち、待ちは取得 1 回あたり平均 3.4 µs と 10.3 µs で、更新そのもの（約 0.6 µs）より長い。`tanh` の負荷では待つ取得は 4〜6%、取得 1 回あたり平均 0.2 µs（7 本）、0.9 µs（14 本）、5.7 µs（28 本）。更新 1 回で lock を 2 回取るので、約 78 µs の更新に対してワーカーがコア数以下なら 3% 以下、コア数の 2 倍で約 15% になる。今は直さない。小さなネイティブのノードを載せるときに、ワーカーごとのキューと work stealing を検討する
 - timekeeper の起こしすぎ（上の箇条）を直す前は、周期 0.01 s のノード 64 個に周期 0 のノード 2 個を混ぜると、`Timer::interrupt_waiters` が毎秒 18〜21 万回呼ばれ、スイッチは毎秒 40〜43 万回だった。直した後は呼び出しが 0 回、スイッチが毎秒約 7 万回、周期 0 のノードの更新頻度が 7〜8 倍（毎秒 18〜21 万回 → 140〜146 万回）
 - 既定のワーカー数: free-threaded では、`tanh` の更新頻度がワーカー 14 本（= 論理コア数）で最大（7 本の約 1.45 倍、28 本より約 8% 速い）。GIL ありでは 7〜8 本で最大になり、10 本以上で約半分に落ちる（GIL の取り合い）。そこで GIL ありの既定を論理コア数の半分にした。物理コア数には変えない（下記）。`addmm_` は Apple silicon の行列演算器をコアのクラスタで共有するため、2 本を超えるとほとんど伸びない。この機械は SMT が無く、論理コア数と物理コア数が同じなので、両者の差はここでは測れない。free-threaded では論理コア数までは伸び、超えると遅くなるので、上限としての論理コア数は妥当と判断した。物理コア数を取るには依存 crate（`num_cpus`）を足すか OS ごとに読む必要があり、SMT のある機械で差を測るまで見送る

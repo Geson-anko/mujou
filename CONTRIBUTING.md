@@ -79,7 +79,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 ## Design rules
 
 - Keep nodes local and asynchronous. A node updates from its own state and the messages of its neighbours only. Do not build an autograd graph across nodes (no `.backward()` across nodes), and do not add global barriers, epochs, or train/inference modes.
-- Autograd inside one node is fine: wrap it in `with torch.enable_grad():` and mark that line with `# mujou: local-autograd`.
+- Autograd inside one node is fine, written as in plain PyTorch: the hooks record gradients, and a port sends a detached copy. In `src/mujou/`, mark such a line with `# mujou: local-autograd`.
 - Do not build a learning rule into nodes, messages or the scheduler. The update rule must stay replaceable.
 - Prefix internals, including attributes set in `__init__`, with `_`. Make public only what users need.
 - Subclasses of `Node` and `Network` call `super().__init__()` first in `__init__`, and the same hook of `super()` first in every hook they override (`on_start`, `on_update(dt)`, `on_stop`, ...). Write examples and docs this way too.
