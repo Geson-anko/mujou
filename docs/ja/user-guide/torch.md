@@ -46,11 +46,11 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## ノードの中の BP
 
-mujou は勾配の記録を切り替えない。hook は通常の PyTorch と同じく勾配を記録するので、autograd も通常の PyTorch と同じように使える。
+mujou は勾配の記録を切り替えない。hook は通常の PyTorch と同じく勾配を記録し、autograd もそのまま使える。
 
 - パラメータは `optimizer.step()` と同じく `with torch.no_grad():` の中でその場で更新する（例の `p -= h * self.rate * g`）。外で更新するとエラーになる
 - 推論だけのノードなど勾配の要らない計算も `with torch.no_grad():` の中で行えば、グラフのメモリと時間を省ける
-- 計算グラフを次の更新へ持ち越さない。`self.h = torch.tanh(self.w(self.h))` のようにパラメータから計算した属性はグラフを持ち、更新のたびに伸び続ける。`.detach()` するか `no_grad` の下で計算する
+- 計算グラフを次の更新へ持ち越さない。`self.h = torch.tanh(self.w(self.h))` のように前の値から次の値を計算する属性は、更新のたびに前のグラフへ新しいグラフをつなぎ、グラフが伸び続ける。`.detach()` するか `no_grad` の下で計算する
 - 勾配の記録は `torch.set_grad_enabled(False)` ではなく `with torch.no_grad():` で切る。スレッドごとの設定なので、戻さないと同じワーカーで次に走るノードに残る（[プロセス全体に効く設定](#%E3%83%97%E3%83%AD%E3%82%BB%E3%82%B9%E5%85%A8%E4%BD%93%E3%81%AB%E5%8A%B9%E3%81%8F%E8%A8%AD%E5%AE%9A)）
 
 BP はノードの中に閉じ、ほかのノードへ勾配を流すことはできない。`recv()` が返す値はコピーで、`send()` は値を `detach()` してから送る。

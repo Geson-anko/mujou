@@ -76,7 +76,8 @@ class Learner(Node):
             return
         self.last = t
         x, y = sample["x"], sample["y"]
-        self.loss.send(nn.functional.mse_loss(self.model(x), y))  # an unseen batch
+        with torch.no_grad():  # the loss on an unseen batch, before learning
+            self.loss.send(nn.functional.mse_loss(self.model(x), y))
         # Follow the gradient flow dW/dt = -rate * dL/dW over the time since the
         # last batch, in n equal steps no longer than MAX_STEP.
         params = list(self.model.parameters())

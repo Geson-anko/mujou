@@ -50,7 +50,7 @@ Mujou does not turn gradient recording on or off: the hooks record gradients as 
 
 - Update the parameters in place inside `with torch.no_grad():`, as `optimizer.step()` does (`p -= h * self.rate * g` in the example). Outside it, an in-place update of a parameter raises an error
 - Compute what needs no gradient inside `with torch.no_grad():` too, such as a node that only infers. It saves the memory and time of the graph
-- Do not carry a graph from one update to the next. An attribute computed from the parameters, such as `self.h = torch.tanh(self.w(self.h))`, keeps its graph, which then grows with every update. Keep such a tensor detached (`.detach()`), or compute it under `no_grad`
+- Do not carry a graph from one update to the next. An attribute fed back into its own next value, such as `self.h = torch.tanh(self.w(self.h))`, chains a new graph onto the old one at every update, so the graph keeps growing. Detach such a tensor (`.detach()`), or compute it under `no_grad`
 - Turn gradient recording off with `with torch.no_grad():`, not with `torch.set_grad_enabled(False)` alone. It is a per-thread setting, and left behind it reaches the next node on the same worker (see [Settings of the whole process](#settings-of-the-whole-process))
 
 BP stays inside the node. A node cannot pass gradients to another node: `recv()` returns a copy, and `send()` detaches the value with `detach()` before sending it.

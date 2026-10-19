@@ -54,7 +54,8 @@ class Regressor(Node):
             with torch.no_grad():  # the step itself is not part of any graph
                 for p, g in zip(params, grads, strict=True):
                     p -= h * self.rate * g
-        self.next.send(self.model(x))  # sent detached: the graph stays here
+        with torch.no_grad():  # the prediction needs no graph: it is sent detached
+            self.next.send(self.model(x))
 
 
 # --8<-- [end:node]
