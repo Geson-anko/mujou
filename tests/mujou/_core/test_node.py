@@ -461,10 +461,6 @@ class TestPeriod:
         with pytest.raises(TypeError, match="period"):
             Node(period=True)
 
-    def test_rejects_none_and_points_to_zero(self):
-        with pytest.raises(TypeError, match="period=0.0"):
-            Node(period=None)  # pyright: ignore[reportArgumentType]
-
     def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
         class OnTheClass(Ticker):
             period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]

@@ -45,6 +45,7 @@
 - [日本語の文体](feedback_japanese_style.md) — 翻訳調にしない。読点を減らす、主語と補足を削る、短い項目は体言止め。基準はユーザーが直した docs/ja/index.md
 - [質問は最後にまとめる](feedback_questions_at_end.md) — 確認事項は推奨案で進め、質問は報告の最後に一覧で出す（2026-10-19）
 - [super() を呼ぶ](feedback_super_calls.md) — Node/Network のサブクラスは `__init__` と override した hook の最初で super() を呼ぶ。サンプル・docs・docstring の例も常に
+- [公開前は互換を残さない](feedback_no_compat_before_release.md) — PyPI への正式公開までは、破壊的変更で古い名前の受け付け・移行の案内・deprecation の警告を入れず単に消す
 
 ## reference
 

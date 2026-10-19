@@ -156,8 +156,8 @@ class Node(_native.Node, Component):
             per-thread state set once (in ``on_start``).
 
     Raises:
-        TypeError: ``period`` is ``None`` or a ``bool``, or
-            ``dedicated_thread`` is not a ``bool``.
+        TypeError: ``period`` is a ``bool``, or ``dedicated_thread`` is not a
+            ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
             while CUDA is not available, or ``period`` is negative or not
             finite.
@@ -180,11 +180,6 @@ class Node(_native.Node, Component):
         period: float = 0.01,
         dedicated_thread: bool = False,
     ) -> None:
-        if period is None:  # pyright: ignore[reportUnnecessaryComparison]
-            raise TypeError(
-                "the period must be a number of seconds, got None; pass period=0.0 "
-                "to update as soon as any time has passed"
-            )
         if isinstance(period, bool):
             raise TypeError(f"the period must be a number of seconds, got {period}")
         if not (math.isfinite(period) and period >= 0):
@@ -553,9 +548,9 @@ def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
-def checked_period(node: Node) -> float | None:
+def checked_period(node: Node) -> float:
     """Return the period of ``node`` in seconds for the runtime, which rounds it
-    to ns, or ``None`` for ``0.0`` (no wait between updates).
+    to ns and at least 1 ns (so ``0.0`` waits only for the time to move).
 
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved ``period``.
@@ -565,8 +560,7 @@ def checked_period(node: Node) -> float | None:
             f"{type(node).__qualname__} replaces period, a reserved name of Node: "
             "pass the period to Node.__init__ instead"
         )
-    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
-    return period if period > 0 else None
+    return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
 def checked_dedicated(node: Node) -> bool:
