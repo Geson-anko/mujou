@@ -72,20 +72,19 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 ### 切り替えごとの設定
 
-フレームワークは `state_dict` 以外の公開の hook の直前に毎回、内部の hook `_before_hook()` を呼ぶ。さらにスレッドがノードに切り替わるたび（最初に走らせるとき、ワーカーが間に別のノードを走らせたとき）、その前に内部の hook `_on_enter()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` は勾配の記録を `_before_hook()` で毎回切り、ほかの設定を `_on_enter()` で行う。公開の hook とは別にしたので、サブクラスが公開の hook を override して `super()` を呼ばなくても設定は漏れない。どれもスレッドごとの設定でほかのノードには影響しない。
+フレームワークはスレッドがノードに切り替わるたび（最初に走らせるとき、ワーカーが間に別のノードを走らせたとき）、次の hook の前に内部の hook `_on_enter()` を呼ぶ（[ノード](nodes.md#ライフサイクル-hook)）。`mujou.Node` はここで設定を行う。公開の hook とは別にしたので、サブクラスが公開の hook を override して `super()` を呼ばなくても設定は漏れない。どれもスレッドごとの設定でほかのノードには影響しない。
 
-勾配の記録だけを毎回切るのは決定性のため。切り替えのときだけだと、前の hook が `with` なしで有効にした勾配の記録が次の hook に残るかどうかが、同じワーカーで続けて走ったかどうかで決まってしまう（2026-10-18、レビューを受けた orchestrator の裁定。費用は 1 回 0.13 µs ほど）。デバイスとストリームは切り替えのたびに設定し直す。
+勾配の記録は切り替えない（2026-10-19、ユーザーの決定）。hook は通常の PyTorch と同じく勾配を記録し、ノード内の BP をそのまま書ける。ノードをまたぐグラフは、Port が detach したコピーを送るので作れない。勾配の要らない更新手法（PC-ALM など）は、自分の hook の中で `torch.no_grad()` を使う。以前は `state_dict` 以外の hook の前に毎回切っていた（内部の hook `_before_hook`）。BP を書くノードに `torch.enable_grad()` を強いるうえ、ほかのスレッドごとの設定は文書だけで扱う方針（2026-10-18）とも揃わないのでやめた。
 
 `_on_enter()` は最初に今走らせているノードとして自分を記録し、それから CUDA と生成器の設定をする。途中で失敗しても、コアがそのまま呼ぶ `on_exception` / `on_stop` は、前に走っていたノードとしてではなく自分として走る。
 
 | 設定 | 内容 | 理由 |
 | --- | --- | --- |
-| 勾配の記録を止める | `_before_hook()` で毎回 `torch.set_grad_enabled(False)` | mujou の更新手法は更新式を直接計算するので、autograd のグラフは要らない |
 | デバイス | CUDA のときは `torch.cuda.set_device` でノードのデバイスをこのスレッドの現在のデバイスにする | `device="cuda"` と書いた確保や演算が、ノードのデバイスに載る |
 | ストリーム | CUDA のときは最初の `_on_enter` で自分の `torch.cuda.Stream` を作り、毎回 `torch.cuda.set_stream` でこのスレッドの現在のストリームにする | 以降の演算がすべて自分のストリームに積まれる |
 | ステップの終わりの同期 | CUDA のときは、各 `on_update` の直後に呼ばれる `_after_update()` で自分のストリームにイベントを記録し、それを `synchronize` する | CPU が GPU を追い越さない |
 
-フレームワークが hook の前に戻すのは、この勾配モード（毎回）と CUDA の device と stream（切り替えのたび）だけ。hook の間で保たれるのは、これらとノードごとの `contextvars.Context` である。`Context` は空で作り、ホストの文脈を引き継がない。hook の中で変えたほかのスレッドごとの設定（`torch.autocast` など）は、hook を抜ける前に戻す。戻さないと、同じワーカーで次に走るほかのノードに漏れる（局所性を壊す）。CPU のノードは CUDA の device と stream を設定しないので、直前に CUDA のノードを走らせたワーカーではそのストリームが残る。CPU のノードは CUDA を使わない契約なので問題にしない。hook はすべてそのノードの `Context` の中で呼ぶ（`state_dict` と `_before_hook` は外。[ネイティブコア](native-core.md#python-のノードの載せ方)）。ノードはワーカーの間を移るので、`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドのノードでは保たれる）。ほかのスレッドごとの設定に頼るノードは、`dedicated_thread=True` にして `on_start` で設定する。
+フレームワークが hook の前に戻すのは、CUDA の device と stream（切り替えのたび）だけ。hook の間で保たれるのは、これらとノードごとの `contextvars.Context` である。`Context` は空で作り、ホストの文脈を引き継がない。hook の中で変えたほかのスレッドごとの設定（勾配の記録、`torch.autocast` など）は、hook を抜ける前に戻す（`with torch.no_grad():` のように `with` に閉じる）。戻さないと、同じワーカーで次に走るほかのノードに漏れる（局所性を壊す）。CPU のノードは CUDA の device と stream を設定しないので、直前に CUDA のノードを走らせたワーカーではそのストリームが残る。CPU のノードは CUDA を使わない契約なので問題にしない。hook はすべてそのノードの `Context` の中で呼ぶ（`state_dict` は外。[ネイティブコア](native-core.md#python-のノードの載せ方)）。ノードはワーカーの間を移るので、`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドのノードでは保たれる）。ほかのスレッドごとの設定に頼るノードは、`dedicated_thread=True` にして `on_start` で設定する。
 
 デバイスと seed と周期は、`mujou.Node` の構築時に `super().__init__(device=..., seed=..., period=...)` で渡す（周期は [実行の周期](nodes.md#実行の周期)）。デバイスは CPU か CUDA のデバイスで、それ以外の種類（`mps`、`xpu`、`meta` など）は、どのデバイスが使えるかを書いたメッセージで `ValueError`。乱数生成器はスレッドの設定ではなく、`super().__init__()` がノードごとの `torch.Generator` を seed で作る。既定の乱数生成器はプロセス全体で共有されるので、そのままではテストが決定的にならない。seed を省略すると、決定的でない seed で作る。`super().__init__()` を呼ばないサブクラスでも動く。そのときデバイスは CPU、周期は既定の 0.01 秒になり、seed は省略したのと同じになる。ノードは実行のタイマーの読み取り側を `self.timer` として持つ（[ライフサイクル hook](nodes.md#ライフサイクル-hook)）。`device`・`generator`・`period`・`dedicated_thread`・`timer` は予約名で、同じ名前の属性を代入しない。
 
@@ -93,9 +92,9 @@ GPU の演算器・メモリ帯域・PCIe の帯域・GPU メモリは、全ノ�
 
 `_on_enter` は、スレッドが今走らせているノードとして自分を記録する（`hooks` の `threading.local` に持ち、`current_node()` で読む）。Port の `recv` / `send` は、呼んだスレッドが今走らせているノードが所有ノードかを確かめる。同じワーカーの上でも、ほかのノードの Port を呼ぶと `RuntimeError` になる。あわせて、このスレッドを「hook の中」として印を付け、ネットワークのホスト用のメソッドを呼べないようにする。
 
-`_on_enter`・`_before_hook`・`_after_update`・`_restore_state`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_start`・`on_update`・`load_state_dict`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
+`_on_enter`・`_after_update`・`_restore_state`・`_capture_state` は、コアの `Node` が持つフレームワーク用の内部の hook である（[ノード](nodes.md#ライフサイクル-hook)）。利用者の hook とは別なので、`on_start`・`on_update`・`load_state_dict`・`state_dict` を override しても、インスタンス属性で置き換えても、設定と同期は漏れない。
 
-`state_dict()` は、ノードの hook を走らせるスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。これらのスレッドでは勾配の記録の設定は効かない。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
+`state_dict()` は、ノードの hook を走らせるスレッドではなく制御スレッドで、ノードが止まっている間に呼ばれる。正常に終了した後は、`state_dict()` を呼んだホストのスレッドで呼ばれる。ランタイムは `state_dict()` を直接は呼ばず、`_capture_state()` を呼ぶ。`mujou.Node` の `_capture_state()` は、CUDA のときは次の順で同期する。
 
 1. `with torch.cuda.stream(自分のストリーム):` の下で、まず自分のストリームに積んだ仕事を待つ。`on_update` に限らず、`on_start`・`load_state_dict`・`on_pause` などのどの hook が積んだ仕事も、ここで終わる
 2. `state_dict()` を呼ぶ。中で作るコピーは自分のストリームに積まれる
@@ -147,7 +146,7 @@ Port の `recv()` と `send()` は `torch.Tensor` でやり取りし、コアと
 
 ### ノード内の BP
 
-ノードの内側で BP を行う場合は、その部分だけを `with torch.enable_grad():` で囲み、`# mujou: local-autograd` を付ける（skill `locality-and-async`）。ノードをまたぐ `.backward()` は禁止のままである（[ノード](nodes.md#bp-の取り込み)）。
+ノードの内側の BP は通常の PyTorch と同じく書き、パラメータの更新は `torch.no_grad()` の中で行う。ノードをまたぐ `.backward()` は禁止のままである（[ノード](nodes.md#bp-の取り込み)）。送る値は detach したコピーなので、ノードをまたぐグラフは作れない。パラメータから計算した値を属性に持って次の更新で使うと、グラフが更新ごとに伸びるので、detach するか `no_grad` の下で計算する。`src/mujou/` の中でノード内の autograd を書くときは `# mujou: local-autograd` を付ける（skill `locality-and-async`）。
 
 既定で `torch.inference_mode()` は使わない。その中で作ったテンソルは backward に使えないので、スロットから来た入力を使うノード内の BP がエラーになる。
 

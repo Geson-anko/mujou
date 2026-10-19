@@ -179,8 +179,7 @@ class Node:
     own thread if it was started as dedicated (`state_dict`, through
     `_capture_state`, on the control thread while the node is paused). The hooks
     of a node never overlap, and each runs in the node's own
-    `contextvars.Context` (but `_capture_state` and `_before_hook`). They do
-    nothing by default.
+    `contextvars.Context` (but `_capture_state`). They do nothing by default.
 
     The hooks are looked up by name until `on_start` (and `load_state_dict`)
     has returned, and once after that, so replacing one in those hooks takes
@@ -196,16 +195,6 @@ class Node:
         """
         Called right after each `on_update`, for the framework's per-step work
         (so that overriding `on_update` cannot skip it).
-        """
-    def _before_hook(self, /) -> None:
-        """
-        Called right before every public hook but `state_dict` (after
-        `_on_enter` when the thread switches to this node), for the framework's
-        settings that must hold at the start of each hook whatever the previous
-        hook left. It runs outside the node's `contextvars.Context`, so a
-        setting held in a context variable does not take effect here. An error
-        here is reported as the error of that hook, which is then not called,
-        except `on_exception` and `on_stop`, which still run.
         """
     def _capture_state(self, /) -> "object":
         """

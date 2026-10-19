@@ -113,8 +113,9 @@ class TestStateDict:
 
     @pytest.mark.cuda
     def test_moves_from_cuda_to_the_cpu(self):
-        on_cuda = tree().to("cuda")
+        original = tree()  # each tree() has new random weights
+        on_cuda = original.to("cuda")
         assert all(t.device.type == "cuda" for t in tensors(on_cuda))
         moved = on_cuda.cpu()
         assert all(t.device == torch.device("cpu") for t in tensors(moved))
-        assert_same_tree(moved, tree())
+        assert_same_tree(moved, original)

@@ -227,7 +227,7 @@ Draw random numbers from `self.generator` (`torch.randn(..., generator=self.gene
 By default the node runs on the run's worker threads, which it shares with the other nodes (see [Running a network](running.md#threads-of-a-run)). Each hook may then run on a different thread, and the thread runs other nodes in between. So whether the next hook sees what a hook set per thread depends on the schedule, and the next node on the same worker may see it too:
 
 - `threading.local`, `threading.current_thread()` and `threading.get_ident()` may differ from hook to hook
-- Set a per-thread setting of torch, such as `torch.autocast`, back before the hook returns, by keeping it inside a `with` in the hook. A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only gradient recording (before every hook) and, on CUDA, the current device and stream (whenever a worker switches to the node; see [PyTorch in nodes](torch.md))
+- Set a per-thread setting of torch, such as `torch.autocast` or gradient recording, back before the hook returns, by keeping it inside a `with` in the hook (`with torch.no_grad():`). A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only the current CUDA device and stream (whenever a worker switches to a CUDA node; see [PyTorch in nodes](torch.md))
 - `contextvars` do carry over: each node runs its hooks in a `contextvars.Context` of its own. It starts empty, without the variables of the host's context, and `state_dict` runs outside it
 
 Pass `dedicated_thread=True` to `super().__init__` when the node needs a thread of its own:

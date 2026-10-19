@@ -1,10 +1,9 @@
 """A node that learns with PyTorch: backpropagation inside one node.
 
-The framework turns gradient recording off before every hook. A node that
-backpropagates within itself turns it on for that part, marked
-``# mujou: local-autograd``. The update follows the gradient flow
-dW/dt = -rate * dL/dW over the whole ``dt``, in explicit Euler steps no longer
-than ``MAX_STEP``.
+A hook records gradients as plain PyTorch does, and the tensors a node sends
+are detached, so the graph stays inside the node. The update follows the
+gradient flow dW/dt = -rate * dL/dW over the whole ``dt``, in explicit Euler
+steps no longer than ``MAX_STEP``.
 """
 
 import math
@@ -50,12 +49,13 @@ class Regressor(Node):
         n = max(1, math.ceil(dt / MAX_STEP))
         h = dt / n
         for _ in range(n):
-            with torch.enable_grad():  # mujou: local-autograd
-                loss = nn.functional.mse_loss(self.model(x), y)
-                grads = torch.autograd.grad(loss, params)
-            for p, g in zip(params, grads, strict=True):
-                p -= h * self.rate * g  # in place, outside the block: not recorded
-        self.next.send(self.model(x))
+            loss = nn.functional.mse_loss(self.model(x), y)
+            grads = torch.autograd.grad(loss, params)
+            with torch.no_grad():  # the step itself is not part of any graph
+                for p, g in zip(params, grads, strict=True):
+                    p -= h * self.rate * g
+        with torch.no_grad():  # the prediction needs no graph: it is sent detached
+            self.next.send(self.model(x))
 
 
 # --8<-- [end:node]
