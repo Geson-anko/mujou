@@ -26,8 +26,8 @@ Scenarios (each run of a configuration warms up, then measures a window):
 - ``workers``: the same measures for M nodes over a range of worker counts, to
   judge the default number of workers.
 - ``switch``: the cost of switching a worker between nodes, with one worker:
-  one node against two that alternate, and the two with ``_on_enter`` or
-  ``_before_hook`` replaced by the least they must do.
+  one node against two that alternate, and the two with ``_on_enter``
+  replaced by the least it must do.
 - ``mixed``: nodes of period 0 among nodes of period 0.01 s, with a dedicated
   node of period 1 s and the host sleeping on the same timer, against the same
   nodes all at 0.01 s. Shows the wake-ups of other waiters on the timer that the
@@ -101,14 +101,6 @@ class BareEnter(Light):
     @override
     def _on_enter(self) -> None:
         enter_node(self)
-
-
-class BareBefore(Light):
-    """Leaves the gradient mode alone before each hook."""
-
-    @override
-    def _before_hook(self) -> None:
-        pass
 
 
 @dataclass
@@ -258,10 +250,6 @@ def switch(args: argparse.Namespace) -> None:
     print("| --- | --- | --- |")
     cases: list[tuple[str, Callable[[], list[Light]]]] = [
         ("1 node", lambda: [Light(period=0.0, dedicated=False)]),
-        (
-            "1 node, _before_hook empty",
-            lambda: [BareBefore(period=0.0, dedicated=False)],
-        ),
         (
             "2 nodes alternating",
             lambda: [Light(period=0.0, dedicated=False) for _ in range(2)],

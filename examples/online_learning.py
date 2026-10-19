@@ -83,11 +83,11 @@ class Learner(Node):
         n = max(1, math.ceil(self.elapsed / MAX_STEP))
         h = self.elapsed / n
         for _ in range(n):
-            with torch.enable_grad():  # mujou: local-autograd
-                loss = nn.functional.mse_loss(self.model(x), y)
-                grads = torch.autograd.grad(loss, params)
-            for p, g in zip(params, grads, strict=True):
-                p -= h * self.rate * g
+            loss = nn.functional.mse_loss(self.model(x), y)
+            grads = torch.autograd.grad(loss, params)
+            with torch.no_grad():  # the step itself is not part of any graph
+                for p, g in zip(params, grads, strict=True):
+                    p -= h * self.rate * g
         self.elapsed = 0.0
 
 
