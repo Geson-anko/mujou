@@ -12,6 +12,7 @@ metadata:
 - `mujou.Node` は ~~`on_start`~~ ~~内部の hook `_on_thread_start`~~（2026-10-17 に変更、[[project-runtime-api-revision]]）内部の hook `_on_enter`（2026-10-18 に変更、[[project-mn-scheduler]]。スレッドがそのノードに切り替わるたび、次の hook の直前に呼ばれる）で、スレッドごとの設定を行う（勾配の記録の停止 `torch.set_grad_enabled(False)` だけは、決定性のため 2026-10-18 から内部の hook `_before_hook` で hook の前に毎回）: CUDA のときは `set_device` と、最初の `_on_enter` で作った自分の `torch.cuda.Stream` を現在のストリームにする。ノードごとの `torch.Generator` は 2026-10-18 から `super().__init__` で作る
 - Port の `recv()` / `send()` は `torch.Tensor` でやり取りし、コアとの変換（DLPack、必ずコピー）は `mujou.Node` が受け持つ。利用者は変換を意識しない。書くときは値を `detach()` し、GPU 上の値は自分のストリームでホストへコピーして、そのストリームだけを同期してからコアへ渡す
 - パラメータは `nn.Module` / `nn.Parameter` を使わず、`requires_grad=False` のテンソルで持つ。`inference_mode` は既定にしない（ノード内 BP で入力を backward に使えなくなるため）
+- CUDA のテンソルやモジュールは `on_start` 以降で作るよう docs で勧める（2026-10-19、ユーザーの決定）。`__init__` で作っても `mujou.run` がホストのストリームを同期するので正しく動くが、キャッシュアロケータがメモリをホストのストリームに結び付けたままにし、ノードが捨てたときにノードのストリームの計算が終わる前にホストの確保に再利用されうる。GPU の実機では未確認（`specs/torch.md`）
 - 状態は `add_`・`addmm_` などで**その場で更新する**。毎ステップ新しいテンソルを確保すると、多数のスレッドでメモリ確保が律速になる（7950X、n=1024、16 スレッドで 1.1k → 36.9k ステップ/秒）
 - torch の計算をするスレッド（ワーカーの数 + 専用スレッドのノードの数）× 内部スレッド数は物理コア数を超えないようにする（論理コア数まで増やすと遅くなった）。既定のワーカー数（論理 CPU 数）が適切かは M:N の PR 3 で測る
 - 対象デバイスは CPU と CUDA だけ。MPS など CUDA 以外のアクセラレータはサポートしない（2026-10-17 に一度対応したが、MPS が 2 スレッドから同時に使うと落ちるため、同日ユーザーの決定で取りやめた。[[project-gpu-policy]]）

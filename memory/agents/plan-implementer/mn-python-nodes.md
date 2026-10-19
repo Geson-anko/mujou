@@ -52,3 +52,13 @@
 
 - code N2（既定のワーカー数のテストが `os.cpu_count()` で近似している）: bindings にも `Run` にも、実際のワーカー数を読む口が無い。テストのためだけに公開の口を足すのは要求外なので直さない。`PYTHON_CPU_COUNT` などで `os.cpu_count()` を小さくした環境でしか落ちない
 - 原文書にあった `Runtime` の docstring「The hooks other than ... are looked up once」は不正確だった（`_on_enter` も start の後は 1 回だけ引く）ので、`_before_hook` を足すついでに「`on_start`（と `load_state_dict`）が戻るまでは名前で、その後は 1 回だけ引く」に直した
+
+## ユーザーの決定（2026-10-19）への対応
+
+1. **`on_thread_start` の廃止**: native の Node（bindings）から hook と、専用スレッドのノードだけに呼ぶ経路を消した。`PyNode` の `dedicated` は `on_thread_start` のためだけにあったので消した（専用スレッドかどうかはコアの `RuntimeConfig::dedicated` だけが持つ）。`checked_dedicated` から override の検査を消し、予約名の検査だけを残した。`just stub` で `_native.pyi` を生成し直した
+   - テスト: `TestOnThreadStart` と `OwnSetup`（test_node.py）、`test_on_thread_start_is_called_only_for_the_dedicated_nodes`（test_native_runtime.py）は、検査の対象が無くなったので消した。`Recorder.on_thread_start` を消し、hook の列を比べるテストから `on_thread_start` を外した。起動中のエラーのテストの `("on_thread_start", True)` は `("on_start", True)` にして、専用スレッドの起動の失敗を見る場合を残した。`_before_hook` のテストの添字を詰めた。専用スレッドが全 hook を 1 本のスレッドで走らせることは `TestDedicatedThread` が引き続き確かめる
+   - `OwnSetup` が見ていた「専用スレッドの中でもホスト用のメソッドを断る」は、ほかの in_hook のテスト（ワーカーの上）で足りると判断した。専用スレッドでもワーカーでも同じ `enter_node` を通る
+   - docs・specs・memory・skill から消した。memory の経緯（2026-10-17 に分けた等）は打ち消し線や「廃止した」の注記で残した
+2. **CUDA のテンソルやモジュールの確保場所**: docs の torch.md（en/ja）に tip を、writing-a-node.md（en/ja）に「`on_start` 以降に作る（理由は torch.md）」と `nn.Module` の一言を、specs/torch.md の同期の表の後に理由と「GPU の実機では確かめていない」注記を書いた。memory/project_torch_module.md にも 1 行
+
+確認事項: なし（決定の範囲で進めた）。

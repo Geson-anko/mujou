@@ -178,7 +178,8 @@ class Node:
     own thread if it was started as dedicated (`state_dict`, through
     `_capture_state`, on the control thread while the node is paused). The hooks
     of a node never overlap, and each runs in the node's own
-    `contextvars.Context` (but `_capture_state`). They do nothing by default.
+    `contextvars.Context` (but `_capture_state` and `_before_hook`). They do
+    nothing by default.
     The hooks are looked up by name until `on_start` (and `load_state_dict`)
     has returned, and once after that, so replacing one in those hooks takes
     effect. `state_dict` itself is looked up by the default `_capture_state` at
@@ -199,7 +200,10 @@ class Node:
         Called right before every public hook but `state_dict` (after
         `_on_enter` when the thread switches to this node), for the framework's
         settings that must hold at the start of each hook whatever the previous
-        hook left. An error here is reported as the error of that hook.
+        hook left. It runs outside the node's `contextvars.Context`, so a
+        setting held in a context variable does not take effect here. An error
+        here is reported as the error of that hook, which is then not called,
+        except `on_exception` and `on_stop`, which still run.
         """
     def _capture_state(self, /) -> "object":
         """
@@ -243,18 +247,12 @@ class Node:
     def on_start(self, /) -> None:
         """
         Called once when the run starts (also when it is restored), before any
-        other public hook but `on_thread_start`. Allocate and initialize the
-        state here.
+        other public hook. Allocate and initialize the state here.
         """
     def on_stop(self, /) -> None:
         """
         Called once when the run stops, also after an exception. It must not
         change what `state_dict` returns. What it raises is logged and ignored.
-        """
-    def on_thread_start(self, /) -> None:
-        """
-        Called only on a dedicated node's own thread, right before `on_start`,
-        for the node's per-thread settings.
         """
     def on_update(self, /, dt: "float") -> None:
         """
@@ -413,10 +411,10 @@ class Runtime:
         and at least 1 ns, or `None` to update as soon as any time has passed;
         the manual mode ignores it.
 
-        `dedicated` tells which nodes run on a thread of their own (and get
-        `on_thread_start`); the others, all of them by default, share a pool of
-        `workers` threads (>= 1), by default as many as the available
-        parallelism, never more than the nodes in the pool.
+        `dedicated` tells which nodes run on a thread of their own; the others,
+        all of them by default, share a pool of `workers` threads (>= 1), by
+        default as many as the available parallelism, never more than the nodes
+        in the pool.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

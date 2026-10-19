@@ -63,9 +63,9 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 
 bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated` に、`mujou.run(..., workers=None)` の `workers` を `RuntimeConfig::workers` に渡す。`None` なら `min(ワーカーに載るノード数, available_parallelism)`。`workers` が `int` でなければ（`bool` も）`TypeError`、1 未満なら `ValueError`。`mujou.testing.run` に `workers` は無い。
 
-- `on_thread_start` は専用スレッドのノードにだけ、そのスレッドで `on_start` の直前に 1 回呼ぶ。ワーカーではスレッドごとの設定が hook の間で残らないので、黙って呼ぶと罠になる。そのためワーカーに載るノードのクラスが `on_thread_start` を override していたら、`mujou.run` は何も起動しないうちに `TypeError` を投げる
-- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録は、bindings が `state_dict` 以外の公開の hook の直前に毎回呼ぶ内部の hook `_before_hook` で切る（[PyTorch の利用](torch.md#切り替えごとの設定)）
-- hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。`state_dict`（`_capture_state`）は文脈の外で呼ぶ
+- 公開の hook `on_thread_start` は 2026-10-19 にユーザーの決定で廃止した（正式公開前なので、移行の案内も検出もせずに消した）。専用スレッドのノードは `on_start` も自分のスレッドで呼ばれるので、スレッドごとの設定はそこに書く。ワーカーではスレッドごとの設定が hook の間で残らないので、そういう hook を持つこと自体が罠になっていた
+- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録は、bindings が `state_dict` 以外の公開の hook の直前に毎回呼ぶ内部の hook `_before_hook` で切る（[PyTorch の利用](torch.md#切り替えごとの設定)）。`_before_hook` の失敗はその hook の失敗として扱い、その hook は呼ばない。ただし `on_exception` と `on_stop` は `enter` の失敗と同じく、失敗をログに出したうえで呼ぶ
+- hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。例外は文脈の外で呼ぶ `state_dict`（`_capture_state`）と `_before_hook` の 2 つ。勾配モードは torch のスレッドローカルで `contextvars` に依らないので、`_before_hook` は文脈の外でよい。`contextvars` に依る設定を `_before_hook` に足すと効かない
 - ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す勾配モード（hook の前に毎回）・CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
 - GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すのでワーカーが複数あれば並列に進む。GIL を取り合うスレッドはノードの数でなく N 本に減る。`workers` の既定は両方のビルドで同じ
 

@@ -227,7 +227,7 @@ Rust のネイティブなノードの panic も、例外と同じように扱�
 ノードの実行と制御はコア（Rust の `mujou_core::runtime`、Python からは private な `mujou._core._native.Runtime`）にあり、`mujou.run` と `mujou.Run` がそれを使う。`Run` のメソッドの一覧は [ネットワーク](network.md#実装) にある。
 
 - コアはノードを実行ごとのワーカープールか専用スレッドで動かす（[ワーカープールの実装](native-core.md#ワーカープールの実装)）。Python のノードは既定でワーカーに載り、`dedicated_thread=True` のノードだけが専用スレッドで動く（[Python のノードの載せ方](native-core.md#python-のノードの載せ方)）。制御（起動・停止・状態の取得・終了・手動のステップ）は 1 本の制御スレッドが 1 つずつ処理する
-- `mujou.run` は、その実行のタイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードの hook を走らせるスレッドで `_on_enter`（`mujou.Node` のスレッドごとの設定）→（専用スレッドのノードだけ）`on_thread_start` → `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
+- `mujou.run` は、その実行のタイマーを凍結 → タイマーと各ノードの最後の更新の時刻を戻す → 各ノードの hook を走らせるスレッドで `_on_enter`（`mujou.Node` のスレッドごとの設定）→ `on_start` →（復元なら）`load_state_dict` → タイマーを再開、まで済ませてから戻る
 - `Run.state_dict()` が返す木は次の形の `mujou.StateDict`（`dict` の派生）で、pickle できる。ノードの状態は `copy.deepcopy`、スロットの値は新しい CPU の Tensor でコピーする。`mujou.run(..., state=)` は `StateDict` でも、同じ中身の素の `Mapping` でも受け付ける
 
 ```python

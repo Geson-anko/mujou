@@ -114,7 +114,7 @@ Create the state tensors in `on_start`.
 
 `torch.Tensor` and `nn.Module` values assigned to attributes are collected into the state automatically. What is collected, and how to save it, is in [Saving and restoring state](state.md).
 
-When the node computes on a GPU, create the tensors with `device=self.device`.
+When the node computes on a GPU, create the tensors with `device=self.device`, in `on_start` or later (why: [PyTorch in nodes](torch.md#cuda)).
 
 ```python
 @override
@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 You may keep settings (a time constant, the size of a layer, ...) as numbers set in `__init__`. Numbers are not collected into the state.
 
-An `nn.Module` may be built in `__init__` or in `on_start`. The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
+An `nn.Module` may be built in `__init__` or in `on_start` (on CUDA, prefer `on_start`). The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
 
 ## 3. Update in proportion to `dt` in `on_update(dt)`
 
@@ -233,7 +233,7 @@ By default the node runs on the run's worker threads, which it shares with the o
 Pass `dedicated_thread=True` to `super().__init__` when the node needs a thread of its own:
 
 - Its hooks block, waiting for a device, a socket or a lock. On a worker, the wait would hold the worker, and the other nodes' `dt` would grow
-- It relies on per-thread state set once, in `on_thread_start`
+- It relies on per-thread state set once. Its `on_start` runs on its own thread, so make such settings there
 
 ```python
 class Camera(Node):
@@ -241,19 +241,16 @@ class Camera(Node):
         super().__init__(period=1 / 30, dedicated_thread=True)
 ```
 
-`on_thread_start` is called only for such a node. A node on the workers that overrides it makes `mujou.run` raise `TypeError` before anything starts.
-
 ## The hooks and their order
 
 Mujou calls the hooks of a node in this order. Override only the ones you need.
 
-1. `on_thread_start()`: once, before `on_start`, only for a node with `dedicated_thread=True`. Per-thread settings (see [Run on a thread of its own](#run-on-a-thread-of-its-own))
-2. `on_start()`: once. Create the state
-3. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
-4. `on_update(dt)`: again and again until the run ends
-5. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them
-6. `on_exception()`: once on every node, when any hook of any node raises (see [Errors and shutdown](errors.md))
-7. `on_stop()`: once at the end, normal or not
+1. `on_start()`: once. Create the state
+2. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
+3. `on_update(dt)`: again and again until the run ends
+4. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them
+5. `on_exception()`: once on every node, when any hook of any node raises (see [Errors and shutdown](errors.md))
+6. `on_stop()`: once at the end, normal or not
 
 ## What not to do in a hook
 
