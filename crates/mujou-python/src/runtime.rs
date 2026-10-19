@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use mujou_core::runtime::{
     self as core, HookError, NodeFailure, NodeHooks, Reply, RuntimeConfig, RuntimeError,
 };
-use mujou_core::time::{Timer, seconds_to_ns};
+use mujou_core::time::Timer;
 use pyo3::create_exception;
 use pyo3::exceptions::{PyRuntimeError, PyTimeoutError, PyValueError};
 use pyo3::intern;
@@ -22,7 +22,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyList, PyTuple};
 
 use crate::hint::Build;
-use crate::time::{PyTimer, extract_state, timer_error};
+use crate::time::{PyTimer, extract_state, to_ns};
 use crate::wait_interruptibly;
 
 // pyo3 does not introspect these, so `crates/mujou-stubgen` adds them to the
@@ -406,16 +406,14 @@ fn runtime_error(py: Python<'_>, names: &[String], err: RuntimeError) -> PyErr {
 }
 
 fn duration(seconds: f64) -> PyResult<Duration> {
-    Ok(Duration::from_nanos(
-        seconds_to_ns(seconds).map_err(timer_error)?,
-    ))
+    Ok(Duration::from_nanos(to_ns(seconds)?))
 }
 
-/// A period in seconds as the runtime's ns: rounded as `seconds_to_ns` rounds,
+/// A period in seconds as the runtime's ns: rounded as `to_ns` rounds,
 /// and at least 1 ns, since a period of 0 ns is invalid (0.0 s becomes 1 ns,
 /// which updates as soon as any time has passed).
 fn period_to_ns(seconds: f64) -> PyResult<u64> {
-    Ok(seconds_to_ns(seconds).map_err(timer_error)?.max(1))
+    Ok(to_ns(seconds)?.max(1))
 }
 
 /// The number of workers when `start` is given none, if not the core's
@@ -493,7 +491,7 @@ impl Runtime {
         Ok(Self {
             pending: Mutex::new(Some(nodes)),
             names,
-            timer: Arc::clone(timer.timer()),
+            timer: Arc::clone(&timer.0),
             inner: OnceLock::new(),
         })
     }
