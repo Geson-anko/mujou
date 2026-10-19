@@ -1693,11 +1693,11 @@
 <ul>
 <li>It makes the node's device the current device in the node's hooks</li>
 <li>It creates a CUDA stream for the node alone and makes it the current stream in the node's hooks. All of the node's operations go on this stream</li>
-<li>It synchronizes the node's stream after each <code>on_update</code> and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see <a href="../running/#threads-of-a-run">Running a network</a>)</li>
-<li>When the state is taken, it synchronizes the node's stream before and after <code>state_dict</code>. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it</li>
+<li>It waits for the work queued on the node's stream after each <code>on_update</code> and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see <a href="../running/#threads-of-a-run">Running a network</a>)</li>
+<li>When the state is taken, it waits for the work queued on the node's stream before and after <code>state_dict</code>. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it</li>
 </ul>
 <p>Mujou sets the device and the stream whenever a worker switches to a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.</p>
-<p>So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (<code>torch.cuda.current_stream().synchronize()</code>).</p>
+<p>So the node's author does not have to write any synchronization. If you synchronize yourself, wait only for the work you queued on your own stream (<code>torch.cuda.current_stream().record_event().synchronize()</code>). A device has a pool of 32 streams, so past 32 CUDA nodes on one device several nodes share a stream, and synchronizing the whole stream can also wait for work that the other nodes queue on it.</p>
 <div class="admonition warning">
 <p class="admonition-title">Do not wait for the whole device</p>
 <p>Do not use <code>torch.cuda.synchronize()</code>, which waits for the whole device, including the work of other nodes.</p>

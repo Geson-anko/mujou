@@ -1782,7 +1782,7 @@ runs the node (see "Threads" below), except <code>state_dict</code>:</p>
   <code>on_start</code> and before the first <code>on_update</code>. <code>state</code> is a copy of what
   this node's <code>state_dict</code> returned. By default it copies the state into the
   collected tensors and modules (see below). When <code>device</code> is CUDA, the
-  framework waits for the node's stream after it.</li>
+  framework waits for the work queued on the node's stream after it.</li>
 <li><code>on_update(dt)</code>: repeatedly, once every <code>period</code> on average (see
   below). <code>dt</code> is the time in seconds on the run's <code>timer</code> since the
   node's last update. Read the ports with <code>recv</code>, update in proportion to
@@ -1839,10 +1839,11 @@ a graph inside <code>with torch.no_grad():</code>. No graph crosses nodes: a por
 sends a detached copy. Whenever a thread switches to the node, when
 <code>device</code> is CUDA, the framework makes the device and a stream of the
 node's own current. These are the only per-thread settings it sets back.
-On CUDA it also waits for that stream after <code>on_update</code> (holding its
-worker meanwhile), after <code>load_state_dict</code> and around <code>state_dict</code>. It
-does this in hooks of its own, whose names start with <code>_</code>: do not
-override those, and overriding a public hook never skips them.</p>
+On CUDA it also waits for the work queued on that stream after
+<code>on_update</code> (holding its worker meanwhile), after <code>load_state_dict</code> and
+around <code>state_dict</code>. It does this in hooks of its own, whose names start
+with <code>_</code>: do not override those, and overriding a public hook never skips
+them.</p>
 <p>The node updates once every <code>period</code> (0.01 s by default) of the run's timer
 on average: the time an update takes
 counts toward the period, and a node that falls a whole <code>period</code> behind does
