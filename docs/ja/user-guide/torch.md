@@ -46,13 +46,12 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## ノードの中の BP
 
-既定の更新手法 PC-ALM は更新式を直接計算し、autograd のグラフを必要としない。そのため mujou はどのノードでも `state_dict` 以外の hook の前に毎回勾配の記録を切っている（`torch.set_grad_enabled(False)`）。
+mujou は勾配の記録を切り替えない。hook は通常の PyTorch と同じく勾配を記録するので、autograd も通常の PyTorch と同じように使える。
 
-ノードの中で autograd を使うときは次のように書く。
-
-1. 順伝播と勾配の計算（`torch.autograd.grad` か `.backward()`）の両方を `with torch.enable_grad():` で囲む
-2. その `with` の行に、BP がこのノードの中に閉じていることを示す印 `# mujou: local-autograd` を付ける
-3. パラメータはブロックの外でその場で更新する（例の `p -= h * self.rate * g`）。ブロックの外では勾配を記録しないので、更新が autograd のグラフに入らない
+- パラメータは `optimizer.step()` と同じく `with torch.no_grad():` の中でその場で更新する（例の `p -= h * self.rate * g`）。外で更新するとエラーになる
+- 推論だけのノードなど勾配の要らない計算も `with torch.no_grad():` の中で行えば、グラフのメモリと時間を省ける
+- 計算グラフを次の更新へ持ち越さない。`self.h = torch.tanh(self.w(self.h))` のようにパラメータから計算した属性はグラフを持ち、更新のたびに伸び続ける。`.detach()` するか `no_grad` の下で計算する
+- 勾配の記録は `torch.set_grad_enabled(False)` ではなく `with torch.no_grad():` で切る。スレッドごとの設定なので、戻さないと同じワーカーで次に走るノードに残る（[プロセス全体に効く設定](#%E3%83%97%E3%83%AD%E3%82%BB%E3%82%B9%E5%85%A8%E4%BD%93%E3%81%AB%E5%8A%B9%E3%81%8F%E8%A8%AD%E5%AE%9A)）
 
 BP はノードの中に閉じ、ほかのノードへ勾配を流すことはできない。`recv()` が返す値はコピーで、`send()` は値を `detach()` してから送る。
 
@@ -97,7 +96,7 @@ torch.save(run.state_dict().cpu(), "state.pt")
 - `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
 - `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
 
-ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（[専用のスレッドで動かす](writing-a-node.md#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）。設定は hook の中の `with` に閉じ（`with torch.autocast(...):`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou 自身が戻すのは、`state_dict` 以外の hook の前に毎回切る勾配の記録と、ワーカーがノードに切り替わるたびに設定する CUDA の現在のデバイス・ストリームだけである。`dedicated_thread=True` のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を `on_start` に 1 回だけ書ける。
+ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（[専用のスレッドで動かす](writing-a-node.md#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)）。設定は hook の中の `with` に閉じ（`with torch.autocast(...):`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。勾配の記録もこの設定に含まれる。mujou 自身が戻すのは、ワーカーが CUDA のノードに切り替わるたびに設定する現在のデバイス・ストリームだけ。`dedicated_thread=True` のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を `on_start` に 1 回だけ書ける。
 
 ### 内部のスレッド数
 

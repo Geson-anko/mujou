@@ -227,7 +227,7 @@ class Sensor(mujou.Node):
 ノードは既定でほかのノードと共有する実行のワーカースレッドの上で動く（[ネットワークを走らせる](running.md#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89)）。hook ごとに別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす。hook がスレッドに設定したものを次の hook が見るかどうかはスケジュール次第で、同じワーカーで次に走る別のノードにも見える。
 
 - `threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる
-- `torch.autocast` などスレッドごとの torch の設定は hook の中の `with` に閉じ、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは勾配の記録（hook の前に毎回）と、CUDA の現在のデバイス・ストリーム（ワーカーがノードに切り替わるたび）だけ（[ノードの中の PyTorch](torch.md)）
+- `torch.autocast` や勾配の記録などスレッドごとの torch の設定は hook の中の `with` に閉じ（`with torch.no_grad():`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは CUDA の現在のデバイス・ストリーム（ワーカーが CUDA のノードに切り替わるたび）だけ（[ノードの中の PyTorch](torch.md)）
 - `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する。この文脈は空から始まりホストの文脈の変数を引き継がない。`state_dict` はこの文脈の外で呼ばれる
 
 次のノードには `super().__init__` に `dedicated_thread=True` を渡す。

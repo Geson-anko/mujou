@@ -46,13 +46,12 @@ noise = torch.randn(4, generator=self.generator, device=self.device)
 
 ## BP inside a node
 
-Mujou turns gradient recording off before every hook but `state_dict`, in every node (`torch.set_grad_enabled(False)`). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.
+Mujou does not turn gradient recording on or off: the hooks record gradients as plain PyTorch does, and a node uses autograd as any PyTorch code does.
 
-To use autograd in a node, write it as follows.
-
-1. Wrap both the forward pass and the gradient computation (`torch.autograd.grad` or `.backward()`) in `with torch.enable_grad():`
-2. Mark that `with` line with `# mujou: local-autograd`. The mark says that BP stays inside this node
-3. Update the parameters in place, outside the block (`p -= h * self.rate * g` in the example). No gradient is recorded outside the block, so the update does not enter the autograd graph
+- Update the parameters in place inside `with torch.no_grad():`, as `optimizer.step()` does (`p -= h * self.rate * g` in the example). Outside it, an in-place update of a parameter raises an error
+- Compute what needs no gradient inside `with torch.no_grad():` too, such as a node that only infers. It saves the memory and time of the graph
+- Do not carry a graph from one update to the next. An attribute computed from the parameters, such as `self.h = torch.tanh(self.w(self.h))`, keeps its graph, which then grows with every update. Keep such a tensor detached (`.detach()`), or compute it under `no_grad`
+- Turn gradient recording off with `with torch.no_grad():`, not with `torch.set_grad_enabled(False)` alone. It is a per-thread setting, and left behind it reaches the next node on the same worker (see [Settings of the whole process](#settings-of-the-whole-process))
 
 BP stays inside the node. A node cannot pass gradients to another node: `recv()` returns a copy, and `send()` detaches the value with `detach()` before sending it.
 
@@ -97,7 +96,7 @@ The following settings are shared by the whole process. Do not change them in a 
 - `torch.set_num_threads`, `torch.use_deterministic_algorithms`, and the flags in `torch.backends.*`
 - Operations on a whole device, such as `torch.cuda.synchronize()` and `torch.cuda.empty_cache()`
 
-A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Set such a setting back before the hook returns, by keeping it inside a `with` in the hook (`with torch.autocast(...):`); a setting left behind leaks into the next node on the same worker. Mujou itself sets back only gradient recording, before every hook but `state_dict`, and on CUDA the current device and stream, whenever a worker switches to the node. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_start`.
+A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Set such a setting back before the hook returns, by keeping it inside a `with` in the hook (`with torch.autocast(...):`); a setting left behind leaks into the next node on the same worker. Gradient recording is such a setting too. Mujou itself sets back only the current CUDA device and stream, whenever a worker switches to a CUDA node. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_start`.
 
 ### Internal threads
 
