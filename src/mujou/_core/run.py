@@ -350,13 +350,11 @@ class Run:
         """Shut the run down. When the body raised, its exception goes on and a
         ``NetworkError`` of the shutdown is dropped (the node's exception is in
         the log)."""
-        if exc is None:
-            self.shutdown()
-            return
         try:
             self.shutdown()
         except _native.NetworkError:
-            pass
+            if exc is None:
+                raise
 
 
 class ManualRun[T: Timer = VirtualTimer](Run):
