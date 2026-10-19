@@ -152,7 +152,9 @@ class TestThreadSetup:
     ):
         # specs: when the framework's setup of a node fails, the runtime still calls
         # on_exception and on_stop; they run as that node (not as the node the
-        # worker ran before), with gradients off.
+        # worker ran before), with gradients off. BrokenSetup fails through a
+        # private override: the real failure (setting up CUDA) needs a GPU, and no
+        # public way makes the setup fail.
         leaky = GradSetter(leak=True)
         broken = BrokenSetup(leaky.inp)
         with pytest.raises(NetworkError, match="raised in on_start"):
