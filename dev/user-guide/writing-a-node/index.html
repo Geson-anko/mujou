@@ -1741,7 +1741,7 @@
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 <p>You may keep settings (a time constant, the size of a layer, ...) as numbers set in <code>__init__</code>. Numbers are not collected into the state.</p>
-<p>Build <code>nn.Module</code>s in <code>on_start</code> too, like the tensors of the state, because <code>self.generator</code>, the node's own generator for initialization, exists from <code>on_start</code> on. Built in <code>__init__</code>, a module such as <code>nn.Linear</code> is initialized from the global generator that all nodes share, so <code>seed</code> does not reproduce it.</p>
+<p>An <code>nn.Module</code> may be built in <code>__init__</code> or in <code>on_start</code>. The default initialization of a module such as <code>nn.Linear</code> draws from the global generator that all nodes share, so <code>seed</code> does not reproduce it: initialize it again from <code>self.generator</code>, which can be used in <code>__init__</code> already.</p>
 <h2 id="3-update-in-proportion-to-dt-in-on_updatedt">3. Update in proportion to <code>dt</code> in <code>on_update(dt)</code><a class="headerlink" href="#3-update-in-proportion-to-dt-in-on_updatedt" title="Permanent link">&para;</a></h2>
 <p>Mujou calls <code>on_update(dt)</code> again and again. The node's author does not write a loop; write the work of one call only. One call does the following, in this order.</p>
 <ol>
@@ -1829,7 +1829,7 @@
 </tbody>
 </table>
 <p>Draw random numbers from <code>self.generator</code> (<code>torch.randn(..., generator=self.generator)</code>). Do not call <code>torch.manual_seed</code> in a node, because it changes the random number generator that all nodes share.</p>
-<p><code>self.generator</code> can be used in the hooks from <code>on_start</code> on. How it works with PyTorch is in <a href="../torch/">PyTorch in nodes</a>.</p>
+<p><code>self.generator</code> can be used right after <code>super().__init__()</code>, in <code>__init__</code> too. How it works with PyTorch is in <a href="../torch/">PyTorch in nodes</a>.</p>
 <p><code>device</code>, <code>generator</code>, <code>period</code> and <code>timer</code> are reserved names. Do not assign attributes with these names.</p>
 <h2 id="the-hooks-and-their-order">The hooks and their order<a class="headerlink" href="#the-hooks-and-their-order" title="Permanent link">&para;</a></h2>
 <p>Mujou calls the hooks of a node in this order. Override only the ones you need.</p>

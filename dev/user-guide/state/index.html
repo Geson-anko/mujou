@@ -1689,7 +1689,7 @@
 </ul>
 <p>To put these in the state, override both <code>state_dict</code> and <code>load_state_dict</code>. Call <code>super()</code>, and the automatically collected part is handled as before.</p>
 <p>For a number, you can instead keep it as a 0-dimensional tensor created in <code>on_start</code> (<code>self.count = torch.zeros((), device=self.device)</code>) and update it in place (<code>self.count += 1</code>), without overriding anything. It is then collected automatically.</p>
-<p>The following example adds the state of the random number generator. The generator is created again from <code>seed</code> every time the run starts. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.</p>
+<p>The following example adds the state of the random number generator. A restored run uses new node instances, whose generators start again from <code>seed</code>. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>

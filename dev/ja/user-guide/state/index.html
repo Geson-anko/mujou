@@ -1691,7 +1691,7 @@
 </ul>
 <p>これらを状態に入れるには <code>state_dict</code> と <code>load_state_dict</code> の両方を override する。<code>super()</code> を呼べば、自動で集めた分はそのまま扱える。</p>
 <p>数値なら override せずに、<code>on_start</code> で 0 次元のテンソルとして作り（<code>self.count = torch.zeros((), device=self.device)</code>）、その場で更新してもよい（<code>self.count += 1</code>）。そうすれば自動で集まる。</p>
-<p>次の例では乱数生成器の状態を足す。生成器は起動のたびに <code>seed</code> から作り直されるので、生成器の状態を足さないと、復元後の乱数列が止めずに続けたときと違う列になる。</p>
+<p>次の例では乱数生成器の状態を足す。復元では新しいインスタンスを使い生成器も <code>seed</code> から作り直すので、生成器の状態を足さないと、復元後の乱数列が止めずに続けたときと違う列になる。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>

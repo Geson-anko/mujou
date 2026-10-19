@@ -1671,9 +1671,9 @@
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 <ul>
-<li><code>self.generator</code> はノードのスレッドで作られるので、<code>on_start</code> から使える。<code>__init__</code> の中で使うと <code>RuntimeError</code> になる</li>
+<li><code>self.generator</code> は <code>super().__init__()</code> が作るので、<code>__init__</code> の中から使える</li>
 <li>ノードの中で <code>torch.manual_seed</code> を呼ばない。既定の生成器はプロセス全体で共有されるので、ほかのノードの乱数まで変わる</li>
-<li>生成器は起動のたびに <code>seed</code> から作り直される。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（<a href="../state/">状態の保存と復元</a>）</li>
+<li>復元では新しいインスタンスを使うので、生成器も <code>seed</code> から作り直す。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（<a href="../state/">状態の保存と復元</a>）</li>
 </ul>
 <h2 id="ノードの中の-bp">ノードの中の BP<a class="headerlink" href="#ノードの中の-bp" title="Permanent link">&para;</a></h2>
 <p>既定の更新手法 PC-ALM は更新式を直接計算し、autograd のグラフを必要としない。そのため mujou はノードのスレッドで勾配の記録を切っている（<code>torch.set_grad_enabled(False)</code>）。</p>

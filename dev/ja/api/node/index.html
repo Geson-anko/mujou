@@ -1815,9 +1815,8 @@ only through its own ports.</p>
 <p>Before <code>on_start</code>, the framework sets up the node's thread: it turns off
 gradient recording (to backpropagate inside the node, wrap the forward
 computation and <code>backward</code> in <code>with torch.enable_grad():</code> marked
-<code># mujou: local-autograd</code>), creates <code>generator</code> from <code>seed</code> on
-<code>device</code>, and, when <code>device</code> is CUDA, makes the device and a stream of the
-node's own current. On CUDA it also waits for that stream after
+<code># mujou: local-autograd</code>), and, when <code>device</code> is CUDA, makes the device and
+a stream of the node's own current. On CUDA it also waits for that stream after
 <code>on_update</code>, after <code>load_state_dict</code> and around <code>state_dict</code>. It does this in hooks of its own, whose names start with
 <code>_</code>: do not override those, and overriding a public hook never skips them.</p>
 <p>The node updates once every <code>period</code> (0.01 s by default) of the run's timer
@@ -2061,9 +2060,11 @@ timer. <code>0.0</code> updates as soon as any time has passed.</p>
 
         <p>The node's own random generator on <code>device</code>, seeded with <code>seed</code>.</p>
 <p>Use it instead of the global generator, which all nodes share (do not
-call <code>torch.manual_seed</code> in a node). It is created anew from <code>seed</code>
-whenever the network starts, also when it is restored; to continue the
-same sequence after a restore, add <code>self.generator.get_state()</code> to what
+call <code>torch.manual_seed</code> in a node). <code>super().__init__</code> creates it, so
+it can be used in <code>__init__</code> already (to initialize modules, say), and the
+hooks go on with the same sequence. A restored network runs new instances,
+whose generators start again from <code>seed</code>; to continue the same sequence
+after a restore, add <code>self.generator.get_state()</code> to what
 <code>super().state_dict()</code> returns, and in <code>load_state_dict</code> take it out
 and <code>set_state</code> it before passing the rest to <code>super()</code>.</p>
 
@@ -2084,7 +2085,8 @@ and <code>set_state</code> it before passing the rest to <code>super()</code>.</
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The node's thread has not started yet.</p>
+                <p><code>super().__init__()</code> has not been called (and the node's
+thread has not started).</p>
               </div>
             </td>
           </tr>

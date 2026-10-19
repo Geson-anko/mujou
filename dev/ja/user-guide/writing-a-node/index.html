@@ -1743,7 +1743,7 @@
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 <p>設定値（時定数、層の大きさなど）は <code>__init__</code> で数値として持たせてよい。数値は状態に集まらない。</p>
-<p>初期化に使うノード専用の <code>self.generator</code> は <code>on_start</code> から使えるので、<code>nn.Module</code> も状態のテンソルと同じく <code>on_start</code> で作る。<code>__init__</code> で作ると <code>nn.Linear</code> などの既定の初期化は全ノードが共有する乱数生成器を使い、<code>seed</code> で再現できない。</p>
+<p><code>nn.Module</code> は <code>__init__</code> でも <code>on_start</code> でも作れる。<code>nn.Linear</code> などの既定の初期化は全ノードが共有する乱数生成器を使い <code>seed</code> で再現できないので、<code>__init__</code> の中でも使える <code>self.generator</code> で初期化し直す。</p>
 <h2 id="3-on_updatedt-で-dt-に比例して更新する">3. <code>on_update(dt)</code> で <code>dt</code> に比例して更新する<a class="headerlink" href="#3-on_updatedt-で-dt-に比例して更新する" title="Permanent link">&para;</a></h2>
 <p><code>on_update(dt)</code> は mujou が繰り返し呼ぶ。ノードの作者はループを書かず、1 回分の処理だけを書く。1 回の処理は次の順に行う。</p>
 <ol>
@@ -1831,7 +1831,7 @@
 </tbody>
 </table>
 <p>乱数は <code>self.generator</code> から引く（<code>torch.randn(..., generator=self.generator)</code>）。<code>torch.manual_seed</code> は全ノードが共有する乱数生成器を変えてしまうので、ノードの中で呼ばない。</p>
-<p><code>self.generator</code> は <code>on_start</code> 以降の hook で使える。PyTorch との組み合わせの詳細は<a href="../torch/">ノードの中の PyTorch</a>を参照。</p>
+<p><code>self.generator</code> は <code>super().__init__()</code> の直後から、<code>__init__</code> の中でも使える。PyTorch との組み合わせの詳細は<a href="../torch/">ノードの中の PyTorch</a>を参照。</p>
 <p><code>device</code>・<code>generator</code>・<code>period</code>・<code>timer</code> は予約された名前なので、この名前で属性を代入しない。</p>
 <h2 id="hook-とその順序">hook とその順序<a class="headerlink" href="#hook-とその順序" title="Permanent link">&para;</a></h2>
 <p>mujou はノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。</p>

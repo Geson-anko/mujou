@@ -1669,9 +1669,9 @@
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 <ul>
-<li><code>self.generator</code> is created on the node's thread, so you can use it from <code>on_start</code> on. Using it in <code>__init__</code> raises <code>RuntimeError</code></li>
+<li><code>super().__init__()</code> creates <code>self.generator</code>, so you can use it in <code>__init__</code> already</li>
 <li>Do not call <code>torch.manual_seed</code> in a node. The default generator is shared by the whole process, so it would change the random numbers of other nodes too</li>
-<li>The generator is created again from <code>seed</code> every time the run starts. To continue the same random sequence after a restore, put the generator's state in the state tree (see <a href="../state/">Saving and restoring state</a>)</li>
+<li>A restored run uses new node instances, whose generators start again from <code>seed</code>. To continue the same random sequence after a restore, put the generator's state in the state tree (see <a href="../state/">Saving and restoring state</a>)</li>
 </ul>
 <h2 id="bp-inside-a-node">BP inside a node<a class="headerlink" href="#bp-inside-a-node" title="Permanent link">&para;</a></h2>
 <p>Mujou turns gradient recording off on every node's thread (<code>torch.set_grad_enabled(False)</code>). The default update rule, PC-ALM, computes its update equations directly, so it will need no autograd graph.</p>
