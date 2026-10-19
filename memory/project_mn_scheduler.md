@@ -9,7 +9,7 @@ metadata:
 
 ユーザーの決定（同日、推奨案どおり）:
 
-- **Q1 専用スレッドは opt-in で残す。** `Node(dedicated_thread=False)` が既定で全ノードがワーカーに載る。`on_thread_start` は専用スレッドのノードだけに、そのスレッドで `on_start` の直前に呼ぶ。ワーカーに載るノードのクラスが override していたら `mujou.run` が何も起動しないうちに `TypeError`
+- **Q1 専用スレッドは opt-in で残す。** `Node(dedicated_thread=False)` が既定で全ノードがワーカーに載る。~~`on_thread_start` は専用スレッドのノードだけに、そのスレッドで `on_start` の直前に呼ぶ。ワーカーに載るノードのクラスが override していたら `mujou.run` が何も起動しないうちに `TypeError`~~ → 2026-10-19 にユーザーの決定で `on_thread_start` を廃止した（「まだ PyPI 等に正式公開していないので、単に消して良い」。検出も移行の案内も入れない）。専用スレッドのノードのスレッドごとの設定は `on_start`（そのスレッドで呼ばれる）に書く。`dedicated_thread` はブロッキングする I/O のノードのために残す
 - **Q2 プールは実行ごと。** `mujou.run(..., workers=None)` で指定する。既定は `min(ワーカーに載るノードの数, 論理 CPU 数)`。`mujou.testing.run` には足さない
 - **Q3 ノードはワーカーの間を移ってよい（pinning しない）。** hook の間で保つのは `contextvars`（ノードごとの `contextvars.Context`）と、フレームワークが hook の前に戻す勾配モード・CUDA の device と stream だけ。`threading.local`・`threading.current_thread()` は保たない
 
