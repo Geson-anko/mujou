@@ -124,10 +124,7 @@ def on_start(self) -> None:
 
 You may keep settings (a time constant, the size of a layer, ...) as numbers set in `__init__`. Numbers are not collected into the state.
 
-Build `nn.Module`s in `on_start` too, like the tensors of the state, for two reasons.
-
-- **Random generator**: `self.generator`, the node's own generator for initialization, exists from `on_start` on. Built in `__init__`, a module such as `nn.Linear` is initialized from the global generator that all nodes share, so `seed` does not reproduce it
-- **CUDA stream**: on a CUDA node, the operations from `on_start` on go on the node's own stream. `__init__` runs on the host's thread, so the initialization of tensors made there is not ordered with that stream (see [PyTorch in nodes](torch.md#cuda))
+Build `nn.Module`s in `on_start` too, like the tensors of the state, because `self.generator`, the node's own generator for initialization, exists from `on_start` on. Built in `__init__`, a module such as `nn.Linear` is initialized from the global generator that all nodes share, so `seed` does not reproduce it.
 
 ## 3. Update in proportion to `dt` in `on_update(dt)`
 

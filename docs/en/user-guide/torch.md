@@ -70,8 +70,6 @@ For a node given a CUDA `device`, Mujou sets up the following.
 
 So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`).
 
-`__init__` runs on the host's thread, outside the node's stream, so create tensors and `nn.Module`s in `on_start` or later.
-
 !!! warning "Do not wait for the whole device"
 
     Do not use `torch.cuda.synchronize()`, which waits for the whole device, including the work of other nodes.
