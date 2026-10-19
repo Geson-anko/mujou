@@ -51,6 +51,7 @@ create_exception!(
 /// of a node never overlap, and each runs in the node's own
 /// `contextvars.Context` (but `_capture_state` and `_before_hook`). They do
 /// nothing by default.
+///
 /// The hooks are looked up by name until `on_start` (and `load_state_dict`)
 /// has returned, and once after that, so replacing one in those hooks takes
 /// effect. `state_dict` itself is looked up by the default `_capture_state` at
