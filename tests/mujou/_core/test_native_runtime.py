@@ -517,6 +517,14 @@ class FrameworkHooks(Recorder):
         return {"captured": super()._capture_state()}
 
 
+class BeforeHook(FrameworkHooks):
+    """Records _before_hook too."""
+
+    @override
+    def _before_hook(self) -> None:
+        self.hook("_before_hook")
+
+
 class TestFrameworkHooks:
     def test_the_framework_enters_a_node_on_a_worker_before_its_hooks(
         self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
@@ -668,6 +676,69 @@ class TestFrameworkHooks:
         with pytest.raises(NetworkError, match="raised in on_update$") as raised:
             runtime.step()
         assert raised.value.__cause__ is node.error
+
+    def test_before_hook_precedes_every_public_hook_but_state_dict(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    ):
+        log = Log()
+        node = BeforeHook("a", log)
+        runtime = make_runtime([node])
+        runtime.start(manual=True, states=[None], dedicated=[True])
+        virtual_timer.advance(H)
+        runtime.step()
+        runtime.capture(lambda states: states, WAIT)
+        runtime.shutdown()
+        assert log.of("a") == [
+            "_on_enter",  # first, when the thread switches to the node
+            "_before_hook",
+            "on_thread_start",
+            "_before_hook",
+            "on_start",
+            "_before_hook",
+            "_restore_state",
+            "load_state_dict",
+            "_before_hook",
+            "on_update",
+            "_after_update",  # part of on_update
+            "_before_hook",
+            "on_pause",
+            "_capture_state",  # state_dict, on the control thread
+            "state_dict",
+            "_before_hook",
+            "on_resume",
+            "_before_hook",
+            "on_stop",
+        ]
+
+    @pytest.mark.parametrize(
+        ("at", "hook"),
+        [
+            (1, "on_thread_start"),
+            (2, "on_start"),
+            (3, "load_state_dict"),
+            (4, "on_update"),
+            (5, "on_pause"),
+            (6, "on_resume"),
+        ],
+    )
+    def test_an_error_in_before_hook_is_reported_as_the_hook_and_skips_it(
+        self,
+        virtual_timer: GlobalTimer,
+        make_runtime: MakeRuntime,
+        at: int,
+        hook: str,
+    ):
+        log = Log()
+        node = BeforeHook("a", log, raise_in="_before_hook", at=at)
+        runtime = make_runtime([node])
+        with pytest.raises(NetworkError, match=f"raised in {hook}$") as raised:
+            runtime.start(manual=True, states=[None], dedicated=[True])
+            virtual_timer.advance(H)
+            runtime.step()
+            runtime.capture(lambda states: states, WAIT)
+            runtime.join(WAIT)  # on_resume raises after the capture returned
+        assert raised.value.__cause__ is node.error
+        assert hook not in log.of("a")
 
 
 class TestFreeRun:
