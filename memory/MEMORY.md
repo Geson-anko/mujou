@@ -43,6 +43,7 @@
 - [文書の言語](feedback_doc_language.md) — 仕様書（specs/）・計画書・CLAUDE.md・skill・memory は日本語、docs/ の本文は英語と日本語、docstring とコメントは英語。コミットと PR タイトルは英語の規約形式
 - [日本語の文体](feedback_japanese_style.md) — 翻訳調にしない。読点を減らす、主語と補足を削る、短い項目は体言止め。基準はユーザーが直した docs/ja/index.md
 - [super() を呼ぶ](feedback_super_calls.md) — Node/Network のサブクラスは `__init__` と override した hook の最初で super() を呼ぶ。サンプル・docs・docstring の例も常に
+- [公開前は互換を残さない](feedback_no_compat_before_release.md) — PyPI への正式公開までは、破壊的変更で古い名前の受け付け・移行の案内・deprecation の警告を入れず単に消す
 
 ## reference
 
