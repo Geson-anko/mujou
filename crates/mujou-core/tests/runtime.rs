@@ -744,7 +744,7 @@ mod period {
         }
     }
 
-    fn with_period(period_ns: Option<u64>, manual: bool) -> RuntimeConfig {
+    fn with_period(period_ns: u64, manual: bool) -> RuntimeConfig {
         RuntimeConfig {
             manual,
             period_ns: Some(vec![period_ns]),
@@ -793,7 +793,7 @@ mod period {
     fn waits_for_the_period_and_then_updates_once_with_dt_equal_to_it() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), None);
             timer.advance_ns(P_NS - 1).unwrap();
             assert_quiet(&dts);
             timer.advance_ns(1).unwrap();
@@ -812,7 +812,7 @@ mod period {
     fn late_by_less_than_a_period_the_next_target_stays_one_period_after_the_last() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), None);
             // Wakes up half a period late: one update.
             timer.advance_ns(3 * P_NS / 2).unwrap();
             assert_eq!(dts.recv_timeout(LONG), Ok(3 * P_NS / 2));
@@ -833,7 +833,7 @@ mod period {
     fn late_by_a_period_or_more_it_updates_once_and_counts_again_from_there() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), None);
             // 1.5 P late: one update, not one per missed target.
             timer.advance_ns(5 * P_NS / 2).unwrap();
             assert_eq!(dts.recv_timeout(LONG), Ok(5 * P_NS / 2));
@@ -852,7 +852,7 @@ mod period {
         each_mode(|mode| {
             let timer = virtual_timer();
             let (release, hold) = mpsc::channel();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), Some(hold));
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), Some(hold));
             timer.advance_ns(P_NS / 2).unwrap();
             timer.advance_ns(P_NS / 2).unwrap();
             assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
@@ -878,7 +878,7 @@ mod period {
         each_mode(|mode| {
             let timer = virtual_timer();
             let (release, hold) = mpsc::channel();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), Some(hold));
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), Some(hold));
             timer.advance_ns(P_NS).unwrap();
             assert_eq!(dts.recv_timeout(LONG), Ok(P_NS));
             // The update takes 2.5 P.
@@ -900,7 +900,7 @@ mod period {
     fn a_capture_does_not_move_the_target() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), false), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, false), None);
             timer.advance_ns(P_NS / 2).unwrap();
             rt.capture(|states: Vec<()>| states.len(), PAUSE)
                 .wait()
@@ -925,7 +925,7 @@ mod period {
                     time_ns: at_ns,
                     scale: 1.0,
                 }),
-                ..with_period(Some(P_NS), false)
+                ..with_period(P_NS, false)
             };
             let (rt, dts) = start_ticker(mode, &timer, config, None);
             timer.advance_ns(P_NS / 2 - 1).unwrap();
@@ -941,7 +941,7 @@ mod period {
         each_mode(|mode| {
             let timer = virtual_timer();
             let config = RuntimeConfig {
-                period_ns: Some(vec![Some(P_NS), Some(3 * P_NS)]),
+                period_ns: Some(vec![P_NS, 3 * P_NS]),
                 ..RuntimeConfig::default()
             };
             let (rt, dts) = start_tickers(mode, &timer, config, None);
@@ -967,7 +967,7 @@ mod period {
             let timer = virtual_timer();
             let (release, hold) = mpsc::channel();
             let config = RuntimeConfig {
-                period_ns: Some(vec![Some(P_NS), Some(1_000 * P_NS)]),
+                period_ns: Some(vec![P_NS, 1_000 * P_NS]),
                 ..RuntimeConfig::default()
             };
             let (rt, dts) = start_tickers(mode, &timer, config, Some(hold));
@@ -987,10 +987,10 @@ mod period {
     }
 
     #[test]
-    fn without_a_period_any_time_passing_is_enough() {
+    fn with_a_period_of_1_ns_any_time_passing_is_enough() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(None, false), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(1, false), None);
             assert_quiet(&dts);
             timer.advance_ns(1).unwrap();
             assert_eq!(dts.recv_timeout(LONG), Ok(1));
@@ -1002,7 +1002,7 @@ mod period {
     fn the_manual_mode_ignores_the_period() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            let (rt, dts) = start_ticker(mode, &timer, with_period(Some(P_NS), true), None);
+            let (rt, dts) = start_ticker(mode, &timer, with_period(P_NS, true), None);
             timer.advance_ns(1).unwrap();
             rt.step(None).wait().unwrap();
             assert_eq!(dts.try_recv(), Ok(1));
@@ -1014,7 +1014,7 @@ mod period {
     fn a_stop_or_a_capture_wakes_the_wait_for_the_period() {
         each_mode(|mode| {
             let timer = Arc::new(Timer::new());
-            let period = Some(1_000 * 1_000_000_000);
+            let period = 1_000 * 1_000_000_000;
             let (rt, dts) = start_ticker(mode, &timer, with_period(period, false), None);
             let begin = Instant::now();
             rt.capture(|states: Vec<()>| states.len(), PAUSE)
@@ -1042,7 +1042,7 @@ mod period {
         let timer = Arc::new(Timer::new());
         timer.set_scale(scale).unwrap();
         let begin = Instant::now();
-        let (rt, dts) = start_ticker(mode, &timer, with_period(Some(period_ns), false), None);
+        let (rt, dts) = start_ticker(mode, &timer, with_period(period_ns, false), None);
         thread::sleep(RUN);
         rt.shutdown().wait().unwrap();
         let elapsed = begin.elapsed();
@@ -1088,7 +1088,7 @@ mod period {
     fn rejects_a_zero_period_and_a_wrong_number_of_periods() {
         each_mode(|mode| {
             let timer = virtual_timer();
-            for period_ns in [vec![Some(0)], vec![None, None]] {
+            for period_ns in [vec![0], vec![1, 1]] {
                 let config = RuntimeConfig {
                     period_ns: Some(period_ns),
                     ..RuntimeConfig::default()
@@ -1304,7 +1304,7 @@ mod pool {
             node.ticks = Some(tx.clone());
         }
         let config = RuntimeConfig {
-            period_ns: Some(vec![Some(3 * H_NS), Some(2 * H_NS), Some(H_NS)]),
+            period_ns: Some(vec![3 * H_NS, 2 * H_NS, H_NS]),
             ..pool(1, RuntimeConfig::default())
         };
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
@@ -1840,7 +1840,7 @@ mod pool {
         let (tx, ticks) = mpsc::channel();
         nodes[1].ticks = Some(tx);
         let config = RuntimeConfig {
-            period_ns: Some(vec![Some(H_NS); 2]),
+            period_ns: Some(vec![H_NS; 2]),
             ..pool(2, RuntimeConfig::default())
         };
         let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();

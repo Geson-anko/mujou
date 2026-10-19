@@ -442,7 +442,8 @@ fn duration(seconds: f64) -> PyResult<Duration> {
 }
 
 /// A period in seconds as the runtime's ns: rounded as `seconds_to_ns` rounds,
-/// and at least 1 ns, since a period of 0 ns is invalid.
+/// and at least 1 ns, since a period of 0 ns is invalid (0.0 s becomes 1 ns,
+/// which updates as soon as any time has passed).
 fn period_to_ns(seconds: f64) -> PyResult<u64> {
     Ok(seconds_to_ns(seconds).map_err(timer_error)?.max(1))
 }
@@ -514,9 +515,9 @@ impl Runtime {
     /// Loading it raises `ValueError` while another runtime runs on the same
     /// timer, whose time would jump. `last_update_ns` is where each node's
     /// first Δt starts (the time at the start by default). `periods` is each
-    /// node's period on the timer in seconds (> 0), rounded to the nearest ns
-    /// and at least 1 ns, or `None` to update as soon as any time has passed;
-    /// the manual mode ignores it.
+    /// node's period on the timer in seconds (>= 0), rounded to the nearest ns
+    /// and at least 1 ns, so that 0.0 updates as soon as any time has passed,
+    /// as every node does without `periods`; the manual mode ignores it.
     ///
     /// `dedicated` tells which nodes run on a thread of their own; the others,
     /// all of them by default, share a pool of `workers` threads (>= 1), by
@@ -545,7 +546,7 @@ impl Runtime {
         manual: bool,
         states: Option<Vec<Py<PyAny>>>,
         last_update_ns: Option<Vec<u64>>,
-        periods: Option<Vec<Option<f64>>>,
+        periods: Option<Vec<f64>>,
         timer_state: Option<Bound<'_, PyAny>>,
         workers: Option<usize>,
         dedicated: Option<Vec<bool>>,
@@ -570,7 +571,7 @@ impl Runtime {
             .map(|periods| {
                 periods
                     .into_iter()
-                    .map(|p| p.map(period_to_ns).transpose())
+                    .map(period_to_ns)
                     .collect::<PyResult<Vec<_>>>()
             })
             .transpose()?;

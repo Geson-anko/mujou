@@ -389,8 +389,7 @@ class Runtime:
         manual: bool = False,
         states: SupportsGetItem[int, Any] | None = None,
         last_update_ns: SupportsGetItem[int, SupportsIndex] | None = None,
-        periods: SupportsGetItem[int, SupportsFloat | SupportsIndex | None]
-        | None = None,
+        periods: SupportsGetItem[int, SupportsFloat | SupportsIndex] | None = None,
         timer_state: "dict[str, int | float] | None" = None,
         workers: SupportsIndex | None = None,
         dedicated: SupportsGetItem[int, bool] | None = None,
@@ -407,9 +406,9 @@ class Runtime:
         Loading it raises `ValueError` while another runtime runs on the same
         timer, whose time would jump. `last_update_ns` is where each node's
         first Δt starts (the time at the start by default). `periods` is each
-        node's period on the timer in seconds (> 0), rounded to the nearest ns
-        and at least 1 ns, or `None` to update as soon as any time has passed;
-        the manual mode ignores it.
+        node's period on the timer in seconds (>= 0), rounded to the nearest ns
+        and at least 1 ns, so that 0.0 updates as soon as any time has passed,
+        as every node does without `periods`; the manual mode ignores it.
 
         `dedicated` tells which nodes run on a thread of their own; the others,
         all of them by default, share a pool of `workers` threads (>= 1), by

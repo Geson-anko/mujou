@@ -124,9 +124,9 @@ pub struct RuntimeConfig {
     /// Each node's period on the timer, in ns (> 0): a free-running node
     /// updates at targets a period apart (see `node_loop`), so once every
     /// period on average while its update and its wake-up fit in the period.
-    /// `None` (for all nodes or one) updates as soon as any time has passed.
-    /// The manual mode ignores it.
-    pub period_ns: Option<Vec<Option<u64>>>,
+    /// A period of 1 ns updates as soon as any time has passed, which every
+    /// node does by default. The manual mode ignores it.
+    pub period_ns: Option<Vec<u64>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
     /// The number of worker threads for the nodes in the pool. Defaults to
@@ -183,8 +183,8 @@ struct Shared<N: NodeHooks> {
     /// before the timer's elsewhere).
     word: AtomicU64,
     last_update_ns: Vec<AtomicU64>,
-    /// Each node's period in ns when running freely (1 without a period: the
-    /// next update as soon as Δt > 0).
+    /// Each node's period in ns when running freely (1 by default: the next
+    /// update as soon as Δt > 0).
     period_ns: Vec<u64>,
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
@@ -686,7 +686,7 @@ impl<N: NodeHooks> Runtime<N> {
 }
 
 /// Checks the arguments of [`Runtime::start`] for `n` nodes and returns each
-/// node's period in ns when running freely (1 without a period).
+/// node's period in ns when running freely (1 ns by default).
 fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64>, RuntimeError> {
     if names != n {
         return Err(RuntimeError::InvalidArgument(format!(
@@ -715,16 +715,10 @@ fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64
             "got {n} nodes but {} periods",
             periods.len()
         ))),
-        Some(periods) => periods
-            .iter()
-            .map(|period| match *period {
-                None => Ok(1),
-                Some(0) => Err(RuntimeError::InvalidArgument(
-                    "a period must be > 0 ns".to_owned(),
-                )),
-                Some(ns) => Ok(ns),
-            })
-            .collect(),
+        Some(periods) if periods.contains(&0) => Err(RuntimeError::InvalidArgument(
+            "a period must be > 0 ns".to_owned(),
+        )),
+        Some(periods) => Ok(periods.clone()),
     }
 }
 
