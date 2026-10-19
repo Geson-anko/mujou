@@ -29,7 +29,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use crate::dlpack::{DLDataType, format_dtype, format_shape};
-use crate::time::{Timer, Timestamp};
+use crate::time::{Timer, Timestamp, remaining};
 
 /// One named tensor of a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -446,10 +446,7 @@ impl Slot {
             if !Arc::ptr_eq(&value, last) {
                 break Some(Arc::clone(&value));
             }
-            let wait = match deadline {
-                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
-                None => Duration::MAX,
-            };
+            let wait = remaining(deadline);
             if wait.is_zero() {
                 break None;
             }

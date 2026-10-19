@@ -45,7 +45,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, TryLockError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::time::{Timer, TimerState};
+use crate::time::{Timer, TimerState, remaining};
 
 pub use error::{HookError, NodeFailure, RuntimeError, SharedError};
 
@@ -416,13 +416,6 @@ fn guarded<N: NodeHooks, T>(
         };
         node.panicked(&error);
         Err(error)
-    })
-}
-
-/// What is left of a wait until `deadline` (no end if `None`).
-fn remaining(deadline: Option<Instant>) -> Duration {
-    deadline.map_or(Duration::MAX, |d| {
-        d.saturating_duration_since(Instant::now())
     })
 }
 

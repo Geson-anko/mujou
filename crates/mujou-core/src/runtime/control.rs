@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use super::error::{finished_error, panic_message, stopped};
 use super::freeze::FreezeReason;
 use super::node::Command;
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, RuntimeError, Shared, remaining};
+use super::{Control, NodeHooks, RUNTIME_OF_THREAD, RuntimeError, Shared};
+use crate::time::remaining;
 
 /// A request from the host, run on the control thread.
 pub(super) type Job<N> = Box<dyn FnOnce(&mut Controller<N>) + Send>;
