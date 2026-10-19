@@ -1821,25 +1821,26 @@ may then run on a different thread from the previous one, but the hooks of
 a node never run at the same time, and each sees what the previous one
 wrote. Whether the next hook sees what a hook set per thread
 (<code>threading.local</code>, <code>threading.current_thread()</code>, settings of torch
-such as <code>torch.autocast</code>) depends on the schedule, and the next node on
-the same worker may see it too: set such settings back before the hook
-returns (inside a <code>with</code>, say). <code>contextvars</code> do carry over: each node
-runs its hooks in a <code>contextvars.Context</code> of its own, which starts empty
-(it does not inherit the host's) and does not hold for <code>state_dict</code>. A
-hook that blocks (<code>time.sleep</code>, waiting for I/O or a lock) holds its
-worker meanwhile, and the other nodes' <code>dt</code> grows; give such a node
+such as <code>torch.set_grad_enabled</code> or <code>torch.autocast</code>) depends on the
+schedule, and the next node on the same worker may see it too: set such
+settings back before the hook returns (inside a <code>with</code>, say).
+<code>contextvars</code> do carry over: each node runs its hooks in a
+<code>contextvars.Context</code> of its own, which starts empty (it does not inherit
+the host's) and does not hold for <code>state_dict</code>. A hook that blocks
+(<code>time.sleep</code>, waiting for I/O or a lock) holds its worker meanwhile,
+and the other nodes' <code>dt</code> grows; give such a node
 <code>dedicated_thread=True</code>, so that it runs on a thread of its own, with
 every hook on that thread.</p>
-<p>Before every hook but <code>state_dict</code>, the framework turns off gradient
-recording (to backpropagate inside the node, wrap the forward computation
-and <code>backward</code> in <code>with torch.enable_grad():</code> marked
-<code># mujou: local-autograd</code>). Whenever a thread switches to the node, when
-<code>device</code> is CUDA, it also makes the device and a stream of the node's own
-current. These are the only per-thread settings it sets back. On CUDA it
-also waits for that stream after <code>on_update</code> (holding its worker
-meanwhile), after <code>load_state_dict</code> and around <code>state_dict</code>. It does
-this in hooks of its own, whose names start with <code>_</code>: do not override
-those, and overriding a public hook never skips them.</p>
+<p>The framework leaves gradient recording as it is, on by default as in
+plain PyTorch: a hook may call <code>backward</code> directly, and computes without
+a graph inside <code>with torch.no_grad():</code>. No graph crosses nodes: a port
+sends a detached copy. Whenever a thread switches to the node, when
+<code>device</code> is CUDA, the framework makes the device and a stream of the
+node's own current. These are the only per-thread settings it sets back.
+On CUDA it also waits for that stream after <code>on_update</code> (holding its
+worker meanwhile), after <code>load_state_dict</code> and around <code>state_dict</code>. It
+does this in hooks of its own, whose names start with <code>_</code>: do not
+override those, and overriding a public hook never skips them.</p>
 <p>The node updates once every <code>period</code> (0.01 s by default) of the run's timer
 on average: the time an update takes
 counts toward the period, and a node that falls a whole <code>period</code> behind does

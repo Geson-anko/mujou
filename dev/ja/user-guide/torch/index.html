@@ -1650,12 +1650,13 @@
 <a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>        <span class="n">n</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="n">MAX_STEP</span><span class="p">))</span>
 <a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>        <span class="n">h</span> <span class="o">=</span> <span class="n">dt</span> <span class="o">/</span> <span class="n">n</span>
 <a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
-<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">enable_grad</span><span class="p">():</span>  <span class="c1"># mujou: local-autograd</span>
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>                <span class="n">loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">y</span><span class="p">)</span>
-<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>                <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
-<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>            <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>                <span class="n">p</span> <span class="o">-=</span> <span class="n">h</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate</span> <span class="o">*</span> <span class="n">g</span>  <span class="c1"># in place, outside the block: not recorded</span>
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>            <span class="n">loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">y</span><span class="p">)</span>
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>            <span class="n">grads</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">autograd</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>  <span class="c1"># the step itself is not part of any graph</span>
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>                <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>                    <span class="n">p</span> <span class="o">-=</span> <span class="n">h</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate</span> <span class="o">*</span> <span class="n">g</span>
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>  <span class="c1"># the prediction needs no graph: it is sent detached</span>
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
 </code></pre></div>
 <p><a href="../../examples/">サンプル</a>の <code>online_learning.py</code> では、同様のノードが実行中に目標の変わるストリームから学び、その変化に追従する。</p>
 <h2 id="デバイスと-seed">デバイスと seed<a class="headerlink" href="#デバイスと-seed" title="Permanent link">&para;</a></h2>
@@ -1676,13 +1677,13 @@
 <li>復元では新しいインスタンスを使うので、生成器も <code>seed</code> から作り直す。状態から復元した後も同じ乱数列を続けたいときは、生成器の状態を状態の木に入れる（<a href="../state/">状態の保存と復元</a>）</li>
 </ul>
 <h2 id="ノードの中の-bp">ノードの中の BP<a class="headerlink" href="#ノードの中の-bp" title="Permanent link">&para;</a></h2>
-<p>既定の更新手法 PC-ALM は更新式を直接計算し、autograd のグラフを必要としない。そのため mujou はどのノードでも <code>state_dict</code> 以外の hook の前に毎回勾配の記録を切っている（<code>torch.set_grad_enabled(False)</code>）。</p>
-<p>ノードの中で autograd を使うときは次のように書く。</p>
-<ol>
-<li>順伝播と勾配の計算（<code>torch.autograd.grad</code> か <code>.backward()</code>）の両方を <code>with torch.enable_grad():</code> で囲む</li>
-<li>その <code>with</code> の行に、BP がこのノードの中に閉じていることを示す印 <code># mujou: local-autograd</code> を付ける</li>
-<li>パラメータはブロックの外でその場で更新する（例の <code>p -= h * self.rate * g</code>）。ブロックの外では勾配を記録しないので、更新が autograd のグラフに入らない</li>
-</ol>
+<p>mujou は勾配の記録を切り替えない。hook は通常の PyTorch と同じく勾配を記録し、autograd もそのまま使える。</p>
+<ul>
+<li>パラメータは <code>optimizer.step()</code> と同じく <code>with torch.no_grad():</code> の中でその場で更新する（例の <code>p -= h * self.rate * g</code>）。外で更新するとエラーになる</li>
+<li>推論だけのノードなど勾配の要らない計算も <code>with torch.no_grad():</code> の中で行えば、グラフのメモリと時間を省ける</li>
+<li>計算グラフを次の更新へ持ち越さない。<code>self.h = torch.tanh(self.w(self.h))</code> のように前の値から次の値を計算する属性は、更新のたびに前のグラフへ新しいグラフをつなぎ、グラフが伸び続ける。<code>.detach()</code> するか <code>no_grad</code> の下で計算する</li>
+<li>勾配の記録は <code>torch.set_grad_enabled(False)</code> ではなく <code>with torch.no_grad():</code> で切る。スレッドごとの設定なので、戻さないと同じワーカーで次に走るノードに残る（<a href="#%E3%83%97%E3%83%AD%E3%82%BB%E3%82%B9%E5%85%A8%E4%BD%93%E3%81%AB%E5%8A%B9%E3%81%8F%E8%A8%AD%E5%AE%9A">プロセス全体に効く設定</a>）</li>
+</ul>
 <p>BP はノードの中に閉じ、ほかのノードへ勾配を流すことはできない。<code>recv()</code> が返す値はコピーで、<code>send()</code> は値を <code>detach()</code> してから送る。</p>
 <ul>
 <li><code>torch.inference_mode()</code> は使わない。その中で作ったテンソルは backward に使えない</li>
@@ -1718,7 +1719,7 @@
 <li><code>torch.set_num_threads</code>、<code>torch.use_deterministic_algorithms</code>、<code>torch.backends.*</code> のフラグ</li>
 <li><code>torch.cuda.synchronize()</code>、<code>torch.cuda.empty_cache()</code> などデバイス全体に効く操作</li>
 </ul>
-<p>ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（<a href="../writing-a-node/#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99">専用のスレッドで動かす</a>）。設定は hook の中の <code>with</code> に閉じ（<code>with torch.autocast(...):</code>）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou 自身が戻すのは、<code>state_dict</code> 以外の hook の前に毎回切る勾配の記録と、ワーカーがノードに切り替わるたびに設定する CUDA の現在のデバイス・ストリームだけである。<code>dedicated_thread=True</code> のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を <code>on_start</code> に 1 回だけ書ける。</p>
+<p>ノードの中で変えてよいのはスレッドごとの設定だけで、それも hook の中に限る。ノードの次の hook は別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす（<a href="../writing-a-node/#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99">専用のスレッドで動かす</a>）。設定は hook の中の <code>with</code> に閉じ（<code>with torch.autocast(...):</code>）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。勾配の記録もこの設定に含まれる。mujou 自身が戻すのは、ワーカーが CUDA のノードに切り替わるたびに設定する現在のデバイス・ストリームだけ。<code>dedicated_thread=True</code> のノードは全 hook を 1 本のスレッドで実行するので、スレッドごとの設定を <code>on_start</code> に 1 回だけ書ける。</p>
 <h3 id="内部のスレッド数">内部のスレッド数<a class="headerlink" href="#内部のスレッド数" title="Permanent link">&para;</a></h3>
 <p>ノードは実行のワーカースレッド（と <code>dedicated_thread=True</code> のノードのスレッド）で計算し、CPU 上の torch の演算はそのスレッドごとにさらに内部のスレッドを使う。内部のスレッドが多いとノード同士で CPU を取り合い、全体が遅くなる。</p>
 <p>mujou は内部のスレッド数を設定しないので、ホストが <code>mujou.run</code> の前に決める。</p>

@@ -1864,7 +1864,7 @@
 <p>ノードは既定でほかのノードと共有する実行のワーカースレッドの上で動く（<a href="../running/#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89">ネットワークを走らせる</a>）。hook ごとに別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす。hook がスレッドに設定したものを次の hook が見るかどうかはスケジュール次第で、同じワーカーで次に走る別のノードにも見える。</p>
 <ul>
 <li><code>threading.local</code>・<code>threading.current_thread()</code>・<code>threading.get_ident()</code> は hook ごとに変わりうる</li>
-<li><code>torch.autocast</code> などスレッドごとの torch の設定は hook の中の <code>with</code> に閉じ、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは勾配の記録（hook の前に毎回）と、CUDA の現在のデバイス・ストリーム（ワーカーがノードに切り替わるたび）だけ（<a href="../torch/">ノードの中の PyTorch</a>）</li>
+<li><code>torch.autocast</code> や勾配の記録などスレッドごとの torch の設定は hook の中の <code>with</code> に閉じ（<code>with torch.no_grad():</code>）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは CUDA の現在のデバイス・ストリーム（ワーカーが CUDA のノードに切り替わるたび）だけ（<a href="../torch/">ノードの中の PyTorch</a>）</li>
 <li><code>contextvars</code> は持ち越される。各ノードは自分専用の <code>contextvars.Context</code> の中で hook を実行する。この文脈は空から始まりホストの文脈の変数を引き継がない。<code>state_dict</code> はこの文脈の外で呼ばれる</li>
 </ul>
 <p>次のノードには <code>super().__init__</code> に <code>dedicated_thread=True</code> を渡す。</p>
