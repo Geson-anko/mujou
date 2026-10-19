@@ -277,6 +277,15 @@ impl PyNode {
         }
     }
 
+    /// The method the runtime calls for `hook`.
+    fn method<'py>(&self, py: Python<'py>, hook: &str) -> PyResult<Bound<'py, PyAny>> {
+        match self.methods.as_ref().and_then(|m| m.get(hook)) {
+            Some(method) => Ok(method.bind(py).clone()),
+            // Before the lookup, or if it failed: by name.
+            None => self.node.bind(py).getattr(attribute(hook)),
+        }
+    }
+
     /// Calls `hook` in the node's context, reporting an error as `public(hook)`.
     fn call(
         &self,
@@ -297,14 +306,9 @@ impl PyNode {
         // (`on_thread`), so this attach only takes the GIL (on a GIL build).
         Python::attach(|py| {
             let result = (|| {
-                let method = |hook: &str| match self.methods.as_ref().and_then(|m| m.get(hook)) {
-                    Some(method) => Ok(method.bind(py).clone()),
-                    // Before the lookup, or if it failed: by name.
-                    None => self.node.bind(py).getattr(attribute(hook)),
-                };
                 // Outside the node's context (see `Node::_before_hook`).
                 if !matches!(hook, "_on_enter" | "_after_update") {
-                    match method("_before_hook").and_then(|m| m.call0()) {
+                    match self.method(py, "_before_hook").and_then(|m| m.call0()) {
                         Ok(_) => {}
                         // Like a failed `enter`: logged, and the hook still
                         // runs so that the node can release its resources.
@@ -314,9 +318,8 @@ impl PyNode {
                         Err(e) => return Err(e),
                     }
                 }
-                let method = method(hook)?;
                 // `Context.run(method, *args)`.
-                let mut call = vec![method];
+                let mut call = vec![self.method(py, hook)?];
                 call.extend(args(py));
                 let call = PyTuple::new(py, call)?;
                 self.context.bind(py).call_method1(intern!(py, "run"), call)
@@ -405,11 +408,8 @@ impl NodeHooks for PyNode {
     /// a normal end.
     fn state_dict(&mut self) -> Result<Py<PyAny>, HookError> {
         Python::attach(|py| {
-            let result = match self.methods.as_ref() {
-                Some(methods) => methods.capture_state.bind(py).call0(),
-                None => self.node.bind(py).call_method0(attribute("state_dict")),
-            };
-            result
+            self.method(py, "state_dict")
+                .and_then(|m| m.call0())
                 .map(Bound::unbind)
                 .map_err(|e| self.error(py, "state_dict", e))
         })
