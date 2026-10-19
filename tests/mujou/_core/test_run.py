@@ -144,8 +144,10 @@ class Echo(Node):
 class Calls(Node):
     """Calls ``action`` in ``on_update`` and keeps the exception it raises."""
 
-    def __init__(self, action: Callable[[], object]) -> None:
-        super().__init__()
+    def __init__(
+        self, action: Callable[[], object], *, dedicated_thread: bool = False
+    ) -> None:
+        super().__init__(dedicated_thread=dedicated_thread)
         self.action = action
         self.errors: list[Exception] = []
 
@@ -1179,7 +1181,8 @@ class TestHostMethodsFromANode:
             runs[0].shutdown()
         assert "host methods" in runs[0].state_dict()["nodes"]["node"]
 
-    def test_raise(self, step: Step, start_manual: StartManual):
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_raise(self, step: Step, start_manual: StartManual, dedicated_thread: bool):
         runs: list[Run] = []
 
         def call_every_host_method() -> None:
@@ -1198,7 +1201,7 @@ class TestHostMethodsFromANode:
                 except RuntimeError as e:
                     node.errors.append(e)
 
-        node = Calls(call_every_host_method)
+        node = Calls(call_every_host_method, dedicated_thread=dedicated_thread)
         chain = Chain()
         chain.caller = node  # pyright: ignore[reportAttributeAccessIssue]
         net = chain
