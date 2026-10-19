@@ -1,8 +1,7 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use mujou_core::time::{Timer, TimerError, TimerState, Timestamp, Wait, global, seconds_to_ns};
 
@@ -12,6 +11,18 @@ const SECOND: u64 = 1_000_000_000;
 fn sleep_ns(timer: &Timer, dt_ns: u64) {
     let target_ns = timer.time_ns().saturating_add(dt_ns);
     while !timer.wait_until_ns(target_ns, Duration::MAX) {}
+}
+
+/// A virtual clock at exactly 0 (the real clock ran until it was switched).
+fn virtual_timer() -> Timer {
+    let timer = Timer::new();
+    timer.use_virtual_clock(true);
+    let state = TimerState {
+        time_ns: 0,
+        scale: 1.0,
+    };
+    timer.load_state(state).unwrap();
+    timer
 }
 
 fn real_ns(d: Duration) -> f64 {
@@ -203,12 +214,6 @@ mod hold {
 mod virtual_clock {
     use super::*;
 
-    fn virtual_timer() -> Timer {
-        let timer = Timer::new();
-        timer.use_virtual_clock(true);
-        timer
-    }
-
     #[test]
     fn stands_still_until_advanced() {
         let timer = virtual_timer();
@@ -343,8 +348,7 @@ mod state {
 
     #[test]
     fn restores_the_time_and_scale() {
-        let source = Timer::new();
-        source.use_virtual_clock(true);
+        let source = virtual_timer();
         source.set_scale(4.0).unwrap();
         let taken_ns = source.time_ns() + 12 * SECOND + 345;
         source.advance_ns(12 * SECOND + 345).unwrap();
@@ -357,8 +361,7 @@ mod state {
             }
         );
 
-        let restored = Timer::new();
-        restored.use_virtual_clock(true);
+        let restored = virtual_timer();
         restored.load_state(state).unwrap();
         assert_eq!(restored.time_ns(), taken_ns);
         assert_eq!(restored.scale(), 4.0);
@@ -416,18 +419,6 @@ mod conversion {
 
 mod independent_timers {
     use super::*;
-
-    /// A virtual clock at exactly 0 (the real clock ran until it was switched).
-    fn virtual_timer() -> Timer {
-        let timer = Timer::new();
-        timer.use_virtual_clock(true);
-        let state = TimerState {
-            time_ns: 0,
-            scale: 1.0,
-        };
-        timer.load_state(state).unwrap();
-        timer
-    }
 
     #[test]
     fn a_new_timer_starts_at_zero() {
@@ -489,8 +480,7 @@ mod timestamp {
 
     #[test]
     fn now_is_the_time_of_the_timer() {
-        let timer = Timer::new();
-        timer.use_virtual_clock(true);
+        let timer = virtual_timer();
         let ns = timer.time_ns();
         assert_eq!(timer.now(), Timestamp::from_ns(ns));
     }
