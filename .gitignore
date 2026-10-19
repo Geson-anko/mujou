@@ -49,5 +49,8 @@ src/mujou/_core/*.pyd
 # Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
 .venv-devcontainer/
 
+# Virtualenv with the GIL that benchmarks/mn_scheduler.py suggests
+.venv-gil/
+
 # Documentation site built by mkdocs
 site/
