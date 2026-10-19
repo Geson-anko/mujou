@@ -785,7 +785,9 @@ class TestCapture:
         log = Log()
         stuck, other = Stuck("stuck", log), Recorder("other", log)
         runtime = make_runtime([stuck, other])
-        runtime.start()
+        # A worker for each node: the stuck one holds its worker (the default
+        # can be 1 on a small machine with the GIL).
+        runtime.start(workers=2)
         virtual_timer.advance(H)
         assert entered.wait(WAIT)
         log.wait_for(lambda: len(other.dts) == 1)
@@ -877,7 +879,8 @@ class TestException:
         log = Log()
         nodes = [Simultaneous(n, log, "on_update") for n in ["a", "b"]]
         runtime = make_runtime(nodes)
-        runtime.start()
+        # Both updates must run at once, so a worker for each node.
+        runtime.start(workers=2)
         virtual_timer.advance(H)
         with pytest.raises(NetworkError) as exc_info:
             runtime.join(WAIT)
