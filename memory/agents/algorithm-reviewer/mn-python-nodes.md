@@ -77,3 +77,53 @@
 
 - 計画書（L111, L162）の約束は「切り替えのときだけ `_on_enter`」。spec-test-author のテスト `test_a_worker_enters_a_node_only_when_it_switches_to_it` もそれを固定している。食い違っているのは利用者向けの文書・example・skill・memory の「毎回」という表現のほう
 - 局所性の 3 条件（受け取った値は detach 済み、勾配の対象は自分の状態だけ、マーカーとコメント）は、ワーカーを共有しても保たれる。グラフがつながる経路はメッセージだけで、メッセージは常にコピーだから。スレッドごとの状態はグラフではなく「計算の設定」の経路で、S1・S2 はそこで起きている
+
+---
+
+# 再監査（2026-10-19、`git diff 82183ce..HEAD`、2f3bb91 まで）
+
+## verdict
+
+**approve**。確信度: 高。前回の S1・S3・N1 は解消した。S2 はユーザーの決定どおり文書で扱っていて、不変条件の書き方も正確。must-fix と should-fix は無い。
+
+## 前回の指摘の状況
+
+- **S1 → 解消（確信度: 高）**: bindings の `call_as` は、`_on_enter` と `_after_update` を除く全 hook の前に、毎回 `_before_hook` を呼ぶ（`crates/mujou-python/src/runtime.rs:301-303`）。`mujou.Node._before_hook` は `torch.set_grad_enabled(False)`（`src/mujou/_core/node.py:408-411`）。`state_dict` は別の経路（`runtime.rs` の `NodeHooks::state_dict`）なので呼ばない。切り替えのときは `_on_enter` → `_before_hook` → hook の順になる。前回の再現スクリプト（ノード 1 つ、workers=1、毎回 `set_grad_enabled(True)` を残す）は、3 回の更新で `[False, False, False]` になった（前回は `[False, True, True]`）。テスト `test_gradients_are_off_at_the_start_of_every_hook_of_the_same_node` がこれを固定している。勾配モードはスケジュールに依存しなくなった
+- **S2 → 文書で対応（ユーザーの決定）**: 再現スクリプトでは、閉じなかった autocast が今も同じワーカーのほかのノードに漏れる（3 回とも `True`）。実装は変えないという決定なので想定どおり。skill に足した不変条件（`SKILL.md:70`）は正確:
+  - 局所性の節に置き、「メッセージを経ずに漏れる」と理由も書いている
+  - フレームワークが戻すのは、勾配モード（毎回）と CUDA の device・stream（切り替えのたび）だけ。これは実装と一致する
+  - ユーザー向け文書（en/ja の writing-a-node・torch）と Node の docstring も、「スケジュール次第で、同じワーカーの次のノードにも見える。抜ける前に戻す」に揃っている
+- **S3 → 解消**: 既定のワーカー数は `min(ワーカーに載るノード数, 論理 CPU 数)` になった（`SKILL.md:43`）。`_on_enter` / `_before_hook` は「フレームワーク側の設定を書く内部の hook（利用者は override しない）」と主語を限った（`SKILL.md:47`）。「hook の前に毎回」と「切り替えのたび」の区別も実装と合っている
+- **N1 → 解消（確信度: 高）**: `enter_node(self)` を `_on_enter` の先頭に移した（`node.py` の `_on_enter`）。セットアップが失敗した後の `on_exception` / `on_stop` は、自分のノードとして走る（ほかのノードの Port は `RuntimeError`）。`_before_hook` は BestEffort の hook の前にも走るので、勾配の記録も切れている（`test_a_node_whose_setup_failed_cleans_up_as_itself`）
+- N2・N3・N4 → 文書に書かれた。CUDA の同期の間はワーカーを占有すること、CPU のノードの後に残るストリーム、`Context` は空で `state_dict` はその外で走ること
+
+## must-fix
+
+なし。
+
+## should-fix
+
+なし。
+
+## nit（新規）
+
+- R1（確信度: 高、実害: ほぼ無し）`_before_hook` が失敗すると、`call_as` は `?` で早く戻る（`runtime.rs:302`）。そのため `on_exception` / `on_stop` も呼ばれない。コアの契約では、`enter` が失敗しても `exception` / `stop` は資源を解放するために呼ぶ（`crates/mujou-core/src/runtime/mod.rs` の `NodeHooks::enter` の doc）。`_before_hook` の失敗は、この契約から漏れている。中身は `torch.set_grad_enabled(False)` だけなので、利用者が override しない限り起きない。直すなら、BestEffort の hook では `_before_hook` のエラーを記録してから hook を続けるか、少なくとも docstring（`runtime.rs:77-81`）に「失敗するとその hook は呼ばれない」と書く
+- R2（確信度: 高）`_before_hook` は `Context.run` の外で呼ばれる（`runtime.rs:302` と `:309`）。一方、`Node` の docstring は「each runs in the node's own `contextvars.Context` (but `_capture_state`)」と書いている（`runtime.rs:47-52`、`_native.pyi`）。勾配モードは文脈に依存しないので実害は無い。docstring の例外に `_before_hook` を足すか、`Context.run` の中で呼ぶと一貫する
+- R3（確信度: 中）N1 の残り: `_on_enter` で `torch.cuda.set_device` か stream の設定が失敗すると、続く `on_exception` / `on_stop` は前のノードの CUDA stream のまま走りうる。Port の所有と勾配はもう正しい。CUDA の失敗は稀で、終了処理の中だけのことなので記録に留める
+- R4（確信度: 低）`SKILL.md:47` と `:70` の「CUDA の device・stream（切り替えのたび）」は、正確には「CUDA のノードに切り替わるたび」（CPU のノードは設定しない）。specs と docs にはこの区別が書いてあるので、skill からは参照で足りる
+
+## 検証結果（再監査）
+
+- `just run`: exit 0。cargo test 成功、pytest 589 passed / 20 skipped（CUDA は環境に無いので skip。CUDA まわりは今回も実行では未検証）、pyright 0 errors、docs-build 成功。作業ツリーに差分は出なかった
+- 再現スクリプトの結果
+
+  | ケース | 前回 | 今回 |
+  | --- | --- | --- |
+  | 勾配、ノード 1 つ | `[F, T, T]` | `[F, F, F]` |
+  | 勾配、ほかのノード | `[F, F, F]` | `[F, F, F]` |
+  | autocast、ほかのノード | `[T, T, T]` | `[T, T, T]`（文書で対応する決定のとおり） |
+
+## 照合メモ（再監査）
+
+- hook の前に呼ばれる順: コアの `invoke`（切り替え時だけ `enter` → `_on_enter`、`_before_hook` は除外）→ hook の関数 → `call_as`（`_before_hook` → `Context.run(hook)`）。`_after_update` は `on_update` の直後で `_before_hook` を挟まないが、中身はストリームの同期だけなので勾配モードに依存しない
+- 局所性（グラフはメッセージのコピーでしか渡らない）、非同期性、Δt、CUDA のストリームの扱いは、前回の確認から変わっていない。今回の差分は、それらの経路に触れていない

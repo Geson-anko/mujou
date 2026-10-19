@@ -75,3 +75,64 @@ must-fix は 1 件だけ。エラー経路に限られ、直し方も行の並�
 - GIL ありの 3.14.8: `tests/mujou` + `tests/test_examples.py` で 551 passed / 21 skipped
 - 新しいテスト（Workers / FrameworkHooks / Dedicated / OnThreadStart / OwnerOnAWorker / ThreadSetup / TestStart）を 8 回繰り返し: すべて 55 passed
 - 成果物の汚染（`</content>` など）: 見つからなかった
+
+---
+
+# 再レビュー（2026-10-19、`git diff 82183ce..HEAD`、2f3bb91 まで）
+
+## verdict: approve
+
+前回の M1・S1・S2・S3 と nit（N2 を除く）は解消した。N2 を見送った理由（実際のワーカー数を読む公開の口が無い）も妥当。新しく見つけたのは、どれも動作に影響しない should-fix 1 件と nit だけ。
+
+## 前回の指摘の状況
+
+- M1 → 解消（確信度: 高）
+  - `_on_enter` の先頭で `enter_node(self)` を呼ぶようになった（`src/mujou/_core/node.py` の `_on_enter`）。勾配は `_before_hook` で切る。`enter` が失敗したときも、BestEffort の `on_exception` / `on_stop` は bindings の `call_as` を通るので、`_before_hook` が先に走る
+  - テスト `test_a_node_whose_setup_failed_cleans_up_as_itself` は意図した経路を通る
+    - workers=1 で、タスクは添字の順に並ぶ。leaky の `on_start`（勾配を有効にして残す）→ broken の `enter` が失敗（`Required` なので `on_start` は呼ばない）→ leaky の `on_exception` → broken の `enter`（また失敗）→ BestEffort で `on_exception` の順になる
+    - 直す前の順序なら、broken の `on_exception` の時点で `current_node()` が leaky なので、leaky の Port を読めてしまい、勾配も有効のままになる。テストはその両方を確かめている
+- S1 → 解消（確信度: 高）。勾配を切るのを「切り替えのとき」から「毎回」に変えた。実装・docstring・docs・specs・skill・memory が揃っている
+- S2・S3 → 解消。autocast などの漏れは、ユーザーの決定どおり文書だけで扱っている。記述は実装の事実（フレームワークが戻すのは勾配と CUDA の device・stream だけ）に合っている
+- nit: N1・N3・N4・N5・N6・N7 → 解消。N2 → 理由つきで見送り（妥当）
+
+## `_before_hook` の呼ばれ方の確認
+
+- 呼ばれる条件（`crates/mujou-python/src/runtime.rs:293-303`）: `call_as` を通る hook のうち、`_on_enter` と `_after_update` を除くすべての前に呼ばれる
+  - 対象は `on_thread_start`、`on_start`、`load_state_dict`（実体は `_restore_state`）、`on_update`、`on_pause`、`on_resume`、`on_exception`、`on_stop`
+  - `state_dict` は `NodeHooks::state_dict` の別の経路なので呼ばれない
+  - 順序は `_on_enter`（切り替えのときだけ）→ `_before_hook` → hook
+  - `enter` が失敗したとき: `Required` の hook は呼ばれないので `_before_hook` も呼ばれない。BestEffort（`on_exception` / `on_stop`）では呼ばれる
+- エラーの報告名: `call_as` の `reported` に、その hook の public な名前が入る。specs/nodes.md の「`_before_hook` は次に呼ぶはずだった公開の hook」と一致する
+- `Context.run` の外で呼ぶこと: 勾配モードは torch の C++ のスレッドローカルで、contextvars ではない。だから文脈の外でも中でも効果は同じで、妥当。ただし文書との食い違いが残る（下の N8）
+
+## must-fix
+
+なし
+
+## should-fix
+
+### S4. `_before_hook` の契約を bindings の層で確かめるテストが無い
+
+- 対象: `tests/mujou/_core/test_native_runtime.py`（`FrameworkHooks` は `_before_hook` を記録しない）
+- 問題: `_before_hook` を確かめているのは、`mujou.Node` の勾配を見る 2 本だけ（`test_node.py`）。この 2 本が通るのは `on_start`・`on_update`・`on_exception`・`on_stop` だけだ。次の性質はどのテストも固定していない
+  - `on_thread_start`・`load_state_dict`・`on_pause`・`on_resume` の前にも呼ぶこと
+  - `state_dict` と `_after_update` の前には呼ばないこと
+  - 失敗をその hook の名前で報告すること
+  - `_on_enter` → `_before_hook` の順
+- 根拠: skill testing-strategy（契約を公開の層で固定する。bindings の内部の hook は、既存の `TestFrameworkHooks` と同じく `_native.Runtime` で確かめる方針）。`_on_enter` には同種のテスト（`test_a_worker_enters_a_node_only_when_it_switches_to_it`、エラーの名前の 2 本）がある
+- 確信度: 高（テストが無いこと）。深刻度: 低
+
+## nit
+
+- N8. `_before_hook` は `Context.run` の外で呼ばれる。一方、`specs/native-core.md:67` は「hook はすべてノードごとの `contextvars.Context()` の中で `Context.run` で呼ぶ。`state_dict`（`_capture_state`）は文脈の外で呼ぶ」と書いている。specs/torch.md の「hook はすべてそのノードの `Context` の中で呼ぶ」と、`Node` の doc comment（`runtime.rs` の「each runs in the node's own `contextvars.Context` (but `_capture_state`)」）も同じ。例外として `_before_hook` を挙げるか、文脈の中で呼ぶかのどちらかに揃える。将来 contextvars に依る設定を `_before_hook` に足すと効かない、という注意にもなる。確信度: 高
+- N9. `_before_hook` が例外を投げると、`call_as` の `?` で抜けるので `on_exception` / `on_stop` の本体も呼ばれない。`specs/native-core.md:59` の「`on_exception` と `on_stop` は `enter` が失敗しても呼び、資源を解放させる」と同じ扱いにはなっていない。`torch.set_grad_enabled(False)` が失敗することはまず無いので、実害はほぼ無い。確信度: 高（振る舞い）／影響: ごく低
+- N10. 利用者向け docs の「before every hook of every node」（`docs/en/user-guide/torch.md:49`）と「どのノードでも hook の前に毎回」（`docs/ja/user-guide/torch.md:49`）は、`state_dict` を除くことを書いていない。docs の hook の一覧には `state_dict` も入っている（docstring と specs は「`state_dict` 以外」と書いている）。確信度: 中
+- N11. `docs/en/user-guide/torch.md` は CUDA の同期について「The worker waits meanwhile」と書き、`docs/ja/user-guide/torch.md` も「その間は…ワーカーが待つ」と書いている。しかし、状態を取得するときの同期は制御スレッド（終了後はホストのスレッド）で行うので、ワーカーが待つのは `on_update` の後と復元の後だけ。確信度: 中
+- N12. ja の文体: 前回 N6 で直した体言止めが、新しい段落で 2 か所に出ている。`docs/ja/user-guide/torch.md` の「デバイスとストリームを設定するのは、ワーカーが CUDA のノードに切り替わるとき。」と「mujou 自身が戻すのは、…CUDA の現在のデバイス・ストリームだけ。」で、どちらも本文の文。箇条書きの末尾の「…だけ（[ノードの中の PyTorch](torch.md)）」は短い項目なので構わない。確信度: 中
+- N13. `test_a_node_whose_setup_failed_cleans_up_as_itself` は、private の `_make_generator` を override し、`_generator` を直接 `None` にして失敗を起こしている。本来の失敗の経路（CUDA の設定）は GPU が無いと起こせず、公開の口からセットアップを失敗させる手段も無いので、やむを得ない。そう選んだ理由をテストのコメントに一言残すとよい。確信度: 中
+
+## 検証結果
+
+- just run: pass（cargo test・pytest 589 passed / 20 skipped・pyright 0 errors・mkdocs build --strict）
+- 作業ツリー: just run の後、`memory/agents/algorithm-reviewer/mn-python-nodes.md` に未コミットの追記がある。algorithm-reviewer が同時に書いた再監査で、just run の整形によるものではない
+- 成果物の汚染（`</content>` など）: なし
