@@ -152,9 +152,15 @@ impl<N: NodeHooks> Shared<N> {
                     c = self.run_work(i, Work::Update { now_ns, dt }, c);
                     continue;
                 }
-                if c.sched.timekeeper.is_none() {
-                    c = self.keep_time(target_ns, c);
-                    continue;
+                match c.sched.timekeeper {
+                    None => {
+                        c = self.keep_time(target_ns, c);
+                        continue;
+                    }
+                    // A worker put back an update due before the timekeeper's
+                    // target: let the timekeeper wait for this one instead.
+                    Some(waiting_ns) if target_ns < waiting_ns => self.interrupt_timekeeper(&c),
+                    Some(_) => {}
                 }
             }
             c = self
@@ -164,17 +170,22 @@ impl<N: NodeHooks> Shared<N> {
         }
     }
 
-    /// Re-evaluates every pool node after a change of the control state.
+    /// Re-evaluates every pool node after a change of the control state, and
+    /// wakes the timekeeper once if any of them needs it.
     pub(super) fn wake_pool(&self, c: &mut Control) {
+        let mut look = false;
         for i in 0..self.dedicated.len() {
-            self.wake_node(c, i);
+            look |= !self.dedicated[i] && self.schedule(i, c);
+        }
+        if look {
+            self.interrupt_timekeeper(c);
         }
     }
 
     /// Re-evaluates node `i` (if it is in the pool) after a change for it.
     pub(super) fn wake_node(&self, c: &mut Control, i: usize) {
-        if !self.dedicated[i] {
-            self.schedule(i, c);
+        if !self.dedicated[i] && self.schedule(i, c) {
+            self.interrupt_timekeeper(c);
         }
     }
 
@@ -224,13 +235,13 @@ impl<N: NodeHooks> Shared<N> {
     }
 
     /// Puts node `i` where it waits, unless a worker has it or will decide
-    /// when it takes it.
-    fn schedule(&self, i: usize, c: &mut Control) {
+    /// when it takes it. Returns whether the timekeeper must look again.
+    fn schedule(&self, i: usize, c: &mut Control) -> bool {
         if matches!(c.sched.tasks[i].at, At::Ready | At::Running) {
-            return;
+            return false;
         }
         let next = self.advance(i, c);
-        self.place(i, next, false, c);
+        self.place(i, next, false, c)
     }
 
     /// Takes node `i` out of the ready queue: the hook to run now, if any.
@@ -245,6 +256,7 @@ impl<N: NodeHooks> Shared<N> {
                 Some(work)
             }
             next => {
+                // This worker looks at the queues next.
                 self.place(i, next, false, c);
                 None
             }
@@ -253,7 +265,15 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Puts node `i` where `next` says: a hook goes to the back of the ready
     /// queue, or to its front if `first`.
-    fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) {
+    ///
+    /// Returns whether the timekeeper must look again: the node has a hook to
+    /// run (with every other worker busy, the timekeeper takes it) or an update
+    /// due before the timekeeper's target. A worker that puts a node back looks
+    /// at the queues itself right after, so it ignores this, and only the
+    /// control side wakes the timekeeper. Waking it wakes every waiter on the
+    /// timer (the other runs' timekeepers, dedicated threads, the host), so a
+    /// node of period 0 putting itself back after each update must not.
+    fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) -> bool {
         match next {
             Next::Hook(_) => {
                 c.sched.tasks[i].at = At::Ready;
@@ -263,26 +283,30 @@ impl<N: NodeHooks> Shared<N> {
                     c.sched.ready.push_back(i);
                 }
                 self.sched_changed.notify_one();
-                // With every other worker busy, the timekeeper takes it.
-                self.interrupt_timekeeper(c);
+                true
             }
             Next::Heap(target_ns) => {
                 let task = &mut c.sched.tasks[i];
                 if let At::Heap(_) = task.at {
                     // Already there: the target changes only after an update.
-                    return;
+                    return false;
                 }
                 task.generation += 1;
                 task.at = At::Heap(task.generation);
                 let entry = (target_ns, i, task.generation);
                 c.sched.heap.push(Reverse(entry));
                 match c.sched.timekeeper {
-                    None => self.sched_changed.notify_one(),
-                    Some(waiting_ns) if target_ns < waiting_ns => self.interrupt_timekeeper(c),
-                    Some(_) => {}
+                    None => {
+                        self.sched_changed.notify_one();
+                        false
+                    }
+                    Some(waiting_ns) => target_ns < waiting_ns,
                 }
             }
-            Next::Park => c.sched.tasks[i].at = At::Parked,
+            Next::Park => {
+                c.sched.tasks[i].at = At::Parked;
+                false
+            }
         }
     }
 
@@ -390,6 +414,7 @@ impl<N: NodeHooks> Shared<N> {
         let next = self.advance(i, &mut c);
         // A failed hook is followed by `exception` ahead of the nodes the
         // failure woke, as a dedicated thread calls it right after catching.
+        // This worker looks at the queues next.
         self.place(i, next, !ok, &mut c);
         c
     }
