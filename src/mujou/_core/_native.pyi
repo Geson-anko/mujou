@@ -412,8 +412,8 @@ class Runtime:
 
         `dedicated` tells which nodes run on a thread of their own; the others,
         all of them by default, share a pool of `workers` threads (>= 1), by
-        default as many as the available parallelism, never more than the nodes
-        in the pool.
+        default as many as the available parallelism (half of it, at least 1,
+        while the GIL is enabled), never more than the nodes in the pool.
 
         If the wait is interrupted (Ctrl-C), the start goes on in the
         background; `shutdown` stops it.

@@ -448,6 +448,23 @@ fn period_to_ns(seconds: f64) -> PyResult<u64> {
     Ok(seconds_to_ns(seconds).map_err(timer_error)?.max(1))
 }
 
+/// The number of workers when `start` is given none, if not the core's
+/// default (the available parallelism): half of it, at least 1, while the GIL
+/// is enabled. With the GIL, more workers than that only contend for it: in the
+/// benchmark (`benchmarks/mn_scheduler.py`, 14 cores), torch nodes updated
+/// about twice as fast on 7 or 8 workers as on 14.
+fn default_workers(py: Python<'_>) -> PyResult<Option<NonZeroUsize>> {
+    let gil = py
+        .import(intern!(py, "sys"))?
+        .call_method0(intern!(py, "_is_gil_enabled"))?
+        .extract::<bool>()?;
+    if !gil {
+        return Ok(None);
+    }
+    let cores = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    Ok(NonZeroUsize::new((cores / 2).max(1)))
+}
+
 /// Runs nodes on a pool of worker threads, or each dedicated node on a thread
 /// of its own, under one control thread.
 #[pyclass(frozen, module = "mujou._core._native")]
@@ -521,8 +538,8 @@ impl Runtime {
     ///
     /// `dedicated` tells which nodes run on a thread of their own; the others,
     /// all of them by default, share a pool of `workers` threads (>= 1), by
-    /// default as many as the available parallelism, never more than the nodes
-    /// in the pool.
+    /// default as many as the available parallelism (half of it, at least 1,
+    /// while the GIL is enabled), never more than the nodes in the pool.
     ///
     /// If the wait is interrupted (Ctrl-C), the start goes on in the
     /// background; `shutdown` stops it.
@@ -552,12 +569,13 @@ impl Runtime {
         dedicated: Option<Vec<bool>>,
     ) -> PyResult<()> {
         let n = self.names.len();
-        let workers = workers
-            .map(|w| {
+        let workers = match workers {
+            Some(w) => Some(
                 NonZeroUsize::new(w)
-                    .ok_or_else(|| PyValueError::new_err("workers must be at least 1, got 0"))
-            })
-            .transpose()?;
+                    .ok_or_else(|| PyValueError::new_err("workers must be at least 1, got 0"))?,
+            ),
+            None => default_workers(py)?,
+        };
         if let Some(states) = &states {
             if states.len() != n {
                 return Err(PyValueError::new_err(format!(

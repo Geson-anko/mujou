@@ -530,6 +530,28 @@ def more_nodes_than_cpus() -> int:
     return (os.cpu_count() or 1) + 2
 
 
+def default_workers() -> int:
+    """The default number of workers for more nodes than CPUs: the logical CPUs,
+    or half of them (at least 1) with the GIL. The CPUs this process may use
+    stand for the core's available parallelism (which also counts a quota)."""
+    cpus = os.process_cpu_count() or 1
+    return max(1, cpus // 2) if sys._is_gil_enabled() else cpus
+
+
+class Holding(Node):
+    """Holds its worker in each update (``time.sleep`` lets the GIL go) and
+    records the OS thread."""
+
+    def __init__(self) -> None:
+        super().__init__(period=0.0)
+        self.idents: set[int] = set()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.idents.add(threading.get_ident())
+        time.sleep(0.005)
+
+
 class TestWorkers:
     @pytest.mark.parametrize(
         ("workers", "error"),
@@ -592,8 +614,18 @@ class TestWorkers:
         for _ in range(2):
             step(run, *nodes)
         idents = {i for node in nodes for i in node.idents}
-        assert len(idents) <= (os.cpu_count() or 1) < n
+        assert len(idents) <= default_workers() < n
         assert threading.get_ident() not in idents
+
+    def test_the_default_number_of_workers_all_take_updates(self, start: Start):
+        # Every update holds its worker and some node is always due, so each
+        # worker takes updates: one thread per worker, as many as the default.
+        nodes = [Holding() for _ in range(more_nodes_than_cpus())]
+        run = start(Group(*nodes), timer=Timer())
+        time.sleep(0.5)
+        run.shutdown()
+        idents = set[int]().union(*(node.idents for node in nodes))
+        assert len(idents) == default_workers()
 
 
 class TestWith:

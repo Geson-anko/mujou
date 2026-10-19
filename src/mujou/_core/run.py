@@ -441,7 +441,8 @@ def run[P: Port[Any, Any, Any]](
             came from: the same node paths and slots.
         workers: The number of worker threads of the run (>= 1). ``None`` is
             as many as the CPUs the process may use (the logical cores, or
-            fewer when the CPU affinity or a quota limits them), never more
+            fewer when the CPU affinity or a quota limits them), or half of
+            them (at least 1) on a build of Python with the GIL, never more
             than the nodes on the workers. With no such node, the run has no
             worker.
 

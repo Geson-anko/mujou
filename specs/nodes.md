@@ -43,7 +43,7 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 
 複数のノードを 1 本のワーカーで決まった順に、同じ $\Delta t$ で回せば、まとめて 1 つのノードのように動く。どのノードも状態とライフサイクル hook からなるので、フレームワークはノードの内側を知らなくてもこれができる。テストで全ノードを固定の $\Delta t$ で同期的に回すのも、この配置の一例である（[実行モデル](execution-model.md#テスト)）。
 
-利用者が選べる配置は 2 つある。実行ごとのワーカー数は `mujou.run(..., workers=None)` で選び、既定は `min(ワーカーに載るノード数, 論理 CPU 数)`。ノードは `Node(dedicated_thread=False)` が既定でワーカーに載り、`dedicated_thread=True` のノードだけが自分の OS スレッドで動く。どのワーカーがどのノードを回すかは期限の順に決まり、ノードはワーカーの間を移る。hook がブロッキングするノードはその間ワーカーを占有してほかのノードの $\Delta t$ を伸ばすので、`dedicated_thread=True` にする。`dedicated_thread` は `period` と同じ予約名で、読み取り専用の property `Node.dedicated_thread`（`bool`）で読む。複数のノードを決まった順に同じワーカーで回す指定は未決定（[未決定事項](open-decisions.md#実行の配置)）。
+利用者が選べる配置は 2 つある。実行ごとのワーカー数は `mujou.run(..., workers=None)` で選び、既定は `min(ワーカーに載るノード数, 論理 CPU 数)`、GIL ありのビルドでは `min(ワーカーに載るノード数, max(1, 論理 CPU 数 // 2))`（2026-10-19、[ベンチマーク](native-core.md#ベンチマーク)）。ノードは `Node(dedicated_thread=False)` が既定でワーカーに載り、`dedicated_thread=True` のノードだけが自分の OS スレッドで動く。どのワーカーがどのノードを回すかは期限の順に決まり、ノードはワーカーの間を移る。hook がブロッキングするノードはその間ワーカーを占有してほかのノードの $\Delta t$ を伸ばすので、`dedicated_thread=True` にする。`dedicated_thread` は `period` と同じ予約名で、読み取り専用の property `Node.dedicated_thread`（`bool`）で読む。複数のノードを決まった順に同じワーカーで回す指定は未決定（[未決定事項](open-decisions.md#実行の配置)）。
 
 ### 粒度を選べるようにする理由
 
