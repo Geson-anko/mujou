@@ -957,6 +957,35 @@ mod period {
         });
     }
 
+    /// A worker that puts a node back with a target earlier than the one the
+    /// timekeeper waits for must hand that target to it: no one else wakes the
+    /// timekeeper for it.
+    #[test]
+    fn a_target_a_worker_puts_back_before_the_timekeepers_is_kept() {
+        // Needs a second worker to keep the time while the first one updates.
+        in_modes(&[Mode::Pool], |mode| {
+            let timer = virtual_timer();
+            let (release, hold) = mpsc::channel();
+            let config = RuntimeConfig {
+                period_ns: Some(vec![Some(P_NS), Some(1_000 * P_NS)]),
+                ..RuntimeConfig::default()
+            };
+            let (rt, dts) = start_tickers(mode, &timer, config, Some(hold));
+            timer.advance_ns(P_NS).unwrap();
+            assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
+            // Meanwhile the other worker waits for the far target of node 1.
+            thread::sleep(QUIET);
+            release.send(()).unwrap();
+            // Node 0 is back, with its target at 2 P, before the time gets there.
+            thread::sleep(QUIET);
+            timer.advance_ns(P_NS).unwrap();
+            assert_eq!(dts[0].recv_timeout(LONG), Ok(P_NS));
+            release.send(()).unwrap();
+            assert_quiet(&dts[1]);
+            rt.shutdown().wait().unwrap();
+        });
+    }
+
     #[test]
     fn without_a_period_any_time_passing_is_enough() {
         each_mode(|mode| {
