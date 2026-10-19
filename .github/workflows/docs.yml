@@ -15,7 +15,7 @@ on:
     branches: [main]
     # Path filters do not apply to tag pushes.
     tags: ["v*"]
-    paths:
+    paths: &paths
       - "docs/**"
       - "examples/**"
       - "src/**/*.py"
@@ -30,19 +30,7 @@ on:
       - ".github/workflows/docs.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "docs/**"
-      - "examples/**"
-      - "src/**/*.py"
-      - "src/**/*.pyi"
-      - "mkdocs.yml"
-      - "hooks/**"
-      - "overrides/**"
-      - ".github/docs/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "justfile"
-      - ".github/workflows/docs.yml"
+    paths: *paths
   # Deploys by hand: on main for "dev", on a tag for that version.
   workflow_dispatch:
 
