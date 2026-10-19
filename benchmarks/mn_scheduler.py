@@ -21,8 +21,8 @@ Scenarios (each run of a configuration warms up, then measures a window):
   hundreds of µs each, with one intra-op thread). Threads of the process,
   voluntary and involuntary context switches per second (``getrusage``; macOS
   counts every switch as involuntary), updates per
-  second (total, and the median and minimum per node), and for the period 0.01 s
-  the rate achieved against 100 Hz and the percentiles of Δt.
+  second (total, and the median and minimum per node), and for a period above 0
+  the rate achieved against one update per period and the percentiles of Δt.
 - ``workers``: the same measures for M nodes over a range of worker counts, to
   judge the default number of workers.
 - ``switch``: the cost of switching a worker between nodes, with one worker:
@@ -207,13 +207,13 @@ def make(
 
 HEADER = (
     "| load | period | M | mode | threads | vcsw/s | ivcsw/s | updates/s | "
-    "median/node | min/node | 100 Hz (median, min) | Δt p50 ms | Δt p99 ms | Δt max ms |\n"
+    "median/node | min/node | of 1/period (median, min) | Δt p50 ms | Δt p99 ms | Δt max ms |\n"
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 )
 
 
 def row(load: str, period: float, m: int, mode: str, r: Result) -> str:
-    hz = f"{r.median / 100:.0%}, {r.minimum / 100:.0%}" if period > 0 else "-"
+    hz = f"{r.median * period:.0%}, {r.minimum * period:.0%}" if period > 0 else "-"
     # macOS counts every switch as involuntary (ru_nvcsw stays 0).
     voluntary = "-" if sys.platform == "darwin" else f"{r.voluntary:,.0f}"
     return (
