@@ -142,42 +142,19 @@ def assert_ended_by_exception(log: Log, name: str) -> None:
 
 
 class TestStart:
-    def test_hooks_run_in_order_on_a_dedicated_thread(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
+    @pytest.mark.parametrize("dedicated", [False, True])
+    def test_hooks_run_in_order(
+        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime, dedicated: bool
     ):
         log = Log()
         nodes = recorders(log, "a", "b")
         runtime = make_runtime(nodes)
-        runtime.start(manual=True, states=[{"s": 0}, {"s": 1}], dedicated=[True, True])
-        virtual_timer.advance(H)
-        runtime.step()
-        runtime.capture(lambda states: None, WAIT)
-        runtime.shutdown()
-
-        for i, node in enumerate(nodes):
-            events = log.of(node.name)
-            assert events == [
-                "on_start",
-                "load_state_dict",
-                "on_update",
-                "on_pause",
-                "state_dict",
-                "on_resume",
-                "on_stop",
-            ]
-            assert node.loaded == {"s": i}
-            node_thread = {t for e, t in node.threads.items() if e != "state_dict"}
-            assert len(node_thread) == 1
-            assert node.threads["state_dict"] not in node_thread
-
-    def test_hooks_on_the_workers_run_in_order(
-        self, virtual_timer: GlobalTimer, make_runtime: MakeRuntime
-    ):
-        # The nodes go on the workers by default.
-        log = Log()
-        nodes = recorders(log, "a", "b")
-        runtime = make_runtime(nodes)
-        runtime.start(manual=True, states=[{"s": 0}, {"s": 1}])
+        # Without `dedicated`, the nodes go on the workers.
+        runtime.start(
+            manual=True,
+            states=[{"s": 0}, {"s": 1}],
+            dedicated=[True, True] if dedicated else None,
+        )
         virtual_timer.advance(H)
         runtime.step()
         runtime.capture(lambda states: None, WAIT)
@@ -194,6 +171,10 @@ class TestStart:
                 "on_stop",
             ]
             assert node.loaded == {"s": i}
+            if dedicated:
+                node_thread = {t for e, t in node.threads.items() if e != "state_dict"}
+                assert len(node_thread) == 1
+                assert node.threads["state_dict"] not in node_thread
 
     @pytest.mark.parametrize(
         ("hook", "dedicated"),
