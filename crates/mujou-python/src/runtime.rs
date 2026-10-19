@@ -178,50 +178,18 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
 }
 
 /// The hooks called more than once, looked up once at the end of `start`
-/// instead of by name at every call.
-struct Methods {
-    on_enter: Py<PyAny>,
-    before_hook: Py<PyAny>,
-    on_update: Py<PyAny>,
-    after_update: Py<PyAny>,
-    on_pause: Py<PyAny>,
-    on_resume: Py<PyAny>,
-    on_exception: Py<PyAny>,
-    on_stop: Py<PyAny>,
-    capture_state: Py<PyAny>,
-}
-
-impl Methods {
-    fn of(node: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let get = |hook: &str| node.getattr(attribute(hook)).map(Bound::unbind);
-        Ok(Self {
-            on_enter: get("_on_enter")?,
-            before_hook: get("_before_hook")?,
-            on_update: get("on_update")?,
-            after_update: get("_after_update")?,
-            on_pause: get("on_pause")?,
-            on_resume: get("on_resume")?,
-            on_exception: get("on_exception")?,
-            on_stop: get("on_stop")?,
-            capture_state: get("state_dict")?,
-        })
-    }
-
-    fn get(&self, hook: &str) -> Option<&Py<PyAny>> {
-        match hook {
-            "_on_enter" => Some(&self.on_enter),
-            "_before_hook" => Some(&self.before_hook),
-            "on_update" => Some(&self.on_update),
-            "_after_update" => Some(&self.after_update),
-            "on_pause" => Some(&self.on_pause),
-            "on_resume" => Some(&self.on_resume),
-            "on_exception" => Some(&self.on_exception),
-            "on_stop" => Some(&self.on_stop),
-            "state_dict" => Some(&self.capture_state),
-            _ => None,
-        }
-    }
-}
+/// instead of by name at every call. `PyNode::methods` holds them in this order.
+const CACHED_HOOKS: [&str; 9] = [
+    "_on_enter",
+    "_before_hook",
+    "on_update",
+    "_after_update",
+    "on_pause",
+    "on_resume",
+    "on_exception",
+    "on_stop",
+    "state_dict",
+];
 
 /// The attribute the runtime calls for `hook`. Taking the state goes through
 /// `_capture_state`, which calls `state_dict`, and restoring it through
@@ -235,17 +203,6 @@ fn attribute(hook: &str) -> &str {
     }
 }
 
-/// The public hook that `hook` belongs to, as errors name it: the framework's
-/// `_after_update` runs right after `on_update`, and an error there is reported
-/// as that hook's. (`_on_enter` is reported under the hook that was to follow
-/// it, see `PyNode::enter`.)
-fn public(hook: &'static str) -> &'static str {
-    match hook {
-        "_after_update" => "on_update",
-        _ => hook,
-    }
-}
-
 /// A Python node seen by the runtime.
 struct PyNode {
     node: Py<PyAny>,
@@ -255,7 +212,8 @@ struct PyNode {
     context: Py<PyAny>,
     /// The state to restore in `start`.
     state: Option<Py<PyAny>>,
-    methods: Option<Methods>,
+    /// The methods of `CACHED_HOOKS`, once `start` has looked them up.
+    methods: Option<Vec<Py<PyAny>>>,
 }
 
 impl PyNode {
@@ -272,20 +230,23 @@ impl PyNode {
 
     /// The method the runtime calls for `hook`.
     fn method<'py>(&self, py: Python<'py>, hook: &str) -> PyResult<Bound<'py, PyAny>> {
-        match self.methods.as_ref().and_then(|m| m.get(hook)) {
+        let cached = (self.methods.as_ref())
+            .zip(CACHED_HOOKS.iter().position(|&h| h == hook))
+            .map(|(methods, i)| &methods[i]);
+        match cached {
             Some(method) => Ok(method.bind(py).clone()),
             // Before the lookup, or if it failed: by name.
             None => self.node.bind(py).getattr(attribute(hook)),
         }
     }
 
-    /// Calls `hook` in the node's context, reporting an error as `public(hook)`.
+    /// Calls `hook` in the node's context.
     fn call(
         &self,
         hook: &'static str,
         args: impl for<'py> FnOnce(Python<'py>) -> Vec<Bound<'py, PyAny>>,
     ) -> Result<Py<PyAny>, HookError> {
-        self.call_as(hook, public(hook), args)
+        self.call_as(hook, hook, args)
     }
 
     /// Calls `hook` in the node's context, reporting an error as `reported`.
@@ -368,14 +329,23 @@ impl NodeHooks for PyNode {
         }
         // Look the hooks up last, so that the hooks above may still replace them
         // (by instance attributes).
-        let methods = Python::attach(|py| Methods::of(self.node.bind(py)));
-        self.methods =
-            Some(methods.map_err(|e| Python::attach(|py| self.error(py, "on_start", e)))?);
+        let methods = Python::attach(|py| {
+            let node = self.node.bind(py);
+            CACHED_HOOKS
+                .iter()
+                .map(|hook| node.getattr(attribute(hook)).map(Bound::unbind))
+                .collect::<PyResult<_>>()
+                .map_err(|e| self.error(py, "on_start", e))
+        })?;
+        self.methods = Some(methods);
         Ok(())
     }
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
         self.call("on_update", |py| vec![PyFloat::new(py, dt).into_any()])?;
-        self.call0("_after_update")
+        // The framework's per-step work: an error there is reported as
+        // `on_update`'s.
+        self.call_as("_after_update", "on_update", |_| Vec::new())
+            .map(drop)
     }
 
     fn pause(&mut self) -> Result<(), HookError> {
@@ -619,14 +589,14 @@ impl Runtime {
             .ok_or_else(|| PyRuntimeError::new_err("the runtime has already started"))?;
         // Kept to undo the take if the core rejects the arguments.
         let kept = nodes.iter().map(|n| n.clone_ref(py)).collect();
-        let mut states = states.map(Vec::into_iter);
+        let mut states = states.into_iter().flatten();
         let hooks = (nodes.into_iter().zip(self.names.iter().cloned()))
             .zip(contexts)
             .map(|((node, name), context)| PyNode {
                 node,
                 name,
                 context,
-                state: states.as_mut().and_then(Iterator::next),
+                state: states.next(),
                 methods: None,
             })
             .collect();
