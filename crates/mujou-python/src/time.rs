@@ -2,8 +2,7 @@
 
 use std::sync::Arc;
 
-use mujou_core::time::TimerError;
-use mujou_core::time::{self as core, Timer, TimerState, Timestamp, seconds_to_ns};
+use mujou_core::time::{self as core, Timer, TimerError, TimerState, Timestamp, seconds_to_ns};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::inspect::PyStaticExpr;
 use pyo3::prelude::*;
@@ -20,13 +19,7 @@ use crate::wait_interruptibly;
 ///
 /// The time is held in nanoseconds and saturates at about 584 years.
 #[pyclass(subclass, frozen, module = "mujou._core._native", name = "Timer")]
-pub struct PyTimer(Arc<Timer>);
-
-impl PyTimer {
-    pub fn timer(&self) -> &Arc<Timer> {
-        &self.0
-    }
-}
+pub struct PyTimer(pub(crate) Arc<Timer>);
 
 #[pymethods]
 impl PyTimer {
@@ -57,7 +50,7 @@ impl PyTimer {
     /// Raises:
     ///     ValueError: `seconds` is negative or not finite.
     fn sleep(&self, py: Python<'_>, seconds: f64) -> PyResult<()> {
-        let dt_ns = seconds_to_ns(seconds).map_err(timer_error)?;
+        let dt_ns = to_ns(seconds)?;
         let target_ns = self.0.time_ns().saturating_add(dt_ns);
         wait_interruptibly(py, None, |step| {
             self.0.wait_until_ns(target_ns, step).then_some(())
@@ -138,12 +131,18 @@ impl PyTimer {
     ///     ValueError: `seconds` is negative or not finite.
     ///     RuntimeError: The real clock is in use, or the time is paused.
     fn advance(&self, seconds: f64) -> PyResult<()> {
-        let dt_ns = seconds_to_ns(seconds).map_err(timer_error)?;
+        let dt_ns = to_ns(seconds)?;
         self.0.advance_ns(dt_ns).map_err(timer_error)
     }
 }
 
-pub(crate) fn timer_error(err: TimerError) -> PyErr {
+/// `seconds` in nanoseconds, rounded as `mujou_core::time::seconds_to_ns` rounds.
+/// Raises `ValueError` if `seconds` is negative or not finite.
+pub(crate) fn to_ns(seconds: f64) -> PyResult<u64> {
+    seconds_to_ns(seconds).map_err(timer_error)
+}
+
+fn timer_error(err: TimerError) -> PyErr {
     match err {
         TimerError::InvalidScale(_) | TimerError::InvalidDuration(_) => {
             PyValueError::new_err(err.to_string())

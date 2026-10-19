@@ -340,7 +340,7 @@ impl PyOutlet {
             Arc::clone(&schema.0),
             channels,
             name,
-            Arc::clone(timer.timer()),
+            Arc::clone(&timer.0),
         ))
     }
 
@@ -382,7 +382,7 @@ impl PyInputGroup {
     #[new]
     #[pyo3(signature = (*, timer))]
     fn new(timer: PyRef<'_, PyTimer>) -> Self {
-        Self(core::InputGroup::new(Arc::clone(timer.timer())))
+        Self(core::InputGroup::new(Arc::clone(&timer.0)))
     }
 
     /// Creates the slot `"{name}/in"` holding zeros.
