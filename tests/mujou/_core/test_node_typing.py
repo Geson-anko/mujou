@@ -96,7 +96,7 @@ class TestStrictTyping:
         b.out.connect(fan.prev)
         with mujou.testing.run(a, b, fan) as run:
             run.step()
-            value, _ = run.read(fan.next)
+            value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)
 
     def test_a_run_takes_at_least_one_component(self) -> None:
