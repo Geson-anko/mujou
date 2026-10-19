@@ -481,6 +481,8 @@ mod timestamp {
     #[test]
     fn now_is_the_time_of_the_timer() {
         let timer = virtual_timer();
+        // Away from 0, so that a `now` stuck at 0 would fail.
+        timer.advance_ns(SECOND / 3).unwrap();
         let ns = timer.time_ns();
         assert_eq!(timer.now(), Timestamp::from_ns(ns));
     }

@@ -11,6 +11,7 @@ use mujou_core::time::Timer;
 const H_NS: u64 = 1_000_000;
 /// How long a capture waits for the nodes to pause.
 const PAUSE: Duration = Duration::from_secs(30);
+/// How long to wait for something that must come.
 const LONG: Duration = Duration::from_secs(5);
 /// How long to watch for an update that must not come.
 const QUIET: Duration = Duration::from_millis(50);

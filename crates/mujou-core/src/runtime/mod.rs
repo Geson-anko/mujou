@@ -182,6 +182,9 @@ struct Shared<N: NodeHooks> {
     /// interrupt condition under the timer's lock, and the control lock is taken
     /// before the timer's elsewhere).
     word: AtomicU64,
+    /// Each node's start of its next Δt. A pool node's entry is written only
+    /// under the control lock; a dedicated thread writes only its own entry,
+    /// without the lock.
     last_update_ns: Vec<AtomicU64>,
     /// Each node's period in ns when running freely (1 by default: the next
     /// update as soon as Δt > 0).
