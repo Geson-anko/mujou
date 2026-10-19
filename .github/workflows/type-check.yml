@@ -3,7 +3,7 @@ name: Type Check
 on:
   push:
     branches: [main]
-    paths:
+    paths: &paths
       - "src/**/*.py"
       - "src/**/*.pyi"
       - "tests/**/*.py"
@@ -18,19 +18,7 @@ on:
       - ".github/workflows/type-check.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "src/**/*.py"
-      - "src/**/*.pyi"
-      - "tests/**/*.py"
-      - "examples/**/*.py"
-      - "hooks/**"
-      - "**/*.rs"
-      - "**/Cargo.toml"
-      - "Cargo.lock"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "justfile"
-      - ".github/workflows/type-check.yml"
+    paths: *paths
 
 jobs:
   run_type-check:

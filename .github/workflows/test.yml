@@ -3,7 +3,7 @@ name: Test
 on:
   push:
     branches: [main]
-    paths:
+    paths: &paths
       - "**/*.py"
       - "**/*.pyi"
       - ".claude/hooks/**"
@@ -18,19 +18,7 @@ on:
       - ".github/workflows/test.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "**/*.py"
-      - "**/*.pyi"
-      - ".claude/hooks/**"
-      - ".claude/scripts/**"
-      - "**/*.rs"
-      - "**/Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "justfile"
-      - ".github/workflows/test.yml"
+    paths: *paths
 
 jobs:
   rust:
