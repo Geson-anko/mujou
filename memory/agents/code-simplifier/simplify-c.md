@@ -24,7 +24,7 @@
 ## tests の簡素化
 
 - `test_run.py`: 2 つのスレッドから同時に run を始める 2 つのテスト（`test_runs_once_under_concurrent_calls`、`test_runs_once_when_trees_sharing_a_part_run_together`）が、barrier・スレッド・結果の集計を同じ形で 2 回書いていたので、`run_together(started, *given)` にまとめた。確かめる性質（「ちょうど 1 つの run だけが始まり、もう一方は RuntimeError」）は同じ。ほかに、`TestHostMethodsFromANode.test_raise` の `net = chain` の別名と、`TestState.test_the_nodes_get_copies` の常に真の `assert restored is not None` を消した
-- `test_native_runtime.py`: `test_hooks_run_in_order_on_a_dedicated_thread` と `test_hooks_on_the_workers_run_in_order` は配置とスレッドの確認以外が同じだったので、`dedicated` で parametrize した 1 つにした。workers 側は以前と同じく `dedicated` を渡さない（既定の配置を確かめる）。スレッドの確認は dedicated のときだけ行う
+- `test_native_runtime.py`: `test_hooks_run_in_order_on_a_dedicated_thread` と `test_hooks_on_the_workers_run_in_order` は配置とスレッドの確認以外が同じだったので、`dedicated` で parametrize した 1 つにした。workers 側は `dedicated=None` を渡す（stub の既定値と同じで、既定の配置を確かめる）。スレッドの確認は dedicated のときだけ行う
 - `test_port.py`: 使っていない `virtual` fixture の引数と、1 回しか使わない `timer` 変数を消した
 - `test_node_typing.py`（fix）: `value, _ = run.read(fan.next)` は shape (2,) のテンソルを 2 要素に分解していた。意図どおり `read_with_time` にした
 
