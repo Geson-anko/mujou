@@ -288,16 +288,15 @@ def mixed(args: argparse.Namespace) -> None:
     print("A dedicated node at period 1 s and the host sleep on the same timer.")
     print("The measures are of the nodes at 0.01 s.\n")
     print(HEADER)
-
-    def host_sleeps(seconds: float) -> None:
-        mujou.time.sleep(seconds)  # one more waiter on the global timer
-
     for w in args.mixed_workers:
         for zero in (0, z):
             nodes = [Light(period=0.01, dedicated=False) for _ in range(m)]
             nodes += [Light(period=0.0, dedicated=False) for _ in range(zero)]
             nodes.append(Light(period=1.0, dedicated=True))
-            r = measure(nodes, w, args.warmup, args.seconds, host_sleeps, observed=m)
+            # The host sleeping is one more waiter on the global timer.
+            r = measure(
+                nodes, w, args.warmup, args.seconds, mujou.time.sleep, observed=m
+            )
             mode = f"w={w}, {zero} at 0 ({r.others:,.0f}/s with the 1 s node)"
             print(row("light", 0.01, m, mode, r), flush=True)
 
@@ -314,7 +313,6 @@ def describe() -> None:
         for key in keys:
             out = subprocess.run(["sysctl", "-n", key], capture_output=True, text=True)
             print(f"- {key}: {out.stdout.strip()}")
-    if sys.platform == "darwin":
         print("- macOS: getrusage counts every context switch in ru_nivcsw (ivcsw/s)")
     print(f"- Py_GIL_DISABLED={sysconfig.get_config_var('Py_GIL_DISABLED')}")
 
