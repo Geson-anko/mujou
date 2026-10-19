@@ -97,12 +97,12 @@ print("output port:", graph.port_path(net.next))
 # --8<-- [end:build]
 
 x = torch.tensor([1.0, 3.0])
+want = 2 * x + (-x) ** 2
 with mujou.run(net, inputs={net.prev: x}) as run:
     # x takes a few updates to pass through the nodes, and how many fit in a given
     # time depends on how the threads get scheduled: follow the output until y
     # arrives (TimeoutError after 5 s).
-    want = 2 * x + (-x) ** 2
     y, _ = run.wait_for(net.next, lambda y: torch.equal(y, want), timeout=5.0)
 
 print(f"x = {x}, y = {y}")
-assert torch.equal(y, 2 * x + (-x) ** 2)
+assert torch.equal(y, want)

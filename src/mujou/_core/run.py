@@ -1,6 +1,7 @@
 """Running networks: ``mujou.run`` and the ``Run`` it returns (``specs/network.md``)."""
 
 import math
+import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Never, Self, cast, override
@@ -23,8 +24,8 @@ class Run:
     """A run of networks, as ``mujou.run`` returns it: what the host uses to talk
     to the running nodes.
 
-    The nodes run in the background, each on its own thread; the host's thread
-    only writes inputs, reads outputs and takes the state:
+    The nodes run in the background, on the run's worker threads (or threads of
+    their own); the host's thread only writes inputs, reads outputs and takes the state:
 
     - ``write`` inputs, ``read`` / ``read_with_time`` / ``subscribe`` outputs,
       take a ``state_dict``.
@@ -37,8 +38,9 @@ class Run:
     If a node raises, the whole run stops. If that happens while ``mujou.run``
     starts the nodes, ``mujou.run`` raises ``NetworkError``; otherwise every later
     call of ``write``, ``read``, ``read_with_time``, ``subscribe`` (and its
-    iterator), ``state_dict``, ``shutdown`` and ``join`` raises it. Its ``__cause__`` is the node's
-    exception. The state at the exception is not kept.
+    iterator), ``state_dict``, ``shutdown`` and ``join`` raises it. Its
+    ``__cause__`` is the node's exception. The state at the exception is not
+    kept.
 
     A run keeps running when the host drops it, until ``shutdown`` or, at the
     latest, the interpreter's exit (which waits for ``on_stop``). At the exit,
@@ -111,8 +113,8 @@ class Run:
 
         The time is the run's timer at the write, as a node's ``recv_with_time``
         and the ``/in`` slots of ``state_dict`` show it; ``read_with_time`` shows
-        the times of sends, not of writes. An empty ``values`` changes nothing and returns
-        the time all the same.
+        the times of sends, not of writes. An empty ``values`` changes nothing
+        and returns the time all the same.
 
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
@@ -349,13 +351,11 @@ class Run:
         """Shut the run down. When the body raised, its exception goes on and a
         ``NetworkError`` of the shutdown is dropped (the node's exception is in
         the log)."""
-        if exc is None:
-            self.shutdown()
-            return
         try:
             self.shutdown()
         except _native.NetworkError:
-            pass
+            if exc is None:
+                raise
 
 
 class ManualRun[T: Timer = VirtualTimer](Run):
@@ -372,7 +372,7 @@ class ManualRun[T: Timer = VirtualTimer](Run):
     def timer(self) -> T:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
         or the timer given to it."""
-        # The T that start_manual gave start_run.
+        # The T that mujou.testing.run gave start_run.
         return cast(T, self._timer)
 
     def step(self, *nodes: Node) -> None:
@@ -399,6 +399,7 @@ def run[P: Port[Any, Any, Any]](
     timer: Timer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
+    workers: int | None = None,
 ) -> Run:
     """Build the given nodes and networks and run them in the background; return
     once every node has started.
@@ -411,9 +412,15 @@ def run[P: Port[Any, Any, Any]](
     nodes of a network given second. Either way the host writes and reads the
     ports themselves (``run.write({node.prev: x})``).
 
-    Every node's thread is set up, ``on_start`` (and, with ``state``, the node's
+    Every node's ``on_start`` (and, with ``state``, the node's
     ``load_state_dict``) has returned, and the run's timer runs when this
     returns. A network or node runs once.
+
+    The run's nodes share a pool of ``workers`` threads, which it creates for
+    itself; a node with ``dedicated_thread=True`` runs on a thread of its own
+    instead. A worker runs one hook of one node at a time, the updates that are
+    due earliest first. A hook that blocks holds its worker, so the other
+    nodes' ``dt`` grows meanwhile.
 
     Args:
         component: The node or network to run.
@@ -426,11 +433,18 @@ def run[P: Port[Any, Any, Any]](
             receive, as ``Run.write`` takes them. Written after ``state``, they
             replace its values and carry its time.
         state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
-            or any mapping of the same items (such as a plain ``dict``). The slots, the nodes'
-            states (through each node's ``load_state_dict``, after its
-            ``on_start``), their last update times and the timer continue from
-            the time the tree was taken. Build the networks as the ones the tree
-            came from: the same node paths and slots.
+            or any mapping of the same items (such as a plain ``dict``). The
+            slots, the nodes' states (through each node's ``load_state_dict``,
+            after its ``on_start``), their last update times and the timer
+            continue from the time the tree was taken. Build the networks as the
+            ones the tree came from: the same node paths and slots.
+        workers: The number of worker threads of the run (>= 1). ``None`` is
+            as many as the CPUs the process may use (the logical cores, or
+            fewer when the CPU affinity or a quota limits them), or half of
+            them (at least 1) while the GIL is enabled at run time
+            (``sys._is_gil_enabled()``), never more than the nodes on the
+            workers. With no such node, the run has no
+            worker.
 
     Example, with the node ``Error`` of the example of ``Run``::
 
@@ -444,7 +458,9 @@ def run[P: Port[Any, Any, Any]](
             run; create a new instance to run again"``), or part of one belongs
             to another network that was built but has not run; or this is called
             from a node's hook.
-        TypeError: A value is neither a ``Node`` nor a ``Network``.
+        TypeError: A value is neither a ``Node`` nor a ``Network``, or
+            ``workers`` is not an ``int`` (a ``bool`` included).
+        ValueError: ``workers`` is less than 1 (or more than ``sys.maxsize``).
         ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
             networks, or the timer it would set back has another run on it.
@@ -459,6 +475,7 @@ def run[P: Port[Any, Any, Any]](
         inputs=inputs,
         state=state,
         manual=False,
+        workers=workers,
     )
 
 
@@ -470,10 +487,22 @@ def start_run[R: Run](
     inputs: Mapping[Any, object] | None,
     state: Mapping[str, Any] | None,
     manual: bool,
+    workers: int | None,
 ) -> R:
     """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
     if in_hook():
         raise _from_hook()
+    if workers is not None:
+        # The annotation is not checked at runtime.
+        if isinstance(workers, bool) or not isinstance(workers, int):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"workers must be an int or None, got {type(workers).__name__}"
+            )
+        # The upper bound: the core counts the workers in a pointer-sized int.
+        if not 1 <= workers <= sys.maxsize:
+            raise ValueError(
+                f"workers must be at least 1 and at most {sys.maxsize}, got {workers}"
+            )
     for given in components:
         # The annotation is not checked at runtime.
         if not isinstance(given, Node | Network):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -493,7 +522,7 @@ def start_run[R: Run](
     def go() -> Session:
         # Made only once the graph may run: it binds the ports to its slots.
         session = Session(graph, run_timer)
-        session.start(manual=manual, state=state, inputs=inputs)
+        session.start(manual=manual, state=state, inputs=inputs, workers=workers)
         return session
 
     try:
@@ -508,25 +537,6 @@ def start_run[R: Run](
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
     handle._timer = run_timer  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle
-
-
-def start_manual[T: Timer](
-    components: Sequence[Node | Network],
-    *,
-    timer: T,
-    inputs: Mapping[Any, object] | None,
-    state: Mapping[str, Any] | None,
-) -> ManualRun[T]:
-    """Run ``components`` as ``mujou.testing.run`` does, on ``timer``."""
-    # The class itself: a subscripted generic is not a class to instantiate.
-    return start_run(
-        cast(type[ManualRun[T]], ManualRun),
-        components,
-        timer=timer,
-        inputs=inputs,
-        state=state,
-        manual=True,
-    )
 
 
 def _host(run: Run) -> Session:

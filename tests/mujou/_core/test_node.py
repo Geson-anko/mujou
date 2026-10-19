@@ -5,16 +5,14 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
 from torch import nn
 
-import mujou
 from mujou import Group, NetworkError, Node, Port, TensorSpec
 from mujou._core import _native
-from mujou._core.node import thread_ident
 from mujou.testing import VirtualTimer
 from mujou.time import ReadOnlyTimer, Timer, Timestamp
 
@@ -26,9 +24,15 @@ class Probe(Node):
     """Overrides ``on_start`` without calling the base, and records the thread's
     settings there."""
 
-    def __init__(self, seed: int | None = None, *, init_base: bool = True) -> None:
+    def __init__(
+        self,
+        seed: int | None = None,
+        *,
+        init_base: bool = True,
+        dedicated_thread: bool = False,
+    ) -> None:
         if init_base:
-            super().__init__(seed=seed)
+            super().__init__(seed=seed, dedicated_thread=dedicated_thread)
             self.out = Port(send=TensorSpec((3,)))
         self.grad_enabled: bool | None = None
         self.draws: torch.Tensor | None = None
@@ -100,6 +104,136 @@ class TestThreadSetup:
         _ = torch.rand(3, generator=generator)  # what __init__ drew
         assert node.draws is not None
         assert torch.equal(node.draws, torch.rand(3, generator=generator))
+
+    def test_gradients_stay_off_in_every_hook_of_a_node_sharing_a_worker(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: the framework turns gradient recording off again whenever a
+        # thread switches to a node, so what a hook of another node left on the
+        # same worker does not reach it.
+        leaky, clean = GradSetter(leak=True), GradSetter(leak=False)
+        run = start(Group(leaky=leaky, clean=clean), timer=virtual, workers=1)
+        for _ in range(3):
+            virtual.advance(0.01)
+            for node in (leaky, clean):
+                node.updated.get(timeout=5.0)
+        run.shutdown()
+        assert clean.grad_enabled == {
+            "on_start": [False],
+            "on_update": [False, False, False],
+            "on_stop": [False],
+        }
+        # The hooks of both nodes ran on the one worker, not on the host.
+        assert len(leaky.idents | clean.idents) == 1
+        assert threading.get_ident() not in leaky.idents
+        assert torch.is_grad_enabled()
+
+    def test_gradients_are_off_at_the_start_of_every_hook_of_the_same_node(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: gradient recording is turned off before every hook, not only on a
+        # switch, so a hook that left it on does not decide the next one's, even
+        # when the same worker runs the node again right away.
+        leaky = GradSetter(leak=True)
+        run = start(Group(leaky=leaky), timer=virtual, workers=1)
+        for _ in range(3):
+            virtual.advance(0.01)
+            leaky.updated.get(timeout=5.0)
+        run.shutdown()
+        assert leaky.grad_enabled == {
+            "on_start": [False],
+            "on_update": [False, False, False],
+            "on_stop": [False],
+        }
+
+    def test_a_node_whose_setup_failed_cleans_up_as_itself(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # specs: when the framework's setup of a node fails, the runtime still calls
+        # on_exception and on_stop; they run as that node (not as the node the
+        # worker ran before), with gradients off. BrokenSetup fails through a
+        # private override: the real failure (setting up CUDA) needs a GPU, and no
+        # public way makes the setup fail.
+        leaky = GradSetter(leak=True)
+        broken = BrokenSetup(leaky.inp)
+        with pytest.raises(NetworkError, match="raised in on_start"):
+            start(Group(leaky=leaky, broken=broken), timer=virtual, workers=1)
+        assert set(broken.results) == {"on_exception", "on_stop"}
+        for hook, (grad_enabled, result) in broken.results.items():
+            assert grad_enabled is False, hook
+            assert isinstance(result, RuntimeError), hook
+            assert "only the node that owns" in str(result)
+
+
+class BrokenSetup(Node):
+    """Fails in the framework's setup (creating the generator) every time a
+    thread enters it, and tries to read another node's port while it cleans up."""
+
+    failing = False  # not while super().__init__ creates the generator
+
+    def __init__(self, other: Port[Any, Any, Any]) -> None:
+        super().__init__(period=0.01)
+        self.out = Port(send=TensorSpec((1,)))
+        # From now on the setup creates the generator again, and fails.
+        self._generator = None
+        self.failing = True
+        vars(self)["other"] = other  # not registered as one of its ports
+        self.results: dict[str, tuple[bool, object]] = {}
+
+    @override
+    def _make_generator(self) -> torch.Generator:
+        if self.failing:
+            raise RuntimeError("setup failed")
+        return super()._make_generator()
+
+    def clean_up(self, hook: str) -> None:
+        other = cast(Port[Any, Any, Any], vars(self)["other"])
+        try:
+            result: object = other.recv()
+        except RuntimeError as e:
+            result = e
+        self.results[hook] = (torch.is_grad_enabled(), result)
+
+    @override
+    def on_exception(self) -> None:
+        self.clean_up("on_exception")
+
+    @override
+    def on_stop(self) -> None:
+        self.clean_up("on_stop")
+
+
+class GradSetter(Node):
+    """Records whether gradients are recorded at the entry of each hook, and,
+    with ``leak``, turns them on without ``with`` at the end of each hook."""
+
+    def __init__(self, *, leak: bool) -> None:
+        super().__init__(period=0.01)
+        self.out = Port(send=TensorSpec((1,)))
+        self.inp = Port(recv=TensorSpec((1,)))
+        self.leak = leak
+        self.grad_enabled: dict[str, list[bool]] = {}
+        self.idents: set[int] = set()
+        self.updated: queue.Queue[None] = queue.Queue()
+
+    def record(self, hook: str) -> None:
+        self.grad_enabled.setdefault(hook, []).append(torch.is_grad_enabled())
+        self.idents.add(threading.get_ident())
+        if self.leak:
+            torch.set_grad_enabled(True)
+
+    @override
+    def on_start(self) -> None:
+        self.record("on_start")
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.record("on_update")
+        self.updated.put(None)
+
+    @override
+    def on_stop(self) -> None:
+        self.record("on_stop")
 
 
 class InitDraws(Probe):
@@ -327,10 +461,6 @@ class TestPeriod:
         with pytest.raises(TypeError, match="period"):
             Node(period=True)
 
-    def test_rejects_none_and_points_to_zero(self):
-        with pytest.raises(TypeError, match="period=0.0"):
-            Node(period=None)  # pyright: ignore[reportArgumentType]
-
     def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
         class OnTheClass(Ticker):
             period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
@@ -367,42 +497,54 @@ class TestPeriod:
         assert node.dts.get(timeout=5.0) == 1e-9
 
 
-class OwnSetup(Probe):
-    """Overrides ``on_thread_start`` without calling the base, and tries a host
-    method there."""
+class TestDedicatedThread:
+    def test_defaults_to_the_workers(self):
+        assert Probe().dedicated_thread is False
+        assert Probe(init_base=False).dedicated_thread is False
 
-    def __init__(self, seed: int) -> None:
-        super().__init__(seed=seed)
-        self.host_error: str | None = None
+    @pytest.mark.parametrize("dedicated", [1, None, "yes"])
+    def test_rejects_what_is_not_a_bool(self, dedicated: object):
+        with pytest.raises(TypeError, match="dedicated_thread"):
+            Node(dedicated_thread=dedicated)  # pyright: ignore[reportArgumentType]
+
+    def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
+        class OnTheClass(Ticker):
+            dedicated_thread = True  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
+
+        with pytest.raises(TypeError, match="reserved"):
+            start(Group(node=OnTheClass(period=0.0)), timer=virtual)
+
+    def test_a_dedicated_node_runs_every_hook_on_one_thread_of_its_own(
+        self, step: Step, start_manual: StartManual
+    ):
+        dedicated = ThreadRecorder(dedicated_thread=True)
+        others = [ThreadRecorder() for _ in range(3)]
+        run = start_manual(Group(dedicated, *others))
+        for _ in range(3):
+            step(run)
+        run.shutdown()
+        assert len(dedicated.idents) == 1
+        assert not dedicated.idents & set().union(*(o.idents for o in others))
+
+
+class ThreadRecorder(Node):
+    """Records the OS thread of each hook."""
+
+    def __init__(self, *, dedicated_thread: bool = False) -> None:
+        super().__init__(dedicated_thread=dedicated_thread)
+        self.idents: set[int] = set()
 
     @override
-    def on_thread_start(self) -> None:
-        self.grad_at_thread_start = torch.is_grad_enabled()
-        self.draws_at_thread_start = torch.rand(3, generator=self.generator)
-        self.ident_at_thread_start = thread_ident(self)
-        try:
-            mujou.run(Group(node=Probe()))
-        except RuntimeError as e:
-            self.host_error = str(e)
+    def on_start(self) -> None:
+        self.idents.add(threading.get_ident())
 
+    @override
+    def on_update(self, dt: float) -> None:
+        self.idents.add(threading.get_ident())
 
-class TestOnThreadStart:
-    def test_runs_after_the_settings_without_calling_the_base(
-        self, start_manual: StartManual
-    ):
-        node = OwnSetup(seed=7)
-        start_manual(Group(node=node))
-        assert node.grad_at_thread_start is False
-        assert node.grad_enabled is False
-        generator = torch.Generator().manual_seed(7)
-        expected = torch.rand(3, generator=generator)
-        assert torch.equal(node.draws_at_thread_start, expected)
-        # on_start draws next from the same generator.
-        assert node.draws is not None
-        assert torch.equal(node.draws, torch.rand(3, generator=generator))
-        assert node.ident_at_thread_start == node.ident == thread_ident(node)
-        # The guard against the host methods holds in it too.
-        assert node.host_error is not None and "host methods" in node.host_error
+    @override
+    def on_stop(self) -> None:
+        self.idents.add(threading.get_ident())
 
 
 class Stateful(Node):
@@ -677,6 +819,27 @@ class OnDevice(Node):
         self.grad_enabled = torch.is_grad_enabled()
 
 
+class StreamRecorder(Node):
+    """Records the current CUDA device and stream in each ``on_update``, and
+    switches the stream away (to its device's default stream) at its end without
+    restoring it."""
+
+    def __init__(self, device: str) -> None:
+        super().__init__(device=device, period=0.01)
+        self.out = Port(send=TensorSpec((3,)))
+        self.devices: list[int] = []
+        self.streams: list[int] = []
+        self.updated: queue.Queue[None] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.devices.append(torch.cuda.current_device())
+        self.streams.append(torch.cuda.current_stream().cuda_stream)
+        # Left behind for whatever runs next on this thread.
+        torch.cuda.set_stream(torch.cuda.default_stream(self.device))
+        self.updated.put(None)
+
+
 class Draws(Node):
     """Draws from ``generator`` in ``on_start``."""
 
@@ -722,6 +885,25 @@ class TestCuda:
         assert node.current_device == index
         assert node.own_stream is True
         assert node.grad_enabled is False
+
+    @pytest.mark.parametrize(
+        "indices", [(0, 0), pytest.param((0, 1), marks=pytest.mark.cuda(2))]
+    )
+    def test_nodes_sharing_a_worker_keep_their_own_device_and_stream(
+        self, virtual: VirtualTimer, start: Start, indices: tuple[int, int]
+    ):
+        a, b = (StreamRecorder(f"cuda:{i}") for i in indices)
+        run = start(Group(a=a, b=b), timer=virtual, workers=1)
+        for _ in range(3):
+            virtual.advance(0.01)
+            for node in (a, b):
+                node.updated.get(timeout=5.0)
+        run.shutdown()
+        for node, index in zip((a, b), indices, strict=True):
+            assert node.devices == [index] * 3
+            assert len(set(node.streams)) == 1
+            assert node.streams[0] != torch.cuda.default_stream(index).cuda_stream
+        assert a.streams[0] != b.streams[0]
 
     def test_the_generator_is_on_the_device_and_follows_the_seed(
         self, start_manual: StartManual

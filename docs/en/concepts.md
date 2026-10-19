@@ -28,7 +28,7 @@ A node is the unit of computation. You write a node as a class that inherits fro
 
 Inside a node, ordinary PyTorch code runs synchronously. It may even use backpropagation (BP), as long as the BP stays inside the node.
 
-Between nodes, everything is asynchronous. Mujou calls the node's `on_update(dt)` over and over on a thread of its own, and a node never waits for another node. In each `on_update`, the node does three things.
+Between nodes, everything is asynchronous. Mujou calls the node's `on_update(dt)` over and over, on threads it shares among the nodes, and a node never waits for another node. In each `on_update`, the node does three things.
 
 1. It reads the latest values its neighbors sent
 2. It updates its state

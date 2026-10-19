@@ -114,7 +114,7 @@ def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
 
 属性に代入した `torch.Tensor` と `nn.Module` は自動で状態に集まる。何が集まり、どう保存されるかは[状態の保存と復元](state.md)を参照。
 
-GPU で計算するノードでは、テンソルを `device=self.device` で作る。
+GPU で計算するノードでは、テンソルを `on_start` 以降に `device=self.device` で作る（理由は[ノードの中の PyTorch](torch.md#cuda)）。
 
 ```python
 @override
@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 設定値（時定数、層の大きさなど）は `__init__` で数値として持たせてよい。数値は状態に集まらない。
 
-`nn.Module` は `__init__` でも `on_start` でも作れる。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`__init__` の中でも使える `self.generator` で初期化し直す。
+`nn.Module` は `__init__` でも `on_start` でも作れる（CUDA なら `on_start` がよい）。`nn.Linear` などの既定の初期化は全ノードが共有する乱数生成器を使い `seed` で再現できないので、`__init__` の中でも使える `self.generator` で初期化し直す。
 
 ## 3. `on_update(dt)` で `dt` に比例して更新する
 
@@ -209,29 +209,48 @@ class Sensor(mujou.Node):
 
 `super().__init__` は次の引数を取る。いずれもキーワード引数で省略可能。
 
-| 引数     | 意味                                                 | 既定               |
-| -------- | ---------------------------------------------------- | ------------------ |
-| `device` | ノードが計算するデバイス。`"cpu"` か CUDA のデバイス | `"cpu"`            |
-| `seed`   | ノード専用の乱数生成器 `self.generator` のシード     | `None`（毎回違う） |
-| `period` | 実行の周期（秒）                                     | `0.01`             |
+| 引数               | 意味                                                                                                                                                     | 既定               |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `device`           | ノードが計算するデバイス。`"cpu"` か CUDA のデバイス                                                                                                     | `"cpu"`            |
+| `seed`             | ノード専用の乱数生成器 `self.generator` のシード                                                                                                         | `None`（毎回違う） |
+| `period`           | 実行の周期（秒）                                                                                                                                         | `0.01`             |
+| `dedicated_thread` | 実行のワーカーでなく専用のスレッドで動かす（[下](#%E5%B0%82%E7%94%A8%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%81%A7%E5%8B%95%E3%81%8B%E3%81%99)） | `False`            |
 
 乱数は `self.generator` から引く（`torch.randn(..., generator=self.generator)`）。`torch.manual_seed` は全ノードが共有する乱数生成器を変えてしまうので、ノードの中で呼ばない。
 
 `self.generator` は `super().__init__()` の直後から、`__init__` の中でも使える。PyTorch との組み合わせの詳細は[ノードの中の PyTorch](torch.md)を参照。
 
-`device`・`generator`・`period`・`timer` は予約された名前なので、この名前で属性を代入しない。
+`device`・`generator`・`period`・`dedicated_thread`・`timer` は予約された名前なので、この名前で属性を代入しない。
+
+## 専用のスレッドで動かす
+
+ノードは既定でほかのノードと共有する実行のワーカースレッドの上で動く（[ネットワークを走らせる](running.md#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89)）。hook ごとに別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす。hook がスレッドに設定したものを次の hook が見るかどうかはスケジュール次第で、同じワーカーで次に走る別のノードにも見える。
+
+- `threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる
+- `torch.autocast` などスレッドごとの torch の設定は hook の中の `with` に閉じ、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは勾配の記録（hook の前に毎回）と、CUDA の現在のデバイス・ストリーム（ワーカーがノードに切り替わるたび）だけ（[ノードの中の PyTorch](torch.md)）
+- `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する。この文脈は空から始まりホストの文脈の変数を引き継がない。`state_dict` はこの文脈の外で呼ばれる
+
+次のノードには `super().__init__` に `dedicated_thread=True` を渡す。
+
+- hook がデバイス・ソケット・lock を待ってブロッキングする。ワーカーの上だとその間ワーカーをふさぎ、ほかのノードの `dt` が伸びる
+- 1 回だけ設定するスレッドごとの状態に頼る。`on_start` はこのノードのスレッドで呼ばれるので、そこで設定する
+
+```python
+class Camera(Node):
+    def __init__(self) -> None:
+        super().__init__(period=1 / 30, dedicated_thread=True)
+```
 
 ## hook とその順序
 
 mujou はノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。
 
-1. `on_thread_start()`: `on_start` の前に 1 回。スレッドごとの設定を書く（[ノードの中の PyTorch](torch.md)）
-2. `on_start()`: 1 回。状態を作る
-3. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
-4. `on_update(dt)`: 実行が終わるまで繰り返し
-5. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる
-6. `on_exception()`: どれかのノードのどれかの hook が例外を投げたとき、全ノードで 1 回（[例外と終了](errors.md)）
-7. `on_stop()`: 終了のときに 1 回。正常な終了でも例外による終了でも呼ばれる
+1. `on_start()`: 1 回。状態を作る
+2. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
+3. `on_update(dt)`: 実行が終わるまで繰り返し
+4. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる
+5. `on_exception()`: どれかのノードのどれかの hook が例外を投げたとき、全ノードで 1 回（[例外と終了](errors.md)）
+6. `on_stop()`: 終了のときに 1 回。正常な終了でも例外による終了でも呼ばれる
 
 ## hook の中でしてはいけないこと
 

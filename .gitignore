@@ -45,13 +45,12 @@ target/
 # Native extension built in place by the editable install
 src/mujou/_core/*.so
 src/mujou/_core/*.pyd
-# Its old place (as mujou._core, before 2026-10-16): keeps the stale builds of
-# existing checkouts out of git until they are removed.
-src/mujou/*.so
-src/mujou/*.pyd
 
 # Virtualenv of the dev container (UV_PROJECT_ENVIRONMENT)
 .venv-devcontainer/
+
+# Virtualenv with the GIL that benchmarks/mn_scheduler.py suggests
+.venv-gil/
 
 # Documentation site built by mkdocs
 site/

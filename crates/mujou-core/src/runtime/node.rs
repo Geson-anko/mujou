@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, Shared};
+use super::{Control, NodeHooks, Shared};
 
 /// The instruction from the control thread to the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub(super) fn control_word(epoch: u64, command: Command) -> u64 {
 /// does not delay the following updates. Only an update a period or more late
 /// (already at or past the target after its own) starts counting again from its
 /// own time, so the node never updates several times in a row to catch up.
-/// Without a period (`period_ns` = 1), the target is 1 ns after the update.
+/// With a period of 1 ns (the shortest), the target is 1 ns after the update.
 pub(super) fn next_target_ns(target_ns: u64, now_ns: u64, period_ns: u64) -> u64 {
     let next_ns = target_ns.saturating_add(period_ns);
     if now_ns >= next_ns {
@@ -78,7 +78,6 @@ enum Boundary {
 impl<N: NodeHooks> Shared<N> {
     /// The thread of node `i`.
     pub(super) fn run_node(&self, i: usize) {
-        RUNTIME_OF_THREAD.set(self.id());
         let started = self.call(i, "on_start", |n| n.start()).is_ok();
         let mut c = self.lock();
         c.nodes[i].started = true;

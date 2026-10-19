@@ -100,7 +100,7 @@ if t_out >= t_in:               # y は x を書いた後に送られた
 1 つのノードが時間を止めたり速さを変えたりすると同じ実行のほかのノードの `dt` まで変わるので、hook の中から `mujou.time` や `Timer` の `sleep`・`set_time_scale`・`pause`・`resume`、`VirtualTimer.advance` を呼ぶと `RuntimeError` になる。
 
 - ノードを一定間隔で更新したいときは、hook の中で待たずに `super().__init__(period=seconds)` で周期を渡す。周期は更新と更新の間の平均時間（実行のタイマーの秒）である（[ノードを書く](writing-a-node.md)）
-- `self.timer` は `on_thread_start` と `on_start` を含むどの hook の中でも読める。`__init__` の中で読むと `RuntimeError` になる
+- `self.timer` は `on_start` を含むどの hook の中でも読める。`__init__` の中で読むと `RuntimeError` になる
 
 ## 復元すると時刻が戻る
 

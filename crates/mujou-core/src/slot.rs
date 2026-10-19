@@ -29,7 +29,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use crate::dlpack::{DLDataType, format_dtype, format_shape};
-use crate::time::{Timer, Timestamp};
+use crate::time::{Timer, Timestamp, remaining};
 
 /// One named tensor of a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,10 +40,6 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
-    pub(crate) fn numel(&self) -> usize {
-        self.shape.iter().product::<i64>() as usize
-    }
-
     pub(crate) fn elem_bytes(&self) -> usize {
         usize::from(self.dtype.bits / 8) * usize::from(self.dtype.lanes)
     }
@@ -51,7 +47,7 @@ impl FieldSpec {
     /// The size of the field as compact row-major bytes. Cannot overflow for the
     /// fields of a [`Schema`], which checks it.
     pub(crate) fn nbytes(&self) -> usize {
-        self.numel() * self.elem_bytes()
+        self.shape.iter().product::<i64>() as usize * self.elem_bytes()
     }
 
     /// `nbytes`, or `None` if it exceeds `isize::MAX`, the most one allocation
@@ -446,10 +442,7 @@ impl Slot {
             if !Arc::ptr_eq(&value, last) {
                 break Some(Arc::clone(&value));
             }
-            let wait = match deadline {
-                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
-                None => Duration::MAX,
-            };
+            let wait = remaining(deadline);
             if wait.is_zero() {
                 break None;
             }
@@ -500,10 +493,11 @@ pub enum Target {
 /// slot, which the host reads, and one slot per channel, which the peer reads.
 ///
 /// Being the only writer is up to the caller: `send_with` takes `&self`, and the
-/// port that owns the outlet accepts sends only from its node's thread. Sends
-/// from two threads at once stay memory safe, but the slots may then keep their
-/// messages out of time order, and `Target::All` may leave the outward slot and
-/// the channels holding different messages.
+/// port that owns the outlet accepts sends only from its node's hooks, which
+/// never run on two threads at once. Sends from two threads at once stay memory
+/// safe, but the slots may then keep their messages out of time order, and
+/// `Target::All` may leave the outward slot and the channels holding different
+/// messages.
 pub struct Outlet {
     messages: Arc<Messages>,
     outbox: Arc<Slot>,
@@ -882,22 +876,6 @@ mod tests {
     }
 
     #[test]
-    fn restore_sets_whether_sent() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
-        outlet.channel(0).restore(1, true, fill_k(4)).unwrap();
-        assert!(outlet.channel(0).load().sent());
-        outlet.channel(0).restore(1, false, fill_k(4)).unwrap();
-        assert!(!outlet.channel(0).load().sent());
-
-        let group = InputGroup::new(timer());
-        let input = group.input(scalar_schema(), "i");
-        input.restore(1, true, fill_k(5)).unwrap();
-        assert!(input.load().sent());
-        input.restore(1, false, fill_k(5)).unwrap();
-        assert!(!input.load().sent());
-    }
-
-    #[test]
     fn send_to_one_channel_changes_only_it() {
         let outlet = Outlet::new(scalar_schema(), 3, "p", timer());
         outlet.send_with(Target::Channel(1), fill_k(9)).unwrap();
@@ -1036,12 +1014,18 @@ mod tests {
     }
 
     #[test]
-    fn restore_sets_value_and_time() {
+    fn restore_sets_value_time_and_whether_sent() {
         let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
-        outlet.channel(0).restore(123, true, fill_k(4)).unwrap();
-        let msg = outlet.channel(0).load();
-        assert_eq!((values(&msg), msg.time_ns()), (vec![4], 123));
+        let slot = outlet.channel(0);
+        slot.restore(123, true, fill_k(4)).unwrap();
+        let msg = slot.load();
+        assert_eq!(
+            (values(&msg), msg.time_ns(), msg.sent()),
+            (vec![4], 123, true)
+        );
         assert_eq!(values(&outlet.outbox().load()), [0]);
+        slot.restore(1, false, fill_k(4)).unwrap();
+        assert!(!slot.load().sent());
     }
 
     #[test]
@@ -1088,7 +1072,12 @@ mod tests {
         group.write(&[&a], |_, bytes| fill_k(1)(bytes)).unwrap();
         a.restore(9, true, fill_k(2)).unwrap();
         let msg = a.load();
-        assert_eq!((values(&msg), msg.time_ns()), (vec![2], 9));
+        assert_eq!(
+            (values(&msg), msg.time_ns(), msg.sent()),
+            (vec![2], 9, true)
+        );
+        a.restore(9, false, fill_k(2)).unwrap();
+        assert!(!a.load().sent());
     }
 
     /// The observable form of "no reader ever sees a mix of old and new values":

@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use super::error::{finished_error, panic_message, stopped};
 use super::freeze::FreezeReason;
 use super::node::Command;
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, RuntimeError, Shared, remaining};
+use super::{Control, NodeHooks, RuntimeError, Shared};
+use crate::time::remaining;
 
 /// A request from the host, run on the control thread.
 pub(super) type Job<N> = Box<dyn FnOnce(&mut Controller<N>) + Send>;
@@ -34,7 +35,6 @@ impl<N: NodeHooks> Controller<N> {
         messages: Receiver<Message<N>>,
         started: Sender<Result<(), RuntimeError>>,
     ) {
-        RUNTIME_OF_THREAD.set(self.shared.id());
         let _ = started.send(self.startup());
         while !self.done {
             // `shared` holds a sender, so this does not disconnect.

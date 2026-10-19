@@ -13,7 +13,7 @@
 | Rust        | 1.85 or later, installed with [rustup](https://rustup.rs/). Needed only to build from source                |
 | uv          | [uv](https://docs.astral.sh/uv/). Needed only to build from source                                          |
 
-The free-threaded build is recommended because each node runs on a thread of its own. With the GIL, nodes written in Python compete for the GIL and rarely run in parallel.
+The free-threaded build is recommended because the nodes run on several worker threads at once. With the GIL, nodes written in Python compete for the GIL and rarely run in parallel.
 
 ## Build from source
 

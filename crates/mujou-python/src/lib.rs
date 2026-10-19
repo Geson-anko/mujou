@@ -67,5 +67,5 @@ mod core_module {
     };
 
     #[pymodule_export]
-    use super::runtime::{NetworkError, Node, PauseTimeoutError, Runtime};
+    use super::runtime::{NetworkError, Node, PauseTimeoutError, Runtime, available_parallelism};
 }

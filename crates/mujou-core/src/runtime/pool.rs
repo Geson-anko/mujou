@@ -24,7 +24,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use super::node::{Command, ExceptionHook, next_target_ns};
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, Shared};
+use super::{Control, NodeHooks, Shared};
 
 /// Where a pool node is in its life, as the position of a dedicated thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,8 +60,6 @@ struct Task {
     phase: Phase,
     at: At,
     generation: u64,
-    /// The time of the last update, where the next Δt starts.
-    last_ns: u64,
     /// The time of the next free-running update (see [`next_target_ns`]).
     target_ns: u64,
 }
@@ -118,7 +116,6 @@ impl Sched {
                 phase: Phase::Start,
                 at,
                 generation: 0,
-                last_ns: 0,
                 target_ns: 0,
             });
         }
@@ -130,9 +127,13 @@ impl<N: NodeHooks> Shared<N> {
     /// The body of a worker thread: runs the pool nodes until all of them have
     /// stopped.
     pub(super) fn run_worker(&self) {
-        RUNTIME_OF_THREAD.set(self.id());
         let mut c = self.lock();
         while c.sched.left > 0 {
+            // Work in the ready queue means the timekeeper, if any, is already
+            // woken: the control side wakes it when it queues work, a worker
+            // takes the hook it queues itself under the same lock, and a worker
+            // keeps the time only with the queue empty. So a target this worker
+            // just put back is not missed while it runs a hook first.
             if let Some(i) = c.sched.ready.pop_front() {
                 if let Some(work) = self.take(i, &mut c) {
                     c = self.run_work(i, work, c);
@@ -145,16 +146,22 @@ impl<N: NodeHooks> Shared<N> {
                 let now_ns = self.timer.time_ns();
                 if now_ns >= target_ns {
                     c.sched.heap.pop();
-                    let task = &mut c.sched.tasks[i];
-                    task.at = At::Running;
+                    c.sched.tasks[i].at = At::Running;
                     // From the nanosecond difference, as on a dedicated thread.
-                    let dt = (now_ns - task.last_ns) as f64 / 1e9;
+                    let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
+                    let dt = (now_ns - last_ns) as f64 / 1e9;
                     c = self.run_work(i, Work::Update { now_ns, dt }, c);
                     continue;
                 }
-                if c.sched.timekeeper.is_none() {
-                    c = self.keep_time(target_ns, c);
-                    continue;
+                match c.sched.timekeeper {
+                    None => {
+                        c = self.keep_time(target_ns, c);
+                        continue;
+                    }
+                    // A worker put back an update due before the timekeeper's
+                    // target: let the timekeeper wait for this one instead.
+                    Some(waiting_ns) if target_ns < waiting_ns => self.interrupt_timekeeper(&c),
+                    Some(_) => {}
                 }
             }
             c = self
@@ -164,17 +171,22 @@ impl<N: NodeHooks> Shared<N> {
         }
     }
 
-    /// Re-evaluates every pool node after a change of the control state.
+    /// Re-evaluates every pool node after a change of the control state, and
+    /// wakes the timekeeper once if any of them needs it.
     pub(super) fn wake_pool(&self, c: &mut Control) {
+        let mut look = false;
         for i in 0..self.dedicated.len() {
-            self.wake_node(c, i);
+            look |= !self.dedicated[i] && self.schedule(i, c);
+        }
+        if look {
+            self.interrupt_timekeeper(c);
         }
     }
 
     /// Re-evaluates node `i` (if it is in the pool) after a change for it.
     pub(super) fn wake_node(&self, c: &mut Control, i: usize) {
-        if !self.dedicated[i] {
-            self.schedule(i, c);
+        if !self.dedicated[i] && self.schedule(i, c) {
+            self.interrupt_timekeeper(c);
         }
     }
 
@@ -224,13 +236,13 @@ impl<N: NodeHooks> Shared<N> {
     }
 
     /// Puts node `i` where it waits, unless a worker has it or will decide
-    /// when it takes it.
-    fn schedule(&self, i: usize, c: &mut Control) {
+    /// when it takes it. Returns whether the timekeeper must look again.
+    fn schedule(&self, i: usize, c: &mut Control) -> bool {
         if matches!(c.sched.tasks[i].at, At::Ready | At::Running) {
-            return;
+            return false;
         }
         let next = self.advance(i, c);
-        self.place(i, next, false, c);
+        self.place(i, next, false, c)
     }
 
     /// Takes node `i` out of the ready queue: the hook to run now, if any.
@@ -245,6 +257,7 @@ impl<N: NodeHooks> Shared<N> {
                 Some(work)
             }
             next => {
+                // This worker looks at the queues next.
                 self.place(i, next, false, c);
                 None
             }
@@ -253,7 +266,17 @@ impl<N: NodeHooks> Shared<N> {
 
     /// Puts node `i` where `next` says: a hook goes to the back of the ready
     /// queue, or to its front if `first`.
-    fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) {
+    ///
+    /// Returns whether the timekeeper must look again: the node has a hook to
+    /// run (with every other worker busy, the timekeeper takes it) or an update
+    /// due before the timekeeper's target. A worker that puts a node back looks
+    /// at the queues itself right after, so it ignores this, and only the
+    /// control side wakes the timekeeper (the worker may run a hook from the
+    /// ready queue first; see [`Self::run_worker`] for why that misses no
+    /// target). Waking it wakes every waiter on the timer (the other runs'
+    /// timekeepers, dedicated threads, the host), so a node of period 1 ns
+    /// putting itself back after each update must not.
+    fn place(&self, i: usize, next: Next, first: bool, c: &mut Control) -> bool {
         match next {
             Next::Hook(_) => {
                 c.sched.tasks[i].at = At::Ready;
@@ -263,26 +286,30 @@ impl<N: NodeHooks> Shared<N> {
                     c.sched.ready.push_back(i);
                 }
                 self.sched_changed.notify_one();
-                // With every other worker busy, the timekeeper takes it.
-                self.interrupt_timekeeper(c);
+                true
             }
             Next::Heap(target_ns) => {
                 let task = &mut c.sched.tasks[i];
                 if let At::Heap(_) = task.at {
                     // Already there: the target changes only after an update.
-                    return;
+                    return false;
                 }
                 task.generation += 1;
                 task.at = At::Heap(task.generation);
                 let entry = (target_ns, i, task.generation);
                 c.sched.heap.push(Reverse(entry));
                 match c.sched.timekeeper {
-                    None => self.sched_changed.notify_one(),
-                    Some(waiting_ns) if target_ns < waiting_ns => self.interrupt_timekeeper(c),
-                    Some(_) => {}
+                    None => {
+                        self.sched_changed.notify_one();
+                        false
+                    }
+                    Some(waiting_ns) => target_ns < waiting_ns,
                 }
             }
-            Next::Park => c.sched.tasks[i].at = At::Parked,
+            Next::Park => {
+                c.sched.tasks[i].at = At::Parked;
+                false
+            }
         }
     }
 
@@ -302,7 +329,6 @@ impl<N: NodeHooks> Shared<N> {
                     }
                     let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
                     let task = &mut c.sched.tasks[i];
-                    task.last_ns = last_ns;
                     task.target_ns = last_ns.saturating_add(self.period_ns[i]);
                     task.phase = Phase::Loop;
                 }
@@ -316,7 +342,7 @@ impl<N: NodeHooks> Shared<N> {
                         // Under the control lock, the freeze cannot come in
                         // between.
                         let now_ns = self.timer.time_ns();
-                        let last_ns = c.sched.tasks[i].last_ns;
+                        let last_ns = self.last_update_ns[i].load(Ordering::SeqCst);
                         if now_ns <= last_ns {
                             // Nothing to do for a step without time passing.
                             self.end_step(c);
@@ -390,6 +416,7 @@ impl<N: NodeHooks> Shared<N> {
         let next = self.advance(i, &mut c);
         // A failed hook is followed by `exception` ahead of the nodes the
         // failure woke, as a dedicated thread calls it right after catching.
+        // This worker looks at the queues next.
         self.place(i, next, !ok, &mut c);
         c
     }
@@ -410,7 +437,6 @@ impl<N: NodeHooks> Shared<N> {
             Work::Update { now_ns, .. } => {
                 self.last_update_ns[i].store(now_ns, Ordering::SeqCst);
                 let task = &mut c.sched.tasks[i];
-                task.last_ns = now_ns;
                 task.target_ns = next_target_ns(task.target_ns, now_ns, self.period_ns[i]);
                 if self.manual {
                     self.end_step(c);

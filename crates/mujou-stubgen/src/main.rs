@@ -80,26 +80,25 @@ fn fix_methods(module: &mut Module) {
         if own_type.is_none() {
             class.methods.push(no_constructor());
         }
+        let object = Expr::Name {
+            id: "object".to_owned(),
+        };
         for method in &mut class.methods {
-            if let Some(own_type) = own_type
-                .as_ref()
-                .filter(|_| SAME_CLASS_OPERATORS.contains(&method.name.as_str()))
-            {
-                let object = Expr::Name {
-                    id: "object".to_owned(),
-                };
-                let arguments = &mut method.arguments;
-                for operand in arguments
-                    .positional_only_arguments
-                    .iter_mut()
-                    .chain(arguments.arguments.iter_mut())
-                    .filter(|a| a.annotation.as_ref() == Some(&object))
-                {
-                    operand.annotation = Some(own_type.clone());
+            if let Some(own_type) = &own_type {
+                if method.name == "__new__" {
+                    method.returns = Some(typing("Self"));
                 }
-            }
-            if method.name == "__new__" && own_type.is_some() {
-                method.returns = Some(typing("Self"));
+                if SAME_CLASS_OPERATORS.contains(&method.name.as_str()) {
+                    let arguments = &mut method.arguments;
+                    for operand in arguments
+                        .positional_only_arguments
+                        .iter_mut()
+                        .chain(arguments.arguments.iter_mut())
+                        .filter(|a| a.annotation.as_ref() == Some(&object))
+                    {
+                        operand.annotation = Some(own_type.clone());
+                    }
+                }
             }
             let arguments = &mut method.arguments;
             for variadic in [&mut arguments.vararg, &mut arguments.kwarg]

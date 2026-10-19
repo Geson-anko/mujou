@@ -1,6 +1,8 @@
 import io
 import math
+import os
 import pickle
+import queue
 import re
 import subprocess
 import sys
@@ -17,6 +19,7 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
+from mujou._core._native import _available_parallelism  # pyright: ignore[reportPrivateUsage]
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort
@@ -142,8 +145,10 @@ class Echo(Node):
 class Calls(Node):
     """Calls ``action`` in ``on_update`` and keeps the exception it raises."""
 
-    def __init__(self, action: Callable[[], object]) -> None:
-        super().__init__()
+    def __init__(
+        self, action: Callable[[], object], *, dedicated_thread: bool = False
+    ) -> None:
+        super().__init__(dedicated_thread=dedicated_thread)
         self.action = action
         self.errors: list[Exception] = []
 
@@ -158,6 +163,35 @@ class Calls(Node):
 def euler(x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """The reference of one ``Leaky`` update with ``tau=1`` and ``dt=H``."""
     return x + min(H / 1.0, 1.0) * (target - x)
+
+
+def run_together(
+    started: list[Run], *given: tuple[Node | Network, ...]
+) -> RuntimeError:
+    """Call ``mujou.testing.run(*components)`` for each of ``given`` on threads of
+    their own at once; check that all but one raised ``RuntimeError`` and return one
+    of those errors."""
+    barrier = threading.Barrier(len(given))
+    outcomes: list[Run | RuntimeError] = []
+
+    def run(components: tuple[Node | Network, ...]) -> None:
+        barrier.wait()
+        try:
+            handle = mujou.testing.run(*components, timer=VirtualTimer())
+        except RuntimeError as e:
+            outcomes.append(e)
+            return
+        started.append(handle)
+        outcomes.append(handle)
+
+    threads = [threading.Thread(target=run, args=(g,)) for g in given]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(outcomes) == len(given)
+    (error,) = (o for o in outcomes if isinstance(o, RuntimeError))
+    return error
 
 
 class TestRun:
@@ -231,28 +265,7 @@ class TestRun:
     ):
         for _ in range(20):
             net = make()
-            barrier = threading.Barrier(2)
-            outcomes: list[object] = []
-
-            def run(
-                net: Node | Network = net, barrier: threading.Barrier = barrier
-            ) -> None:
-                barrier.wait()
-                try:
-                    handle = mujou.testing.run(net, timer=VirtualTimer())
-                except RuntimeError as e:
-                    outcomes.append(e)
-                    return
-                started.append(handle)
-                outcomes.append(handle)
-
-            threads = [threading.Thread(target=run) for _ in range(2)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            assert sum(isinstance(o, Run) for o in outcomes) == 1
-            (error,) = (o for o in outcomes if not isinstance(o, Run))
+            error = run_together(started, (net,), (net,))
             assert str(error) == message
 
     @pytest.mark.parametrize("shared", ["network", "node"])
@@ -275,31 +288,7 @@ class TestRun:
                 node = Leaky()
                 given = [(node,), (Group(node=node),)]
                 who = r"^Leaky (at 'node' )?"
-            barrier = threading.Barrier(2)
-            outcomes: list[object] = []
-
-            def run(
-                components: tuple[Node | Network, ...],
-                barrier: threading.Barrier = barrier,
-                outcomes: list[object] = outcomes,
-            ) -> None:
-                barrier.wait()
-                try:
-                    handle = mujou.testing.run(*components, timer=VirtualTimer())
-                except RuntimeError as e:
-                    outcomes.append(e)
-                    return
-                started.append(handle)
-                outcomes.append(handle)
-
-            threads = [threading.Thread(target=run, args=(g,)) for g in given]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            assert sum(isinstance(o, Run) for o in outcomes) == 1
-            (error,) = (o for o in outcomes if not isinstance(o, Run))
-            assert isinstance(error, RuntimeError)
+            error = run_together(started, *given)
             assert re.match(who + refused, str(error)), str(error)
 
     def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
@@ -473,6 +462,155 @@ class TestRefusedRun:
                 call()
         assert not (net.a.started or other.a.started or node.started)
         assert set(retry().state_dict()["nodes"]) == nodes
+
+
+class Noisy(Node):
+    """``dx/dt = u + xi - x`` by explicit Euler, ``xi ~ U[0, 1)^2`` drawn from the
+    node's own generator at each update.
+
+    ``u`` comes from the previous side and ``x`` goes to the next side. Records
+    the OS thread of each update and signals it.
+    """
+
+    def __init__(self, seed: int, *, dedicated_thread: bool = False) -> None:
+        super().__init__(seed=seed, dedicated_thread=dedicated_thread)
+        self.prev = PrevPort(recv=vec())
+        self.next = NextPort(send=vec())
+        self.x = torch.zeros(2, dtype=F64)
+        self.idents: list[int] = []
+        self.updated: queue.Queue[None] = queue.Queue()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.idents.append(threading.get_ident())
+        xi = torch.rand(2, dtype=F64, generator=self.generator)
+        self.x += dt * (self.prev.recv() + xi - self.x)
+        self.next.send(self.x)
+        self.updated.put(None)
+
+
+def noisy_chain(n: int, *, dedicated_thread: bool = False) -> list[Noisy]:
+    """``n`` ``Noisy`` nodes seeded ``0..n-1``, each sending to the next."""
+    nodes = [Noisy(seed=k, dedicated_thread=dedicated_thread) for k in range(n)]
+    for sender, receiver in zip(nodes, nodes[1:]):
+        sender.next.connect(receiver.prev)
+    return nodes
+
+
+def noisy_reference(n: int, steps: int, dt: float, chained: bool) -> list[torch.Tensor]:
+    """The states of ``noisy_chain(n)`` (or of ``n`` unconnected ``Noisy``) after
+    ``steps`` updates of every node in the order of the chain, each by ``dt``."""
+    generators = [torch.Generator().manual_seed(k) for k in range(n)]
+    xs = [torch.zeros(2, dtype=F64) for _ in range(n)]
+    for _ in range(steps):
+        for k in range(n):
+            inp = xs[k - 1] if chained and k > 0 else torch.zeros(2, dtype=F64)
+            xi = torch.rand(2, dtype=F64, generator=generators[k])
+            xs[k] = xs[k] + dt * (inp + xi - xs[k])
+    return xs
+
+
+def more_nodes_than_cpus() -> int:
+    """A node count above the default number of workers, the logical CPUs."""
+    return (os.cpu_count() or 1) + 2
+
+
+def default_workers() -> int:
+    """The default number of workers for more nodes than CPUs: the core's
+    available parallelism, or half of it (at least 1) with the GIL."""
+    cpus = _available_parallelism()
+    gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
+    return max(1, cpus // 2) if gil else cpus
+
+
+class Holding(Node):
+    """Holds its worker in each update (``time.sleep`` lets the GIL go) and
+    records the OS thread."""
+
+    def __init__(self) -> None:
+        super().__init__(period=0.0)
+        self.idents: set[int] = set()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.idents.add(threading.get_ident())
+        time.sleep(0.005)
+
+
+class TestWorkers:
+    @pytest.mark.parametrize(
+        ("workers", "error"),
+        [
+            (True, TypeError),
+            (1.0, TypeError),
+            (0, ValueError),
+            (-1, ValueError),
+            (2**70, ValueError),  # more than the core can count
+        ],
+    )
+    def test_rejects_what_is_not_a_positive_int_before_starting(
+        self, virtual: VirtualTimer, start: Start, workers: object, error: type
+    ):
+        net = Chain()
+        with pytest.raises(error, match="workers"):
+            start(net, timer=virtual, workers=workers)  # pyright: ignore[reportArgumentType]
+        assert not (net.a.started or net.b.started)
+        start(net, timer=virtual, workers=1)
+        assert net.a.started and net.b.started
+
+    def test_more_nodes_than_workers_all_update_exactly(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # Unconnected, so the order of the updates within a period does not
+        # matter: each node's state is a function of its own seed and dt only.
+        n, steps, period = 8, 3, 0.01
+        nodes = [Noisy(seed=k) for k in range(n)]
+        start(Group(*nodes), timer=virtual, workers=2)
+        for _ in range(steps):
+            virtual.advance(period)
+            for node in nodes:
+                node.updated.get(timeout=5.0)
+        # dt is 10_000_000 ns / 1e9, the same float as the period.
+        expected = noisy_reference(n, steps, period, chained=False)
+        for node, x in zip(nodes, expected, strict=True):
+            assert len(node.idents) == steps
+            assert torch.equal(node.x, x)
+        assert len({i for node in nodes for i in node.idents}) <= 2
+
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_a_manual_run_gives_the_same_bits_on_workers_and_dedicated_threads(
+        self, step: Step, start_manual: StartManual, dedicated_thread: bool
+    ):
+        n, steps = more_nodes_than_cpus(), 4
+        nodes = noisy_chain(n, dedicated_thread=dedicated_thread)
+        run = start_manual(Group(*nodes))
+        for _ in range(steps):
+            step(run, *nodes)  # each node reads what the previous one just sent
+        expected = noisy_reference(n, steps, H, chained=True)
+        for node, x in zip(nodes, expected, strict=True):
+            assert torch.equal(node.x, x)
+
+    def test_the_default_shares_threads_among_more_nodes_than_cpus(
+        self, step: Step, start_manual: StartManual
+    ):
+        n = more_nodes_than_cpus()
+        nodes = noisy_chain(n)
+        run = start_manual(Group(*nodes))
+        for _ in range(2):
+            step(run, *nodes)
+        idents = {i for node in nodes for i in node.idents}
+        assert len(idents) <= default_workers() < n
+        assert threading.get_ident() not in idents
+
+    def test_the_default_number_of_workers_all_take_updates(self, start: Start):
+        # Every update holds its worker and some node is always due, so each
+        # worker takes updates: one thread per worker, as many as the default.
+        nodes = [Holding() for _ in range(more_nodes_than_cpus())]
+        run = start(Group(*nodes), timer=Timer())
+        time.sleep(0.5)
+        run.shutdown()
+        idents = set[int]().union(*(node.idents for node in nodes))
+        assert len(idents) == default_workers()
 
 
 class TestWith:
@@ -1060,7 +1198,8 @@ class TestHostMethodsFromANode:
             runs[0].shutdown()
         assert "host methods" in runs[0].state_dict()["nodes"]["node"]
 
-    def test_raise(self, step: Step, start_manual: StartManual):
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_raise(self, step: Step, start_manual: StartManual, dedicated_thread: bool):
         runs: list[Run] = []
 
         def call_every_host_method() -> None:
@@ -1079,11 +1218,10 @@ class TestHostMethodsFromANode:
                 except RuntimeError as e:
                     node.errors.append(e)
 
-        node = Calls(call_every_host_method)
-        chain = Chain()
-        chain.caller = node  # pyright: ignore[reportAttributeAccessIssue]
-        net = chain
-        run = start_manual(chain)
+        node = Calls(call_every_host_method, dedicated_thread=dedicated_thread)
+        net = Chain()
+        net.caller = node  # pyright: ignore[reportAttributeAccessIssue]
+        run = start_manual(net)
         runs.append(run)
         step(run)
         assert len(node.errors) == 7
@@ -1124,8 +1262,7 @@ class TestState:
         run.shutdown()
         x = tree["nodes"]["a"]["x"].clone()
         net = Chain()
-        restored = start_manual(net, timer=VirtualTimer(), state=tree)
-        assert restored is not None
+        start_manual(net, timer=VirtualTimer(), state=tree)
         net.a.x += 1.0  # in place, as a node updates its state
         assert torch.equal(tree["nodes"]["a"]["x"], x)
 

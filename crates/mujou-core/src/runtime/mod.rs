@@ -42,10 +42,10 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, TryLockError};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::time::{Timer, TimerState};
+use crate::time::{Timer, TimerState, remaining};
 
 pub use error::{HookError, NodeFailure, RuntimeError, SharedError};
 
@@ -61,8 +61,8 @@ use pool::Sched;
 /// dedicated thread, or any worker of the pool (a different one from call to
 /// call). The hooks of a node never overlap, and each one sees what the
 /// previous one wrote. `state_dict` runs on the control thread while the node
-/// is paused (or has stopped after an exception), so it never overlaps with the
-/// other hooks either.
+/// is paused, so it never overlaps with the other hooks either. It is not
+/// called after an exception.
 ///
 /// A hook that panics is treated like one that returned an error, under the
 /// hook's name as the node's author knows it (`on_update` for `update`, ...).
@@ -124,9 +124,9 @@ pub struct RuntimeConfig {
     /// Each node's period on the timer, in ns (> 0): a free-running node
     /// updates at targets a period apart (see `node_loop`), so once every
     /// period on average while its update and its wake-up fit in the period.
-    /// `None` (for all nodes or one) updates as soon as any time has passed.
-    /// The manual mode ignores it.
-    pub period_ns: Option<Vec<Option<u64>>>,
+    /// A period of 1 ns updates as soon as any time has passed, which every
+    /// node does by default. The manual mode ignores it.
+    pub period_ns: Option<Vec<u64>>,
     /// The timer state to continue from.
     pub timer_state: Option<TimerState>,
     /// The number of worker threads for the nodes in the pool. Defaults to
@@ -182,9 +182,12 @@ struct Shared<N: NodeHooks> {
     /// interrupt condition under the timer's lock, and the control lock is taken
     /// before the timer's elsewhere).
     word: AtomicU64,
+    /// Each node's start of its next Δt. A pool node's entry is written only
+    /// under the control lock; a dedicated thread writes only its own entry,
+    /// without the lock.
     last_update_ns: Vec<AtomicU64>,
-    /// Each node's period in ns when running freely (1 without a period: the
-    /// next update as soon as Δt > 0).
+    /// Each node's period in ns when running freely (1 by default: the next
+    /// update as soon as Δt > 0).
     period_ns: Vec<u64>,
     failure: Arc<OnceLock<NodeFailure>>,
     hooks: Vec<Mutex<N>>,
@@ -301,31 +304,25 @@ impl<N: NodeHooks> Shared<N> {
         hook: &'static str,
         f: impl FnOnce(&mut N) -> Result<T, HookError>,
     ) -> Result<T, ()> {
-        self.invoke(i, hook, Entry::Required, f).map_err(|e| {
-            self.fail(NodeFailure {
-                node: i,
-                hook: e.hook,
-                error: e.source,
-            })
-        })
+        self.invoke(i, hook, Entry::Required, f)
+            .map_err(|e| self.fail(i, e))
     }
 
     /// Calls `state_dict` on the control thread, without entering the node.
     fn state_dict(&self, i: usize) -> Result<N::State, ()> {
         self.invoke(i, "state_dict", Entry::Skip, N::state_dict)
-            .map_err(|e| {
-                self.fail(NodeFailure {
-                    node: i,
-                    hook: e.hook,
-                    error: e.source,
-                })
-            })
+            .map_err(|e| self.fail(i, e))
     }
 
-    /// Records the first failure and asks everything to stop, right where the
-    /// error was caught: the nodes see the stop at their next loop boundary
-    /// without the control thread having to poll.
-    fn fail(&self, failure: NodeFailure) {
+    /// Records the failure of node `i` if it is the first and asks everything
+    /// to stop, right where the error was caught: the nodes see the stop at
+    /// their next loop boundary without the control thread having to poll.
+    fn fail(&self, i: usize, e: HookError) {
+        let failure = NodeFailure {
+            node: i,
+            hook: e.hook,
+            error: e.source,
+        };
         // Only the first failure is reported; the hooks log every error.
         if self.failure.set(failure).is_err() {
             return;
@@ -416,13 +413,6 @@ fn guarded<N: NodeHooks, T>(
         };
         node.panicked(&error);
         Err(error)
-    })
-}
-
-/// What is left of a wait until `deadline` (no end if `None`).
-fn remaining(deadline: Option<Instant>) -> Duration {
-    deadline.map_or(Duration::MAX, |d| {
-        d.saturating_duration_since(Instant::now())
     })
 }
 
@@ -542,36 +532,29 @@ impl<N: NodeHooks> Runtime<N> {
 
         let mut threads = Vec::with_capacity(n - pool + workers);
         for i in (0..n).filter(|&i| shared.dedicated[i]) {
-            let node_shared = Arc::clone(&shared);
-            let spawned = thread::Builder::new()
-                .name(format!("mujou-node-{}", shared.names[i]))
-                .spawn(move || N::on_thread(move || node_shared.run_node(i)));
-            match spawned {
+            let name = format!("mujou-node-{}", shared.names[i]);
+            match spawn(&shared, name, move |s| s.run_node(i)) {
                 Ok(thread) => threads.push(thread),
                 Err(e) => return Err(abandon(&shared, "a node", &e)),
             }
         }
         for k in 0..workers {
-            let worker_shared = Arc::clone(&shared);
-            let spawned = thread::Builder::new()
-                .name(format!("mujou-worker-{k}"))
-                .spawn(move || N::on_thread(move || worker_shared.run_worker()));
-            match spawned {
+            match spawn(&shared, format!("mujou-worker-{k}"), |s| s.run_worker()) {
                 Ok(thread) => threads.push(thread),
                 Err(e) => return Err(abandon(&shared, "a worker", &e)),
             }
         }
-        let controller = Controller {
-            shared: Arc::clone(&shared),
-            threads,
-            done: false,
-        };
         let (started_tx, started_rx) = mpsc::channel();
-        let spawned = thread::Builder::new()
-            .name("mujou-control".to_owned())
-            .spawn(move || N::on_thread(move || controller.run(messages, started_tx)));
-        if let Err(e) = spawned {
-            // The controller (with the node threads' handles) was dropped.
+        let control = move |shared| {
+            let controller = Controller {
+                shared,
+                threads,
+                done: false,
+            };
+            controller.run(messages, started_tx);
+        };
+        if let Err(e) = spawn(&shared, "mujou-control".to_owned(), control) {
+            // The node threads' handles were dropped with `control`.
             return Err(abandon(&shared, "the control", &e));
         }
         let reply = Reply {
@@ -686,46 +669,47 @@ impl<N: NodeHooks> Runtime<N> {
 }
 
 /// Checks the arguments of [`Runtime::start`] for `n` nodes and returns each
-/// node's period in ns when running freely (1 without a period).
+/// node's period in ns when running freely (1 ns by default).
 fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64>, RuntimeError> {
-    if names != n {
-        return Err(RuntimeError::InvalidArgument(format!(
-            "got {n} nodes but {names} names"
-        )));
-    }
-    if let Some(dedicated) = &config.dedicated {
-        if dedicated.len() != n {
+    let lengths = [
+        ("names", Some(names)),
+        ("dedicated flags", config.dedicated.as_ref().map(Vec::len)),
+        (
+            "last update times",
+            config.last_update_ns.as_ref().map(Vec::len),
+        ),
+        ("periods", config.period_ns.as_ref().map(Vec::len)),
+    ];
+    for (what, len) in lengths {
+        if let Some(len) = len.filter(|&len| len != n) {
             return Err(RuntimeError::InvalidArgument(format!(
-                "got {n} nodes but {} dedicated flags",
-                dedicated.len()
-            )));
-        }
-    }
-    if let Some(last) = &config.last_update_ns {
-        if last.len() != n {
-            return Err(RuntimeError::InvalidArgument(format!(
-                "got {n} nodes but {} last update times",
-                last.len()
+                "got {n} nodes but {len} {what}"
             )));
         }
     }
     match &config.period_ns {
         None => Ok(vec![1; n]),
-        Some(periods) if periods.len() != n => Err(RuntimeError::InvalidArgument(format!(
-            "got {n} nodes but {} periods",
-            periods.len()
-        ))),
-        Some(periods) => periods
-            .iter()
-            .map(|period| match *period {
-                None => Ok(1),
-                Some(0) => Err(RuntimeError::InvalidArgument(
-                    "a period must be > 0 ns".to_owned(),
-                )),
-                Some(ns) => Ok(ns),
-            })
-            .collect(),
+        Some(periods) if periods.contains(&0) => Err(RuntimeError::InvalidArgument(
+            "a period must be > 0 ns".to_owned(),
+        )),
+        Some(periods) => Ok(periods.clone()),
     }
+}
+
+/// Spawns a thread of the runtime of `s`, which marks itself as one
+/// ([`RUNTIME_OF_THREAD`]) and runs `body` inside [`NodeHooks::on_thread`].
+fn spawn<N: NodeHooks>(
+    s: &Arc<Shared<N>>,
+    name: String,
+    body: impl FnOnce(Arc<Shared<N>>) + Send + 'static,
+) -> std::io::Result<JoinHandle<()>> {
+    let shared = Arc::clone(s);
+    thread::Builder::new().name(name).spawn(move || {
+        N::on_thread(move || {
+            RUNTIME_OF_THREAD.set(shared.id());
+            body(shared);
+        })
+    })
 }
 
 /// Gives up a start whose threads could not all be spawned: lets the time run

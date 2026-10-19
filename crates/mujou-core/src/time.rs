@@ -105,6 +105,13 @@ pub fn seconds_to_ns(seconds: f64) -> Result<u64, TimerError> {
     Ok((seconds * 1e9).round() as u64)
 }
 
+/// What is left of a wait until `deadline` in real time (no end if `None`).
+pub(crate) fn remaining(deadline: Option<Instant>) -> Duration {
+    deadline.map_or(Duration::MAX, |d| {
+        d.saturating_duration_since(Instant::now())
+    })
+}
+
 fn check_scale(scale: f64) -> Result<(), TimerError> {
     if scale.is_finite() && scale > 0.0 {
         Ok(())
@@ -345,10 +352,7 @@ impl Timer {
             if interrupted() {
                 return Wait::Interrupted;
             }
-            let mut wait = match deadline {
-                Some(deadline) => deadline.saturating_duration_since(Instant::now()),
-                None => Duration::MAX,
-            };
+            let mut wait = remaining(deadline);
             if wait.is_zero() {
                 return Wait::TimedOut;
             }

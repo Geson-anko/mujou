@@ -261,9 +261,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not running, or the caller is not the owning
-                node's thread (only the owner reads its port; ``state_dict`` runs
-                on another thread).
+            RuntimeError: The network is not running, or the caller is not a hook
+                of the owning node (only the owner reads its port; ``state_dict``
+                runs on another thread).
             TypeError: The port receives no messages.
         """
         return self._bound().recv(with_time=False)
@@ -315,8 +315,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         Call it only from the owning node's hooks while the network runs.
 
         Raises:
-            RuntimeError: The network is not running, or the caller is not the owning
-                node's thread (only the owner writes its port).
+            RuntimeError: The network is not running, or the caller is not a hook
+                of the owning node (only the owner writes its port).
             TypeError: The port sends no messages, a value is not a dense
                 ``torch.Tensor`` of the spec's dtype, or a ``DictSpec`` message is
                 not a dict.
@@ -499,8 +499,8 @@ def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
 
 def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
     """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
-    (a node calls this as the port is assigned; the first assignment wins, so a second name
-    does not rename the port, and networks never do)."""
+    (a node calls this as the port is assigned; the first assignment wins, so a
+    second name does not rename the port, and networks never do)."""
     if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
         port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
 

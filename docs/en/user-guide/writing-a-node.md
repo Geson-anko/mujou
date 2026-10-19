@@ -114,7 +114,7 @@ Create the state tensors in `on_start`.
 
 `torch.Tensor` and `nn.Module` values assigned to attributes are collected into the state automatically. What is collected, and how to save it, is in [Saving and restoring state](state.md).
 
-When the node computes on a GPU, create the tensors with `device=self.device`.
+When the node computes on a GPU, create the tensors with `device=self.device`, in `on_start` or later (why: [PyTorch in nodes](torch.md#cuda)).
 
 ```python
 @override
@@ -124,7 +124,7 @@ def on_start(self) -> None:
 
 You may keep settings (a time constant, the size of a layer, ...) as numbers set in `__init__`. Numbers are not collected into the state.
 
-An `nn.Module` may be built in `__init__` or in `on_start`. The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
+An `nn.Module` may be built in `__init__` or in `on_start` (on CUDA, prefer `on_start`). The default initialization of a module such as `nn.Linear` draws from the global generator that all nodes share, so `seed` does not reproduce it: initialize it again from `self.generator`, which can be used in `__init__` already.
 
 ## 3. Update in proportion to `dt` in `on_update(dt)`
 
@@ -209,29 +209,48 @@ A manual run (see [Testing](testing.md)) does not use the period.
 
 `super().__init__` takes the following arguments. All of them are keyword arguments and can be left out.
 
-| Argument | Meaning                                                             | Default                       |
-| -------- | ------------------------------------------------------------------- | ----------------------------- |
-| `device` | The device the node computes on. `"cpu"` or a CUDA device           | `"cpu"`                       |
-| `seed`   | The seed of the node's own random number generator `self.generator` | `None` (different every time) |
-| `period` | The period of updates, in seconds                                   | `0.01`                        |
+| Argument           | Meaning                                                                                                     | Default                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `device`           | The device the node computes on. `"cpu"` or a CUDA device                                                   | `"cpu"`                       |
+| `seed`             | The seed of the node's own random number generator `self.generator`                                         | `None` (different every time) |
+| `period`           | The period of updates, in seconds                                                                           | `0.01`                        |
+| `dedicated_thread` | Run the node on a thread of its own instead of the run's workers (see [below](#run-on-a-thread-of-its-own)) | `False`                       |
 
 Draw random numbers from `self.generator` (`torch.randn(..., generator=self.generator)`). Do not call `torch.manual_seed` in a node, because it changes the random number generator that all nodes share.
 
 `self.generator` can be used right after `super().__init__()`, in `__init__` too. How it works with PyTorch is in [PyTorch in nodes](torch.md).
 
-`device`, `generator`, `period` and `timer` are reserved names. Do not assign attributes with these names.
+`device`, `generator`, `period`, `dedicated_thread` and `timer` are reserved names. Do not assign attributes with these names.
+
+## Run on a thread of its own
+
+By default the node runs on the run's worker threads, which it shares with the other nodes (see [Running a network](running.md#threads-of-a-run)). Each hook may then run on a different thread, and the thread runs other nodes in between. So whether the next hook sees what a hook set per thread depends on the schedule, and the next node on the same worker may see it too:
+
+- `threading.local`, `threading.current_thread()` and `threading.get_ident()` may differ from hook to hook
+- Set a per-thread setting of torch, such as `torch.autocast`, back before the hook returns, by keeping it inside a `with` in the hook. A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only gradient recording (before every hook) and, on CUDA, the current device and stream (whenever a worker switches to the node; see [PyTorch in nodes](torch.md))
+- `contextvars` do carry over: each node runs its hooks in a `contextvars.Context` of its own. It starts empty, without the variables of the host's context, and `state_dict` runs outside it
+
+Pass `dedicated_thread=True` to `super().__init__` when the node needs a thread of its own:
+
+- Its hooks block, waiting for a device, a socket or a lock. On a worker, the wait would hold the worker, and the other nodes' `dt` would grow
+- It relies on per-thread state set once. Its `on_start` runs on its own thread, so make such settings there
+
+```python
+class Camera(Node):
+    def __init__(self) -> None:
+        super().__init__(period=1 / 30, dedicated_thread=True)
+```
 
 ## The hooks and their order
 
 Mujou calls the hooks of a node in this order. Override only the ones you need.
 
-1. `on_thread_start()`: once, before `on_start`. Per-thread settings (see [PyTorch in nodes](torch.md))
-2. `on_start()`: once. Create the state
-3. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
-4. `on_update(dt)`: again and again until the run ends
-5. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them
-6. `on_exception()`: once on every node, when any hook of any node raises (see [Errors and shutdown](errors.md))
-7. `on_stop()`: once at the end, normal or not
+1. `on_start()`: once. Create the state
+2. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
+3. `on_update(dt)`: again and again until the run ends
+4. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them
+5. `on_exception()`: once on every node, when any hook of any node raises (see [Errors and shutdown](errors.md))
+6. `on_stop()`: once at the end, normal or not
 
 ## What not to do in a hook
 

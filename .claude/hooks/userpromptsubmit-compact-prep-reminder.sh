@@ -10,19 +10,8 @@
 
 set -uo pipefail
 
-input=$(cat)
-sid=$(
-  printf '%s' "$input" | python3 -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("session_id") or "" if isinstance(data, dict) else "")
-except Exception:
-    pass
-' 2>/dev/null
-) || sid=""
+source "${BASH_SOURCE[0]%/*}/_common.sh" 2>/dev/null || exit 0
+sid=$(read_session_id) || sid=""
 [[ -z "$sid" ]] && exit 0
 
 warn_marker="${TMPDIR:-/tmp}/claude-compact-warn/$sid"
@@ -43,19 +32,5 @@ ctx+=$'\n'"- \`/compact-prep\` 実行後、続けて \`/compact\` の実行を�
 ctx+=$'\n'"- scope 縮小や別セッション化ではなく、圧縮前 state 保存で対処せよ"
 ctx+=$'\n'"- 自動 compact に先を越される前に、区切りを作ることを優先せよ"
 
-printf '%s' "$ctx" | python3 -c '
-import json
-import sys
-
-print(
-    json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": sys.stdin.read(),
-            }
-        }
-    )
-)
-' 2>/dev/null || true
+printf '%s' "$ctx" | print_prompt_context || true
 exit 0

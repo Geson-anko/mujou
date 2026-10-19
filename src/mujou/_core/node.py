@@ -2,7 +2,6 @@
 
 import inspect
 import math
-import threading
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast, override
 
@@ -11,7 +10,7 @@ from torch import nn
 
 from mujou._core import _native
 from mujou._core.component import Component, is_data_descriptor
-from mujou._core.hooks import enter_node_thread, running_hook
+from mujou._core.hooks import enter_node, running_hook
 from mujou._core.timer import ReadOnlyTimer
 
 
@@ -27,14 +26,13 @@ class Node(_native.Node, Component):
     Override the lifecycle hooks below; each does nothing by default, except
     ``state_dict`` and ``load_state_dict``. As in any subclass, call
     ``super().__init__()`` first in ``__init__`` and the same hook of ``super()``
-    first in each override. The framework calls the hooks on the node's own
-    thread, except ``state_dict``:
+    first in each override. The framework calls the hooks on the thread that
+    runs the node (see "Threads" below), except ``state_dict``:
 
-    - ``on_thread_start()``: once, right before ``on_start``, after the
-      framework has set up the thread (see below). Make the node's own
-      per-thread settings here.
     - ``on_start()``: once, when the network runs (also when it was restored).
-      Allocate and initialize the state here.
+      Allocate and initialize the state here. A node with
+      ``dedicated_thread=True`` gets it on its own thread, so it can also make
+      its per-thread settings here.
     - ``load_state_dict(state)``: only when the network was restored, after
       ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
       this node's ``state_dict`` returned. By default it copies the state into the
@@ -76,13 +74,32 @@ class Node(_native.Node, Component):
     ``state_dict``, ...): they raise ``RuntimeError`` there, because a node talks
     only through its own ports.
 
-    Before ``on_start``, the framework sets up the node's thread: it turns off
-    gradient recording (to backpropagate inside the node, wrap the forward
-    computation and ``backward`` in ``with torch.enable_grad():`` marked
-    ``# mujou: local-autograd``), and, when ``device`` is CUDA, makes the device and
-    a stream of the node's own current. On CUDA it also waits for that stream after
-    ``on_update``, after ``load_state_dict`` and around ``state_dict``. It does this in hooks of its own, whose names start with
-    ``_``: do not override those, and overriding a public hook never skips them.
+    Threads: by default the node runs on the workers, a pool of threads that
+    the run shares among its nodes (``mujou.run(..., workers=...)``). Each hook
+    may then run on a different thread from the previous one, but the hooks of
+    a node never run at the same time, and each sees what the previous one
+    wrote. Whether the next hook sees what a hook set per thread
+    (``threading.local``, ``threading.current_thread()``, settings of torch
+    such as ``torch.autocast``) depends on the schedule, and the next node on
+    the same worker may see it too: set such settings back before the hook
+    returns (inside a ``with``, say). ``contextvars`` do carry over: each node
+    runs its hooks in a ``contextvars.Context`` of its own, which starts empty
+    (it does not inherit the host's) and does not hold for ``state_dict``. A
+    hook that blocks (``time.sleep``, waiting for I/O or a lock) holds its
+    worker meanwhile, and the other nodes' ``dt`` grows; give such a node
+    ``dedicated_thread=True``, so that it runs on a thread of its own, with
+    every hook on that thread.
+
+    Before every hook but ``state_dict``, the framework turns off gradient
+    recording (to backpropagate inside the node, wrap the forward computation
+    and ``backward`` in ``with torch.enable_grad():`` marked
+    ``# mujou: local-autograd``). Whenever a thread switches to the node, when
+    ``device`` is CUDA, it also makes the device and a stream of the node's own
+    current. These are the only per-thread settings it sets back. On CUDA it
+    also waits for that stream after ``on_update`` (holding its worker
+    meanwhile), after ``load_state_dict`` and around ``state_dict``. It does
+    this in hooks of its own, whose names start with ``_``: do not override
+    those, and overriding a public hook never skips them.
 
     The node updates once every ``period`` (0.01 s by default) of the run's timer
     on average: the time an update takes
@@ -97,9 +114,10 @@ class Node(_native.Node, Component):
     Set it only when the node must: such a node keeps a CPU core busy, and takes
     time from the other nodes, whose ``dt`` it makes irregular.
 
-    ``device``, ``generator``, ``period`` and ``timer`` (the reading side of the
-    run's timer) are reserved names: do not assign attributes of those names
-    (a class attribute ``period`` makes the run raise ``TypeError``).
+    ``device``, ``generator``, ``period``, ``dedicated_thread`` and ``timer``
+    (the reading side of the run's timer) are reserved names: do not assign
+    attributes of those names (a class attribute ``period`` or
+    ``dedicated_thread`` makes the run raise ``TypeError``).
 
     Example::
 
@@ -133,9 +151,13 @@ class Node(_native.Node, Component):
         seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
         period: The time between two updates on average, in seconds of the
             run's timer. ``0.0`` updates as soon as any time has passed.
+        dedicated_thread: Run the node on a thread of its own instead of the
+            run's workers: for a node whose hooks block, or that relies on
+            per-thread state set once (in ``on_start``).
 
     Raises:
-        TypeError: ``period`` is ``None`` or a ``bool``.
+        TypeError: ``period`` is a ``bool``, or ``dedicated_thread`` is not a
+            ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
             while CUDA is not available, or ``period`` is negative or not
             finite.
@@ -146,7 +168,7 @@ class Node(_native.Node, Component):
     _seed: int | None = None
     _period: float = 0.01
     _generator: torch.Generator | None = None
-    _thread_ident: int | None = None
+    _dedicated_thread: bool = False
     _stream: torch.cuda.Stream | None = None
     _timer: ReadOnlyTimer | None = None
 
@@ -156,28 +178,31 @@ class Node(_native.Node, Component):
         device: torch.device | str = "cpu",
         seed: int | None = None,
         period: float = 0.01,
+        dedicated_thread: bool = False,
     ) -> None:
-        if period is None:  # pyright: ignore[reportUnnecessaryComparison]
-            raise TypeError(
-                "the period must be a number of seconds, got None; pass period=0.0 "
-                "to update as soon as any time has passed"
-            )
         if isinstance(period, bool):
             raise TypeError(f"the period must be a number of seconds, got {period}")
         if not (math.isfinite(period) and period >= 0):
             raise ValueError(f"the period must be finite and >= 0, got {period}")
+        # The annotation is not checked at runtime.
+        if not isinstance(dedicated_thread, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"dedicated_thread must be a bool, got {type(dedicated_thread).__name__}"
+            )
         super().__init__()
         self._device = _check_device(torch.device(device))
         self._seed = seed
         self._period = period
+        self._dedicated_thread = dedicated_thread
         self._generator = self._make_generator()
 
     @property
     def device(self) -> torch.device:
         """The device the node computes on and receives messages on.
 
-        Allocate with it (``torch.zeros(..., device=self.device)``): the thread's
-        current device is this one, but an explicit device states the intent.
+        Allocate with it (``torch.zeros(..., device=self.device)``): the current
+        device in the hooks is this one, but an explicit device states the
+        intent.
         """
         return self._device
 
@@ -186,6 +211,12 @@ class Node(_native.Node, Component):
         """The time between two updates on average, in seconds of the run's
         timer. ``0.0`` updates as soon as any time has passed."""
         return self._period
+
+    @property
+    def dedicated_thread(self) -> bool:
+        """Whether the node runs on a thread of its own instead of the run's
+        workers."""
+        return self._dedicated_thread
 
     @property
     def generator(self) -> torch.Generator:
@@ -201,8 +232,8 @@ class Node(_native.Node, Component):
         and ``set_state`` it before passing the rest to ``super()``.
 
         Raises:
-            RuntimeError: ``super().__init__()`` has not been called (and the node's
-                thread has not started).
+            RuntimeError: ``super().__init__()`` has not been called (and the node
+                has not started).
         """
         if self._generator is None:
             raise RuntimeError(
@@ -224,20 +255,18 @@ class Node(_native.Node, Component):
 
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
-            names = _state_names(self)
             if isinstance(value, _STATE_TYPES):
+                names = _state_names(self)
                 # A property is not registered: what its setter stores is. Looked
                 # up only for a new name, as the lookup walks the MRO.
                 if name not in names and not is_data_descriptor(type(self), name):
                     _set_state_names(self, {**names, name: None})
-            elif name in names:
-                _set_state_names(self, {k: v for k, v in names.items() if k != name})
+            else:
+                _forget_state_name(self, name)
 
         def __delattr__(self, name: str) -> None:
             super().__delattr__(name)
-            names = _state_names(self)
-            if name in names:
-                _set_state_names(self, {k: v for k, v in names.items() if k != name})
+            _forget_state_name(self, name)
 
     @override
     def state_dict(self) -> Any:  # Any: an override returns any picklable object.
@@ -329,9 +358,9 @@ class Node(_native.Node, Component):
         ``VirtualTimer.advance`` raise ``RuntimeError`` in a hook). ``timer`` is a
         reserved name: do not assign an attribute of that name.
 
-        It can be read from the start of the run (also in ``on_thread_start``
-        and ``on_start``). Once the host has seen a normal end (e.g. after
-        ``Run.shutdown`` returned), it is replaced by a ``ReadOnlyTimer`` that
+        It can be read from the start of the run (also in ``on_start``). Once the
+        host has seen a normal end (e.g. after ``Run.shutdown`` returned), it is
+        replaced by a ``ReadOnlyTimer`` that
         stays at the time of the state, also in the ``state_dict`` that the host
         takes then. A ``ReadOnlyTimer`` kept from before the end keeps reading
         the running timer.
@@ -349,20 +378,27 @@ class Node(_native.Node, Component):
         return self._timer
 
     @override
-    def _on_thread_start(self) -> None:
-        # Every setting here is per thread, so it does not touch other nodes.
-        torch.set_grad_enabled(False)
+    def _on_enter(self) -> None:
+        # Every setting here is per thread, so it does not touch other nodes; the
+        # thread switches to this node, so set them all again (a worker ran
+        # other nodes in between). The node first: if a setting below fails, the
+        # hooks the runtime still calls (on_exception, on_stop) run as this node,
+        # not as the one the thread ran before.
+        enter_node(self)
         if self._device.type == "cuda":
             torch.cuda.set_device(self._device)
-            stream = torch.cuda.Stream(self._device)
-            torch.cuda.set_stream(stream)
-            self._stream = stream
+            if self._stream is None:
+                self._stream = torch.cuda.Stream(self._device)
+            torch.cuda.set_stream(self._stream)
         # Normally made by __init__; a subclass that skipped it still gets one.
         if self._generator is None:
             self._generator = self._make_generator()
-        # The OS thread id: the Python thread object may differ between hooks.
-        self._thread_ident = threading.get_ident()
-        enter_node_thread()
+
+    @override
+    def _before_hook(self) -> None:
+        # Before every hook, not only on a switch, so that whether a hook starts
+        # with gradients on does not depend on the schedule.
+        torch.set_grad_enabled(False)
 
     @override
     def _after_update(self) -> None:
@@ -450,6 +486,12 @@ def _set_state_names(node: Node, names: dict[str, None]) -> None:
     vars(node)[_STATE_NAMES] = names  # Not through __setattr__.
 
 
+def _forget_state_name(node: Node, name: str) -> None:
+    names = _state_names(node)
+    if name in names:
+        _set_state_names(node, {k: v for k, v in names.items() if k != name})
+
+
 def _state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
     """Return ``(attribute name, value)`` for the tensors and modules registered on
     ``node``, in the order of registration."""
@@ -505,37 +547,39 @@ def _check_module(name: str, module: nn.Module, source: object) -> None:
         )
 
 
-def thread_ident(node: Node) -> int | None:
-    """Return the id of the thread ``node`` runs on, or ``None`` when it does not
-    run."""
-    return node._thread_ident  # pyright: ignore[reportPrivateUsage]  # Node's own module
-
-
-def end_thread(node: Node) -> None:
-    """Forget the thread of ``node`` once its network has stopped, so that a later
-    thread that reuses the id is not taken for it."""
-    node._thread_ident = None  # pyright: ignore[reportPrivateUsage]  # Node's own module
-
-
 def set_timer(node: Node, timer: ReadOnlyTimer | None) -> None:
     """Give ``node`` the view of its run's timer, or take it back with ``None``."""
     node._timer = timer  # pyright: ignore[reportPrivateUsage]  # Node's own module
 
 
-def checked_period(node: Node) -> float | None:
+def checked_period(node: Node) -> float:
     """Return the period of ``node`` in seconds for the runtime, which rounds it
-    to ns, or ``None`` for ``0.0`` (no wait between updates).
+    to ns and at least 1 ns (so ``0.0`` waits only for the time to move).
 
     Raises:
         TypeError: A subclass of ``Node`` replaced the reserved ``period``.
     """
-    if inspect.getattr_static(type(node), "period") is not vars(Node)["period"]:
+    _check_reserved(node, "period")
+    return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def checked_dedicated(node: Node) -> bool:
+    """Return whether ``node`` runs on a thread of its own, for the runtime.
+
+    Raises:
+        TypeError: A subclass of ``Node`` replaced the reserved
+            ``dedicated_thread``.
+    """
+    _check_reserved(node, "dedicated_thread")
+    return node._dedicated_thread  # pyright: ignore[reportPrivateUsage]  # Node's own module
+
+
+def _check_reserved(node: Node, name: str) -> None:
+    if inspect.getattr_static(type(node), name) is not vars(Node)[name]:
         raise TypeError(
-            f"{type(node).__qualname__} replaces period, a reserved name of Node: "
-            "pass the period to Node.__init__ instead"
+            f"{type(node).__qualname__} replaces {name}, a reserved name of Node: "
+            f"pass {name} to Node.__init__ instead"
         )
-    period = node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
-    return period if period > 0 else None
 
 
 def capture_state(node: Node) -> object:

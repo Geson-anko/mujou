@@ -63,7 +63,7 @@ class Affine(mujou.Network):
 # --8<-- [start:run]
 net = Affine()
 x = torch.tensor([1.0, 2.0, 3.0])
-# The nodes run on threads of their own until the end of the `with` block.
+# The nodes run on the run's worker threads until the end of the `with` block.
 with mujou.run(net) as run:
     run.write({net.prev: x})  # the unconnected input port of scale
     # x takes a few updates to pass through the nodes: wait until y arrives, with

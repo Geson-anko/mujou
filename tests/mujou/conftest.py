@@ -62,6 +62,7 @@ class Start(Protocol):
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
+        workers: int | None = None,
     ) -> Run: ...
 
 
@@ -117,8 +118,16 @@ def start(started: list[Run]) -> Start:
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
+        workers: int | None = None,
     ) -> Run:
-        run = mujou.run(component, *components, timer=timer, inputs=inputs, state=state)
+        run = mujou.run(
+            component,
+            *components,
+            timer=timer,
+            inputs=inputs,
+            state=state,
+            workers=workers,
+        )
         started.append(run)
         return run
 
