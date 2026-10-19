@@ -42,7 +42,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, TryLockError};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::time::{Timer, TimerState, remaining};
@@ -535,36 +535,29 @@ impl<N: NodeHooks> Runtime<N> {
 
         let mut threads = Vec::with_capacity(n - pool + workers);
         for i in (0..n).filter(|&i| shared.dedicated[i]) {
-            let node_shared = Arc::clone(&shared);
-            let spawned = thread::Builder::new()
-                .name(format!("mujou-node-{}", shared.names[i]))
-                .spawn(move || N::on_thread(move || node_shared.run_node(i)));
-            match spawned {
+            let name = format!("mujou-node-{}", shared.names[i]);
+            match spawn(&shared, name, move |s| s.run_node(i)) {
                 Ok(thread) => threads.push(thread),
                 Err(e) => return Err(abandon(&shared, "a node", &e)),
             }
         }
         for k in 0..workers {
-            let worker_shared = Arc::clone(&shared);
-            let spawned = thread::Builder::new()
-                .name(format!("mujou-worker-{k}"))
-                .spawn(move || N::on_thread(move || worker_shared.run_worker()));
-            match spawned {
+            match spawn(&shared, format!("mujou-worker-{k}"), |s| s.run_worker()) {
                 Ok(thread) => threads.push(thread),
                 Err(e) => return Err(abandon(&shared, "a worker", &e)),
             }
         }
-        let controller = Controller {
-            shared: Arc::clone(&shared),
-            threads,
-            done: false,
-        };
         let (started_tx, started_rx) = mpsc::channel();
-        let spawned = thread::Builder::new()
-            .name("mujou-control".to_owned())
-            .spawn(move || N::on_thread(move || controller.run(messages, started_tx)));
-        if let Err(e) = spawned {
-            // The controller (with the node threads' handles) was dropped.
+        let control = move |shared| {
+            let controller = Controller {
+                shared,
+                threads,
+                done: false,
+            };
+            controller.run(messages, started_tx);
+        };
+        if let Err(e) = spawn(&shared, "mujou-control".to_owned(), control) {
+            // The node threads' handles were dropped with `control`.
             return Err(abandon(&shared, "the control", &e));
         }
         let reply = Reply {
@@ -713,6 +706,22 @@ fn check_start(n: usize, names: usize, config: &RuntimeConfig) -> Result<Vec<u64
         )),
         Some(periods) => Ok(periods.clone()),
     }
+}
+
+/// Spawns a thread of the runtime of `s`, which marks itself as one
+/// ([`RUNTIME_OF_THREAD`]) and runs `body` inside [`NodeHooks::on_thread`].
+fn spawn<N: NodeHooks>(
+    s: &Arc<Shared<N>>,
+    name: String,
+    body: impl FnOnce(Arc<Shared<N>>) + Send + 'static,
+) -> std::io::Result<JoinHandle<()>> {
+    let shared = Arc::clone(s);
+    thread::Builder::new().name(name).spawn(move || {
+        N::on_thread(move || {
+            RUNTIME_OF_THREAD.set(shared.id());
+            body(shared);
+        })
+    })
 }
 
 /// Gives up a start whose threads could not all be spawned: lets the time run

@@ -24,7 +24,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use super::node::{Command, ExceptionHook, next_target_ns};
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, Shared};
+use super::{Control, NodeHooks, Shared};
 
 /// Where a pool node is in its life, as the position of a dedicated thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +130,6 @@ impl<N: NodeHooks> Shared<N> {
     /// The body of a worker thread: runs the pool nodes until all of them have
     /// stopped.
     pub(super) fn run_worker(&self) {
-        RUNTIME_OF_THREAD.set(self.id());
         let mut c = self.lock();
         while c.sched.left > 0 {
             // Work in the ready queue means the timekeeper, if any, is already

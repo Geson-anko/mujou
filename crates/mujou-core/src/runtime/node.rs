@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use super::{Control, NodeHooks, RUNTIME_OF_THREAD, Shared};
+use super::{Control, NodeHooks, Shared};
 
 /// The instruction from the control thread to the nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +78,6 @@ enum Boundary {
 impl<N: NodeHooks> Shared<N> {
     /// The thread of node `i`.
     pub(super) fn run_node(&self, i: usize) {
-        RUNTIME_OF_THREAD.set(self.id());
         let started = self.call(i, "on_start", |n| n.start()).is_ok();
         let mut c = self.lock();
         c.nodes[i].started = true;
