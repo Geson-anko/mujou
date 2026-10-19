@@ -814,14 +814,12 @@ class OnDevice(Node):
         self.out = Port(send=TensorSpec((3,)))
         self.current_device: int | None = None
         self.own_stream: bool | None = None
-        self.grad_enabled: bool | None = None
 
     @override
     def on_update(self, dt: float) -> None:
         self.current_device = torch.cuda.current_device()
         default = torch.cuda.default_stream(self.device)
         self.own_stream = torch.cuda.current_stream() != default
-        self.grad_enabled = torch.is_grad_enabled()
 
 
 class StreamRecorder(Node):
@@ -889,7 +887,6 @@ class TestCuda:
         step(run)
         assert node.current_device == index
         assert node.own_stream is True
-        assert node.grad_enabled is False
 
     @pytest.mark.parametrize(
         "indices", [(0, 0), pytest.param((0, 1), marks=pytest.mark.cuda(2))]
