@@ -68,7 +68,7 @@ bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated`
 - 公開の hook `on_thread_start` は 2026-10-19 にユーザーの決定で廃止した（正式公開前なので、移行の案内も検出もせずに消した）。専用スレッドのノードは `on_start` も自分のスレッドで呼ばれるので、スレッドごとの設定はそこに書く。ワーカーではスレッドごとの設定が hook の間で残らないので、そういう hook を持つこと自体が罠になっていた
 - `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録には触れない（[PyTorch の利用](torch.md#切り替えごとの設定)）
 - hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。例外は文脈の外で呼ぶ `state_dict`（`_capture_state`）
-- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す勾配モード（hook の前に毎回）・CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
+- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
 - GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すのでワーカーが複数あれば並列に進む。GIL を取り合うスレッドはノードの数でなく N 本に減る。`workers` の既定は、実行時に GIL が有効なら（`sys._is_gil_enabled()`）、無効なときの半分にする。計画では両方のビルドで同じにしていたが、ベンチマークで GIL ありは論理コア数の半分ほどが最速で、論理コア数では約半分の速さだった（2026-10-19、ユーザーへの確認待ち）
 
 ### ベンチマーク
