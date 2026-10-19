@@ -65,12 +65,12 @@ For a node given a CUDA `device`, Mujou sets up the following.
 
 - It makes the node's device the current device in the node's hooks
 - It creates a CUDA stream for the node alone and makes it the current stream in the node's hooks. All of the node's operations go on this stream
-- It synchronizes the node's stream after each `on_update` and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see [Running a network](running.md#threads-of-a-run))
-- When the state is taken, it synchronizes the node's stream before and after `state_dict`. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it
+- It waits for the work queued on the node's stream after each `on_update` and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see [Running a network](running.md#threads-of-a-run))
+- When the state is taken, it waits for the work queued on the node's stream before and after `state_dict`. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it
 
 Mujou sets the device and the stream whenever a worker switches to a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.
 
-So the node's author does not have to write any synchronization. If you synchronize yourself, synchronize only your own stream (`torch.cuda.current_stream().synchronize()`).
+So the node's author does not have to write any synchronization. If you synchronize yourself, wait only for the work you queued on your own stream (`torch.cuda.current_stream().record_event().synchronize()`). A device has a pool of 32 streams, so past 32 CUDA nodes on one device several nodes share a stream, and synchronizing the whole stream can also wait for work that the other nodes queue on it.
 
 !!! warning "Do not wait for the whole device"
 
