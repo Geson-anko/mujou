@@ -239,16 +239,17 @@ class TestRecvSendBeforeRun:
 
 class Probe(Node):
     """Holds the given ports and, in each ``on_update``, keeps what ``update``
-    returns (or the exception it raised)."""
+    returns (or the exception it raised). A subclass sets ``on_device`` to
+    compute on another device (a keyword would collide with ``**ports``)."""
+
+    on_device = "cpu"
 
     def __init__(
         self,
         update: Callable[[], object] = lambda: None,
-        *,
-        device: str = "cpu",
         **ports: Port[Any, Any, Any],
     ) -> None:
-        super().__init__(device=device)
+        super().__init__(device=self.on_device)
         for name, port in ports.items():
             setattr(self, name, port)
         self.update = update
@@ -676,7 +677,11 @@ class TestCuda:
             return x
 
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
-        sink = Probe(update, device="cuda", prev=inp, back=back)
+
+        class OnCuda(Probe):
+            on_device = "cuda"
+
+        sink = OnCuda(update, prev=inp, back=back)
         run = start_manual(Group(source=source, sink=sink))
         step(run, source, sink)
         received = cast(torch.Tensor, sink.results[0])
