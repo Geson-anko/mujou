@@ -1,6 +1,6 @@
 # mujou.pc の実装計画
 
-> 状態: `pc.Input`・`pc.Layer`・`pc.Output`・`pc.functional` と MNIST の example は実装済み（2026-10-20）。docs の使い方のページと skill `pc-alm` への追記は未着手（[実装の順番](#実装の順番) の 5）。
+> 状態: `pc.Input`・`pc.Layer`・`pc.Output`・`pc.functional`、MNIST の example、docs の使い方のページ（`docs/en|ja/user-guide/pc.md`）と API リファレンス（`docs/en/api/pc.md`）は実装済み（2026-10-20）。skill `pc-alm` への追記は未着手（[実装の順番](#実装の順番) の 5）。
 
 PC-ALM を `mujou.Node` の上に実装するモジュール `mujou.pc` の設計と実装の順番。最初の目標は `nn.Linear` + 任意の活性化関数の 3 層ネットワークでバッチサイズ $B$ の MNIST を解き、同じネットワークの BP と性能を比べること。
 

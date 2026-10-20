@@ -24,6 +24,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 | ノードをテストする                                 | `testing_a_node.py`   | [テスト](../user-guide/testing.md)                                                                                                                |
 | 時間の進み方を変える                               | `timers.py`           | [時間の制御](../user-guide/time.md)、[グローバル時間](../concepts.md#%E3%82%B0%E3%83%AD%E3%83%BC%E3%83%90%E3%83%AB%E6%99%82%E9%96%93)             |
 | ノードが例外を投げたときの動きを知る               | `errors.py`           | [例外と終了](../user-guide/errors.md)                                                                                                             |
+| PC-ALM でモデルを学習させ、BP と比べる             | `mnist/`              | [PC-ALM で学習する](../user-guide/pc.md)                                                                                                          |
 
 ### 各プログラムが示すこと
 
@@ -39,8 +40,9 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 - `testing_a_node.py`: `mujou.testing` の仮想タイマーと手動の更新で、ノードを決まった `dt` と順序で動かし、結果を参照の計算とビット単位で比べる。途中で取得した状態から復元した実行が、止めずに続けた実行と一致することも確かめる
 - `timers.py`: 時刻 `Timestamp`、実行ごとのタイマー `Timer`、時間の速さ（実行のタイマーとグローバルタイマー）
 - `errors.py`: ホストが受け取る `NetworkError` とその `__cause__`、`on_exception` → `on_stop` の順、`on_start` の例外は `mujou.run` が送出する
+- `mnist/`: 784-256-256-10 の ReLU ネットワークを `mujou.pc` の 4 つのノードに分け、MNIST をストリームで流して PC-ALM で学習させる。同じ初期重みとバッチで BP でも学習させ、prequential 精度とテスト精度、ノードの `dt` を比べる
 
-`leaky_chain/` だけはディレクトリになっている。入口は `main.py` で、ノードの定義は `leaky.py` に分けてある。
+`leaky_chain/` と `mnist/` はディレクトリになっている。入口はどちらも `main.py`。`leaky_chain/` はノードの定義を `leaky.py` に、`mnist/` はデータの読み込みを `data.py` に、BP での学習を `bp.py` に分けてある。
 
 ## ▶️ 走らせ方
 
@@ -51,4 +53,4 @@ uv run python examples/quickstart.py
 uv run python examples/leaky_chain/main.py
 ```
 
-どのプログラムも GPU やネットワーク接続を使わず、数秒以内に終わる。
+どのプログラムも GPU を使わない。`mnist/` 以外はネットワーク接続も使わず、数秒以内に終わる。`mnist/` は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。
