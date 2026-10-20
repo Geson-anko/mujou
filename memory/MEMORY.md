@@ -20,11 +20,12 @@
 - [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer / mujou.time の pause・resume・is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は符号付きの秒
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_core/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ（mujou.Tensor・mujou.dtypes・mujou.default.dtype は廃止）、torch.Tensor / TypedDict、TensorSpec(shape, torch.dtype)、zeros/rand、初期値必須、片方向スロット 2 本、時刻（秒 f64 + ns u64）自動付与、バッファプールのみ、define-and-run のネットワークオブジェクト
-- [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）。実装計画の決定（ずれ u で持ちリセットしない、ターゲットは入力に付随させ carry で中継、learn_interval、周期 τ_h/4、register_state）
+- [PC-ALM の実装と公開元](project_pc_module.md) — PC-ALM は Rust でなく PyTorch で実装し、mujou.pc から公開（トップレベルには出さない）。実装の決定（状態は h で持ち離散的な跳びだけ付け替えて epoch で連鎖、学習は書いた時刻から、ターゲットは入力に付随させ carry で中継、learn_interval、周期 τ_h/4、register_state）
 - [ノードのライフサイクル](project_node_lifecycle.md) — ノードが分散処理の最小単位。on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop / state_dict / load_state_dict を override、ループはフレームワーク、state は pickle 可能な木、インスタンスが定義と実行を兼ねる
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → 木をコピー → 再開 → ホストに返す。正常終了後も取得できる。保存はユーザー。スロット・最後の更新時刻・タイマーも木に入る。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook が例外を投げてもシステム全体を終了（pamiq-core 参考）。その場で終了フラグ、全ノードの on_exception → on_stop、ホストへ最初の例外を送出。例外時の state tree は取得しない。部分停止・再起動・スキップはしない
 - [ネットワークと Port](project_network_ports.md) — Node と Network は Composite、接続は Port 同士（a.next.connect(b.prev)）、NextPort は既定で複数・PrevPort は 1 つ、Port 名は prev / next、向きなしの Port（send/recv 型の組）、接続 1 回で両端に登録する Channel、単一/複数を宣言で区別、相手は接続ハンドルで識別、入出力は未接続 Port の読み書き、片方向 Port 可、集約は更新手法の責任
+- [付随データ（carry）](project_carry.md) — 値と同じメッセージで運び途中はゼロコピーで中継。Port の send_carry=（spec か同じノードの Port）/ recv_carry=、carried()、木の "carries"、ホストが読むと値だけ返り書けない、型は Port[S, R, M, CS, CR]
 - [ホストの入出力（暫定）](project_host_io.md) — run はバックグラウンド、mujou.run が返す Run ハンドルの write / read / subscribe / wait_for / state_dict / shutdown / join。初期値と復元は inputs= / state=。複数 Port の write は版番号で一斉切り替え。入力はその実行のタイマー上の信号
 - [GPU の扱い](project_gpu_policy.md) — mujou は GPU をサポートしない。コアの値はホストだけ、GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡し（必ずコピー）にだけ使う。ノード内の GPU 利用は自由。ノードのデバイスは CPU と CUDA だけ（MPS などは 2026-10-17 に取りやめ）
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — 実装は private な mujou._core パッケージ、PyTorch を必須の依存として全面採用（mujou.torch に分けない）、torch を使わないのは拡張モジュール mujou._core._native と時刻まわりだけ。利用者が継承する mujou.Node が内部の hook _on_enter で勾配停止・ノードごとのストリームを設定、乱数生成器は super().__init__ で作る（2026-10-18）。状態はその場で更新。CPU と CUDA だけ。JAX は多数スレッドで伸びず不採用

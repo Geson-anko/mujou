@@ -30,6 +30,7 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 - **You cannot restore while another run is running on the same timer.** In that case `mujou.run` raises `ValueError` and starts nothing. End the other run first, or give the restored run a timer of its own, `mujou.time.Timer()` (see [Controlling time](time.md))
 - The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise `mujou.run` raises `ValueError`
 - If you pass both `state=` and `inputs=`, the values in `inputs` override the input values in the tree
+- Data carried along a path ([Carrying data along a path](building-a-network.md#carrying-data-along-a-path)) is in the tree too: with the messages that carry it, and, for each port with a `recv_carry`, the data of the message it last received. A restored node passes on the same data as one that never stopped
 
 ## Taking the states of several runs at one time
 
