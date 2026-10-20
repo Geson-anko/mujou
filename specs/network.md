@@ -35,6 +35,8 @@ Port は未接続のまま残ってもよい。未接続の Port も、スキー
 
 Port は、つながる相手が 1 つか複数かを持つ。相手 1 つの Port に 2 本目の Channel を接続すると、`connect` を呼んだ時点でエラーになる。
 
+Port は、送るメッセージと受け取るメッセージに、値とは別に付随データ（carry）を載せられる（[付随データ](#付随データ)）。
+
 ### PrevPort と NextPort
 
 Port の宣言には 3 種類がある。
@@ -71,6 +73,37 @@ ch = l1.next.connect(l2.prev)
 ```
 
 Channel のスロット 2 本は、それぞれ書く側の端が所有する。各スロットの書き手は 1 つという原則は、分岐や合流があってもそのまま保たれる。
+
+## 付随データ
+
+> 状態: 実装済み（2026-10-20）。
+
+付随データ（carry）は、値と同じメッセージに載せて経路に沿って運ぶデータである。サンプル ID・ターゲット・マスクのように、入力のサンプルに付いて先のノードまで届けたいデータに使う（PC のターゲット: [PC モジュール](pc-module.md#メッセージと-port)）。別の Port（別のスロット）で運ぶと、読み手は 2 つのスロットを別々の瞬間に読むので、値と付随データが別のサンプルの組になりうる。同じメッセージに入れておけば、読み手は常に同じサンプルの組を読む。
+
+Port は向きごとに付随データの spec を持つ。
+
+| 引数               | 意味                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `recv_carry=spec`  | 受け取るメッセージに載る付随データ。相手 1 つの Port だけが持てる（相手が複数だと、どのメッセージの付随データか決まらない） |
+| `send_carry=spec`  | 送るメッセージに載せる付随データ。`send` / `send_to` の `carry=` で値を渡し、値と同じくコピーする。付随データを作る側        |
+| `send_carry=port`  | 同じノードの、`recv_carry` を持つ Port が最後に `recv` したメッセージの付随データを、コピーせずに載せる。中継する側          |
+
+```python
+class Relay(Node):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec((B, 784)), recv_carry=CARRY)
+        self.next = NextPort(send=TensorSpec((B, 256)), send_carry=self.prev)
+```
+
+- 「最後に `recv` したメッセージ」の付随データを中継するので、送る値の計算に使った入力と付随データが同じスナップショットになる
+- `connect` は、値の spec と同じく付随データの spec も向きごとに照合する（`send_carry_spec` と相手の `recv_carry_spec`）。中継する Port の `send_carry_spec` は中継元の `recv_carry_spec` である
+- 中継元は同じノードの Port に限る。ノードが読むのは自分の Port のスロットだけ、という局所性を保つためである。構築（`Network.build` と `mujou.run`）で検査し、違えば `ValueError`。Port は `__init__` の時点では所有ノードを知らないので、構築で検査する
+- 中継はコアの中でバッファの参照を複製するだけで、torch もノードをまたぐ計算グラフも経由しない（[メッセージ](messages.md#付随データ)）。待ちもバリアも増えない
+- `initial` は値だけを決め、付随データの初期値はゼロ（bool なら False）である。初期値を宣言する口（`initial_carry=`）は、要るまで足さない
+- 付随データの意味（ターゲット・マスク・時刻など）はコアに持ち込まない。コアからはフィールドの列に見えるだけである
+
+宣言の形を `carry=` 1 つ（spec なら受け取る向き、Port なら送る向き）にする案は採らなかった。付随データを作る側（送る向きの spec）も、両方の向きに付随データを持つ Port も書けないからである（2026-10-20）。
 
 ## 入れ子
 
@@ -269,8 +302,9 @@ A.next ──┼─ Channel ─ C.prev
 ### 構築と実行
 
 - `Network.build()` が構造を検査して凍結し、`Graph` を返す。何度呼んでも同じ `Graph` を返し、別々のスレッドから同時に呼んでも構築は 1 回だけ行う（構築は lock の下で 1 つずつ）。以後の `Port.connect` と、木の Port・ノード・ネットワークの代入と削除は `RuntimeError` になる（[属性の登録](#属性の登録)）。構築した木のノード・ネットワーク・Port には構築済みの印が付き、印の付いたものを含む木の `build` は `RuntimeError` になる（Port を持たないノードも、ほかの実行に入れられない）。`Graph` は `nodes`（パスとノードの組）と `port_path(port)` だけを公開し、直接は作れない（`TypeError`）
-- `Port[S, R, M]` の型引数は、送る型・受ける型・相手の数（`Single` か `Multi`。既定は `Single` で、`NextPort` だけ `Multi`）である。`send` と `recv` は位置でも渡せ、`multi=` と `initial=` はキーワード専用である
-- `connect` は、spec が互いに逆向きでないときと、両方の Port がどちらの向きの spec も持たない（何も流れない）ときに `TypeError` を投げる。自分自身との接続と、接続済みの相手 1 つの Port への 2 本目は `ValueError`、構築済みの木の Port は `RuntimeError` である
+- `Port[S, R, M, CS, CR]` の型引数は、送る型・受ける型・相手の数（`Single` か `Multi`。既定は `Single` で、`NextPort` だけ `Multi`）・送る付随データの型・受け取る付随データの型である。付随データを持たない向きは `Never` で、どの Port でも受け取る注釈は `Port[Any, Any, Any, Any, Any]` になる。`send` と `recv` は位置でも渡せ、`multi=`・`initial=`・`send_carry=`・`recv_carry=` はキーワード専用である。`multi=True` の overload は `recv_carry` を受け取らない
+- Port を作る時点の付随データの検査はすべて `TypeError` である: `send_carry` が spec・Port・`None` のどれでもない、`recv_carry` が spec でも `None` でもない、`send` が無いのに `send_carry`、`recv` が無いのに `recv_carry`、`multi=True` で `recv_carry`、`send_carry` に渡した Port が `recv_carry` を持たない
+- `connect` は、spec（付随データの spec を含む）が互いに逆向きでないときと、両方の Port がどちらの向きの spec も持たない（何も流れない）ときに `TypeError` を投げる。付随データの不一致は `"A carries X with what it sends, but B expects Y"` の形で、値の不一致と並べて示す。自分自身との接続と、接続済みの相手 1 つの Port への 2 本目は `ValueError`、構築済みの木の Port は `RuntimeError` である
 - `Channel` を作るのは `Port.connect` だけである。`Channel()` を直接呼ぶと `TypeError` になる。両端の Port に登録されない Channel は何も運ばないからである
 - Port は、ノードの属性に初めて代入されたときに `<ノードのクラス名>.<属性名>`（例: `Shift.next`）という名前を持つ。`connect` のエラー、実行していないときの `recv` / `send` のエラー、`repr` はこの名前で Port を示す。名前は最初の代入で決まり、別名での代入やネットワークでの公開では変わらない。ノードに代入する前の Port は spec で示す。`initial` の検査は Port を作る時点で行うので、そのエラーには名前が無い（`"PrevPort initial"`）
 - `mujou.run(component, *components, timer=None, inputs=None, state=None)` は、ネットワーク 1 つならそれを `build()` し、ノード 1 つならそれを根にした木を構築し、2 つ以上（ノードとネットワークを混ぜてよい）なら `Group(component, *components)` を `build()` して、その `Graph` を走らせて `Run` を返す。何も渡さないと `TypeError`（型検査でも引数が足りないと分かる）。`Node` でも `Network` でもない値があっても `TypeError`。1 つの `Graph` が走るのは 1 回で、2 回目は `RuntimeError`（同時に呼んでも走るのは 1 回）。ただし、何も起動せずに `ValueError` などで終わった `run` は数えないので、原因を取り除けば同じネットワークを同じ形で（単独なら単独で、まとめてなら同じ順にまとめて）走らせ直せる。複数のネットワークやノード 1 つを渡した `run` が断られたときは、`mujou.run` が自分で構築した木（`Group` かノードを根にした木）の構築を取り消すので、同じ形で走らせ直せる（ノードは、1 つで渡しても他と一緒に渡しても、断られた後どの形でも走らせ直せる）。ノードを 2 回走らせると、2 回目は構築がノードの構築済みの印に当たり、`RuntimeError` になる。走った（または走らせるために `mujou.run` が構築した）木の一部をもう一度構築したときの文言は、ネットワークでもノードでも `"<クラス名> has already run; create a new instance to run again"` にそろえる。利用者が `mujou.run` に渡したものは、`mujou.run` が作った `Group` のパス（`'0'` など）や根の空のパスを付けずにクラス名だけで呼ぶ。利用者が作った木の中にあるものは `"Leaky at 'node' has already run; ..."` のようにそのパスを付ける。走っていない構築済みの木（`build()` だけ呼んだネットワーク）の一部なら、従来どおり `"... belongs to a network that is already built"` である。付けるパスは `mujou.run` が作る木でのパスで、状態の木のキーと一致する（複数渡したときは `"Chain at '0.x' has already run; ..."` のように位置が付く）。並行に呼ばれた `run` のうち断られた側の文言は、`"... has already run; ..."` か `"... belongs to a network that is already built"` のどちらかになる（相手の起動が終わる前は、相手の木がまだ走ったと記録されていない）。どちらの場合も走るのは 1 回だけである。また並行の `run` では、相手が後で断られても、こちらが断られることがある。断られた `run` は走らせ直せる。単独の `build` は取り消さないので、単独で断られたネットワークは、ほかのネットワークとまとめては走らせられない。`KeyboardInterrupt` を受けた `run` は、どこで受けても走ったものとして数える。起動を待つ間ならバックグラウンドで起動が続き、インタプリタの終了時に止める。起動の前（状態の復元や入力の書き込みの途中）に受けた場合も、安全側に倒して数える。もう一度動かすには、ノードも含めて新しいインスタンスを作る（構築済みのネットワークのノードは、別のネットワークで `build` できない）
@@ -286,17 +320,20 @@ A.next ──┼─ Channel ─ C.prev
 - `recv()` は相手 1 つなら値、複数なら `{Channel: 値}`（接続順）を返す。`recv_with_time()` は値と書かれた時刻（その実行のタイマーの `Timestamp`）の組を返す。`Timestamp` は pickle と deepcopy ができるので、ノードの状態に入れてよい（木の保存は pickle で行う。`torch.save` / `torch.load` を使うときは、`Timestamp` を含む木は `torch.load(..., weights_only=False)` で読む。`weights_only=True` では読めない）。どのタイマーの時刻かは持たないので、比べるのは同じタイマーの時刻とだけにする。どちらも毎回コアのバッファからノードのデバイスの新しい Tensor へコピーするので、受け取った Tensor をその場で書き換えても、スロットにもほかの読み手にも影響しない。`requires_grad` は False である
 - 相手 1 つの Port は、相手（未接続ならホスト）がまだ書いていなければ初期値を返す。初期値は相手の Port の `initial`（無ければゼロ）、ホストが書く Port なら `inputs` の値（無ければゼロ）である（[メッセージ](messages.md#スキーマと初期値)）。相手を複数取る未接続の Port は `{}` を返す
 - `has_received()` は、`recv()` が返す値が初期値ではなく書き手の書いた値かを返す。相手 1 つなら `bool`、複数なら `{Channel: bool}`（`recv` と同じキー。未接続なら `{}`）。書き手は相手のノード（`send` / `send_to`）か、ホスト（`inputs` と `run.write`）である。送った値が初期値と等しくても `True` になる。実装はコアの `Message` が持つ `sent` の印で、送った値（`Outlet.send` / `InputGroup.write`）は `True`、スロットを作ったときのゼロと `initial` は `False` である。状態の木はスロットごとに `(value, time_ns, sent)` を持ち、復元した実行は状態を取った時点の印を保つ。復元で書く `inputs` は `True` にする。時刻を番兵にする案は採らなかった。初期値の時刻（実行の開始の時刻）に送ることがあり（仮想時計で時刻を進める前に `on_start` で送るなど）、区別できないからである（2026-10-17）
+- 付随データを作る Port（`send_carry=spec`）の `send(msg, carry=...)` / `send_to(channel, msg, carry=...)` は、`carry` を値と同じ検査とコピーで 1 つのメッセージに入れる。`carry` を渡さないと `TypeError`。中継する Port（`send_carry=port`）に `carry` を渡すと `TypeError` で、中継元の Port が最後に受け取ったメッセージの付随データ（`_native.Carry`）をそのまま載せる。付随データを持たない Port に `carry` を渡しても `TypeError`
+- `recv_carry` を持つ Port の `Binding` は、最後に受け取ったメッセージの付随データ（`Carry`）を持つ。`recv` / `recv_with_time` のたびに、値を読んだのと同じメッセージの付随データに差し替える。`has_received` は差し替えない。最初の `recv` までは、実行を組んだ時点でその Port が読むスロットにあるメッセージの付随データ（ゼロ。復元したなら木の `"carries"` の値）である。ノードは `Message` ごと持たず `Carry` だけを持つので、値のバッファはプールへ戻る
+- `carried()` は最後に受け取ったメッセージの付随データを、`carried(key)` は `DictSpec` のそのフィールドだけを、所有ノードのデバイスの新しい Tensor にコピーして返す。`recv_carry` を持たない Port と、`TensorSpec` の付随データに `key` を渡すと `TypeError`、無いキーは `KeyError`
 - `send(msg)` はすべての相手に送り、外向きのスロットも更新する。`send_to(channel, msg)` はその Channel のスロットだけを更新し、外向きのスロットは変えない。そのため `send_to` だけを使う Port をホストが `read` すると、初期値（復元したなら木の値）が返る
 - 送るときは値を `detach()` する。GPU の値は自分のストリームでホストへコピーし、その後コアがプールのバッファへコピーする。送った後に値を書き換えても、読み手には見えない
-- `recv` / `recv_with_time` / `has_received` / `send` / `send_to` を呼べるのは、Port を所有するノードの hook の中だけである。ほかのスレッド（ホストなど）や、ほかのノードの hook から呼ぶと `RuntimeError` になる。スロットの書き手を 1 つに保ち、ノードが読めるのを自分の Port のスロットに限るため（局所性）である。受け取った値を所有ノードのデバイスとストリームに載せるためでもある。判定はスレッド ID でなく、呼んだスレッドが今走らせているノードで行う（[切り替えごとの設定](torch.md#切り替えごとの設定)）。ワーカーはほかのノードも走らせるので、同じワーカーの上でもほかのノードの Port は呼べない。`state_dict()` は制御スレッドで呼ばれるので、その中では `recv` できない（スロットは木に別に入る）
+- `recv` / `recv_with_time` / `has_received` / `carried` / `send` / `send_to` を呼べるのは、Port を所有するノードの hook の中だけである。ほかのスレッド（ホストなど）や、ほかのノードの hook から呼ぶと `RuntimeError` になる。スロットの書き手を 1 つに保ち、ノードが読めるのを自分の Port のスロットに限るため（局所性）である。受け取った値を所有ノードのデバイスとストリームに載せるためでもある。判定はスレッド ID でなく、呼んだスレッドが今走らせているノードで行う（[切り替えごとの設定](torch.md#切り替えごとの設定)）。ワーカーはほかのノードも走らせるので、同じワーカーの上でもほかのノードの Port は呼べない。`state_dict()` は制御スレッドで呼ばれるので、その中では `recv` できない（スロットは木に別に入る）
 - 新しい値が書かれるまで待つ機能は Port に持たせない。ノードが隣のノードを待つことになるからである。待つのはホストの `subscribe` だけである
 
 ### ホストの入出力
 
 | メソッド                         | 振る舞い                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかは `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
-| `read(port)` / `read_with_time(port)` | 送る spec を持つ Port の外向きのスロットの値を返す。`read_with_time` は時刻（`Timestamp`）との組を返す。Port の `recv` / `recv_with_time` と同じ分け方である（2026-10-17、ユーザーの決定。時刻を使わない読み出しが多く、`y, _ =` と書かずに済む）。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
+| `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかと、付随データを受け取る Port（`recv_carry`）は `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
+| `read(port)` / `read_with_time(port)` | 送る spec を持つ Port の外向きのスロットの値を返す。付随データを送る Port（`send_carry`）は `ValueError`（型でも弾く。`subscribe` と `wait_for` も同じ）。`read_with_time` は時刻（`Timestamp`）との組を返す。Port の `recv` / `recv_with_time` と同じ分け方である（2026-10-17、ユーザーの決定。時刻を使わない読み出しが多く、`y, _ =` と書かずに済む）。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
 | `subscribe(port, timeout=math.inf)` | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまでは Port の `initial` かゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる）。`timeout` は反復全体にかける実時間の秒で、`subscribe` を呼んだときから数え、ループの本体にかかった時間も含む。2 つ目以降の値を返す前にこれを過ぎると、イテレータが `TimeoutError` を送出して終わり、実行は走り続ける。負か NaN なら呼んだ時点で `ValueError` |
 | `wait_for(port, condition, timeout=math.inf)` | `subscribe` で最新値から順に確かめ、`condition` を満たした最初の値と時刻を返す。`timeout` を過ぎると `TimeoutError`（実行は走り続ける）、先に実行が正常に終了すると `RuntimeError`。期待した出力が届くまで待つホストの書き方を 1 行にするため（2026-10-17、例の読み直しループを置き換えた） |
 | `state_dict(timeout=30.0)`       | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError`。`timeout` は全ノードの停止を待つ実時間の秒で、有限の正の数（ほかは `ValueError`）。終了した後は待たず、検査だけする（[実行モデル](execution-model.md#実装-1)） |
@@ -304,6 +341,7 @@ A.next ──┼─ Channel ─ C.prev
 | `shutdown(timeout=math.inf)` / `join(timeout=math.inf)` | 終了を要求して待つ／終了を要求せずに待つ。`shutdown` は終了の後は何もしない。`timeout` は実時間の秒で、負か NaN なら `ValueError` |
 | `with mujou.run(...) as run:`    | 抜けるときに `shutdown()` を呼ぶ。本体が例外で抜けたときは本体の例外を優先し、`shutdown()` の `NetworkError` は捨てる（ノードの例外はログに出ている） |
 
+- ホストの読み書きは付随データに対応させない（2026-10-20、必要になったら足す）。付随データを捨てて値だけを読み書きする案もあるが、黙って捨てるより断る。PC の `Output` は予測とターゲットを普通のメッセージで送るので、ホストはそれを読む
 - `mujou.run(..., state=tree)` で復元するネットワークは、木を取ったネットワークと同じノードのパスとスロット名を持たなければならない。違えば `mujou.run` は `ValueError` を送出し、何も起動しない。属性名や接続を変えると、パスとスロット名が変わる。同じタイマーでほかの実行が走っている間は、復元する `mujou.run` が `ValueError` になる。このとき何も起動しないので、ほかの実行を終了させるか別のタイマーを渡して走らせ直せる（[実行モデル](execution-model.md#復元)）
 - `shutdown(timeout)` が時間内に終わらなければ `TimeoutError` を送出する。終了の要求は取り消さないので、ノードはもう更新せず、ネットワークはバックグラウンドで終了を続ける（`on_stop` がまだ走っているかもしれない）。終了を待つには `join()` を呼ぶ。`join(timeout)` が時間内に終わらなければ `TimeoutError` を送出し、ネットワークには何もしない。走っていれば走り続ける
 - 例外で終了した後は、`write`・`read`・`read_with_time`・`subscribe`（とそのイテレータ）・`state_dict`・`shutdown`・`join` が `NetworkError` を送出する。`__cause__` は最初にノードが投げた例外である。例外で終了したときの状態の木は取得しない
