@@ -72,3 +72,44 @@
 ### その他の確認
 
 - `Port.send` は値を同期的にコピーする（`h` をそのまま送っても後の in-place 更新は届かない）。発散の調査で疑ったが、`h.clone()` を送っても同じように発散した
+
+## 2 回目のレビューへの対応（2026-10-20）
+
+依頼: algorithm-reviewer の 2 回目の監査（must-1、should 1〜3、検討 1）、code-reviewer の 2 回目（should-fix 2、nit 1〜5）、orchestrator の決定 1〜8（推奨案）。
+
+### 実装した形
+
+- `Layer` は付け替えを離散的な跳びに限る。(1) 付随データの `time` の変化か、受け取った `epoch` の変化で `h <- mu + (h - mu_last)`（重なっても 1 回）。(2) 学習した更新で同じ `h_in` に `mu' = f(h_in; theta_new)` を no_grad で計算し、`_jump = mu' - mu`、`_mu = mu'`。次の更新の最初に `h += _jump`。状態は `_jump`（Tensor）・`_jumped`・`_epoch`・`_seen_epoch`（register_state）。`_moved` は削除
+- 活動のメッセージは `pc.Activity`（`h`、`epoch` は `()` の int64）。`Input.next`・`Layer.next` が送り、`Layer.prev`・`Output.prev` が受け取る。spec を作る `activity_spec` は `carry.py` に置き、公開しない（自作ノードは `DictSpec(pc.Activity, ...)` を書く）
+- `epoch` を進めるのは (1) の付け替えか、`learn_interval` を指定したときの (2) の跳びを足した更新。`None` では自分の跳びを足すが進めない。`Input` は書き込みを数える（`has_received()` と書き込み時刻の変化。状態 `_epoch`・`_seen_write`）
+- `Learner._tick`: `learn_interval` を指定したとき、新しい入力を見た更新では学習しない（`Output` も同じ）
+- `period > max_dt` は構築時に `ValueError`
+
+### 計画からの逸脱・計画に無かった判断
+
+- **時刻 0 に書いた最初のサンプルでも付け替える**ようになった。`Input` の `epoch` が書き込みで進むため（時刻では区別できないままなので、学習の時刻は従来どおり時刻 0 から数える）。spec の「付け替えない」を書き換えた。`TestLearnInterval.test_a_first_input_written_at_time_zero_is_learned` は `learn_interval` を K → 2K にした。K = 3 では l0 が学習する時点で credit がまだ届かず（付け替えで r = 0、λ = 0）、δ = 0 で θ が動かないため。`2 × 深さ × 周期` の目安どおり
+- **`Output` は `epoch` を読まない**（活動を持たないので付け替えるものが無い）
+- **既定の時定数でも `period > max_dt` になりうる**: `max_dt` の既定 min(τh/2, 3τλ) は τλ < τh/12 のとき既定の周期 τh/4 より短い。そのときは構築時に `ValueError` になり、利用者が `period` か `max_dt` を渡す。黙って時間を捨てるより良いと判断した
+- **深い鎖のテスト（テスト 14）は途中の λ も見る**。前の規則でも 6000 ステップ後には動いた θ の不動点に落ち着き、最後の値だけでは区別できなかった（λ は 500 ステップで 1e5 まで増えてから戻る）。100 ステップごとに max|λ| < 2 × max|credit| を確かめ、最後に今の θ の credit と 1e-8 で照合する。前の規則に戻すと 0.6 s で落ちることを確かめた
+- **順序と学習のテスト（テスト 6 の追加分）は学習率 0.1**（τθ = 30 s）。既存の不動点の SGD テストの率 60 では 2 回目で発散する。同期の順序では前の規則でも通るので、連鎖の回帰は Jacobi（`learn_interval` あり）と r の保存のテスト（`TestJumps`）が見る。Jacobi は連鎖の付け替えを外すと None・間隔ありの両方で落ちる
+- **テストの参照実装の学習の時刻は `Clock` に書き下した**（spec の規則をそのまま）。`Learner._tick` と同じ論理の重複だが、Jacobi で学習ありの経路を 1e-12 で照合するのに要る。学習の時刻そのものは `TestLearnTime`・`TestLearnInterval` が独立に見る
+- **学習したかの判定に `_elapsed == 0` を使う**（`TestLearnTime`）。credit が届く前の学習は δ = 0 で重みが動かないため、重みの比較では検出できない。ゼロの付随データでのスキップを除くため `_seen_time != 0` も条件にした
+- **`specs/open-decisions.md` の「状態を u と λ で持ち」を h の形に直した**（前回の作り直しで漏れていた 1 行）
+- `relax_` のコメント（code-reviewer nit 5）は「α = 0 では λ をちょうどそのまま保つ」に変え、spec の「r が無限大でも NaN を作らない」も同じく直した
+
+### MNIST の example（新しい規則、32 コア、3.14t、4 ワーカー）
+
+再現: `uv run python examples/mnist/main.py [--seed N] [--epochs 1] [--time-scale S]`、負荷は scratchpad の `busy.py N 150` と並べる。ログは scratchpad の `rev3/`。
+
+| 条件 | 結果（PC / BP） |
+| --- | --- |
+| 既定（3 epoch、スケール 1）seed 0 | test 97.82% / 97.54%、prequential（3 epoch 目）98.07% / 97.92% |
+| 既定 seed 1 | test 97.59% / 97.45%、prequential 98.08% / 97.99% |
+| スケール 2、1 epoch、seed 0 / 1 | 96.47% / 96.23%（完走。l1 の dt の 99% 点 2.25 周期で警告。前の規則では発散） |
+| busy 16、スケール 1、1 epoch | 96.62%（完走） |
+| busy 26、スケール 1、1 epoch（2 回） | 96.52%、96.23%（完走。前の規則では発散） |
+| busy 32、スケール 1 | 発散（prequential 19.5%、test 9.8%。dt の 99% 点 4.5〜6.5 周期） |
+| busy 32、スケール 0.5 | 完走、93.52%（前の規則では発散） |
+
+- 1 バッチ PC 32 ms、BP 0.8 ms（変わらず）。学習ごとの forward 1 回の追加は目立たない
+- busy 32 で発散したとき、プログラムは止まらなかった（最初の予測が有限のまま精度が落ちた）。example の発散の検出は最初の予測の非有限だけを見るので、計画外の改善候補（今回は触っていない）
