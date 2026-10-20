@@ -703,6 +703,8 @@ class TestScalar:
         run_steps(run, step, [out, layer, inp], 1500)
         lam = run.state_dict()["nodes"]["layer"]["lam"]
         close(lam, torch.full((1, 1), w2 * (y - w2 * w1 * x), dtype=F64), 1e-10)
+        # The host reads h without the data carried with it: the forward value.
+        close(run.read(layer.next)["h"], torch.full((1, 1), w1 * x, dtype=F64), 1e-10)
 
 
 @pytest.mark.slow

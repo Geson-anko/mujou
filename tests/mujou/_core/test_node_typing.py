@@ -130,9 +130,9 @@ class TestStrictTyping:
             run.timer.advance(0.001)
             run.step()
             assert len(relay.seen) == len(other.seen) == 1
-            # The host neither reads nor writes carried data, statically too.
-            with pytest.raises(ValueError, match="carried data"):
-                run.read(relay.next)  # pyright: ignore[reportArgumentType]
+            # The host reads only the value of a port that carries data, and
+            # cannot write a port that receives carried data.
+            assert_type(run.read(relay.next), torch.Tensor)
             with pytest.raises(ValueError, match="carried data"):
                 run.write({relay.prev: torch.ones(2)})
         # Carried data comes from one peer.

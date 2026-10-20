@@ -153,7 +153,8 @@ The host writes each sample and waits for the report that carries its ID.
 
 - `connect` also checks that the carried data matches in each direction, and raises `TypeError` otherwise
 - A port can pass on only the data of a port of its own node. Otherwise building the network raises `ValueError`
-- The host cannot read or write the carried data: `run.write` to a port with a `recv_carry`, and `run.read` (and the other reads) of a port with a `send_carry`, raise `ValueError`. Send what the host should see as a plain message, as `Report` does
+- The host reads only the value of a port with a `send_carry`: `run.read` (and the other reads) return the value and drop the carried data. Send what the host should see of the carried data as a plain message, as `Report` does
+- The host cannot write to a port with a `recv_carry`: `run.write` raises `ValueError`, since a write gives only a value and has no data to carry
 
 ## Checking the built structure
 

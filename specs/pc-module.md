@@ -153,7 +153,7 @@ $\delta$ は状態にせず、更新のたびに今の `h_in` から $\mu$ を�
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい
 - `Layer` は付随データを中継する。読むのは学習の時刻と付け替えのための `time` と、`mask` だけ。付け替えの連鎖には活動の `epoch` を読む。学習するステップで `mask` がすべて False なら、前の入力から持ち越した $\delta$ で学習しないよう、$\theta$ を動かさず $\Sigma\Delta t$ を 0 に戻す（`Output` も同じ。2026-10-20、orchestrator の決定）
 - `mask` が False の行は、VJP の cotangent $\delta$ を 0 にする（2026-10-20、algorithm-reviewer の指摘）。その行の $\delta$ は前の入力から持ち越した値かもしれず、そのまま流すと下のノードの credit と $g_\theta$ に雑音が乗る。その行の不動点はもともと $\lambda = 0$ なので不動点は変わらない。「すべて False なら学習しない」を行ごとに一般化したもので、`Output` の扱いと揃う
-- `Output` の `next` は予測と $y$・`mask` を普通のメッセージで送り、ホストが prequential 精度を測れるようにする（ホストの読み書きは carry に対応させない）
+- `Output` の `next` は予測と $y$・`mask` を普通のメッセージで送り、ホストが prequential 精度を測れるようにする（ホストは付随データを読めない）
 
 `Input` は、ホストが書いた $\{x, y, \mathrm{mask}\}$ を活動と付随データに分けて送るだけのノード。これでどの `Layer` の `prev` も同じ型になる。`Input` の次の `Layer` は $g_{\mathrm{in}}$ の計算を省いてよい（読み手が捨てるので）。
 
@@ -312,7 +312,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - `recv` は付随データを torch へ移さない。`carried()` / `carried(key)` で読み、そのときだけコピーする
 - コアの `Message` はバッファを `Vec<Arc<Buffer>>` で持ち、中継はバッファの参照の複製だけにする。最後の参照が消えたら元の書き手のプールへ戻る
 - 付随データはスロットの値として状態の木に入り、各 Port が最後に受け取った付随データも木の `"carries"` に入って復元される
-- ホストの `Run.write` / `Run.read` は付随データを持つ Port を断る（`ValueError`。必要になったら足す）
+- ホストの `Run.read` などは、付随データを送る Port から値だけを読む（付随データは捨てる。2026-10-20、ユーザーの決定）。隠れ層の `h` は `run.read(layer.next)["h"]` で読める。`Run.write` は付随データを受け取る Port を断る（`ValueError`。付随データを作る口が無いため）
 
 PC のノードでの使い方:
 

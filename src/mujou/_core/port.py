@@ -85,6 +85,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     the ``zeros()`` of its spec (in a restored run, the values under
     ``"carries"`` in the state). These zeros cannot be told from zeros that were
     sent: to tell them apart, carry a field that says whether the data is valid.
+    The host reads only the value of a port with a ``send_carry``
+    (``Run.read``), and cannot write to a port with a ``recv_carry``.
 
     Once assigned as an attribute of a node, the port is named
     ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
