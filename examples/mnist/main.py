@@ -17,22 +17,26 @@ The host shows each batch for ``S`` periods of the nodes. It measures:
 - the real time, the time scale, the workers, and the ``dt`` the nodes saw.
 
 The run's timer goes ``--time-scale`` times faster than real time so that the
-nodes update as fast as they can compute, instead of waiting for their period.
-Too fast, and an update comes later than its period: ``dt`` grows, and so does
-the effective step ``dt / tau.h`` of the relaxation, which becomes unstable past
-about 0.7 (``dt`` 2.8 periods with the default period ``tau.h / 4``). The program
-prints the distribution of ``dt`` and warns when its median exceeds 1.5 periods
-or when more than 1% of the updates come later than 2.8 periods. The default 2
-keeps the median at 1 to 1.25 periods on an idle 32-core machine, where the
-first layer (784 inputs) is the slowest node. To choose the time scale on
-another machine, run one epoch and take the highest scale that gives no warning.
+nodes update about as fast as they can compute, instead of waiting for their
+period. Too fast, and an update comes later than its period: ``dt`` grows. The
+nodes count at most ``max_dt`` of it (``tau.h / 2``, 2 periods), which keeps the
+relaxation stable but drops the time beyond. The program prints the
+distribution of ``dt`` and warns when its median exceeds 1.5 periods or when
+more than 1% of the updates come later than 2 periods. The default 1 keeps
+``dt`` at 1 to 1.25 periods on an idle 32-core machine, where the first layer
+(784 inputs) is the slowest node. At 2, that node takes most of its period to
+compute, the messages it reads are older, and the network diverged after a few
+hundred batches. To choose the time scale on another machine, run one epoch and
+take the highest scale that gives no warning and does not diverge.
 
-Run it on an otherwise idle machine. Other processes that take the cores delay
-the nodes by many periods at times, and the network then diverges (the program
-stops when a prediction is not finite); lower ``--time-scale`` if it does.
+Run it on an otherwise idle machine. When other processes take the cores, a node
+may wait for one for 100 ms while its neighbors keep learning from its last
+message, and the network then diverges (the program stops when a prediction is
+not finite); lower ``--time-scale`` if it does. With 26 busy processes on 32
+cores, 1 diverged and 0.5 ran through; with 32, 0.5 diverged too.
 
 Needs the network once, to download MNIST (about 11 MB) into ``--data``. Runs on
-the CPU; the defaults (3 epochs) take a few minutes. Run it from the repository::
+the CPU; the defaults (3 epochs) take about 2 minutes. Run it from the repository::
 
     uv run python examples/mnist/main.py
     uv run python examples/mnist/main.py --epochs 1
@@ -119,13 +123,13 @@ def dt_report(nodes: dict[str, Any]) -> str:
 
 def check_dt(nodes: dict[str, Any]) -> None:
     """Warn when the ``dt`` of a watched node is too often longer than its period:
-    a median over 1.5 periods, or a 99th percentile over 2.8 (the step
-    ``dt / tau.h`` over 0.7)."""
+    a median over 1.5 periods, or a 99th percentile over 2 (``max_dt``, beyond
+    which the node drops the time)."""
     for path, state in nodes.items():
         if "dt_histogram" not in state:
             continue
         histogram = state["dt_histogram"]
-        if quantile(histogram, 0.5) > 1.5 or quantile(histogram, 0.99) > 2.8:
+        if quantile(histogram, 0.5) > 1.5 or quantile(histogram, 0.99) > 2:
             print(
                 f"warning: the updates of {path} come too late (see its dt below): "
                 "the nodes do not keep up with the time scale; lower --time-scale"
@@ -227,7 +231,7 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=32, help="periods per batch (S)")
     parser.add_argument("--tau-h", type=float, default=4e-3, help="seconds")
     parser.add_argument("--lr", type=float, default=0.1, help="learning rate per batch")
-    parser.add_argument("--time-scale", type=float, default=2.0)
+    parser.add_argument("--time-scale", type=float, default=1.0)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--data", type=Path, default=Path.home() / ".cache/mujou/mnist")
