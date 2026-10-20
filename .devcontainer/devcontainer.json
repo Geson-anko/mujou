@@ -7,7 +7,14 @@
   "updateRemoteUserUID": true,
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
   "workspaceFolder": "${localWorkspaceFolder}",
+  "mounts": [
+    "source=mujou-claude-config,target=/home/vscode/.claude,type=volume"
+  ],
+  "hostRequirements": {
+    "gpu": "optional"
+  },
   "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
     "UV_PROJECT_ENVIRONMENT": ".venv-devcontainer",
     "UV_LINK_MODE": "copy",
     "GIT_CONFIG_COUNT": "1",
