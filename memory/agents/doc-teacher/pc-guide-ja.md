@@ -162,3 +162,23 @@ R1 の解答を採点した。10/11。
 見送ったもの:
 - eval mode なら `BatchNorm` と `Dropout` を使えるか。英語版にも書いておらず、確かめていない
 - 手順 2 に `period` を書くこと。snippet と表に書いてある
+
+### 実装との照合（117 行、2026-10-20）
+
+修正済みの `mujou.pc` を docs ブランチにマージした後で、ページを実装と照合した。照合した資料は、`memory/agents/plan-implementer/pc-module.md` の「2 回目のレビューへの対応」、`src/mujou/_core/pc/`、`examples/mnist/main.py` の docstring。
+
+- 精度: 1 epoch の 96.4% / 96.2% を、既定 3 epoch の値に替えた（PC 97.82% / BP 97.54%、seed 1 では 97.59% / 97.45%）
+- ノードの表: `Input.next`・`Layer.next` は `pc.Activity` を送り、`Layer.prev`・`Output.prev` は `pc.Activity` を受け取る、と書いた
+- `max_dt` の行: 周期が `max_dt` より長いと構築時に `ValueError`。`tau.lam < tau.h / 12` なら既定でもそうなる。どちらも `learner.py` で確認した
+- `learn_interval`: 新しい入力を初めて見た更新では学習しないこと、下限の目安 `2 × 深さ × 周期`（深さは経路上のノードの数、`Layer` の docstring）を足した
+- 負荷の warning: スケール 2 は完走するが、更新の 1% が 2 周期より遅れて警告が出る、と直した。busy 32 本・スケール 1 では精度が崩れ、0.5 では完走した。精度だけが崩れたときは `show` が止まらない（非有限しか見ない）ので、精度も見るよう書いた
+- 自分のノードを書く: `pc.Activity` の形と、`DictSpec(pc.Activity, ...)` で Port を宣言することを足した（`mujou.DictSpec` が公開されていることを確認した）
+- ほかのページ: `docs/ja/user-guide/torch.md` の「未実装」の note を消し、箇条にリンクを足した。`docs/ja/examples/index.md` に `mnist/` の行と説明を足し、ディレクトリの説明と末尾の「数秒」を直した
+- 問題への影響:
+    - Q8 の前提（スケール 2 で NaN）は、今の実装では起こらなくなった。再利用するときは前提を書き換える
+    - H1 の要点に「period > max_dt は `ValueError`」を足せる
+- 英語版の照合結果に合わせ直した（116 行）
+    - `learn_interval` の表: 「見せる時間の半分と `2 × 深さ × 周期` の両方より長く、見せる時間より短く」
+    - 下限の説明を理由の箇条にまとめ、例の値（4 ノードで 8 ms）を足した
+    - 負荷の warning: 有限のまま発散すると精度の低下としてしか見えない、と書いた。busy は 26 本完走 / 32 本発散 / 0.5 で 32 本完走
+    - 自作ノードの節: `DictSpec(pc.Activity, h=..., epoch=TensorSpec((), torch.int64))` を受け取り送る、と書いた

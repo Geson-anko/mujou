@@ -179,3 +179,18 @@
 - テストでは書く `mask` がすべて False なので、元の `mask` を採点用に取っておく（パディングの箇条に足した）
 
 114 → 116 行（2 割未満）。
+
+### 実装のマージ後の照合（116 行）
+
+`feature/2026-10-20/pc-module` のマージ（`pc.Activity`、`learn_interval` で初見の更新は学習しない、`period > max_dt` で `ValueError`）に合わせて直した。
+
+- ノードの表: `Input.next`・`Layer.next` が `pc.Activity` を送る
+- `learn_interval`: 下限に `2 * depth * period`（例は 8 ms）を足し、初見の更新で学習しないことを理由の箇条に書いた
+- `max_dt`: `tau.lam < tau.h / 12` では既定でも `ValueError`
+- 精度: 3 epoch の数値（PC 97.82% / 97.59%、BP 97.54% / 97.45%）に更新
+- Heavy load: スケール 2 は警告つきで完走、busy 26 は完走・32 は発散・0.5 なら完走。有限のまま精度が落ちる発散は `show` では止まらない
+- 自作ノード: `DictSpec(pc.Activity, ...)` でつなぐ
+- アンカー付きのリンクを戻した（ja の pc.md ができてフォールバックが無くなった）
+- API: `Activity` を members に足した
+
+Q3・Q9 などの要点は変わらない（`learn_interval` の範囲に下限が 1 つ増えたので、Q3 の要点に「`2 * depth * period` より長く」を足すとよい）。
