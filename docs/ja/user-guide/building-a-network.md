@@ -137,12 +137,18 @@ class Classifier(mujou.Network):
 | `send_carry=spec` | 送るメッセージに載せる付随データ。`send(value, carry=data)` で渡し、値と同じくコピーされる                                                                    |
 | `send_carry=port` | 同じノードの Port `port`（`recv_carry` を持つ）が最後に受け取ったメッセージの付随データを中継する。`send` は `carry` を取らない。データはコピーせずに共有する |
 
-`port.carried()` は、`recv` で最後に受け取ったメッセージの付随データのコピーを返す（`port.carried("key")` は `DictSpec` のそのフィールドだけ）。最初の `recv` の前と、相手がまだ送っていない間はゼロである。
+`port.carried()` は、`recv` で最後に受け取ったメッセージの付随データのコピーを返す（`port.carried("key")` は `DictSpec` のそのフィールドだけ）。最初の `recv` の前と、相手がまだ送っていない間はゼロである（復元した実行では、状態の木の `"carries"` の値）。このゼロは、実際に送られたゼロと区別できない。区別したいときは、データが有効かどうかを表すフィールド（真偽値のマスクなど）を付随データに入れる。
 
 次の例では、`Stamp` が各サンプルに ID を付け、`Double` がそれを中継し、`Report` が値と組にする。
 
 ```python
 --8<-- "examples/carry.py:nodes"
+```
+
+ホストは各サンプルを書き込み、その ID を運んできた報告を待つ。
+
+```python
+--8<-- "examples/carry.py:host"
 ```
 
 - `connect` は付随データが向きごとに一致するかも確かめ、一致しなければ `TypeError` を送出する

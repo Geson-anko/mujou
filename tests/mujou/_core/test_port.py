@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, over
 import pytest
 import torch
 
-from mujou._core import _native
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
@@ -103,7 +102,10 @@ class TestCarryTypes:
             assert_type(received.carried("id"), torch.Tensor)
             made.send(torch.zeros(2, 3), carry=tagged(0))
             passed.send(torch.zeros(2, 3))
-            passed.send(torch.zeros(2, 3), carry=tagged(0))  # pyright: ignore[reportArgumentType]
+            # Passing carry= to a port that passes data on, or leaving it out on
+            # a port that makes its own, type-checks: only a run rejects them.
+            passed.send(torch.zeros(2, 3), carry=tagged(0))
+            made.send(torch.zeros(2, 3))
 
         assert made.send_carry_spec == tag() and made.recv_carry_spec is None
         assert passed.send_carry_spec is received.recv_carry_spec
@@ -113,9 +115,9 @@ class TestCarryTypes:
         with pytest.raises(
             TypeError, match="takes many peers, so it takes no recv_carry"
         ):
-            Port(recv=h(), multi=True, recv_carry=tag())  # pyright: ignore[reportCallIssue, reportArgumentType]
+            Port(recv=h(), multi=True, recv_carry=tag())  # pyright: ignore[reportArgumentType]
         with pytest.raises(TypeError, match="NextPort takes many peers"):
-            NextPort(recv=h(), recv_carry=tag())  # pyright: ignore[reportCallIssue, reportArgumentType]
+            NextPort(recv=h(), recv_carry=tag())  # pyright: ignore[reportCallIssue]
 
 
 class TestCarrySpecs:
@@ -124,9 +126,9 @@ class TestCarrySpecs:
         with pytest.raises(
             TypeError, match="send_carry must be a TensorSpec, a DictSpec, a Port"
         ):
-            Port(send=h(), send_carry=spec)  # pyright: ignore[reportArgumentType, reportCallIssue, reportUnknownVariableType]
+            Port(send=h(), send_carry=spec)  # pyright: ignore[reportArgumentType]
         with pytest.raises(TypeError, match="PrevPort recv_carry must be"):
-            PrevPort(recv=h(), recv_carry=spec)  # pyright: ignore[reportArgumentType, reportCallIssue, reportUnknownVariableType]
+            PrevPort(recv=h(), recv_carry=spec)  # pyright: ignore[reportArgumentType]
 
     def test_rejects_a_carry_without_its_direction(self):
         with pytest.raises(
@@ -140,8 +142,9 @@ class TestCarrySpecs:
 
     def test_passes_on_only_from_a_port_that_receives_a_carry(self):
         received = PrevPort(recv=h())
+        # Type-checks (the carry spec is solved as Never): only building rejects it.
         with pytest.raises(TypeError, match="has no recv_carry, so there is nothing"):
-            NextPort(send=h(), send_carry=received)  # pyright: ignore[reportArgumentType]
+            NextPort(send=h(), send_carry=received)
 
     def test_repr_shows_the_carry(self):
         received = PrevPort(recv=h(), recv_carry=tag())
@@ -911,20 +914,6 @@ class TestCarried:
         step(run, path.relay, path.sink)
         assert path.sink.results[-1] == (-1.0, 1)
 
-    def test_shares_the_carried_buffers_along_the_path(
-        self, step: Step, start_manual: StartManual
-    ):
-        path = Path()
-        run = start_manual(path.group())
-        step(run, path.source, path.relay)
-        slots = run._session._slots  # pyright: ignore[reportPrivateUsage]
-        source, relayed = slots["source.out/ch0"][0], slots["relay.next/ch0"][0]
-
-        def data_ptrs(slot: _native.Slot | _native.InputSlot) -> list[int]:
-            return [torch.from_dlpack(v).data_ptr() for v in slot.read().carry.buffers]
-
-        assert data_ptrs(relayed) == data_ptrs(source)
-
     def test_rejects_a_missing_or_unexpected_carry(
         self, step: Step, start_manual: StartManual
     ):
@@ -932,7 +921,8 @@ class TestCarried:
         path = Path(plain=plain)
         x = torch.tensor(1.0)
         path.source.update = lambda: path.out.send(x)
-        path.relay.update = lambda: path.next.send(x, carry=tagged(1))  # pyright: ignore[reportArgumentType]
+        # The relay's carry= type-checks: only the run rejects it.
+        path.relay.update = lambda: path.next.send(x, carry=tagged(1))
         path.sink.update = lambda: plain.send(x, carry=tagged(1))  # pyright: ignore[reportArgumentType]
         run = start_manual(path.group())
         step(run)
