@@ -6,12 +6,8 @@
 
 `on_update(dt)` に書く更新が、そのノードの更新手法（学習則）である。mujou はノード・Port・実行の基盤に更新手法を組み込まないので、ノードごとに選んで差し替えられる。
 
-- 既定の更新手法は PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）。局所的な更新で BP に近い性能を出せると報告されている。ただし暫定的な選択である
+- 既定の更新手法は PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）。局所的な更新で BP に近い性能を出せると報告されている。ただし暫定的な選択である。PC-ALM のノードはモジュール `mujou.pc` にある（[PC-ALM で学習する](pc.md)）
 - BP も 1 つのノードの内側に閉じていれば、更新手法の 1 つとして使える（下の「ノードの中の BP」）
-
-!!! note "PC-ALM のノードは未実装"
-
-    PC-ALM のノードはモジュール `mujou.pc` から提供する予定。それまでは `mujou.Node` を継承し、`on_update(dt)` に更新式を自分で書く（[ノードを書く](writing-a-node.md)）。
 
 ## 例
 

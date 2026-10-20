@@ -2,9 +2,9 @@
 
 These are working programs that show how to use Mujou. They live in `examples/` in the repository.
 
-!!! tip "Tested code"
+!!! tip "Runnable code"
 
-    The documentation pages include these files as they are. The tests run every program, so if the code shown here stops working, the tests fail.
+    The documentation pages include these files as they are, so the code shown here is a whole program you can run.
 
 ## 📋 The list
 
@@ -20,6 +20,7 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 | Take the states of several runs at one time                         | `pause.py`            | [Saving and Restoring State](../user-guide/state.md), [Controlling Time](../user-guide/time.md)                    |
 | Keep receiving the latest output (values in between may be skipped) | `subscribe.py`        | [Running a Network](../user-guide/running.md)                                                                      |
 | Train a PyTorch model with BP inside a node                         | `torch_node.py`       | [PyTorch in Nodes](../user-guide/torch.md)                                                                         |
+| Train a model split into nodes with PC-ALM, and compare it with BP  | `mnist/`              | [Learning with PC-ALM](../user-guide/pc.md)                                                                        |
 | Keep learning from a stream while its target changes                | `online_learning.py`  | [PyTorch in Nodes](../user-guide/torch.md), [Writing a Node](../user-guide/writing-a-node.md)                      |
 | Test a node                                                         | `testing_a_node.py`   | [Testing](../user-guide/testing.md)                                                                                |
 | Change how time advances                                            | `timers.py`           | [Controlling Time](../user-guide/time.md), [Global Time](../concepts.md#global-time)                               |
@@ -35,12 +36,13 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 - `pause.py`: pauses the global timer with `mujou.time.pause()`, takes the states of two runs on it at that one time, and resumes it with `mujou.time.resume()`. A run restored from one of the states goes on from that time
 - `subscribe.py`: with `run.subscribe`, first receives the latest output at that moment, then the latest one each time a newer output is sent. If the next value is sent before one is received, the value in between is skipped. The loop stops with `break` after 20 values
 - `online_learning.py`: a teacher node sends a batch from y = a x + b every 10 ms, with the `a` that the host writes; the host changes `a` while the network runs. A learner learns once from each new batch, with no separate training and inference phases. The host follows the learner's loss with `run.wait_for`: it falls, jumps when the target changes, and falls again as the learner catches up
+- `mnist/`: a 784-256-256-10 network learns MNIST as four nodes of `mujou.pc`, and the same network learns by BP with the same initial weights and batches. The host measures the prequential and the test accuracy, the time per batch, and the `dt` of the nodes
 - `torch_node.py`: trains an `nn.Module` inside a node with BP kept inside the node. Setting the seed, and an update that advances `dt` in smaller steps
 - `testing_a_node.py`: runs a node with a fixed `dt` and order, using the virtual timer and manual updates of `mujou.testing`, and compares the result bit for bit with a reference computation. It also checks that a run restored from a state taken midway matches a run that did not stop
 - `timers.py`: the time point `Timestamp`, the per-run timer `Timer`, and the speed of time (the run's timer and the global timer)
 - `errors.py`: the `NetworkError` the host receives and its `__cause__`, the order `on_exception` → `on_stop`, and that `mujou.run` raises an exception from `on_start`
 
-Only `leaky_chain/` is a directory. Its entry point is `main.py`, and the node definitions are in `leaky.py`.
+`leaky_chain/` and `mnist/` are directories. The entry point of each is `main.py`; the node definitions of `leaky_chain/` are in `leaky.py`, and `mnist/` loads the data in `data.py` and trains the BP baseline in `bp.py`.
 
 ## ▶️ How to run them
 
@@ -51,4 +53,4 @@ uv run python examples/quickstart.py
 uv run python examples/leaky_chain/main.py
 ```
 
-None of the programs use a GPU or a network connection, and each finishes within a few seconds.
+None of the programs use a GPU. Each finishes within a few seconds, except `mnist/`: it downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. The programs are guides, not tests, and are not run by the test suite.

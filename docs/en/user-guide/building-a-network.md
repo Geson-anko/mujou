@@ -6,6 +6,7 @@ You write a network as a class that inherits from `mujou.Network`. This page sho
 - expose ports to the outside
 - nest networks
 - branch and merge
+- carry data along a path
 - check the built structure
 
 How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
@@ -123,6 +124,37 @@ The receiving node decides how to combine the values (sum them, average them, we
 To treat the peers differently, keep the `Channel` of each on the receiving node, as for `send_to`: `self.sum.from_double = self.double.next.connect(self.sum.prev)`, then `self.prev.recv()[self.from_double]` in the node.
 
 A `NextPort` also takes many peers by default, so its `recv()` returns a dict. If the node is sure to have only one next node, declare `NextPort(send=..., multi=False)`, and `recv()` returns the value itself.
+
+## Carrying data along a path
+
+A message can carry data along with its value, such as the ID or the target of a sample, so that every node down the path sees each value together with the data of the very sample it was computed from. Carrying it in the same message, instead of on a port of its own, is what makes this hold: a node that read two ports could read them at different moments and pair a value with the data of another sample.
+
+A port declares the carried data for each direction.
+
+| Argument          | Meaning                                                                                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recv_carry=spec` | The data carried with what the port receives. Only a port with one peer takes it                                                                                           |
+| `send_carry=spec` | The data carried with what the port sends. `send(value, carry=data)` takes it, and copies it as it copies the value                                                        |
+| `send_carry=port` | Pass on the data carried with the message that `port`, a port of the same node with a `recv_carry`, last received. `send` takes no `carry`: the data is shared, not copied |
+
+`port.carried()` returns a copy of the data carried with the message last received by `recv` (`port.carried("key")` only one field of a `DictSpec`). Before the first `recv`, and until the peer first sends, it is zeros (in a restored run, the values under `"carries"` in the state). These zeros cannot be told from zeros that were sent; to tell them apart, carry a field that says whether the data is valid, such as a boolean mask.
+
+The following example gives each sample an ID in `Stamp`, passes it on through `Double`, and pairs it with the value in `Report`.
+
+```python
+--8<-- "examples/carry.py:nodes"
+```
+
+The host writes each sample and waits for the report that carries its ID.
+
+```python
+--8<-- "examples/carry.py:host"
+```
+
+- `connect` also checks that the carried data matches in each direction, and raises `TypeError` otherwise
+- A port can pass on only the data of a port of its own node. Otherwise building the network raises `ValueError`
+- The host reads only the value of a port with a `send_carry`: `run.read` (and the other reads) return the value and drop the carried data. Send what the host should see of the carried data as a plain message, as `Report` does
+- The host cannot write to a port with a `recv_carry`: `run.write` raises `ValueError`, since a write gives only a value and has no data to carry
 
 ## Checking the built structure
 

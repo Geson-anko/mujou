@@ -9,7 +9,7 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::Arc;
 
-use crate::slot::{FieldSpec, Message, SlotError};
+use crate::slot::{Buffer, FieldSpec, SlotError};
 
 /// `kDLCPU`: ordinary host memory.
 pub const DEVICE_CPU: i32 = 1;
@@ -249,11 +249,11 @@ pub(crate) fn format_dtype(dtype: DLDataType) -> String {
     }
 }
 
-/// What a lent tensor keeps alive: the message, so that its buffer cannot go back
-/// to the pool, and the shape and strides that the tensor points to.
+/// What a lent tensor keeps alive: the buffer, so that it cannot go back to its
+/// pool, and the shape and strides that the tensor points to.
 struct Lent<T> {
     managed: T,
-    _message: Arc<Message>,
+    _buffer: Arc<Buffer>,
     shape: Box<[i64]>,
     strides: Box<[i64]>,
 }
@@ -267,16 +267,14 @@ fn row_major_strides(shape: &[i64]) -> Box<[i64]> {
     strides.into_boxed_slice()
 }
 
-/// Boxes the managed tensor `make` builds around buffer `i` of `msg`, and points
-/// it at the shape, the strides and the box itself (its `manager_ctx`). `parts`
-/// picks the tensor and the context out of the managed struct.
+/// Boxes the managed tensor `make` builds around `buffer`, and points it at the
+/// shape, the strides and the box itself (its `manager_ctx`). `parts` picks the
+/// tensor and the context out of the managed struct.
 fn lend<T>(
-    msg: Arc<Message>,
-    i: usize,
+    buffer: Arc<Buffer>,
     make: impl FnOnce(DLTensor) -> T,
     parts: fn(&mut T) -> (&mut DLTensor, &mut *mut c_void),
 ) -> *mut T {
-    let buffer = &msg.buffers()[i];
     let shape: Box<[i64]> = buffer.field().shape.clone().into_boxed_slice();
     let tensor = DLTensor {
         // The pointer is mutable only because DLPack says so: the buffer is
@@ -298,7 +296,7 @@ fn lend<T>(
         managed: make(tensor),
         strides: row_major_strides(&shape),
         shape,
-        _message: msg,
+        _buffer: buffer,
     }));
     // SAFETY: `lent` was just allocated and is not shared yet. The pointers are
     // taken after `into_raw`, from the slices the box owns, so they stay valid
@@ -314,9 +312,9 @@ fn lend<T>(
     }
 }
 
-/// Lends buffer `i` of `msg` as a 1.x DLPack tensor. The message stays alive
-/// until the consumer calls the tensor's deleter.
-pub fn export_versioned(msg: Arc<Message>, i: usize) -> *mut DLManagedTensorVersioned {
+/// Lends `buffer` as a 1.x DLPack tensor. The buffer stays alive (out of its
+/// pool) until the consumer calls the tensor's deleter.
+pub fn export_versioned(buffer: Arc<Buffer>) -> *mut DLManagedTensorVersioned {
     let make = |dl_tensor| DLManagedTensorVersioned {
         version: VERSION,
         manager_ctx: ptr::null_mut(),
@@ -324,18 +322,18 @@ pub fn export_versioned(msg: Arc<Message>, i: usize) -> *mut DLManagedTensorVers
         flags: 0,
         dl_tensor,
     };
-    lend(msg, i, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
+    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
 }
 
-/// Lends buffer `i` of `msg` as an unversioned DLPack tensor, for consumers that
-/// do not know the 1.x protocol.
-pub fn export_legacy(msg: Arc<Message>, i: usize) -> *mut DLManagedTensor {
+/// Lends `buffer` as an unversioned DLPack tensor, for consumers that do not
+/// know the 1.x protocol.
+pub fn export_legacy(buffer: Arc<Buffer>) -> *mut DLManagedTensor {
     let make = |dl_tensor| DLManagedTensor {
         dl_tensor,
         manager_ctx: ptr::null_mut(),
         deleter: Some(delete_legacy),
     };
-    lend(msg, i, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
+    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
 }
 
 unsafe extern "C" fn delete_versioned(t: *mut DLManagedTensorVersioned) {

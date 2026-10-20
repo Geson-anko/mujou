@@ -1041,6 +1041,217 @@ class TestWaitFor:
         stopper.join()
 
 
+def ids() -> TensorSpec:
+    """The carried data of the carry tests: a sample ID."""
+    return TensorSpec((), torch.int64)
+
+
+class Tagged(Node):
+    """Sends ``k`` carrying ``k`` at its k-th update."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.next = NextPort(send=TensorSpec(()), send_carry=ids())
+        self.k = 0
+        self.register_state("k")
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.k += 1
+        self.next.send(torch.tensor(float(self.k)), carry=torch.tensor(self.k))
+
+
+class PassOn(Node):
+    """Sends what it last received plus 100, passing on what that carried. It
+    receives at every ``every``-th update (the first included) and sends at each.
+    """
+
+    def __init__(self, every: int = 1) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec(()), recv_carry=ids())
+        self.next = NextPort(send=TensorSpec(()), send_carry=self.prev)
+        self.every = every
+        self.updates = 0
+        self.register_state("updates")
+        self.last = torch.zeros(())
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        if self.updates % self.every == 0:
+            self.last = self.prev.recv()
+        self.updates += 1
+        self.next.send(self.last + 100)
+
+
+class CheckTag(Node):
+    """Counts the messages whose value is the ID they carry plus 100."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec(()), recv_carry=ids())
+        self.matched = 0
+        self.mismatched: list[tuple[float, int]] = []
+        self.received: list[tuple[float, int]] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        value, k = self.prev.recv().item(), int(self.prev.carried().item())
+        self.received.append((value, k))
+        if value == k + 100:
+            self.matched += 1
+        elif (value, k) != (0.0, 0):  # before the relay first sends
+            self.mismatched.append((value, k))
+
+
+class TaggedPath(Network):
+    def __init__(self, every: int = 1) -> None:
+        super().__init__()
+        self.a = Tagged()
+        self.b = PassOn(every)
+        self.c = CheckTag()
+        self.a.next.connect(self.b.prev)
+        self.b.next.connect(self.c.prev)
+
+
+class TestCarry:
+    def test_the_host_cannot_write_carried_data(self, start_manual: StartManual):
+        node = CheckTag()
+        with pytest.raises(
+            ValueError,
+            match=r"^cannot write the port 'CheckTag\.prev': it receives carried "
+            r"data, which the host cannot write$",
+        ):
+            start_manual(node, inputs={node.prev: torch.tensor(1.0)})
+        node = CheckTag()
+        run = start_manual(node)
+        with pytest.raises(ValueError, match="receives carried data"):
+            run.write({node.prev: torch.tensor(1.0)})
+
+    def test_the_host_reads_only_the_value(self, step: Step, start_manual: StartManual):
+        net = TaggedPath()
+        run = start_manual(net)
+        step(run, net.a, net.b)
+        # a sent 1 carrying 1, and b passed it on with 101: the host gets the
+        # values without the carried data.
+        assert torch.equal(run.read(net.a.next), torch.tensor(1.0))
+        value, _ = run.read_with_time(net.b.next)
+        assert torch.equal(value, torch.tensor(101.0))
+        assert torch.equal(next(run.subscribe(net.b.next))[0], torch.tensor(101.0))
+        value, _ = run.wait_for(net.a.next, lambda v: v.item() == 1.0, timeout=0.0)
+        assert torch.equal(value, torch.tensor(1.0))
+
+    def test_the_tree_holds_the_carried_data(
+        self, step: Step, start_manual: StartManual
+    ):
+        net = TaggedPath()
+        run = start_manual(net)
+        step(run, net.a, net.b)
+        tree = run.state_dict()
+        sent = tree["slots"]["a.next/ch0"]
+        assert len(sent) == 4 and sent[2] is True
+        assert sent[0].item() == 1.0 and torch.equal(sent[3], torch.tensor(1))
+        assert torch.equal(tree["slots"]["b.next/out"][3], torch.tensor(1))
+        assert set(tree["carries"]) == {"b.prev", "c.prev"}
+        assert torch.equal(tree["carries"]["b.prev"], torch.tensor(1))
+        assert torch.equal(tree["carries"]["c.prev"], torch.tensor(0))
+        # The slots of messages without carried data keep three items.
+        chain = Chain()
+        assert len(start_manual(chain).state_dict()["slots"]["a.next/out"]) == 3
+
+    def test_a_restored_run_goes_on_as_one_never_stopped(
+        self, step: Step, start_manual: StartManual
+    ):
+        # b receives at every other update and passes on what it last received,
+        # so it stops holding an older carry than a's latest message: the tree
+        # must keep it apart from the slots.
+        # b's 5th update receives, and a sends twice more before the stop.
+        first = ["abc", "b", "a", "cb", "ab", "a", "b", "ca", "a"]
+        then = ["bc", "abc", "c", "ba", "b", "cab", "bc"]
+
+        def play(run: ManualRun[Any], net: TaggedPath, schedule: list[str]) -> None:
+            for names in schedule:
+                step(run, *(getattr(net, name) for name in names))
+
+        whole = TaggedPath(every=2)
+        run = start_manual(whole)
+        play(run, whole, first + then)
+
+        stopped = TaggedPath(every=2)
+        run = start_manual(stopped)
+        play(run, stopped, first)
+        tree = run.state_dict()
+        run.shutdown()
+        held, latest = tree["carries"]["b.prev"], tree["slots"]["a.next/ch0"][3]
+        assert not torch.equal(held, latest), "the schedule tests nothing"
+        assert tree["nodes"]["b"]["updates"] % 2 == 1, "b sends before it receives"
+        resumed = TaggedPath(every=2)
+        run = start_manual(resumed, timer=VirtualTimer(), state=tree)
+        play(run, resumed, then)
+
+        assert resumed.c.received == whole.c.received[len(stopped.c.received) :]
+        assert stopped.c.received + resumed.c.received == whole.c.received
+        assert resumed.c.mismatched == whole.c.mismatched == []
+
+    def test_rejects_a_tree_whose_carried_data_does_not_match(
+        self, step: Step, start_manual: StartManual
+    ):
+        net = TaggedPath()
+        run = start_manual(net)
+        step(run)
+        tree = run.state_dict()
+        run.shutdown()
+        entry = tree["slots"]["a.next/ch0"]
+
+        def slot(changed: object) -> dict[str, Any]:
+            return {**tree, "slots": {**tree["slots"], "a.next/ch0": changed}}
+
+        def carries(changed: dict[str, object]) -> dict[str, Any]:
+            return {**tree, "carries": changed}
+
+        broken: list[tuple[dict[str, Any], type[Exception], str]] = [
+            (slot(entry[:3]), ValueError, r"is not \(value, time_ns, sent, carried\)"),
+            (
+                slot((*entry[:3], torch.zeros(2, dtype=torch.int64))),
+                ValueError,
+                "shape",
+            ),
+            (slot((*entry[:3], torch.tensor(1.0))), TypeError, "dtype"),
+            (
+                {k: v for k, v in tree.items() if k != "carries"},
+                ValueError,
+                "no 'carries'",
+            ),
+            (carries({"b.prev": torch.tensor(1)}), ValueError, "carries do not match"),
+            (
+                carries({**tree["carries"], "a.next": torch.tensor(1)}),
+                ValueError,
+                "unknown",
+            ),
+            (
+                carries({**tree["carries"], "b.prev": torch.zeros(3)}),
+                ValueError,
+                "shape",
+            ),
+        ]
+        for wrong, error, match in broken:
+            with pytest.raises(error, match=match):
+                start_manual(TaggedPath(), state=wrong)
+
+    @pytest.mark.slow
+    def test_free_running_nodes_keep_values_with_their_carry(self, start: Start):
+        net = TaggedPath()
+        with start(net) as run:
+            deadline = time.monotonic() + 30.0
+            while net.c.matched < 300 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            run.shutdown()
+        assert net.c.matched >= 300
+        assert net.c.mismatched == []
+
+
 class TestStateDict:
     @pytest.mark.parametrize("timeout", [0.0, -1.0, math.nan, math.inf])
     def test_rejects_a_timeout_that_is_not_finite_and_positive(
