@@ -30,7 +30,7 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## 双対変数の扱い
 
-ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。状態を予測からのずれ $u = h - \mu$ と $\lambda$ で持ち、リセットせず持ち越すと決めた（2026-10-20、ユーザーの決定。[mujou.pc の実装計画](pc-module.md#入力の切り替えと状態)）。dual leak は未決定。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
+ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。状態を活動 $h$ と $\lambda$ で持ち（予測が離散的に跳ぶ更新で $h$ を付け替える）、リセットせず持ち越すと決めた（2026-10-20、ユーザーの決定。状態の形は orchestrator の決定。[mujou.pc の実装計画](pc-module.md#入力の切り替えと状態)）。dual leak は未決定。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## mujou.Node の細部
 
