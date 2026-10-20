@@ -34,7 +34,8 @@ class Output(Learner):
     paired with) for the host to read, and updates ``theta`` when it learns.
 
     It learns as ``Layer`` does: once ``learn_interval`` seconds have passed
-    since the host wrote the input, or in every update with ``None``. When no sample
+    since the host wrote the input, but not in the update that first sees it,
+    or in every update with ``None``. When no sample
     has a target, it does not learn and drops the time since the last update;
     so too before the first sample arrives, while the carried data is zeros
     (``mask`` all False), and when the input changes before it has learned from

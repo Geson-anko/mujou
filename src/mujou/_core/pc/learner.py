@@ -21,14 +21,14 @@ class Learner(Node):
     The input changes when the ``time`` carried with the activity it receives
     changes (the host wrote a new input at that time). The node learns in its
     first update at or after ``time + k * learn_interval`` (``k = 1, 2, ...``)
-    on the run's time, so the nodes on a path learn at about the same time,
-    however deep they are. An update counts at most ``max_dt`` seconds
-    (``_cap``). The state holds, besides ``module``, the last such ``time`` seen
-    (``"_seen_time"``), the time (ns) from which the next update learns
-    (``"_learn_at"``), the time since the last update of ``theta``
-    (``"_elapsed"``), which weighs the update, and whether the node has learned
-    (or skipped learning for want of a target) since the input changed
-    (``"_learned_input"``).
+    on the run's time, but not in the update that first sees the input, so the
+    nodes on a path learn at about the same time, however deep they are. An
+    update counts at most ``max_dt`` seconds (``_cap``). The state holds,
+    besides ``module``, the last such ``time`` seen (``"_seen_time"``), the time
+    (ns) from which the next update learns (``"_learn_at"``), the time since the
+    last update of ``theta`` (``"_elapsed"``), which weighs the update, and
+    whether the node has learned (or skipped learning for want of a target)
+    since the input changed (``"_learned_input"``).
 
     Raises:
         TypeError: ``tau`` is not a ``TimeConstants``, ``carry`` is not a spec
@@ -131,6 +131,12 @@ class Learner(Node):
         input written at ``time`` (ns), and return whether the input is new and
         whether to update ``theta`` in this update.
 
+        With ``learn_interval``, the update that first sees an input does not
+        learn: its ``delta`` is still that of the input before, which a node
+        deep on a path (or one that was stalled) may see only after
+        ``time + learn_interval``. It learns in the next update. With ``None``,
+        every update learns, a new input or not.
+
         An input that changes before the node has learned from it drops the
         time counted for it, as an input without a target does: otherwise an
         input that changes faster than ``learn_interval`` would pile the time up
@@ -146,7 +152,8 @@ class Learner(Node):
             self._learned_input = False
         self._elapsed += dt
         learn = math.isfinite(self._tau.theta) and (
-            self._interval_ns is None or self.timer.now().ns >= self._learn_at
+            self._interval_ns is None
+            or (not new and self.timer.now().ns >= self._learn_at)
         )
         return new, learn
 

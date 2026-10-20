@@ -836,6 +836,72 @@ class TestLearnInterval:
             close(after[key], value, 1e-14)
 
 
+def learned_steps(
+    chain: Chain,
+    widths: Sequence[int],
+    run: ManualRun[Any],
+    order: Callable[[], Sequence[Any]],
+    steps: int,
+) -> dict[str, list[int]]:
+    """Step ``run`` ``steps`` times with ``chain``'s host writing a labeled input
+    at steps 1, 13, ...; return the steps at which each node learned (the time
+    since its last update of theta went back to zero: its parameters may not
+    move, before the credit reaches it), once it has seen an input."""
+    names = [*(f"l{i}" for i in range(len(chain.layers))), "out"]
+    learned: dict[str, list[int]] = {name: [] for name in names}
+    for s in range(1, steps + 1):
+        run.timer.advance(H)
+        if s % 12 == 1:
+            x, y = sample(widths, s)
+            chain.write(run, x, y, MASK)
+        run.step(*order())
+        nodes = run.state_dict()["nodes"]
+        for name in names:
+            # Before the first input, the zeros carried (time 0) skip theirs.
+            if nodes[name]["_seen_time"] != 0 and nodes[name]["_elapsed"] == 0.0:
+                learned[name].append(s)
+    return learned
+
+
+class TestLearnTime:
+    def test_the_nodes_on_a_path_learn_in_the_same_step(
+        self, start_manual: StartManual
+    ):
+        # learn_interval = 8 steps after each write, longer than the input takes
+        # to reach the output (4 steps from the output down): every node learns
+        # at steps 9 and 21, whatever the order of the updates.
+        shuffle = random.Random(0)
+        for name in ("from_next", "from_prev", "random"):
+            widths = [4, 5, 5, 5]
+            layers, head = make_modules("linear", "tanh", widths)
+            chain = Chain(layers, head, widths, learn_interval=8 * H)
+            run = start_manual(chain.net, timer=VirtualTimer())
+
+            def order(chain: Chain = chain, name: str = name) -> list[Any]:
+                if name == "random":
+                    nodes = chain.from_prev()
+                    return shuffle.sample(nodes, k=len(nodes))
+                return getattr(chain, name)()
+
+            learned = learned_steps(chain, widths, run, order, 24)
+            assert learned == dict.fromkeys(learned, [9, 21]), name
+
+    def test_a_node_does_not_learn_in_the_update_that_first_sees_an_input(
+        self, start_manual: StartManual
+    ):
+        # learn_interval = 2 steps, shorter than the path: stepped from the
+        # output, l0 sees the input (written at step 1) at step 2 and learns at
+        # steps 3 and 5, but l1, l2 and the output see it at steps 3, 4 and 5,
+        # at or past the time to learn, and learn in the update after; then at
+        # the next time on the grid of the write (step 5), if any.
+        widths = [4, 5, 5, 5]
+        layers, head = make_modules("linear", "tanh", widths)
+        chain = Chain(layers, head, widths, learn_interval=2 * H)
+        run = start_manual(chain.net, timer=VirtualTimer())
+        learned = learned_steps(chain, widths, run, chain.from_next, 6)
+        assert learned == {"l0": [3, 5], "l1": [4, 5], "l2": [5], "out": [6]}
+
+
 def relaxed(
     before: dict[str, Any], after: dict[str, Any], dt: float, *, moves: bool
 ) -> tuple[torch.Tensor, torch.Tensor]:

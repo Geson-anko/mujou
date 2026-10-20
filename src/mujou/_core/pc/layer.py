@@ -59,8 +59,12 @@ class Layer(Learner):
 
     It learns in its first update once ``learn_interval`` seconds have passed
     since the host wrote the input (the carried ``time``, on the run's time),
-    and then every ``learn_interval`` seconds while the input stays; with
-    ``learn_interval=None``, in every update. Timed from the write, the nodes
+    and then every ``learn_interval`` seconds while the input stays, but never
+    in the update that first sees an input (its ``delta`` is still that of the
+    input before); with ``learn_interval=None``, in every update.
+    ``learn_interval`` should leave the credit time to go down the path and
+    back: at least about ``2 * depth * period``, with ``depth`` the number of
+    nodes on the path. Timed from the write, the nodes
     on a path learn at about the same time, however deep they are: a node
     that learned later than the one before it would learn from a ``delta``
     shaken by the jump of ``h_in`` that the update of the other's ``theta``
@@ -118,8 +122,9 @@ class Layer(Learner):
         carry: The spec of the carried data, from ``carry_spec``.
         tau: The time constants.
         learn_interval: The time in seconds from the write of an input to the
-            update of ``theta``, and between the updates while the input stays.
-            ``None`` updates in every ``on_update``.
+            update of ``theta``, and between the updates while the input stays;
+            at least about ``2 * depth * period``. ``None`` updates in every
+            ``on_update``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
             It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
