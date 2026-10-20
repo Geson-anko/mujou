@@ -769,6 +769,22 @@ class TestRegisterState:
         node.register_state("w")  # a tensor, already collected
         assert list(node.state_dict()) == ["w", "_h", "p", "linear", "count", "log"]
 
+    def test_registering_a_collected_name_keeps_it_on_a_plain_value(self):
+        node = Counting(2.0)
+        node.register_state("w")
+        setattr(node, "w", None)  # noqa: B010  # not the declared type
+        assert node.state_dict()["w"] is None
+        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "count", "log"]
+
+    def test_a_registered_tensor_is_restored_in_place(self):
+        source, target = Counting(1.0), Counting(-1.0)
+        source.register_state("w")
+        target.register_state("w")
+        w = target.w
+        target.load_state_dict(copy.deepcopy(source.state_dict()))
+        assert target.w is w
+        assert torch.equal(w, torch.ones(2, 3))
+
     def test_loads_by_assigning_a_copy(self):
         source, target = Counting(1.0), Counting(-1.0)
         source.count, source.log = 5, [1.0, 2.0]

@@ -287,6 +287,10 @@ class Node(_native.Node, Component):
         default ``load_state_dict`` assigns a deep copy of the saved value (a
         tensor or a module held at load time is still restored in place).
 
+        Register in ``__init__`` or ``on_start``: a restore loads into new
+        instances, and a name first registered later (in ``on_update``, say) is
+        not registered there yet, so the load rejects it.
+
         ``torch.load(..., weights_only=True)`` reads only basic types (numbers,
         strings, ``None``, lists, tuples, dicts and tensors): keep the
         registered values to those if the state is saved with ``torch.save``.
@@ -332,11 +336,11 @@ class Node(_native.Node, Component):
 
     @override
     def load_state_dict(self, state: object) -> None:
-        """Copy ``state`` (from the default ``state_dict``) into the registered
-        attributes in place: ``copy_`` into each tensor and ``load_state_dict``
-        into each module, without recording gradients. Any other value registered
-        with ``register_state`` is replaced by a ``copy.deepcopy`` of its value in
-        ``state``.
+        """Restore ``state`` (from the default ``state_dict``) into the
+        registered attributes: ``copy_`` into each tensor and ``load_state_dict``
+        into each module in place, without recording gradients, and assign a
+        ``copy.deepcopy`` of the saved value to any other attribute registered
+        with ``register_state``.
 
         The objects stay the same, so references taken in ``__init__`` or
         ``on_start`` see the restored values, and a tensor that records gradients
@@ -345,6 +349,10 @@ class Node(_native.Node, Component):
         after ``on_start``) is set as a new attribute, a copy of the value, and
         registered. Everything is checked before anything is copied, so on an
         error nothing has changed.
+
+        A name is restored by what it holds at load time, not by what it held
+        when saved: a registered name that holds a tensor now but held another
+        value (``None``, say) when saved raises ``TypeError``.
 
         Raises:
             TypeError: ``state`` or the state of a module is not a mapping, or
@@ -367,7 +375,7 @@ class Node(_native.Node, Component):
         ]
         if missing or unexpected:
             raise ValueError(
-                "the state does not match the node's tensors and modules: "
+                "the state does not match the node's registered attributes: "
                 + "; ".join(
                     f"{what} {keys}"
                     for what, keys in (

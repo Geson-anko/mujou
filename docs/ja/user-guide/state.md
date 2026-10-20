@@ -73,7 +73,7 @@ self.elapsed = 0.0
 self.register_state("elapsed")
 ```
 
-既定の `load_state_dict` は保存した値のコピーを属性に代入する。登録できるのは代入済みの属性だけ。既定の `torch.load` で読むなら値は基本的な型に限る（[保存の形式](#%E4%BF%9D%E5%AD%98%E3%81%AE%E5%BD%A2%E5%BC%8F)）。
+既定の `load_state_dict` は保存した値のコピーを属性に代入する。登録できるのは代入済みの属性だけで、登録は `__init__` か `on_start` で行う。復元では新しいインスタンスを使うので、それより後（`on_update` の中など）で初めて登録した名前は復元先でまだ登録されておらず、復元が失敗する。既定の `torch.load` で読むなら値は基本的な型に限る（[保存の形式](#%E4%BF%9D%E5%AD%98%E3%81%AE%E5%BD%A2%E5%BC%8F)）。
 
 それ以外のものは `state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分と登録した分はそのまま扱える。
 
@@ -118,7 +118,7 @@ override するときは次を守る。
 
 読むときは保存時と同じ方法を使う（`pickle.dumps` なら `pickle.loads`、`torch.save` なら `torch.load`）。保存方法が分からないファイルは、まず既定の `torch.load` で読む。それが失敗したら、送り手を信頼できるときだけ pickle で読む。
 
-- `torch.load` は既定（`weights_only=True`）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。`mujou.StateDict` も `import mujou` した後なら読める。`state_dict` を override して独自クラスのオブジェクトを木に入れると、既定の `torch.load` では読めない
+- `torch.load` は既定（`weights_only=True`）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。`mujou.StateDict` も `import mujou` した後なら読める。登録した属性や `state_dict` の override から独自クラスのオブジェクトが木に入ると、既定の `torch.load` では読めない
 - `pickle.load` と `torch.load(..., weights_only=False)` は、読むときにファイルの中のコードを実行できる。信頼できないファイルをこれらで読まない
 - CUDA で計算するノードの状態は CUDA のテンソルのまま木に入る。`tree.cpu()` は木の中のテンソルをすべて CPU に移した新しい木を返す（元の木は変えない）。保存前に CPU に移せば GPU の無いマシンでも読める。CUDA のまま保存したファイルは `torch.load(..., map_location="cpu")` で読む。既定の `load_state_dict` はノードのデバイスへコピーするので、CPU のテンソルのまま `state=` に渡してよい
 

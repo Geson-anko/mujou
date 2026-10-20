@@ -173,7 +173,7 @@ pamiq-core の `SleepIntervalAdjustor`（`interaction/interval_adjustors.py`）�
 | ほかの値（`None` を含む）で上書き | 自動で登録した名前は外す。`register_state` で登録した名前は外さない |
 | `del` | 外す |
 
-Port・数値・Tensor のリストや dict は自動では集めない。数値などを状態に入れるには、代入してから `self.register_state("name")` を呼ぶ。値の型は問わないが、想定は int・float・str・None とそのコンテナ。順序は Tensor・nn.Module の自動登録と同じ 1 本の順序で、呼んだ時点の位置に入る。Tensor の名前を登録してもよく、その場の更新で復元される点は変わらない。まだインスタンスに無い名前（`name not in vars(self)`）は `AttributeError`、property（`device`・`period`・`timer` などの予約名を含む）は `ValueError` にする。
+Port・数値・Tensor のリストや dict は自動では集めない。数値などを状態に入れるには、代入してから `self.register_state("name")` を呼ぶ。値の型は問わないが、想定は int・float・str・None とそのコンテナ。順序は Tensor・nn.Module の自動登録と同じ 1 本の順序で、呼んだ時点の位置に入る。Tensor の名前を登録してもよく、その場の更新で復元される点は変わらない。まだインスタンスに無い名前（`name not in vars(self)`）は `AttributeError`、property（`device`・`period`・`timer` などの予約名を含む）は `ValueError` にする。登録は `__init__` か `on_start` で行う。復元は新しいインスタンスへ load するので、それより後で初めて登録した名前は復元先で登録されておらず、`load_state_dict` が `ValueError`（not tensors and not registered）にする。Tensor と違い、登録に無い普通の値を load で新しく登録する救済は無い。
 
 property も集めない（setter が別の名前の属性に Tensor を置けば、そちらが集まる）。
 
