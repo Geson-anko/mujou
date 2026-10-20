@@ -59,37 +59,45 @@ $$\tau_h \dot u_i = -(u_i + \lambda_i + g_i),\qquad \tau_\lambda \dot\lambda_i =
 | `Output` | $\theta_L$（`f_L`）                    | $\tau_\theta$                           |
 | `Input`  | なし                                   | —                                       |
 
-ほかに、入力の時刻・学習の位相・前回の学習からの経過時間を Python の数値で持ち、`Node.register_state`（[コアの変更](#コアの変更-noderegister_state)）で状態の木に入れる。$u, \lambda$ は属性に `Tensor` を代入するだけで集まるので、専用のクラスは作らない。
+ほかに、学習の位相・前回の学習からの経過時間・最後に見た入力の時刻を Python の数値で持ち、`Node.register_state`（[コアの変更](#コアの変更-noderegister_state)）で状態の木に入れる。$u, \lambda$ は属性に `Tensor` を代入するだけで集まるので、専用のクラスは作らない。
 
 $\mu, \delta$ は状態にせず、更新のたびに今の `h_in` から計算し直す。落とし穴 2（$\sigma'$ をキャッシュで評価しない）は自動で守られる。
 
 ### メッセージと Port
 
-活動には、それが**どの時刻の入力から作られたか**（入力の時刻）を付ける。入力の時刻はホストが `Run.write` で $x$ を書いた時刻（`Timestamp` の ns）で、ホストが番号を管理する必要は無い。
+ターゲットは入力に**付随させて**、活動と同じ経路で運ぶ（2026-10-20、ユーザーの決定）。付随データはコアの carry（[コアの変更: carry](#コアの変更-carry)）で、活動と同じメッセージに載せ、途中のノードはゼロコピーで中継する。
 
-| 型          | 中身                              | 送る Port |
-| ----------- | --------------------------------- | --------- |
-| `pc.ToNext` | `h` と `time`（入力の時刻、int64） | `next`    |
-| （Tensor）  | $g$                               | `prev`    |
+付随データ `pc.Carried`（`TypedDict`、spec は `pc.carry_spec(target, batch)` で作る）:
 
-| ノード   | Port     | 受け取る                        | 送る                       |
-| -------- | -------- | ------------------------------- | -------------------------- |
-| `Input`  | `prev`   | $x$（ホストが書く）             | —                          |
-| `Input`  | `next`   | $g$（捨てる）                   | `ToNext`（$x$ と書いた時刻） |
-| `Layer`  | `prev`   | `ToNext`                        | $g_{\mathrm{in}}$          |
-| `Layer`  | `next`   | $g$（相手ごと、和を取る）       | `ToNext`（$h_i$）          |
-| `Output` | `prev`   | `ToNext`                        | $g_{\mathrm{in}}$          |
-| `Output` | `target` | $y$（ホストが書く）             | —                          |
-| `Output` | `next`   | —                               | `ToNext`（予測 $\mu_L$）   |
+| フィールド | 中身                                                         |
+| ---------- | ------------------------------------------------------------ |
+| `y`        | ターゲット（spec は利用者が決める。クラス番号なら `(B,)` の int64） |
+| `mask`     | `(B,)` の bool。ラベルのあるサンプル                          |
+| `time`     | `()` の int64。ホストが入力を書いた時刻（ns）                 |
 
-`Input` は、ホストが書いた $x$ に書いた時刻を付けて送るだけのノード。これでどの `Layer` の `prev` も同じ型になる。`Input` の次の `Layer` は $g_{\mathrm{in}}$ の計算を省いてよい（読み手が捨てるので）。
+| ノード   | Port   | 受け取る                              | 送る                                              |
+| -------- | ------ | ------------------------------------- | ------------------------------------------------- |
+| `Input`  | `prev` | $\{x, y, \mathrm{mask}\}$（ホストが書く） | —                                             |
+| `Input`  | `next` | $g$（捨てる）                         | $x$ + 付随データ（書いた時刻を `time` に入れる）   |
+| `Layer`  | `prev` | $h_{\mathrm{in}}$ + 付随データ        | $g_{\mathrm{in}}$                                 |
+| `Layer`  | `next` | $g$（相手ごと、和を取る）             | $h_i$ + 付随データ（`prev` から中継）             |
+| `Output` | `prev` | $h_{\mathrm{in}}$ + 付随データ        | $g_{\mathrm{in}}$                                 |
+| `Output` | `next` | —                                     | $\{\hat y, y, \mathrm{mask}\}$                    |
+
+- `Output` は `prev` から届いた $h_{\mathrm{in}}$ と、同じメッセージの $y$・`mask` を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、組み違いが構造的に起きない。時刻の照合も、ホストが $x$ と $y$ を同時に書く必要も無い
+- ホストが伝播より速く次のサンプルを書いても組み違えない（時刻で揃える方式は、`target` のスロットが常に新しいサンプルで上書きされ、一致する瞬間が来なくなる）
+- 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい
+- `Layer` は付随データを使わず中継するだけ。読むのは学習の位相のための `time` だけ
+- `Output` の `next` は予測と $y$・`mask` を普通のメッセージで送り、ホストが prequential 精度を測れるようにする（ホストの読み書きは carry に対応させない）
+
+`Input` は、ホストが書いた $\{x, y, \mathrm{mask}\}$ を活動と付随データに分けて送るだけのノード。これでどの `Layer` の `prev` も同じ型になる。`Input` の次の `Layer` は $g_{\mathrm{in}}$ の計算を省いてよい（読み手が捨てるので）。
 
 ### ResBlock などの入れ方
 
 ノードの境界は、制約 $h_i = f_i(\cdot)$ を置いて自由変数 $u, \lambda$ を持つ場所。
 
 - ResBlock を 1 つの `Layer` にする（既定）: $f(h) = h + g_\theta(h)$ を渡す。スキップ接続と中間の活性はノードの内側で BP される
-- ノードをまたいで分ける: 合流するノードが入力ごとに Port を持ち、VJP を入力ごとに返す。分岐する側は `next` に届いた値を足す。一般形は $\nabla_{h_j}\mathcal L = \delta_j + \sum_{i \in \mathrm{children}(j)} \partial E_i/\partial h_j$。入力の時刻は入力のうち最も古いものを取る
+- ノードをまたいで分ける: 合流するノードが入力ごとに Port を持ち、VJP を入力ごとに返す。分岐する側は `next` に届いた値を足す。一般形は $\nabla_{h_j}\mathcal L = \delta_j + \sum_{i \in \mathrm{children}(j)} \partial E_i/\partial h_j$。付随データは入力のうちの 1 つから中継する
 
 細かく分けるほど並列度と局所性が上がり、$u, \lambda$ のメモリと緩和の時間（経路上のノード数に比例）が増える。モデル全体を 1 ノードにして出力ノードをつなぐとオンラインの BP になる。
 
@@ -97,19 +105,19 @@ $\mu, \delta$ は状態にせず、更新のたびに今の `h_in` から計算�
 
 `Layer` は 1 回の `on_update(dt)` で次を行う。
 
-1. `prev` から $h_{\mathrm{in}}$ と入力の時刻、`next` から $g$ を読む
-2. 入力の時刻が変わったら、自分の入力の時刻を更新し、学習の位相を 0 に戻す（$u, \lambda$ はそのまま）
+1. `prev` から $h_{\mathrm{in}}$ と付随データの `time`、`next` から $g$ を読む
+2. `time` が最後に見た値から変わったら、それを覚え、学習の位相を 0 に戻す（$u, \lambda$ はそのまま）
 3. $\mu = f(h_{\mathrm{in}})$ を計算し、**更新前の** $\delta = u + \lambda$ で VJP を取る。学習するステップなら $g_\theta$ も取り、しないステップは $h_{\mathrm{in}}$ についてだけ取る
 4. $g_{\mathrm{in}}$ を送る
 5. $u$ を進め、続けて**更新後の** $u$ で $\lambda$ を進める（陽的 Euler、公式実装と同じ順）
-6. $h = \mu + u$ と入力の時刻を送る
+6. $h = \mu + u$ を、`prev` で読んだ付随データとともに送る（中継）
 7. 学習するステップなら $\theta$ を更新する
 
 状態の更新（5、7）は `torch.no_grad()` の下で行う。autograd の行には `# mujou: local-autograd` を付ける。
 
-`Output` は 1〜3 で、`target` を書いた時刻（`recv_with_time`）が `h_in` の入力の時刻と一致するときだけ $\ell = \sum_b \ell_b$ を微分して $g_{\mathrm{in}}$ と（学習するステップなら）$g_\theta$ を得る。一致しなければ教師なしとして $g_{\mathrm{in}} = 0$ を送り、学習しない。予測 $\mu_L$ は入力の時刻を付けて毎回送る。
+`Output` は 1〜3 で $\ell = \sum_b \mathrm{mask}_b\,\ell_b(\hat y_b, y_b)$ を微分して $g_{\mathrm{in}}$ と（学習するステップなら）$g_\theta$ を得る。`mask` がすべて False なら $g_{\mathrm{in}} = 0$ で、学習しない。
 
-ホストは $x$ と $y$ を 1 回の `Run.write` で書く（同じ時刻になる）。教師なしのサンプル（ラベルが無いとき、テスト）は $x$ だけを書けばよい。学習モードと推論モードの区別は持ち込まない。
+ホストは $\{x, y, \mathrm{mask}\}$ を `Input` の `prev` に書く。教師なしのサンプル（ラベルが無いとき、テスト）は `mask` を False にする。学習モードと推論モードの区別は持ち込まない。
 
 ## 入力の切り替えと状態
 
@@ -149,10 +157,10 @@ $S = 16$ で崩れた原因は $u, \lambda$ の持ち越しではない。$u$ �
 そこで次のように決める。
 
 - 状態は $u, \lambda$ で持ち、入力が変わっても持ち越す。リセットの機構は持たない
-- 出力は、ラベルを書いた時刻と活動の入力の時刻が一致するときだけ教師として使う（[メッセージと Port](#メッセージと-port)）。伝播の遅れの分だけラベルを遅らせることを、遅れの段数を数えずに実現できる
+- ターゲットは入力に付随させ、活動と同じ経路で運ぶ（[メッセージと Port](#メッセージと-port)）。伝播の遅れの分だけラベルを遅らせることが、遅れの段数を数えずに実現できる
 - 古い credit が新しい入力のヤコビアンを通るずれは残る。$S$ の下限はリセットより厳しい（リセットは $S \ge 8$、持ち越しは $S \ge 32$）
 
-ラベルを時刻で揃えたうえでの $S$ の下限と精度は、実装後に測り直す。
+ターゲットを付随させたうえでの $S$ の下限と精度は、実装後に測り直す。
 
 ## θ の更新間隔
 
@@ -162,7 +170,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 とする。時間あたりの学習の速さは $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
 
-間隔は時間 `learn_interval`（秒）で持つ（2026-10-19、ユーザーの承認）。位相は入力の時刻が変わったときと学習したときに 0 に戻し、入力が変わってから `learn_interval` だけ経った時点で学習する。$\Sigma\Delta t$ は入力の切り替えでは戻さない。`ManualRun` を固定の `dt` で回すと「入力の切り替えから数えて $K$ ステップごと」と同じになる。`learn_interval=None` は毎回学習する（連続時間形そのまま）。
+間隔は時間 `learn_interval`（秒）で持つ（2026-10-19、ユーザーの承認）。位相は付随データの `time` が変わったときと学習したときに 0 に戻し、入力が変わってから `learn_interval` だけ経った時点で学習する。$\Sigma\Delta t$ は入力の切り替えでは戻さない。`ManualRun` を固定の `dt` で回すと「入力の切り替えから数えて $K$ ステップごと」と同じになる。`learn_interval=None` は毎回学習する（連続時間形そのまま）。
 
 サンプルの時点が効くのは、入力が変わった直後の $\delta$ が新しいサンプルの credit になっていないからである。MNIST での比較（$h$ で持ちリセット、relu-ce、$S = 32$）:
 
@@ -208,17 +216,35 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 仕様は [ノード](nodes.md#状態の自動収集) を更新する。
 
+## コアの変更: carry
+
+付随データを活動と同じメッセージに載せ、途中のノードがゼロコピーで中継できるようにする（2026-10-20、ユーザーの決定）。PC に限らず、サンプル ID・マスク・時刻など、経路に沿って運びたいデータに使える。
+
+付随データを別の Port（別のスロット）に分けない。読み手が 2 つのスロットを別々の瞬間に読むと、活動と付随データが別のサンプルの組になりうるからである。1 つのメッセージに入れておけば、読み手は常に同じサンプルの組を読む。
+
+要件（API の細部は実装の計画で詰める）:
+
+- Port の宣言で、送る向きと受け取る向きそれぞれに付随データの spec を持てる。`connect` は送る側と受け取る側の付随データの spec の一致も確かめる
+- 送る向きの付随データには、別の Port を指定できる。そのとき `send` は、その Port で**最後に `recv` したメッセージ**の付随データをそのまま添える。活動の計算に使った入力と付随データが同じスナップショットになる
+- 付随データを最初に作るノード（`pc.Input`）は、`send` に付随データの値を渡す（コピー）
+- `recv` は付随データを torch へ移さない。付随データは別のメソッドで読み、そのときだけコピーする（フィールドを選べる）
+- コアでは `Message` のフィールドのバッファを `Arc` で持ち（`Vec<Buffer>` → `Vec<Arc<Buffer>>`）、中継はバッファの参照の複製だけにする。最後の参照が消えたら元の書き手のプールへ戻る
+- 付随データもスロットの値として状態の木に入り、復元される
+- ホストの `Run.write` / `Run.read` は付随データに対応させない（必要になったら足す）
+
+仕様は [ネットワーク](network.md) と [メッセージ](messages.md) を更新する。
+
 ## 機能
 
 ### MVP（MNIST に必要なもの）
 
 | 公開名                        | 内容                                                                                         |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
-| `pc.Input`                    | ホストが書いた $x$ に書いた時刻を付けて送るノード                                             |
-| `pc.Layer`                    | 任意の `nn.Module` を包むノード。$u, \lambda$ を持つ。出力の shape は構築時に `f` を 1 回通して決める |
+| `pc.Input`                    | ホストが書いた $\{x, y, \mathrm{mask}\}$ を、活動と付随データに分けて送るノード               |
+| `pc.Layer`                    | 任意の `nn.Module` を包むノード。$u, \lambda$ を持ち、付随データを中継する。出力の shape は構築時に `f` を 1 回通して決める |
 | `pc.Output`                   | $f_L$ とサンプルごとの損失を持つノード                                                       |
 | `pc.TimeConstants`            | $\tau_h, \tau_\lambda, \tau_\theta$（秒）                                                    |
-| `pc.ToNext`                   | 活動のメッセージの `TypedDict` と、shape から `DictSpec` を作る関数                          |
+| `pc.Carried` / `pc.carry_spec` | 付随データの `TypedDict` と、ターゲットの spec とバッチサイズから `DictSpec` を作る関数      |
 | `pc.mse` / `pc.cross_entropy` | サンプルごとの損失                                                                           |
 | `pc.functional`               | 状態を持たない計算: `vjp`、`relax_`（刻みの分割つき Euler）、`learn_`                         |
 
@@ -229,12 +255,13 @@ import mujou.pc as pc
 
 B = 64
 tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=...)  # 周期の既定は tau.h / 4 = 1 ms
-inp = pc.Input((B, 784))
+carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
+inp = pc.Input((B, 784), carry=carry)
 l1 = pc.Layer(nn.Sequential(nn.Linear(784, 256), nn.ReLU()), input_shape=(B, 784),
-              tau=tau, learn_interval=24e-3)
+              carry=carry, tau=tau, learn_interval=24e-3)
 l2 = pc.Layer(nn.Sequential(nn.Linear(256, 256), nn.ReLU()), input_shape=(B, 256), ...)
 out = pc.Output(nn.Linear(256, 10), loss=pc.cross_entropy, input_shape=(B, 256),
-                target=TensorSpec((B,), torch.int64), ...)
+                carry=carry, ...)
 inp.next.connect(l1.prev)
 l1.next.connect(l2.prev)
 l2.next.connect(out.prev)
@@ -242,7 +269,7 @@ l2.next.connect(out.prev)
 
 ### 後で足すもの
 
-- `pc.Chain(input, *layers, output)`: 直列につないで `prev`・`target`・`next` を公開するネットワーク
+- `pc.Chain(input, *layers, output)`: 直列につないで `prev`・`next` を公開するネットワーク
 - 多入力の `Layer`（ノードをまたぐスキップ接続、合流）
 - 監視用の Port（ノードごとの $\tfrac12\|\delta\|^2$、$\|u\|$）
 - 重みの更新に `torch.optim`（Adam など）を差し込む口。学習率は $\Sigma\Delta t/\tau_\theta$ から作る
@@ -254,12 +281,12 @@ l2.next.connect(out.prev)
 `examples/mnist/` に置く。example は利用者への手引きで、動作確認のためのものではないので、テストでは実行しない（[実装の順番](#実装の順番) の 0）。
 
 - **データ**: <https://ossci-datasets.s3.amazonaws.com/mnist/> から idx 形式をダウンロードしてキャッシュし、numpy で読む（torchvision に依存しない）。画素を標準化
-- **PC-ALM**: 上の 4 ノードを `mujou.run` で非同期に回す。ホストは各バッチを $S = 32$ 周期見せ、$x$ と $y$ を 1 回の `write` で書く
+- **PC-ALM**: 上の 4 ノードを `mujou.run` で非同期に回す。ホストは各バッチの $\{x, y, \mathrm{mask}\}$ を `Input` に書き、$S = 32$ 周期見せる
 - **BP**: 同じ初期値・同じバッチ順で素の PyTorch の SGD。1 バッチあたりの学習率を $\Sigma\Delta t/\tau_\theta$ と同じ値（0.1）にそろえる
 - **速さの比べ方**: 実時間の周期のまま回すと待ち時間が入り、BP と比べられない。timer の時間のスケールを上げ、ノードが計算の限界の速さで回るようにする。上げすぎると `dt` が周期より伸びて不安定になるので、ノードが追いつける上限を選ぶ（`dt` を監視する）
 - **測るもの**:
-  - prequential 精度: 入力を書いてから経路の分の更新を経た、学習前の予測の精度。継続学習の自然な指標
-  - テスト精度: テストのバッチを $x$ だけ書いて見せ、`Output` の予測で測る。推論モードを持たないことの実演
+  - prequential 精度: `Output` の `next` から届く、学習前の予測とそのサンプルの $y$ から測る。継続学習の自然な指標
+  - テスト精度: テストのバッチを `mask` を False にして見せ、`Output` の予測で測る。推論モードを持たないことの実演
   - 同じコア数での、ある精度に達するまでの実時間と、1 サンプルあたりの forward と VJP の回数
 - **既定値**: relu、CE、$\tau_\lambda = 2\tau_h$、周期 $\tau_h/4$、$\tau_\theta$ は 1 バッチの学習率が 0.1 になる値、3 epoch
 
@@ -276,18 +303,19 @@ l2.next.connect(out.prev)
 5. スカラーの線形の例で $\lambda = w_2(y - \hat y)$
 6. 上から・下から・固定 seed のランダム順で回しても同じ不動点に収束する
 7. 教師が無いとき、$h$ は経路の分の更新で forward の値になり、平衡で $u = 0$、$\lambda = 0$、$g_\theta = 0$
-8. ラベルの時刻が活動の入力の時刻と一致しないステップでは、`Output` が教師を使わない
+8. `Output` は常に、受け取った活動と同じメッセージの $y$ を使う。`mask` が False のサンプルは損失に入らない
 9. `learn_interval` を固定の `dt` で回すと、入力の切り替えから $K$ ステップごとに $\Sigma\Delta t$ の重みで更新される。刻みの分割が細かい Euler と一致する
-10. `Run.state_dict` で取得した状態から復元すると、同じスケジュールで同じ値になる（入力の時刻・位相・$\Sigma\Delta t$ を含む）
+10. `Run.state_dict` で取得した状態から復元すると、同じスケジュールで同じ値になる（付随データ・位相・$\Sigma\Delta t$ を含む）
 
 ## 実装の順番
 
 0. example をテストから外す: `tests/test_examples.py` を削除し、`examples/README.md`（60 秒・ネットワーク不要の規約）、CLAUDE.md、`memory/project_docs_site.md` を直す（chore、別 PR）
 1. `Node.register_state` と、[ノード](nodes.md#状態の自動収集) の仕様とテスト（別 PR）
-2. `pc.functional`・損失・`TimeConstants`・`ToNext` と、テスト 1・2
-3. `pc.Input`・`pc.Layer`・`pc.Output` と、テスト 3〜10
-4. MNIST の example、docs（英語と日本語）の使い方のページ、skill `pc-alm` 7 節への一般化と実験結果の追記
-5. code-reviewer と algorithm-reviewer のレビュー
+2. コアの carry（Rust の `Message`、bindings、`Port`、スタブ）と、[ネットワーク](network.md)・[メッセージ](messages.md) の仕様（別 PR）
+3. `pc.functional`・損失・`TimeConstants`・`Carried` と、テスト 1・2
+4. `pc.Input`・`pc.Layer`・`pc.Output` と、テスト 3〜10
+5. MNIST の example、docs（英語と日本語）の使い方のページ、skill `pc-alm` 7 節への一般化と実験結果の追記
+6. 各 PR で code-reviewer（学習則とコアの carry には algorithm-reviewer も）のレビュー
 
 ## 記事の公式実装との違い
 
@@ -305,7 +333,7 @@ l2.next.connect(out.prev)
 
 ## 未決定事項
 
-- ラベルを時刻で揃えたうえでの $S$ の下限と精度（実装後に測る）
+- ターゲットを付随させたうえでの $S$ の下限と精度（実装後に測る）
 - 入力がフレームごとに変わり続けるストリーム（時間的に相関したデータ）での振る舞い
 - $u$ で持つ力学の安定性。不動点は同じだが、過渡はラグランジアンの勾配流ではない
 - 非同期の実行（`dt` の揺らぎ、読む値の古さ）で同期と同じ精度が出るか。example で測る
