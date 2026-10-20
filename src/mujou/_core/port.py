@@ -82,7 +82,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     a ``recv_carry``, and ``send`` passes on, without copying, the data of the
     message that port last received (``recv``). Until the first ``send``, and
     before the first ``recv`` of the port it passes on from, the carried data is
-    the ``zeros()`` of its spec.
+    the ``zeros()`` of its spec (in a restored run, the values under
+    ``"carries"`` in the state). These zeros cannot be told from zeros that were
+    sent: to tell them apart, carry a field that says whether the data is valid.
 
     Once assigned as an attribute of a node, the port is named
     ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
@@ -427,7 +429,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         A port whose ``send_carry`` is a spec takes the carried data as ``carry``,
         checked and copied as ``msg`` is. A port whose ``send_carry`` is another
         port takes no ``carry``: the message carries the data of the message
-        that port last received, shared and not copied.
+        that port last received, shared and not copied. Type checkers accept
+        both mistakes (``carry`` given to a port that passes data on, or left
+        out on a port that carries a spec); only the call rejects them.
 
         Call it only from the owning node's hooks while the network runs.
 

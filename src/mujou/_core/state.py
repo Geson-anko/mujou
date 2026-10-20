@@ -227,7 +227,7 @@ def _slot_restores(
         shape = (
             "(value, time_ns, sent)"
             if carry is None
-            else ("(value, time_ns, sent, carried)")
+            else "(value, time_ns, sent, carried)"
         )
         length = 3 if carry is None else 4
         if (

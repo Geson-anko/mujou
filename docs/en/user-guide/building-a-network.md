@@ -137,12 +137,18 @@ A port declares the carried data for each direction.
 | `send_carry=spec` | The data carried with what the port sends. `send(value, carry=data)` takes it, and copies it as it copies the value                                                        |
 | `send_carry=port` | Pass on the data carried with the message that `port`, a port of the same node with a `recv_carry`, last received. `send` takes no `carry`: the data is shared, not copied |
 
-`port.carried()` returns a copy of the data carried with the message last received by `recv` (`port.carried("key")` only one field of a `DictSpec`). Before the first `recv`, and until the peer first sends, it is zeros.
+`port.carried()` returns a copy of the data carried with the message last received by `recv` (`port.carried("key")` only one field of a `DictSpec`). Before the first `recv`, and until the peer first sends, it is zeros (in a restored run, the values under `"carries"` in the state). These zeros cannot be told from zeros that were sent; to tell them apart, carry a field that says whether the data is valid, such as a boolean mask.
 
 The following example gives each sample an ID in `Stamp`, passes it on through `Double`, and pairs it with the value in `Report`.
 
 ```python
 --8<-- "examples/carry.py:nodes"
+```
+
+The host writes each sample and waits for the report that carries its ID.
+
+```python
+--8<-- "examples/carry.py:host"
 ```
 
 - `connect` also checks that the carried data matches in each direction, and raises `TypeError` otherwise

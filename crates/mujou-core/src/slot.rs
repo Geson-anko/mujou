@@ -257,7 +257,11 @@ impl fmt::Display for SlotError {
                 actual,
             } => {
                 write_location(f, slot, "")?;
-                write!(f, "expected to carry {expected}, got {actual}")
+                if expected == NOTHING {
+                    write!(f, "expected to carry nothing, so it passes nothing on")
+                } else {
+                    write!(f, "expected to carry {expected}, got {actual}")
+                }
             }
         }
     }
@@ -265,11 +269,14 @@ impl fmt::Display for SlotError {
 
 impl std::error::Error for SlotError {}
 
+/// How [`format_fields`] lists no fields.
+const NOTHING: &str = "nothing";
+
 /// `('y': (2,) int64, 'mask': (2,) bool)`, or `nothing` for no fields: how a
 /// [`SlotError::CarryMismatch`] lists them.
 fn format_fields<'a>(fields: impl ExactSizeIterator<Item = &'a FieldSpec>) -> String {
     if fields.len() == 0 {
-        return "nothing".to_owned();
+        return NOTHING.to_owned();
     }
     let fields: Vec<String> = fields
         .map(|f| {
@@ -1537,7 +1544,10 @@ mod tests {
             .send_with(Target::Channel(0), Some(&[]), fill_k(1))
             .unwrap_err()
             .to_string();
-        assert_eq!(err, "slot 'w/ch0': expected to carry nothing, got nothing");
+        assert_eq!(
+            err,
+            "slot 'w/ch0': expected to carry nothing, so it passes nothing on"
+        );
     }
 
     #[test]
