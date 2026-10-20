@@ -86,9 +86,13 @@ class Layer(Learner):
     input before); with ``learn_interval=None``, in every update. The nodes
     read the one timer of the run, so the nodes on a path learn at about the
     same time, however deep they are, and each from the relaxed ``delta`` of
-    the same input. ``learn_interval`` should leave the credit time to go down
-    the path and back: at least about ``2 * depth * period``, with ``depth`` the
-    number of nodes on the path. The node does not learn when no sample of the
+    the same input. ``learn_interval`` must leave the credit time to go down the
+    path and back, at least about ``2 * depth * period`` with ``depth`` the
+    number of nodes on the path: this is a condition of stability, not of
+    accuracy only. With a shorter interval, deep chains can diverge however
+    slowly ``theta`` moves, as every node then learns, and so advances its
+    ``epoch``, in almost every update, and the nodes above move ``h`` with every
+    change of ``mu``. The node does not learn when no sample of the
     input has a target (every carried ``mask`` is False): that time is dropped
     from the next update, which would otherwise learn from the ``delta`` left
     over from an earlier input. Nor does it keep the time of an input that
@@ -106,8 +110,11 @@ class Layer(Learner):
     stable in the node itself.
 
     ``module`` must treat the samples of the batch independently (no
-    ``BatchNorm`` in training mode, no ``Dropout``): the gradient of each sample
-    must be its own. Its parameters that require gradients learn; set
+    ``BatchNorm`` in training mode): the gradient of each sample must be its
+    own. It must also be deterministic and keep no state of its own (no
+    ``Dropout``, no ``BatchNorm`` in training mode): an update that learns calls
+    it once more on the same ``h_in`` to find the jump of ``theta``, which would
+    otherwise carry noise, or update running statistics a second time. Its parameters that require gradients learn; set
     ``requires_grad`` to False to freeze one. It is called once on zeros when the
     node is made, to find the shape and dtype of ``h``.
 
@@ -143,8 +150,8 @@ class Layer(Learner):
         tau: The time constants.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
-            at least about ``2 * depth * period``. ``None`` updates in every
-            ``on_update``.
+            at least about ``2 * depth * period``, or deep chains can diverge.
+            ``None`` updates in every ``on_update``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
             It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
