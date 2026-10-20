@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, Never, cast, override
 
 import pytest
 import torch
@@ -1039,6 +1039,115 @@ class TestWaitFor:
         with pytest.raises(RuntimeError, match=r"shut down before the port 'b\.next'"):
             run.wait_for(net.next, lambda _: False)
         stopper.join()
+
+
+def ids() -> TensorSpec:
+    """The carried data of the carry tests: a sample ID."""
+    return TensorSpec((), torch.int64)
+
+
+class Tagged(Node):
+    """Sends ``k`` carrying ``k`` at its k-th update."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.next = NextPort(send=TensorSpec(()), send_carry=ids())
+        self.k = 0
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.k += 1
+        self.next.send(torch.tensor(float(self.k)), carry=torch.tensor(self.k))
+
+
+class PassOn(Node):
+    """Sends what it receives plus 100, passing on what it carries."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec(()), recv_carry=ids())
+        self.next = NextPort(send=TensorSpec(()), send_carry=self.prev)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.next.send(self.prev.recv() + 100)
+
+
+class CheckTag(Node):
+    """Counts the messages whose value is the ID they carry plus 100."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec(()), recv_carry=ids())
+        self.matched = 0
+        self.mismatched: list[tuple[float, int]] = []
+        self.received: list[tuple[float, int]] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        value, k = self.prev.recv().item(), int(self.prev.carried().item())
+        self.received.append((value, k))
+        if value == k + 100:
+            self.matched += 1
+        elif (value, k) != (0.0, 0):  # before the relay first sends
+            self.mismatched.append((value, k))
+
+
+class TaggedPath(Network):
+    def __init__(self) -> None:
+        super().__init__()
+        self.a = Tagged()
+        self.b = PassOn()
+        self.c = CheckTag()
+        self.a.next.connect(self.b.prev)
+        self.b.next.connect(self.c.prev)
+
+
+class TestCarry:
+    def test_the_host_cannot_write_carried_data(self, start_manual: StartManual):
+        node = CheckTag()
+        with pytest.raises(
+            ValueError,
+            match=r"^cannot write the port 'CheckTag\.prev': it receives carried "
+            r"data, which the host cannot write$",
+        ):
+            start_manual(node, inputs={node.prev: torch.tensor(1.0)})
+        node = CheckTag()
+        run = start_manual(node)
+        with pytest.raises(ValueError, match="receives carried data"):
+            run.write({node.prev: torch.tensor(1.0)})
+
+    def test_the_host_cannot_read_carried_data(self, start_manual: StartManual):
+        net = TaggedPath()
+        run = start_manual(net)
+        message = (
+            r"^cannot read the port 'a\.next': it sends carried data, which the "
+            r"host cannot read$"
+        )
+        port = cast(Port[Any, Any, Any, Never, Any], net.a.next)  # rejected statically
+        reads: list[Callable[[], object]] = [
+            lambda: run.read(port),
+            lambda: run.read_with_time(port),
+            lambda: run.subscribe(port),
+            lambda: run.wait_for(port, lambda _: True),
+        ]
+        for read in reads:
+            with pytest.raises(ValueError, match=message):
+                read()
+
+    @pytest.mark.slow
+    def test_free_running_nodes_keep_values_with_their_carry(self, start: Start):
+        net = TaggedPath()
+        with start(net) as run:
+            deadline = time.monotonic() + 30.0
+            while net.c.matched < 300 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            run.shutdown()
+        assert net.c.matched >= 300
+        assert net.c.mismatched == []
 
 
 class TestStateDict:

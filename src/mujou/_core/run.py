@@ -97,9 +97,10 @@ class Run:
         return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any] would reject (Mapping keys are invariant). A dict message
-    # is a Mapping[str, object]: a TypedDict is not a Mapping[str, torch.Tensor].
-    def write[P: Port[Any, Any, Any]](
+    # Port[Any, Any, Any, Any, Any] would reject (Mapping keys are invariant). A
+    # dict message is a Mapping[str, object]: a TypedDict is not a
+    # Mapping[str, torch.Tensor].
+    def write[P: Port[Any, Any, Any, Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
     ) -> Timestamp:
         """Write messages to unconnected single-peer ports that receive, and
@@ -120,13 +121,14 @@ class Run:
             RuntimeError: The run has stopped normally (no node reads what is
                 written then).
             ValueError: A port is outside the run, connected, takes many peers,
-                or receives nothing; or a shape or the keys differ.
+                receives nothing, or receives carried data (``recv_carry``),
+                which the host cannot write; or a shape or the keys differ.
             TypeError: A message or dtype differs from the spec.
             NetworkError: The run stopped because a node raised.
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any]) -> S:
+    def read[S](self, port: Port[S, Any, Any, Never, Any]) -> S:
         """Return the latest message ``port`` sent.
 
         Any port that sends can be read, so a connected port shows an inner
@@ -135,13 +137,19 @@ class Run:
         value restored from ``state``. The tensors are new copies on the CPU.
         ``read_with_time`` also returns the time it was sent at.
 
+        A port that sends carried data (``send_carry``) cannot be read: its type
+        is rejected statically, and it raises at runtime.
+
         Raises:
-            ValueError: ``port`` is outside the run or sends nothing.
+            ValueError: ``port`` is outside the run, sends nothing, or sends
+                carried data.
             NetworkError: The run stopped because a node raised.
         """
         return cast(S, _host(self).read(port)[0])
 
-    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
+    def read_with_time[S](
+        self, port: Port[S, Any, Any, Never, Any]
+    ) -> tuple[S, Timestamp]:
         """Return the latest message ``port`` sent, as ``read`` does, and the time
         it was sent at.
 
@@ -150,13 +158,13 @@ class Run:
         ``mujou.time`` only when the run is on the global timer).
 
         Raises:
-            ValueError: ``port`` is outside the run or sends nothing.
+            ValueError: As ``read`` raises.
             NetworkError: The run stopped because a node raised.
         """
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
     def subscribe[S](
-        self, port: Port[S, Any, Any], timeout: float = math.inf
+        self, port: Port[S, Any, Any, Never, Any], timeout: float = math.inf
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
@@ -180,8 +188,8 @@ class Run:
                 ``math.inf`` iterates as long as the run runs.
 
         Raises:
-            ValueError: ``port`` is outside the run or sends nothing; or
-                ``timeout`` is negative or NaN.
+            ValueError: ``port`` is outside the run, sends nothing, or sends
+                carried data (as ``read``); or ``timeout`` is negative or NaN.
             TimeoutError: From the iterator, at a step after the first that
                 begins once ``timeout`` has passed, or that would wait past it.
                 The iterator ends; the run keeps running.
@@ -192,7 +200,7 @@ class Run:
 
     def wait_for[S](
         self,
-        port: Port[S, Any, Any],
+        port: Port[S, Any, Any, Never, Any],
         condition: Callable[[S], bool],
         timeout: float = math.inf,
     ) -> tuple[S, Timestamp]:
@@ -393,7 +401,7 @@ class ManualRun[T: Timer = VirtualTimer](Run):
 
 
 # P: as in Run.write.
-def run[P: Port[Any, Any, Any]](
+def run[P: Port[Any, Any, Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,

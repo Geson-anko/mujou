@@ -60,7 +60,7 @@ __all__ = ["ManualRun", "VirtualTimer", "run"]
 
 
 # P: as in Run.write. T: the timer's type, which ManualRun.timer gives back.
-def run[P: Port[Any, Any, Any], T: Timer = VirtualTimer](
+def run[P: Port[Any, Any, Any, Any, Any], T: Timer = VirtualTimer](
     component: Node | Network,
     *components: Node | Network,
     timer: T | None = None,

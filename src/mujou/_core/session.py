@@ -62,6 +62,7 @@ class Session:
         self._slots: dict[str, tuple[AnySlot, Spec]] = {}
         # Every port of the run by how its errors name it.
         self._labels: dict[AnyPort, str] = {}
+        self._bindings: dict[AnyPort, Binding] = {}
 
         owners = ports(graph)
         # Every outlet first: a port reads the channel slots of its peers' outlets.
@@ -74,7 +75,14 @@ class Session:
             # The path alone ("next") would not say which node a root's port is of.
             name = path if owner_path else label(port)
             self._labels[port] = name
-            bind(port, Binding(owner, name, port, self._outlets.get(port), sources))
+            binding = Binding(owner, name, port, self._outlets.get(port), sources)
+            self._bindings[port] = binding
+            bind(port, binding)
+        # Once every port is bound: a port may pass on the carry of one bound
+        # after it (build_tree checked it is a port of the same node).
+        for port, binding in self._bindings.items():
+            if port.carry_source is not None:
+                binding.relay_from(self._bindings[port.carry_source])
 
         self._runtime: _native.Runtime | None = None
         # The timer when shutdown first asked the run to stop.
@@ -89,8 +97,9 @@ class Session:
         spec = as_spec(port.send_spec)
         if spec is None:
             return
+        carry = as_spec(port.send_carry_spec)
         outlet = _native.Outlet(
-            _native.Schema(fields(spec)),
+            _schema(spec, carry),
             len(port.channels),
             self._graph.port_path(port),
             timer=self._clock,
@@ -101,6 +110,10 @@ class Session:
             self._slots[slot.name] = (slot, spec)
         values = initial(port)
         if values is not None:
+            if carry is not None:
+                # The initial value carries zeros, as the slots do from the start.
+                zeros = carry.zeros()
+                values = values + host_tensors(carry, zeros, where=label(port))
             # In place of the zeros, with their time (the timer's when the run was
             # laid out). A restore later replaces them, as it does the zeros.
             time_ns = outlet.outbox.read().timestamp.ns
@@ -124,8 +137,10 @@ class Session:
             return sources
         if port.multi:
             return []
-        # An unconnected single-peer port reads what the host writes.
-        slot = self._group.input(_native.Schema(fields(spec)), path)
+        # An unconnected single-peer port reads what the host writes (its carry
+        # stays zeros: the host cannot write one).
+        carry = as_spec(port.recv_carry_spec)
+        slot = self._group.input(_schema(spec, carry), path)
         self._inputs[port] = (slot, spec)
         self._slots[slot.name] = (slot, spec)
         return [(None, slot)]
@@ -380,9 +395,14 @@ class Session:
             yield message_value(spec, message, _CPU), message.timestamp
 
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
+        name = self.label(port)
+        if port.recv_carry_spec is not None:
+            raise ValueError(
+                f"cannot write the port {name!r}: it receives carried data, which "
+                "the host cannot write"
+            )
         if port in self._inputs:
             return self._inputs[port]
-        name = self.label(port)
         if port.recv_spec is None:
             reason = "receives no messages"
         elif port.channels:
@@ -396,6 +416,11 @@ class Session:
         outlet = self._outlets.get(port)
         if outlet is None:
             raise ValueError(f"cannot read the port {name!r}: it sends no messages")
+        if port.send_carry_spec is not None:
+            raise ValueError(
+                f"cannot read the port {name!r}: it sends carried data, which the "
+                "host cannot read"
+            )
         return outlet.outbox, cast(Spec, port.send_spec)
 
     def label(self, port: AnyPort) -> str:
@@ -488,6 +513,11 @@ class Session:
         # the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
         return tree
+
+
+def _schema(spec: Spec, carry: Spec | None) -> _native.Schema:
+    """The schema of messages of ``spec`` carrying ``carry`` (or nothing)."""
+    return _native.Schema(fields(spec), [] if carry is None else fields(carry))
 
 
 def _wait(timeout: float) -> float | None:

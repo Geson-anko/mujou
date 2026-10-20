@@ -177,7 +177,7 @@ class BrokenSetup(Node):
 
     failing = False  # not while super().__init__ creates the generator
 
-    def __init__(self, other: Port[Any, Any, Any]) -> None:
+    def __init__(self, other: Port[Any, Any, Any, Any, Any]) -> None:
         super().__init__(period=0.01)
         self.out = Port(send=TensorSpec((1,)))
         # From now on the setup creates the generator again, and fails.
@@ -193,7 +193,7 @@ class BrokenSetup(Node):
         return super()._make_generator()
 
     def clean_up(self, hook: str) -> None:
-        other = cast(Port[Any, Any, Any], vars(self)["other"])
+        other = cast(Port[Any, Any, Any, Any, Any], vars(self)["other"])
         try:
             result: object = other.recv()
         except RuntimeError as e:

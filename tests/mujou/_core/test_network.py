@@ -1,12 +1,13 @@
 import threading
-from typing import Any, override
+from typing import Any, Never, override
 
 import pytest
 
+import mujou
 from mujou._core.graph import Graph
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.port import NextPort, Port, PrevPort, Single
 from mujou._core.spec import TensorSpec
 
 
@@ -52,6 +53,18 @@ class Classifier(Network):
         self.body.next.connect(self.head.prev)
         self.prev = self.body.prev
         self.teacher = self.head.teacher
+
+
+class Receiver(Node):
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=h(), recv_carry=h(1))
+
+
+class PassesOn(Node):
+    def __init__(self, source: PrevPort[Never, Any, Single, Never, Any]) -> None:
+        super().__init__()
+        self.next = NextPort(send=h(), send_carry=source)
 
 
 class TestBuild:
@@ -130,7 +143,7 @@ class TestBuild:
 
     def test_rejects_a_port_owned_by_two_nodes(self):
         class Borrower(Node):
-            def __init__(self, port: Port[Any, Any, Any]) -> None:
+            def __init__(self, port: Port[Any, Any, Any, Any, Any]) -> None:
                 super().__init__()
                 self.port = port
 
@@ -244,6 +257,24 @@ class TestBuild:
             for thread in threads:
                 thread.join()
             assert graphs[0] is graphs[1]
+
+    def test_rejects_passing_on_the_carry_of_another_node(self):
+        def tree() -> Group:
+            receiver = Receiver()
+            return Group(receiver=receiver, passes_on=PassesOn(receiver.prev))
+
+        message = (
+            r"^the port 'passes_on\.next' passes on the carried data of "
+            r"Receiver\.prev, which is not a port of the same node$"
+        )
+        with pytest.raises(ValueError, match=message):
+            tree().build()
+        with pytest.raises(ValueError, match=message):
+            mujou.run(tree())
+        # A port of no node at all.
+        alone = PassesOn(PrevPort(recv=h(), recv_carry=h(1)))
+        with pytest.raises(ValueError, match="not a port of the same node"):
+            Group(alone=alone).build()
 
     def test_rejects_a_network_without_nodes(self):
         class Empty(Network):
