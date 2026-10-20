@@ -1,6 +1,5 @@
 import threading
 import time
-from collections.abc import Callable
 from typing import TYPE_CHECKING, override
 
 import pytest
@@ -11,6 +10,7 @@ import mujou.time
 from mujou import Group, NextPort, Node, TensorSpec
 from mujou.testing import VirtualTimer
 from mujou.time import Timer, Timestamp
+from tests.mujou.nodes import Calls
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -232,25 +232,6 @@ class TestPause:
                 saved = int(tree["nodes"][""]["count"])
                 wait_for_updates(run, restored, saved)
             assert run.state_dict()["last_update_ns"][""] > paused_at_ns
-
-
-class Calls(Node):
-    """Calls ``action`` in each ``on_update``, keeps what it raised, and records
-    each ``dt``."""
-
-    def __init__(self, action: Callable[[], object] = lambda: None) -> None:
-        super().__init__()
-        self.action = action
-        self.errors: list[Exception] = []
-        self.dts: list[float] = []
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.dts.append(dt)
-        try:
-            self.action()
-        except Exception as e:  # noqa: BLE001 - kept for the test to inspect
-            self.errors.append(e)
 
 
 class TestOnlyTheHostControlsTheTime:

@@ -8,6 +8,7 @@ from torch import nn
 import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun
+from tests.mujou.nodes import close
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -90,10 +91,6 @@ def gradients(
     loss = (0.5 * (y - y_hat) ** 2).sum(dim=1)[mask].sum()
     g_in, *g_theta = torch.autograd.grad(loss, [x, *module.parameters()])
     return y_hat.detach(), g_in, g_theta
-
-
-def close(actual: torch.Tensor, expected: torch.Tensor) -> None:
-    torch.testing.assert_close(actual, expected, rtol=0.0, atol=1e-14)
 
 
 class TestConstruction:

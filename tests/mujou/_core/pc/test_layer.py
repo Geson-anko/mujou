@@ -11,6 +11,7 @@ from torch import nn
 import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun, VirtualTimer
+from tests.mujou.nodes import assert_same_tree, close
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual, Step
@@ -324,10 +325,6 @@ class Reference:
                 for p, g in zip(params, g_theta, strict=True):
                     p -= (clock.elapsed / TAU.theta) * g / B
         clock.learned(now)
-
-
-def close(actual: torch.Tensor, expected: torch.Tensor, atol: float) -> None:
-    torch.testing.assert_close(actual, expected, rtol=0.0, atol=atol)
 
 
 def run_steps(run: ManualRun[Any], step: Step, order: Sequence[Any], n: int) -> None:
@@ -1223,6 +1220,28 @@ class TestJumps:
 
 
 class TestUnlabeled:
+    @pytest.mark.parametrize("learn_interval", [None, K * H])
+    def test_no_theta_moves_while_every_mask_is_false(
+        self, start_manual: StartManual, step: Step, learn_interval: float | None
+    ):
+        # With mask False for every sample of every input, no node learns: h
+        # moves, and the theta of every node stays the same to the bit.
+        widths = [4, 5, 5]
+        layers, head = make_modules("linear", "tanh", widths)
+        chain = Chain(layers, head, widths, learn_interval=learn_interval)
+        run = start_manual(chain.net, timer=VirtualTimer())
+        before = run.state_dict()["nodes"]
+        no_target = torch.zeros(B, dtype=torch.bool)
+        for k in range(6 * M):
+            if k % M == 0:
+                x, y = sample(widths, k)
+                chain.write(run, x, y, no_target)
+            step(run, *chain.from_next())
+        after = run.state_dict()["nodes"]
+        for path in ("l0", "l1", "out"):
+            assert_same_tree(after[path]["module"], before[path]["module"])
+        assert not torch.equal(after["l1"]["h"], before["l1"]["h"])
+
     def test_no_target_skips_the_update_and_drops_the_time(
         self, start_manual: StartManual
     ):
@@ -1308,18 +1327,3 @@ class TestState:
         for _ in range(10):
             restored.step()
         assert_same_tree(restored.run.state_dict(), whole.run.state_dict())
-
-
-def assert_same_tree(a: object, b: object) -> None:
-    if isinstance(a, torch.Tensor):
-        assert isinstance(b, torch.Tensor) and torch.equal(a, b)
-    elif isinstance(a, dict):
-        assert isinstance(b, dict) and a.keys() == b.keys()
-        for key in a:
-            assert_same_tree(a[key], b[key])
-    elif isinstance(a, tuple | list):
-        assert isinstance(b, type(a)) and len(a) == len(b)
-        for x, y in zip(a, b, strict=True):
-            assert_same_tree(x, y)
-    else:
-        assert a == b

@@ -26,106 +26,18 @@ from mujou._core.port import NextPort, Port, PrevPort
 from mujou._core.spec import TensorSpec
 from mujou.testing import ManualRun, VirtualTimer
 from mujou.time import ReadOnlyTimer, Timer, Timestamp
+from tests.mujou.nodes import F64, Calls, Chain, Leaky, Pair, vec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual, Step
 
 H_NS = 1_000_000
 H = H_NS / 1e9  # The step of the `step` fixture (conftest's H), in seconds.
-F64 = torch.float64
-
-
-def vec() -> TensorSpec:
-    return TensorSpec((2,), F64)
 
 
 def u(k: float) -> torch.Tensor:
     """The k-th input: different at every step."""
     return torch.tensor([math.sin(k), math.cos(k)], dtype=F64)
-
-
-class Leaky(Node):
-    """``dx/dt = -(x - u) / tau`` by explicit Euler, the rate clipped at 1.
-
-    ``u`` comes from the previous side and ``x`` goes to the next side. Raises in
-    the ``raise_at``-th ``on_update`` (or in ``on_start`` with ``raise_at=0``).
-    """
-
-    def __init__(self, tau: float = 1.0, raise_at: int | None = None) -> None:
-        super().__init__()
-        self.prev = PrevPort(recv=vec())
-        self.next = NextPort(send=vec())
-        self.tau = tau
-        self.raise_at = raise_at
-        # Set by a test to make the next on_update raise.
-        self.trigger = threading.Event()
-        self.x = torch.zeros(2, dtype=F64)
-        self.updates = 0
-        self.started = False
-        self.error: Exception | None = None
-
-    def fail(self) -> None:
-        self.error = ValueError(f"boom after {self.updates} updates")
-        raise self.error
-
-    @override
-    def on_start(self) -> None:
-        self.started = True
-        if self.raise_at == 0:
-            self.fail()
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.updates += 1
-        if self.updates == self.raise_at or self.trigger.is_set():
-            self.fail()
-        self.x += min(dt / self.tau, 1.0) * (self.prev.recv() - self.x)
-        self.next.send(self.x)
-
-    @override
-    def state_dict(self) -> object:
-        return {"x": self.x, "updates": self.updates}
-
-    @override
-    def load_state_dict(self, state: object) -> None:
-        loaded = cast(dict[str, Any], state)
-        self.x = loaded["x"]
-        self.updates = loaded["updates"]
-
-
-class Chain(Network):
-    """``u -> a -> b ->``: two leaky integrators in a row."""
-
-    def __init__(
-        self,
-        tau: float = 1.0,
-        raise_in_a: int | None = None,
-        raise_in_b: int | None = None,
-    ) -> None:
-        super().__init__()
-        self.a = Leaky(tau, raise_in_a)
-        self.b = Leaky(tau, raise_in_b)
-        self.a.next.connect(self.b.prev)
-        self.prev = self.a.prev
-        self.next = self.b.next
-
-
-class Pair(Node):
-    """Receives two inputs from the host and keeps them with their times."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.x = Port(recv=vec())
-        self.y = Port(recv=vec())
-        self.many = Port(recv=vec(), multi=True)
-        self.out = Port(send=vec())
-        self.seen: list[
-            tuple[tuple[torch.Tensor, Timestamp], tuple[torch.Tensor, Timestamp]]
-        ] = []
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.seen.append((self.x.recv_with_time(), self.y.recv_with_time()))
 
 
 class Echo(Node):
@@ -140,24 +52,6 @@ class Echo(Node):
     def on_update(self, dt: float) -> None:
         _, t = self.prev.recv_with_time()
         self.next.send(torch.tensor(t.ns))
-
-
-class Calls(Node):
-    """Calls ``action`` in ``on_update`` and keeps the exception it raises."""
-
-    def __init__(
-        self, action: Callable[[], object], *, dedicated_thread: bool = False
-    ) -> None:
-        super().__init__(dedicated_thread=dedicated_thread)
-        self.action = action
-        self.errors: list[Exception] = []
-
-    @override
-    def on_update(self, dt: float) -> None:
-        try:
-            self.action()
-        except Exception as e:  # noqa: BLE001 - kept for the test to inspect
-            self.errors.append(e)
 
 
 def euler(x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

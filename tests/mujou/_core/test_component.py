@@ -6,19 +6,13 @@ import pytest
 from mujou._core.component import children_of, ports_of
 from mujou._core.network import Network
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.port import Port, PrevPort
 from mujou._core.spec import TensorSpec
+from tests.mujou.nodes import Hidden
 
 
 def h() -> TensorSpec:
     return TensorSpec((2, 3))
-
-
-class Hidden(Node):
-    def __init__(self) -> None:
-        super().__init__()
-        self.prev = PrevPort(send=h(), recv=h())
-        self.next = NextPort(send=h(), recv=h())
 
 
 class Pair(Network):

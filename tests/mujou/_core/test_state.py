@@ -9,6 +9,7 @@ import torch
 from torch import nn
 
 from mujou import StateDict
+from tests.mujou.nodes import assert_same_tree
 
 
 def tree() -> StateDict:
@@ -35,23 +36,6 @@ def tensors(value: Any) -> list[torch.Tensor]:
     if type(value) in (list, tuple):
         return [t for v in value for t in tensors(v)]
     return []
-
-
-def assert_same_tree(moved: Any, original: Any) -> None:
-    """``moved`` has the structure and values of ``original``."""
-    assert type(moved) is type(original)
-    if isinstance(original, torch.Tensor):
-        assert torch.equal(moved.cpu(), original.cpu())
-    elif isinstance(original, dict):
-        assert list(moved) == list(original)  # pyright: ignore[reportUnknownArgumentType]
-        for key in original:  # pyright: ignore[reportUnknownVariableType]
-            assert_same_tree(moved[key], original[key])
-    elif type(original) in (list, tuple):
-        assert len(moved) == len(original)
-        for m, o in zip(moved, original, strict=True):
-            assert_same_tree(m, o)
-    else:
-        assert moved == original
 
 
 class TestStateDict:

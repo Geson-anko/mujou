@@ -9,17 +9,11 @@ from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import NextPort, Port, PrevPort, Single
 from mujou._core.spec import TensorSpec
+from tests.mujou.nodes import Hidden
 
 
 def h(n: int = 3) -> TensorSpec:
     return TensorSpec((2, n))
-
-
-class Hidden(Node):
-    def __init__(self) -> None:
-        super().__init__()
-        self.prev = PrevPort(send=h(), recv=h())
-        self.next = NextPort(send=h(), recv=h())
 
 
 class Source(Node):

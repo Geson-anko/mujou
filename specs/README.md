@@ -21,6 +21,7 @@ mujou の設計方針と仕様をまとめた文書群。2026-10-18 時点で `m
 | [mujou.pc の実装計画](pc-module.md) | `mujou.pc` のノード・状態・メッセージ・θ の更新間隔・時定数・版番号によるリセット・MNIST の example |
 | [PyTorch の利用](torch.md)                       | モジュール構成、GPU の扱い、`mujou.Node`、プロセス全体に効く設定                 |
 | [Python 環境](python-environment.md)             | free-threaded Python 3.14t での開発と GIL ありビルドのサポート                  |
+| [性能の基準値](research/benchmarks.md) | 作り直しの各ステップで比べる、性能の基準値と測り方 |
 | [未決定事項](open-decisions.md)                  | まだ決めていない設計判断                                                        |
 
 ## 読む順番

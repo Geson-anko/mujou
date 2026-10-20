@@ -16,4 +16,4 @@ metadata:
 
 **Why:** hook の中からの `sleep` を禁じた（2026-10-17）ので、周期はフレームワークが持つ必要がある。待ちをランタイムに置けば、停止・終了の要求とスケール・仮想時計にそのまま従う。
 
-**How to apply:** 周期の振る舞いを変えるとき、`specs/nodes.md#実行の周期` と `crates/mujou-core/tests/runtime.rs` の `mod period` を合わせる。未決定の残り（M:N での扱い）は [[project-open-decisions]]。
+**How to apply:** 周期の振る舞いを変えるとき、`specs/nodes.md#実行の周期` と `crates/mujou-core/tests/runtime/period.rs` を合わせる。未決定の残り（M:N での扱い）は [[project-open-decisions]]。

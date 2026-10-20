@@ -12,6 +12,7 @@ from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
 from mujou._core.spec import DictSpec, TensorSpec
 from mujou.testing import VirtualTimer
 from mujou.time import Timestamp
+from tests.mujou.nodes import Probe
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual, Step
@@ -366,32 +367,6 @@ class TestRecvSendBeforeRun:
         ):
             with pytest.raises(RuntimeError, match="while the network runs"):
                 call()
-
-
-class Probe(Node):
-    """Holds the given ports and, in each ``on_update``, keeps what ``update``
-    returns (or the exception it raised). A subclass sets ``on_device`` to
-    compute on another device (a keyword would collide with ``**ports``)."""
-
-    on_device = "cpu"
-
-    def __init__(
-        self,
-        update: Callable[[], object] = lambda: None,
-        **ports: Port[Any, Any, Any, Any, Any],
-    ) -> None:
-        super().__init__(device=self.on_device)
-        for name, port in ports.items():
-            setattr(self, name, port)
-        self.update = update
-        self.results: list[object] = []
-
-    @override
-    def on_update(self, dt: float) -> None:
-        try:
-            self.results.append(self.update())
-        except Exception as e:  # noqa: BLE001 - kept for the test to inspect
-            self.results.append(e)
 
 
 class TestRecv:
