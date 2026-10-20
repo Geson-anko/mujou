@@ -6,9 +6,15 @@ This module is the one place that defines the tree::
     {
         "nodes": {path: the node's state_dict(), ...},
         "slots": {slot name: (value, time_ns, sent), ...},
+        "carries": {port path: carried, ...},
         "last_update_ns": {path: int, ...},
         "timer": {"time_ns": int, "scale": float},
     }
+
+The entry of a slot whose messages carry data is ``(value, time_ns, sent,
+carried)``. ``"carries"`` holds, for each port with a ``recv_carry``, the data
+carried with the message it last received, which a port with it as its
+``send_carry`` passes on.
 
 Values are copies: the tree shares no memory with the run, in either direction.
 The tree is a ``StateDict``, a ``dict`` that also moves all its tensors to a device.
@@ -20,7 +26,8 @@ from typing import Any, Final, Self, cast, override
 
 import torch
 
-from mujou._core.binding import AnySlot, message_value
+from mujou._core import _native
+from mujou._core.binding import AnySlot, message_value, views_value
 from mujou._core.spec import Spec, host_tensors
 
 # Where the tree holds the values of the slots.
@@ -106,27 +113,33 @@ def _moved[T](value: T, device: torch.device, memo: dict[int, object]) -> T:
     return cast(T, result)
 
 
+# A slot of the run: the slot, the spec of its value and of the data its
+# messages carry (or None).
+type SlotSpecs = tuple[AnySlot, Spec, Spec | None]
+
+
 def make_tree(
     paths: Sequence[str],
     states: Sequence[object],
-    slots: Mapping[str, tuple[AnySlot, Spec]],
+    slots: Mapping[str, SlotSpecs],
+    carries: Mapping[str, tuple[_native.Carry, Spec]],
     last_update_ns: Sequence[int],
     timer: Mapping[str, int | float],
 ) -> StateDict:
     """Copy the state of a paused or ended run into a tree.
 
-    ``states`` and ``last_update_ns`` are per node, in the order of ``paths``. The
-    copies queue on the calling thread's current streams; synchronize them before
-    the nodes update in place again.
+    ``states`` and ``last_update_ns`` are per node, in the order of ``paths``.
+    ``carries`` holds the carry each port with a ``recv_carry`` last received, by
+    the port's path. The copies queue on the calling thread's current streams;
+    synchronize them before the nodes update in place again.
     """
-    values: dict[str, tuple[object, int, bool]] = {}
-    for name, (slot, spec) in slots.items():
+    values: dict[str, tuple[object, ...]] = {}
+    for name, (slot, spec, carry) in slots.items():
         message = slot.read()
-        values[name] = (
-            message_value(spec, message, _CPU),
-            message.timestamp.ns,
-            message.sent,
-        )
+        entry = (message_value(spec, message, _CPU), message.timestamp.ns, message.sent)
+        if carry is not None:
+            entry += (views_value(carry, message.carry.buffers, _CPU),)
+        values[name] = entry
     return StateDict(
         {
             "nodes": {
@@ -134,6 +147,10 @@ def make_tree(
                 for path, state in zip(paths, states, strict=True)
             },
             "slots": values,
+            "carries": {
+                path: views_value(spec, carried.buffers, _CPU)
+                for path, (carried, spec) in carries.items()
+            },
             "last_update_ns": dict(zip(paths, last_update_ns, strict=True)),
             "timer": dict(timer),
         }
@@ -143,28 +160,38 @@ def make_tree(
 def read_tree(
     state: Mapping[str, Any],
     paths: Sequence[str],
-    slots: Mapping[str, tuple[AnySlot, Spec]],
-) -> tuple[list[tuple[AnySlot, list[torch.Tensor], int, bool]], dict[str, Any]]:
-    """Check ``state`` against a run of the nodes at ``paths`` with ``slots``, and
-    copy it, changing nothing.
+    slots: Mapping[str, SlotSpecs],
+    carries: Mapping[str, Spec],
+) -> tuple[
+    list[tuple[AnySlot, list[torch.Tensor], int, bool]],
+    dict[str, list[torch.Tensor]],
+    dict[str, Any],
+]:
+    """Check ``state`` against a run of the nodes at ``paths`` with ``slots`` and
+    the ports at the paths of ``carries`` (with the spec of their
+    ``recv_carry``), and copy it, changing nothing.
 
     Returns ``(slot, tensors in host memory, time_ns, sent)`` for each slot to
-    restore, and what ``Runtime.start`` restores: the nodes' states (copies, so
-    that the nodes' updates in place never reach ``state``), their last update
-    times and the timer. The copies queue on the calling thread's current streams.
+    restore (the value's tensors, then the carried data's); the tensors of the
+    carry of each port in ``carries``, by its path; and what ``Runtime.start``
+    restores: the nodes' states (copies, so that the nodes' updates in place
+    never reach ``state``), their last update times and the timer. The copies
+    queue on the calling thread's current streams.
 
     Raises:
         ValueError: The tree does not match the run.
     """
-    for key in ("nodes", "slots", "last_update_ns", "timer"):
+    for key in ("nodes", "slots", "carries", "last_update_ns", "timer"):
         if key not in state:
             raise ValueError(f"the state tree has no {key!r}")
     nodes = cast(Mapping[str, object], state["nodes"])
     entries = cast(Mapping[str, object], state["slots"])
+    carried = cast(Mapping[str, object], state["carries"])
     last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
     timer = cast(Mapping[str, object], state["timer"])
     _same_keys("nodes", nodes, paths)
     _same_keys("slots", entries, slots)
+    _same_keys("carries", carried, carries)
     _same_keys("last_update_ns", last_update_ns, paths)
     _same_keys("timer", timer, ("time_ns", "scale"))
     for path in paths:
@@ -173,6 +200,10 @@ def read_tree(
     if not _is_int(timer["time_ns"]) or not isinstance(timer["scale"], int | float):
         raise ValueError("the state tree's timer must have an int time_ns and a scale")
     restores = _slot_restores(entries, slots)
+    carry_restores = {
+        path: host_tensors(spec, carried[path], where=f"the carry of {path}")
+        for path, spec in carries.items()
+    }
     restored = {
         "states": [copy.deepcopy(nodes[path]) for path in paths],
         "last_update_ns": [cast(int, last_update_ns[path]) for path in paths],
@@ -181,22 +212,30 @@ def read_tree(
             "scale": cast(float, timer["scale"]),
         },
     }
-    return restores, restored
+    return restores, carry_restores, restored
 
 
 def _slot_restores(
-    entries: Mapping[str, object], slots: Mapping[str, tuple[AnySlot, Spec]]
+    entries: Mapping[str, object], slots: Mapping[str, SlotSpecs]
 ) -> list[tuple[AnySlot, list[torch.Tensor], int, bool]]:
-    """Check each slot's ``(value, time_ns, sent)`` in the tree and copy the value
-    to the host, without restoring anything yet."""
+    """Check each slot's ``(value, time_ns, sent)`` (or ``(value, time_ns, sent,
+    carried)``) in the tree and copy the values to the host, without restoring
+    anything yet."""
     restores: list[tuple[AnySlot, list[torch.Tensor], int, bool]] = []
-    for name, (slot, spec) in slots.items():
+    for name, (slot, spec, carry) in slots.items():
         entry = entries[name]
-        if not isinstance(entry, tuple) or len(cast(tuple[object, ...], entry)) != 3:
-            raise ValueError(
-                f"the state tree's slot {name!r} is not (value, time_ns, sent)"
-            )
-        value, time_ns, sent = cast(tuple[object, object, object], entry)
+        shape = (
+            "(value, time_ns, sent)"
+            if carry is None
+            else ("(value, time_ns, sent, carried)")
+        )
+        length = 3 if carry is None else 4
+        if (
+            not isinstance(entry, tuple)
+            or len(cast(tuple[object, ...], entry)) != length
+        ):
+            raise ValueError(f"the state tree's slot {name!r} is not {shape}")
+        value, time_ns, sent = cast(tuple[object, ...], entry)[:3]
         if not _is_int(time_ns):
             raise ValueError(
                 f"the state tree's slot {name!r} has a time that is not an int"
@@ -205,9 +244,11 @@ def _slot_restores(
             raise ValueError(
                 f"the state tree's slot {name!r} has a sent flag that is not a bool"
             )
-        restores.append(
-            (slot, host_tensors(spec, value, where=name), cast(int, time_ns), sent)
-        )
+        tensors = host_tensors(spec, value, where=name)
+        if carry is not None:
+            carried = cast(tuple[object, ...], entry)[3]
+            tensors += host_tensors(carry, carried, where=f"{name} carried")
+        restores.append((slot, tensors, cast(int, time_ns), sent))
     return restores
 
 
