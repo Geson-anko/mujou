@@ -134,6 +134,19 @@ class TestConstruction:
         )
         assert out.period == pytest.approx(TAU.h / 4)
 
+    @pytest.mark.parametrize("name", ["learn_interval", "max_dt"])
+    def test_a_bool_is_not_a_time(self, name: str):
+        kwargs: dict[str, Any] = {name: True}
+        with pytest.raises(TypeError, match=name):
+            pc.Output(
+                nn.Linear(N_IN, N_OUT),
+                loss=pc.mse,
+                input_shape=(B, N_IN),
+                carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+                tau=TAU,
+                **kwargs,
+            )
+
     def test_the_period_must_not_be_longer_than_max_dt(self):
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(
@@ -205,5 +218,24 @@ class TestUnlabeled:
         with torch.no_grad():
             for p, g in zip(reference.parameters(), g_theta, strict=True):
                 p -= (3 * H / TAU.theta) * g / B
+        for key, value in reference.state_dict().items():
+            close(direct.weights()[key], value)
+
+
+class TestMaxDt:
+    def test_a_long_dt_weighs_the_update_by_max_dt(self, start_manual: StartManual):
+        # Learning in every update: a step of 4 H weighs the update of theta by
+        # max_dt = 2 H only.
+        module = head()
+        reference = copy.deepcopy(module)
+        direct = Direct(start_manual, module, max_dt=2 * H)
+        x, y, mask = samples(1)[0]
+        direct.step((x, y, mask))  # the output reads zeros: nothing to learn
+        direct.run.timer.advance(3 * H)
+        direct.step(None)
+        _, _, g_theta = gradients(reference, x, y, mask)
+        with torch.no_grad():
+            for p, g in zip(reference.parameters(), g_theta, strict=True):
+                p -= (2 * H / TAU.theta) * g / B
         for key, value in reference.state_dict().items():
             close(direct.weights()[key], value)

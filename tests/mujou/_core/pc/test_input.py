@@ -33,7 +33,7 @@ class TestInput:
             written_at = run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
             step(run, inp)
             sent, _, _, carried = run.state_dict()["slots"]["next/out"]
-            assert torch.equal(sent, x)
+            assert torch.equal(sent["h"], x)
             assert torch.equal(carried["y"], y)
             assert torch.equal(carried["mask"], mask)
             assert int(carried["time"]) == written_at.ns
@@ -44,10 +44,29 @@ class TestInput:
         inp, run = self._run(start_manual)
         step(run, inp)
         sent, _, _, carried = run.state_dict()["slots"]["next/out"]
-        assert torch.equal(sent, torch.zeros(B, 4))
+        assert torch.equal(sent["h"], torch.zeros(B, 4))
+        assert int(sent["epoch"]) == 0
         assert torch.equal(carried["y"], torch.zeros(B, dtype=torch.int64))
         assert torch.equal(carried["mask"], torch.zeros(B, dtype=torch.bool))
         assert int(carried["time"]) == 0
+
+    def test_the_epoch_counts_the_writes(self, start_manual: StartManual, step: Step):
+        # A write at time 0, as the zeros before it carry, still counts; an
+        # update without a new write does not.
+        inp, run = self._run(start_manual)
+        sample = {
+            "x": torch.ones(B, 4),
+            "y": torch.zeros(B, dtype=torch.int64),
+            "mask": torch.ones(B, dtype=torch.bool),
+        }
+        epochs: list[int] = []
+        for s in range(5):
+            if s in (0, 3):
+                run.write({inp.prev: sample})  # at times 0 and 3 ms
+            step(run, inp)
+            epochs.append(int(run.state_dict()["slots"]["next/out"][0]["epoch"]))
+        assert epochs == [1, 1, 1, 2, 2]
+        assert run.state_dict()["nodes"][""]["_seen_write"] == 3_000_000
 
     def test_connects_to_a_layer(self):
         inp = pc.Input((B, 4), carry=CARRY, period=1e-3)

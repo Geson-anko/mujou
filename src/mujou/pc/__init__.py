@@ -4,8 +4,8 @@ Each node holds a part of the model and learns from its neighbors' messages
 only: ``Input`` takes the samples the host writes, each ``Layer`` wraps a module
 as one constraint ``h = f(h_in)``, and ``Output`` holds the last module and the
 loss. Inside a node, the module is differentiated by autograd; between nodes,
-activities flow to the next node and gradients of the energy to the previous
-one. The target of each sample travels with its input, so the output node
+activities (``Activity``) flow to the next node and gradients of the energy to
+the previous one. The target of each sample travels with its input, so the output node
 pairs every prediction with its own target. ``functional`` holds the stateless
 computations the nodes are made of, for writing nodes of your own.
 
@@ -34,7 +34,7 @@ Import it as a submodule::
     hidden.next.connect(out.prev)
 """
 
-from mujou._core.pc.carry import Carried, Prediction, Sample, carry_spec
+from mujou._core.pc.carry import Activity, Carried, Prediction, Sample, carry_spec
 from mujou._core.pc.input import Input
 from mujou._core.pc.layer import Layer
 from mujou._core.pc.losses import cross_entropy, mse
@@ -43,6 +43,7 @@ from mujou._core.pc.time_constants import TimeConstants
 from mujou.pc import functional as functional
 
 __all__ = [
+    "Activity",
     "Carried",
     "Input",
     "Layer",

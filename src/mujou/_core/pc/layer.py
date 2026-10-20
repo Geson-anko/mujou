@@ -6,7 +6,7 @@ from typing import override
 import torch
 from torch import nn
 
-from mujou._core.pc.carry import Carried
+from mujou._core.pc.carry import Carried, activity_spec
 from mujou._core.pc.functional import learn_, relax_, rows, vjp
 from mujou._core.pc.learner import Learner
 from mujou._core.pc.time_constants import TimeConstants
@@ -36,47 +36,65 @@ class Layer(Learner):
     $-\partial\ell/\partial h$ of backpropagation. Inside the node, ``module``
     is differentiated by autograd; between nodes, only these messages flow.
 
-    When the input changes, and in the update after the node has moved
-    ``theta``, ``mu`` jumps: the node then moves ``h`` with it once,
-    ``h <- mu + (h - mu_last)`` with the ``mu_last`` of its previous update, so
-    that only the deviation from the prediction carries over to the new input.
-    Without a target, ``h`` is thus the forward pass.
+    ``h`` follows the gradient flow above, with the ``mu`` of the moment: when
+    the nodes below relax, ``h_in`` and ``mu`` move continuously and ``h`` only
+    relaxes towards them. Where ``mu`` jumps, ``h`` moves with it once, so that
+    the deviation ``r = h - mu`` and ``lam`` carry over and only they do:
+
+    - With a new sample (the carried ``time`` changed), or when the ``h_in`` it
+      reads jumped (the ``epoch`` of the ``Activity`` changed), the node moves
+      ``h <- mu + (h - mu_last)`` with the ``mu_last`` of its previous update.
+      Without a target, ``h`` is thus the forward pass.
+    - When it updates ``theta``, it computes once more, without gradients,
+      ``mu' = f(h_in; theta_new)`` at the same ``h_in``, and moves
+      ``h <- h + (mu' - mu)`` at the start of its next update, with
+      ``mu_last <- mu'``. Only the jump that ``theta`` makes moves ``h``, not
+      the drift of ``h_in``. The move waits one update so that the next nodes,
+      which may read ``h`` before they learn, see it as a jump (it is sent
+      with a new ``epoch``) rather than learn from it.
+
+    The node advances its ``epoch`` once in an update that moves ``h`` with a
+    new sample or a jump of ``h_in``, or by a jump of ``theta`` while
+    ``learn_interval`` is set; the next node then moves with it in turn, so a
+    jump runs up the path with ``r`` unchanged at every node, whenever each
+    node learns. With ``learn_interval=None``, ``theta`` moves by ``dt`` in
+    every update, continuously: the node moves its own ``h`` but does not
+    advance its ``epoch``, as moving every node above in every update would
+    hold ``r`` rather than ``h`` as the state, which diverges in deep chains.
 
     Each ``on_update(dt)``:
 
     1. caps ``dt`` at ``max_dt``;
-    2. reads ``h_in`` with the data carried with it, and ``g``;
+    2. reads ``h_in`` and its ``epoch`` with the data carried with it, and ``g``;
     3. notes a new input if the carried ``time`` changed;
-    4. computes ``mu``, ``g_in`` and, when it learns, ``g_theta`` with the
+    4. moves ``h`` by the jump of ``theta`` of the previous update, if any;
+    5. computes ``mu``, ``g_in`` and, when it learns, ``g_theta`` with the
        ``delta`` before this update, zero for the samples whose carried
-       ``mask`` is False; when the input is new or ``theta`` moved in the
-       previous update, moves ``h`` with ``mu`` first;
-    5. sends ``g_in``;
-    6. moves ``h`` and then ``lam`` by ``dt`` (``functional.relax_``);
-    7. sends ``h``, carrying on the data that came with ``h_in``;
-    8. when it learns, moves ``theta`` by the time since its last update
-       (``functional.learn_``).
+       ``mask`` is False; with a new input or a new ``epoch`` of ``h_in``,
+       moves ``h`` with ``mu`` first;
+    6. sends ``g_in``;
+    7. moves ``h`` and then ``lam`` by ``dt`` (``functional.relax_``);
+    8. sends ``h`` with its ``epoch``, carrying on the data that came with
+       ``h_in``;
+    9. when it learns, moves ``theta`` by the time since its last update
+       (``functional.learn_``) and computes the jump of ``mu`` it made.
 
     It learns in its first update once ``learn_interval`` seconds have passed
     since the host wrote the input (the carried ``time``, on the run's time),
     and then every ``learn_interval`` seconds while the input stays, but never
     in the update that first sees an input (its ``delta`` is still that of the
-    input before); with ``learn_interval=None``, in every update.
-    ``learn_interval`` should leave the credit time to go down the path and
-    back: at least about ``2 * depth * period``, with ``depth`` the number of
-    nodes on the path. Timed from the write, the nodes
-    on a path learn at about the same time, however deep they are: a node
-    that learned later than the one before it would learn from a ``delta``
-    shaken by the jump of ``h_in`` that the update of the other's ``theta``
-    makes. The node does not learn when no sample of the input has a target
-    (every carried ``mask`` is False): that time is dropped from the next
-    update, which would otherwise learn from the ``delta`` left over from an
-    earlier input. Nor does it keep the time of an input that changed before
-    the node learned from it. Until the first sample reaches the node, the
-    carried data is zeros (``mask`` all False, ``time`` 0), so it does not
-    learn then; a first sample written at time 0 is not told from those zeros
-    by its time, so ``h`` does not move with ``mu`` for it (it follows by
-    relaxing).
+    input before); with ``learn_interval=None``, in every update. The nodes
+    read the one timer of the run, so the nodes on a path learn at about the
+    same time, however deep they are, and each from the relaxed ``delta`` of
+    the same input. ``learn_interval`` should leave the credit time to go down
+    the path and back: at least about ``2 * depth * period``, with ``depth`` the
+    number of nodes on the path. The node does not learn when no sample of the
+    input has a target (every carried ``mask`` is False): that time is dropped
+    from the next update, which would otherwise learn from the ``delta`` left
+    over from an earlier input. Nor does it keep the time of an input that
+    changed before the node learned from it. Until the first sample reaches
+    the node, the carried data is zeros (``mask`` all False, ``time`` 0), so it
+    does not learn then.
 
     ``dt`` is capped because the nodes are coupled explicitly: ``g`` was made
     from ``h`` as it was when the next node last updated. After a long stall
@@ -95,8 +113,10 @@ class Layer(Learner):
 
     The state (``Run.state_dict()["nodes"][path]``) holds ``"module"`` (its
     ``state_dict``), ``"h"`` and ``"lam"`` (``(B, *out)``), the prediction of
-    the last update (``"_mu"``), whether ``theta`` moved in it (``"_moved"``)
-    and when to learn (``"_seen_time"``, ``"_learn_at"``, ``"_elapsed"``,
+    the last update (``"_mu"``), the jump of ``theta`` still to add to ``h``
+    (``"_jump"``, and ``"_jumped"`` whether there is one), the ``epoch`` it
+    sends and the last one it read (``"_epoch"``, ``"_seen_epoch"``) and when to
+    learn (``"_seen_time"``, ``"_learn_at"``, ``"_elapsed"``,
     ``"_learned_input"``). To watch the node while it runs, read them there:
     ``Run.state_dict()`` pauses the run, whereas reading ``module``, ``h`` or
     ``lam`` from the host's thread races with the node's updates in place.
@@ -175,17 +195,27 @@ class Layer(Learner):
         # The prediction of the last update, from which h moves with a new mu.
         # At zero with h, the first update moves h to the forward pass.
         self._mu = torch.zeros_like(mu)
-        self._moved = False  # whether theta moved in the last update
-        self.register_state("_moved")
-        self.prev = PrevPort(send=self._input, recv=self._input, recv_carry=carry)
+        # The jump of mu that the last update of theta made, for h to take in the
+        # next update.
+        self._jump = torch.zeros_like(mu)
+        self._jumped = False
+        self._epoch = 0  # the jumps of the h this node sends
+        self._seen_epoch = 0  # that of the h_in read last; the zeros before any
+        for name in ("_jumped", "_epoch", "_seen_epoch"):
+            self.register_state(name)
+        self.prev = PrevPort(
+            send=self._input, recv=activity_spec(self._input), recv_carry=carry
+        )
         out = TensorSpec(mu.shape, mu.dtype)
-        self.next = NextPort(send=out, recv=out, send_carry=self.prev)
+        self.next = NextPort(send=activity_spec(out), recv=out, send_carry=self.prev)
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         dt = self._cap(dt)
-        h_in = self.prev.recv()  # (B, *in)
+        activity = self.prev.recv()
+        h_in = activity["h"]  # (B, *in)
+        epoch_in = int(activity["epoch"])
         g = torch.zeros_like(self.h)  # (B, *out): the sum over the next nodes
         for g_next in self.next.recv().values():
             g += g_next
@@ -197,8 +227,14 @@ class Layer(Learner):
         # A sample without a target sends back no credit and adds nothing to
         # g_theta: its delta may be left over from an earlier input.
         labeled = rows(mask, self.h)
-        reanchor = new or self._moved
         h, lam, mu_last = self.h, self.lam, self._mu
+        jumped = self._jumped
+        if jumped:  # theta moved in the last update; mu_last is already mu'
+            h.add_(self._jump)
+            self._jumped = False
+        # A new sample, or h_in jumped: move h with mu, once.
+        reanchor = new or epoch_in != self._seen_epoch
+        self._seen_epoch = epoch_in
 
         def delta(mu: torch.Tensor) -> torch.Tensor:
             # When h moves with mu (below), h - mu is h - mu_last.
@@ -212,8 +248,16 @@ class Layer(Learner):
             h.sub_(mu_last).add_(mu)  # h <- mu + (h - mu_last)
         relax_(h, lam, mu, g, dt, self._tau)
         mu_last.copy_(mu)
-        self.next.send(h)  # carrying what came with h_in
+        # The jump of theta is discrete only when it learns at intervals.
+        if reanchor or (jumped and self._interval_ns is not None):
+            self._epoch += 1
+        epoch = torch.tensor(self._epoch, dtype=torch.int64, device=self.device)
+        self.next.send({"h": h, "epoch": epoch})  # carrying what came with h_in
         if learn:
             learn_(self._params, g_theta, self._elapsed, self._tau, self._batch)
             self._learned()
-        self._moved = learn
+            with torch.no_grad():
+                moved = self.module(h_in)  # mu' = f(h_in; theta_new)
+            torch.sub(moved, mu, out=self._jump)
+            mu_last.copy_(moved)
+            self._jumped = True

@@ -214,7 +214,7 @@ def relax_(
     """
     with torch.no_grad():
         h.sub_((dt / tau.h) * (h - mu + lam + g))  # tau_h dh/dt = -(r + lam + g)
-        if math.isfinite(tau.lam):  # 0 * inf would make NaN of an infinite r
+        if math.isfinite(tau.lam):  # alpha = 0 (PC): lam stays exactly as it is
             lam.add_(h - mu, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
 
 
