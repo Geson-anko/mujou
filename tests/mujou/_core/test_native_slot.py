@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from mujou._core._native import (
+    Carry,
     GlobalTimer,
     InputGroup,
     Message,
@@ -45,6 +46,22 @@ def tensor_schema(shape: Sequence[int], dtype: torch.dtype = torch.float32) -> S
 
 def values(msg: Message) -> list[torch.Tensor]:
     return [torch.from_dlpack(view).clone() for view in msg.buffers]
+
+
+def carried(carry: Carry) -> list[torch.Tensor]:
+    return [torch.from_dlpack(view).clone() for view in carry.buffers]
+
+
+def carry_schema() -> Schema:
+    """A (2,) float32 value carrying an int64 ``y`` and a bool ``mask``."""
+    return Schema(
+        [("", (2,), DTYPES[torch.float32])],
+        [("y", (3,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
+    )
+
+
+def data_ptrs(carry: Carry) -> list[int]:
+    return [torch.from_dlpack(view).data_ptr() for view in carry.buffers]
 
 
 def bits(t: torch.Tensor) -> torch.Tensor:
@@ -88,6 +105,26 @@ class TestSchema:
     ):
         with pytest.raises(ValueError, match="invalid schema"):
             Schema(fields)
+
+    @pytest.mark.parametrize(
+        ("carry", "match"),
+        [
+            ([("y", (2,), (0, 64, 1)), ("y", (3,), (0, 64, 1))], "duplicate carry"),
+            ([("y", (0,), (0, 64, 1))], "carry field 'y'"),
+            ([("y", (2,), (0, 64, 2))], "carry field 'y'"),
+        ],
+        ids=["duplicate", "zero-extent", "vector-dtype"],
+    )
+    def test_rejects_invalid_carry_fields(
+        self, carry: list[tuple[str, tuple[int, ...], DLDataType]], match: str
+    ):
+        with pytest.raises(ValueError, match=match):
+            Schema([("", (2,), (2, 32, 1))], carry)
+
+    def test_names_values_and_carry_apart(self):
+        Schema([("", (2,), (2, 32, 1))], [("", (2,), (2, 32, 1))])
+        with pytest.raises(ValueError, match="at least one field"):
+            Schema([], [("y", (2,), (2, 32, 1))])
 
 
 class TestOutlet:
@@ -254,6 +291,122 @@ class TestOutlet:
             outlet.send_to(index, [torch.zeros(2)])
         with pytest.raises(IndexError):
             outlet.channel(index)
+
+
+class TestCarry:
+    @pytest.mark.parametrize("dtype", list(DTYPES), ids=str)
+    def test_round_trips_every_dtype_apart_from_the_value(self, dtype: torch.dtype):
+        s = Schema(
+            [("", (2,), DTYPES[torch.float32])],
+            [("c", (3, 5), DTYPES[dtype]), ("d", (), DTYPES[torch.int64])],
+        )
+        outlet = Outlet(s, 1, "p", timer=global_timer)
+        x, c, d = torch.ones(2), sample((3, 5), dtype), torch.tensor(7)
+        outlet.send([x, c, d])
+        msg = outlet.channel(0).read()
+        assert [v.shape for v in values(msg)] == [(2,)]
+        got_c, got_d = carried(msg.carry)
+        assert got_c.dtype == dtype
+        assert torch.equal(bits(got_c), bits(c))
+        assert got_d.shape == () and got_d.item() == 7
+
+    def test_a_message_without_carry_carries_nothing(self):
+        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        assert outlet.outbox.read().carry.buffers == ()
+
+    def test_relay_shares_the_buffers(self):
+        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
+        relayer = Outlet(carry_schema(), 1, "b", timer=global_timer)
+        y, mask = torch.tensor([1, 2, 3]), torch.tensor([True, False, True])
+        source.send([torch.zeros(2), y, mask])
+        received = source.channel(0).read()
+        relayer.send([torch.ones(2)], relay=received.carry)
+        relayed = relayer.channel(0).read()
+        assert torch.equal(values(relayed)[0], torch.ones(2))
+        got_y, got_mask = carried(relayed.carry)
+        assert torch.equal(got_y, y) and torch.equal(got_mask, mask)
+        assert data_ptrs(relayed.carry) == data_ptrs(received.carry)
+        # A send without relay copies into buffers of its own.
+        relayer.send([torch.ones(2), y, mask])
+        copied = relayer.channel(0).read().carry
+        assert set(data_ptrs(copied)).isdisjoint(data_ptrs(received.carry))
+
+    def test_relay_to_one_channel(self):
+        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
+        relayer = Outlet(carry_schema(), 2, "b", timer=global_timer)
+        source.send([torch.zeros(2), torch.tensor([4, 5, 6]), torch.ones(3).bool()])
+        carry = source.channel(0).read().carry
+        relayer.send_to(1, [torch.ones(2)], relay=carry)
+        assert data_ptrs(relayer.channel(1).read().carry) == data_ptrs(carry)
+        assert data_ptrs(relayer.channel(0).read().carry) != data_ptrs(carry)
+
+    def test_relay_takes_only_the_value_fields(self):
+        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
+        relayer = Outlet(carry_schema(), 0, "b", timer=global_timer)
+        carry = source.channel(0).read().carry
+        y, mask = torch.zeros(3, dtype=torch.int64), torch.zeros(3, dtype=torch.bool)
+        with pytest.raises(ValueError, match="expected 1 tensor, got 3"):
+            relayer.send([torch.ones(2), y, mask], relay=carry)
+        with pytest.raises(
+            ValueError, match=r"expected 3 tensors \(fields '', 'y', 'mask'\)"
+        ):
+            relayer.send([torch.ones(2)])
+
+    @pytest.mark.parametrize(
+        "carry",
+        [
+            [("y", (3,), DTYPES[torch.int64])],
+            [("y", (3,), DTYPES[torch.int32]), ("mask", (3,), DTYPES[torch.bool])],
+            [("y", (2,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
+            [("z", (3,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
+            [],
+        ],
+        ids=["fewer", "dtype", "shape", "name", "none"],
+    )
+    def test_rejects_a_relay_of_other_fields(
+        self, carry: list[tuple[str, tuple[int, ...], DLDataType]]
+    ):
+        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
+        target = Outlet(
+            Schema([("", (2,), DTYPES[torch.float32])], carry),
+            0,
+            "b",
+            timer=global_timer,
+        )
+        before = target.outbox.read()
+        with pytest.raises(ValueError, match="slot 'b/out': expected to carry"):
+            target.send([torch.ones(2)], relay=source.channel(0).read().carry)
+        assert torch.equal(values(target.outbox.read())[0], values(before)[0])
+        assert not target.outbox.read().sent
+
+    def test_restore_and_input_write_fill_the_carry(self):
+        y, mask = torch.tensor([7, 8, 9]), torch.tensor([False, True, False])
+        outlet = Outlet(carry_schema(), 1, "p", timer=global_timer)
+        outlet.channel(0).restore([torch.ones(2), y, mask], 3, sent=True)
+        got = carried(outlet.channel(0).read().carry)
+        assert torch.equal(got[0], y) and torch.equal(got[1], mask)
+        group = InputGroup(timer=global_timer)
+        x = group.input(carry_schema(), "x")
+        assert torch.equal(
+            carried(x.read().carry)[0], torch.zeros(3, dtype=torch.int64)
+        )
+        group.write([(x, [torch.ones(2), y, mask])])
+        assert torch.equal(carried(x.read().carry)[0], y)
+        x.restore([torch.ones(2), y + 1, mask], 3, sent=True)
+        assert torch.equal(carried(x.read().carry)[0], y + 1)
+
+    def test_new_carry_holds_the_values(self):
+        y, mask = torch.tensor([1, 0, 1]), torch.tensor([True, True, False])
+        outlet = Outlet(carry_schema(), 1, "p", timer=global_timer)
+        x = InputGroup(timer=global_timer).input(carry_schema(), "x")
+        for slot in (outlet.channel(0), x):
+            got = carried(slot.new_carry([y, mask]))
+            assert torch.equal(got[0], y) and torch.equal(got[1], mask)
+        with pytest.raises(ValueError, match="expected 2 tensors"):
+            x.new_carry([y])
+        # A new carry relays like a received one.
+        outlet.send([torch.ones(2)], relay=x.new_carry([y, mask]))
+        assert torch.equal(carried(outlet.outbox.read().carry)[0], y)
 
 
 class TestSlotWaitNewer:

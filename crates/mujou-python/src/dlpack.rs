@@ -1,12 +1,12 @@
 //! The DLPack capsules of the bindings: borrowing a producer's tensor from
-//! its `__dlpack__`, and lending a field of a message to a consumer. The
+//! its `__dlpack__`, and lending a buffer of a message to a consumer. The
 //! structs and the copy are in `mujou_core::dlpack`.
 
 use std::ffi::{CStr, c_void};
 use std::sync::Arc;
 
 use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
-use mujou_core::slot::Message;
+use mujou_core::slot::Buffer;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -117,19 +117,18 @@ fn capsule_tensor(capsule: &Bound<'_, PyAny>) -> PyResult<*const DLTensor> {
     }
 }
 
-/// Lends field `index` of `message` as a new DLPack capsule, of the 1.x
-/// protocol if `versioned`, and of the unversioned one otherwise.
+/// Lends `buffer` as a new DLPack capsule, of the 1.x protocol if `versioned`,
+/// and of the unversioned one otherwise.
 pub(crate) fn export_capsule(
     py: Python<'_>,
-    message: Arc<Message>,
-    index: usize,
+    buffer: Arc<Buffer>,
     versioned: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     let (ptr, name, destructor): (*mut c_void, &CStr, ffi::PyCapsule_Destructor) = if versioned {
-        let ptr = dlpack::export_versioned(message, index);
+        let ptr = dlpack::export_versioned(buffer);
         (ptr.cast(), VERSIONED, destroy_versioned)
     } else {
-        let ptr = dlpack::export_legacy(message, index);
+        let ptr = dlpack::export_legacy(buffer);
         (ptr.cast(), LEGACY, destroy_legacy)
     };
     // SAFETY: `ptr` is a fresh DLPack tensor and `name` a static string.
