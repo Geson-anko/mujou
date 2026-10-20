@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -886,6 +888,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#carrying-data-along-a-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carrying data along a path
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-the-built-structure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1101,6 +1114,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1188,6 +1229,8 @@
       
         
           
+        
+      
         
       
         
@@ -1454,6 +1497,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1571,6 +1642,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#carrying-data-along-a-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carrying data along a path
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#checking-the-built-structure" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1608,6 +1690,7 @@
 <li>expose ports to the outside</li>
 <li>nest networks</li>
 <li>branch and merge</li>
+<li>carry data along a path</li>
 <li>check the built structure</li>
 </ul>
 <p>How to think about networks is in <a href="../../concepts/#networks">Networks</a> and <a href="../../concepts/#ports-and-channels">Ports and channels</a>.</p>
@@ -1779,12 +1862,99 @@
 <p>The receiving node decides how to combine the values (sum them, average them, weight each peer, ...). Mujou does not combine them. <code>Sum</code> in the example above sums them.</p>
 <p>To treat the peers differently, keep the <code>Channel</code> of each on the receiving node, as for <code>send_to</code>: <code>self.sum.from_double = self.double.next.connect(self.sum.prev)</code>, then <code>self.prev.recv()[self.from_double]</code> in the node.</p>
 <p>A <code>NextPort</code> also takes many peers by default, so its <code>recv()</code> returns a dict. If the node is sure to have only one next node, declare <code>NextPort(send=..., multi=False)</code>, and <code>recv()</code> returns the value itself.</p>
+<h2 id="carrying-data-along-a-path">Carrying data along a path<a class="headerlink" href="#carrying-data-along-a-path" title="Permanent link">&para;</a></h2>
+<p>A message can carry data along with its value, such as the ID or the target of a sample, so that every node down the path sees each value together with the data of the very sample it was computed from. Carrying it in the same message, instead of on a port of its own, is what makes this hold: a node that read two ports could read them at different moments and pair a value with the data of another sample.</p>
+<p>A port declares the carried data for each direction.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>recv_carry=spec</code></td>
+<td>The data carried with what the port receives. Only a port with one peer takes it</td>
+</tr>
+<tr>
+<td><code>send_carry=spec</code></td>
+<td>The data carried with what the port sends. <code>send(value, carry=data)</code> takes it, and copies it as it copies the value</td>
+</tr>
+<tr>
+<td><code>send_carry=port</code></td>
+<td>Pass on the data carried with the message that <code>port</code>, a port of the same node with a <code>recv_carry</code>, last received. <code>send</code> takes no <code>carry</code>: the data is shared, not copied</td>
+</tr>
+</tbody>
+</table>
+<p><code>port.carried()</code> returns a copy of the data carried with the message last received by <code>recv</code> (<code>port.carried("key")</code> only one field of a <code>DictSpec</code>). Before the first <code>recv</code>, and until the peer first sends, it is zeros (in a restored run, the values under <code>"carries"</code> in the state). These zeros cannot be told from zeros that were sent; to tell them apart, carry a field that says whether the data is valid, such as a boolean mask.</p>
+<p>The following example gives each sample an ID in <code>Stamp</code>, passes it on through <code>Double</code>, and pairs it with the value in <code>Report</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Stamp</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">"""Sends the input with the time it was written at as its ID."""</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">)</span>  <span class="c1"># the host writes it</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">,</span> <span class="n">send_carry</span><span class="o">=</span><span class="n">SAMPLE_ID</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="n">x</span><span class="p">,</span> <span class="n">written_at</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv_with_time</span><span class="p">()</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">carry</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">written_at</span><span class="o">.</span><span class="n">ns</span><span class="p">))</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="k">class</span><span class="w"> </span><span class="nc">Double</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">    </span><span class="sd">"""Sends ``2 x``, carrying on what came with ``x``."""</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">,</span> <span class="n">recv_carry</span><span class="o">=</span><span class="n">SAMPLE_ID</span><span class="p">)</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">,</span> <span class="n">send_carry</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">())</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="k">class</span><span class="w"> </span><span class="nc">Report</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a><span class="w">    </span><span class="sd">"""Sends each value with the ID it carries, for the host to read."""</span>
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">,</span> <span class="n">recv_carry</span><span class="o">=</span><span class="n">SAMPLE_ID</span><span class="p">)</span>
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">REPORTED</span><span class="p">)</span>
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">carried</span><span class="p">()})</span>
+</code></pre></div>
+<p>The host writes each sample and waits for the report that carries its ID.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">net</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">()</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>            <span class="n">written_at</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">2</span><span class="p">,),</span> <span class="nb">float</span><span class="p">(</span><span class="n">k</span><span class="p">))})</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>            <span class="n">report</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>                <span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">==</span> <span class="n">written_at</span><span class="o">.</span><span class="n">ns</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>            <span class="p">)</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>            <span class="nb">print</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">report</span><span class="p">[</span><span class="s2">"value"</span><span class="p">])</span>  <span class="c1"># 2 k, never the value of another sample</span>
+</code></pre></div>
+<ul>
+<li><code>connect</code> also checks that the carried data matches in each direction, and raises <code>TypeError</code> otherwise</li>
+<li>A port can pass on only the data of a port of its own node. Otherwise building the network raises <code>ValueError</code></li>
+<li>The host reads only the value of a port with a <code>send_carry</code>: <code>run.read</code> (and the other reads) return the value and drop the carried data. Send what the host should see of the carried data as a plain message, as <code>Report</code> does</li>
+<li>The host cannot write to a port with a <code>recv_carry</code>: <code>run.write</code> raises <code>ValueError</code>, since a write gives only a value and has no data to carry</li>
+</ul>
 <h2 id="checking-the-built-structure">Checking the built structure<a class="headerlink" href="#checking-the-built-structure" title="Permanent link">&para;</a></h2>
 <p><code>net.build()</code> checks the structure and the types, freezes them, and returns the built structure (a <code>Graph</code>). <code>mujou.run</code> calls <code>build()</code> itself, so you need not call it just to run. Call it to check the structure before running.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Diamond</span><span class="p">()</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">net</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>  <span class="c1"># what mujou.run runs; mujou.run(net) builds the same graph</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"nodes:"</span><span class="p">,</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">])</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"output port:"</span><span class="p">,</span> <span class="n">graph</span><span class="o">.</span><span class="n">port_path</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Diamond</span><span class="p">()</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">net</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>  <span class="c1"># what mujou.run runs; mujou.run(net) builds the same graph</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"nodes:"</span><span class="p">,</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">])</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nb">print</span><span class="p">(</span><span class="s2">"output port:"</span><span class="p">,</span> <span class="n">graph</span><span class="o">.</span><span class="n">port_path</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">))</span>
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title"><code>build()</code> freezes the network</p>

@@ -1,0 +1,5654 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+      
+      
+      
+        <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/api/pc/">
+      
+      
+        <link rel="prev" href="../testing/">
+      
+      
+      
+        
+          <link rel="alternate" href="./" hreflang="en">
+        
+          <link rel="alternate" href="../../ja/api/pc/" hreflang="ja">
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>PC-ALM - Mujou</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mujou">
+  <meta property="og:title" content="PC-ALM - Mujou">
+  <meta property="og:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta property="og:url" content="https://geson-anko.github.io/mujou/dev/api/pc/">
+  <meta property="og:image" content="https://geson-anko.github.io/mujou/dev/assets/hero.jpg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="722">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PC-ALM - Mujou">
+  <meta name="twitter:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta name="twitter:image" content="https://geson-anko.github.io/mujou/dev/assets/hero.jpg">
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pc-alm" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mujou" class="md-header__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../assets/icon.jpg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mujou
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PC-ALM
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Select language">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../ja/api/pc/" hreflang="ja" class="md-select__link">
+              日本語
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  How Mujou Works
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../user-guide/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mujou" class="md-nav__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../assets/icon.jpg" alt="logo">
+
+    </a>
+    Mujou
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How Mujou Works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../user-guide/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/writing-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Writing a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/building-a-network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/group/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grouping Networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Saving and Restoring State
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Controlling Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/torch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PyTorch in Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Errors and Shutdown
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../port/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ports and Channels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Global Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../typing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.pc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pc
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pc">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.lam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeConstants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeConstants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.lam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.theta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        theta
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carried
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Carried">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sample">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.x" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        x
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Activity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity.epoch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        epoch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prediction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.y_hat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y_hat
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.carry_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        carry_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.mse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.cross_entropy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cross_entropy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.pc.functional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        functional
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="functional">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.loss_vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        loss_vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.relax_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        relax_
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.learn_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        learn_
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.pc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pc
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="pc">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Input.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.lam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Layer.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Output.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeConstants
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeConstants">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.lam" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lam
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.theta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        theta
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carried
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Carried">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Carried.time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sample
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sample">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.x" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        x
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Sample.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Activity
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Activity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity.h" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        h
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Activity.epoch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        epoch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prediction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.y_hat" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y_hat
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.y" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        y
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Prediction.time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.carry_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        carry_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.mse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.cross_entropy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cross_entropy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.pc.functional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        functional
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="functional">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.loss_vjp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        loss_vjp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.relax_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        relax_
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.learn_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        learn_
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pc-alm">PC-ALM<a class="headerlink" href="#pc-alm" title="Permanent link">&para;</a></h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="mujou.pc" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">mujou.pc</span>
+
+
+<a href="#mujou.pc" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>PC-ALM (augmented Lagrangian predictive coding) as nodes of mujou.</p>
+<p>Each node holds a part of the model and learns from its neighbors' messages
+only: <code>Input</code> takes the samples the host writes, each <code>Layer</code> wraps a module
+as one constraint <code>h = f(h_in)</code>, and <code>Output</code> holds the last module and the
+loss. Inside a node, the module is differentiated by autograd; between nodes,
+activities (<code>Activity</code>) flow to the next node and gradients of the energy to
+the previous one. The target of each sample travels with its input, so the output node
+pairs every prediction with its own target. <code>functional</code> holds the stateless
+computations the nodes are made of, for writing nodes of your own.</p>
+<p>Import it as a submodule::</p>
+<div class="highlight"><pre><span></span><code>import mujou.pc as pc
+
+B = 64
+tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
+carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
+inp = pc.Input((B, 784), carry=carry, period=tau.h / 4)
+hidden = pc.Layer(
+    nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
+    input_shape=(B, 784),
+    carry=carry,
+    tau=tau,
+)
+out = pc.Output(
+    nn.Linear(256, 10),
+    loss=pc.cross_entropy,
+    input_shape=(B, 256),
+    carry=carry,
+    tau=tau,
+)
+inp.next.connect(hidden.prev)
+hidden.next.connect(out.prev)
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Input" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Input</span>
+
+
+<a href="#mujou.pc.Input" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Input</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">carry</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Carried</span><span class="p">],</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">dtype</span><span class="p">:</span> <span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Node (mujou._core.node.Node)" href="../node/#mujou.Node">Node</a></code></p>
+
+
+
+        <p>A node that takes the samples the host writes and sends them on, the input
+<code>x</code> as the activity and the target with it as the carried data.</p>
+<p>The host writes a <code>Sample</code> (<code>x</code>, <code>y</code> and <code>mask</code>) to <code>prev</code> with
+<code>Run.write</code>. In each <code>on_update</code> the node sends <code>x</code> from <code>next</code> as
+the <code>h</code> of an <code>Activity</code>, carrying <code>y</code>, <code>mask</code> and the <code>time</code> (ns)
+at which the host wrote them: the nodes on the path pass them on with the
+activity computed from <code>x</code>, so that the output node pairs each prediction
+with its own target. A new <code>time</code> tells them the input changed. The
+<code>epoch</code> of the <code>Activity</code> counts the writes the node has seen, so that
+the next node moves its <code>h</code> with a new <code>x</code> even when it was written at
+the same time as the zeros before it (time 0). <code>x</code> is clamped: what the
+next node sends back on <code>next</code> is not read.</p>
+<p>Before the host first writes, the node sends zeros with <code>mask</code> False and
+<code>epoch</code> 0. The state holds the <code>epoch</code> (<code>"_epoch"</code>) and the time (ns)
+of the last write seen (<code>"_seen_write"</code>, -1 before any).</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
+inp = pc.Input((B, 784), carry=carry, period=1e-3)
+...
+with mujou.run(net) as run:
+    run.write({inp.prev: {"x": x, "y": y, "mask": torch.ones(B, dtype=torch.bool)}})
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>shape</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The shape <code>(B, *in)</code> of <code>x</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="int">int</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>carry</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The spec of the carried data, from <code>carry_spec</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="mujou.DictSpec (mujou._core.spec.DictSpec)" href="../port/#mujou.DictSpec">DictSpec</a>[<a class="autorefs autorefs-internal" title="Carried (mujou._core.pc.carry.Carried)" href="#mujou.pc.Carried">Carried</a>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>period</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The period of the node in seconds, usually that of the next
+node.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dtype</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The dtype of <code>x</code>; <code>None</code> is <code>torch.get_default_dtype()</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.dtype">dtype</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Where the node computes.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.device">device</span> | <span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;cpu&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>carry</code> is not a spec of <code>carry_spec</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>shape[0]</code> is not the batch of <code>carry</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Input.prev" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">prev</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Input.prev" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">sample</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Input.next" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">next</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Input.next" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">activity_spec</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">recv</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">send_carry</span><span class="o">=</span><span class="n">carry</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="mujou.pc.Input.on_update" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_update</span>
+
+
+<a href="#mujou.pc.Input.on_update" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Layer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Layer</span>
+
+
+<a href="#mujou.pc.Layer" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Layer</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">module</span><span class="p">:</span> <span class="n">Module</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">input_shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">carry</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Carried</span><span class="p">],</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">learn_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">dtype</span><span class="p">:</span> <span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou._core.pc.learner.Learner">Learner</span></code></p>
+
+
+
+        <p>A node that wraps <code>module</code> as one constraint <code>h = f(h_in; theta)</code> of
+PC-ALM.</p>
+<p>It predicts <code>mu = module(h_in)</code> from the activity <code>h_in</code> of the previous
+node, and holds its own activity <code>h</code>, which it sends to the next nodes, and
+the dual <code>lam</code> of the constraint. With <span class="arithmatex">\(r = h - \mu\)</span>,
+<span class="arithmatex">\(\delta = r + \lambda\)</span> and the sum <span class="arithmatex">\(g\)</span> of what the next nodes send back:</p>
+<div class="arithmatex">\[
+\tau_h \dot h = -(r + \lambda + g),\qquad
+\tau_\lambda \dot\lambda = r,\qquad
+\tau_\theta \dot\theta = -g_\theta / B,
+\]</div>
+<p>where <span class="arithmatex">\(g_\theta = -J_\theta^\top \delta\)</span> and the node sends
+<span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top \delta\)</span> to the previous node (both from one
+vector-Jacobian product of <code>module</code>, <code>functional.vjp</code>). At a fixed point,
+<span class="arithmatex">\(r = 0\)</span> (<code>h</code> is the forward pass) and <code>lam</code> is the credit
+<span class="arithmatex">\(-\partial\ell/\partial h\)</span> of backpropagation. Inside the node, <code>module</code>
+is differentiated by autograd; between nodes, only these messages flow.</p>
+<p><code>h</code> follows the gradient flow above, with the <code>mu</code> of the moment: when
+the nodes below relax, <code>h_in</code> and <code>mu</code> move continuously and <code>h</code> only
+relaxes towards them. Where <code>mu</code> jumps, <code>h</code> moves with it once, so that
+the deviation <code>r = h - mu</code> and <code>lam</code> carry over and only they do:</p>
+<ul>
+<li>With a new sample (the carried <code>time</code> changed), or when the <code>h_in</code> it
+  reads jumped (the <code>epoch</code> of the <code>Activity</code> changed), the node moves
+  <code>h &lt;- mu + (h - mu_last)</code> with the <code>mu_last</code> of its previous update.
+  Without a target, <code>h</code> is thus the forward pass.</li>
+<li>When it updates <code>theta</code>, it computes once more, without gradients,
+  <code>mu' = f(h_in; theta_new)</code> at the same <code>h_in</code>, and moves
+  <code>h &lt;- h + (mu' - mu)</code> at the start of its next update, with
+  <code>mu_last &lt;- mu'</code>. Only the jump that <code>theta</code> makes moves <code>h</code>, not
+  the drift of <code>h_in</code>. The move waits one update so that the next nodes,
+  which may read <code>h</code> before they learn, see it as a jump (it is sent
+  with a new <code>epoch</code>) rather than learn from it.</li>
+</ul>
+<p>The node advances its <code>epoch</code> once in an update that moves <code>h</code> with a
+new sample or a jump of <code>h_in</code>, or by a jump of <code>theta</code> while
+<code>learn_interval</code> is set; the next node then moves with it in turn, so a
+jump runs up the path with <code>r</code> unchanged at every node, whenever each
+node learns. With <code>learn_interval=None</code>, <code>theta</code> moves by <code>dt</code> in
+every update, continuously: the node moves its own <code>h</code> but does not
+advance its <code>epoch</code>, as moving every node above in every update would
+hold <code>r</code> rather than <code>h</code> as the state, which diverges in deep chains.</p>
+<p>Each <code>on_update(dt)</code>:</p>
+<ol>
+<li>caps <code>dt</code> at <code>max_dt</code>;</li>
+<li>reads <code>h_in</code> and its <code>epoch</code> with the data carried with it, and <code>g</code>;</li>
+<li>notes a new input if the carried <code>time</code> changed;</li>
+<li>moves <code>h</code> by the jump of <code>theta</code> of the previous update, if any;</li>
+<li>computes <code>mu</code>, <code>g_in</code> and, when it learns, <code>g_theta</code> with the
+   <code>delta</code> before this update, zero for the samples whose carried
+   <code>mask</code> is False; with a new input or a new <code>epoch</code> of <code>h_in</code>,
+   moves <code>h</code> with <code>mu</code> first;</li>
+<li>sends <code>g_in</code>;</li>
+<li>moves <code>h</code> and then <code>lam</code> by <code>dt</code> (<code>functional.relax_</code>);</li>
+<li>sends <code>h</code> with its <code>epoch</code>, carrying on the data that came with
+   <code>h_in</code>;</li>
+<li>when it learns, moves <code>theta</code> by the time since its last update
+   (<code>functional.learn_</code>) and computes the jump of <code>mu</code> it made.</li>
+</ol>
+<p>It learns in its first update once <code>learn_interval</code> seconds have passed
+since the host wrote the input (the carried <code>time</code>, on the run's time),
+and then every <code>learn_interval</code> seconds while the input stays, but never
+in the update that first sees an input (its <code>delta</code> is still that of the
+input before); with <code>learn_interval=None</code>, in every update. The nodes
+read the one timer of the run, so the nodes on a path learn at about the
+same time, however deep they are, and each from the relaxed <code>delta</code> of
+the same input. <code>learn_interval</code> must leave the credit time to go down the
+path and back, at least about <code>2 * depth * period</code> with <code>depth</code> the
+number of nodes on the path: this is a condition of stability, not of
+accuracy only. With a shorter interval, deep chains can diverge however
+slowly <code>theta</code> moves, as every node then learns, and so advances its
+<code>epoch</code>, in almost every update, and the nodes above move <code>h</code> with every
+change of <code>mu</code>. The node does not learn when no sample of the
+input has a target (every carried <code>mask</code> is False): that time is dropped
+from the next update, which would otherwise learn from the <code>delta</code> left
+over from an earlier input. Nor does it keep the time of an input that
+changed before the node learned from it. Until the first sample reaches
+the node, the carried data is zeros (<code>mask</code> all False, <code>time</code> 0), so it
+does not learn then.</p>
+<p><code>dt</code> is capped because the nodes are coupled explicitly: <code>g</code> was made
+from <code>h</code> as it was when the next node last updated. After a long stall
+(a loaded machine), the step <code>dt / tau.h</code> of every node grows at once and
+the coupling makes the network diverge, which no split of the step inside
+the node prevents. The time beyond <code>max_dt</code> is dropped, from the
+relaxation and from the weight of the next update of <code>theta</code> alike. The
+default <code>min(tau.h / 2, 3 * tau.lam)</code> keeps the step of <code>h</code> and <code>lam</code>
+stable in the node itself.</p>
+<p><code>module</code> must treat the samples of the batch independently (no
+<code>BatchNorm</code> in training mode): the gradient of each sample must be its
+own. It must also be deterministic and keep no state of its own (no
+<code>Dropout</code>, no <code>BatchNorm</code> in training mode): an update that learns calls
+it once more on the same <code>h_in</code> to find the jump of <code>theta</code>, which would
+otherwise carry noise, or update running statistics a second time. Its parameters that require gradients learn; set
+<code>requires_grad</code> to False to freeze one. It is called once on zeros when the
+node is made, to find the shape and dtype of <code>h</code>.</p>
+<p>The state (<code>Run.state_dict()["nodes"][path]</code>) holds <code>"module"</code> (its
+<code>state_dict</code>), <code>"h"</code> and <code>"lam"</code> (<code>(B, *out)</code>), the prediction of
+the last update (<code>"_mu"</code>), the jump of <code>theta</code> still to add to <code>h</code>
+(<code>"_jump"</code>, and <code>"_jumped"</code> whether there is one), the <code>epoch</code> it
+sends and the last one it read (<code>"_epoch"</code>, <code>"_seen_epoch"</code>) and when to
+learn (<code>"_seen_time"</code>, <code>"_learn_at"</code>, <code>"_elapsed"</code>,
+<code>"_learned_input"</code>). To watch the node while it runs, read them there:
+<code>Run.state_dict()</code> pauses the run, whereas reading <code>module</code>, <code>h</code> or
+<code>lam</code> from the host's thread races with the node's updates in place.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>B = 64
+tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
+carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
+hidden = pc.Layer(
+    nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
+    input_shape=(B, 784),
+    carry=carry,
+    tau=tau,
+    learn_interval=24e-3,
+)
+inp.next.connect(hidden.prev)  # inp: a pc.Input
+hidden.next.connect(out.prev)  # out: a pc.Output, or another pc.Layer
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>module</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The function <code>f</code>, <code>(B, *in) -&gt; (B, *out)</code>, on <code>device</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.nn.Module">Module</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>input_shape</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The shape <code>(B, *in)</code> of <code>h_in</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="int">int</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>carry</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The spec of the carried data, from <code>carry_spec</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="mujou.DictSpec (mujou._core.spec.DictSpec)" href="../port/#mujou.DictSpec">DictSpec</a>[<a class="autorefs autorefs-internal" title="Carried (mujou._core.pc.carry.Carried)" href="#mujou.pc.Carried">Carried</a>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constants.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="TimeConstants
+
+
+  
+      dataclass
+   (mujou._core.pc.time_constants.TimeConstants)" href="#mujou.pc.TimeConstants">TimeConstants</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>learn_interval</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time in seconds from the write of an input to the
+update of <code>theta</code>, and between the updates while the input stays;
+at least about <code>2 * depth * period</code>, or deep chains can diverge.
+<code>None</code> updates in every <code>on_update</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>period</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The period of the node in seconds; <code>None</code> is <code>tau.h / 4</code>.
+It must not be longer than <code>max_dt</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_dt</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The longest <code>dt</code> an update counts, in seconds; <code>None</code> is
+<code>min(tau.h / 2, 3 * tau.lam)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dtype</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The dtype of <code>h_in</code>; <code>None</code> is <code>torch.get_default_dtype()</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.dtype">dtype</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Where the node computes.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.device">device</span> | <span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;cpu&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>tau</code> is not a <code>TimeConstants</code>, <code>carry</code> is not a spec
+of <code>carry_spec</code>, <code>module</code> does not return a tensor, or
+<code>learn_interval</code> or <code>max_dt</code> is a <code>bool</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>input_shape[0]</code> or the first dimension of the output of
+<code>module</code> is not the batch of <code>carry</code>; a parameter or buffer of
+<code>module</code> is not on <code>device</code>; <code>learn_interval</code> or <code>max_dt</code>
+is neither <code>None</code> nor finite and positive; or <code>period</code> is
+longer than <code>max_dt</code>. <code>module</code>
+raises as PyTorch does when it does not take <code>input_shape</code> and
+<code>dtype</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Layer.h" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">h</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Layer.h" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">mu</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Layer.lam" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">lam</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Layer.lam" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">lam</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">mu</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Layer.prev" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">prev</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Layer.prev" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_input</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">activity_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_input</span><span class="p">),</span> <span class="n">recv_carry</span><span class="o">=</span><span class="n">carry</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Layer.next" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">next</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Layer.next" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">activity_spec</span><span class="p">(</span><span class="n">out</span><span class="p">),</span> <span class="n">recv</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">send_carry</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="mujou.pc.Layer.on_update" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_update</span>
+
+
+<a href="#mujou.pc.Layer.on_update" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Output" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Output</span>
+
+
+<a href="#mujou.pc.Output" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Output</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">module</span><span class="p">:</span> <span class="n">Module</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">loss</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">input_shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">carry</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Carried</span><span class="p">],</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">learn_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">dtype</span><span class="p">:</span> <span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou._core.pc.learner.Learner">Learner</span></code></p>
+
+
+
+        <p>A node that predicts <code>y_hat = module(h_in)</code> and whose energy is the loss
+of the samples that have a target.</p>
+<p>It pairs <code>h_in</code> with the target <code>y</code> and <code>mask</code> carried in the same
+message, so the prediction always meets the target of the very input it was
+computed from, however fast the host writes. With</p>
+<div class="arithmatex">\[
+\ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
+\tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta},
+\]</div>
+<p>it sends <span class="arithmatex">\(g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}\)</span> to the
+previous node (<code>functional.loss_vjp</code>), zeros when no sample has a target.
+Each <code>on_update(dt)</code> caps <code>dt</code> at <code>max_dt</code> as <code>Layer</code> does, reads
+<code>h_in</code> with its carried data, sends <code>g_in</code>, sends a <code>Prediction</code>
+(<code>y_hat</code> with the <code>y</code>, <code>mask</code> and <code>time</code> it was paired with) for
+the host to read, and updates <code>theta</code> when it learns. It reads the
+<code>h</code> of the <code>Activity</code> only: a jump of <code>h_in</code> needs no move here, as
+the node holds no activity of its own.</p>
+<p>It learns as <code>Layer</code> does: once <code>learn_interval</code> seconds have passed
+since the host wrote the input, but not in the update that first sees it,
+or in every update with <code>None</code>. When no sample has a target, it does not
+learn and drops the time since the last update; so too before the first
+sample arrives, while the carried data is zeros (<code>mask</code> all False), and
+when the input changes before it has learned from it. <code>B</code> is the batch,
+not the number of samples with a target: a sample without one adds zero.</p>
+<p><code>loss</code> returns the loss of each sample, <code>(B,)</code>, such as <code>mse</code> or
+<code>cross_entropy</code>, and the node sums them. A loss that averages (such as
+<code>nn.MSELoss()</code>) would scale the gradient that flows back by <code>1 / B</code>.
+<code>module</code> must treat the samples independently, and is called once on zeros
+when the node is made, as in <code>Layer</code>.</p>
+<p>The state holds <code>"module"</code> and when to learn (<code>"_seen_time"</code>,
+<code>"_learn_at"</code>, <code>"_elapsed"</code>, <code>"_learned_input"</code>). Read it with
+<code>Run.state_dict()</code>, as for <code>Layer</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>out = pc.Output(
+    nn.Linear(256, 10),
+    loss=pc.cross_entropy,
+    input_shape=(B, 256),
+    carry=carry,  # pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
+    tau=tau,
+    learn_interval=24e-3,
+)
+hidden.next.connect(out.prev)
+# The host: prediction = run.read(out.next); prediction["y_hat"], ...
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>module</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The function <code>f</code>, <code>(B, *in) -&gt; (B, *out)</code>, on <code>device</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.nn.Module">Module</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>loss</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>(y_hat, y) -&gt; (B,)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>], <span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>input_shape</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The shape <code>(B, *in)</code> of <code>h_in</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="int">int</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>carry</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The spec of the carried data, from <code>carry_spec</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="mujou.DictSpec (mujou._core.spec.DictSpec)" href="../port/#mujou.DictSpec">DictSpec</a>[<a class="autorefs autorefs-internal" title="Carried (mujou._core.pc.carry.Carried)" href="#mujou.pc.Carried">Carried</a>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constants; <code>tau.theta</code> is used, and <code>tau.h</code> gives the
+default period.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="TimeConstants
+
+
+  
+      dataclass
+   (mujou._core.pc.time_constants.TimeConstants)" href="#mujou.pc.TimeConstants">TimeConstants</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>learn_interval</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>As in <code>Layer</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>period</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The period of the node in seconds; <code>None</code> is <code>tau.h / 4</code>.
+It must not be longer than <code>max_dt</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_dt</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>As in <code>Layer</code>: the longest <code>dt</code> an update counts, here
+towards the weight of the update of <code>theta</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dtype</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The dtype of <code>h_in</code>; <code>None</code> is <code>torch.get_default_dtype()</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.dtype">dtype</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Where the node computes.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.device">device</span> | <span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;cpu&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>As <code>Layer</code> raises.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>As <code>Layer</code> raises, or <code>loss</code> does
+not return <code>(B,)</code> for the output of <code>module</code> and the target.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Output.prev" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">prev</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Output.prev" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">prev</span> <span class="o">=</span> <span class="n">PrevPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_input</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">activity_spec</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_input</span><span class="p">),</span> <span class="n">recv_carry</span><span class="o">=</span><span class="n">carry</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Output.next" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">next</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Output.next" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">next</span> <span class="o">=</span> <span class="n">NextPort</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">send</span><span class="o">=</span><span class="n">DictSpec</span><span class="p">(</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="n">Prediction</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">y_hat</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">(</span><span class="n">y_hat</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">y_hat</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">y</span><span class="o">=</span><span class="n">target</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">mask</span><span class="o">=</span><span class="n">carry</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">],</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">time</span><span class="o">=</span><span class="n">carry</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="mujou.pc.Output.on_update" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_update</span>
+
+
+<a href="#mujou.pc.Output.on_update" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.TimeConstants" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TimeConstants</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#mujou.pc.TimeConstants" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TimeConstants</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">h</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The time constants of the continuous-time PC-ALM, in seconds.</p>
+<p>A node relaxes its activity <code>h</code>, its dual <code>lam</code> and its parameters
+<code>theta</code> with</p>
+<div class="arithmatex">\[
+\tau_h \dot h = -(r + \lambda + g),\qquad
+\tau_\lambda \dot\lambda = r,\qquad
+\tau_\theta \dot\theta = -g_\theta / B
+\]</div>
+<p>(<span class="arithmatex">\(r = h - \mu\)</span>), and a step of <code>dt</code> seconds moves them by <code>dt / tau</code> of
+the right-hand side (the discrete step sizes are <code>eta_h = dt / h</code>,
+<code>alpha = dt / lam</code> and <code>eta_theta = dt / theta</code>).</p>
+<p><code>lam=math.inf</code> makes the dual stay at zero (<code>alpha = 0</code>, plain predictive
+coding), and <code>theta=math.inf</code> makes the parameters stay where they are (no
+learning). <code>h</code> must be finite.</p>
+<p>The fields are keyword-only: all three are floats, and a swap by position
+could not be caught by the type checker.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>tau = TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
+pc_only = TimeConstants(h=4e-3, lam=math.inf, theta=1.28)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A field is not a number (<code>bool</code> is not one).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>h</code> is not finite and positive, or <code>lam</code> or <code>theta</code> is
+not positive (NaN is not).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.TimeConstants.h" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">h</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.TimeConstants.h" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">h</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.TimeConstants.lam" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">lam</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.TimeConstants.lam" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">lam</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.TimeConstants.theta" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">theta</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.TimeConstants.theta" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Carried" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Carried</span>
+
+
+<a href="#mujou.pc.Carried" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>The data that travels with an activity from the input node to the output
+node, relayed by every node on the way.</p>
+<ul>
+<li><code>y</code>: the target of each sample, <code>(B, *target)</code>, of the spec the user
+  gives to <code>carry_spec</code>.</li>
+<li><code>mask</code>: <code>(B,)</code> bool, whether each sample has a target. A sample whose
+  <code>mask</code> is False adds nothing to the loss, whatever its <code>y</code> is.</li>
+<li><code>time</code>: <code>()</code> int64, the time in nanoseconds at which the host wrote the
+  input that the activity was computed from.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Carried.y" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">y</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Carried.y" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Carried.mask" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">mask</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Carried.mask" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">mask</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Carried.time" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">time</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Carried.time" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Sample" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Sample</span>
+
+
+<a href="#mujou.pc.Sample" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>What the host writes to an input node: the input <code>x</code> (<code>(B, *in)</code>), and
+the <code>y</code> and <code>mask</code> of <code>Carried</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Sample.x" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">x</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Sample.x" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">x</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Sample.y" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">y</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Sample.y" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Sample.mask" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">mask</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Sample.mask" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">mask</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Activity" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Activity</span>
+
+
+<a href="#mujou.pc.Activity" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>The activity a node sends to the next nodes.</p>
+<ul>
+<li><code>h</code>: the activity, <code>(B, *out)</code>.</li>
+<li><code>epoch</code>: <code>()</code> int64, the number of times the sender's <code>h</code> has jumped
+  by more than its continuous relaxation: an <code>Input</code> counts the writes of
+  the host, and a <code>Layer</code> counts its moves with a new sample and with a
+  jump of the <code>h</code> it receives, and the jumps of its own <code>theta</code> when it
+  learns at intervals (<code>learn_interval</code> not <code>None</code>). A change tells the
+  receiver to move its own <code>h</code> with its prediction, so that the jump
+  does not enter its deviation <code>h - mu</code> (<code>Layer</code>).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Activity.h" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">h</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Activity.h" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">h</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Activity.epoch" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">epoch</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Activity.epoch" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">epoch</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Prediction" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Prediction</span>
+
+
+<a href="#mujou.pc.Prediction" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.TypedDict">TypedDict</span></code></p>
+
+
+
+        <p>What an output node sends: the prediction <code>y_hat</code> (<code>(B, *out)</code>), and the
+<code>y</code>, <code>mask</code> and <code>time</code> of the input it was computed from (see
+<code>Carried</code>).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Prediction.y_hat" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">y_hat</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Prediction.y_hat" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Prediction.y" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">y</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Prediction.y" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Prediction.mask" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">mask</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Prediction.mask" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">mask</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Prediction.time" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">time</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Prediction.time" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.carry_spec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">carry_spec</span>
+
+
+<a href="#mujou.pc.carry_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">carry_spec</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Carried</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the spec of the data carried with an activity of <code>batch</code> samples.</p>
+<p>Two calls with equal arguments return equal specs, so each node may make its
+own.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>carry = carry_spec(TensorSpec((64,), torch.int64), batch=64)  # class labels
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>target</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The spec of the targets <code>y</code>, <code>(batch, *target)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="mujou.TensorSpec (mujou._core.spec.TensorSpec)" href="../port/#mujou.TensorSpec">TensorSpec</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The number of samples <code>B</code> of an activity.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>target</code> is not a <code>TensorSpec</code>, or <code>batch</code> is not an
+<code>int</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>batch</code> is less than 1, or the first dimension of
+<code>target</code> is not <code>batch</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.mse" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mse</span>
+
+
+<a href="#mujou.pc.mse" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">mse</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>0.5 * ||y_b - y_hat_b||^2</code> of each sample <code>b</code>.</p>
+<p>The squared error is summed over every dimension but the first. Unlike
+<code>nn.MSELoss</code>, there is no mean and the half is there, so the gradient with
+respect to <code>y_hat</code> is <code>y_hat - y</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_hat</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The prediction, <code>(B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The target, of the same shape as <code>y_hat</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>(B,)</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The shapes differ (a broadcast would silently give <code>(B, B)</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.cross_entropy" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">cross_entropy</span>
+
+
+<a href="#mujou.pc.cross_entropy" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">cross_entropy</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the cross entropy of each sample, as
+<code>F.cross_entropy(y_hat, y, reduction="none")</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_hat</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The logits, <code>(B, C)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The class of each sample, <code>(B,)</code> int64, or the probability of each
+class, <code>(B, C)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>(B,)</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="mujou.pc.functional" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">mujou.pc.functional</span>
+
+
+<a href="#mujou.pc.functional" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>The stateless computations of PC-ALM that the nodes of <code>mujou.pc</code> are made
+of: <code>vjp</code> and <code>loss_vjp</code> (the gradients of a node's energy), <code>relax_</code> (the
+dynamics of <code>h</code> and <code>lam</code>) and <code>learn_</code> (the update of the parameters).</p>
+<p>Use them to write a node of your own, such as one with several inputs. Gradients
+are summed over the batch; <code>learn_</code> applies the <code>1 / B</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.vjp" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">vjp</span>
+
+
+<a href="#mujou.pc.functional.vjp" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">vjp</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">module</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">h_in</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">delta</span><span class="p">:</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">params</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">wrt_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Predict <code>mu = module(h_in)</code> and the gradients of the node's energy.</p>
+<p>With the activity <span class="arithmatex">\(h\)</span> held fixed, the energy
+<span class="arithmatex">\(E = \tfrac12\|h - \mu + \lambda\|^2\)</span> has the gradients</p>
+<div class="arithmatex">\[
+g_{\mathrm{in}} = \frac{\partial E}{\partial h_{\mathrm{in}}}
+    = -J_h^\top \delta,\qquad
+g_\theta = \frac{\partial E}{\partial \theta} = -J_\theta^\top \delta,
+\]</div>
+<p>where <span class="arithmatex">\(\delta = h - \mu + \lambda\)</span> and <span class="arithmatex">\(J\)</span> are the Jacobians of <code>module</code>
+at <code>h_in</code>. Both are summed over the batch. <code>h_in</code> is detached first, so
+no graph reaches the node that sent it.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>module</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The function <code>f</code> of the node, <code>(B, *in) -&gt; (B, *out)</code>. It must
+treat the samples independently.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="torch.Tensor">Tensor</span>], <span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>h_in</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The activity of the previous node, <code>(B, *in)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>delta</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p><span class="arithmatex">\(\delta\)</span> of the node, <code>(B, *out)</code>, or a function that makes it
+from <code>mu</code> (detached), such as <code>lambda mu: h - mu + lam</code>, for a
+<span class="arithmatex">\(\delta\)</span> that depends on the prediction of this call.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span> | <span title="collections.abc.Callable">Callable</span>[[<span title="torch.Tensor">Tensor</span>], <span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>params</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The parameters to get the gradients of, usually those of
+<code>module</code> that require gradients.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>wrt_input</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether to get the gradient of <code>h_in</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>True</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p><code>(mu, g_in, g_theta)</code>: <code>mu</code> (<code>(B, *out)</code>, detached), <code>g_in</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span> | None</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>(<code>(B, *in)</code>, or <code>None</code> when <code>wrt_input</code> is False) and <code>g_theta</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="list">list</span>[<span title="torch.Tensor">Tensor</span>]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>(one tensor per parameter, in the order of <code>params</code>; a parameter that</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span> | None, <span title="list">list</span>[<span title="torch.Tensor">Tensor</span>]]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p><code>module</code> does not use gets zeros).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>delta</code> is not of the shape of <code>mu</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.loss_vjp" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">loss_vjp</span>
+
+
+<a href="#mujou.pc.functional.loss_vjp" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">loss_vjp</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">module</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">h_in</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">mask</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">loss</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">params</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">wrt_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Predict <code>y_hat = module(h_in)</code> and the gradients of the masked loss.</p>
+<p>The energy of an output node is the loss of the samples that have a target,</p>
+<div class="arithmatex">\[
+\ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
+g_{\mathrm{in}} = \frac{\partial \ell}{\partial h_{\mathrm{in}}},\qquad
+g_\theta = \frac{\partial \ell}{\partial \theta}.
+\]</div>
+<p>A sample whose <code>mask</code> is False adds nothing, whatever its <code>y</code> is (NaN
+too): its <code>y</code> is replaced by zeros before <code>loss</code> sees it, and its
+<code>g_in</code> is zero. <code>h_in</code> is detached first.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>module</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The function <code>f</code> of the node, <code>(B, *in) -&gt; (B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="torch.Tensor">Tensor</span>], <span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>h_in</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The activity of the previous node, <code>(B, *in)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The target, <code>(B, *target)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>mask</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether each sample has a target, <code>(B,)</code> bool.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>loss</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>(y_hat, y) -&gt; (B,)</code>, such as
+<code>mse</code> or <code>cross_entropy</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>], <span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>params</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The parameters to get the gradients of.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>wrt_input</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether to get the gradient of <code>h_in</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>True</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span> | None, <span title="list">list</span>[<span title="torch.Tensor">Tensor</span>]]</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p><code>(y_hat, g_in, g_theta)</code> as <code>vjp</code> returns <code>(mu, g_in, g_theta)</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>loss</code> does not return <code>(B,)</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.relax_" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">relax_</span>
+
+
+<a href="#mujou.pc.functional.relax_" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">relax_</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">h</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">g</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Move <code>h</code> and <code>lam</code> in place by one explicit Euler step of <code>dt</code>
+seconds of</p>
+<div class="arithmatex">\[
+\tau_h \dot h = -(r + \lambda + g),\qquad
+\tau_\lambda \dot\lambda = r,\qquad r = h - \mu.
+\]</div>
+<p>The step moves <code>h</code> first and then <code>lam</code> with the <code>r</code> of the moved
+<code>h</code>. <code>mu</code> and <code>g</code> are held fixed. The step is not split: <code>g</code> comes
+from the next nodes and stays as it was over <code>dt</code>, so the coupling between
+the nodes is explicit however finely the step is split. Keep <code>dt</code> short
+instead (<code>Layer</code> caps it at <code>max_dt</code>). <code>tau.lam = inf</code> leaves <code>lam</code>
+exactly as it is.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>h</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The activity of the node, <code>(B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>lam</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The dual of the node's activity, <code>(B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>mu</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The prediction <code>f(h_in)</code> of the node, <code>(B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>g</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The sum of the gradients the next nodes sent, <code>(B, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dt</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time to move by, in seconds.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constants; <code>tau.h</code> and <code>tau.lam</code> are used.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="TimeConstants
+
+
+  
+      dataclass
+   (mujou._core.pc.time_constants.TimeConstants)" href="#mujou.pc.TimeConstants">TimeConstants</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.learn_" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">learn_</span>
+
+
+<a href="#mujou.pc.functional.learn_" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">learn_</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">params</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">g_theta</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">elapsed</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Move <code>params</code> in place by <code>elapsed</code> seconds of
+<code>tau_theta * dtheta/dt = -g_theta / B</code>.</p>
+<p>That is one gradient step on the mean loss of the batch with the learning
+rate <code>elapsed / tau.theta</code>: <code>p -= (elapsed / tau.theta) * g / batch</code>.
+<code>tau.theta = inf</code> leaves <code>params</code> exactly as they are.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>params</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The parameters of the node.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>g_theta</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Their gradients summed over the batch, in the same order, as
+<code>vjp</code> or <code>loss_vjp</code> returns them.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Sequence">Sequence</span>[<span title="torch.Tensor">Tensor</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>elapsed</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time since the last update of <code>params</code>, in seconds.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constants; <code>tau.theta</code> is used.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="TimeConstants
+
+
+  
+      dataclass
+   (mujou._core.pc.time_constants.TimeConstants)" href="#mujou.pc.TimeConstants">TimeConstants</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch size <code>B</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>params</code> and <code>g_theta</code> differ in length (nothing is moved).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Images: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Geson-anko/mujou" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.top", "navigation.sections", "navigation.indexes", "search.highlight", "search.share", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

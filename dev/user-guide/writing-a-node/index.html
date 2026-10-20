@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -1106,6 +1108,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1193,6 +1223,8 @@
       
         
           
+        
+      
         
       
         
@@ -1446,6 +1478,34 @@
     
   
     Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
   
 
     
@@ -1735,6 +1795,7 @@
 <li><code>R</code> the type it receives</li>
 <li><code>M</code> its number of peers, <code>Single</code> or <code>Multi</code> from <code>mujou.typing</code></li>
 </ul>
+<p>Two more type arguments, <code>Port[S, R, M, CS, CR]</code>, are the types of the data it carries with what it sends and receives (<a href="../building-a-network/#carrying-data-along-a-path">Carrying data along a path</a>); <code>Port[S, R, M]</code> carries nothing. Annotate a port of any kind as <code>Port[Any, Any, Any, Any, Any]</code>.</p>
 <p>An omitted direction is <code>Never</code>. A function that takes any spec takes a <code>MessageSpec[T]</code> from <code>mujou.typing</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Never</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>

@@ -753,6 +753,8 @@
       
         
       
+        
+      
     
     
     
@@ -1059,6 +1061,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1146,6 +1176,8 @@
       
         
           
+        
+      
         
       
         
@@ -1412,6 +1444,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1601,8 +1661,8 @@
 </code></pre></div>
 <p>更新の速さはノードごとに違い、負荷によっても揺らぐ。更新量を反復 1 回あたりで決めると、速く回るノードほど状態が大きく変わってしまう。<code>dt</code> に比例させれば、どのノードも同じ時間の流れの上で同じダイナミクスに従う。負荷が高くなっても <code>dt</code> が伸びるだけで済む。</p>
 <div class="admonition warning">
-<p class="admonition-title"><code>dt</code> を打ち切らない</p>
-<p><code>dt</code> に上限を設けて打ち切ってはならない。打ち切ると実際に経った時間が失われる。<code>dt</code> が大きくて更新が不安定になるなら、1 回の <code>on_update</code> の中で刻みを分割する。</p>
+<p class="admonition-title">長い <code>dt</code> に気を付ける</p>
+<p>Mujou は <code>dt</code> を打ち切らない。<code>dt</code> は実際に経った時間で、打ち切るとその一部が失われる。<code>dt</code> が大きくてノード自身の状態の更新が不安定になるなら、1 回の <code>on_update</code> の中で刻みを分割する。不安定さが他のノードとの結合から来るとき（読んだメッセージは <code>dt</code> の間そのまま）は、分割しても安定にならない。そのようなノードは、失う時間と引き換えに、自分が使う <code>dt</code> を打ち切ってよい。</p>
 </div>
 <p>ノードは周期を持つ（既定は 0.01 秒）。更新の間隔は 1 回ごとに揺らぐが、平均すると周期ごとに 1 回更新する。遅れたときの <code>dt</code> は周期より長くなる。<code>dt</code> は実際に経った時間なので、周期を決めていても更新は <code>dt</code> に比例させる。</p>
 <p>タイマーは実行ごとに 1 つあり、その実行のすべてのノードとホストがそれを使う。既定ではプロセスに 1 つのグローバルタイマーを使う。ホストは時間を実時間より速くも遅くも進められるが、ノードは時間を読むだけである。</p>

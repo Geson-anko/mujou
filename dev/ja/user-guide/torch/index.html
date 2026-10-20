@@ -653,6 +653,8 @@
       
         
       
+        
+      
     
     
     
@@ -1103,6 +1105,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1190,6 +1220,8 @@
       
         
           
+        
+      
         
       
         
@@ -1456,6 +1488,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1608,13 +1668,9 @@
 <h2 id="更新手法">更新手法<a class="headerlink" href="#更新手法" title="Permanent link">&para;</a></h2>
 <p><code>on_update(dt)</code> に書く更新が、そのノードの更新手法（学習則）である。mujou はノード・Port・実行の基盤に更新手法を組み込まないので、ノードごとに選んで差し替えられる。</p>
 <ul>
-<li>既定の更新手法は PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）。局所的な更新で BP に近い性能を出せると報告されている。ただし暫定的な選択である</li>
+<li>既定の更新手法は PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）。局所的な更新で BP に近い性能を出せると報告されている。ただし暫定的な選択である。PC-ALM のノードはモジュール <code>mujou.pc</code> にある（<a href="../pc/">PC-ALM で学習する</a>）</li>
 <li>BP も 1 つのノードの内側に閉じていれば、更新手法の 1 つとして使える（下の「ノードの中の BP」）</li>
 </ul>
-<div class="admonition note">
-<p class="admonition-title">PC-ALM のノードは未実装</p>
-<p>PC-ALM のノードはモジュール <code>mujou.pc</code> から提供する予定。それまでは <code>mujou.Node</code> を継承し、<code>on_update(dt)</code> に更新式を自分で書く（<a href="../writing-a-node/">ノードを書く</a>）。</p>
-</div>
 <h2 id="例">例<a class="headerlink" href="#例" title="Permanent link">&para;</a></h2>
 <p>次のノードは入力から目標への線形写像をオンラインで学び、予測を送る。BP はこのノードの中に閉じている。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">BATCH</span><span class="p">,</span> <span class="n">N_IN</span><span class="p">,</span> <span class="n">N_OUT</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span>

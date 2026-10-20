@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -1073,6 +1075,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1160,6 +1190,8 @@
       
         
           
+        
+      
         
       
         
@@ -1426,6 +1458,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1645,6 +1705,7 @@
 <li><strong>You cannot restore while another run is running on the same timer.</strong> In that case <code>mujou.run</code> raises <code>ValueError</code> and starts nothing. End the other run first, or give the restored run a timer of its own, <code>mujou.time.Timer()</code> (see <a href="../time/">Controlling time</a>)</li>
 <li>The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise <code>mujou.run</code> raises <code>ValueError</code></li>
 <li>If you pass both <code>state=</code> and <code>inputs=</code>, the values in <code>inputs</code> override the input values in the tree</li>
+<li>Data carried along a path (<a href="../building-a-network/#carrying-data-along-a-path">Carrying data along a path</a>) is in the tree too: with the messages that carry it, and, for each port with a <code>recv_carry</code>, the data of the message it last received. A restored node passes on the same data as one that never stopped</li>
 </ul>
 <h2 id="taking-the-states-of-several-runs-at-one-time">Taking the states of several runs at one time<a class="headerlink" href="#taking-the-states-of-several-runs-at-one-time" title="Permanent link">&para;</a></h2>
 <p><code>run.state_dict()</code> takes the state of one run at one time. When several runs share a timer (by default, all of them run on the global timer) and you take their states one after another, each state is of a later time than the one before, because the time goes on in between.</p>
@@ -1687,26 +1748,30 @@
 <li>The state of the random number generator <code>self.generator</code></li>
 <li>The state of an optimizer (such as moments) and the gradients accumulated in <code>.grad</code></li>
 </ul>
-<p>To put these in the state, override both <code>state_dict</code> and <code>load_state_dict</code>. Call <code>super()</code>, and the automatically collected part is handled as before.</p>
-<p>For a number, you can instead keep it as a 0-dimensional tensor created in <code>on_start</code> (<code>self.count = torch.zeros((), device=self.device)</code>) and update it in place (<code>self.count += 1</code>), without overriding anything. It is then collected automatically.</p>
+<p>For a number, a string, <code>None</code>, or a list or dict of them, assign the attribute and register its name with <code>register_state</code>. The value then goes into the state as it is, and stays in it whatever you assign to the attribute later, until <code>del</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
+</code></pre></div>
+<p>The default <code>load_state_dict</code> assigns a copy of the saved value to the attribute. Register only an attribute that already exists, and register it in <code>__init__</code> or <code>on_start</code>: a restored run uses new node instances, and a name first registered later (in <code>on_update</code>, say) is not registered there yet, so the restore rejects it. Keep the values to basic types if the tree is to be read with the default <code>torch.load</code> (see <a href="#formats">Formats</a>).</p>
+<p>For the rest, override both <code>state_dict</code> and <code>load_state_dict</code>. Call <code>super()</code>, and the automatically collected and registered part is handled as before.</p>
 <p>The following example adds the state of the random number generator. A restored run uses new node instances, whose generators start again from <code>seed</code>. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Noisy</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="n">state</span><span class="p">[</span><span class="s2">"generator"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="k">return</span> <span class="n">state</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>  <span class="c1"># copy first, so the given tree is not modified</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"generator"</span><span class="p">))</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Noisy</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">state</span><span class="p">[</span><span class="s2">"generator"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="k">return</span> <span class="n">state</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>  <span class="c1"># copy first, so the given tree is not modified</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"generator"</span><span class="p">))</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 </code></pre></div>
 <p>When you override them, follow these rules.</p>
 <table>
@@ -1736,12 +1801,12 @@
 <p>For your own files, either will do. To share a tree with others, save it with <code>torch.save</code>, so that they can read it with the default <code>torch.load</code>. <code>mujou.run(..., state=)</code> takes a <code>mujou.StateDict</code>, or a plain dict of the same items.</p>
 <p>Read a file back the same way it was saved (<code>pickle.loads</code> for <code>pickle.dumps</code>, <code>torch.load</code> for <code>torch.save</code>). If you do not know how a file was saved, read it first with the default <code>torch.load</code>. If that fails, read it with pickle only when you trust the sender.</p>
 <ul>
-<li><code>torch.load</code> with its default (<code>weights_only=True</code>) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a <code>mujou.StateDict</code> too, once <code>mujou</code> is imported. If you override <code>state_dict</code> to put objects of your own classes in the tree, the default <code>torch.load</code> cannot read it</li>
+<li><code>torch.load</code> with its default (<code>weights_only=True</code>) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a <code>mujou.StateDict</code> too, once <code>mujou</code> is imported. If objects of your own classes go into the tree (from a registered attribute, or from an override of <code>state_dict</code>), the default <code>torch.load</code> cannot read it</li>
 <li><code>pickle.load</code> and <code>torch.load(..., weights_only=False)</code> can run code from the file while reading it. Do not read files you do not trust with them</li>
 <li>The state of a node that computes on CUDA goes into the tree as CUDA tensors. <code>tree.cpu()</code> returns a new tree with every tensor of the tree on the CPU (the tree itself is not changed). Move the tree to the CPU before saving it, and a machine without a GPU can read it too. To read a file saved with CUDA tensors, use <code>torch.load(..., map_location="cpu")</code>. The default <code>load_state_dict</code> copies to the node's device, so you can pass the CPU tensors to <code>state=</code> as they are</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">(),</span> <span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># the state of GPU nodes as CPU tensors</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">tree</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># a mujou.StateDict</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">(),</span> <span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># the state of GPU nodes as CPU tensors</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">tree</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># a mujou.StateDict</span>
 </code></pre></div>
 <p><code>tree.to(device)</code> moves every tensor of the tree to <code>device</code>, and <code>cpu()</code> is <code>to("cpu")</code>.</p>
 <p>It looks into the dicts (including the <code>OrderedDict</code> of the <code>state_dict</code> of an <code>nn.Module</code>), lists and tuples of the tree, and makes these containers anew. Other values are shared with the original tree. As with <code>torch.Tensor.to</code>, a tensor already on <code>device</code> is not copied but shared with the original tree</p>

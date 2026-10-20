@@ -649,6 +649,8 @@
       
         
       
+        
+      
     
     
     
@@ -955,6 +957,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1044,6 +1074,8 @@
       
         
           
+        
+      
         
       
         
@@ -1317,6 +1349,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.Node.register_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.Node.state_dict" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1520,6 +1563,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1687,6 +1758,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.Node.register_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.Node.state_dict" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1806,7 +1888,10 @@ assigned a <code>torch.Tensor</code> (<code>nn.Parameter</code> included) or an 
 whether or not its name starts with <code>_</code>, is registered under its name.
 Assigning any other value (<code>None</code> too) under that name, or <code>del</code>, removes
 it. Ports, numbers, lists and dicts of tensors are not collected, and neither
-are properties (what a setter stores is, under its own name). The default
+are properties (what a setter stores is, under its own name). To add any
+other value (a number, a string, a list of them), assign it and call
+<code>self.register_state(name)</code>: it stays in the state whatever is assigned
+to it later, until <code>del</code>. The default
 <code>state_dict</code> and <code>load_state_dict</code> save and restore what is registered;
 override both to choose the state yourself (they may call <code>super()</code>).
 Allocate the tensors of the state by <code>on_start</code> and update them in place
@@ -2389,6 +2474,78 @@ node's last update (always &gt; 0). Read the ports, update in proportion to
 <div class="doc doc-object doc-function">
 
 
+<h3 id="mujou.Node.register_state" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">register_state</span>
+
+
+<a href="#mujou.Node.register_state" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">register_state</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Add the attribute <code>name</code> to the state, whatever value it holds.</p>
+<p>Use it for values that are not collected by themselves: numbers,
+strings, <code>None</code>, and lists or dicts of them. The attribute joins the
+state in the order of registration, the same order as the collected
+tensors and modules, and stays in it whatever is assigned to it later,
+until <code>del</code>. Registering a name again (or a collected one) keeps its
+place. The default <code>state_dict</code> returns the value as it is, and the
+default <code>load_state_dict</code> assigns a deep copy of the saved value (a
+tensor or a module held at load time is still restored in place).</p>
+<p>Register in <code>__init__</code> or <code>on_start</code>: a restore loads into new
+instances, and a name first registered later (in <code>on_update</code>, say) is
+not registered there yet, so the load rejects it.</p>
+<p><code>torch.load(..., weights_only=True)</code> reads only basic types (numbers,
+strings, <code>None</code>, lists, tuples, dicts and tensors): keep the
+registered values to those if the state is saved with <code>torch.save</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>name</code> is a property (as the reserved <code>device</code>,
+<code>period</code> and <code>timer</code> are).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="AttributeError">AttributeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The node has no attribute <code>name</code> yet; assign it
+first.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="mujou.Node.state_dict" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">state_dict</span>
 
@@ -2400,8 +2557,9 @@ node's last update (always &gt; 0). Read the ports, update in proportion to
     <div class="doc doc-contents ">
 
         <p>Return the collected state: a dict with, for each registered attribute
-in the order of registration, the tensor <code>detach</code>-ed or the module's
-<code>state_dict()</code>, under the attribute's name.</p>
+in the order of registration, the tensor <code>detach</code>-ed, the module's
+<code>state_dict()</code> or any other value as it is (see <code>register_state</code>),
+under the attribute's name.</p>
 <p>The tensors share memory with the attributes (the framework copies the
 tree). <code>requires_grad</code> and <code>.grad</code> are not part of the state, as in
 <code>nn.Module.state_dict</code>: detaching also makes a tensor that is part of an
@@ -2425,9 +2583,11 @@ autograd graph picklable.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Copy <code>state</code> (from the default <code>state_dict</code>) into the registered
-attributes in place: <code>copy_</code> into each tensor and <code>load_state_dict</code>
-into each module, without recording gradients.</p>
+        <p>Restore <code>state</code> (from the default <code>state_dict</code>) into the
+registered attributes: <code>copy_</code> into each tensor and <code>load_state_dict</code>
+into each module in place, without recording gradients, and assign a
+<code>copy.deepcopy</code> of the saved value to any other attribute registered
+with <code>register_state</code>.</p>
 <p>The objects stay the same, so references taken in <code>__init__</code> or
 <code>on_start</code> see the restored values, and a tensor that records gradients
 stays a leaf that does. <code>copy_</code> casts the dtype and moves the device.
@@ -2435,6 +2595,9 @@ A tensor in <code>state</code> whose name is not registered (one first assigned
 after <code>on_start</code>) is set as a new attribute, a copy of the value, and
 registered. Everything is checked before anything is copied, so on an
 error nothing has changed.</p>
+<p>A name is restored by what it holds at load time, not by what it held
+when saved: a registered name that holds a tensor now but held another
+value (<code>None</code>, say) when saved raises <code>TypeError</code>.</p>
 
 
 <table>

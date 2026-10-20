@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -957,6 +959,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1046,6 +1076,8 @@
       
         
           
+        
+      
         
       
         
@@ -1440,6 +1472,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1601,7 +1661,10 @@ names at the top level (<code>Port</code>, <code>TensorSpec</code> and so on).</
   <code>MessageSpec[Sample]</code>. Annotate with it a function that takes either</li>
 </ul>
 <p>An omitted direction is <code>Never</code>: <code>PrevPort(recv=TensorSpec((3,)))</code> is a
-<code>PrevPort[Never, torch.Tensor, Single]</code>.</p>
+<code>PrevPort[Never, torch.Tensor, Single]</code>. Two more type arguments,
+<code>Port[S, R, M, CS, CR]</code>, are the types of the data carried with what the port
+sends and receives (<code>send_carry</code> and <code>recv_carry</code>), <code>Never</code> when it carries
+nothing. <code>Port[Any, Any, Any, Any, Any]</code> takes any port.</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>from typing import Never
 

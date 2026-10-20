@@ -649,6 +649,8 @@
       
         
       
+        
+      
     
     
     
@@ -955,6 +957,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1044,6 +1074,8 @@
       
         
           
+        
+      
         
       
         
@@ -1621,6 +1653,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2073,8 +2133,9 @@ one.</p>
                 <p>The structure is invalid: the tree has no node; a component
 appears at two paths; a port is owned by two nodes (or under two
 names); a port is declared as a class attribute; a network exposes
-a port that no node inside it owns; or a channel leads to a port
-outside the tree.</p>
+a port that no node inside it owns; a channel leads to a port
+outside the tree; or a port passes on the carried data of a port
+(its <code>send_carry</code>) that is not of the same node.</p>
               </div>
             </td>
           </tr>
@@ -2241,8 +2302,9 @@ one.</p>
                 <p>The structure is invalid: the tree has no node; a component
 appears at two paths; a port is owned by two nodes (or under two
 names); a port is declared as a class attribute; a network exposes
-a port that no node inside it owns; or a channel leads to a port
-outside the tree.</p>
+a port that no node inside it owns; a channel leads to a port
+outside the tree; or a port passes on the carried data of a port
+(its <code>send_carry</code>) that is not of the same node.</p>
               </div>
             </td>
           </tr>
@@ -2342,7 +2404,7 @@ a node that is itself the root (<code>mujou.run(node)</code>) is at <code>""</co
 
 
 <a href="#mujou.Graph.port_path" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">port_path</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">port_path</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2835,7 +2897,9 @@ written then).</p>
             <td class="doc-raises-details">
               <div class="doc-md-description">
                 <p>A port is outside the run, connected, takes many peers,
-or receives nothing; or a shape or the keys differ.</p>
+receives nothing, or receives carried data (<code>recv_carry</code>):
+a write gives only the value, and has no data to carry; or a
+shape or the keys differ.</p>
               </div>
             </td>
           </tr>
@@ -2879,7 +2943,7 @@ or receives nothing; or a shape or the keys differ.</p>
 
 
 <a href="#mujou.Run.read" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">read</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">S</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">read</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">S</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2890,6 +2954,8 @@ node. Only <code>send</code> (to every peer) updates the value read here; before
 the first one it is the port's <code>initial</code> (zeros by default) or the
 value restored from <code>state</code>. The tensors are new copies on the CPU.
 <code>read_with_time</code> also returns the time it was sent at.</p>
+<p>A port that sends carried data (<code>send_carry</code>) is read as any other:
+only the value is returned, and the carried data is dropped.</p>
 
 
 <table>
@@ -2940,7 +3006,7 @@ value restored from <code>state</code>. The tensors are new copies on the CPU.
 
 
 <a href="#mujou.Run.read_with_time" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">read_with_time</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">read_with_time</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2968,7 +3034,7 @@ it is on: compare it only with times of the same timer (with
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>port</code> is outside the run or sends nothing.</p>
+                <p>As <code>read</code> raises.</p>
               </div>
             </td>
           </tr>
@@ -3001,7 +3067,7 @@ it is on: compare it only with times of the same timer (with
 
 <a href="#mujou.Run.subscribe" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">subscribe</span><span class="p">(</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]]</span>
 </code></pre></div>
 
@@ -3040,7 +3106,7 @@ without a <code>timeout</code> on the thread that steps never ends.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../port/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>]</code>
+                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../port/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>]</code>
                   </span>
               </p>
             </td>
@@ -3087,8 +3153,8 @@ iteration may take, the time spent in the loop's body included.
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>port</code> is outside the run or sends nothing; or
-<code>timeout</code> is negative or NaN.</p>
+                <p><code>port</code> is outside the run or sends nothing (as
+<code>read</code>); or <code>timeout</code> is negative or NaN.</p>
               </div>
             </td>
           </tr>
@@ -3136,8 +3202,10 @@ iterator).</p>
 
 <a href="#mujou.Run.wait_for" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">wait_for</span><span class="p">(</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">condition</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">S</span><span class="p">],</span> <span class="nb">bool</span><span class="p">],</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">port</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">condition</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">S</span><span class="p">],</span> <span class="nb">bool</span><span class="p">],</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">S</span><span class="p">,</span> <span class="n">Timestamp</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3178,7 +3246,7 @@ with mujou.run(node, inputs={node.prev: x}) as run:
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../port/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>]</code>
+                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../port/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>]</code>
                   </span>
               </p>
             </td>

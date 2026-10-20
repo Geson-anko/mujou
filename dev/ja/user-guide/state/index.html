@@ -653,6 +653,8 @@
       
         
       
+        
+      
     
     
     
@@ -1075,6 +1077,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1162,6 +1192,8 @@
       
         
           
+        
+      
         
       
         
@@ -1428,6 +1460,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1647,6 +1707,7 @@
 <li><strong>同じタイマーでほかの実行が走っている間は復元できない。</strong> このとき <code>mujou.run</code> は何も起動せずに <code>ValueError</code> を送出する。先にほかの実行を終了させるか、復元する実行に専用の <code>mujou.time.Timer()</code> を渡す（<a href="../time/">時間の制御</a>）</li>
 <li>復元するネットワークは、ノードのパスと接続が木を取得したネットワークと同じでなければならない。違えば <code>mujou.run</code> は <code>ValueError</code> を送出する</li>
 <li><code>state=</code> と <code>inputs=</code> を両方渡すと、<code>inputs</code> の値が木の中の入力の値を上書きする</li>
+<li>経路に沿って運ぶ付随データ（<a href="../building-a-network/#%E7%B5%8C%E8%B7%AF%E3%81%AB%E6%B2%BF%E3%81%A3%E3%81%A6%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E9%81%8B%E3%81%B6">経路に沿ってデータを運ぶ</a>）も木に入る。それを運ぶメッセージと一緒に入り、<code>recv_carry</code> を持つ Port ごとに、最後に受け取ったメッセージの付随データも入る。復元したノードは、止めずに回した場合と同じデータを中継する</li>
 </ul>
 <h2 id="複数の実行の状態を同じ時刻で取る">複数の実行の状態を同じ時刻で取る<a class="headerlink" href="#複数の実行の状態を同じ時刻で取る" title="Permanent link">&para;</a></h2>
 <p><code>run.state_dict()</code> は 1 つの実行の状態を 1 つの時刻で取得する。複数の実行が 1 つのタイマーを共有しているとき（既定ではどの実行もグローバルタイマーで走る）、状態を 1 つずつ取得するとその間にも時間が進むので、後で取得した状態ほど時刻が遅れる。</p>
@@ -1689,26 +1750,30 @@
 <li>乱数生成器 <code>self.generator</code> の状態</li>
 <li>optimizer の状態（モーメントなど）と、<code>.grad</code> に溜めた勾配</li>
 </ul>
-<p>これらを状態に入れるには <code>state_dict</code> と <code>load_state_dict</code> の両方を override する。<code>super()</code> を呼べば、自動で集めた分はそのまま扱える。</p>
-<p>数値なら override せずに、<code>on_start</code> で 0 次元のテンソルとして作り（<code>self.count = torch.zeros((), device=self.device)</code>）、その場で更新してもよい（<code>self.count += 1</code>）。そうすれば自動で集まる。</p>
+<p>数値・文字列・<code>None</code> とそのリストや dict は、属性に代入してから <code>register_state</code> で名前を登録すれば状態に入る。後で何を代入しても <code>del</code> するまで状態に残る。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
+</code></pre></div>
+<p>既定の <code>load_state_dict</code> は保存した値のコピーを属性に代入する。登録できるのは代入済みの属性だけで、登録は <code>__init__</code> か <code>on_start</code> で行う。復元では新しいインスタンスを使うので、それより後（<code>on_update</code> の中など）で初めて登録した名前は復元先でまだ登録されておらず、復元が失敗する。既定の <code>torch.load</code> で読むなら値は基本的な型に限る（<a href="#%E4%BF%9D%E5%AD%98%E3%81%AE%E5%BD%A2%E5%BC%8F">保存の形式</a>）。</p>
+<p>それ以外のものは <code>state_dict</code> と <code>load_state_dict</code> の両方を override する。<code>super()</code> を呼べば、自動で集めた分と登録した分はそのまま扱える。</p>
 <p>次の例では乱数生成器の状態を足す。復元では新しいインスタンスを使い生成器も <code>seed</code> から作り直すので、生成器の状態を足さないと、復元後の乱数列が止めずに続けたときと違う列になる。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Noisy</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="n">state</span><span class="p">[</span><span class="s2">"generator"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="k">return</span> <span class="n">state</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>  <span class="c1"># 渡された木を書き換えないよう、写してから取り出す</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"generator"</span><span class="p">))</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Noisy</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">state</span><span class="p">[</span><span class="s2">"generator"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="k">return</span> <span class="n">state</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="n">state</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>  <span class="c1"># 渡された木を書き換えないよう、写してから取り出す</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="o">.</span><span class="n">set_state</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"generator"</span><span class="p">))</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 </code></pre></div>
 <p>override するときは次を守る。</p>
 <table>
@@ -1738,12 +1803,12 @@
 <p>自分で使うファイルならどちらでもよい。木を他人と共有するなら <code>torch.save</code> で保存し、相手が既定の <code>torch.load</code> で読めるようにする。<code>mujou.run(..., state=)</code> には <code>mujou.StateDict</code> のほか、同じ中身の素の dict も渡せる。</p>
 <p>読むときは保存時と同じ方法を使う（<code>pickle.dumps</code> なら <code>pickle.loads</code>、<code>torch.save</code> なら <code>torch.load</code>）。保存方法が分からないファイルは、まず既定の <code>torch.load</code> で読む。それが失敗したら、送り手を信頼できるときだけ pickle で読む。</p>
 <ul>
-<li><code>torch.load</code> は既定（<code>weights_only=True</code>）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。<code>mujou.StateDict</code> も <code>import mujou</code> した後なら読める。<code>state_dict</code> を override して独自クラスのオブジェクトを木に入れると、既定の <code>torch.load</code> では読めない</li>
+<li><code>torch.load</code> は既定（<code>weights_only=True</code>）で、テンソル・数値・文字列・dict・list・tuple だけからなる木を読める。<code>mujou.StateDict</code> も <code>import mujou</code> した後なら読める。登録した属性や <code>state_dict</code> の override から独自クラスのオブジェクトが木に入ると、既定の <code>torch.load</code> では読めない</li>
 <li><code>pickle.load</code> と <code>torch.load(..., weights_only=False)</code> は、読むときにファイルの中のコードを実行できる。信頼できないファイルをこれらで読まない</li>
 <li>CUDA で計算するノードの状態は CUDA のテンソルのまま木に入る。<code>tree.cpu()</code> は木の中のテンソルをすべて CPU に移した新しい木を返す（元の木は変えない）。保存前に CPU に移せば GPU の無いマシンでも読める。CUDA のまま保存したファイルは <code>torch.load(..., map_location="cpu")</code> で読む。既定の <code>load_state_dict</code> はノードのデバイスへコピーするので、CPU のテンソルのまま <code>state=</code> に渡してよい</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">(),</span> <span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># GPU のノードの状態も CPU のテンソルで保存する</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">tree</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># mujou.StateDict</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">(),</span> <span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># GPU のノードの状態も CPU のテンソルで保存する</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">tree</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"state.pt"</span><span class="p">)</span>  <span class="c1"># mujou.StateDict</span>
 </code></pre></div>
 <p><code>tree.to(device)</code> は木のテンソルをすべて <code>device</code> に移す。<code>cpu()</code> は <code>to("cpu")</code> と同じ。</p>
 <p>辿るのは木の中の dict（<code>nn.Module</code> の <code>state_dict</code> の <code>OrderedDict</code> も含む）・list・tuple で、これらの入れ物は新しく作る。テンソル以外の値は元の木と共有する。<code>torch.Tensor.to</code> と同じく、すでに <code>device</code> にあるテンソルはコピーせず元の木と共有する。</p>

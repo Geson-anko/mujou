@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/examples/">
       
       
-        <link rel="prev" href="../user-guide/testing/">
+        <link rel="prev" href="../user-guide/pc/">
       
       
         <link rel="next" href="../api/">
@@ -649,6 +649,8 @@
       
         
       
+        
+      
     
     
     
@@ -955,6 +957,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1047,6 +1077,8 @@
       
         
           
+        
+      
         
       
         
@@ -1313,6 +1345,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1408,8 +1468,8 @@
 <h1 id="-examples">💡 Examples<a class="headerlink" href="#-examples" title="Permanent link">&para;</a></h1>
 <p>These are working programs that show how to use Mujou. They live in <code>examples/</code> in the repository.</p>
 <div class="admonition tip">
-<p class="admonition-title">Tested code</p>
-<p>The documentation pages include these files as they are. The tests run every program, so if the code shown here stops working, the tests fail.</p>
+<p class="admonition-title">Runnable code</p>
+<p>The documentation pages include these files as they are, so the code shown here is a whole program you can run.</p>
 </div>
 <h2 id="-the-list">📋 The list<a class="headerlink" href="#-the-list" title="Permanent link">&para;</a></h2>
 <p>Pick the row closest to what you want to do. The "Explained in" pages include the program and explain it.</p>
@@ -1463,6 +1523,11 @@
 <td><a href="../user-guide/torch/">PyTorch in Nodes</a></td>
 </tr>
 <tr>
+<td>Train a model split into nodes with PC-ALM, and compare it with BP</td>
+<td><code>mnist/</code></td>
+<td><a href="../user-guide/pc/">Learning with PC-ALM</a></td>
+</tr>
+<tr>
 <td>Keep learning from a stream while its target changes</td>
 <td><code>online_learning.py</code></td>
 <td><a href="../user-guide/torch/">PyTorch in Nodes</a>, <a href="../user-guide/writing-a-node/">Writing a Node</a></td>
@@ -1494,18 +1559,19 @@
 <li><code>pause.py</code>: pauses the global timer with <code>mujou.time.pause()</code>, takes the states of two runs on it at that one time, and resumes it with <code>mujou.time.resume()</code>. A run restored from one of the states goes on from that time</li>
 <li><code>subscribe.py</code>: with <code>run.subscribe</code>, first receives the latest output at that moment, then the latest one each time a newer output is sent. If the next value is sent before one is received, the value in between is skipped. The loop stops with <code>break</code> after 20 values</li>
 <li><code>online_learning.py</code>: a teacher node sends a batch from y = a x + b every 10 ms, with the <code>a</code> that the host writes; the host changes <code>a</code> while the network runs. A learner learns once from each new batch, with no separate training and inference phases. The host follows the learner's loss with <code>run.wait_for</code>: it falls, jumps when the target changes, and falls again as the learner catches up</li>
+<li><code>mnist/</code>: a 784-256-256-10 network learns MNIST as four nodes of <code>mujou.pc</code>, and the same network learns by BP with the same initial weights and batches. The host measures the prequential and the test accuracy, the time per batch, and the <code>dt</code> of the nodes</li>
 <li><code>torch_node.py</code>: trains an <code>nn.Module</code> inside a node with BP kept inside the node. Setting the seed, and an update that advances <code>dt</code> in smaller steps</li>
 <li><code>testing_a_node.py</code>: runs a node with a fixed <code>dt</code> and order, using the virtual timer and manual updates of <code>mujou.testing</code>, and compares the result bit for bit with a reference computation. It also checks that a run restored from a state taken midway matches a run that did not stop</li>
 <li><code>timers.py</code>: the time point <code>Timestamp</code>, the per-run timer <code>Timer</code>, and the speed of time (the run's timer and the global timer)</li>
 <li><code>errors.py</code>: the <code>NetworkError</code> the host receives and its <code>__cause__</code>, the order <code>on_exception</code> → <code>on_stop</code>, and that <code>mujou.run</code> raises an exception from <code>on_start</code></li>
 </ul>
-<p>Only <code>leaky_chain/</code> is a directory. Its entry point is <code>main.py</code>, and the node definitions are in <code>leaky.py</code>.</p>
+<p><code>leaky_chain/</code> and <code>mnist/</code> are directories. The entry point of each is <code>main.py</code>; the node definitions of <code>leaky_chain/</code> are in <code>leaky.py</code>, and <code>mnist/</code> loads the data in <code>data.py</code> and trains the BP baseline in <code>bp.py</code>.</p>
 <h2 id="-how-to-run-them">▶️ How to run them<a class="headerlink" href="#-how-to-run-them" title="Permanent link">&para;</a></h2>
 <p>Run them from the root of the repository, in an environment built from source (see <a href="../getting-started/installation/">Installation</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/leaky_chain/main.py
 </code></pre></div>
-<p>None of the programs use a GPU or a network connection, and each finishes within a few seconds.</p>
+<p>None of the programs use a GPU. Each finishes within a few seconds, except <code>mnist/</code>: it downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. The programs are guides, not tests, and are not run by the test suite.</p>
 
 
 

@@ -751,6 +751,8 @@
       
         
       
+        
+      
     
     
     
@@ -1057,6 +1059,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1144,6 +1174,8 @@
       
         
           
+        
+      
         
       
         
@@ -1410,6 +1442,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1558,7 +1618,7 @@
 </ul>
 </div>
 <p>If a node raises an exception, the whole run stops. Mujou never stops only the node that raised and keeps the others running (see <a href="../user-guide/errors/">Errors and Shutdown</a>).</p>
-<p>The default update rule will be <a href="https://pub.sakana.ai/pc-alm/">PC-ALM</a> (Augmented Lagrangian Predictive Coding; not implemented yet), where each node learns with local updates only. Update rules are not built into Mujou: a node can use any rule that keeps to the rules above.</p>
+<p>The default update rule is <a href="https://pub.sakana.ai/pc-alm/">PC-ALM</a> (Augmented Lagrangian Predictive Coding), where each node learns with local updates only. Its nodes are in the module <code>mujou.pc</code> (see <a href="../user-guide/pc/">Learning with PC-ALM</a>). Update rules are not built into Mujou: a node can use any rule that keeps to the rules above.</p>
 <h2 id="ports-and-channels">Ports and channels<a class="headerlink" href="#ports-and-channels" title="Permanent link">&para;</a></h2>
 <p>A <strong>port</strong> is a connection point that a node holds. A <strong>channel</strong> is one connection between two ports, made by <code>connect</code>.</p>
 <p>A channel has one slot for the value in each direction, and only the sender in that direction writes the slot.</p>
@@ -1599,8 +1659,8 @@
 </code></pre></div>
 <p>Nodes update at different rates, and their rates vary with the load. If the update size were fixed per iteration, a faster node would change its state more. With updates proportional to <code>dt</code>, every node follows the same dynamics on the same flow of time; a higher load only makes <code>dt</code> longer.</p>
 <div class="admonition warning">
-<p class="admonition-title">Do not cap <code>dt</code></p>
-<p>Do not cap <code>dt</code>, because a capped <code>dt</code> drops time that really passed. If a large <code>dt</code> makes the update unstable, split it into smaller steps inside one <code>on_update</code>.</p>
+<p class="admonition-title">Mind a long <code>dt</code></p>
+<p>Mujou never caps <code>dt</code>: it is the time that really passed, and a capped <code>dt</code> drops some of it. If a large <code>dt</code> makes the update of the node's own state unstable, split it into smaller steps inside one <code>on_update</code>. Splitting does not help when the instability comes from the coupling with other nodes, whose messages stay as they were over <code>dt</code>; such a node may cap the <code>dt</code> it uses, at the cost of the time it drops.</p>
 </div>
 <p>Every node has a period, 0.01 s by default. The interval between two updates varies, but on average the node updates once every period. When the node is late, <code>dt</code> is longer than the period. <code>dt</code> is the time that actually passed, so update in proportion to <code>dt</code> even with a period set.</p>
 <p>Each run has one timer, and every node of the run and the host use it. By default, it is the global timer, one per process. The host can make the time run faster or slower than real time. Nodes only read the time.</p>

@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -1079,6 +1081,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1166,6 +1196,8 @@
       
         
           
+        
+      
         
       
         
@@ -1432,6 +1464,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1635,7 +1695,7 @@
 <li>takes one peer</li>
 <li>has a receive type</li>
 </ul>
-<p>Nodes write to connected ports, so the host cannot write to them.</p>
+<p>Nodes write to connected ports, so the host cannot write to them. Nor can it write to a port that receives carried data (<code>recv_carry</code>, see <a href="../building-a-network/#carrying-data-along-a-path">Carrying data along a path</a>).</p>
 <table>
 <thead>
 <tr>
@@ -1712,7 +1772,7 @@
 </tr>
 </tbody>
 </table>
-<p>All of them read from any port that has a send type. All but <code>read</code> return the time as a <code>mujou.time.Timestamp</code> (see <a href="../time/">Controlling time</a>).</p>
+<p>All of them read from any port that has a send type. From a port that sends carried data (<code>send_carry</code>), they return the value only and drop the carried data. All but <code>read</code> return the time as a <code>mujou.time.Timestamp</code> (see <a href="../time/">Controlling time</a>).</p>
 <p>Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.</p>
 <p><code>read</code> and <code>read_with_time</code> behave as follows.</p>
 <ul>

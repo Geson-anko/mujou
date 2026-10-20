@@ -653,6 +653,8 @@
       
         
       
+        
+      
     
     
     
@@ -1108,6 +1110,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1195,6 +1225,8 @@
       
         
           
+        
+      
         
       
         
@@ -1448,6 +1480,34 @@
     
   
     テスト
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
   
 
     
@@ -1737,6 +1797,7 @@
 <li><code>R</code> は受け取る型</li>
 <li><code>M</code> は相手の数。<code>mujou.typing</code> の <code>Single</code> か <code>Multi</code> を使う</li>
 </ul>
+<p>さらに 2 つの型引数 <code>Port[S, R, M, CS, CR]</code> は、送るときと受け取るときに運ぶ付随データの型である（<a href="../building-a-network/#%E7%B5%8C%E8%B7%AF%E3%81%AB%E6%B2%BF%E3%81%A3%E3%81%A6%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E9%81%8B%E3%81%B6">経路に沿ってデータを運ぶ</a>）。<code>Port[S, R, M]</code> は何も運ばない。どんな Port でも受け取る注釈は <code>Port[Any, Any, Any, Any, Any]</code> と書く。</p>
 <p>省いた向きは <code>Never</code> になる。任意の spec を受け取る関数は <code>mujou.typing</code> の <code>MessageSpec[T]</code> で注釈する。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Never</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>

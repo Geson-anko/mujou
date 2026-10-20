@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/examples/">
       
       
-        <link rel="prev" href="../user-guide/testing/">
+        <link rel="prev" href="../user-guide/pc/">
       
       
         <link rel="next" href="../api/">
@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -957,6 +959,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../user-guide/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1049,6 +1079,8 @@
       
         
           
+        
+      
         
       
         
@@ -1315,6 +1347,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1410,8 +1470,8 @@
 <h1 id="-サンプル">💡 サンプル<a class="headerlink" href="#-サンプル" title="Permanent link">&para;</a></h1>
 <p>mujou の使い方を示すサンプルプログラムの一覧。どれもリポジトリの <code>examples/</code> にある。</p>
 <div class="admonition tip">
-<p class="admonition-title">テストしているコード</p>
-<p>ドキュメントには、これらのプログラムのファイルをそのまま取り込んで載せている。全プログラムをテストで実行しているので、載っているコードが動かなくなればテストが失敗する。</p>
+<p class="admonition-title">そのまま動くコード</p>
+<p>ドキュメントにはプログラムのファイルをそのまま取り込んで載せている。載っているコードはそのまま実行可能。</p>
 </div>
 <h2 id="-一覧">📋 一覧<a class="headerlink" href="#-一覧" title="Permanent link">&para;</a></h2>
 <p>やりたいことに近い行を探す。「詳しい説明」のページでは、そのプログラムを取り込んで解説している。</p>
@@ -1484,6 +1544,11 @@
 <td><code>errors.py</code></td>
 <td><a href="../user-guide/errors/">例外と終了</a></td>
 </tr>
+<tr>
+<td>PC-ALM でモデルを学習させ、BP と比べる</td>
+<td><code>mnist/</code></td>
+<td><a href="../user-guide/pc/">PC-ALM で学習する</a></td>
+</tr>
 </tbody>
 </table>
 <h3 id="各プログラムが示すこと">各プログラムが示すこと<a class="headerlink" href="#各プログラムが示すこと" title="Permanent link">&para;</a></h3>
@@ -1500,14 +1565,15 @@
 <li><code>testing_a_node.py</code>: <code>mujou.testing</code> の仮想タイマーと手動の更新で、ノードを決まった <code>dt</code> と順序で動かし、結果を参照の計算とビット単位で比べる。途中で取得した状態から復元した実行が、止めずに続けた実行と一致することも確かめる</li>
 <li><code>timers.py</code>: 時刻 <code>Timestamp</code>、実行ごとのタイマー <code>Timer</code>、時間の速さ（実行のタイマーとグローバルタイマー）</li>
 <li><code>errors.py</code>: ホストが受け取る <code>NetworkError</code> とその <code>__cause__</code>、<code>on_exception</code> → <code>on_stop</code> の順、<code>on_start</code> の例外は <code>mujou.run</code> が送出する</li>
+<li><code>mnist/</code>: 784-256-256-10 の ReLU ネットワークを <code>mujou.pc</code> の 4 つのノードに分け、MNIST をストリームで流して PC-ALM で学習させる。同じ初期重みとバッチで BP でも学習させ、prequential 精度とテスト精度、ノードの <code>dt</code> を比べる</li>
 </ul>
-<p><code>leaky_chain/</code> だけはディレクトリになっている。入口は <code>main.py</code> で、ノードの定義は <code>leaky.py</code> に分けてある。</p>
+<p><code>leaky_chain/</code> と <code>mnist/</code> はディレクトリになっている。入口はどちらも <code>main.py</code>。<code>leaky_chain/</code> はノードの定義を <code>leaky.py</code> に、<code>mnist/</code> はデータの読み込みを <code>data.py</code> に、BP での学習を <code>bp.py</code> に分けてある。</p>
 <h2 id="-走らせ方">▶️ 走らせ方<a class="headerlink" href="#-走らせ方" title="Permanent link">&para;</a></h2>
 <p>ソースからビルドした環境（<a href="../getting-started/installation/">インストール</a>）で、リポジトリのルートから実行する。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/leaky_chain/main.py
 </code></pre></div>
-<p>どのプログラムも GPU やネットワーク接続を使わず、数秒以内に終わる。</p>
+<p>どのプログラムも GPU を使わない。<code>mnist/</code> 以外はネットワーク接続も使わず、数秒以内に終わる。<code>mnist/</code> は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。</p>
 
 
 

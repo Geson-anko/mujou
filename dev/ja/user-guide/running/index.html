@@ -653,6 +653,8 @@
       
         
       
+        
+      
     
     
     
@@ -1081,6 +1083,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1168,6 +1198,8 @@
       
         
           
+        
+      
         
       
         
@@ -1434,6 +1466,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1637,7 +1697,7 @@
 <li>相手を 1 つしか取らない</li>
 <li>受け取る型を持つ</li>
 </ul>
-<p>つながっている Port にはノードが書くので、ホストは書けない。</p>
+<p>つながっている Port にはノードが書くので、ホストは書けない。付随データを受け取る Port（<code>recv_carry</code>、<a href="../building-a-network/#%E7%B5%8C%E8%B7%AF%E3%81%AB%E6%B2%BF%E3%81%A3%E3%81%A6%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E9%81%8B%E3%81%B6">経路に沿ってデータを運ぶ</a>）にも書けない。</p>
 <table>
 <thead>
 <tr>
@@ -1714,7 +1774,7 @@
 </tr>
 </tbody>
 </table>
-<p>どれも送る型を持つどの Port からでも読める。<code>read</code> 以外は時刻を <code>mujou.time.Timestamp</code> で返す（<a href="../time/">時間の制御</a>）。</p>
+<p>どれも送る型を持つどの Port からでも読める。付随データを送る Port（<code>send_carry</code>）からは値だけを返し、付随データは捨てる。<code>read</code> 以外は時刻を <code>mujou.time.Timestamp</code> で返す（<a href="../time/">時間の制御</a>）。</p>
 <p>つながっていない Port を読むとネットワークの出力になる。つながっている Port を読めば途中のノードの値を観測できる。読んでもノードの動作は変わらない。</p>
 <p><code>read</code> と <code>read_with_time</code> の性質は次のとおり。</p>
 <ul>

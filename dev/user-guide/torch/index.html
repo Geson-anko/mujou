@@ -651,6 +651,8 @@
       
         
       
+        
+      
     
     
     
@@ -1101,6 +1103,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learning with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1188,6 +1218,8 @@
       
         
           
+        
+      
         
       
         
@@ -1454,6 +1486,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1610,8 +1670,8 @@
 <li>BP is also an update rule, as long as it stays inside one node (see "BP inside a node" below)</li>
 </ul>
 <div class="admonition note">
-<p class="admonition-title">The PC-ALM nodes are not implemented yet</p>
-<p>The PC-ALM nodes are planned for the module <code>mujou.pc</code>, which is not implemented yet. Until then, subclass <code>mujou.Node</code> and write the update equations yourself in <code>on_update(dt)</code> (see <a href="../writing-a-node/">Writing a node</a>).</p>
+<p class="admonition-title">The PC-ALM nodes are in <code>mujou.pc</code></p>
+<p>The module <code>mujou.pc</code> has nodes that learn with PC-ALM (see <a href="../pc/">Learning with PC-ALM</a>). For another update rule, subclass <code>mujou.Node</code> and write the update equations yourself in <code>on_update(dt)</code> (see <a href="../writing-a-node/">Writing a node</a>).</p>
 </div>
 <h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <p>The following node learns a linear map from its input to the target online, and sends its prediction. BP stays inside the one node.</p>
