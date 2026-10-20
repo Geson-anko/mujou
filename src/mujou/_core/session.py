@@ -425,11 +425,7 @@ class Session:
         outlet = self._outlets.get(port)
         if outlet is None:
             raise ValueError(f"cannot read the port {name!r}: it sends no messages")
-        if port.send_carry_spec is not None:
-            raise ValueError(
-                f"cannot read the port {name!r}: it sends carried data, which the "
-                "host cannot read"
-            )
+        # A message's buffers are its value only: the data it carries is dropped.
         return outlet.outbox, cast(Spec, port.send_spec)
 
     def label(self, port: AnyPort) -> str:

@@ -121,14 +121,15 @@ class Run:
             RuntimeError: The run has stopped normally (no node reads what is
                 written then).
             ValueError: A port is outside the run, connected, takes many peers,
-                receives nothing, or receives carried data (``recv_carry``),
-                which the host cannot write; or a shape or the keys differ.
+                receives nothing, or receives carried data (``recv_carry``):
+                a write gives only the value, and has no data to carry; or a
+                shape or the keys differ.
             TypeError: A message or dtype differs from the spec.
             NetworkError: The run stopped because a node raised.
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any, Never, Any]) -> S:
+    def read[S](self, port: Port[S, Any, Any, Any, Any]) -> S:
         """Return the latest message ``port`` sent.
 
         Any port that sends can be read, so a connected port shows an inner
@@ -137,18 +138,17 @@ class Run:
         value restored from ``state``. The tensors are new copies on the CPU.
         ``read_with_time`` also returns the time it was sent at.
 
-        A port that sends carried data (``send_carry``) cannot be read: its type
-        is rejected statically, and it raises at runtime.
+        A port that sends carried data (``send_carry``) is read as any other:
+        only the value is returned, and the carried data is dropped.
 
         Raises:
-            ValueError: ``port`` is outside the run, sends nothing, or sends
-                carried data.
+            ValueError: ``port`` is outside the run or sends nothing.
             NetworkError: The run stopped because a node raised.
         """
         return cast(S, _host(self).read(port)[0])
 
     def read_with_time[S](
-        self, port: Port[S, Any, Any, Never, Any]
+        self, port: Port[S, Any, Any, Any, Any]
     ) -> tuple[S, Timestamp]:
         """Return the latest message ``port`` sent, as ``read`` does, and the time
         it was sent at.
@@ -164,7 +164,7 @@ class Run:
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
     def subscribe[S](
-        self, port: Port[S, Any, Any, Never, Any], timeout: float = math.inf
+        self, port: Port[S, Any, Any, Any, Any], timeout: float = math.inf
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
@@ -188,8 +188,8 @@ class Run:
                 ``math.inf`` iterates as long as the run runs.
 
         Raises:
-            ValueError: ``port`` is outside the run, sends nothing, or sends
-                carried data (as ``read``); or ``timeout`` is negative or NaN.
+            ValueError: ``port`` is outside the run or sends nothing (as
+                ``read``); or ``timeout`` is negative or NaN.
             TimeoutError: From the iterator, at a step after the first that
                 begins once ``timeout`` has passed, or that would wait past it.
                 The iterator ends; the run keeps running.
@@ -200,7 +200,7 @@ class Run:
 
     def wait_for[S](
         self,
-        port: Port[S, Any, Any, Never, Any],
+        port: Port[S, Any, Any, Any, Any],
         condition: Callable[[S], bool],
         timeout: float = math.inf,
     ) -> tuple[S, Timestamp]:
