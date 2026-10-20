@@ -24,16 +24,19 @@ relaxation stable but drops the time beyond. The program prints the
 distribution of ``dt`` and warns when its median exceeds 1.5 periods or when
 more than 1% of the updates come later than 2 periods. The default 1 keeps
 ``dt`` at 1 to 1.25 periods on an idle 32-core machine, where the first layer
-(784 inputs) is the slowest node. At 2, that node takes most of its period to
-compute, the messages it reads are older, and the network diverged after a few
-hundred batches. To choose the time scale on another machine, run one epoch and
-take the highest scale that gives no warning and does not diverge.
+(784 inputs) is the slowest node; there, 3 epochs reach a test accuracy of
+97.82% (seed 0) and 97.59% (seed 1), against 97.54% and 97.45% for BP. At 2,
+that node takes most of its period to compute and 1% of its updates come later
+than 2 periods (a warning), though one epoch ran through (96.47% and 96.23%).
+To choose the time scale on another machine, run one epoch and take the highest
+scale that gives no warning and does not diverge.
 
 Run it on an otherwise idle machine. When other processes take the cores, a node
-may wait for one for 100 ms while its neighbors keep learning from its last
-message, and the network then diverges (the program stops when a prediction is
-not finite); lower ``--time-scale`` if it does. With 26 busy processes on 32
-cores, 1 diverged and 0.5 ran through; with 32, 0.5 diverged too.
+may wait for one for 100 ms while its neighbors keep learning, and the network
+may diverge (the program stops when a prediction is not finite) or degrade;
+lower ``--time-scale`` if it does. On 32 cores, one epoch at 1 ran through with
+16 and 26 busy processes (test 96.62%, and 96.52% and 96.23% in two runs) and
+diverged with 32; at 0.5 with 32, it ran through to 93.52%.
 
 Needs the network once, to download MNIST (about 11 MB) into ``--data``. Runs on
 the CPU; the defaults (3 epochs) take about 2 minutes. Run it from the repository::
