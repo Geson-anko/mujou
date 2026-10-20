@@ -27,7 +27,7 @@ from mujou._core.node import (
 )
 from mujou._core.port import Channel, bind, initial, label
 from mujou._core.spec import Spec, fields, host_tensors
-from mujou._core.state import StateDict, make_tree, read_tree
+from mujou._core.state import SlotSpecs, StateDict, make_tree, read_tree
 from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
 
 # Real seconds between the checks of `subscribe` for the end of the run.
@@ -59,7 +59,11 @@ class Session:
         self._outlets: dict[AnyPort, _native.Outlet] = {}
         self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
         # Every slot by name, in the order of the graph's ports, for the state tree.
-        self._slots: dict[str, tuple[AnySlot, Spec]] = {}
+        self._slots: dict[str, SlotSpecs] = {}
+        # Every port with a recv_carry by its path: its binding, which holds the
+        # carry it last received, the spec of that carry and the slot it reads
+        # (whose writer's pools a restored carry is made from).
+        self._carries: dict[str, tuple[Binding, Spec, AnySlot]] = {}
         # Every port of the run by how its errors name it.
         self._labels: dict[AnyPort, str] = {}
         self._bindings: dict[AnyPort, Binding] = {}
@@ -78,6 +82,11 @@ class Session:
             binding = Binding(owner, name, port, self._outlets.get(port), sources)
             self._bindings[port] = binding
             bind(port, binding)
+            carry = as_spec(port.recv_carry_spec)
+            if carry is not None:
+                # A port with a recv_carry reads exactly one slot.
+                ((_, source),) = sources
+                self._carries[path] = (binding, carry, source)
         # Once every port is bound: a port may pass on the carry of one bound
         # after it (build_tree checked it is a port of the same node).
         for port, binding in self._bindings.items():
@@ -107,7 +116,7 @@ class Session:
         self._outlets[port] = outlet
         slots = [outlet.outbox, *(outlet.channel(k) for k in range(len(port.channels)))]
         for slot in slots:
-            self._slots[slot.name] = (slot, spec)
+            self._slots[slot.name] = (slot, spec, carry)
         values = initial(port)
         if values is not None:
             if carry is not None:
@@ -142,7 +151,7 @@ class Session:
         carry = as_spec(port.recv_carry_spec)
         slot = self._group.input(_schema(spec, carry), path)
         self._inputs[port] = (slot, spec)
-        self._slots[slot.name] = (slot, spec)
+        self._slots[slot.name] = (slot, spec, carry)
         return [(None, slot)]
 
     # --- run and control
@@ -307,7 +316,7 @@ class Session:
             [
                 int(stop_timer["time_ns"]),
                 *runtime.last_update_ns(),
-                *(slot.read().timestamp.ns for slot, _ in self._slots.values()),
+                *(slot.read().timestamp.ns for slot, _, _ in self._slots.values()),
             ]
         )
         return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
@@ -482,12 +491,17 @@ class Session:
         """
         # Check and copy everything before changing anything, so that an error
         # changes nothing.
-        restores, restored = read_tree(state, self._paths, self._slots)
+        specs = {path: spec for path, (_, spec, _) in self._carries.items()}
+        restores, carries, restored = read_tree(state, self._paths, self._slots, specs)
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
         self._synchronize_current_streams()
         for slot, tensors, time_ns, sent in restores:
             slot.restore(tensors, time_ns, sent)
+        for path, tensors in carries.items():
+            binding, _, source = self._carries[path]
+            # Made from the source's pools, as if received from it.
+            binding.carry = source.new_carry(tensors)
         return restored
 
     def _synchronize_current_streams(self) -> None:
@@ -508,7 +522,13 @@ class Session:
 
         The nodes' streams are idle here (``Node._capture_state`` waited for them).
         """
-        tree = make_tree(self._paths, states, self._slots, last_update_ns, timer)
+        carries = {
+            path: (cast(_native.Carry, binding.carry), spec)
+            for path, (binding, spec, _) in self._carries.items()
+        }
+        tree = make_tree(
+            self._paths, states, self._slots, carries, last_update_ns, timer
+        )
         # The copies queue on this thread's current streams. Finish them before
         # the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
