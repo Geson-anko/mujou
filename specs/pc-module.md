@@ -87,7 +87,7 @@ $\mu, \delta$ は状態にせず、更新のたびに今の `h_in` から計算�
 - `Output` は `prev` から届いた $h_{\mathrm{in}}$ と、同じメッセージの $y$・`mask` を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、組み違いが構造的に起きない。時刻の照合も、ホストが $x$ と $y$ を同時に書く必要も無い
 - ホストが伝播より速く次のサンプルを書いても組み違えない（時刻で揃える方式は、`target` のスロットが常に新しいサンプルで上書きされ、一致する瞬間が来なくなる）
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい
-- `Layer` は付随データを使わず中継するだけ。読むのは学習の位相のための `time` だけ
+- `Layer` は付随データを中継する。読むのは学習の位相のための `time` と、`mask` だけ。学習するステップで `mask` がすべて False なら、前の入力から持ち越した $\delta$ で学習しないよう、$\theta$ を動かさず $\Sigma\Delta t$ を 0 に戻す（`Output` も同じ。2026-10-20、orchestrator の決定）
 - `Output` の `next` は予測と $y$・`mask` を普通のメッセージで送り、ホストが prequential 精度を測れるようにする（ホストの読み書きは carry に対応させない）
 
 `Input` は、ホストが書いた $\{x, y, \mathrm{mask}\}$ を活動と付随データに分けて送るだけのノード。これでどの `Layer` の `prev` も同じ型になる。`Input` の次の `Layer` は $g_{\mathrm{in}}$ の計算を省いてよい（読み手が捨てるので）。
@@ -172,6 +172,8 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 間隔は時間 `learn_interval`（秒）で持つ（2026-10-19、ユーザーの承認）。位相は付随データの `time` が変わったときと学習したときに 0 に戻し、入力が変わってから `learn_interval` だけ経った時点で学習する。$\Sigma\Delta t$ は入力の切り替えでは戻さない。`ManualRun` を固定の `dt` で回すと「入力の切り替えから数えて $K$ ステップごと」と同じになる。`learn_interval=None` は毎回学習する（連続時間形そのまま）。
 
+最初のサンプルが届くまで、付随データはゼロ（`time` は 0、`mask` はすべて False）である。位相はノードの最初の更新から数え始める。時刻 0 に書いた最初のサンプルは、時刻ではゼロの付随データと区別できないので位相を戻さない。学習するかは `mask` で決まり、ゼロの付随データでは学習しない（2026-10-20、carry のレビューを受けて決定）。
+
 サンプルの時点が効くのは、入力が変わった直後の $\delta$ が新しいサンプルの credit になっていないからである。MNIST での比較（$h$ で持ちリセット、relu-ce、$S = 32$）:
 
 | 学習のタイミング                   | BP との差 | $g_{W_1}$ の cos / ノルム比 | 1 バッチの計算時間 |
@@ -187,7 +189,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ## 時定数
 
-`pc.TimeConstants(h, lam, theta)` に秒で持つ。$\alpha = 0$ は $\tau_\lambda = \infty$ として受け付ける（内部ではレート $1/\tau$ で持つ）。
+`pc.TimeConstants(h, lam, theta)` に秒で持つ。$\alpha = 0$ は $\tau_\lambda = \infty$ として受け付ける（`dt / tau.lam` が 0 になるので、レート $1/\tau$ を別に持たない）。
 
 ノードの周期の既定は $\tau_h / 4$（$\eta_h = 0.25$）にする。利用者は時定数だけを決めればよく、周期を明示すればそちらを使う。
 
@@ -253,8 +255,9 @@ self.next = NextPort(send=TensorSpec((B, 256)), recv=..., send_carry=self.prev)
 | `pc.Output`                   | $f_L$ とサンプルごとの損失を持つノード                                                       |
 | `pc.TimeConstants`            | $\tau_h, \tau_\lambda, \tau_\theta$（秒）                                                    |
 | `pc.Carried` / `pc.carry_spec` | 付随データの `TypedDict` と、ターゲットの spec とバッチサイズから `DictSpec` を作る関数      |
+| `pc.Sample` / `pc.Prediction` | ホストが `Input.prev` に書くもの（$x, y$, `mask`）と、`Output.next` が送るもの（$\hat y, y$, `mask`, `time`） |
 | `pc.mse` / `pc.cross_entropy` | サンプルごとの損失                                                                           |
-| `pc.functional`               | 状態を持たない計算: `vjp`、`relax_`（刻みの分割つき Euler）、`learn_`                         |
+| `pc.functional`               | 状態を持たない計算: `vjp`、`loss_vjp`（出力ノードの損失の勾配）、`relax_`（刻みの分割つき Euler）、`learn_` |
 
 `pc.functional` は、多入力のノードなどを利用者が自分で書くときの部品で、`Layer` と `Output` もこれで書く。重みの初期化は利用者が `module` を作るときに行う。
 
@@ -264,7 +267,7 @@ import mujou.pc as pc
 B = 64
 tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=...)  # 周期の既定は tau.h / 4 = 1 ms
 carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
-inp = pc.Input((B, 784), carry=carry)
+inp = pc.Input((B, 784), carry=carry, period=tau.h / 4)  # period は必須
 l1 = pc.Layer(nn.Sequential(nn.Linear(784, 256), nn.ReLU()), input_shape=(B, 784),
               carry=carry, tau=tau, learn_interval=24e-3)
 l2 = pc.Layer(nn.Sequential(nn.Linear(256, 256), nn.ReLU()), input_shape=(B, 256), ...)
