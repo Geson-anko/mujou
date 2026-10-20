@@ -26,7 +26,7 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## 時定数
 
-連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。周期を入れても $\Delta t$ は実際の経過時間のままで、上限（`max_dt`）はまだ持たない（2026-10-17）。`mujou.pc` のノードの周期の既定は $\tau_h/4$ とし、$\tau_\lambda = 2\tau_h$ を example の既定にする（2026-10-20、[mujou.pc の実装計画](pc-module.md#時定数)）。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
+連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。周期を入れても $\Delta t$ は実際の経過時間のままで、コアは上限（`max_dt`）を持たない（2026-10-17）。`mujou.pc` のノードは自分の選択として `max_dt`（既定 $\min(\tau_h/2, 3\tau_\lambda)$）で打ち切る（2026-10-20、[mujou.pc の実装計画](pc-module.md#dt-が伸びたとき)）。`mujou.pc` のノードの周期の既定は $\tau_h/4$ とし、$\tau_\lambda = 2\tau_h$ を example の既定にする（2026-10-20、[mujou.pc の実装計画](pc-module.md#時定数)）。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## 双対変数の扱い
 

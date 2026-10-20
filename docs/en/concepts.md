@@ -105,9 +105,9 @@ x = x + dt * f(x)
 
 Nodes update at different rates, and their rates vary with the load. If the update size were fixed per iteration, a faster node would change its state more. With updates proportional to `dt`, every node follows the same dynamics on the same flow of time; a higher load only makes `dt` longer.
 
-!!! warning "Do not cap `dt`"
+!!! warning "Mind a long `dt`"
 
-    Do not cap `dt`, because a capped `dt` drops time that really passed. If a large `dt` makes the update unstable, split it into smaller steps inside one `on_update`.
+    Mujou never caps `dt`: it is the time that really passed, and a capped `dt` drops some of it. If a large `dt` makes the update of the node's own state unstable, split it into smaller steps inside one `on_update`. Splitting does not help when the instability comes from the coupling with other nodes, whose messages stay as they were over `dt`; such a node may cap the `dt` it uses, at the cost of the time it drops.
 
 Every node has a period, 0.01 s by default. The interval between two updates varies, but on average the node updates once every period. When the node is late, `dt` is longer than the period. `dt` is the time that actually passed, so update in proportion to `dt` even with a period set.
 
