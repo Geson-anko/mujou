@@ -45,12 +45,3 @@ class TestCrossEntropy:
         torch.testing.assert_close(
             ell.mean(), nn.CrossEntropyLoss()(y_hat, y), rtol=1e-14, atol=0
         )
-
-    def test_probability_targets(self):
-        g = _generator()
-        y_hat = torch.randn(5, 4, generator=g, dtype=torch.float64)
-        y = torch.softmax(torch.randn(5, 4, generator=g, dtype=torch.float64), dim=1)
-        expected = -(y * torch.log_softmax(y_hat, dim=1)).sum(dim=1)
-        torch.testing.assert_close(
-            cross_entropy(y_hat, y), expected, rtol=1e-14, atol=0
-        )

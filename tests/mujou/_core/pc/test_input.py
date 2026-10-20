@@ -38,6 +38,17 @@ class TestInput:
             assert torch.equal(carried["mask"], mask)
             assert int(carried["time"]) == written_at.ns
 
+    def test_sends_zeros_without_a_target_before_the_host_writes(
+        self, start_manual: StartManual, step: Step
+    ):
+        inp, run = self._run(start_manual)
+        step(run, inp)
+        sent, _, _, carried = run.state_dict()["slots"]["next/out"]
+        assert torch.equal(sent, torch.zeros(B, 4))
+        assert torch.equal(carried["y"], torch.zeros(B, dtype=torch.int64))
+        assert torch.equal(carried["mask"], torch.zeros(B, dtype=torch.bool))
+        assert int(carried["time"]) == 0
+
     def test_connects_to_a_layer(self):
         inp = pc.Input((B, 4), carry=CARRY, period=1e-3)
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.0)

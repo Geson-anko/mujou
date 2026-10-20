@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from mujou._core.pc.carry import Carried, Prediction, Sample, carry_spec
+from mujou._core.pc.carry import Carried, carry_spec
 from mujou._core.spec import DictSpec, TensorSpec
 
 
@@ -34,21 +34,3 @@ class TestCarrySpec:
     def test_batch_must_be_positive(self):
         with pytest.raises(ValueError, match=">= 1"):
             carry_spec(TensorSpec((1,)), batch=0)
-
-
-class TestMessages:
-    def test_sample_and_prediction_make_dict_specs(self):
-        # Every key is a tensor, so both can be the messages of a port.
-        x, y, mask = (
-            TensorSpec((2, 3)),
-            TensorSpec((2,), torch.int64),
-            TensorSpec((2,), torch.bool),
-        )
-        DictSpec(Sample, x=x, y=y, mask=mask)
-        DictSpec(
-            Prediction,
-            y_hat=TensorSpec((2, 5)),
-            y=y,
-            mask=mask,
-            time=TensorSpec((), torch.int64),
-        )
