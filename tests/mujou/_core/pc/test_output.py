@@ -20,8 +20,9 @@ CARRY = pc.carry_spec(TensorSpec((B, N_OUT), F64), batch=B)
 
 
 def head(seed: int = 0) -> nn.Linear:
-    torch.manual_seed(seed)
-    return nn.Linear(N_IN, N_OUT).double()
+    with torch.random.fork_rng():
+        torch.manual_seed(seed)
+        return nn.Linear(N_IN, N_OUT).double()
 
 
 class Direct:
@@ -122,6 +123,15 @@ class TestConstruction:
             mask=TensorSpec((B,), torch.bool),
             time=TensorSpec((), torch.int64),
         )
+
+    def test_the_period_defaults_to_a_quarter_of_tau_h(self):
+        out = pc.Output(
+            nn.Linear(N_IN, N_OUT),
+            loss=pc.mse,
+            input_shape=(B, N_IN),
+            carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+            tau=TAU,
+        )
         assert out.period == pytest.approx(TAU.h / 4)
 
 
@@ -163,22 +173,23 @@ class TestUnlabeled:
     def test_no_target_skips_the_update_and_drops_the_time(
         self, start_manual: StartManual
     ):
-        # learn_interval = 2 steps. Steps 1-5 write A without a target: the
-        # output sees it from step 2 and skips its updates at steps 4 and 6.
-        # Step 6 writes B, which the output sees at step 7 and learns at step 9,
-        # by the time since the skip at step 6 only (steps 7 to 9).
+        # learn_interval = 2 steps. Step 1 writes A without a target: the output
+        # sees it from step 2 and skips its updates at steps 3 and 5 (2 and 4
+        # steps after the write). Step 6 writes B, which the output sees at step
+        # 7 and learns at step 8, by the time since the skip at step 5 only
+        # (steps 6 to 8).
         module = head()
         reference = copy.deepcopy(module)
         direct = Direct(start_manual, module, learn_interval=2 * H)
         (x_a, y_a, _), (x_b, y_b, mask_b) = samples(3)[0], samples(3)[2]
         no_target = torch.zeros(B, dtype=torch.bool)
         initial = copy.deepcopy(module.state_dict())
-        for s in range(1, 9):
+        for s in range(1, 8):
             new = {1: (x_a, y_a, no_target), 6: (x_b, y_b, mask_b)}.get(s)
             direct.step(new)
             for key, value in initial.items():
                 assert torch.equal(direct.weights()[key], value), s
-        direct.step(None)  # step 9
+        direct.step(None)  # step 8
         _, _, g_theta = gradients(reference, x_b, y_b, mask_b)
         with torch.no_grad():
             for p, g in zip(reference.parameters(), g_theta, strict=True):

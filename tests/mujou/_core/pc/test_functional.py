@@ -46,8 +46,9 @@ def _modules() -> dict[str, Callable[[], nn.Module]]:
 
 
 def _make(name: str) -> nn.Module:
-    torch.manual_seed(0)
-    return _modules()[name]().double()
+    with torch.random.fork_rng():
+        torch.manual_seed(0)
+        return _modules()[name]().double()
 
 
 def _randn(*shape: int, seed: int) -> torch.Tensor:
@@ -121,8 +122,9 @@ class TestVjp:
         assert g_theta == []
 
     def test_unused_parameters_get_zeros(self):
-        torch.manual_seed(0)
-        module = WithUnused().double()
+        with torch.random.fork_rng():
+            torch.manual_seed(0)
+            module = WithUnused().double()
         _, _, g_theta = vjp(
             module, _randn(B, 4, seed=1), _randn(B, 4, seed=2), [module.unused]
         )
@@ -138,6 +140,23 @@ class TestVjp:
         assert mu.grad_fn is None
         assert g_in is not None
         assert g_in.grad_fn is None
+
+    @pytest.mark.parametrize("wrt_input", [True, False])
+    def test_delta_may_be_made_from_mu(self, wrt_input: bool):
+        module = _make("linear-tanh")
+        h_in = _randn(B, 4, seed=1)
+        h, lam = _randn(B, 5, seed=2), _randn(B, 5, seed=3)
+        with torch.no_grad():
+            mu0 = module(h_in)
+        params = list(module.parameters())
+        made = vjp(module, h_in, lambda mu: h - mu + lam, params, wrt_input=wrt_input)
+        given = vjp(module, h_in, h - mu0 + lam, params, wrt_input=wrt_input)
+        assert torch.equal(made[0], given[0])
+        assert (made[1] is None) == (given[1] is None)
+        if made[1] is not None and given[1] is not None:
+            assert torch.equal(made[1], given[1])
+        for g, e in zip(made[2], given[2], strict=True):
+            assert torch.equal(g, e)
 
     @pytest.mark.parametrize("wrt_input", [True, False])
     def test_delta_must_have_the_shape_of_mu(self, wrt_input: bool):
@@ -203,7 +222,8 @@ class TestLossVjp:
         for g, e in zip(g_theta, expected, strict=True):
             torch.testing.assert_close(g, e, rtol=0, atol=0)
 
-    def test_loss_must_be_per_sample(self):
+    @pytest.mark.parametrize("wrt_input", [True, False])
+    def test_loss_must_be_per_sample(self, wrt_input: bool):
         module = _make("linear-tanh")
 
         def mean_loss(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -216,6 +236,7 @@ class TestLossVjp:
                 _randn(B, 5, seed=2),
                 torch.ones(B, dtype=torch.bool),
                 mean_loss,
+                wrt_input=wrt_input,
             )
 
 
@@ -223,71 +244,36 @@ class TestRelax:
     TAU = TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
 
     @staticmethod
-    def _state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return _randn(B, 5, seed=1), _randn(B, 5, seed=2), _randn(B, 5, seed=3)
+    def _state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """``h``, ``lam``, ``mu`` and ``g``."""
+        return tuple(_randn(B, 5, seed=seed) for seed in range(1, 5))  # pyright: ignore[reportReturnType]
 
-    @staticmethod
-    def _euler(
-        u: torch.Tensor,
-        lam: torch.Tensor,
-        g: torch.Tensor,
-        s: float,
-        n: int,
-        tau: TimeConstants,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # n explicit Euler steps of s with g fixed; lam moves with the moved u.
-        for _ in range(n):
-            u = u - s / tau.h * (u + lam + g)
-            lam = lam + s / tau.lam * u
-        return u, lam
-
-    def test_one_step(self):
-        u, lam, g = self._state()
-        u0, lam0 = u.clone(), lam.clone()
-        dt = 1e-3  # <= tau.h / 2
-        relax_(u, lam, g, dt, self.TAU)
-        u1 = u0 - dt / self.TAU.h * (u0 + lam0 + g)
-        torch.testing.assert_close(u, u1, rtol=1e-15, atol=1e-15)
+    @pytest.mark.parametrize("dt", [1e-3, 4e-3])
+    def test_one_euler_step(self, dt: float):
+        # h first, then lam with the r of the moved h; a long dt is one step.
+        h, lam, mu, g = self._state()
+        h0, lam0 = h.clone(), lam.clone()
+        relax_(h, lam, mu, g, dt, self.TAU)
+        h1 = h0 - dt / self.TAU.h * (h0 - mu + lam0 + g)
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
         torch.testing.assert_close(
-            lam, lam0 + dt / self.TAU.lam * u1, rtol=1e-15, atol=1e-15
+            lam, lam0 + dt / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
         )
 
-    @pytest.mark.parametrize(
-        ("dt", "max_step", "n"),
-        [(4e-3, None, 2), (4e-3, 1e-3, 4), (3.5e-3, 1e-3, 4), (5e-4, 1e-3, 1)],
-    )
-    def test_split_into_euler_steps(self, dt: float, max_step: float | None, n: int):
-        u, lam, g = self._state()
-        expected_u, expected_lam = self._euler(u, lam, g, dt / n, n, self.TAU)
-        relax_(u, lam, g, dt, self.TAU, max_step=max_step)
-        torch.testing.assert_close(u, expected_u, rtol=1e-14, atol=1e-15)
-        torch.testing.assert_close(lam, expected_lam, rtol=1e-14, atol=1e-15)
-
-    def test_split_differs_from_one_long_step(self):
-        # So that the test above would catch a missing split.
-        u, lam, g = self._state()
-        one_u, _ = self._euler(u, lam, g, 4e-3, 1, self.TAU)
-        relax_(u, lam, g, 4e-3, self.TAU)
-        assert not torch.allclose(u, one_u)
-
     def test_infinite_lam_time_constant_keeps_the_dual(self):
-        u, lam, g = self._state()
+        # Even when r is not finite: 0 * inf would make NaN.
+        h, lam, mu, g = self._state()
+        h[0, 0] = math.inf
         lam0 = lam.clone()
-        relax_(u, lam, g, 1e-2, TimeConstants(h=4e-3, lam=math.inf, theta=1.0))
+        relax_(h, lam, mu, g, 1e-3, TimeConstants(h=4e-3, lam=math.inf, theta=1.0))
         assert torch.equal(lam, lam0)
 
     def test_zero_dt_changes_nothing(self):
-        u, lam, g = self._state()
-        u0, lam0 = u.clone(), lam.clone()
-        relax_(u, lam, g, 0.0, self.TAU)
-        assert torch.equal(u, u0)
+        h, lam, mu, g = self._state()
+        h0, lam0 = h.clone(), lam.clone()
+        relax_(h, lam, mu, g, 0.0, self.TAU)
+        assert torch.equal(h, h0)
         assert torch.equal(lam, lam0)
-
-    @pytest.mark.parametrize("max_step", [0.0, -1e-3, math.inf, math.nan])
-    def test_max_step_must_be_finite_and_positive(self, max_step: float):
-        u, lam, g = self._state()
-        with pytest.raises(ValueError, match="max_step"):
-            relax_(u, lam, g, 1e-3, self.TAU, max_step=max_step)
 
 
 class TestLearn:

@@ -15,30 +15,30 @@ from mujou._core.spec import DictSpec, TensorSpec
 
 
 class Output(Learner):
-    """A node that predicts ``y_hat = module(h_in)`` and whose energy is the loss
+    r"""A node that predicts ``y_hat = module(h_in)`` and whose energy is the loss
     of the samples that have a target.
 
     It pairs ``h_in`` with the target ``y`` and ``mask`` carried in the same
     message, so the prediction always meets the target of the very input it was
     computed from, however fast the host writes. With
 
-    .. math::
+    $$
+    \ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
+    \tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta},
+    $$
 
-        \\ell = \\sum_b \\mathrm{mask}_b\\, \\ell_b(\\hat y_b, y_b),\\qquad
-        \\tau_\\theta \\dot\\theta = -\\frac{1}{B}\\frac{\\partial\\ell}
-            {\\partial\\theta},
-
-    it sends ``g_in = d loss / d h_in`` to the previous node
-    (``functional.loss_vjp``), zeros when no sample has a target. Each
-    ``on_update(dt)`` reads ``h_in`` with its carried data, sends ``g_in``, sends
-    a ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
+    it sends $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
+    previous node (``functional.loss_vjp``), zeros when no sample has a target.
+    Each ``on_update(dt)`` caps ``dt`` at ``max_dt`` as ``Layer`` does, reads
+    ``h_in`` with its carried data, sends ``g_in``, sends a ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
     paired with) for the host to read, and updates ``theta`` when it learns.
 
     It learns as ``Layer`` does: once ``learn_interval`` seconds have passed
-    since the input changed, or in every update with ``None``. When no sample
+    since the host wrote the input, or in every update with ``None``. When no sample
     has a target, it does not learn and drops the time since the last update;
     so too before the first sample arrives, while the carried data is zeros
-    (``mask`` all False).
+    (``mask`` all False), and when the input changes before it has learned from
+    it.
     ``B`` is the batch, not the number of samples with a target: a sample
     without one adds zero.
 
@@ -48,8 +48,9 @@ class Output(Learner):
     ``module`` must treat the samples independently, and is called once on zeros
     when the node is made, as in ``Layer``.
 
-    The state holds ``"module"`` and the learning phase (``"_seen_time"``,
-    ``"_phase"``, ``"_elapsed"``).
+    The state holds ``"module"`` and when to learn (``"_seen_time"``,
+    ``"_learn_at"``, ``"_elapsed"``, ``"_learned_input"``). Read it with
+    ``Run.state_dict()``, as for ``Layer``.
 
     Example::
 
@@ -73,12 +74,14 @@ class Output(Learner):
             default period.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
+        max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
+            towards the weight of the update of ``theta``.
         dtype: The dtype of ``h_in``; ``None`` is ``torch.get_default_dtype()``.
         device: Where the node computes.
 
     Raises:
         TypeError: As ``Layer`` raises.
-        ValueError: As ``Layer`` raises (but for ``max_step``), or ``loss`` does
+        ValueError: As ``Layer`` raises, or ``loss`` does
             not return ``(B,)`` for the output of ``module`` and the target.
     """
 
@@ -92,6 +95,7 @@ class Output(Learner):
         tau: TimeConstants,
         learn_interval: float | None = None,
         period: float | None = None,
+        max_dt: float | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
@@ -102,6 +106,7 @@ class Output(Learner):
             tau=tau,
             learn_interval=learn_interval,
             period=period,
+            max_dt=max_dt,
             dtype=dtype,
             device=device,
         )
@@ -130,9 +135,10 @@ class Output(Learner):
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
+        dt = self._cap(dt)
         h_in = self.prev.recv()  # (B, *in)
         carried = self.prev.carried()  # y, mask and time of h_in
-        learn = self._tick(dt, int(carried["time"]))
+        _, learn = self._tick(dt, int(carried["time"]))
         labeled = bool(carried["mask"].any())
         g_theta: list[torch.Tensor] = []
         if labeled:

@@ -6,20 +6,20 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, kw_only=True)
 class TimeConstants:
-    """The time constants of the continuous-time PC-ALM, in seconds.
+    r"""The time constants of the continuous-time PC-ALM, in seconds.
 
-    A node relaxes its deviation ``u``, its dual ``lam`` and its parameters
+    A node relaxes its activity ``h``, its dual ``lam`` and its parameters
     ``theta`` with
 
-    .. math::
+    $$
+    \tau_h \dot h = -(r + \lambda + g),\qquad
+    \tau_\lambda \dot\lambda = r,\qquad
+    \tau_\theta \dot\theta = -g_\theta / B
+    $$
 
-        \\tau_h \\dot u = -(u + \\lambda + g),\\qquad
-        \\tau_\\lambda \\dot\\lambda = u,\\qquad
-        \\tau_\\theta \\dot\\theta = -g_\\theta / B
-
-    and a step of ``dt`` seconds moves them by ``dt / tau`` of the right-hand side
-    (the discrete step sizes are ``eta_h = dt / h``, ``alpha = dt / lam`` and
-    ``eta_theta = dt / theta``).
+    ($r = h - \mu$), and a step of ``dt`` seconds moves them by ``dt / tau`` of
+    the right-hand side (the discrete step sizes are ``eta_h = dt / h``,
+    ``alpha = dt / lam`` and ``eta_theta = dt / theta``).
 
     ``lam=math.inf`` makes the dual stay at zero (``alpha = 0``, plain predictive
     coding), and ``theta=math.inf`` makes the parameters stay where they are (no
