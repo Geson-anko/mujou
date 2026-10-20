@@ -48,7 +48,7 @@ The node class decides how much computation one node holds: one layer, or severa
 
 If a node raises an exception, the whole run stops. Mujou never stops only the node that raised and keeps the others running (see [Errors and Shutdown](user-guide/errors.md)).
 
-The default update rule will be [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding; not implemented yet), where each node learns with local updates only. Update rules are not built into Mujou: a node can use any rule that keeps to the rules above.
+The default update rule is [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding), where each node learns with local updates only. Its nodes are in the module `mujou.pc` (see [Learning with PC-ALM](user-guide/pc.md)). Update rules are not built into Mujou: a node can use any rule that keeps to the rules above.
 
 ## Ports and channels
 

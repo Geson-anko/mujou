@@ -139,6 +139,7 @@ def check_dt(nodes: dict[str, Any]) -> None:
             )
 
 
+# --8<-- [start:build]
 def build(
     modules: Sequence[nn.Module], batch: int, tau: pc.TimeConstants, learn: float
 ) -> tuple[pc.Input, WatchedOutput, mujou.Group]:
@@ -165,6 +166,9 @@ def build(
     return inp, out, mujou.Group(inp=inp, l1=l1, l2=l2, out=out)
 
 
+# --8<-- [end:build]
+
+
 def train_pc(
     modules: Sequence[nn.Module],
     data: MNIST,
@@ -172,6 +176,7 @@ def train_pc(
     args: argparse.Namespace,
 ) -> list[Epoch]:
     """Train the modules as PC-ALM nodes in a run, and measure each epoch."""
+    # --8<-- [start:tau]
     period = args.tau_h / 4
     shown = args.steps * period  # how long the host shows each batch
     # The learning rate of one batch is sum_dt / tau.theta = S * period / tau.theta.
@@ -180,7 +185,9 @@ def train_pc(
     inp, out, net = build(modules, args.batch, tau, learn)
     timer = mujou.time.Timer()
     timer.set_time_scale(args.time_scale)
+    # --8<-- [end:tau]
 
+    # --8<-- [start:show]
     def show(run: mujou.Run, sample: pc.Sample) -> pc.Prediction:
         """Write ``sample``, return the first prediction made from it, and return
         once it has been shown for ``shown`` seconds of the run's time."""
@@ -191,7 +198,10 @@ def train_pc(
         timer.sleep(max(0.0, shown - (float(timer.now()) - float(t))))
         return first
 
+    # --8<-- [end:show]
+
     results: list[Epoch] = []
+    # --8<-- [start:run]
     with mujou.run(net, timer=timer, workers=args.workers) as run:
         for epoch in range(args.epochs):
             right = total = 0
@@ -220,6 +230,7 @@ def train_pc(
                 f"PC-ALM epoch {epoch + 1}: prequential {right / total:.2%}, "
                 f"test {test_right / test_total:.2%}, {seconds:.1f} s"
             )
+            # --8<-- [end:run]
     nodes = run.state_dict()["nodes"]
     print(f"dt of the nodes (period {period * 1e3:g} ms of the run's time):")
     print(dt_report(nodes))

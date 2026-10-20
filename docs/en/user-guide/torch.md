@@ -9,9 +9,9 @@ The update a node writes in `on_update(dt)` is that node's update rule (its lear
 - The default update rule is PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). It is reported to perform close to BP with local updates. The choice is provisional
 - BP is also an update rule, as long as it stays inside one node (see "BP inside a node" below)
 
-!!! note "The PC-ALM nodes are not implemented yet"
+!!! note "The PC-ALM nodes are in `mujou.pc`"
 
-    The PC-ALM nodes are planned for the module `mujou.pc`, which is not implemented yet. Until then, subclass `mujou.Node` and write the update equations yourself in `on_update(dt)` (see [Writing a node](writing-a-node.md)).
+    The module `mujou.pc` has nodes that learn with PC-ALM (see [Learning with PC-ALM](pc.md)). For another update rule, subclass `mujou.Node` and write the update equations yourself in `on_update(dt)` (see [Writing a node](writing-a-node.md)).
 
 ## Example
 

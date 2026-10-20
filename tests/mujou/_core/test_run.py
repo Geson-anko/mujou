@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Never, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
@@ -1130,23 +1130,18 @@ class TestCarry:
         with pytest.raises(ValueError, match="receives carried data"):
             run.write({node.prev: torch.tensor(1.0)})
 
-    def test_the_host_cannot_read_carried_data(self, start_manual: StartManual):
+    def test_the_host_reads_only_the_value(self, step: Step, start_manual: StartManual):
         net = TaggedPath()
         run = start_manual(net)
-        message = (
-            r"^cannot read the port 'a\.next': it sends carried data, which the "
-            r"host cannot read$"
-        )
-        port = cast(Port[Any, Any, Any, Never, Any], net.a.next)  # rejected statically
-        reads: list[Callable[[], object]] = [
-            lambda: run.read(port),
-            lambda: run.read_with_time(port),
-            lambda: run.subscribe(port),
-            lambda: run.wait_for(port, lambda _: True),
-        ]
-        for read in reads:
-            with pytest.raises(ValueError, match=message):
-                read()
+        step(run, net.a, net.b)
+        # a sent 1 carrying 1, and b passed it on with 101: the host gets the
+        # values without the carried data.
+        assert torch.equal(run.read(net.a.next), torch.tensor(1.0))
+        value, _ = run.read_with_time(net.b.next)
+        assert torch.equal(value, torch.tensor(101.0))
+        assert torch.equal(next(run.subscribe(net.b.next))[0], torch.tensor(101.0))
+        value, _ = run.wait_for(net.a.next, lambda v: v.item() == 1.0, timeout=0.0)
+        assert torch.equal(value, torch.tensor(1.0))
 
     def test_the_tree_holds_the_carried_data(
         self, step: Step, start_manual: StartManual
