@@ -548,14 +548,21 @@ class TestDeepChain:
             close(nodes[f"l{i}"]["h"], h, 1e-9)
             close(nodes[f"l{i}"]["lam"], credit, 1e-8)
 
-    def test_learning_in_every_update_keeps_lam_at_the_credit(
-        self, start_manual: StartManual, step: Step
+    @pytest.mark.parametrize(
+        "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
+    )
+    def test_learning_keeps_lam_at_the_credit(
+        self, start_manual: StartManual, step: Step, learn_interval: float | None
     ):
-        # learn_interval=None with a theta so slow it barely moves: only the
-        # jumps theta makes move h, not the relaxation of the nodes below, so
-        # lam goes to the credit and stays there. (Moving h with every change
-        # of mu, the previous design, made lam grow to 1e5 in 500 steps here,
-        # however slow theta was, before it settled elsewhere.)
+        # A theta so slow it barely moves: only the jumps theta makes move h,
+        # not the relaxation of the nodes below, so lam goes to the credit and
+        # stays there. (Moving h with every change of mu, the previous design,
+        # made lam grow to 1e5 in 500 steps here with learn_interval=None,
+        # however slow theta was, before it settled elsewhere.) 16 periods is
+        # about the round trip 2 * depth * period of this chain (18 periods); an
+        # interval much shorter advances the epoch in almost every update, the
+        # nodes above move h with every change of mu again, and lam grows
+        # (4 periods: about 4 times the credit; 1 or 2 periods: it diverges).
         widths = [8] * 9
         layers, head = make_modules("res", "tanh", widths)
         x, noise = sample(widths, 0)
@@ -564,7 +571,7 @@ class TestDeepChain:
         y = y_hat + noise
         bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
         slow = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=1e9)
-        chain = Chain(layers, head, widths, tau=slow)
+        chain = Chain(layers, head, widths, tau=slow, learn_interval=learn_interval)
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         for _ in range(DEEP_STEPS // 100):
