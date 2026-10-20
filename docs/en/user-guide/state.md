@@ -66,9 +66,16 @@ Only `torch.Tensor` and `nn.Module` values assigned directly to attributes are c
 - The state of the random number generator `self.generator`
 - The state of an optimizer (such as moments) and the gradients accumulated in `.grad`
 
-To put these in the state, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected part is handled as before.
+For a number, a string, `None`, or a list or dict of them, assign the attribute and register its name with `register_state`. The value then goes into the state as it is, and stays in it whatever you assign to the attribute later, until `del`.
 
-For a number, you can instead keep it as a 0-dimensional tensor created in `on_start` (`self.count = torch.zeros((), device=self.device)`) and update it in place (`self.count += 1`), without overriding anything. It is then collected automatically.
+```python
+self.elapsed = 0.0
+self.register_state("elapsed")
+```
+
+The default `load_state_dict` assigns a copy of the saved value to the attribute. Register only an attribute that already exists, and keep the values to basic types if the tree is to be read with the default `torch.load` (see [Formats](#formats)).
+
+For the rest, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected and registered part is handled as before.
 
 The following example adds the state of the random number generator. A restored run uses new node instances, whose generators start again from `seed`. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.
 

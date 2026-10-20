@@ -66,9 +66,16 @@
 - 乱数生成器 `self.generator` の状態
 - optimizer の状態（モーメントなど）と、`.grad` に溜めた勾配
 
-これらを状態に入れるには `state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分はそのまま扱える。
+数値・文字列・`None` とそのリストや dict は、属性に代入してから `register_state` で名前を登録すれば状態に入る。後で何を代入しても `del` するまで状態に残る。
 
-数値なら override せずに、`on_start` で 0 次元のテンソルとして作り（`self.count = torch.zeros((), device=self.device)`）、その場で更新してもよい（`self.count += 1`）。そうすれば自動で集まる。
+```python
+self.elapsed = 0.0
+self.register_state("elapsed")
+```
+
+既定の `load_state_dict` は保存した値のコピーを属性に代入する。登録できるのは代入済みの属性だけ。既定の `torch.load` で読むなら値は基本的な型に限る（[保存の形式](#%E4%BF%9D%E5%AD%98%E3%81%AE%E5%BD%A2%E5%BC%8F)）。
+
+それ以外のものは `state_dict` と `load_state_dict` の両方を override する。`super()` を呼べば、自動で集めた分と登録した分はそのまま扱える。
 
 次の例では乱数生成器の状態を足す。復元では新しいインスタンスを使い生成器も `seed` から作り直すので、生成器の状態を足さないと、復元後の乱数列が止めずに続けたときと違う列になる。
 

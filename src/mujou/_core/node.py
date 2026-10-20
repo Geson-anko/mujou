@@ -1,5 +1,6 @@
 """The node, the unit of asynchronous computation."""
 
+import copy
 import inspect
 import math
 from collections.abc import Mapping
@@ -63,7 +64,10 @@ class Node(_native.Node, Component):
     whether or not its name starts with ``_``, is registered under its name.
     Assigning any other value (``None`` too) under that name, or ``del``, removes
     it. Ports, numbers, lists and dicts of tensors are not collected, and neither
-    are properties (what a setter stores is, under its own name). The default
+    are properties (what a setter stores is, under its own name). To add any
+    other value (a number, a string, a list of them), assign it and call
+    ``self.register_state(name)``: it stays in the state whatever is assigned
+    to it later, until ``del``. The default
     ``state_dict`` and ``load_state_dict`` save and restore what is registered;
     override both to choose the state yourself (they may call ``super()``).
     Allocate the tensors of the state by ``on_start`` and update them in place
@@ -257,24 +261,60 @@ class Node(_native.Node, Component):
 
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
+            names = _state_names(self)
             if isinstance(value, _STATE_TYPES):
-                names = _state_names(self)
                 # A property is not registered: what its setter stores is. Looked
                 # up only for a new name, as the lookup walks the MRO.
                 if name not in names and not is_data_descriptor(type(self), name):
-                    _set_state_names(self, {**names, name: None})
-            else:
+                    _set_state_names(self, {**names, name: False})
+            elif names.get(name) is False:
+                # Collected, not registered by register_state: forget it.
                 _forget_state_name(self, name)
 
         def __delattr__(self, name: str) -> None:
             super().__delattr__(name)
             _forget_state_name(self, name)
 
+    def register_state(self, name: str) -> None:
+        """Add the attribute ``name`` to the state, whatever value it holds.
+
+        Use it for values that are not collected by themselves: numbers,
+        strings, ``None``, and lists or dicts of them. The attribute joins the
+        state in the order of registration, the same order as the collected
+        tensors and modules, and stays in it whatever is assigned to it later,
+        until ``del``. Registering a name again (or a collected one) keeps its
+        place. The default ``state_dict`` returns the value as it is, and the
+        default ``load_state_dict`` assigns a deep copy of the saved value (a
+        tensor or a module held at load time is still restored in place).
+
+        ``torch.load(..., weights_only=True)`` reads only basic types (numbers,
+        strings, ``None``, lists, tuples, dicts and tensors): keep the
+        registered values to those if the state is saved with ``torch.save``.
+
+        Raises:
+            ValueError: ``name`` is a property (as the reserved ``device``,
+                ``period`` and ``timer`` are).
+            AttributeError: The node has no attribute ``name`` yet; assign it
+                first.
+        """
+        if is_data_descriptor(type(self), name):
+            raise ValueError(
+                f"{name!r} is a property, which is not state; register the "
+                "attribute its setter stores instead"
+            )
+        if name not in vars(self):
+            raise AttributeError(
+                f"the node has no attribute {name!r} to register as state; assign "
+                "it first"
+            )
+        _set_state_names(self, {**_state_names(self), name: True})
+
     @override
     def state_dict(self) -> Any:  # Any: an override returns any picklable object.
         """Return the collected state: a dict with, for each registered attribute
-        in the order of registration, the tensor ``detach``-ed or the module's
-        ``state_dict()``, under the attribute's name.
+        in the order of registration, the tensor ``detach``-ed, the module's
+        ``state_dict()`` or any other value as it is (see ``register_state``),
+        under the attribute's name.
 
         The tensors share memory with the attributes (the framework copies the
         tree). ``requires_grad`` and ``.grad`` are not part of the state, as in
@@ -285,6 +325,8 @@ class Node(_native.Node, Component):
             name: value.detach()
             if isinstance(value, torch.Tensor)
             else value.state_dict()
+            if isinstance(value, nn.Module)
+            else value
             for name, value in _state_items(self)
         }
 
@@ -292,7 +334,9 @@ class Node(_native.Node, Component):
     def load_state_dict(self, state: object) -> None:
         """Copy ``state`` (from the default ``state_dict``) into the registered
         attributes in place: ``copy_`` into each tensor and ``load_state_dict``
-        into each module, without recording gradients.
+        into each module, without recording gradients. Any other value registered
+        with ``register_state`` is replaced by a ``copy.deepcopy`` of its value in
+        ``state``.
 
         The objects stay the same, so references taken in ``__init__`` or
         ``on_start`` see the restored values, and a tensor that records gradients
@@ -336,14 +380,16 @@ class Node(_native.Node, Component):
         for name, value in items:
             if isinstance(value, torch.Tensor):
                 _check_tensor(name, value, tree[name])
-            else:
+            elif isinstance(value, nn.Module):
                 _check_module(name, value, tree[name])
         with torch.no_grad():
             for name, value in items:
                 if isinstance(value, torch.Tensor):
                     value.copy_(cast(torch.Tensor, tree[name]))
-                else:
+                elif isinstance(value, nn.Module):
                     value.load_state_dict(cast(Mapping[str, Any], tree[name]))
+                else:
+                    setattr(self, name, copy.deepcopy(tree[name]))
             for key, value in tree.items():
                 if key not in names:
                     setattr(self, key, cast(torch.Tensor, value).clone())
@@ -475,17 +521,18 @@ _STATE_TYPES: Final = (torch.Tensor, nn.Module)
 _STATE_NAMES = "_mujou_state_names"
 
 
-def _state_names(node: Node) -> Mapping[str, None]:
+def _state_names(node: Node) -> Mapping[str, bool]:
     """The names of the attributes of ``node`` that hold state, in the order of
-    registration (an ordered set).
+    registration, each with whether ``register_state`` registered it (``False``
+    when it was collected as a tensor or a module).
 
     The registry is replaced, never changed, so that a shallow copy of a node
     (``copy.copy``) does not share changes with the original.
     """
-    return cast(Mapping[str, None], vars(node).get(_STATE_NAMES, {}))
+    return cast(Mapping[str, bool], vars(node).get(_STATE_NAMES, {}))
 
 
-def _set_state_names(node: Node, names: dict[str, None]) -> None:
+def _set_state_names(node: Node, names: dict[str, bool]) -> None:
     vars(node)[_STATE_NAMES] = names  # Not through __setattr__.
 
 
@@ -495,9 +542,10 @@ def _forget_state_name(node: Node, name: str) -> None:
         _set_state_names(node, {k: v for k, v in names.items() if k != name})
 
 
-def _state_items(node: Node) -> list[tuple[str, torch.Tensor | nn.Module]]:
-    """Return ``(attribute name, value)`` for the tensors and modules registered on
-    ``node``, in the order of registration."""
+def _state_items(node: Node) -> list[tuple[str, object]]:
+    """Return ``(attribute name, value)`` for the attributes registered on
+    ``node`` (tensors, modules and any value of ``register_state``), in the order
+    of registration."""
     return [(name, getattr(node, name)) for name in _state_names(node)]
 
 

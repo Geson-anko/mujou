@@ -727,6 +727,83 @@ class TestStateCollection:
         assert list(clone.state_dict()) == ["_h", "p", "linear", "z"]
 
 
+class Counting(Stateful):
+    """``Stateful`` with plain values registered as state: ``count`` between the
+    tensors and the module, and ``log`` (a list) at the end."""
+
+    def __init__(self, fill: float) -> None:
+        super().__init__(fill)
+        self.count = int(fill)
+        self.register_state("count")
+        self.log = [fill]
+        self.register_state("log")
+
+
+class TestRegisterState:
+    def test_adds_any_value_to_the_state_in_the_order_of_registration(self):
+        node = Counting(2.0)
+        state = node.state_dict()
+        assert list(state) == ["w", "_h", "p", "linear", "count", "log"]
+        assert state["count"] == 2 and state["log"] == [2.0]
+
+    def test_follows_reassignment_of_any_value(self):
+        node = Counting(2.0)
+        node.count = 7
+        node.log = []
+        setattr(node, "count", torch.ones(1))  # noqa: B010  # not the declared type
+        setattr(node, "count", None)  # noqa: B010  # still registered
+        state = node.state_dict()
+        assert state["count"] is None and state["log"] == []
+        assert list(state) == ["w", "_h", "p", "linear", "count", "log"]
+
+    def test_deletion_forgets_it(self):
+        node = Counting(2.0)
+        del node.count
+        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "log"]
+        node.count = 3  # a plain value again: not state until registered
+        assert "count" not in node.state_dict()
+
+    def test_registering_twice_keeps_the_order(self):
+        node = Counting(2.0)
+        node.register_state("count")
+        node.register_state("w")  # a tensor, already collected
+        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "count", "log"]
+
+    def test_loads_by_assigning_a_copy(self):
+        source, target = Counting(1.0), Counting(-1.0)
+        source.count, source.log = 5, [1.0, 2.0]
+        state = copy.deepcopy(source.state_dict())
+        target.load_state_dict(state)
+        assert target.count == 5 and target.log == [1.0, 2.0]
+        assert target.log is not state["log"]  # a copy
+        assert torch.equal(target.w, source.w)
+
+    def test_a_missing_value_is_rejected_and_nothing_changes(self):
+        source, target = Counting(1.0), Counting(-1.0)
+        state = copy.deepcopy(source.state_dict())
+        del state["log"]
+        with pytest.raises(ValueError, match=r"missing \['log'\]$"):
+            target.load_state_dict(state)
+        assert target.count == -1 and torch.equal(target.w, torch.full((2, 3), -1.0))
+
+    def test_rejects_a_name_without_an_attribute(self):
+        node = Stateful(0.0)
+        with pytest.raises(AttributeError, match="'steps'.*assign"):
+            node.register_state("steps")
+
+    @pytest.mark.parametrize("name", ["device", "period", "timer"])
+    def test_rejects_a_property(self, name: str):
+        with pytest.raises(ValueError, match=f"'{name}'.*property"):
+            Stateful(0.0).register_state(name)
+
+    def test_a_shallow_copy_has_its_own_registry(self):
+        node = Stateful(0.0)
+        clone = copy.copy(node)
+        clone.register_state("rate")
+        assert "rate" not in node.state_dict()
+        assert clone.state_dict()["rate"] == 0.5
+
+
 INPUT = torch.tensor([1.0, -1.0, 0.5])
 TARGET = torch.tensor([0.5, 2.0])
 
@@ -734,7 +811,8 @@ TARGET = torch.tensor([0.5, 2.0])
 class Learner(Node):
     """Fits ``linear`` to ``TARGET`` by backpropagation inside the node, and relaxes
     ``_x`` toward 1 with momentum, both in proportion to ``dt``. ``_last`` is first
-    assigned in ``on_update``."""
+    assigned in ``on_update``. ``elapsed``, a plain float registered as state, sums
+    the ``dt``."""
 
     _last: torch.Tensor | None = None
 
@@ -745,6 +823,8 @@ class Learner(Node):
         with torch.no_grad():
             self.linear.weight.fill_(fill)
             self.linear.bias.fill_(fill)
+        self.elapsed = 0.0
+        self.register_state("elapsed")
 
     @override
     def on_start(self) -> None:
@@ -766,6 +846,7 @@ class Learner(Node):
             self._x.add_(0.5 * (x - self._last))
         self._last = x
         self.steps.add_(1)
+        self.elapsed += dt
 
 
 class TestRestore:
@@ -799,6 +880,7 @@ class TestRestore:
         assert torch.equal(at(actual, "_x"), at(expected, "_x"))
         assert torch.equal(at(actual, "_last"), at(expected, "_last"))
         assert int(at(actual, "steps")) == k + m
+        assert actual["elapsed"] == expected["elapsed"] > 0
         for name in ("weight", "bias"):
             assert torch.equal(at(actual, "linear", name), at(expected, "linear", name))
         # Restored in place: the objects made in __init__ and on_start remain.
