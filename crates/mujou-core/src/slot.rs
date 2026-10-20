@@ -16,6 +16,13 @@
 //! another slot (even of another type), a writer of that slot could hand the
 //! value to a reader of this one (`specs/native-core.md`).
 //!
+//! A message may carry data along with its values: the carry fields of its
+//! [`Schema`], which a node passes on from the message it received to the one
+//! it sends without reading them (`specs/messages.md`). Each buffer of a message
+//! is an `Arc<Buffer>`, so passing the carry on clones the pointers and copies
+//! no bytes. A carried buffer still belongs to the pool of the writer that
+//! filled it, and goes back there when the last message holding it is dropped.
+//!
 //! - [`Outlet`]: the sending side of one port, writing its outward slot and the
 //!   slot of each channel
 //! - [`InputGroup`] / [`InputSlot`]: the slots the host writes from outside, where
@@ -60,60 +67,87 @@ impl FieldSpec {
     }
 }
 
-/// The fields of a message, fixed when the network is built.
+/// The fields of a message, fixed when the network is built: the fields of its
+/// value, then the fields of the data it carries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Schema {
+    /// The value fields, then the carry fields.
     fields: Vec<FieldSpec>,
+    /// Where the carry fields start in `fields`.
+    carry_from: usize,
 }
 
 impl Schema {
-    /// Checks that there is at least one field, the names are distinct, every
-    /// extent is at least 1 (a 0-dimensional shape is fine), every dtype is a
-    /// scalar of whole bytes, and every field fits in one allocation.
-    pub fn new(fields: Vec<FieldSpec>) -> Result<Self, SlotError> {
-        if fields.is_empty() {
+    /// Checks that there is at least one value field (and any number of carry
+    /// fields), the names are distinct among the value fields and among the
+    /// carry fields, every extent is at least 1 (a 0-dimensional shape is fine),
+    /// every dtype is a scalar of whole bytes, and every field fits in one
+    /// allocation.
+    pub fn new(values: Vec<FieldSpec>, carry: Vec<FieldSpec>) -> Result<Self, SlotError> {
+        if values.is_empty() {
             return Err(SlotError::InvalidSchema(
                 "a schema needs at least one field".to_owned(),
             ));
         }
-        let mut names = HashSet::new();
-        for f in &fields {
-            if !names.insert(f.name.as_str()) {
-                return Err(SlotError::InvalidSchema(format!(
-                    "duplicate field '{}'",
-                    f.name
-                )));
-            }
-            if f.shape.iter().any(|&n| n < 1) {
-                return Err(SlotError::InvalidSchema(format!(
-                    "field '{}': every extent must be >= 1, got shape {}",
-                    f.name,
-                    format_shape(&f.shape)
-                )));
-            }
-            let DLDataType { bits, lanes, .. } = f.dtype;
-            if lanes != 1 || bits == 0 || bits % 8 != 0 {
-                return Err(SlotError::InvalidSchema(format!(
-                    "field '{}': unsupported dtype {}",
-                    f.name,
-                    format_dtype(f.dtype)
-                )));
-            }
-            if f.checked_nbytes().is_none() {
-                return Err(SlotError::InvalidSchema(format!(
-                    "field '{}': shape {} of {} takes more than isize::MAX bytes",
-                    f.name,
-                    format_shape(&f.shape),
-                    format_dtype(f.dtype)
-                )));
-            }
-        }
-        Ok(Self { fields })
+        check_fields(&values, "field")?;
+        check_fields(&carry, "carry field")?;
+        let carry_from = values.len();
+        let mut fields = values;
+        fields.extend(carry);
+        Ok(Self { fields, carry_from })
     }
 
+    /// Every field: the value fields, then the carry fields.
     pub fn fields(&self) -> &[FieldSpec] {
         &self.fields
     }
+
+    /// The fields of the value.
+    pub fn values(&self) -> &[FieldSpec] {
+        &self.fields[..self.carry_from]
+    }
+
+    /// The fields of the carried data, possibly none.
+    pub fn carry(&self) -> &[FieldSpec] {
+        &self.fields[self.carry_from..]
+    }
+}
+
+/// The checks of [`Schema::new`] on one list of fields, which `what` names.
+fn check_fields(fields: &[FieldSpec], what: &str) -> Result<(), SlotError> {
+    let mut names = HashSet::new();
+    for f in fields {
+        if !names.insert(f.name.as_str()) {
+            return Err(SlotError::InvalidSchema(format!(
+                "duplicate {what} '{}'",
+                f.name
+            )));
+        }
+        if f.shape.iter().any(|&n| n < 1) {
+            return Err(SlotError::InvalidSchema(format!(
+                "{what} '{}': every extent must be >= 1, got shape {}",
+                f.name,
+                format_shape(&f.shape)
+            )));
+        }
+        let DLDataType { bits, lanes, .. } = f.dtype;
+        if lanes != 1 || bits == 0 || bits % 8 != 0 {
+            return Err(SlotError::InvalidSchema(format!(
+                "{what} '{}': unsupported dtype {}",
+                f.name,
+                format_dtype(f.dtype)
+            )));
+        }
+        if f.checked_nbytes().is_none() {
+            return Err(SlotError::InvalidSchema(format!(
+                "{what} '{}': shape {} of {} takes more than isize::MAX bytes",
+                f.name,
+                format_shape(&f.shape),
+                format_dtype(f.dtype)
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,6 +173,14 @@ pub enum SlotError {
         field: String,
         reason: String,
     },
+    /// The carried buffers passed on do not have the carry fields of the
+    /// schema, or the schema carries nothing. `expected` and `actual` list the
+    /// fields.
+    CarryMismatch {
+        slot: String,
+        expected: String,
+        actual: String,
+    },
 }
 
 impl SlotError {
@@ -148,7 +190,8 @@ impl SlotError {
             Self::InvalidSchema(_) => {}
             Self::Mismatch { slot, .. }
             | Self::UnsupportedDevice { slot, .. }
-            | Self::InvalidDLPack { slot, .. } => *slot = name.to_owned(),
+            | Self::InvalidDLPack { slot, .. }
+            | Self::CarryMismatch { slot, .. } => *slot = name.to_owned(),
         }
         self
     }
@@ -208,11 +251,45 @@ impl fmt::Display for SlotError {
                 write_location(f, slot, field)?;
                 write!(f, "invalid DLPack tensor: {reason}")
             }
+            Self::CarryMismatch {
+                slot,
+                expected,
+                actual,
+            } => {
+                write_location(f, slot, "")?;
+                if expected == NOTHING {
+                    write!(f, "expected to carry nothing, so it passes nothing on")
+                } else {
+                    write!(f, "expected to carry {expected}, got {actual}")
+                }
+            }
         }
     }
 }
 
 impl std::error::Error for SlotError {}
+
+/// How [`format_fields`] lists no fields.
+const NOTHING: &str = "nothing";
+
+/// `('y': (2,) int64, 'mask': (2,) bool)`, or `nothing` for no fields: how a
+/// [`SlotError::CarryMismatch`] lists them.
+fn format_fields<'a>(fields: impl ExactSizeIterator<Item = &'a FieldSpec>) -> String {
+    if fields.len() == 0 {
+        return NOTHING.to_owned();
+    }
+    let fields: Vec<String> = fields
+        .map(|f| {
+            format!(
+                "'{}': {} {}",
+                f.name,
+                format_shape(&f.shape),
+                format_dtype(f.dtype)
+            )
+        })
+        .collect();
+    format!("({})", fields.join(", "))
+}
 
 /// One storage unit of a buffer. Allocating in units of 64 bytes aligns every
 /// buffer to a cache line, as torch's CPU allocator does, so that a tensor lent
@@ -248,7 +325,9 @@ impl BufferPool {
 }
 
 /// The bytes of one field of a message, borrowed from a pool and returned to it
-/// on drop. Immutable once its message is built.
+/// on drop. Immutable once its message is built, after which it is shared as
+/// `Arc<Buffer>`: by the messages that carry it on, and by the tensors lent over
+/// DLPack.
 pub struct Buffer {
     /// `None` only while dropping.
     storage: Option<Box<[Line]>>,
@@ -256,7 +335,7 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub(crate) fn field(&self) -> &FieldSpec {
+    pub fn field(&self) -> &FieldSpec {
         &self.pool.field
     }
 
@@ -270,7 +349,7 @@ impl Buffer {
         unsafe { std::slice::from_raw_parts(storage.as_ptr().cast(), self.field().nbytes()) }
     }
 
-    /// Only reachable before the buffer is in a message, which hands out `&Buffer`.
+    /// Only reachable before the buffer is shared as `Arc<Buffer>`.
     fn bytes_mut(&mut self) -> &mut [u8] {
         let nbytes = self.field().nbytes();
         let storage = self
@@ -300,16 +379,29 @@ impl fmt::Debug for Buffer {
 
 /// An immutable value of a slot: one buffer per field, in schema order, the
 /// time it was written at on the writer's timer, and whether its writer sent it.
+///
+/// The carry buffers may be shared with the message they were passed on from
+/// (and so belong to another writer's pools).
 #[derive(Debug)]
 pub struct Message {
-    buffers: Vec<Buffer>,
+    /// The value buffers, then the carry buffers.
+    buffers: Vec<Arc<Buffer>>,
+    /// Where the carry buffers start in `buffers`.
+    carry_from: usize,
     time_ns: u64,
     sent: bool,
 }
 
 impl Message {
-    pub fn buffers(&self) -> &[Buffer] {
-        &self.buffers
+    /// The buffers of the value fields, in schema order.
+    pub fn values(&self) -> &[Arc<Buffer>] {
+        &self.buffers[..self.carry_from]
+    }
+
+    /// The buffers of the carry fields, in schema order (none if the schema
+    /// carries nothing).
+    pub fn carry(&self) -> &[Arc<Buffer>] {
+        &self.buffers[self.carry_from..]
     }
 
     pub fn time_ns(&self) -> u64 {
@@ -328,7 +420,9 @@ impl Message {
 }
 
 /// How a writer fills the buffers of a new message: one compact row-major byte
-/// slice per field, in schema order. The buffers come from the pool with old
+/// slice per field it writes, in schema order. That is every field (the value
+/// fields, then the carry fields), or only the value fields when the carry is
+/// passed on from another message. The buffers come from the pool with old
 /// contents, so `fill` must overwrite every byte.
 pub trait Fill<E>: FnOnce(&mut [&mut [u8]]) -> Result<(), E> {}
 impl<E, F: FnOnce(&mut [&mut [u8]]) -> Result<(), E>> Fill<E> for F {}
@@ -356,22 +450,61 @@ impl Messages {
         Arc::new(Self { schema, pools })
     }
 
-    /// Fills fresh buffers. Nothing is published if `fill` fails, and the buffers
-    /// go back to the pool.
-    fn fill<E>(&self, fill: impl Fill<E>) -> Result<Vec<Buffer>, E> {
-        let mut buffers: Vec<Buffer> = self.pools.iter().map(BufferPool::take).collect();
-        let mut bytes: Vec<&mut [u8]> = buffers.iter_mut().map(Buffer::bytes_mut).collect();
-        fill(&mut bytes)?;
+    /// Fills fresh buffers of every field, or of the value fields followed by
+    /// the `relay`ed carry buffers. Nothing is published if `fill` fails, and the
+    /// buffers go back to the pool.
+    ///
+    /// The caller has checked `relay` against the schema ([`Messages::check_relay`]).
+    fn fill<E>(
+        &self,
+        relay: Option<&[Arc<Buffer>]>,
+        fill: impl Fill<E>,
+    ) -> Result<Vec<Arc<Buffer>>, E> {
+        let Some(relay) = relay else {
+            return filled(&self.pools, fill);
+        };
+        let mut buffers = filled(&self.pools[..self.schema.carry_from], fill)?;
+        buffers.extend(relay.iter().map(Arc::clone));
         Ok(buffers)
     }
 
-    fn build<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<Arc<Message>, E> {
-        let buffers = self.fill(fill)?;
-        Ok(Arc::new(Message {
+    /// Fills fresh buffers of the carry fields only, for a carry that a restore
+    /// puts back.
+    fn carry<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
+        filled(&self.pools[self.schema.carry_from..], fill)
+    }
+
+    /// Checks that `relay` has the carry fields of the schema, which must carry
+    /// something. `slot` names the slot in the error.
+    fn check_relay(&self, relay: &[Arc<Buffer>], slot: &str) -> Result<(), SlotError> {
+        let expected = self.schema.carry();
+        let matches = !expected.is_empty()
+            && relay.len() == expected.len()
+            && relay.iter().zip(expected).all(|(b, f)| b.field() == f);
+        if matches {
+            return Ok(());
+        }
+        Err(SlotError::CarryMismatch {
+            slot: slot.to_owned(),
+            expected: format_fields(expected.iter()),
+            actual: format_fields(relay.iter().map(|b| b.field())),
+        })
+    }
+
+    fn message(&self, buffers: Vec<Arc<Buffer>>, time_ns: u64, sent: bool) -> Arc<Message> {
+        debug_assert_eq!(buffers.len(), self.schema.fields().len());
+        Arc::new(Message {
             buffers,
+            carry_from: self.schema.carry_from,
             time_ns,
             sent,
-        }))
+        })
+    }
+
+    /// A message of every field, filled by `fill`.
+    fn build<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<Arc<Message>, E> {
+        let buffers = self.fill(None, fill)?;
+        Ok(self.message(buffers, time_ns, sent))
     }
 
     fn zeros(&self, time_ns: u64) -> Arc<Message> {
@@ -382,6 +515,14 @@ impl Messages {
         let Ok(msg) = self.build(time_ns, false, zero);
         msg
     }
+}
+
+/// Takes one buffer from each of `pools`, fills them and shares them.
+fn filled<E>(pools: &[Arc<BufferPool>], fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
+    let mut buffers: Vec<Buffer> = pools.iter().map(BufferPool::take).collect();
+    let mut bytes: Vec<&mut [u8]> = buffers.iter_mut().map(Buffer::bytes_mut).collect();
+    fill(&mut bytes)?;
+    Ok(buffers.into_iter().map(Arc::new).collect())
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -463,10 +604,19 @@ impl Slot {
     /// Call it only while no node runs (before the start, or while every node is
     /// paused with the timer frozen): it is a second way to write the slot, beside
     /// its writer, and the readers' handles reach it too.
+    ///
+    /// `fill` fills every field, the carry fields included.
     pub fn restore<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<(), E> {
         let msg = self.messages.build(time_ns, sent, fill)?;
         self.publish(msg);
         Ok(())
+    }
+
+    /// New buffers of the carry fields, filled by `fill` from the pools of this
+    /// slot's writer: the carry a restore gives back to the port that reads this
+    /// slot, as if it had last received it from here.
+    pub fn new_carry<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
+        self.messages.carry(fill)
     }
 
     fn publish(&self, msg: Arc<Message>) {
@@ -549,13 +699,27 @@ impl Outlet {
     /// Fills a new message and publishes it to `target`, stamped with the time
     /// after `fill` returns. `Target::All` publishes the very same message to every
     /// slot. Panics if a `Target::Channel` does not exist.
-    pub fn send_with<E>(&self, target: Target, fill: impl Fill<E>) -> Result<(), E> {
-        let buffers = self.messages.fill(fill)?;
-        let msg = Arc::new(Message {
-            buffers,
-            time_ns: self.timer.time_ns(),
-            sent: true,
-        });
+    ///
+    /// Without `relay`, `fill` fills every field. With it, `fill` fills the value
+    /// fields, and the message carries the buffers of `relay` (the carry of a
+    /// message this outlet's node received), shared and not copied. They must
+    /// have the carry fields of the schema, or nothing is published and the error
+    /// is a [`SlotError::CarryMismatch`].
+    pub fn send_with<E: From<SlotError>>(
+        &self,
+        target: Target,
+        relay: Option<&[Arc<Buffer>]>,
+        fill: impl Fill<E>,
+    ) -> Result<(), E> {
+        let name = match target {
+            Target::All => self.outbox.name(),
+            Target::Channel(k) => self.channels[k].name(),
+        };
+        if let Some(relay) = relay {
+            self.messages.check_relay(relay, name)?;
+        }
+        let buffers = self.messages.fill(relay, fill)?;
+        let msg = self.messages.message(buffers, self.timer.time_ns(), true);
         match target {
             Target::All => {
                 for slot in &self.channels {
@@ -641,7 +805,8 @@ impl InputGroup {
     }
 
     /// Writes one message to each of `slots`, all stamped with the same time,
-    /// and returns that time. `fill(i, bytes)` fills the message of `slots[i]`.
+    /// and returns that time. `fill(i, bytes)` fills every field (the carry
+    /// fields included) of the message of `slots[i]`.
     /// Every message is filled before any is placed, so if one `fill` fails no
     /// slot changes.
     ///
@@ -666,21 +831,17 @@ impl InputGroup {
         let filled = slots
             .iter()
             .enumerate()
-            .map(|(i, slot)| slot.messages.fill(|bytes: &mut [&mut [u8]]| fill(i, bytes)))
+            .map(|(i, slot)| {
+                slot.messages
+                    .fill(None, |bytes: &mut [&mut [u8]]| fill(i, bytes))
+            })
             .collect::<Result<Vec<_>, E>>()?;
         let time_ns = self.timer.time_ns();
         // Under the lock no write is in flight, so every next value is already
         // published (its version is at most `version`) and becomes current.
         let version = self.version.load(Ordering::Relaxed);
         for (slot, buffers) in slots.iter().zip(filled) {
-            let next = Some((
-                version + 1,
-                Arc::new(Message {
-                    buffers,
-                    time_ns,
-                    sent: true,
-                }),
-            ));
+            let next = Some((version + 1, slot.messages.message(buffers, time_ns, true)));
             let mut pair = lock(&slot.pair);
             let current = Arc::clone(pair.resolve(version));
             let old = std::mem::replace(&mut *pair, Pair { current, next });
@@ -723,6 +884,8 @@ impl InputSlot {
     /// Call it only while no node runs (before the start, or while every node is
     /// paused with the timer frozen): it is a second way to write the slot, beside
     /// its writer, and the readers' handles reach it too.
+    ///
+    /// `fill` fills every field, the carry fields included.
     pub fn restore<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<(), E> {
         let current = self.messages.build(time_ns, sent, fill)?;
         let _guard = lock(&self.group.write_lock);
@@ -736,11 +899,16 @@ impl InputSlot {
         drop(old);
         Ok(())
     }
+
+    /// New buffers of the carry fields, filled by `fill` from the pools of this
+    /// slot, as [`Slot::new_carry`].
+    pub fn new_carry<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
+        self.messages.carry(fill)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
     use std::sync::atomic::AtomicBool;
     use std::thread;
 
@@ -776,15 +944,15 @@ mod tests {
 
     /// Two scalar int64 fields, so that a torn message would show two values.
     fn pair_schema() -> Arc<Schema> {
-        Arc::new(Schema::new(vec![field("a", &[]), field("b", &[])]).unwrap())
+        Arc::new(Schema::new(vec![field("a", &[]), field("b", &[])], vec![]).unwrap())
     }
 
     fn scalar_schema() -> Arc<Schema> {
-        Arc::new(Schema::new(vec![field("", &[])]).unwrap())
+        Arc::new(Schema::new(vec![field("", &[])], vec![]).unwrap())
     }
 
     /// Fills every field with `k`.
-    fn fill_k(k: i64) -> impl FnOnce(&mut [&mut [u8]]) -> Result<(), Infallible> {
+    fn fill_k(k: i64) -> impl FnOnce(&mut [&mut [u8]]) -> Result<(), SlotError> {
         move |bytes| {
             for b in bytes {
                 b.copy_from_slice(&k.to_ne_bytes());
@@ -794,7 +962,7 @@ mod tests {
     }
 
     fn values(msg: &Message) -> Vec<i64> {
-        msg.buffers()
+        msg.values()
             .iter()
             .map(|b| i64::from_ne_bytes(b.bytes().try_into().unwrap()))
             .collect()
@@ -815,21 +983,31 @@ mod tests {
             bits: 8,
             lanes: 1,
         };
-        assert!(Schema::new(vec![]).is_err());
-        assert!(Schema::new(vec![field("a", &[]), field("a", &[2])]).is_err());
-        assert!(Schema::new(vec![field("a", &[2, 0])]).is_err());
+        let values = |fields: Vec<FieldSpec>| Schema::new(fields, vec![]);
+        assert!(values(vec![]).is_err());
+        assert!(values(vec![field("a", &[]), field("a", &[2])]).is_err());
+        assert!(values(vec![field("a", &[2, 0])]).is_err());
         // 2^61 int64 elements are 2^64 bytes, and 2^32 x 2^32 overflows usize.
-        assert!(Schema::new(vec![field("a", &[1 << 61])]).is_err());
-        assert!(Schema::new(vec![field("a", &[1 << 32, 1 << 32])]).is_err());
+        assert!(values(vec![field("a", &[1 << 61])]).is_err());
+        assert!(values(vec![field("a", &[1 << 32, 1 << 32])]).is_err());
         let mut f = field("a", &[2]);
         f.dtype.lanes = 4;
-        assert!(Schema::new(vec![f]).is_err());
-        let ok = Schema::new(vec![FieldSpec {
+        assert!(values(vec![f.clone()]).is_err());
+        let ok = values(vec![FieldSpec {
             name: "m".to_owned(),
             shape: vec![3],
             dtype: bool8,
         }]);
         assert_eq!(ok.unwrap().fields()[0].nbytes(), 3);
+
+        // The carry fields are checked alike, and named apart from the values.
+        let carry = |fields: Vec<FieldSpec>| Schema::new(vec![field("x", &[])], fields);
+        assert!(carry(vec![field("y", &[]), field("y", &[2])]).is_err());
+        assert!(carry(vec![field("y", &[0])]).is_err());
+        assert!(carry(vec![f]).is_err());
+        let both = Schema::new(vec![field("", &[])], vec![field("", &[2])]).unwrap();
+        assert_eq!((both.values().len(), both.carry().len()), (1, 1));
+        assert!(Schema::new(vec![], vec![field("y", &[])]).is_err());
     }
 
     #[test]
@@ -849,7 +1027,7 @@ mod tests {
         let timer = timer();
         let outlet = Outlet::new(scalar_schema(), 3, "p", Arc::clone(&timer));
         timer.advance_ns(42).unwrap();
-        outlet.send_with(Target::All, fill_k(7)).unwrap();
+        outlet.send_with(Target::All, None, fill_k(7)).unwrap();
         let out = outlet.outbox().load();
         assert_eq!(values(&out), [7]);
         assert_eq!(out.time_ns(), 42);
@@ -862,10 +1040,12 @@ mod tests {
     fn only_written_messages_are_sent() {
         let outlet = Outlet::new(scalar_schema(), 2, "p", timer());
         assert!(!outlet.outbox().load().sent());
-        outlet.send_with(Target::Channel(1), fill_k(1)).unwrap();
+        outlet
+            .send_with(Target::Channel(1), None, fill_k(1))
+            .unwrap();
         assert!(outlet.channel(1).load().sent());
         assert!(!outlet.channel(0).load().sent());
-        outlet.send_with(Target::All, fill_k(2)).unwrap();
+        outlet.send_with(Target::All, None, fill_k(2)).unwrap();
         assert!(outlet.outbox().load().sent() && outlet.channel(0).load().sent());
 
         let group = InputGroup::new(timer());
@@ -878,7 +1058,9 @@ mod tests {
     #[test]
     fn send_to_one_channel_changes_only_it() {
         let outlet = Outlet::new(scalar_schema(), 3, "p", timer());
-        outlet.send_with(Target::Channel(1), fill_k(9)).unwrap();
+        outlet
+            .send_with(Target::Channel(1), None, fill_k(9))
+            .unwrap();
         assert_eq!(values(&outlet.channel(1).load()), [9]);
         for slot in [outlet.outbox(), outlet.channel(0), outlet.channel(2)] {
             assert_eq!(values(&slot.load()), [0]);
@@ -889,17 +1071,19 @@ mod tests {
     fn failed_fill_publishes_nothing() {
         let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
         let before = outlet.outbox().load();
-        assert_eq!(outlet.send_with(Target::All, |_| Err("bad")), Err("bad"));
+        let bad = SlotError::InvalidSchema("bad".to_owned());
+        let failed = outlet.send_with(Target::All, None, |_| Err(bad.clone()));
+        assert_eq!(failed, Err(bad));
         assert!(Arc::ptr_eq(&outlet.outbox().load(), &before));
     }
 
     #[test]
     fn held_message_survives_later_writes() {
         let outlet = Outlet::new(scalar_schema(), 0, "p", timer());
-        outlet.send_with(Target::All, fill_k(1)).unwrap();
+        outlet.send_with(Target::All, None, fill_k(1)).unwrap();
         let held = outlet.outbox().load();
         for k in 2..=100 {
-            outlet.send_with(Target::All, fill_k(k)).unwrap();
+            outlet.send_with(Target::All, None, fill_k(k)).unwrap();
         }
         assert_eq!(values(&held), [1]);
         assert_eq!(values(&outlet.outbox().load()), [100]);
@@ -910,7 +1094,7 @@ mod tests {
         let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
         let slot = outlet.outbox();
         for k in 0..1000 {
-            outlet.send_with(Target::All, fill_k(k)).unwrap();
+            outlet.send_with(Target::All, None, fill_k(k)).unwrap();
             // A reader that holds each message only while it reads it.
             let _ = values(&slot.load());
         }
@@ -938,7 +1122,7 @@ mod tests {
             })
             .collect();
         for k in 1..=WRITES {
-            outlet.send_with(Target::All, fill_k(k)).unwrap();
+            outlet.send_with(Target::All, None, fill_k(k)).unwrap();
         }
         for r in readers {
             r.join().unwrap();
@@ -950,7 +1134,9 @@ mod tests {
     /// freed by one slot is often allocated again, at the same address, for the
     /// next write to another slot, and writing every slot from one thread makes
     /// that likely. Readers of `pairs` and of `input` (whose pairs have the same
-    /// allocation size as messages) must still see only their own messages.
+    /// allocation size as messages) must still see only their own messages, and
+    /// a reader of `relayed` only messages with its own value and the carry of
+    /// `carrying`.
     ///
     /// Passing proves little: against `arc-swap` it failed in about half of the runs
     /// (`specs/native-core.md`).
@@ -961,34 +1147,41 @@ mod tests {
         let scalars = Outlet::new(scalar_schema(), 0, "scalars", timer());
         let group = InputGroup::new(timer());
         let input = group.input(pair_schema(), "input");
+        let carrying = Outlet::new(carry_schema(), 1, "carrying", timer());
+        let relayed = Outlet::new(carry_schema(), 0, "relayed", timer());
         let done = Arc::new(AtomicBool::new(false));
-        let reader = |load: Box<dyn Fn() -> Arc<Message> + Send>| {
+        let reader = |load: Box<dyn Fn() -> Arc<Message> + Send>, expected: [&'static str; 2]| {
             let done = Arc::clone(&done);
             thread::spawn(move || {
                 while !done.load(Ordering::Relaxed) {
                     let msg = load();
                     let fields: Vec<_> = msg
-                        .buffers()
+                        .values()
                         .iter()
+                        .chain(msg.carry())
                         .map(|b| b.field().name.as_str())
                         .collect();
-                    assert_eq!(fields, ["a", "b"], "read a message of another slot");
+                    assert_eq!(fields, expected, "read a message of another slot");
                 }
             })
         };
         let readers: Vec<_> = (0..4)
             .flat_map(|_| {
                 let (slot, input) = (Arc::clone(pairs.outbox()), Arc::clone(&input));
+                let relayed = Arc::clone(relayed.outbox());
                 [
-                    reader(Box::new(move || slot.load())),
-                    reader(Box::new(move || input.load())),
+                    reader(Box::new(move || slot.load()), ["a", "b"]),
+                    reader(Box::new(move || input.load()), ["a", "b"]),
+                    reader(Box::new(move || relayed.load()), ["a", "c"]),
                 ]
             })
             .collect();
         for k in 1..=WRITES {
-            pairs.send_with(Target::All, fill_k(k)).unwrap();
-            scalars.send_with(Target::All, fill_k(k)).unwrap();
+            pairs.send_with(Target::All, None, fill_k(k)).unwrap();
+            scalars.send_with(Target::All, None, fill_k(k)).unwrap();
             group.write(&[&input], |_, bytes| fill_k(k)(bytes)).unwrap();
+            carrying.send_with(Target::All, None, fill_k(k)).unwrap();
+            relay(&relayed, carrying.channel(0), k).unwrap();
         }
         done.store(true, Ordering::Relaxed);
         for r in readers {
@@ -1008,7 +1201,7 @@ mod tests {
             thread::spawn(move || slot.wait_newer(&first, Duration::from_secs(10)))
         };
         thread::sleep(Duration::from_millis(20));
-        outlet.send_with(Target::All, fill_k(3)).unwrap();
+        outlet.send_with(Target::All, None, fill_k(3)).unwrap();
         let newer = waiter.join().unwrap().expect("woken by the write");
         assert_eq!(values(&newer), [3]);
     }
@@ -1120,49 +1313,301 @@ mod tests {
         assert_eq!(values(&a.load()), [WRITES]);
     }
 
+    /// Fills the field `x` of shape (2, 3) with `k`, `k + 1`, ...
+    fn fill_range(k: i64) -> impl FnOnce(&mut [&mut [u8]]) -> Result<(), SlotError> {
+        move |bytes| {
+            for (i, chunk) in bytes[0].chunks_exact_mut(8).enumerate() {
+                chunk.copy_from_slice(&(k + i as i64).to_ne_bytes());
+            }
+            Ok(())
+        }
+    }
+
     #[test]
-    fn lent_tensor_keeps_message_alive_until_deleted() {
+    fn lent_tensor_keeps_buffer_out_of_its_pool_until_deleted() {
         let outlet = Outlet::new(
-            Arc::new(Schema::new(vec![field("x", &[2, 3])]).unwrap()),
+            Arc::new(Schema::new(vec![field("x", &[2, 3])], vec![]).unwrap()),
             0,
             "p",
             timer(),
         );
-        outlet
-            .send_with(Target::All, |bytes: &mut [&mut [u8]]| {
-                for (i, chunk) in bytes[0].chunks_exact_mut(8).enumerate() {
-                    chunk.copy_from_slice(&(i as i64).to_ne_bytes());
-                }
-                Ok::<_, Infallible>(())
-            })
-            .unwrap();
-        let msg = outlet.outbox().load();
-        let field = msg.buffers()[0].field().clone();
-        let before = Arc::strong_count(&msg);
-
-        for versioned in [true, false] {
+        let pool = Arc::clone(&outlet.messages.pools[0]);
+        for (k, versioned) in [(0, true), (100, false)] {
+            outlet.send_with(Target::All, None, fill_range(k)).unwrap();
+            let msg = outlet.outbox().load();
+            let buffer = Arc::clone(&msg.values()[0]);
+            let field = buffer.field().clone();
+            let expected = buffer.bytes().to_vec();
+            let before = Arc::strong_count(&buffer);
             let (tensor, delete): (&DLTensor, Box<dyn FnOnce()>) = if versioned {
-                let t = dlpack::export_versioned(Arc::clone(&msg), 0);
+                let t = dlpack::export_versioned(Arc::clone(&buffer));
                 // SAFETY: `t` stays valid until its deleter is called below.
                 unsafe {
                     assert_eq!((*t).version, dlpack::VERSION);
                     (&(*t).dl_tensor, Box::new(move || (*t).deleter.unwrap()(t)))
                 }
             } else {
-                let t = dlpack::export_legacy(Arc::clone(&msg), 0);
+                let t = dlpack::export_legacy(Arc::clone(&buffer));
                 // SAFETY: as above.
                 unsafe { (&(*t).dl_tensor, Box::new(move || (*t).deleter.unwrap()(t))) }
             };
-            assert_eq!(Arc::strong_count(&msg), before + 1);
+            assert_eq!(Arc::strong_count(&buffer), before + 1);
+            // Drop the message and replace it in the slot: only the tensor holds
+            // the buffer now, so later sends must not reuse it.
+            drop((buffer, msg));
+            for j in 1..=3 {
+                outlet.send_with(Target::All, None, fill_range(-j)).unwrap();
+            }
             let mut copy = vec![0u8; field.nbytes()];
-            // SAFETY: the exported tensor describes the live message buffer.
+            // SAFETY: the exported tensor describes the live buffer.
             unsafe { dlpack::copy_from(tensor, &field, &mut copy) }.unwrap();
-            assert_eq!(copy, msg.buffers()[0].bytes());
+            assert_eq!(copy, expected);
             // SAFETY: the strides point to `ndim` values.
             let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
             assert_eq!(strides, [3, 1]);
+            let free = lock(&pool.free).len();
             delete();
-            assert_eq!(Arc::strong_count(&msg), before);
+            assert_eq!(lock(&pool.free).len(), free + 1, "back in its pool");
+        }
+    }
+
+    /// A scalar int64 value `a` carrying a scalar int64 `c`.
+    fn carry_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![field("a", &[])], vec![field("c", &[])]).unwrap())
+    }
+
+    fn carried(msg: &Message) -> Vec<i64> {
+        msg.carry()
+            .iter()
+            .map(|b| i64::from_ne_bytes(b.bytes().try_into().unwrap()))
+            .collect()
+    }
+
+    /// How many buffers the pools of the value fields and of the carry fields of
+    /// `slot`'s writer have allocated.
+    fn split_allocations(slot: &Slot) -> (usize, usize) {
+        let messages = &slot.messages;
+        let count = |pools: &[Arc<BufferPool>]| -> usize {
+            pools
+                .iter()
+                .map(|p| p.allocated.load(Ordering::Relaxed))
+                .sum()
+        };
+        let carry_from = messages.schema.carry_from;
+        (
+            count(&messages.pools[..carry_from]),
+            count(&messages.pools[carry_from..]),
+        )
+    }
+
+    /// How many buffers wait in the free list of the carry pool of `slot`'s writer.
+    fn free_carry(slot: &Slot) -> usize {
+        lock(&slot.messages.pools[1].free).len()
+    }
+
+    /// Sends `k` as the value and passes on the carry of what `from` holds now.
+    fn relay(outlet: &Outlet, from: &Slot, k: i64) -> Result<(), SlotError> {
+        let msg = from.load();
+        outlet.send_with(Target::All, Some(msg.carry()), fill_k(k))
+    }
+
+    #[test]
+    fn relay_shares_the_carried_buffers() {
+        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let relayer = Outlet::new(carry_schema(), 1, "b", timer());
+        source.send_with(Target::All, None, fill_k(7)).unwrap();
+        relay(&relayer, source.channel(0), 8).unwrap();
+        let (got, from) = (relayer.channel(0).load(), source.channel(0).load());
+        assert_eq!((values(&got), carried(&got)), (vec![8], vec![7]));
+        assert!(Arc::ptr_eq(&got.carry()[0], &from.carry()[0]));
+        assert_eq!(
+            split_allocations(relayer.outbox()),
+            (2, 1),
+            "only the zeros"
+        );
+    }
+
+    #[test]
+    fn relays_along_a_path_allocate_no_carry() {
+        let a = Outlet::new(carry_schema(), 1, "a", timer());
+        let b = Outlet::new(carry_schema(), 1, "b", timer());
+        let c = Outlet::new(carry_schema(), 1, "c", timer());
+        for k in 0..1000 {
+            a.send_with(Target::All, None, fill_k(k)).unwrap();
+            relay(&b, a.channel(0), k + 1).unwrap();
+            relay(&c, b.channel(0), k + 2).unwrap();
+            let end = c.channel(0).load();
+            assert_eq!((values(&end), carried(&end)), (vec![k + 2], vec![k]));
+        }
+        // The relays only ever allocated the carry of their zeros.
+        assert_eq!(split_allocations(b.outbox()).1, 1);
+        assert_eq!(split_allocations(c.outbox()).1, 1);
+        // The latest message of each of the three outlets holds one carry of a's,
+        // and a fills one more while they do.
+        let (_, made) = split_allocations(a.outbox());
+        assert!(made <= 4, "allocated {made}");
+    }
+
+    #[test]
+    fn relayed_buffers_return_to_the_pool_that_filled_them() {
+        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let relayer = Outlet::new(carry_schema(), 0, "b", timer());
+        source.send_with(Target::All, None, fill_k(1)).unwrap();
+        relay(&relayer, source.channel(0), 0).unwrap();
+        // The source moves on, but the relayer still holds the carry of 1.
+        source.send_with(Target::All, None, fill_k(2)).unwrap();
+        let (free, own) = (free_carry(source.outbox()), free_carry(relayer.outbox()));
+        relay(&relayer, source.channel(0), 0).unwrap();
+        assert_eq!(free_carry(source.outbox()), free + 1);
+        assert_eq!(
+            free_carry(relayer.outbox()),
+            own,
+            "not to the relayer's pool"
+        );
+    }
+
+    #[test]
+    fn writers_fill_and_restore_the_carry() {
+        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
+        let zeros = outlet.channel(0).load();
+        assert_eq!((values(&zeros), carried(&zeros)), (vec![0], vec![0]));
+        outlet.send_with(Target::All, None, fill_k(3)).unwrap();
+        assert_eq!(carried(&outlet.outbox().load()), [3]);
+        outlet.channel(0).restore(5, true, fill_k(4)).unwrap();
+        assert_eq!(carried(&outlet.channel(0).load()), [4]);
+
+        let group = InputGroup::new(timer());
+        let input = group.input(carry_schema(), "i");
+        assert_eq!(carried(&input.load()), [0]);
+        group.write(&[&input], |_, bytes| fill_k(6)(bytes)).unwrap();
+        assert_eq!(carried(&input.load()), [6]);
+        input.restore(1, true, fill_k(9)).unwrap();
+        assert_eq!(carried(&input.load()), [9]);
+    }
+
+    #[test]
+    fn new_carry_comes_from_the_slots_pool() {
+        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
+        let slot = outlet.channel(0);
+        let carry = slot.new_carry(fill_k(5)).unwrap();
+        assert_eq!(carry.len(), 1);
+        assert_eq!(carry[0].field(), &field("c", &[]));
+        assert_eq!(carry[0].bytes(), 5i64.to_ne_bytes());
+        assert_eq!(split_allocations(slot), (1, 2));
+        drop(carry);
+        assert_eq!(free_carry(slot), 1);
+
+        let group = InputGroup::new(timer());
+        let input = group.input(carry_schema(), "i");
+        let carry = input.new_carry(fill_k(6)).unwrap();
+        assert_eq!(carry[0].bytes(), 6i64.to_ne_bytes());
+    }
+
+    #[test]
+    fn mismatched_relay_publishes_nothing() {
+        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let other = Outlet::new(
+            Arc::new(Schema::new(vec![field("a", &[])], vec![field("d", &[])]).unwrap()),
+            1,
+            "x",
+            timer(),
+        );
+        let shaped = Outlet::new(
+            Arc::new(Schema::new(vec![field("a", &[])], vec![field("c", &[2])]).unwrap()),
+            1,
+            "y",
+            timer(),
+        );
+        let mut int32 = field("c", &[]);
+        int32.dtype.bits = 32;
+        let typed = Outlet::new(
+            Arc::new(Schema::new(vec![field("a", &[])], vec![int32]).unwrap()),
+            1,
+            "z",
+            timer(),
+        );
+        let plain = Outlet::new(pair_schema(), 1, "w", timer());
+        for target in [&other, &shaped, &typed, &plain] {
+            let before = target.outbox().load();
+            let (values_before, _) = split_allocations(target.outbox());
+            let err = relay(target, source.channel(0), 1).unwrap_err();
+            assert!(matches!(err, SlotError::CarryMismatch { .. }), "{err}");
+            assert!(Arc::ptr_eq(&target.outbox().load(), &before));
+            assert_eq!(split_allocations(target.outbox()).0, values_before);
+        }
+        let err = relay(&other, source.channel(0), 1).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            "slot 'x/out': expected to carry ('d': () int64), got ('c': () int64)"
+        );
+        let err = plain
+            .send_with(Target::Channel(0), Some(&[]), fill_k(1))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err,
+            "slot 'w/ch0': expected to carry nothing, so it passes nothing on"
+        );
+    }
+
+    #[test]
+    fn failed_fill_with_carry_publishes_nothing() {
+        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
+        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let before = outlet.outbox().load();
+        let bad = SlotError::InvalidSchema("bad".to_owned());
+        let failed = outlet.send_with(Target::All, None, |_| Err(bad.clone()));
+        assert_eq!(failed, Err(bad.clone()));
+        let msg = source.channel(0).load();
+        let failed = outlet.send_with(Target::All, Some(msg.carry()), |_| Err(bad.clone()));
+        assert_eq!(failed, Err(bad));
+        assert!(Arc::ptr_eq(&outlet.outbox().load(), &before));
+    }
+
+    /// The point of carrying data in the message: a reader of a relayed path
+    /// sees a value together with the carry of the very message it was made
+    /// from, however the threads interleave.
+    #[test]
+    fn relayed_carry_stays_with_its_value() {
+        const WRITES: i64 = 20_000;
+        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let relayer = Arc::new(Outlet::new(carry_schema(), 1, "b", timer()));
+        let from = Arc::clone(source.channel(0));
+        let done = Arc::new(AtomicBool::new(false));
+        let relaying = {
+            let (relayer, done) = (Arc::clone(&relayer), Arc::clone(&done));
+            thread::spawn(move || {
+                while !done.load(Ordering::Relaxed) {
+                    let msg = from.load();
+                    let k = values(&msg)[0];
+                    relayer
+                        .send_with(Target::All, Some(msg.carry()), fill_k(k))
+                        .unwrap();
+                }
+            })
+        };
+        let readers: Vec<_> = (0..4)
+            .map(|_| {
+                let (slot, done) = (Arc::clone(relayer.channel(0)), Arc::clone(&done));
+                thread::spawn(move || {
+                    let mut last = 0;
+                    while !done.load(Ordering::Relaxed) {
+                        let msg = slot.load();
+                        let (v, c) = (values(&msg)[0], carried(&msg)[0]);
+                        assert_eq!(v, c, "a value with the carry of another message");
+                        assert!(v >= last, "went back from {last} to {v}");
+                        last = v;
+                    }
+                })
+            })
+            .collect();
+        for k in 1..=WRITES {
+            source.send_with(Target::All, None, fill_k(k)).unwrap();
+        }
+        done.store(true, Ordering::Relaxed);
+        relaying.join().unwrap();
+        for r in readers {
+            r.join().unwrap();
         }
     }
 }

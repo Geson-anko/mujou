@@ -12,7 +12,7 @@ from typing import Any, Final, Never, final
 from mujou._core import _native
 from mujou._core.component import Component, children_of, ports_of
 from mujou._core.node import Node
-from mujou._core.port import Port, freeze, is_frozen, thaw
+from mujou._core.port import Port, freeze, is_frozen, label, thaw
 
 
 @final
@@ -29,7 +29,7 @@ class Graph:
 
     # Any: ports of every message type are handled alike.
     _nodes: tuple[tuple[str, Node], ...]
-    _ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
+    _ports: Mapping[Port[Any, Any, Any, Any, Any], tuple[int, str]]
     # Every node and network of the tree, marked as built with _tree.
     _members: tuple[Component, ...]
     _tree: _Tree
@@ -50,7 +50,7 @@ class Graph:
         """
         return self._nodes
 
-    def port_path(self, port: Port[Any, Any, Any]) -> str:
+    def port_path(self, port: Port[Any, Any, Any, Any, Any]) -> str:
         """Return the path of ``port`` through its owner, e.g. ``"body.l1.next"``
         (``"next"`` when the owner is itself the root).
 
@@ -78,7 +78,7 @@ class _Tree:
 
 def _make_graph(
     nodes: tuple[tuple[str, Node], ...],
-    ports: Mapping[Port[Any, Any, Any], tuple[int, str]],
+    ports: Mapping[Port[Any, Any, Any, Any, Any], tuple[int, str]],
     members: tuple[Component, ...],
     tree: _Tree,
 ) -> Graph:
@@ -91,7 +91,7 @@ def _make_graph(
     return graph
 
 
-def ports(graph: Graph) -> Mapping[Port[Any, Any, Any], tuple[int, str]]:
+def ports(graph: Graph) -> Mapping[Port[Any, Any, Any, Any, Any], tuple[int, str]]:
     """For every port owned by a node of ``graph``, the index of the owner in
     ``graph.nodes`` and the attribute name of the port."""
     return graph._ports  # pyright: ignore[reportPrivateUsage]  # Graph's own module
@@ -103,9 +103,9 @@ def build_tree(root: Component, by_run: bool) -> Graph:
     Call it under ``BUILD_LOCK``."""
     members: list[Component] = []
     nodes: list[tuple[str, Node]] = []
-    ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
+    ports: dict[Port[Any, Any, Any, Any, Any], tuple[int, str]] = {}
     # (attribute path, port, indices of the nodes in the exposing subtree)
-    exposed: list[tuple[str, Port[Any, Any, Any], range]] = []
+    exposed: list[tuple[str, Port[Any, Any, Any, Any, Any], range]] = []
     seen: dict[int, str] = {}  # id(component) -> path
 
     def visit(component: Component, path: str) -> None:
@@ -171,6 +171,14 @@ def build_tree(root: Component, by_run: bool) -> Graph:
                     "outside the tree being built (only direct attributes are "
                     "walked, not lists or dicts)"
                 )
+        source = port.carry_source
+        # A node passes on only what its own port received: it reads no other
+        # node's slots (locality).
+        if source is not None and (source not in ports or ports[source][0] != owner[0]):
+            raise ValueError(
+                f"the port {_path(nodes, owner)!r} passes on the carried data of "
+                f"{label(source)}, which is not a port of the same node"
+            )
     for port in ports:
         freeze(port)
     built = _Tree(by_run)

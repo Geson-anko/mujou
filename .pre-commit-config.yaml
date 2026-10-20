@@ -1,3 +1,6 @@
+# Vendored from https://github.com/nanaism/yomiyasu as is: replaced wholesale on update.
+exclude: ^\.claude/skills/yomiyasu/
+
 default_language_version:
   python: python3.14
 

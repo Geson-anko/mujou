@@ -79,8 +79,9 @@ class Network(Component):
             ValueError: The structure is invalid: the tree has no node; a component
                 appears at two paths; a port is owned by two nodes (or under two
                 names); a port is declared as a class attribute; a network exposes
-                a port that no node inside it owns; or a channel leads to a port
-                outside the tree.
+                a port that no node inside it owns; a channel leads to a port
+                outside the tree; or a port passes on the carried data of a port
+                (its ``send_carry``) that is not of the same node.
         """
         # One build at a time: two threads building one tree would each make a
         # graph, and both would run.

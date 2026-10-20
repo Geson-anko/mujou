@@ -26,11 +26,11 @@ hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_excep
 
 ## 時定数
 
-連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。周期を入れても $\Delta t$ は実際の経過時間のままで、上限（`max_dt`）はまだ持たない（2026-10-17）。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
+連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。周期を入れても $\Delta t$ は実際の経過時間のままで、コアは上限（`max_dt`）を持たない（2026-10-17）。`mujou.pc` のノードは自分の選択として `max_dt`（既定 $\min(\tau_h/2, 3\tau_\lambda)$）で打ち切る（2026-10-20、[mujou.pc の実装計画](pc-module.md#dt-が伸びたとき)）。`mujou.pc` のノードの周期の既定は $\tau_h/4$ とし、$\tau_\lambda = 2\tau_h$ を example の既定にする（2026-10-20、[mujou.pc の実装計画](pc-module.md#時定数)）。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## 双対変数の扱い
 
-ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
+ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。状態を活動 $h$ と $\lambda$ で持ち（予測が離散的に跳ぶ更新で $h$ を付け替える）、リセットせず持ち越すと決めた（2026-10-20、ユーザーの決定。状態の形は orchestrator の決定。[mujou.pc の実装計画](pc-module.md#入力の切り替えと状態)）。dual leak は未決定。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
 
 ## mujou.Node の細部
 

@@ -30,6 +30,7 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 - **You cannot restore while another run is running on the same timer.** In that case `mujou.run` raises `ValueError` and starts nothing. End the other run first, or give the restored run a timer of its own, `mujou.time.Timer()` (see [Controlling time](time.md))
 - The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise `mujou.run` raises `ValueError`
 - If you pass both `state=` and `inputs=`, the values in `inputs` override the input values in the tree
+- Data carried along a path ([Carrying data along a path](building-a-network.md#carrying-data-along-a-path)) is in the tree too: with the messages that carry it, and, for each port with a `recv_carry`, the data of the message it last received. A restored node passes on the same data as one that never stopped
 
 ## Taking the states of several runs at one time
 
@@ -66,9 +67,16 @@ Only `torch.Tensor` and `nn.Module` values assigned directly to attributes are c
 - The state of the random number generator `self.generator`
 - The state of an optimizer (such as moments) and the gradients accumulated in `.grad`
 
-To put these in the state, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected part is handled as before.
+For a number, a string, `None`, or a list or dict of them, assign the attribute and register its name with `register_state`. The value then goes into the state as it is, and stays in it whatever you assign to the attribute later, until `del`.
 
-For a number, you can instead keep it as a 0-dimensional tensor created in `on_start` (`self.count = torch.zeros((), device=self.device)`) and update it in place (`self.count += 1`), without overriding anything. It is then collected automatically.
+```python
+self.elapsed = 0.0
+self.register_state("elapsed")
+```
+
+The default `load_state_dict` assigns a copy of the saved value to the attribute. Register only an attribute that already exists, and register it in `__init__` or `on_start`: a restored run uses new node instances, and a name first registered later (in `on_update`, say) is not registered there yet, so the restore rejects it. Keep the values to basic types if the tree is to be read with the default `torch.load` (see [Formats](#formats)).
+
+For the rest, override both `state_dict` and `load_state_dict`. Call `super()`, and the automatically collected and registered part is handled as before.
 
 The following example adds the state of the random number generator. A restored run uses new node instances, whose generators start again from `seed`. Without its state, the random numbers after a restore differ from those of a run that went on without stopping.
 
@@ -111,7 +119,7 @@ For your own files, either will do. To share a tree with others, save it with `t
 
 Read a file back the same way it was saved (`pickle.loads` for `pickle.dumps`, `torch.load` for `torch.save`). If you do not know how a file was saved, read it first with the default `torch.load`. If that fails, read it with pickle only when you trust the sender.
 
-- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a `mujou.StateDict` too, once `mujou` is imported. If you override `state_dict` to put objects of your own classes in the tree, the default `torch.load` cannot read it
+- `torch.load` with its default (`weights_only=True`) reads a tree made only of tensors, numbers, strings, dicts, lists and tuples. It reads a `mujou.StateDict` too, once `mujou` is imported. If objects of your own classes go into the tree (from a registered attribute, or from an override of `state_dict`), the default `torch.load` cannot read it
 - `pickle.load` and `torch.load(..., weights_only=False)` can run code from the file while reading it. Do not read files you do not trust with them
 - The state of a node that computes on CUDA goes into the tree as CUDA tensors. `tree.cpu()` returns a new tree with every tensor of the tree on the CPU (the tree itself is not changed). Move the tree to the CPU before saving it, and a machine without a GPU can read it too. To read a file saved with CUDA tensors, use `torch.load(..., map_location="cpu")`. The default `load_state_dict` copies to the node's device, so you can pass the CPU tensors to `state=` as they are
 

@@ -99,11 +99,11 @@ class TestRegistration:
                 self.out = Port(send=h())
 
             @property
-            def out(self) -> Port[Any, Any, Any]:
+            def out(self) -> Port[Any, Any, Any, Any, Any]:
                 return self._out
 
             @out.setter
-            def out(self, port: Port[Any, Any, Any]) -> None:
+            def out(self, port: Port[Any, Any, Any, Any, Any]) -> None:
                 self._out = port
 
         node = Wrapped()

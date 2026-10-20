@@ -80,10 +80,18 @@ The pages are in the order of the work.
 
     [:octicons-arrow-right-24: Testing](testing.md)
 
+- **🧠 Learning with PC-ALM**
+
+    ______________________________________________________________________
+
+    Train a model split into nodes with `mujou.pc`: stream a dataset, measure the accuracy, choose the time constants.
+
+    [:octicons-arrow-right-24: Learning with PC-ALM](pc.md)
+
 </div>
 
 ## 🚩 Where to start
 
 If you are new, read [Writing a node](writing-a-node.md), [Building a network](building-a-network.md) and [Running a network](running.md), in that order. These three pages cover everything from writing your own node to running it.
 
-The code examples on each page are taken from the programs in `examples/`, which the tests run.
+The code examples on each page are taken from the programs in `examples/`, which you can run as they are.

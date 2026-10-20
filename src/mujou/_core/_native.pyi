@@ -24,6 +24,7 @@ __all__ = [
     "__version__",
     "timer",
     "BufferView",
+    "Carry",
     "GlobalTimer",
     "InputGroup",
     "InputSlot",
@@ -73,6 +74,22 @@ class BufferView:
         """
 
 @final
+class Carry:
+    """
+    The data one message carries, to read or to pass on with
+    `Outlet.send(values, relay=carry)` without copying it.
+    """
+    @property
+    def buffers(self, /) -> tuple[BufferView, ...]:
+        """
+        One view per carry field, in key order (none if nothing is carried).
+        """
+    def __new__(cls, /) -> NoReturn:
+        """
+        No constructor: calling the class raises `TypeError`.
+        """
+
+@final
 class GlobalTimer(Timer):
     """
     The global timer, which every run not given a timer of its own uses. The
@@ -110,7 +127,8 @@ class InputGroup:
 
         No reader sees some of the slots new and others old at any one moment;
         a reader that reads two slots one after the other may still see a write
-        complete in between. If any value is invalid, no slot changes. Raises as
+        complete in between. Each slot's values are its value fields, then its
+        carry fields. If any value is invalid, no slot changes. Raises as
         `Outlet.send` does, and `ValueError` for a slot of another group or a
         slot given twice.
         """
@@ -122,6 +140,11 @@ class InputSlot:
     """
     @property
     def name(self, /) -> str: ...
+    def new_carry(self, /, values: Sequence[Any]) -> Carry:
+        """
+        A new carry of `values` (one per carry field), from the pools of this
+        slot, as `Slot.new_carry`.
+        """
     def read(self, /) -> Message: ...
     def restore(
         self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
@@ -130,8 +153,9 @@ class InputSlot:
         Sets the value, its time and whether it was sent, dropping any pending
         write.
 
-        Call it only while no node runs (before the start, or while every node
-        is paused). Raises as `Outlet.send` does.
+        `values` are the value fields, then the carry fields. Call it only while
+        no node runs (before the start, or while every node is paused). Raises
+        as `Outlet.send` does.
         """
     def __new__(cls, /) -> NoReturn:
         """
@@ -141,13 +165,18 @@ class InputSlot:
 @final
 class Message:
     """
-    An immutable value of a slot, the time it was written at on the writer's
-    timer, and whether the writer sent it.
+    An immutable value of a slot, the data it carries, the time it was written
+    at on the writer's timer, and whether the writer sent it.
     """
     @property
     def buffers(self, /) -> tuple[BufferView, ...]:
         """
-        One view per field, in key order.
+        One view per value field, in key order.
+        """
+    @property
+    def carry(self, /) -> Carry:
+        """
+        The data it carries, shared with the message and not copied.
         """
     @property
     def sent(self, /) -> bool:
@@ -271,9 +300,15 @@ class Outlet:
     change what readers see. Resizing or freeing a value from another thread
     while it is being sent is a data race in the caller's code.
 
+    `values` are the value fields, then the carry fields. With `relay`, they
+    are the value fields only, and the message carries `relay` (the carry of a
+    message this outlet's node received), shared and not copied.
+
     Raises (`send`, `send_to`):
         ValueError: The number of values, a shape or a dtype differs from the
-            schema. The message names the slot and the field.
+            schema (the message names the slot and the field), or `relay`
+            differs from the carry fields of the schema or the schema carries
+            nothing.
         TypeError: A value does not support DLPack or is not in host memory.
             Pinned memory is read without synchronizing any CUDA stream, so
             synchronize the copy that filled it before sending.
@@ -297,11 +332,13 @@ class Outlet:
         """
         The outward slot, which every `send` writes.
         """
-    def send(self, /, values: Sequence[Any]) -> None:
+    def send(self, /, values: Sequence[Any], relay: Carry | None = None) -> None:
         """
         Writes one message to the outward slot and every channel.
         """
-    def send_to(self, /, index: SupportsIndex, values: Sequence[Any]) -> None:
+    def send_to(
+        self, /, index: SupportsIndex, values: Sequence[Any], relay: Carry | None = None
+    ) -> None:
         """
         Writes one message to channel `index` only.
         """
@@ -420,14 +457,16 @@ class Schema:
     """
     The fields of a message, fixed when the network is built.
 
-    `Schema(fields)` takes `(name, shape, (code, bits, lanes))` per field, the
-    dtype as a DLPack `DLDataType`. A tensor message has one field named `""`;
-    a TypedDict message has one field per key, in key order. Every extent must
-    be at least 1.
+    `Schema(fields, carry)` takes `(name, shape, (code, bits, lanes))` per
+    field, the dtype as a DLPack `DLDataType`: `fields` for the value and
+    `carry` for the data the message carries (none by default). A tensor
+    message has one field named `""`; a TypedDict message has one field per
+    key, in key order. Every extent must be at least 1.
 
     Raises:
-        ValueError: No fields, duplicate names, an extent below 1, a dtype that
-            is not a scalar of whole bytes, or a field too large to allocate.
+        ValueError: No value fields, duplicate names among the value fields or
+            among the carry fields, an extent below 1, a dtype that is not a
+            scalar of whole bytes, or a field too large to allocate.
     """
     def __new__(
         cls,
@@ -440,6 +479,14 @@ class Schema:
                 tuple[SupportsIndex, SupportsIndex, SupportsIndex],
             ],
         ],
+        carry: SupportsGetItem[
+            int,
+            tuple[
+                str,
+                SupportsGetItem[int, SupportsIndex],
+                tuple[SupportsIndex, SupportsIndex, SupportsIndex],
+            ],
+        ] = ...,
     ) -> Self: ...
 
 @final
@@ -449,6 +496,12 @@ class Slot:
     """
     @property
     def name(self, /) -> str: ...
+    def new_carry(self, /, values: Sequence[Any]) -> Carry:
+        """
+        A new carry of `values` (one per carry field), from the pools of this
+        slot's writer: what a restore gives back to the port that reads this
+        slot. Raises as `Outlet.send` does.
+        """
     def read(self, /) -> Message: ...
     def restore(
         self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
@@ -457,9 +510,9 @@ class Slot:
         Sets the value, its time and whether it was sent as they were when the
         state was taken (`sent` is false for an initial value).
 
-        Call it only while no node runs (before the start, or while every node
-        is paused): it writes beside the slot's own writer. Raises as
-        `Outlet.send` does.
+        `values` are the value fields, then the carry fields. Call it only while
+        no node runs (before the start, or while every node is paused): it
+        writes beside the slot's own writer. Raises as `Outlet.send` does.
         """
     def wait_newer(
         self, /, last: Message, timeout: SupportsFloat | SupportsIndex

@@ -84,6 +84,8 @@ Port の型は型検査器が spec から推論するので、自分で書く場
 - `R` は受け取る型
 - `M` は相手の数。`mujou.typing` の `Single` か `Multi` を使う
 
+さらに 2 つの型引数 `Port[S, R, M, CS, CR]` は、送るときと受け取るときに運ぶ付随データの型である（[経路に沿ってデータを運ぶ](building-a-network.md#%E7%B5%8C%E8%B7%AF%E3%81%AB%E6%B2%BF%E3%81%A3%E3%81%A6%E3%83%87%E3%83%BC%E3%82%BF%E3%82%92%E9%81%8B%E3%81%B6)）。`Port[S, R, M]` は何も運ばない。どんな Port でも受け取る注釈は `Port[Any, Any, Any, Any, Any]` と書く。
+
 省いた向きは `Never` になる。任意の spec を受け取る関数は `mujou.typing` の `MessageSpec[T]` で注釈する。
 
 ```python

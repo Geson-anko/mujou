@@ -72,7 +72,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 | `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                                   |
 | `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                                  |
 | `specs/`               | Design specifications for developers, in Japanese. They record design decisions, including ones not implemented yet |
-| `examples/`            | Programs for users. The tests run every one of them                                                                 |
+| `examples/`            | Programs for users, as guides. The tests do not run them                                                            |
 
 `src/mujou/_core/_native.pyi` is generated and committed. After changing the bindings, run `just stub` and commit the result. A pre-commit hook runs `just stub` when the Rust sources, `pyproject.toml` or the stub change, and fails when the stub was stale; the Test workflow in CI checks it too.
 
@@ -93,7 +93,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Prefer oracles derived from theory, such as finite differences and known equilibria, to checks that "the loss went down".
 - Keep tests deterministic. Run on a `VirtualTimer` and step the nodes by hand with `mujou.testing.run` and `ManualRun.step`, and fix the seeds (a node's `seed`).
 - Mark long-running convergence or training checks with `@pytest.mark.slow`. Markers are strict: register new ones under `markers` in `pyproject.toml`.
-- `tests/test_examples.py` runs every program in `examples/`. The rules for examples are in [examples/README.md](examples/README.md).
+- The tests do not run the programs in `examples/`, which are guides for users. Run the ones your change affects by hand. The rules for examples are in [examples/README.md](examples/README.md).
 
 ## Documentation
 

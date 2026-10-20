@@ -14,7 +14,10 @@ names at the top level (``Port``, ``TensorSpec`` and so on).
   ``MessageSpec[Sample]``. Annotate with it a function that takes either
 
 An omitted direction is ``Never``: ``PrevPort(recv=TensorSpec((3,)))`` is a
-``PrevPort[Never, torch.Tensor, Single]``.
+``PrevPort[Never, torch.Tensor, Single]``. Two more type arguments,
+``Port[S, R, M, CS, CR]``, are the types of the data carried with what the port
+sends and receives (``send_carry`` and ``recv_carry``), ``Never`` when it carries
+nothing. ``Port[Any, Any, Any, Any, Any]`` takes any port.
 
 Example::
 
