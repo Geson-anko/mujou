@@ -2,9 +2,9 @@
 
 These are working programs that show how to use Mujou. They live in `examples/` in the repository.
 
-!!! tip "Tested code"
+!!! tip "Runnable code"
 
-    The documentation pages include these files as they are. The tests run every program, so if the code shown here stops working, the tests fail.
+    The documentation pages include these files as they are, so the code shown here is a whole program you can run.
 
 ## 📋 The list
 

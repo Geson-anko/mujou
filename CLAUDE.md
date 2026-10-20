@@ -67,7 +67,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 
 - `specs/` は開発者向けの設計仕様（日本語）。設計判断とその理由を書き、まだ実装していない仕様も含む
 - `docs/` は利用者向けのドキュメント（mkdocs、英語と日本語）。実装済みの公開 API の使い方を書く。API リファレンスは docstring から生成する
-- 利用者向けのサンプルは `examples/` に置き、ページには snippets（`--8<--`）で取り込む。`tests/test_examples.py` が全部を実行する
+- 利用者向けのサンプルは `examples/` に置き、ページには snippets（`--8<--`）で取り込む。example は利用者への手引きで、テストでは実行しない（`examples/README.md`）
 - 詳細: [memory/project_docs_site.md](memory/project_docs_site.md)
 
 ### カプセル化

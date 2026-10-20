@@ -71,9 +71,9 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  # Pages include the tested programs of examples/ with --8<-- "examples/<file>.py"
+  # Pages include the programs of examples/ with --8<-- "examples/<file>.py"
   # (or a marked section, "examples/<file>.py:<section>"), so that the code on the
-  # site is the code that the tests run.
+  # site is the code in the repository.
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
