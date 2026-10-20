@@ -1,7 +1,8 @@
 """The messages of ``mujou.pc``: the data carried with an activity, what the host
 writes to an input node and what an output node sends."""
 
-from typing import TypedDict
+from collections.abc import Sequence
+from typing import Any, TypedDict, cast
 
 import torch
 
@@ -75,3 +76,33 @@ def carry_spec(target: TensorSpec, batch: int) -> DictSpec[Carried]:
             f"got shape {target.shape}"
         )
     return DictSpec(Carried, y=target, mask=mask, time=TensorSpec((), torch.int64))
+
+
+def batch_of(carry: object) -> int:
+    """Return the batch ``B`` of a spec made by ``carry_spec``, for the nodes that
+    take one.
+
+    Raises:
+        TypeError: ``carry`` is not a ``DictSpec`` of ``Carried``.
+    """
+    # Any: only the TypedDict is compared.
+    if not (
+        isinstance(carry, DictSpec) and cast(DictSpec[Any], carry).typed_dict is Carried
+    ):
+        raise TypeError(
+            f"carry must be a DictSpec of Carried, as carry_spec makes it, got {carry!r}"
+        )
+    return carry.specs["mask"].shape[0]
+
+
+def check_batch(shape: Sequence[int], batch: int, what: str) -> None:
+    """Check that ``shape`` starts with the batch of the carried data.
+
+    Raises:
+        ValueError: The first dimension of ``shape`` is not ``batch``.
+    """
+    if tuple(shape)[:1] != (batch,):
+        raise ValueError(
+            f"the first dimension of {what} must be the batch {batch} of carry, "
+            f"got shape {tuple(shape)}"
+        )

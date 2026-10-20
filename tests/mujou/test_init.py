@@ -33,3 +33,33 @@ class TestPublicNames:
         # A star import must not shadow the standard `typing`.
         assert "typing" not in mujou.__all__
         assert mujou.typing.__name__ == "mujou.typing"
+
+
+class TestPcPublicNames:
+    def test_exports(self):
+        # The names of specs/pc-module.md; a change here is a change of the
+        # public API.
+        import mujou.pc
+
+        assert sorted(mujou.pc.__all__) == [
+            "Carried",
+            "Input",
+            "Layer",
+            "Output",
+            "Prediction",
+            "Sample",
+            "TimeConstants",
+            "carry_spec",
+            "cross_entropy",
+            "functional",
+            "mse",
+        ]
+        assert sorted(mujou.pc.functional.__all__) == [
+            "learn_",
+            "loss_vjp",
+            "relax_",
+            "vjp",
+        ]
+
+    def test_pc_is_a_submodule_outside_the_top_level(self):
+        assert "pc" not in mujou.__all__
