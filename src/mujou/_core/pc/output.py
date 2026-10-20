@@ -74,6 +74,7 @@ class Output(Learner):
             default period.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
+            It must not be longer than ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
             towards the weight of the update of ``theta``.
         dtype: The dtype of ``h_in``; ``None`` is ``torch.get_default_dtype()``.

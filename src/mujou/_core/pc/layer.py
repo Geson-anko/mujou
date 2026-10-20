@@ -121,6 +121,7 @@ class Layer(Learner):
             update of ``theta``, and between the updates while the input stays.
             ``None`` updates in every ``on_update``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
+            It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
             ``min(tau.h / 2, 3 * tau.lam)``.
         dtype: The dtype of ``h_in``; ``None`` is ``torch.get_default_dtype()``.
@@ -132,8 +133,9 @@ class Layer(Learner):
             ``learn_interval`` or ``max_dt`` is a ``bool``.
         ValueError: ``input_shape[0]`` or the first dimension of the output of
             ``module`` is not the batch of ``carry``; a parameter or buffer of
-            ``module`` is not on ``device``; or ``learn_interval`` or
-            ``max_dt`` is neither ``None`` nor finite and positive. ``module``
+            ``module`` is not on ``device``; ``learn_interval`` or ``max_dt``
+            is neither ``None`` nor finite and positive; or ``period`` is
+            longer than ``max_dt``. ``module``
             raises as PyTorch does when it does not take ``input_shape`` and
             ``dtype``.
     """

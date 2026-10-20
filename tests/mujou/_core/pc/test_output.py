@@ -134,6 +134,17 @@ class TestConstruction:
         )
         assert out.period == pytest.approx(TAU.h / 4)
 
+    def test_the_period_must_not_be_longer_than_max_dt(self):
+        with pytest.raises(ValueError, match="max_dt"):
+            pc.Output(
+                nn.Linear(N_IN, N_OUT),
+                loss=pc.mse,
+                input_shape=(B, N_IN),
+                carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+                tau=TAU,
+                period=TAU.h,  # max_dt is tau.h / 2
+            )
+
 
 class TestPairing:
     def test_each_prediction_meets_the_target_of_its_own_input(

@@ -297,6 +297,8 @@ class TestConstruction:
             ({"max_dt": math.inf}, "max_dt"),
             ({"learn_interval": 0.0}, "learn_interval"),
             ({"learn_interval": math.inf}, "learn_interval"),
+            ({"period": 3e-3}, "max_dt"),  # longer than tau.h / 2
+            ({"period": 2e-3, "max_dt": 1e-3}, "max_dt"),
         ],
     )
     def test_value_errors(self, kwargs: dict[str, Any], match: str):

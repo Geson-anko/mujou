@@ -35,9 +35,10 @@ class Learner(Node):
             of ``carry_spec``, ``module`` does not return a tensor, or
             ``learn_interval`` or ``max_dt`` is a ``bool``.
         ValueError: ``learn_interval`` or ``max_dt`` is neither ``None`` nor
-            finite and positive; ``input_shape[0]`` or the first dimension of
-            the output of ``module`` is not the batch of ``carry``; or a
-            parameter or buffer of ``module`` is not on ``device``.
+            finite and positive; ``period`` is longer than ``max_dt``;
+            ``input_shape[0]`` or the first dimension of the output of
+            ``module`` is not the batch of ``carry``; or a parameter or buffer
+            of ``module`` is not on ``device``.
     """
 
     def __init__(
@@ -80,6 +81,12 @@ class Learner(Node):
         # The explicit Euler step of h then lam is stable for dt / tau.h <= 1/2
         # and dt / tau.lam <= 3 (specs/pc-module.md, "dt が伸びたとき").
         self._max_dt = min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt
+        if self.period > self._max_dt:
+            raise ValueError(
+                f"the period {self.period!r} s must not be longer than max_dt "
+                f"{self._max_dt!r} s, or every update would drop the time beyond "
+                "max_dt; give a shorter period or a longer max_dt"
+            )
         # No time a host writes at (>= 0), so the first update sees a new input.
         # The carried data before the first send is zeros, whose time 0 is also
         # that of a first write at time 0, so a new input is not told by its
