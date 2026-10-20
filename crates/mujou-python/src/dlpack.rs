@@ -1,12 +1,13 @@
 //! The DLPack capsules of the bindings: borrowing a producer's tensor from
 //! its `__dlpack__`, and lending a buffer of a message to a consumer. The
-//! structs and the copy are in `mujou_core::dlpack`.
+//! structs, the copy and the export are in `mujou_core::dlpack`.
 
 use std::ffi::{CStr, c_void};
 use std::sync::Arc;
 
-use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
-use mujou_core::slot::Buffer;
+use mujou_core::buffer::Buffer;
+use mujou_core::dlpack::export::{export_legacy, export_versioned};
+use mujou_core::dlpack::ffi::{DLManagedTensor, DLManagedTensorVersioned, DLTensor, VERSION};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -43,10 +44,7 @@ pub(crate) fn borrow_tensor<'py>(
     };
     let borrow = || {
         let kwargs = PyDict::new(py);
-        kwargs.set_item(
-            "max_version",
-            (dlpack::VERSION.major, dlpack::VERSION.minor),
-        )?;
+        kwargs.set_item("max_version", (VERSION.major, VERSION.minor))?;
         let capsule = match method.call((), Some(&kwargs)) {
             Ok(capsule) => capsule,
             Err(e) if e.is_instance_of::<PyTypeError>(py) => method.call0()?,
@@ -93,7 +91,7 @@ fn capsule_tensor(capsule: &Bound<'_, PyAny>) -> PyResult<*const DLTensor> {
             if managed.is_null() {
                 return Err(PyErr::fetch(capsule.py()));
             }
-            if (*managed).version.major != dlpack::VERSION.major {
+            if (*managed).version.major != VERSION.major {
                 return Err(invalid(&format!(
                     "unsupported DLPack version {:?}",
                     (*managed).version
@@ -125,10 +123,10 @@ pub(crate) fn export_capsule(
     versioned: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
     let (ptr, name, destructor): (*mut c_void, &CStr, ffi::PyCapsule_Destructor) = if versioned {
-        let ptr = dlpack::export_versioned(buffer);
+        let ptr = export_versioned(buffer);
         (ptr.cast(), VERSIONED, destroy_versioned)
     } else {
-        let ptr = dlpack::export_legacy(buffer);
+        let ptr = export_legacy(buffer);
         (ptr.cast(), LEGACY, destroy_legacy)
     };
     // SAFETY: `ptr` is a fresh DLPack tensor and `name` a static string.

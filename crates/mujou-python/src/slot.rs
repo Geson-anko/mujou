@@ -14,8 +14,12 @@ use crate::dlpack::{TensorPtr, borrow_tensor, export_capsule};
 use crate::hint::{Values, Views};
 use crate::time::{PyTimer, PyTimestamp};
 use crate::wait_interruptibly;
-use mujou_core::dlpack::{self, DLDataType};
-use mujou_core::slot::{self as core, Buffer, FieldSpec, Message, Schema, SlotError, Target};
+use mujou_core::buffer::{Buffer, Message};
+use mujou_core::dlpack::ffi::{DEVICE_CPU, DLDataType, VERSION};
+use mujou_core::dlpack::import::copy_from;
+use mujou_core::schema::{FieldError, FieldSpec, Schema, SchemaError};
+use mujou_core::slot::{self as core, SlotError, Target};
+use mujou_core::time::Timestamp;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -23,12 +27,12 @@ use pyo3::types::PyTuple;
 
 fn to_py_err(err: SlotError) -> PyErr {
     match err {
-        SlotError::InvalidSchema(_)
-        | SlotError::Mismatch { .. }
-        | SlotError::CarryMismatch { .. } => PyValueError::new_err(err.to_string()),
-        SlotError::UnsupportedDevice { .. } | SlotError::InvalidDLPack { .. } => {
-            PyTypeError::new_err(err.to_string())
+        SlotError::Field {
+            error: FieldError::Mismatch { .. },
+            ..
         }
+        | SlotError::CarryMismatch { .. } => PyValueError::new_err(err.to_string()),
+        SlotError::Field { .. } => PyTypeError::new_err(err.to_string()),
     }
 }
 
@@ -95,7 +99,11 @@ fn copy_into(
         // alive, and the producer guarantees it describes readable memory
         // (checked to be on the host by `copy_from`). `dst` is a pool buffer,
         // distinct from it.
-        unsafe { dlpack::copy_from(&*t.0, field, dst) }.map_err(|e| e.at_slot(slot))?;
+        unsafe { copy_from(&*t.0, field, dst) }.map_err(|error| SlotError::Field {
+            slot: slot.to_owned(),
+            field: field.name.clone(),
+            error,
+        })?;
     }
     Ok(())
 }
@@ -167,7 +175,8 @@ impl PySchema {
     #[new]
     #[pyo3(signature = (fields, carry = Vec::new()))]
     fn new(fields: Vec<FieldTuple>, carry: Vec<FieldTuple>) -> PyResult<Self> {
-        let schema = Schema::new(field_specs(fields), field_specs(carry)).map_err(to_py_err)?;
+        let schema = Schema::new(field_specs(fields), field_specs(carry))
+            .map_err(|e: SchemaError| PyValueError::new_err(e.to_string()))?;
         Ok(Self(Arc::new(schema)))
     }
 }
@@ -193,7 +202,7 @@ impl BufferView {
     ) -> PyResult<Bound<'py, PyAny>> {
         // The data is on the CPU, where there is no stream to synchronize with.
         let _ = stream;
-        if dl_device.is_some_and(|d| d != (dlpack::DEVICE_CPU, 0)) {
+        if dl_device.is_some_and(|d| d != (DEVICE_CPU, 0)) {
             return Err(PyBufferError::new_err(
                 "a message buffer can only be read on the CPU",
             ));
@@ -203,12 +212,12 @@ impl BufferView {
                 "a message buffer cannot be copied by its producer; copy the tensor after from_dlpack",
             ));
         }
-        let versioned = max_version.is_some_and(|(major, _)| major >= dlpack::VERSION.major);
+        let versioned = max_version.is_some_and(|(major, _)| major >= VERSION.major);
         export_capsule(py, Arc::clone(&self.0), versioned)
     }
 
     fn __dlpack_device__(&self) -> (i32, i32) {
-        (dlpack::DEVICE_CPU, 0)
+        (DEVICE_CPU, 0)
     }
 }
 
@@ -253,7 +262,7 @@ impl PyMessage {
     /// The time it was written at.
     #[getter]
     fn timestamp(&self) -> PyTimestamp {
-        PyTimestamp(self.0.timestamp())
+        PyTimestamp(Timestamp::from_ns(self.0.time_ns()))
     }
 
     /// Whether the slot's writer sent it (or a restore said so), rather than it
@@ -479,7 +488,7 @@ impl PyInputGroup {
         py: Python<'_>,
         items: Vec<(PyRef<'_, PyInputSlot>, Values<'_>)>,
     ) -> PyResult<PyTimestamp> {
-        let mut slots: Vec<&core::InputSlot> = Vec::with_capacity(items.len());
+        let mut slots: Vec<&core::Slot> = Vec::with_capacity(items.len());
         let mut borrowed = Vec::with_capacity(items.len());
         for (slot, values) in &items {
             let slot = &*slot.0;
@@ -520,7 +529,7 @@ impl PyInputGroup {
 
 /// A slot the host writes through its `InputGroup`.
 #[pyclass(frozen, module = "mujou._core._native", name = "InputSlot")]
-pub struct PyInputSlot(Arc<core::InputSlot>);
+pub struct PyInputSlot(Arc<core::Slot>);
 
 #[pymethods]
 impl PyInputSlot {

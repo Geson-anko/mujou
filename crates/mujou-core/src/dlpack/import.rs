@@ -1,82 +1,9 @@
-//! DLPack: copying values in from, and lending them out to, other libraries.
-//!
-//! The core has no tensor type or dtype of its own. Values cross the boundary as
-//! DLPack tensors (<https://dmlc.github.io/dlpack/latest/>), and are always copied:
-//! into a pooled buffer when written, and out of it by the reader (`specs/messages.md`).
-//! The structs here mirror `dlpack.h` (version 1.x) field by field.
+//! Copying a producer's DLPack tensor into the buffer of a field.
 
-use std::ffi::c_void;
 use std::ptr;
-use std::sync::Arc;
 
-use crate::slot::{Buffer, FieldSpec, SlotError};
-
-/// `kDLCPU`: ordinary host memory.
-pub const DEVICE_CPU: i32 = 1;
-/// `kDLCUDAHost`: pinned host memory, readable from the CPU as well.
-pub(crate) const DEVICE_CUDA_HOST: i32 = 3;
-
-/// The DLPack version of the tensors this module exports.
-pub const VERSION: DLPackVersion = DLPackVersion { major: 1, minor: 0 };
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DLDevice {
-    pub device_type: i32,
-    pub device_id: i32,
-}
-
-/// The element type: `code` is the kind (0 int, 1 uint, 2 float, 4 bfloat, 6 bool,
-/// ...), `bits` the size of one lane and `lanes` the vector width.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DLDataType {
-    pub code: u8,
-    pub bits: u8,
-    pub lanes: u16,
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct DLTensor {
-    pub data: *mut c_void,
-    pub device: DLDevice,
-    pub ndim: i32,
-    pub dtype: DLDataType,
-    /// `ndim` extents.
-    pub shape: *mut i64,
-    /// `ndim` strides in elements, or null for a compact row-major tensor.
-    pub strides: *mut i64,
-    /// Bytes from `data` to the first element.
-    pub byte_offset: u64,
-}
-
-/// The tensor of the unversioned (pre-1.0) protocol, capsule name `"dltensor"`.
-#[repr(C)]
-#[derive(Debug)]
-pub struct DLManagedTensor {
-    pub dl_tensor: DLTensor,
-    pub manager_ctx: *mut c_void,
-    pub deleter: Option<unsafe extern "C" fn(*mut DLManagedTensor)>,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DLPackVersion {
-    pub major: u32,
-    pub minor: u32,
-}
-
-/// The tensor of the 1.x protocol, capsule name `"dltensor_versioned"`.
-#[repr(C)]
-#[derive(Debug)]
-pub struct DLManagedTensorVersioned {
-    pub version: DLPackVersion,
-    pub manager_ctx: *mut c_void,
-    pub deleter: Option<unsafe extern "C" fn(*mut DLManagedTensorVersioned)>,
-    pub flags: u64,
-    pub dl_tensor: DLTensor,
-}
+use crate::dlpack::ffi::{DEVICE_CPU, DEVICE_CUDA_HOST, DLTensor};
+use crate::schema::{FieldError, FieldSpec, format_dtype, format_shape};
 
 /// Copies the tensor `t` into `dst` as compact row-major bytes, after checking it
 /// against `field`. Any strides are accepted, negative and zero (broadcast) ones
@@ -86,8 +13,7 @@ pub struct DLManagedTensorVersioned {
 /// stream, since no stream is passed to the producer. The writer must have
 /// synchronized the device-to-host copy that filled it before handing it over.
 ///
-/// The error names the field but not the slot; the caller adds it with
-/// [`SlotError::at_slot`].
+/// The error does not name the field, which the caller knows.
 ///
 /// # Safety
 ///
@@ -95,24 +21,20 @@ pub struct DLManagedTensorVersioned {
 /// unless null) point to `ndim` values, and every element addressed by `data`,
 /// `byte_offset`, `shape` and `strides` is readable host memory if the device is
 /// the CPU or pinned host memory. `dst` must not overlap the tensor.
-pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Result<(), SlotError> {
+pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Result<(), FieldError> {
     if t.device.device_type != DEVICE_CPU && t.device.device_type != DEVICE_CUDA_HOST {
-        return Err(SlotError::UnsupportedDevice {
-            slot: String::new(),
-            field: field.name.clone(),
+        return Err(FieldError::UnsupportedDevice {
             device_type: t.device.device_type,
         });
     }
     if t.dtype != field.dtype {
-        return Err(SlotError::Mismatch {
-            slot: String::new(),
-            field: field.name.clone(),
+        return Err(FieldError::Mismatch {
             what: "dtype",
             expected: format_dtype(field.dtype),
             actual: format_dtype(t.dtype),
         });
     }
-    let ndim = usize::try_from(t.ndim).map_err(|_| invalid(field, "negative ndim"))?;
+    let ndim = usize::try_from(t.ndim).map_err(|_| invalid("negative ndim"))?;
     let shape = if ndim == 0 {
         &[][..]
     } else {
@@ -120,16 +42,14 @@ pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Resu
         unsafe { std::slice::from_raw_parts(t.shape, ndim) }
     };
     if shape != field.shape.as_slice() {
-        return Err(SlotError::Mismatch {
-            slot: String::new(),
-            field: field.name.clone(),
+        return Err(FieldError::Mismatch {
             what: "shape",
             expected: format_shape(&field.shape),
             actual: format_shape(shape),
         });
     }
     if t.data.is_null() {
-        return Err(invalid(field, "null data pointer"));
+        return Err(invalid("null data pointer"));
     }
     debug_assert_eq!(dst.len(), field.nbytes());
     let elem = field.elem_bytes();
@@ -155,10 +75,8 @@ pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Resu
     Ok(())
 }
 
-fn invalid(field: &FieldSpec, reason: &str) -> SlotError {
-    SlotError::InvalidDLPack {
-        slot: String::new(),
-        field: field.name.clone(),
+fn invalid(reason: &str) -> FieldError {
+    FieldError::InvalidDLPack {
         reason: reason.to_owned(),
     }
 }
@@ -224,140 +142,10 @@ unsafe fn copy_strided(
     }
 }
 
-/// `(2, 3)`, `(5,)` or `()`, as Python prints a shape.
-pub(crate) fn format_shape(shape: &[i64]) -> String {
-    match shape {
-        [n] => format!("({n},)"),
-        _ => {
-            let dims: Vec<String> = shape.iter().map(i64::to_string).collect();
-            format!("({})", dims.join(", "))
-        }
-    }
-}
-
-/// The name torch and NumPy use for the scalar dtypes, so that error messages
-/// read naturally; the raw code otherwise.
-pub(crate) fn format_dtype(dtype: DLDataType) -> String {
-    let DLDataType { code, bits, lanes } = dtype;
-    match (code, lanes) {
-        (0, 1) => format!("int{bits}"),
-        (1, 1) => format!("uint{bits}"),
-        (2, 1) => format!("float{bits}"),
-        (4, 1) => format!("bfloat{bits}"),
-        (6, 1) if bits == 8 => "bool".to_owned(),
-        _ => format!("DLDataType(code={code}, bits={bits}, lanes={lanes})"),
-    }
-}
-
-/// What a lent tensor keeps alive: the buffer, so that it cannot go back to its
-/// pool, and the shape and strides that the tensor points to.
-struct Lent<T> {
-    managed: T,
-    _buffer: Arc<Buffer>,
-    shape: Box<[i64]>,
-    strides: Box<[i64]>,
-}
-
-/// Explicit strides, since DLPack 1.2 asks producers not to leave them null.
-fn row_major_strides(shape: &[i64]) -> Box<[i64]> {
-    let mut strides = vec![1i64; shape.len()];
-    for d in (0..shape.len().saturating_sub(1)).rev() {
-        strides[d] = strides[d + 1] * shape[d + 1];
-    }
-    strides.into_boxed_slice()
-}
-
-/// Boxes the managed tensor `make` builds around `buffer`, and points it at the
-/// shape, the strides and the box itself (its `manager_ctx`). `parts` picks the
-/// tensor and the context out of the managed struct.
-fn lend<T>(
-    buffer: Arc<Buffer>,
-    make: impl FnOnce(DLTensor) -> T,
-    parts: fn(&mut T) -> (&mut DLTensor, &mut *mut c_void),
-) -> *mut T {
-    let shape: Box<[i64]> = buffer.field().shape.clone().into_boxed_slice();
-    let tensor = DLTensor {
-        // The pointer is mutable only because DLPack says so: the buffer is
-        // immutable, and every reader copies it out instead of writing to it.
-        // READ_ONLY is not set, because consumers may refuse such tensors.
-        data: buffer.bytes().as_ptr() as *mut c_void,
-        device: DLDevice {
-            device_type: DEVICE_CPU,
-            device_id: 0,
-        },
-        ndim: shape.len() as i32,
-        dtype: buffer.field().dtype,
-        // Set below, once the box is in place.
-        shape: ptr::null_mut(),
-        strides: ptr::null_mut(),
-        byte_offset: 0,
-    };
-    let lent = Box::into_raw(Box::new(Lent {
-        managed: make(tensor),
-        strides: row_major_strides(&shape),
-        shape,
-        _buffer: buffer,
-    }));
-    // SAFETY: `lent` was just allocated and is not shared yet. The pointers are
-    // taken after `into_raw`, from the slices the box owns, so they stay valid
-    // until the deleter drops the box.
-    unsafe {
-        let shape = (*lent).shape.as_mut_ptr();
-        let strides = (*lent).strides.as_mut_ptr();
-        let (tensor, ctx) = parts(&mut (*lent).managed);
-        tensor.shape = shape;
-        tensor.strides = strides;
-        *ctx = lent.cast();
-        &raw mut (*lent).managed
-    }
-}
-
-/// Lends `buffer` as a 1.x DLPack tensor. The buffer stays alive (out of its
-/// pool) until the consumer calls the tensor's deleter.
-pub fn export_versioned(buffer: Arc<Buffer>) -> *mut DLManagedTensorVersioned {
-    let make = |dl_tensor| DLManagedTensorVersioned {
-        version: VERSION,
-        manager_ctx: ptr::null_mut(),
-        deleter: Some(delete_versioned),
-        flags: 0,
-        dl_tensor,
-    };
-    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
-}
-
-/// Lends `buffer` as an unversioned DLPack tensor, for consumers that do not
-/// know the 1.x protocol.
-pub fn export_legacy(buffer: Arc<Buffer>) -> *mut DLManagedTensor {
-    let make = |dl_tensor| DLManagedTensor {
-        dl_tensor,
-        manager_ctx: ptr::null_mut(),
-        deleter: Some(delete_legacy),
-    };
-    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
-}
-
-unsafe extern "C" fn delete_versioned(t: *mut DLManagedTensorVersioned) {
-    // SAFETY: DLPack calls the deleter once, with the tensor `export_versioned`
-    // returned, whose `manager_ctx` is the `Lent` box that owns it.
-    unsafe {
-        drop(Box::from_raw(
-            (*t).manager_ctx.cast::<Lent<DLManagedTensorVersioned>>(),
-        ))
-    };
-}
-
-unsafe extern "C" fn delete_legacy(t: *mut DLManagedTensor) {
-    // SAFETY: as in `delete_versioned`, for `export_legacy`.
-    unsafe {
-        drop(Box::from_raw(
-            (*t).manager_ctx.cast::<Lent<DLManagedTensor>>(),
-        ))
-    };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dlpack::ffi::{DLDataType, DLDevice};
 
     const F32: DLDataType = DLDataType {
         code: 2,
@@ -411,7 +199,7 @@ mod tests {
             }
         }
 
-        fn copy(&mut self, field: &FieldSpec) -> Result<Vec<f32>, SlotError> {
+        fn copy(&mut self, field: &FieldSpec) -> Result<Vec<f32>, FieldError> {
             let mut dst = vec![0u8; field.nbytes()];
             let t = self.dl();
             // SAFETY: `t` describes `self.data`, which outlives the call.
@@ -496,10 +284,7 @@ mod tests {
         let mut t = Tensor::new(range(6), &[6], None);
         t.device_type = 2; // kDLCUDA
         let err = t.copy(&field(&[6])).unwrap_err();
-        assert!(matches!(
-            err,
-            SlotError::UnsupportedDevice { device_type: 2, .. }
-        ));
+        assert_eq!(err, FieldError::UnsupportedDevice { device_type: 2 });
     }
 
     #[test]
