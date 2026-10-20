@@ -42,6 +42,7 @@ class TestPcPublicNames:
         import mujou.pc
 
         assert sorted(mujou.pc.__all__) == [
+            "Activity",
             "Carried",
             "Input",
             "Layer",

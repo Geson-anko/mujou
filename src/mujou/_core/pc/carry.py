@@ -1,5 +1,6 @@
-"""The messages of ``mujou.pc``: the data carried with an activity, what the host
-writes to an input node and what an output node sends."""
+"""The messages of ``mujou.pc``: the activity a node sends to the next one, the
+data carried with it, what the host writes to an input node and what an output
+node sends."""
 
 from collections.abc import Sequence
 from typing import Any, TypedDict, cast
@@ -7,6 +8,23 @@ from typing import Any, TypedDict, cast
 import torch
 
 from mujou._core.spec import DictSpec, TensorSpec
+
+
+class Activity(TypedDict):
+    """The activity a node sends to the next nodes.
+
+    - ``h``: the activity, ``(B, *out)``.
+    - ``epoch``: ``()`` int64, the number of times the sender's ``h`` has jumped
+      by more than its continuous relaxation: an ``Input`` counts the writes of
+      the host, and a ``Layer`` counts its moves with a new sample and with a
+      jump of the ``h`` it receives, and the jumps of its own ``theta`` when it
+      learns at intervals (``learn_interval`` not ``None``). A change tells the
+      receiver to move its own ``h`` with its prediction, so that the jump
+      does not enter its deviation ``h - mu`` (``Layer``).
+    """
+
+    h: torch.Tensor
+    epoch: torch.Tensor
 
 
 class Carried(TypedDict):
@@ -76,6 +94,11 @@ def carry_spec(target: TensorSpec, batch: int) -> DictSpec[Carried]:
             f"got shape {target.shape}"
         )
     return DictSpec(Carried, y=target, mask=mask, time=TensorSpec((), torch.int64))
+
+
+def activity_spec(h: TensorSpec) -> DictSpec[Activity]:
+    """Return the spec of an ``Activity`` whose ``h`` is of the spec ``h``."""
+    return DictSpec(Activity, h=h, epoch=TensorSpec((), torch.int64))
 
 
 def batch_of(carry: object) -> int:

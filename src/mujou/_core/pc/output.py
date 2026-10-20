@@ -6,7 +6,7 @@ from typing import override
 import torch
 from torch import nn
 
-from mujou._core.pc.carry import Carried, Prediction
+from mujou._core.pc.carry import Carried, Prediction, activity_spec
 from mujou._core.pc.functional import learn_, loss_vjp
 from mujou._core.pc.learner import Learner
 from mujou._core.pc.time_constants import TimeConstants
@@ -30,17 +30,19 @@ class Output(Learner):
     it sends $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
     previous node (``functional.loss_vjp``), zeros when no sample has a target.
     Each ``on_update(dt)`` caps ``dt`` at ``max_dt`` as ``Layer`` does, reads
-    ``h_in`` with its carried data, sends ``g_in``, sends a ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
-    paired with) for the host to read, and updates ``theta`` when it learns.
+    ``h_in`` with its carried data, sends ``g_in``, sends a ``Prediction``
+    (``y_hat`` with the ``y``, ``mask`` and ``time`` it was paired with) for
+    the host to read, and updates ``theta`` when it learns. It reads the
+    ``h`` of the ``Activity`` only: a jump of ``h_in`` needs no move here, as
+    the node holds no activity of its own.
 
     It learns as ``Layer`` does: once ``learn_interval`` seconds have passed
-    since the host wrote the input, or in every update with ``None``. When no sample
-    has a target, it does not learn and drops the time since the last update;
-    so too before the first sample arrives, while the carried data is zeros
-    (``mask`` all False), and when the input changes before it has learned from
-    it.
-    ``B`` is the batch, not the number of samples with a target: a sample
-    without one adds zero.
+    since the host wrote the input, but not in the update that first sees it,
+    or in every update with ``None``. When no sample has a target, it does not
+    learn and drops the time since the last update; so too before the first
+    sample arrives, while the carried data is zeros (``mask`` all False), and
+    when the input changes before it has learned from it. ``B`` is the batch,
+    not the number of samples with a target: a sample without one adds zero.
 
     ``loss`` returns the loss of each sample, ``(B,)``, such as ``mse`` or
     ``cross_entropy``, and the node sums them. A loss that averages (such as
@@ -74,6 +76,7 @@ class Output(Learner):
             default period.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
+            It must not be longer than ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
             towards the weight of the update of ``theta``.
         dtype: The dtype of ``h_in``; ``None`` is ``torch.get_default_dtype()``.
@@ -121,7 +124,9 @@ class Output(Learner):
                 "nn.MSELoss(), does not (use pc.mse or pc.cross_entropy)"
             )
         self._loss = loss
-        self.prev = PrevPort(send=self._input, recv=self._input, recv_carry=carry)
+        self.prev = PrevPort(
+            send=self._input, recv=activity_spec(self._input), recv_carry=carry
+        )
         self.next = NextPort(
             send=DictSpec(
                 Prediction,
@@ -136,7 +141,7 @@ class Output(Learner):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         dt = self._cap(dt)
-        h_in = self.prev.recv()  # (B, *in)
+        h_in = self.prev.recv()["h"]  # (B, *in)
         carried = self.prev.carried()  # y, mask and time of h_in
         _, learn = self._tick(dt, int(carried["time"]))
         labeled = bool(carried["mask"].any())
