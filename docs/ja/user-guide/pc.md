@@ -96,7 +96,7 @@
 
 !!! warning "予測は `Output` の `next` から読む"
 
-    ホストが読めるのは `out.next` だけ。`Layer` の `next` は付随データを中継し、ホストは付随データを読めないので、`run.read(layer.next)` は `ValueError` になる。`Layer` の `h` と `lam` を見るときは `run.state_dict()["nodes"][path]["h"]` と `["lam"]` を読む。`path` はネットワークでのノードの属性名（例では `"l1"`）。ホストが `layer.h` を直接読むと、ノードの更新と競合する。
+    予測とターゲットを読めるのは `out.next` だけ。`Layer` の `next` は `y`・`mask`・`time` を付随データで中継し、ホストには付随データが届かない。`run.read(layer.next)["h"]` で読めるのは、その層の活動 `h` だけである。`Layer` の `lam` を見るときは `run.state_dict()["nodes"][path]["lam"]` を読む。`path` はネットワークでのノードの属性名（例では `"l1"`）。ホストが `layer.lam` を直接読むと、ノードの更新と競合する。
 
 !!! warning "最初のサンプルが届くまで付随データはゼロ"
 

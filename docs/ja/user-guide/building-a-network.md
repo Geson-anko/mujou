@@ -153,7 +153,8 @@ class Classifier(mujou.Network):
 
 - `connect` は付随データが向きごとに一致するかも確かめ、一致しなければ `TypeError` を送出する
 - 中継できるのは同じノードの Port の付随データだけ。違えばネットワークの構築で `ValueError` になる
-- ホストは付随データを読み書きできない。`recv_carry` を持つ Port への `run.write` と、`send_carry` を持つ Port の `run.read`（とほかの読み方）は `ValueError` を送出する。ホストに見せたいものは、`Report` のように普通のメッセージで送る
+- `send_carry` を持つ Port をホストが読むと、値だけが返る。`run.read`（とほかの読み方）は付随データを捨てる。付随データのうちホストに見せたいものは、`Report` のように普通のメッセージで送る
+- `recv_carry` を持つ Port には、ホストは書けない。書き込みは値しか渡さず、付随データを作れないので、`run.write` は `ValueError` を送出する
 
 ## 構築した構造を確かめる
 

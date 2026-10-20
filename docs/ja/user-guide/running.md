@@ -99,7 +99,7 @@ for x in stream:
 | `run.subscribe(port)`           | `(value, Timestamp)` を順に返すイテレータ                 | 出力が新しくなるたびに処理する |
 | `run.wait_for(port, condition)` | 値が `condition` を満たす最初の `(value, Timestamp)`      | 期待した出力が届くまで待つ     |
 
-どれも送る型を持つどの Port からでも読める。ただし付随データを送る Port（`send_carry`）は `ValueError` になる。`read` 以外は時刻を `mujou.time.Timestamp` で返す（[時間の制御](time.md)）。
+どれも送る型を持つどの Port からでも読める。付随データを送る Port（`send_carry`）からは値だけを返し、付随データは捨てる。`read` 以外は時刻を `mujou.time.Timestamp` で返す（[時間の制御](time.md)）。
 
 つながっていない Port を読むとネットワークの出力になる。つながっている Port を読めば途中のノードの値を観測できる。読んでもノードの動作は変わらない。
 

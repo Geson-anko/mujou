@@ -334,7 +334,7 @@ A.next ──┼─ Channel ─ C.prev
 | メソッド                         | 振る舞い                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `write({port: value, ...})`      | 書いた値に付いた時刻（その実行のタイマーの `Timestamp`）を返す。木の中の、未接続で相手 1 つの、受ける spec を持つ Port だけに書ける。ほかと、付随データを受け取る Port（`recv_carry`）は `ValueError`。shape の違いは `ValueError`、型と dtype の違いは `TypeError`。正常に終了した後は `RuntimeError`（ノードはもう読まない）。`mujou.run` の `inputs` も同じ検査をする |
-| `read(port)` / `read_with_time(port)` | 送る spec を持つ Port の外向きのスロットの値を返す。付随データを送る Port（`send_carry`）は `ValueError`（型でも弾く。`subscribe` と `wait_for` も同じ）。`read_with_time` は時刻（`Timestamp`）との組を返す。Port の `recv` / `recv_with_time` と同じ分け方である（2026-10-17、ユーザーの決定。時刻を使わない読み出しが多く、`y, _ =` と書かずに済む）。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
+| `read(port)` / `read_with_time(port)` | 送る spec を持つ Port の外向きのスロットの値を返す。付随データを送る Port（`send_carry`）は、付随データを捨てて値だけを返す（`subscribe` と `wait_for` も同じ）。`read_with_time` は時刻（`Timestamp`）との組を返す。Port の `recv` / `recv_with_time` と同じ分け方である（2026-10-17、ユーザーの決定。時刻を使わない読み出しが多く、`y, _ =` と書かずに済む）。値は CPU 上の新しい Tensor。最初に送られるまでは Port の `initial` かゼロ（復元したなら木の値） |
 | `subscribe(port, timeout=math.inf)` | 最初に、呼んだ時点の最新値を待たずに返す（最初に送られるまでは Port の `initial` かゼロ、復元したなら木の値）。以後は新しく書かれた値を返す。待つ間に書かれた値は飛ばし、最新値だけを返す。ネットワークが正常に終了すると、イテレータも終わる（終了した後に呼ぶと、最後の値を 1 つ返して終わる）。`timeout` は反復全体にかける実時間の秒で、`subscribe` を呼んだときから数え、ループの本体にかかった時間も含む。2 つ目以降の値を返す前にこれを過ぎると、イテレータが `TimeoutError` を送出して終わり、実行は走り続ける。負か NaN なら呼んだ時点で `ValueError` |
 | `wait_for(port, condition, timeout=math.inf)` | `subscribe` で最新値から順に確かめ、`condition` を満たした最初の値と時刻を返す。`timeout` を過ぎると `TimeoutError`（実行は走り続ける）、先に実行が正常に終了すると `RuntimeError`。期待した出力が届くまで待つホストの書き方を 1 行にするため（2026-10-17、例の読み直しループを置き換えた） |
 | `state_dict(timeout=30.0)`       | 実行中と、正常に終了した後に呼べる。例外で終了した後は `NetworkError`。`timeout` は全ノードの停止を待つ実時間の秒で、有限の正の数（ほかは `ValueError`）。終了した後は待たず、検査だけする（[実行モデル](execution-model.md#実装-1)） |
@@ -342,7 +342,8 @@ A.next ──┼─ Channel ─ C.prev
 | `shutdown(timeout=math.inf)` / `join(timeout=math.inf)` | 終了を要求して待つ／終了を要求せずに待つ。`shutdown` は終了の後は何もしない。`timeout` は実時間の秒で、負か NaN なら `ValueError` |
 | `with mujou.run(...) as run:`    | 抜けるときに `shutdown()` を呼ぶ。本体が例外で抜けたときは本体の例外を優先し、`shutdown()` の `NetworkError` は捨てる（ノードの例外はログに出ている） |
 
-- ホストの読み書きは付随データに対応させない（2026-10-20、必要になったら足す）。付随データを捨てて値だけを読み書きする案もあるが、黙って捨てるより断る。PC の `Output` は予測とターゲットを普通のメッセージで送るので、ホストはそれを読む
+- ホストは付随データを読み書きしない。付随データを送る Port を読むと、付随データを捨てて値だけを返す（2026-10-20、ユーザーの決定）。値の意味は付随データの有無で変わらず、捨てても読み違えない。断る案（`ValueError`）では PC の `Layer` の `next` を読めず、隠れ層の活動 `h` を見るのに状態の木を取るしかなかった。付随データを読む `Run.read_carried` は足さない。ホストに見せたい付随データは、PC の `Output` のように普通のメッセージで送る
+- 付随データを受け取る Port（`recv_carry`）への書き込み（`write` と `inputs`）は `ValueError` のままにする。書き込みは値だけを渡すので、付随データを作る口が無いからである
 - `mujou.run(..., state=tree)` で復元するネットワークは、木を取ったネットワークと同じノードのパスとスロット名を持たなければならない。違えば `mujou.run` は `ValueError` を送出し、何も起動しない。属性名や接続を変えると、パスとスロット名が変わる。同じタイマーでほかの実行が走っている間は、復元する `mujou.run` が `ValueError` になる。このとき何も起動しないので、ほかの実行を終了させるか別のタイマーを渡して走らせ直せる（[実行モデル](execution-model.md#復元)）
 - `shutdown(timeout)` が時間内に終わらなければ `TimeoutError` を送出する。終了の要求は取り消さないので、ノードはもう更新せず、ネットワークはバックグラウンドで終了を続ける（`on_stop` がまだ走っているかもしれない）。終了を待つには `join()` を呼ぶ。`join(timeout)` が時間内に終わらなければ `TimeoutError` を送出し、ネットワークには何もしない。走っていれば走り続ける
 - 例外で終了した後は、`write`・`read`・`read_with_time`・`subscribe`（とそのイテレータ）・`state_dict`・`shutdown`・`join` が `NetworkError` を送出する。`__cause__` は最初にノードが投げた例外である。例外で終了したときの状態の木は取得しない

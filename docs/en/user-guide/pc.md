@@ -96,7 +96,7 @@ The example sets `torch.set_num_threads(1)`, since the nodes already compute in 
 
 !!! warning "Read predictions from `Output.next`"
 
-    The host can read only `out.next`. `run.read(layer.next)` raises `ValueError`, since a `Layer`'s `next` passes on carried data, which the host cannot read. To watch `h` and `lam` of a `Layer`, read them from `run.state_dict()["nodes"][path]["h"]` and `["lam"]`, where `path` is the attribute name of the node in the network (`"l1"` in the example); reading `layer.h` from the host races with the node's updates.
+    Predictions and targets come only from `out.next`. A `Layer`'s `next` passes on `y`, `mask` and `time` as carried data, which the host does not get: `run.read(layer.next)["h"]` returns only the activity `h` of the layer. To watch `lam` of a `Layer`, read it from `run.state_dict()["nodes"][path]["lam"]`, where `path` is the attribute name of the node in the network (`"l1"` in the example); reading `layer.lam` from the host races with the node's updates.
 
 !!! warning "The carried data is zeros until the first sample arrives"
 
