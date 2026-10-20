@@ -9,4 +9,4 @@ metadata:
 
 **Why:** ネットワークの向きは Port の `PrevPort` / `NextPort` で表しており、上下の比喩は図の描き方次第で逆に読める。
 
-**How to apply:** API・docstring・仕様書で入力側／出力側を指すときは prev / next（「前」「次」）を使う。例: 活動のメッセージは `pc.ToNext`。数式の説明で「上の層」と書くのも避け、「次の層」「前の層」と書く。
+**How to apply:** API・docstring・仕様書で入力側／出力側を指すときは prev / next（「前」「次」）を使う。例: Port は `PrevPort` / `NextPort`、付随データの中継は `prev` から `next` へ。数式の説明で「上の層」と書くのも避け、「次の層」「前の層」と書く。
