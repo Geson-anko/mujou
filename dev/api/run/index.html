@@ -1785,7 +1785,7 @@ nodes' <code>dt</code> grows meanwhile.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="mujou.Node (mujou._core.node.Node)" href="../node-and-ports/#mujou.Node">Node</a> | <a class="autorefs autorefs-internal" title="mujou.Network (mujou._core.network.Network)" href="../network/#mujou.Network">Network</a></code>
+                      <code><a class="autorefs autorefs-internal" title="mujou.Node (mujou.node.Node)" href="../node-and-ports/#mujou.Node">Node</a> | <a class="autorefs autorefs-internal" title="mujou.Network (mujou.network.Network)" href="../network/#mujou.Network">Network</a></code>
                   </span>
               </p>
             </td>
@@ -1804,7 +1804,7 @@ own shares.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Timer (mujou._core._native.Timer)" href="../time/#mujou.time.Timer">Timer</a> | None</code>
+                      <code><a class="autorefs autorefs-internal" title="Timer (mujou._native.Timer)" href="../time/#mujou.time.Timer">Timer</a> | None</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -1826,7 +1826,7 @@ own shares.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="collections.abc.Mapping">Mapping</span>[<span title="mujou._core.run.run[P]">P</span>, <span title="torch.Tensor">Tensor</span> | <span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="object">object</span>]] | None</code>
+                      <code><span title="collections.abc.Mapping">Mapping</span>[<span title="mujou.execution.run[P]">P</span>, <span title="torch.Tensor">Tensor</span> | <span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="object">object</span>]] | None</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -1950,7 +1950,7 @@ does not have the timer, nodes, ports and peers of the tree.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2168,7 +2168,7 @@ spec's keys.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2230,7 +2230,7 @@ time it was sent at.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2290,7 +2290,7 @@ it is on: compare it only with times of the same timer (<code>run.timer</code>).
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2355,7 +2355,7 @@ never ends.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../node-and-ports/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>] | <a class="autorefs autorefs-internal" title="mujou.MultiPort (mujou._core.port.MultiPort)" href="../node-and-ports/#mujou.MultiPort">MultiPort</a>[<span title="mujou._core.run.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>]</code>
+                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou.port.Port)" href="../node-and-ports/#mujou.Port">Port</a>[<span title="mujou.execution.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>] | <a class="autorefs autorefs-internal" title="mujou.MultiPort (mujou.port.MultiPort)" href="../node-and-ports/#mujou.MultiPort">MultiPort</a>[<span title="mujou.execution.Run.subscribe[S]">S</span>, <span title="typing.Any">Any</span>]</code>
                   </span>
               </p>
             </td>
@@ -2423,7 +2423,7 @@ The iterator ends; the run keeps running.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2495,7 +2495,7 @@ with mujou.run(node, inputs={node.prev: x}) as run:
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou._core.port.Port)" href="../node-and-ports/#mujou.Port">Port</a>[<span title="mujou._core.run.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>] | <a class="autorefs autorefs-internal" title="mujou.MultiPort (mujou._core.port.MultiPort)" href="../node-and-ports/#mujou.MultiPort">MultiPort</a>[<span title="mujou._core.run.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>]</code>
+                      <code><a class="autorefs autorefs-internal" title="mujou.Port (mujou.port.Port)" href="../node-and-ports/#mujou.Port">Port</a>[<span title="mujou.execution.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>] | <a class="autorefs autorefs-internal" title="mujou.MultiPort (mujou.port.MultiPort)" href="../node-and-ports/#mujou.MultiPort">MultiPort</a>[<span title="mujou.execution.Run.wait_for[S]">S</span>, <span title="typing.Any">Any</span>]</code>
                   </span>
               </p>
             </td>
@@ -2512,7 +2512,7 @@ the wait.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="mujou._core.run.Run.wait_for[S]">S</span>], <span title="bool">bool</span>]</code>
+                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="mujou.execution.Run.wait_for[S]">S</span>], <span title="bool">bool</span>]</code>
                   </span>
               </p>
             </td>
@@ -2589,7 +2589,7 @@ at most. <code>math.inf</code> waits as long as the run runs.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2729,7 +2729,7 @@ is taken and the run keeps running.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2848,7 +2848,7 @@ running). <code>join</code> waits for the end.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
@@ -2941,7 +2941,7 @@ changes: a running run keeps running.</p>
           <tr class="doc-section-item">
             <td>
               <span class="doc-raises-annotation">
-                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou._core.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
               </span>
             </td>
             <td class="doc-raises-details">
