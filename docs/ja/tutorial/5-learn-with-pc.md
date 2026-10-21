@@ -40,9 +40,10 @@ batch 300: loss 0.0060 (the mean of the last 50)
 
 - `mask` はどのサンプルに目標があるかを表す。`mask` が False のサンプルは損失に何も足さない。`mask` がすべて False なら重みは動かない（活動は動く）。走っている同じ鎖を評価するにはこれを使う。切り替える推論モードは無い
 - `pc.Prediction` は `y_hat` を、その元になったサンプルの `y`・`mask`・`time` と組にして持つ。予測はいつも自分の目標と対になる
-- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動 `h`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロックと、予測が跳んだときに `h` を動かすための値（`mu`・`jump`・`jumped`・`jumps`・`seen_jumps`。説明は [PC-ALM](../topics/pc.md#%E8%87%AA%E5%88%86%E3%81%AE%E3%83%8E%E3%83%BC%E3%83%89%E3%82%92%E6%9B%B8%E3%81%8F)）を持つ
+- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動 `h`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロックと、予測が跳んだときに `h` を動かすための値（`mu`・`jump`・`jumped`・`jumps`・`seen_jumps`。説明は [mujou.pc の仕組み](../topics/pc-concepts.md#jumps)）を持つ
 
 ## 次へ
 
+- 部品のつながりと、ノードが 1 回の更新で行うこと: [mujou.pc の仕組み](../topics/pc-concepts.md)
 - `pc.Chain` で MNIST を学ぶ 784-256-256-10 のネットワークと BP の比較: `examples/mnist/`（`uv run python examples/mnist/main.py`）。説明は [PC-ALM](../topics/pc.md#mnist)
 - 時定数と `learn_interval` の決め方、落とし穴、自作のノード: [PC-ALM](../topics/pc.md)
