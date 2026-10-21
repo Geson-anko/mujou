@@ -655,8 +655,8 @@ wheels = [
 [[package]]
 name = "mujou"
 source = { editable = "." }
+default-groups = ["dev", "examples"]
 dependencies = [
-    { name = "numpy" },
     { name = "torch" },
 ]
 
@@ -673,12 +673,12 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+examples = [
+    { name = "numpy" },
+]
 
 [package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=2.5.4" },
-    { name = "torch", specifier = ">=2.14.1" },
-]
+requires-dist = [{ name = "torch", specifier = ">=2.14.1" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -693,6 +693,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.1.1" },
     { name = "ruff", specifier = ">=0.8.4" },
 ]
+examples = [{ name = "numpy", specifier = ">=2.5.4" }]
 
 [[package]]
 name = "networkx"

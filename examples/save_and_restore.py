@@ -14,6 +14,7 @@ import torch
 from torch import nn
 
 import mujou
+import mujou.time
 from mujou import Node, Port, TensorSpec
 
 VECTOR1 = TensorSpec((1,))
@@ -24,20 +25,15 @@ class Integrator(Node):
 
     def __init__(self) -> None:
         super().__init__()
+        self.x = VECTOR1.zeros()  # a tensor: part of the state
+        self.readout = nn.Linear(1, 1)  # a module: part of the state
         self.prev = Port(recv=VECTOR1)
         self.next = Port(send=VECTOR1)
 
     @override
-    def on_start(self) -> None:
-        super().on_start()
-        self.x = VECTOR1.zeros()  # a tensor: part of the state
-        # A module: part of the state.
-        self.readout = nn.Linear(1, 1, device=self.device)
-
-    @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
-        self.x += dt * self.prev.recv()  # in place, so that a restore copies into it
+        self.x += dt * self.prev.recv()  # in place: other references to x stay valid
         self.next.send(self.readout(self.x))
 
 
@@ -63,12 +59,16 @@ file = io.BytesIO()  # or a path, such as "state.pt"
 # generator state still restores only into a CUDA node).
 torch.save(tree, file)
 
-# A new instance of the same network goes on from the saved state and time, on a
-# timer of its own that starts at the time of the state.
+# A new instance of the same network goes on from the saved state and time. A
+# network runs once: run the one the tree came from again, and mujou.run raises.
 restored = Model()
 file.seek(0)
 loaded = torch.load(file)  # the default weights_only=True reads the plain dict
 with mujou.run(restored, inputs={restored.prev: one}, state=loaded) as run:
+    # On a timer of its own that starts at the time of the tree: the global timer
+    # and the other runs do not go back.
+    assert run.timer is not mujou.time.global_timer
+    print(f"restored at t = {float(run.timer.now()):.3f} s of its own timer")
     run.timer.sleep(0.1)
 after = run.state_dict()["nodes"]["integrator"]["state"]
 

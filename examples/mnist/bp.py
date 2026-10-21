@@ -2,40 +2,12 @@
 PyTorch SGD, on the same batches in the same order."""
 
 import time
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable
 
 import torch
 from data import MNIST, batches
+from metrics import Epoch, correct, evaluate
 from torch import nn
-
-import mujou.pc as pc
-
-
-@dataclass(frozen=True)
-class Epoch:
-    """What one epoch measured: the prequential accuracy (each batch predicted
-    before it is learned from), the test accuracy after the epoch, and the real
-    seconds the training took."""
-
-    prequential: float
-    test: float
-    seconds: float
-
-
-def correct(y_hat: torch.Tensor, y: torch.Tensor, mask: torch.Tensor) -> int:
-    """Count the samples in ``mask`` whose class ``y_hat`` predicts right."""
-    return int(((y_hat.argmax(dim=1) == y) & mask).sum())
-
-
-def evaluate(model: nn.Module, samples: Iterable[pc.Sample]) -> float:
-    """Return the accuracy of ``model`` on ``samples``."""
-    right = total = 0
-    with torch.no_grad():
-        for sample in samples:
-            right += correct(model(sample["x"]), sample["y"], sample["mask"])
-            total += int(sample["mask"].sum())
-    return right / total
 
 
 def train(
@@ -63,12 +35,12 @@ def train(
     for epoch in range(epochs):
         right = total = 0
         start = time.perf_counter()
-        for sample in batches(data.train_x, data.train_y, batch, generator(epoch)):
-            x, y, mask = sample["x"], sample["y"], sample["mask"]
+        for x, y, mask in batches(data.train_x, data.train_y, batch, generator(epoch)):
             y_hat = model(x)
             right += correct(y_hat.detach(), y, mask)  # before learning from it
             total += int(mask.sum())
-            loss = torch.where(mask, pc.cross_entropy(y_hat, y), 0.0).sum() / batch
+            ce = nn.functional.cross_entropy(y_hat, y, reduction="none")
+            loss = torch.where(mask, ce, 0.0).sum() / batch
             grads = torch.autograd.grad(loss, params)
             with torch.no_grad():
                 for p, g in zip(params, grads, strict=True):

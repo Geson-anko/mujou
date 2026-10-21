@@ -88,7 +88,7 @@ class Layer(Node):
     however deep they are, and each from the relaxed ``delta`` of the same
     input. A ``learn_interval`` longer than the round trip of the credit down
     the path and back (``2 * hops * period``, with ``hops`` the number of
-    messages from the input to the output) is recommended: with intervals of a
+    connections from the ``Input`` to the ``Output``) is recommended: with intervals of a
     few periods, every node learns, and so advances its ``jumps``, in almost
     every update, the nodes above move ``h`` with every change of ``mu``, and
     deep chains have been seen to diverge however slowly ``theta`` moves. The

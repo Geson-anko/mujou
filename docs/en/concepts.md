@@ -1,14 +1,6 @@
 # 🧠 How Mujou Works
 
-This page explains the ideas behind Mujou. It covers five of them.
-
-- **Nodes**: the units of computation
-- **Ports and channels**: the connection points of nodes and the connections between them
-- **Networks**: how nodes are put together
-- **Global time**: the flow of time that every node follows
-- **State**: what you can take from a running network and put back later
-
-How to write the code is in the [User Guide](user-guide/index.md).
+This page explains the nine ideas you need to use Mujou, in the order you meet them, and ends with the rules a node keeps. The [Tutorial](tutorial/1-run.md) puts them to work.
 
 ```mermaid
 flowchart TB
@@ -22,133 +14,70 @@ flowchart TB
     T -.->|"time and dt"| N
 ```
 
-## Nodes
+## 1. Nodes
 
-A node is the unit of computation. You write a node as a class that inherits from `mujou.Node`.
+A node is the unit of computation. You write it as a class that inherits from `mujou.Node`, and write one step of its work in `on_update(dt)`. Mujou calls `on_update` over and over, so a node holds no loop of its own; it also calls other hooks, such as `on_start` and `on_stop`, whose order is in the API reference of [`Node`](api/node-and-ports.md#mujou.Node).
 
-Inside a node, ordinary PyTorch code runs synchronously. It may even use backpropagation (BP), as long as the BP stays inside the node.
+Inside a node, ordinary PyTorch code runs synchronously, and records gradients as plain PyTorch does. Between nodes, everything is asynchronous: a node never waits for another, and talks to the others only through its ports. A node keeps its state in its own attributes.
 
-Between nodes, everything is asynchronous. Mujou calls the node's `on_update(dt)` over and over, on threads it shares among the nodes, and a node never waits for another node. In each `on_update`, the node does three things.
+The node class decides how much computation one node holds: one layer, several layers, or a whole model. The node boundaries are the asynchronous boundaries, so put layers that should compute (or learn by backpropagation) together in one node class.
 
-1. It reads the latest values its neighbors sent
-2. It updates its state
-3. It sends its results
+## 2. Ports and channels
 
-Mujou owns the loop, so a node holds no `while` loop of its own. Mujou also calls other hooks that a node can override, for example when the run starts and stops; their order is in the API reference of [`Node`](api/node.md).
+A **port** is a connection point of a node. `connect` joins two ports with one **channel**, and returns it.
 
-There are no epochs, no switch between training and inference, and no hook called for each received message.
+- A `Port`'s `recv()` returns one value, so it receives from at most one peer. A `Port` that only sends reaches any number of peers
+- A `MultiPort` gathers peers of one kind. Its `recv()` returns a `dict[Channel, value]`, in the order of `connect`, and the node decides how to combine them. Inputs of different roles (a prediction and an error, say) go to separate `Port`s
+- Connections may form cycles
 
-The node class decides how much computation one node holds: one layer, or several layers, or a whole model. The node boundaries are the asynchronous boundaries. To compute several layers synchronously, put them in one node class. The same holds when several layers should learn together with BP.
+Reading never waits and nothing queues: `recv()` returns the latest value the peer sent. Until the peer first sends, it returns the peer's initial value (zeros by default) with the time `None`. Every value carries the time it was sent, which tells whether it is new. More in [Ports and Channels](topics/ports.md).
 
-!!! info "The three rules a node keeps"
+## 3. Message types (specs)
 
-    - **No graphs across nodes**: it does not join computation graphs across nodes. A value is detached from the computation graph when it is sent, so gradients never pass between nodes
-    - **Only through ports**: it talks to other nodes and to the host only through its own ports
-    - **Time is read-only**: it only reads the time. Only the host moves the time
+A port declares what it sends and receives with a spec: `TensorSpec(shape, dtype)` for one tensor, or `DictSpec` for a `TypedDict` of tensors that travel together. The values are always `torch.Tensor` (or a dict of them). Two ports connect only when the spec each sends matches the spec the other receives, and `send` copies the value, detached from the computation graph.
 
-If a node raises an exception, the whole run stops. Mujou never stops only the node that raised and keeps the others running (see [Errors and Shutdown](user-guide/errors.md)).
+## 4. Networks and paths
 
-The default update rule is [PC-ALM](https://pub.sakana.ai/pc-alm/) (Augmented Lagrangian Predictive Coding), where each node learns with local updates only. Its nodes are in the module `mujou.pc` (see [Learning with PC-ALM](user-guide/pc.md)). Update rules are not built into Mujou: a node can use any rule that keeps to the rules above.
+A `Network` is a container for building: you assign nodes to its attributes and connect their ports, as you give an `nn.Module` its submodules. `Group(**named)` is a network that only puts its children side by side under names. A network runs nothing itself; while running, the nodes inside it each run on their own.
 
-## Ports and channels
+A node's **path** is the attribute names from the root joined with dots, such as `"body.l1"`. Paths are the keys of the state.
 
-A **port** is a connection point that a node holds. A **channel** is one connection between two ports, made by `connect`.
+## 5. Runs
 
-A channel has one slot for the value in each direction, and only the sender in that direction writes the slot.
+`mujou.run(root)` checks the tree, starts every node, and returns a `Run`, the handle of the host (your program). The host writes inputs with `write`, reads outputs with `read`, `wait_for` and the like, and waits on `run.timer`. A root runs once: to run again, build new instances. After the run, the nodes' attributes are the host's to read.
 
-A port declares what it sends and what it receives, as a shape and a dtype. Two ports connect only when the type that each sends matches the type that the other receives. Mujou checks this when you call `connect`, and converts no dtype.
+## 6. Time
 
-Reading and writing work like this.
+Each run has one time axis, its timer, used by every node and by the host: `mujou.time.global_timer` unless the run is given a `Timer` of its own. The host controls it through `run.timer`; a node only reads it, with `self.timer`.
 
-- **No waiting**: a reader gets the latest value at that moment. It never waits for a new value
-- **No queue**: a value may be overwritten before anyone reads it, and the same value may be read many times. Both are normal
-- **Initial value**: before the sender has written, the reader gets the initial value of the sender's port (zeros by default). Its time is `None`, which tells that the sender has not written yet
-- **A copy**: every value is a copy of a `torch.Tensor`, detached from the computation graph. Changing a received tensor affects no other node
-- **With its time**: every value carries the time it was sent. To tell whether a value is new, read it with its time (`recv_with_time()`) and compare that time with the time of the value read last. If the time has moved on, the value is new
+`dt` is the time in seconds since the node's last update, on the run's timer. A node updates in proportion to `dt`, so that nodes updating at different and varying rates follow the same dynamics; a busy machine only makes `dt` longer. Each node updates once every `period` on average. Timeouts are the one exception: they are in real seconds. More in [Time](topics/time.md).
 
-A `Port` receives from at most one peer, and a `Port` that only sends reaches any number. A `MultiPort` connects to several peers of one kind: it receives one value per channel, and the node decides how to combine them (sum, average, ...).
+## 7. State
 
-A port may also stay unconnected. Unconnected ports are the inputs and outputs of the network.
+A node's state is collected automatically: its tensor attributes, its attributes with `state_dict` and `load_state_dict` (an `nn.Module`, say), and the state of its random generator. Other values that change while it runs (a counter, the time last seen) join with `register_state`. The rules are in the API reference of [`Node`](api/node-and-ports.md#mujou.Node).
 
-- The host writes input to an unconnected input port. The written value stays there until the host writes again
-- The host can read the latest value that any sending port sent. This covers not only unconnected output ports but also ports that connect nodes
+`run.state_dict()` takes the state of the whole run at one time, without ending it: the nodes' states, the latest message on each channel and the time, in one plain dict. `mujou.run(new_instance, state=tree)` goes on from there, on a timer of its own that starts at the saved time. See [Save and Resume](tutorial/6-save-and-resume.md).
 
-## Networks
+## 8. Testing
 
-A network declares how nodes are put together. You write it as a class that inherits from `mujou.Network`, much like giving a PyTorch `nn.Module` its child modules. You build it in three steps.
+`mujou.testing.run` runs a tree on a virtual timer, deterministically: `run.step(dt, *nodes)` moves the time `dt` forward, then updates the nodes once each. See [Test a Node](tutorial/3-test.md).
 
-1. Hold nodes, or other networks, as attributes
-2. Connect their ports with `connect`
-3. Expose the ports that should connect from outside as the network's own attributes
+## 9. Learning
 
-A network that exposes ports connects to other nodes and networks just like a node does.
+An update rule is written inside the nodes: backpropagation inside one node, PC-ALM (the nodes of `mujou.pc`), or a rule of your own. Mujou builds no rule into nodes, ports or the scheduler. No computation graph crosses nodes, because a port sends a copy: what passes between nodes is messages, such as activities, errors and targets. See [Learn in a Node](tutorial/4-learn-in-a-node.md), [Learn with PC-ALM](tutorial/5-learn-with-pc.md) and [Update Rules](topics/update-rules.md).
 
-A network is used only for building. It has no hooks and runs nothing itself. While running, the nodes inside it each run on their own, so wrapping nodes in a network does not synchronize them.
+There is no training mode and no inference mode, and there are no epochs: a running network takes input, produces output and learns at the same time.
 
-`mujou.run(net)` reads the structure from the attributes, checks it, and runs it. A connection made after the start changes nothing: to run another structure, run new instances.
+## Rules a node keeps
 
-Each node is named by its path, the attribute names from the root joined with `.`, such as `"body.l1"`. The state uses these paths.
+The other pages link here instead of repeating these.
 
-!!! warning "Renaming breaks restoring"
-
-    Renaming an attribute or changing a connection makes a state taken before the change impossible to restore.
-
-## Global time
-
-Mujou treats a learning network as a system that changes continuously over time. `dt` is the time in seconds since the node's last update.
-
-A node updates its state in proportion to `dt`. For a state $x$ that follows $\frac{dx}{dt} = f(x)$, one update is this (explicit Euler).
-
-```python
-x = x + dt * f(x)
-```
-
-Nodes update at different rates, and their rates vary with the load. If the update size were fixed per iteration, a faster node would change its state more. With updates proportional to `dt`, every node follows the same dynamics on the same flow of time; a higher load only makes `dt` longer.
-
-!!! warning "Mind a long `dt`"
-
-    Mujou never caps `dt`: it is the time that really passed, and a capped `dt` drops some of it. If a large `dt` makes the update of the node's own state unstable, split it into smaller steps inside one `on_update`. Splitting does not help when the instability comes from the coupling with other nodes, whose messages stay as they were over `dt`; such a node may cap the `dt` it uses, at the cost of the time it drops.
-
-Every node has a period, 0.01 s by default. The interval between two updates varies, but on average the node updates once every period. When the node is late, `dt` is longer than the period. `dt` is the time that actually passed, so update in proportion to `dt` even with a period set.
-
-Each run has one timer, and every node of the run and the host use it. By default, it is the global timer, one per process. The host can make the time run faster or slower than real time. Nodes only read the time.
-
-!!! tip "The host waits with `run.timer.sleep`"
-
-    To wait on that time, for example to show an input for two seconds, the host uses `run.timer.sleep`, not the standard `time.sleep`, which waits in real time.
-
-To take the state of a running network, Mujou pauses the run and stops its timer. The paused time does not enter any `dt` after the run resumes, so to the nodes it is as if the pause never happened.
-
-A pause stops the time of every run that uses the same timer; give a run its own timer to keep it apart (see [Controlling Time](user-guide/time.md)).
-
-A pause is for taking the state and for observing. Do not make pausing part of how the network learns.
-
-## State
-
-You can take the state of a running network without ending the run, and later run the network again from that state. The state is one tree that holds:
-
-- the state of each node (weights, activities, and other tensors), by node path
-- the latest value in each slot, with its time
-- the time of each node's last update, and the time of the timer
-
-The values in the slots are part of the state because a network is its nodes together with the values flowing between them. If they went back to their initial values, the neighbors would leave the equilibrium they had reached.
-
-A node collects its own state, as `nn.Module` does: tensors and `nn.Module`s assigned to its attributes go into the state automatically.
-
-Taking the state causes the pause described in the previous section. Each node pauses not in the middle of `on_update` but after one update ends and before the next begins, so every value in the tree belongs to the same moment.
-
-| When you take the state | What you get                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------- |
-| While the network runs  | The state at that moment                                                                  |
-| After a normal end      | The values as the nodes left them after `on_stop`                                         |
-| After an exception      | Nothing: it raises `NetworkError`. Take the state you want to keep while the network runs |
-
-In the tree taken after a normal end, the timer's time is when `shutdown()` asked the run to stop: the time of the run stands still from then on, so no update or message of the run is later. A run restored from this tree does not count the time that passed after the end.
-
-!!! warning "Do not change the state in `on_stop`"
-
-    Because the tree after a normal end is taken after `on_stop`, a change that `on_stop` makes to the state goes into that tree. For example, `self.w = None` in `on_stop` removes `w` from it. Do not change the state in `on_stop`; release only resources such as I/O there.
-
-To restore, pass the tree as `mujou.run(net, state=tree)`. The network goes on from the time the tree was taken, with the same node states and slot values. The network must have the same node paths and connections as the one the tree was taken from.
-
-Storing the tree in a file (`torch.save`, `pickle`, ...) is up to you. See [Saving and Restoring State](user-guide/state.md).
+- **Do not block with `time.sleep`.** A node shares its worker thread with others, and a hook that blocks holds the worker: the other nodes' `dt` grows. Update at intervals with `period`, and give a node whose hooks must block (on a device, a socket, a lock) `dedicated_thread=True`. The host waits with `run.timer.sleep`, which follows the time scale and the pauses of the run; `time.sleep` follows neither
+- **A node runs once.** Running a node or network that has run raises `RuntimeError`; build new instances to run again. After the run, the attributes stay readable
+- **Do not read a node's attributes from the host while it runs.** It races with the node's updates. Read the ports with `run.read`, or take `run.state_dict()`
+- **Send nothing that depends on the state in `on_start`.** A restore loads the state after `on_start`
+- **Do not change the state in `on_stop`.** The state taken after a normal end is the state the nodes left after `on_stop`. Release resources such as I/O there
+- **Register the values that change while running.** Tensors and modules are collected by themselves; plain values (a counter, the time last seen) need `register_state`, or a restore starts them again
+- **Keep the graph inside one update.** Hooks record gradients as plain PyTorch does. Update the parameters inside `torch.no_grad()`, and detach a value computed from the parameters before you carry it to the next update in an attribute, or the graph keeps growing
+- **After an exception, the time stands still.** The run's time stops when the run ends, so `self.timer` does not move in `on_exception` and `on_stop`: measure real time there (to slow a robot down over a second, say)
+- **Only the host moves the time, and only through ports does a node talk.** In a hook, `Timer.sleep`, `pause`, `resume`, `set_time_scale`, `VirtualTimer.advance` and the methods of `Run` raise `RuntimeError`: a node that moved the time would change the `dt` of every other node of the run. `backward()` cannot reach another node, since a sent value is a detached copy

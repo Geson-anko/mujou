@@ -1,4 +1,4 @@
-# Timers
+# Time
 
 ::: mujou.time
     options:

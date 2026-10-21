@@ -33,7 +33,7 @@ test-py:
 test-fast: test-rs
     uv run pytest -v -m "not slow"
 
-# Run pyright strict over src/
+# Run pyright: strict over src/, standard over tests/, examples/, benchmarks/ and hooks/
 type:
     uv run pyright
 
