@@ -320,3 +320,20 @@ PC の y、mask、time を `Activity` のフィールドとして運び、各ノ
 
 - R9: 悪化は、activity の recv の +2.3% と recv_with_time の +2.4%（どちらも範囲の上端）が最大で、5% 未満。
 - 最初の測定では recv が 15%、recv_with_time が 30% 遅かった。原因は、hot path の `typing.cast` の型の式（`MessageSpec[Any]`、`tuple[R, Timestamp | None]`）が呼ぶたびに評価されていたこと。式を文字列にして解消した（`codec.fields` の `DictSpec[Any]` も同じ）。
+
+## ステップ 9 の後（素の dict の状態の木と、Driver.capture での複製の後。R10）
+
+状態の木を素の dict にし、各ノードの状態を `Driver.capture` がノードの stream の上で複製し（再開の後に CPU へ移す）、乱数生成器の状態も入れた後に、同じマシンで測った。前は、ステップ 9 の作業の前に同じ日に 2 回測った範囲。
+
+| 測定 | 前 | 後 |
+| --- | --- | --- |
+| `capture.py` 1 要素 × 4（ms/capture、中央値） | 0.070〜0.072 | 0.078〜0.080 |
+| `capture.py` 65,536 要素 × 4 | 0.221〜0.233 | 0.093〜0.121 |
+| `capture.py` 200,704 要素 × 4 | 0.564〜0.587 | 0.547〜0.596 |
+| `capture.py` 16,777,216 要素 × 4 | 28.0〜28.7 | 28.6〜29.5 |
+| `ports.py` scalar の send / recv / recv_with_time（µs） | 3.35〜3.42 / 2.15〜2.25 / 2.20〜2.27（ステップ 8 の後） | 3.38 / 2.14 / 2.22 |
+| `ports.py` activity の send / recv / recv_with_time（µs） | 8.32〜8.48 / 7.02〜7.22 / 7.09〜7.31（ステップ 8 の後） | 8.38 / 7.06 / 7.15 |
+| MNIST の 1 epoch（time scale 2）の学習の時間 | 15.3 s | 15.4 s（prequential 92.30%、test 96.40%、l1 の更新 30,917 回） |
+
+- R10（CPU）: 小さい状態では 1 回あたり 8〜10 µs 増えた。乱数生成器の状態（CPU の生成器で 5 KB）の複製と、木を CPU へ移すための走査の分。大きい状態では差は測定の揺れに埋もれる。
+- GPU のノードの値は未計測（GPU なし）。GPU のマシンで `--device cuda` を、ステップ 9 の前の版と交互に測る必要がある。停止中に複製するのはノードの device の上で、CPU への移動は再開の後になる。

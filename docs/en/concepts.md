@@ -85,7 +85,7 @@ A network that exposes ports connects to other nodes and networks just like a no
 
 A network is used only for building. It has no hooks and runs nothing itself. While running, the nodes inside it each run on their own, so wrapping nodes in a network does not synchronize them.
 
-`mujou.run(net)` checks the structure and the types, freezes it, and runs it. After that, no connection can be added.
+`mujou.run(net)` reads the structure from the attributes, checks it, and runs it. A connection made after the start changes nothing: to run another structure, run new instances.
 
 Each node is named by its path, the attribute names from the root joined with `.`, such as `"body.l1"`. The state uses these paths.
 

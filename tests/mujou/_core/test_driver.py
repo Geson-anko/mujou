@@ -2,7 +2,7 @@ import contextvars
 import queue
 import subprocess
 import sys
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Any, override
 
 import pytest
 import torch
@@ -57,7 +57,7 @@ class Hooks(Node):
         self.record("on_resume")
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         self.record("state_dict")
         return {}
 

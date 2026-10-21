@@ -1,8 +1,6 @@
 """Run several networks together with ``Group``.
 
-A network given by keyword is at the path of its keyword (``"enc.scale"``), and
-one given by position at the path of its position (``"0.scale"``).
-``mujou.run(a, b)`` is ``mujou.run(Group(a, b))``.
+A network given to ``Group`` is at the path of its keyword (``"enc.scale"``).
 """
 
 from typing import override
@@ -54,13 +52,14 @@ print(f"keyword: nodes {nodes}, y = {y}")
 assert nodes == ["enc.scale", "dec.scale"]
 assert torch.equal(y, 6 * x)
 
-# By position: two independent networks in one run.
+# Two independent networks in one run.
 first, second = Stage(2.0), Stage(3.0)
-with mujou.run(first, second, inputs={first.prev: x, second.prev: x}) as run:
+both = Group(first=first, second=second)
+with mujou.run(both, inputs={first.prev: x, second.prev: x}) as run:
     y1, _ = run.wait_for(first.next, lambda y: torch.equal(y, 2 * x), timeout=5.0)
     y2, _ = run.wait_for(second.next, lambda y: torch.equal(y, 3 * x), timeout=5.0)
     nodes = list(run.state_dict()["nodes"])
-print(f"position: nodes {nodes}, y1 = {y1}, y2 = {y2}")
-assert nodes == ["0.scale", "1.scale"]
+print(f"side by side: nodes {nodes}, y1 = {y1}, y2 = {y2}")
+assert nodes == ["first.scale", "second.scale"]
 assert torch.equal(y1, 2 * x) and torch.equal(y2, 3 * x)
 # --8<-- [end:group]

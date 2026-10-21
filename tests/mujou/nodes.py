@@ -58,13 +58,13 @@ class Leaky(Node):
         self.next.send(self.x)
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         return {"x": self.x, "updates": self.updates}
 
     @override
     def load_state_dict(self, state: object) -> None:
         loaded = cast(dict[str, Any], state)
-        self.x = loaded["x"]
+        self.x.copy_(loaded["x"])
         self.updates = loaded["updates"]
 
 

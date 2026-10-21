@@ -13,7 +13,7 @@ This node follows its input $u$ with the time constant $\tau$. Its state $x$ fol
 The node writes three things.
 
 1. In `__init__`, it declares the ports (`prev` and `next`)
-2. In `on_start`, it sets up the state `x`
+2. In `__init__` too, it sets up the state `x`
 3. In `on_update(dt)`, it reads the input, updates the state in proportion to `dt`, and sends the result
 
 The sections below follow this order.
@@ -26,10 +26,11 @@ The sections below follow this order.
 
 ## 1. Declare the ports in `__init__`
 
-Assign ports as instance attributes inside `__init__`, after `super().__init__()`.
+Assign ports as instance attributes inside `__init__`, after `super().__init__()`. `mujou.run` reads them when it starts.
 
-- **Before `super().__init__()`**: the node registers each port as it is assigned, and assigning one before `super().__init__()` raises `AttributeError`
-- **As a class attribute**: a port declared as a class attribute makes building the network (`build()`) raise `ValueError`
+- **Without `super().__init__()`**: `mujou.run` raises `TypeError`
+- **As a class attribute**: a port declared as a class attribute raises `TypeError` where the class is defined
+- **In a list, a tuple or a dict**: `mujou.run` raises `TypeError`; assign each port to an attribute of its own, or use a `MultiPort`
 
 Choose the kind of port by the number of peers it receives from. By convention, name the port on the side of the previous node `prev` and the one on the side of the next node `next`, so that a chain reads `a.next.connect(b.prev)`. A node can have any number of ports.
 
@@ -91,21 +92,27 @@ def sender[T](spec: MessageSpec[T]) -> Port[T]:
     return Port(send=spec)
 ```
 
-## 2. Set up the state in `on_start`
+## 2. Set up the state in `__init__`
 
-Create the state tensors in `on_start`.
+Create the state tensors in `__init__`. On a GPU, create them in `on_start` instead (see below).
 
 !!! warning "Update the state in place"
 
     In `on_update`, do not assign a new tensor to the attribute; update the tensor in place with `+=`, `copy_` and the like.
 
-    Assigning a new tensor raises no error, and the new tensor goes into the state under the same name. What breaks is any other reference to the tensor created in `on_start` (from an optimizer, another attribute, ...): it still points at the old tensor, and later updates do not reach it.
+    Assigning a new tensor raises no error, and the new tensor goes into the state under the same name. What breaks is any other reference to the tensor created first (from an optimizer, another attribute, ...): it still points at the old tensor, and later updates do not reach it.
 
     Updating in place keeps every reference on the one tensor. Restoring a state also writes in place into that tensor.
 
 `torch.Tensor` and `nn.Module` values assigned to attributes are collected into the state automatically. What is collected, and how to save it, is in [Saving and restoring state](state.md).
 
-When the node computes on a GPU, create the tensors with `device=self.device`, in `on_start` or later (why: [PyTorch in nodes](torch.md#cuda)).
+```python
+def __init__(self) -> None:
+    super().__init__()
+    self.w = torch.zeros(256, 256)
+```
+
+When the node computes on a GPU, create the tensors with `device=self.device`, in `on_start` (why: [PyTorch in nodes](torch.md#cuda)). A restore loads the state after `on_start`, so the state made there is restored too.
 
 ```python
 @override
@@ -190,7 +197,7 @@ In a pipeline fed by a node with a period (a sensor, say), the nodes after it re
 
     `period=0.0` calls the next `on_update` as soon as any time has passed. Such a node uses up one CPU core, takes time from the other nodes and makes their `dt` irregular. Pass it only to a node that really must not wait.
 
-Pass `period` only as an argument of `super().__init__`. Setting a default with a class attribute `period = 0.01` makes the start of the run raise `TypeError`.
+Pass `period` only as an argument of `super().__init__`, which checks it. A class attribute `period = 0.01` replaces the property `Node.period`, and the run uses its value unchecked.
 
 A manual run (see [Testing](testing.md)) does not use the period.
 
@@ -234,7 +241,7 @@ class Camera(Node):
 
 Mujou calls the hooks of a node in this order. Override only the ones you need.
 
-1. `on_start()`: once. Create the state
+1. `on_start()`: once. Open I/O here (on a GPU, create the state here too)
 2. `load_state_dict(state)`: once, only when the run is restored (see [Saving and restoring state](state.md))
 3. `on_update(dt)`: again and again until the run ends
 4. `on_pause()` and `on_resume()`: before and after the run's state is taken. `state_dict()` is called between them

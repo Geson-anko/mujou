@@ -96,7 +96,7 @@ The example sets `torch.set_num_threads(1)`, since the nodes already compute in 
 
 !!! warning "Read predictions from `Output.next`"
 
-    Predictions come only from `out.next`. A `Layer`'s `next` sends the activity `h` of the layer (`run.read(layer.next)["h"]`) with the `y`, `mask` and `time` it passes on, but no prediction. To watch `lam` of a `Layer`, read it from `run.state_dict()["nodes"][path]["lam"]`, where `path` is the attribute name of the node in the network (`"l1"` in the example); reading `layer.lam` from the host races with the node's updates.
+    Predictions come only from `out.next`. A `Layer`'s `next` sends the activity `h` of the layer (`run.read(layer.next)["h"]`) with the `y`, `mask` and `time` it passes on, but no prediction. To watch `lam` of a `Layer`, read it from `run.state_dict()["nodes"][path]["state"]["lam"]`, where `path` is the attribute name of the node in the network (`"l1"` in the example); reading `layer.lam` from the host races with the node's updates.
 
 !!! warning "The activity is zeros until the first sample arrives"
 

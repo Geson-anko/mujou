@@ -4,10 +4,6 @@
 
 ::: mujou.Group
 
-::: mujou.Graph
-
 ::: mujou.run
 
 ::: mujou.Run
-
-::: mujou.StateDict

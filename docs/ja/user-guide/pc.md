@@ -96,7 +96,7 @@
 
 !!! warning "予測は `Output` の `next` から読む"
 
-    予測を読めるのは `out.next` だけ。`Layer` の `next` が送るのは、その層の活動 `h`（`run.read(layer.next)["h"]`）と、中継する `y`・`mask`・`time` で、予測は含まない。`Layer` の `lam` を見るときは `run.state_dict()["nodes"][path]["lam"]` を読む。`path` はネットワークでのノードの属性名（例では `"l1"`）。ホストが `layer.lam` を直接読むと、ノードの更新と競合する。
+    予測を読めるのは `out.next` だけ。`Layer` の `next` が送るのは、その層の活動 `h`（`run.read(layer.next)["h"]`）と、中継する `y`・`mask`・`time` で、予測は含まない。`Layer` の `lam` を見るときは `run.state_dict()["nodes"][path]["state"]["lam"]` を読む。`path` はネットワークでのノードの属性名（例では `"l1"`）。ホストが `layer.lam` を直接読むと、ノードの更新と競合する。
 
 !!! warning "最初のサンプルが届くまで活動はゼロ"
 

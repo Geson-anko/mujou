@@ -13,7 +13,7 @@
 このノードでは次の 3 つを書いている。
 
 1. `__init__` で Port を宣言する（`prev` と `next`）
-2. `on_start` で状態 `x` を確保する
+2. 同じく `__init__` で状態 `x` を確保する
 3. `on_update(dt)` で入力を読み、`dt` に比例して状態を更新して結果を送る
 
 以下、この順に説明する。
@@ -26,10 +26,11 @@
 
 ## 1. `__init__` で Port を宣言する
 
-Port は `__init__` の中で `super().__init__()` の後にインスタンスの属性として代入する。
+Port は `__init__` の中で `super().__init__()` の後にインスタンスの属性として代入する。`mujou.run` が走り始めるときに読む。
 
-- **`super().__init__()` より前**: ノードは代入された Port をその時点で登録するため `AttributeError` になる
-- **クラス属性**: ネットワークの構築（`build()`）で `ValueError` になる
+- **`super().__init__()` を呼ばない**: `mujou.run` が `TypeError` を送出する
+- **クラス属性**: クラスを定義した場所で `TypeError` になる
+- **リスト・タプル・dict に入れる**: `mujou.run` が `TypeError` を送出する。Port は 1 つずつ属性に代入するか、`MultiPort` を使う
 
 Port の種類は、いくつの相手から受け取るかで選ぶ。慣習では前のノード側の Port を `prev`、次のノード側の Port を `next` と名付ける。こうするとつないだ列が `a.next.connect(b.prev)` と読める。1 つのノードが Port をいくつ持ってもよい。
 
@@ -91,21 +92,27 @@ def sender[T](spec: MessageSpec[T]) -> Port[T]:
     return Port(send=spec)
 ```
 
-## 2. `on_start` で状態を確保する
+## 2. `__init__` で状態を確保する
 
-状態のテンソルは `on_start` で作る。
+状態のテンソルは `__init__` で作る。GPU では代わりに `on_start` で作る（後述）。
 
 !!! warning "状態はその場で更新する"
 
     `on_update` では新しいテンソルを代入し直さず、`+=` や `copy_` などでその場で更新する。
 
-    代入し直してもエラーにはならず、新しいテンソルが同じ名前で状態に入る。問題になるのは、ほかの場所（optimizer や別の属性など）が `on_start` で作ったテンソルを参照している場合。その参照は古いテンソルを指したまま残り、以後の更新が届かない。
+    代入し直してもエラーにはならず、新しいテンソルが同じ名前で状態に入る。問題になるのは、ほかの場所（optimizer や別の属性など）が最初に作ったテンソルを参照している場合。その参照は古いテンソルを指したまま残り、以後の更新が届かない。
 
     その場で更新すれば、どの参照も同じ 1 つのテンソルを指し続ける。状態を復元するときも mujou はそのテンソルにその場で書き込む。
 
 属性に代入した `torch.Tensor` と `nn.Module` は自動で状態に集まる。何が集まり、どう保存されるかは[状態の保存と復元](state.md)を参照。
 
-GPU で計算するノードでは、テンソルを `on_start` 以降に `device=self.device` で作る（理由は[ノードの中の PyTorch](torch.md#cuda)）。
+```python
+def __init__(self) -> None:
+    super().__init__()
+    self.w = torch.zeros(256, 256)
+```
+
+GPU で計算するノードでは、テンソルを `on_start` で `device=self.device` で作る（理由は[ノードの中の PyTorch](torch.md#cuda)）。復元は `on_start` の後に状態を読み込むので、そこで作った状態も復元される。
 
 ```python
 @override
@@ -190,7 +197,7 @@ class Sensor(mujou.Node):
 
     `period=0.0` を渡すと、時刻が少しでも進めばすぐ次の `on_update` が呼ばれる。そのノードは CPU のコアを 1 つ使い切り、ほかのノードの計算時間を奪ってその `dt` を不規則にする。待ってはいけないノードにだけ渡す。
 
-`period` は `super().__init__` の引数としてだけ渡す。クラス属性 `period = 0.01` で既定値を置くと実行の開始時に `TypeError` になる。
+`period` は `super().__init__` の引数としてだけ渡す。値はそこで検査される。クラス属性 `period = 0.01` を置くと property の `Node.period` が置き換わり、実行は検査されていないその値を使う。
 
 手動の実行（[テスト](testing.md)）では周期は使われない。
 
@@ -234,7 +241,7 @@ class Camera(Node):
 
 mujou はノードの hook を次の順に呼ぶ。override するのは必要なものだけでよい。
 
-1. `on_start()`: 1 回。状態を作る
+1. `on_start()`: 1 回。I/O を開く（GPU では状態もここで作る）
 2. `load_state_dict(state)`: 復元するときだけ 1 回（[状態の保存と復元](state.md)）
 3. `on_update(dt)`: 実行が終わるまで繰り返し
 4. `on_pause()` と `on_resume()`: 実行の状態を取る前と後。その間に `state_dict()` が呼ばれる

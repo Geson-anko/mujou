@@ -50,6 +50,7 @@ from typing import override
 import torch
 
 import mujou
+import mujou.time
 
 
 class Light(mujou.Node):
@@ -140,7 +141,10 @@ def measure(
     The rates and Δt are of the first ``observed`` nodes (all by default);
     ``others`` is the updates per second of the rest.
     """
-    with mujou.run(*nodes, workers=workers):
+    with mujou.run(
+        mujou.Group(**{f"n{k}": node for k, node in enumerate(nodes)}),
+        workers=workers,
+    ):
         time.sleep(warmup)
         start = [len(n.dts) for n in nodes]
         before = resource.getrusage(resource.RUSAGE_SELF)

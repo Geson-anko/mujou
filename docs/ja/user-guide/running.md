@@ -8,7 +8,7 @@
 --8<-- "examples/quickstart.py:run"
 ```
 
-1. `mujou.run(net)` でネットワークを構築し、全ノードを起動する。全ノードの `on_start`（復元なら `load_state_dict` も）が終わってから戻る
+1. `mujou.run(net)` でネットワークを読んで検査し、全ノードを起動する。全ノードの `on_start`（復元なら `load_state_dict` も）が終わってから戻る
 2. 以後、各ノードは実行のワーカースレッドの上で周期ごとに `on_update` を繰り返す（[実行のスレッド](#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89)）。ホストのスレッドは止まらない
 3. ホストは `write` で入力を書き、`read`・`read_with_time`・`subscribe`・`wait_for` で出力を読む。上の例では期待した値が届くまで `wait_for` で待つ
 4. `with` 文を抜けると `shutdown()` が呼ばれ、全ノードの `on_stop` が終わるまで待つ

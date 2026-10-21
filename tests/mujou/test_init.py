@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import mujou
 
 
@@ -8,7 +11,6 @@ class TestPublicNames:
         assert sorted(mujou.__all__) == [
             "Channel",
             "DictSpec",
-            "Graph",
             "Group",
             "MessageSpec",
             "MultiPort",
@@ -17,16 +19,23 @@ class TestPublicNames:
             "Node",
             "Port",
             "Run",
-            "StateDict",
             "TensorSpec",
             "__version__",
             "run",
         ]
 
-    def test_time_is_a_submodule_outside_all(self):
-        # A star import must not shadow the standard `time`.
-        assert "time" not in mujou.__all__
-        assert mujou.time.__name__ == "mujou.time"
+    def test_imports_no_submodule(self):
+        # Each is imported by name (import mujou.time), in a new interpreter: this
+        # one has imported them all.
+        script = (
+            "import sys, mujou; "
+            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc') "
+            "if m in sys.modules])"
+        )
+        done = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+        )
+        assert done.stdout.strip() == "[]"
 
 
 class TestPcPublicNames:

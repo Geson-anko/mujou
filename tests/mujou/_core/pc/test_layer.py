@@ -387,21 +387,32 @@ class TestJacobi:
             reference.step(x, y, MASK, time, H, run.timer.now().ns)
             tree = run.state_dict()
             for i, layer in enumerate(reference.layers):
-                state = tree["nodes"][f"l{i}"]
+                state = tree["nodes"][f"l{i}"]["state"]
                 close(state["h"], reference.h[i + 1], 1e-12)
                 close(state["lam"], reference.lam[i], 1e-12)
                 for key, value in layer.state_dict().items():
                     close(state["module"][key], value, 1e-12)
-                sent, _ = tree["slots"][f"l{i}.next/out"]
+                sent = tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]
                 close(sent["h"], reference.h[i + 1], 1e-12)
                 assert int(sent["epoch"]) == reference.epoch[i + 1]
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
                 assert torch.equal(sent["mask"], reference.carried[i + 1][1])
-                close(tree["slots"][f"l{i}.prev/out"][0], reference.g_in[i], 1e-12)
-            assert int(tree["slots"]["inp.next/out"][0]["epoch"]) == reference.epoch[0]
+                close(
+                    tree["nodes"][f"l{i}"]["ports"]["prev"]["out"]["value"],
+                    reference.g_in[i],
+                    1e-12,
+                )
+            assert (
+                int(tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["epoch"])
+                == reference.epoch[0]
+            )
             for key, value in reference.head.state_dict().items():
-                close(tree["nodes"]["out"]["module"][key], value, 1e-12)
-            close(tree["slots"]["out.prev/out"][0], reference.g_in[-1], 1e-12)
+                close(tree["nodes"]["out"]["state"]["module"][key], value, 1e-12)
+            close(
+                tree["nodes"]["out"]["ports"]["prev"]["out"]["value"],
+                reference.g_in[-1],
+                1e-12,
+            )
             prediction = run.read(chain.out.next)
             close(prediction["y_hat"], reference.y_hat, 1e-12)
             assert torch.equal(prediction["y"], reference.prediction_carried[0])
@@ -435,8 +446,8 @@ class TestFixedPoint:
         with torch.no_grad():
             forward_hs, _ = forward(layers, head, x)
         for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
-            close(nodes[f"l{i}"]["h"], h, 1e-10)
-            close(nodes[f"l{i}"]["lam"], credit, 1e-8)
+            close(nodes[f"l{i}"]["state"]["h"], h, 1e-10)
+            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
         if block == "linear":
             # skill pc-alm 4: lam_{L-1} = W_L^T e_L,
             # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}).
@@ -447,8 +458,8 @@ class TestFixedPoint:
             a = linear(hs[0])
             slope = torch.ones_like(a) if act == "linear" else 1 - torch.tanh(a) ** 2
             lam_first = (slope * lam_last) @ linear.weight
-            close(nodes["l1"]["lam"], lam_last.detach(), 1e-8)
-            close(nodes["l0"]["lam"], lam_first.detach(), 1e-8)
+            close(nodes["l1"]["state"]["lam"], lam_last.detach(), 1e-8)
+            close(nodes["l0"]["state"]["lam"], lam_first.detach(), 1e-8)
 
     @pytest.mark.parametrize(("block", "act"), CASES)
     def test_one_update_at_the_fixed_point_is_sgd(
@@ -477,7 +488,7 @@ class TestFixedPoint:
             [*(f"l{i}" for i in range(len(layers))), "out"], sgd, strict=True
         ):
             for key, value in module.state_dict().items():
-                close(nodes[name]["module"][key], value, 1e-10)
+                close(nodes[name]["state"]["module"][key], value, 1e-10)
 
 
 @pytest.mark.slow
@@ -504,8 +515,8 @@ class TestDeepChain:
         nodes = run.state_dict()["nodes"]
         expected = credits(layers, head, x, y, MASK)
         for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
-            close(nodes[f"l{i}"]["h"], h, 1e-9)
-            close(nodes[f"l{i}"]["lam"], credit, 1e-8)
+            close(nodes[f"l{i}"]["state"]["h"], h, 1e-9)
+            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
 
     @pytest.mark.parametrize(
         "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
@@ -536,12 +547,15 @@ class TestDeepChain:
         for _ in range(DEEP_STEPS // 100):
             run_steps(run, chain.from_next(), 100)
             nodes = run.state_dict()["nodes"]
-            assert max(nodes[f"l{i}"]["lam"].abs().max() for i in range(8)) < bound
+            assert (
+                max(nodes[f"l{i}"]["state"]["lam"].abs().max() for i in range(8))
+                < bound
+            )
         nodes = run.state_dict()["nodes"]
         moved = [layer.module for layer in chain.layers]  # the nodes' own modules
         expected = credits(moved, chain.out.module, x, y, MASK)
         for i, credit in enumerate(expected):
-            close(nodes[f"l{i}"]["lam"], credit, 1e-8)
+            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
 
 
 @pytest.mark.slow
@@ -575,10 +589,11 @@ class TestNodeBoundaries:
             params = {
                 f"{i}.{key}" if len(names) > 1 else key: value
                 for i, name in enumerate(names)
-                for key, value in nodes[name]["module"].items()
+                for key, value in nodes[name]["state"]["module"].items()
             }
             updated.append(
-                params | {f"head.{k}": v for k, v in nodes["out"]["module"].items()}
+                params
+                | {f"head.{k}": v for k, v in nodes["out"]["state"]["module"].items()}
             )
         assert updated[0].keys() == updated[1].keys()
         for key, value in updated[0].items():
@@ -602,13 +617,19 @@ class TestPcLimit:
         for _ in range(RELAX_STEPS):
             run.step(H, *chain.from_next())
             for i in range(len(layers)):
-                lam = run.state_dict()["nodes"][f"l{i}"]["lam"]
+                lam = run.state_dict()["nodes"][f"l{i}"]["state"]["lam"]
                 assert torch.equal(lam, torch.zeros_like(lam))
         tree = run.state_dict()
-        hs = [tree["slots"][f"l{i}.next/out"][0]["h"] for i in range(len(layers))]
-        g = [tree["slots"]["l1.prev/out"][0], tree["slots"]["out.prev/out"][0]]
+        hs = [
+            tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["h"]
+            for i in range(len(layers))
+        ]
+        g = [
+            tree["nodes"]["l1"]["ports"]["prev"]["out"]["value"],
+            tree["nodes"]["out"]["ports"]["prev"]["out"]["value"],
+        ]
         for i in range(len(layers)):
-            state = tree["nodes"][f"l{i}"]
+            state = tree["nodes"][f"l{i}"]["state"]
             r = state["h"] - state["_mu"]
             close(r, -g[i], 1e-10)  # r = -g
             assert r.abs().max() > 1e-3
@@ -651,7 +672,7 @@ class TestScalar:
             }
         )
         run_steps(run, [out, layer, inp], 1500)
-        lam = run.state_dict()["nodes"]["layer"]["lam"]
+        lam = run.state_dict()["nodes"]["layer"]["state"]["lam"]
         close(lam, torch.full((1, 1), w2 * (y - w2 * w1 * x), dtype=F64), 1e-10)
         # The host reads the h the layer sent: the forward value.
         close(run.read(layer.next)["h"], torch.full((1, 1), w1 * x, dtype=F64), 1e-10)
@@ -678,7 +699,7 @@ class TestSchedules:
                 run.step(H, *order(chain))
             nodes = run.state_dict()["nodes"]
             for i, credit in enumerate(expected):
-                close(nodes[f"l{i}"]["lam"], credit, 1e-8)
+                close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
 
     def test_every_order_learns_as_sgd(self, start_manual: StartManual):
         # Learning at intervals, twice, at the fixed point each time: whatever
@@ -715,7 +736,7 @@ class TestSchedules:
             nodes = run.state_dict()["nodes"]
             for name, module in zip(["l0", "l1", "out"], sgd, strict=True):
                 for key, value in module.state_dict().items():
-                    close(nodes[name]["module"][key], value, 1e-10)
+                    close(nodes[name]["state"]["module"][key], value, 1e-10)
 
 
 class TestWithoutTeacher:
@@ -741,15 +762,17 @@ class TestWithoutTeacher:
             run.step(H, *chain.from_prev())
             tree = run.state_dict()
             for i, h in enumerate(hs):
-                assert torch.equal(tree["slots"][f"l{i}.next/out"][0]["h"], h)
-                assert torch.equal(tree["nodes"][f"l{i}"]["h"], h)
-                lam = tree["nodes"][f"l{i}"]["lam"]
+                assert torch.equal(
+                    tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["h"], h
+                )
+                assert torch.equal(tree["nodes"][f"l{i}"]["state"]["h"], h)
+                lam = tree["nodes"][f"l{i}"]["state"]["lam"]
                 assert torch.equal(lam, torch.zeros_like(lam))
         tree = run.state_dict()
         names = [*(f"l{i}" for i in range(len(layers))), "out"]
         for name, state in zip(names, before, strict=True):
             for key, value in state.items():
-                assert torch.equal(tree["nodes"][name]["module"][key], value)
+                assert torch.equal(tree["nodes"][name]["state"]["module"][key], value)
 
     def test_a_new_input_takes_one_step_per_sender(self, start_manual: StartManual):
         # At the forward pass of a first input (h - mu = 0), a second one is
@@ -769,9 +792,15 @@ class TestWithoutTeacher:
             hs, _ = forward(layers, head, x)
         for _ in range(2):
             run.step(H, *chain.from_next())
-        assert not torch.equal(run.state_dict()["slots"]["l1.next/out"][0]["h"], hs[-1])
+        assert not torch.equal(
+            run.state_dict()["nodes"]["l1"]["ports"]["next"]["out"]["value"]["h"],
+            hs[-1],
+        )
         run.step(H, *chain.from_next())
-        assert torch.equal(run.state_dict()["slots"]["l1.next/out"][0]["h"], hs[-1])
+        assert torch.equal(
+            run.state_dict()["nodes"]["l1"]["ports"]["next"]["out"]["value"]["h"],
+            hs[-1],
+        )
 
 
 # Input -> Layer -> Output that learns K steps after each new input, and a host
@@ -835,10 +864,10 @@ def layer_update(
     update comes and how much time weighs it.
     """
     module = copy.deepcopy(module)
-    module.load_state_dict(tree["nodes"]["l0"]["module"])
+    module.load_state_dict(tree["nodes"]["l0"]["state"]["module"])
     params = list(module.parameters())
-    state = tree["nodes"]["l0"]
-    sent, _ = tree["slots"]["inp.next/out"]
+    state = tree["nodes"]["l0"]["state"]
+    sent = tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]
     labeled = sent["mask"][:, None]
     h = h_before_mu(state)
 
@@ -872,8 +901,8 @@ class TestLearnInterval:
         for s in range(1, 21):
             before = learning.run.state_dict()
             learning.step()
-            after = learning.run.state_dict()["nodes"]["l0"]["module"]
-            if equal_states(after, before["nodes"]["l0"]["module"]):
+            after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
+            if equal_states(after, before["nodes"]["l0"]["state"]["module"]):
                 continue
             elapsed = (s - last) * H
             expected = layer_update(before, module, elapsed)
@@ -906,13 +935,13 @@ class TestLearnInterval:
             run.step(H, *chain.from_next())
             if s == 2 * K:
                 expected = layer_update(before, layers[0], s * H)
-                after = run.state_dict()["nodes"]["l0"]["module"]
+                after = run.state_dict()["nodes"]["l0"]["state"]["module"]
                 for key, value in expected.items():
                     close(after[key], value, 1e-14)
-                assert not equal_states(after, before["nodes"]["l0"]["module"])
+                assert not equal_states(after, before["nodes"]["l0"]["state"]["module"])
             for name in names:
-                after = run.state_dict()["nodes"][name]["module"]
-                if not equal_states(after, before["nodes"][name]["module"]):
+                after = run.state_dict()["nodes"][name]["state"]["module"]
+                if not equal_states(after, before["nodes"][name]["state"]["module"]):
                     changed[name].append(s)
         assert changed == {"l0": [2 * K, 4 * K], "out": [2 * K, 4 * K]}
 
@@ -938,7 +967,8 @@ class TestLearnInterval:
                 run.step(H, *chain.from_next())
             tree = run.state_dict()
             for node in tree["nodes"].values():
-                node.pop("clock", None)
+                node["state"].pop("clock", None)
+                node["state"].pop("generator")  # seeded by chance
             trees.append(tree)
             for module, state in zip([*layers, head], initial, strict=True):
                 assert equal_states(module.state_dict(), state)
@@ -964,11 +994,11 @@ class TestLearnInterval:
                 learning.chain.write(run, x, y, MASK)
             before = run.state_dict()
             run.step(0.0, *learning.chain.from_next())
-            return before, run.state_dict()["nodes"]["l0"]["module"]
+            return before, run.state_dict()["nodes"]["l0"]["state"]["module"]
 
         for s in range(1, 7 + K):
             before, after = step(s)
-            assert equal_states(after, before["nodes"]["l0"]["module"]), s
+            assert equal_states(after, before["nodes"]["l0"]["state"]["module"]), s
         before, after = step(7 + K)
         expected = layer_update(before, module, K * H)
         for key, value in expected.items():
@@ -997,7 +1027,7 @@ def learned_steps(
         nodes = run.state_dict()["nodes"]
         for name in names:
             # Before the first input, the zeros carried (time 0) skip theirs.
-            clock = nodes[name]["clock"]
+            clock = nodes[name]["state"]["clock"]
             if clock["seen_ns"] != 0 and clock["elapsed"] == 0.0:
                 learned[name].append(s)
     return learned
@@ -1059,15 +1089,15 @@ def relaxed(
     ``g`` as the next node ``g`` sent it in the step. ``h`` first takes the
     jump of ``theta`` of the step before (if any), then, with ``reanchor``,
     moves with ``mu``."""
-    state = before["nodes"][node]
+    state = before["nodes"][node]["state"]
     module = copy.deepcopy(module)
     module.load_state_dict(state["module"])
     with torch.no_grad():
-        mu = module(before["slots"][f"{h_in}.next/out"][0]["h"])
+        mu = module(before["nodes"][f"{h_in}"]["ports"]["next"]["out"]["value"]["h"])
     h, lam = h_before_mu(state), state["lam"]
     if reanchor:
         h = mu + (h - state["_mu"])
-    g_sent = after["slots"][f"{g}.prev/out"][0]
+    g_sent = after["nodes"][f"{g}"]["ports"]["prev"]["out"]["value"]
     h = h - (dt / TAU.h) * (h - mu + lam + g_sent)  # tau_h dh/dt = -(r + lam + g)
     lam = lam + (dt / TAU.lam) * (h - mu)  # tau_lam dlam/dt = r
     return h, lam
@@ -1088,16 +1118,16 @@ class TestMaxDt:
         for _ in range(4):
             learning.step()
         before = learning.run.state_dict()
-        assert before["nodes"]["l0"]["_jumped"]
+        assert before["nodes"]["l0"]["state"]["_jumped"]
         learning.run.timer.advance(4 * H)
         learning.step()
         after = learning.run.state_dict()
         h, lam = relaxed(before, after, module, counted, reanchor=False)
-        close(after["nodes"]["l0"]["h"], h, 1e-14)
-        close(after["nodes"]["l0"]["lam"], lam, 1e-14)
+        close(after["nodes"]["l0"]["state"]["h"], h, 1e-14)
+        close(after["nodes"]["l0"]["state"]["lam"], lam, 1e-14)
         expected = layer_update(before, module, counted)
         for key, value in expected.items():
-            close(after["nodes"]["l0"]["module"][key], value, 1e-14)
+            close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
 
     def test_the_default_keeps_the_step_of_lam_stable(self):
         # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
@@ -1129,21 +1159,27 @@ class TestJumps:
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            epochs.append(int(after["slots"]["l0.next/out"][0]["epoch"]))
+            epochs.append(
+                int(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["epoch"])
+            )
             if s == 1:
                 continue  # the first update moves h from zeros
             h, lam = relaxed(before, after, module, H, reanchor=s in (2, 7))
-            close(after["nodes"]["l0"]["h"], h, 1e-14)
-            close(after["nodes"]["l0"]["lam"], lam, 1e-14)
-            assert after["nodes"]["l0"]["_jumped"] == (s == 4)
+            close(after["nodes"]["l0"]["state"]["h"], h, 1e-14)
+            close(after["nodes"]["l0"]["state"]["lam"], lam, 1e-14)
+            assert after["nodes"]["l0"]["state"]["_jumped"] == (s == 4)
             if s == 4:
-                h_in = before["slots"]["inp.next/out"][0]["h"]
+                h_in = before["nodes"]["inp"]["ports"]["next"]["out"]["value"]["h"]
                 old, new = copy.deepcopy(module), copy.deepcopy(module)
-                old.load_state_dict(before["nodes"]["l0"]["module"])
-                new.load_state_dict(after["nodes"]["l0"]["module"])
+                old.load_state_dict(before["nodes"]["l0"]["state"]["module"])
+                new.load_state_dict(after["nodes"]["l0"]["state"]["module"])
                 with torch.no_grad():
-                    close(after["nodes"]["l0"]["_mu"], new(h_in), 1e-14)
-                    close(after["nodes"]["l0"]["_jump"], new(h_in) - old(h_in), 1e-14)
+                    close(after["nodes"]["l0"]["state"]["_mu"], new(h_in), 1e-14)
+                    close(
+                        after["nodes"]["l0"]["state"]["_jump"],
+                        new(h_in) - old(h_in),
+                        1e-14,
+                    )
         assert epochs == [1, 2, 2, 2, 3, 3, 4, 4]
 
     def test_a_jump_below_moves_the_next_h_with_r_unchanged(
@@ -1161,7 +1197,9 @@ class TestJumps:
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            epochs.append(int(after["slots"]["l1.next/out"][0]["epoch"]))
+            epochs.append(
+                int(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["epoch"])
+            )
             if s < 3:
                 continue  # the moves from zeros and the zeros of l0
             h, lam = relaxed(
@@ -1174,8 +1212,8 @@ class TestJumps:
                 h_in="l0",
                 g="out",
             )
-            close(after["nodes"]["l1"]["h"], h, 1e-14)
-            close(after["nodes"]["l1"]["lam"], lam, 1e-14)
+            close(after["nodes"]["l1"]["state"]["h"], h, 1e-14)
+            close(after["nodes"]["l1"]["state"]["lam"], lam, 1e-14)
         assert epochs == [1, 2, 3, 3, 4, 5, 5, 6, 6]
 
     def test_learning_in_every_update_moves_no_node_above(
@@ -1194,8 +1232,13 @@ class TestJumps:
             run.step(H, *chain.from_next())
             tree = run.state_dict()
             for i in range(2):
-                assert tree["nodes"][f"l{i}"]["_jumped"]
-                assert int(tree["slots"][f"l{i}.next/out"][0]["epoch"]) == 2 + i
+                assert tree["nodes"][f"l{i}"]["state"]["_jumped"]
+                assert (
+                    int(
+                        tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["epoch"]
+                    )
+                    == 2 + i
+                )
 
 
 class TestUnlabeled:
@@ -1218,8 +1261,10 @@ class TestUnlabeled:
             run.step(H, *chain.from_next())
         after = run.state_dict()["nodes"]
         for path in ("l0", "l1", "out"):
-            assert_same_tree(after[path]["module"], before[path]["module"])
-        assert not torch.equal(after["l1"]["h"], before["l1"]["h"])
+            assert_same_tree(
+                after[path]["state"]["module"], before[path]["state"]["module"]
+            )
+        assert not torch.equal(after["l1"]["state"]["h"], before["l1"]["state"]["h"])
 
     def test_no_target_skips_the_update_and_drops_the_time(
         self, start_manual: StartManual
@@ -1237,13 +1282,13 @@ class TestUnlabeled:
             learning.step(masks)
         before = learning.run.state_dict()
         learning.step(masks)  # step 4
-        after = learning.run.state_dict()["nodes"]["l0"]["module"]
-        assert equal_states(after, before["nodes"]["l0"]["module"])
+        after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
+        assert equal_states(after, before["nodes"]["l0"]["state"]["module"])
         for _ in range(4):
             learning.step(masks)
         before = learning.run.state_dict()
         learning.step(masks)  # step 9
-        after = learning.run.state_dict()["nodes"]["l0"]["module"]
+        after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
         expected = layer_update(before, module, 5 * H)
         for key, value in expected.items():
             close(after[key], value, 1e-14)
@@ -1265,13 +1310,21 @@ class TestUnlabeled:
         before = learning.run.state_dict()
         learning.step(masks)  # step 9: learns from the second input
         after = learning.run.state_dict()
-        state = before["nodes"]["l0"]
+        state = before["nodes"]["l0"]["state"]
         assert (state["h"] - state["_mu"] + state["lam"])[1].abs().max() > 1e-6
-        g_in = after["slots"]["l0.prev/out"][0]
+        g_in = after["nodes"]["l0"]["ports"]["prev"]["out"]["value"]
         assert torch.equal(g_in[1], torch.zeros_like(g_in[1]))
         expected = layer_update(before, module, 5 * H)
         for key, value in expected.items():
-            close(after["nodes"]["l0"]["module"][key], value, 1e-14)
+            close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
+
+
+def without_generators(tree: dict[str, Any]) -> dict[str, Any]:
+    """``tree`` without the state of the nodes' generators (seeded by chance,
+    and unused by the pc nodes)."""
+    for node in tree["nodes"].values():
+        node["state"].pop("generator")
+    return tree
 
 
 class TestState:
@@ -1296,10 +1349,13 @@ class TestState:
             "module",
             "h",
             "lam",
-        } <= set(tree["nodes"]["l0"])
-        assert {"_epoch", "_seen_write"} <= set(tree["nodes"]["inp"])
+        } <= set(tree["nodes"]["l0"]["state"])
+        assert {"_epoch", "_seen_write"} <= set(tree["nodes"]["inp"]["state"])
         first.run.shutdown()
         restored = Learning(start_manual, seed=1, state=tree, steps=6)
         for _ in range(10):
             restored.step()
-        assert_same_tree(restored.run.state_dict(), whole.run.state_dict())
+        assert_same_tree(
+            without_generators(restored.run.state_dict()),
+            without_generators(whole.run.state_dict()),
+        )

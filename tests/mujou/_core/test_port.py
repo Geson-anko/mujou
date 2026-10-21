@@ -1,11 +1,12 @@
 import queue
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Never, TypedDict, cast, override
 
 import pytest
 import torch
 
-from mujou._core.network import Group, Network
+from mujou._core.network import Group
 from mujou._core.node import Node
 from mujou._core.port import Channel, MultiPort, Port
 from mujou._core.spec import DictSpec, TensorSpec
@@ -126,44 +127,26 @@ class TestConnect:
 
 
 class TestPortNames:
-    class Shift(Node):
-        def __init__(self) -> None:
-            super().__init__()
-            self.prev = Port(recv=h())
-            self.next = Port(send=h())
-            self.alias = self.next  # a second name does not rename the port
-
-    def test_a_bare_port_is_shown_by_its_specs(self):
+    def test_a_port_is_shown_by_its_specs(self):
         assert repr(Port(send=h())) == f"Port(send={h()!r}, recv=None)"
         assert repr(MultiPort(recv=h())) == f"MultiPort(send=None, recv={h()!r})"
 
-    def test_a_port_of_a_node_is_named_by_its_first_owner_and_attribute(self):
-        shift = self.Shift()
-
-        class Exposing(Network):
-            def __init__(self) -> None:
-                super().__init__()
-                self.node = shift
-                self.next = shift.next
-
-        Exposing()
-        assert repr(shift.next) == f"Port(Shift.next, send={h()!r}, recv=None)"
-
-    def test_connect_errors_name_the_ports(self):
-        a, b = self.Shift(), self.Shift()
-        with pytest.raises(
-            TypeError,
-            match=r"^port specs do not match: Shift\.prev sends nothing, but "
-            r"Shift\.prev receives TensorSpec",
-        ):
-            a.prev.connect(b.prev)  # pyright: ignore[reportArgumentType]
-        a.next.connect(b.prev)
+    def test_connect_errors_name_the_two_ends(self):
+        a, b = Port(recv=h()), Port(recv=h())
+        with pytest.raises(TypeError) as raised:
+            a.connect(b)  # pyright: ignore[reportArgumentType]
+        assert str(raised.value) == (
+            f"port specs do not match: this port sends nothing, but the other "
+            f"receives {h()!r}; the other sends nothing, but this port receives "
+            f"{h()!r}"
+        )
+        Port(send=h()).connect(b)
         with pytest.raises(
             ValueError,
-            match=r"^Shift\.prev receives from one peer and is connected to "
-            r"Shift\.next, so it cannot take Port\(send=",
+            match=r"^the other is a Port that receives and has a peer already; use a "
+            "MultiPort to receive from several$",
         ):
-            Port(send=h()).connect(b.prev)
+            Port(send=h()).connect(b)
 
 
 class TestChannel:
@@ -194,9 +177,9 @@ class TestOutsideTheHooks:
             assert raises_outside(call) is not None
 
     def test_names_the_port(self):
-        shift = TestPortNames.Shift()
-        with pytest.raises(RuntimeError, match=rf"^Shift\.prev {OUTSIDE}"):
-            shift.prev.recv()
+        port = Port(recv=h())
+        with pytest.raises(RuntimeError, match=rf"^{re.escape(repr(port))} {OUTSIDE}"):
+            port.recv()
 
     def test_from_the_host_while_it_runs(self, start_manual: StartManual):
         inp, out = Port(recv=h()), Port(send=h())
@@ -557,12 +540,12 @@ class TestInitial:
         received = cast(Feedback, sink.results[0])
         assert torch.equal(received["error"], torch.ones(2, 3))
 
-    def test_is_copied_when_the_port_is_made(self, start_manual: StartManual):
+    def test_is_copied_when_the_run_starts(self, start_manual: StartManual):
         value = torch.ones(2, 3, requires_grad=True)
         out = Port(send=h(), initial=value)
-        with torch.no_grad():
-            value.add_(1.0)  # after the declaration: must not reach the slots
         run = start_manual(Group(node=Probe(out=out)))
+        with torch.no_grad():
+            value.add_(1.0)  # after the start: must not reach the slots
         received = run.read(out)
         assert torch.equal(received, torch.ones(2, 3))
         assert not received.requires_grad
@@ -589,13 +572,15 @@ class TestInitial:
         run.step(H, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.full((2, 3), 5.0))
 
-    def test_rejects_a_value_that_is_not_a_message(self):
-        with pytest.raises(TypeError, match="initial: expected a torch.Tensor"):
-            Port(send=h(), initial=[[0.0] * 3] * 2)  # pyright: ignore[reportArgumentType]
-
-    def test_rejects_a_dict_with_other_keys(self):
-        with pytest.raises(TypeError, match="initial: expected a dict with the keys"):
-            Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
+    def test_a_run_rejects_a_value_that_is_not_a_message_by_its_path(
+        self, start_manual: StartManual
+    ):
+        tensor = Probe(next=Port(send=h(), initial=[[0.0] * 3] * 2))  # pyright: ignore[reportArgumentType]
+        with pytest.raises(TypeError, match=r"^node\.next: expected a torch\.Tensor"):
+            start_manual(Group(node=tensor))
+        keys = Probe(next=Port(send=fb(), initial={"loss": torch.zeros(2, 3)}))  # pyright: ignore[reportArgumentType]
+        with pytest.raises(TypeError, match=r"^node\.next: expected a dict with"):
+            start_manual(Group(node=keys))
 
     @pytest.mark.parametrize(
         ("value", "what"),

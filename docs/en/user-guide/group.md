@@ -1,6 +1,6 @@
 # 🗂️ Grouping Networks
 
-To run several networks in one run, pass them side by side as `mujou.run(a, b)`, or combine them with `mujou.Group`.
+`mujou.run` runs one root. To run several networks in one run, put them side by side in a `mujou.Group`.
 
 This page shows how to write that, and when to split them into separate runs instead.
 
@@ -10,28 +10,20 @@ This page shows how to write that, and when to split them into separate runs ins
 --8<-- "examples/group.py:group"
 ```
 
-`mujou.run(a, b)` is the same as `mujou.run(Group(a, b))`. To give names, use `Group` with keyword arguments.
+`Group(enc=a, dec=b)` puts each network at its keyword: the grouped networks have paths under those names.
 
-The grouped networks have paths under the names given by `Group`.
+| Form                             | Path of the node `l1` in `a` |
+| -------------------------------- | ---------------------------- |
+| `mujou.run(a)`                   | `"l1"`                       |
+| `mujou.run(Group(enc=a, dec=b))` | `"enc.l1"`                   |
 
-| Form                  | Path of the node `l1` in `a` |
-| --------------------- | ---------------------------- |
-| `mujou.run(a)`        | `"l1"`                       |
-| `mujou.run(a, b)`     | `"0.l1"`                     |
-| `Group(a, b)`         | `"0.l1"`                     |
-| `Group(enc=a, dec=b)` | `"enc.l1"`                   |
-
-The paths are the keys of the state tree. A position and a keyword give different paths.
+The paths are the keys of the state tree, so a network has the same paths however it is run.
 
 !!! warning "Group the same way to restore"
 
-    To restore a saved state, group the networks the same way as when the state was saved: the same order, and keywords only where they were used. Otherwise the paths do not match, and `mujou.run(..., state=tree)` raises `ValueError` (see [Saving and restoring state](state.md)).
+    To restore a saved state, group the networks with the same keywords as when the state was saved. Otherwise the paths do not match, and `mujou.run(..., state=tree)` raises `ValueError` (see [Saving and restoring state](state.md)).
 
-`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on.
-
-`Group(node)` adds a name, so there the path of the node is `"0"`.
-
-An invalid keyword (such as an empty name or one containing `.`) raises `ValueError`.
+`mujou.run(node)` with a single node adds no name either, like a single network. The path of the node is `""`, and the paths of its ports are `"prev"` and so on. In `Group(n=node)`, the path of the node is `"n"`.
 
 ## Connect before grouping
 
@@ -39,9 +31,9 @@ Networks whose ports you connect with `connect` before grouping them run connect
 
 To write input and read output, use the ports of the networks you passed as they are (`enc.prev`, `dec.next`). You do not have to go through the attributes of the `Group`.
 
-!!! warning "A network built alone cannot be grouped later"
+!!! warning "A network that ran cannot run again"
 
-    If you run a network alone with `mujou.run(a)`, that network is built alone. Passing the same network to `mujou.run(a, b)` afterwards raises `RuntimeError`, whether the first run is still running or has ended. Run them together from the start, or create new instances.
+    A node runs once. Passing a network that ran (alone with `mujou.run(a)`, say) to a `Group` and running it again raises `RuntimeError`, whether the first run is still running or has ended. Run them together from the start, or create new instances.
 
 ## Group them, or run them separately?
 
@@ -67,6 +59,8 @@ In the following cases, do not group them; use separate runs, and give each one 
     Even in separate runs, runs given no `timer` both share the global timer. Then taking the state of one stops the time of the other too. If they should not stop each other, give them separate `Timer`s.
 
 ```python
+import mujou.time
+
 timer_a, timer_b = mujou.time.Timer(), mujou.time.Timer()
 with mujou.run(a, timer=timer_a) as run_a, mujou.run(b, timer=timer_b) as run_b:
     timer_a.sleep(2.0)   # wait on the timer of a's run

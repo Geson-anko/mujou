@@ -30,10 +30,6 @@ class Leaky(Node):
         self.tau = tau
         self.prev = Port(recv=SCALAR)
         self.next = Port(send=SCALAR)
-
-    @override
-    def on_start(self) -> None:
-        super().on_start()
         self.x = SCALAR.zeros()  # the state: collected by the node automatically
 
     @override

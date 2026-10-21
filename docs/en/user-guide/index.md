@@ -20,7 +20,7 @@ The pages are in the order of the work.
 
     ______________________________________________________________________
 
-    Connect nodes: branching and merging, nesting, exposed ports, checking the built structure.
+    Connect nodes: branching and merging, nesting, exposed ports, checking the structure.
 
     [:octicons-arrow-right-24: Building a network](building-a-network.md)
 

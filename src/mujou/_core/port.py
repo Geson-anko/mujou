@@ -36,19 +36,9 @@ class _Port[S, R]:
     ) -> None:
         self._send_spec = send
         self._recv_spec = recv
-        # The tensors of the initial value in field order, copied to the host now
-        # so that changing the value later changes nothing.
-        self._initial: list[torch.Tensor] | None = None
-        if initial is not None:
-            # initial is of the type of what send sends: Never without it.
-            spec = cast(MessageSpec[S], send)
-            tensors = to_core(spec, initial, f"{type(self).__name__} initial")
-            self._initial = [t.clone() for t in tensors]
+        self._initial = initial
         # Each peer and the channel to it, in the order they were connected.
         self._peers: dict[AnyPort, Channel] = {}
-        # "<owner class>.<attribute>", set when the port is first assigned as an
-        # attribute of a node; names the port in errors and its repr.
-        self._name: str | None = None
 
     @property
     def send_spec(self) -> MessageSpec[S] | None:
@@ -59,6 +49,12 @@ class _Port[S, R]:
     def recv_spec(self) -> MessageSpec[R] | None:
         """The spec of the messages this port receives, or ``None``."""
         return self._recv_spec
+
+    @property
+    def initial(self) -> S | None:
+        """What the port has sent before its first ``send``, or ``None`` for the
+        ``zeros()`` of its send spec."""
+        return self._initial
 
     @property
     def channels(self) -> tuple[Channel, ...]:
@@ -81,21 +77,23 @@ class _Port[S, R]:
         channel = self._peers.get(other)
         if channel is not None:
             return channel
-        # dict.fromkeys: ports of two instances of one class can read the same.
-        mismatches = dict.fromkeys(
-            f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
-            f"receives {_or_nothing(b._recv_spec)}"
-            for a, b in ((self, other), (other, self))
+        # The ports have no names yet (a run names them by their paths): the
+        # line of the call does.
+        mismatches = [
+            f"{a_name} sends {_or_nothing(a._send_spec)}, but {b_name} receives "
+            f"{_or_nothing(b._recv_spec)}"
+            for (a, a_name), (b, b_name) in (
+                ((self, "this port"), (other, "the other")),
+                ((other, "the other"), (self, "this port")),
+            )
             if a._send_spec != b._recv_spec
-        )
+        ]
         if mismatches:
             raise TypeError("port specs do not match: " + "; ".join(mismatches))
-        for port, peer in ((self, other), (other, self)):
+        for port, name in ((self, "this port"), (other, "the other")):
             if isinstance(port, Port) and port._recv_spec is not None and port._peers:
-                (connected,) = port._peers
                 raise ValueError(
-                    f"{port._label()} receives from one peer and is connected to "
-                    f"{connected._label()}, so it cannot take {peer._label()}; use a "
+                    f"{name} is a Port that receives and has a peer already; use a "
                     "MultiPort to receive from several"
                 )
         me = cast(AnyPort, self)  # every port is a Port or a MultiPort
@@ -122,17 +120,10 @@ class _Port[S, R]:
         """
         _wire(cast(AnyPort, self)).send(msg)  # as in connect
 
-    def _label(self) -> str:
-        """Name this port in an error: by its owner and attribute (e.g.
-        ``"Shift.next"``) once assigned to a node, else by its repr."""
-        return self._name if self._name is not None else repr(self)
-
     @override
     def __repr__(self) -> str:
-        name = "" if self._name is None else f"{self._name}, "
         return (
-            f"{type(self).__name__}({name}send={self._send_spec!r}, "
-            f"recv={self._recv_spec!r})"
+            f"{type(self).__name__}(send={self._send_spec!r}, recv={self._recv_spec!r})"
         )
 
 
@@ -153,13 +144,13 @@ class Port[S = Never, R = Never](_Port[S, R]):
     (``Run.write``).
 
     ``initial`` is what the port has sent before its first ``send``: what its
-    peers receive and the host reads until then. It is copied when the port is
-    made. Without it, that is the ``zeros()`` of ``send``. A restored run takes
-    the values from the state instead.
+    peers receive and the host reads until then. A run copies it when it
+    starts. Without it, that is the ``zeros()`` of ``send``. A restored run
+    takes the values from the state instead.
 
-    Once assigned as an attribute of a node, the port is named
-    ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
-    ``repr``; the first assignment names it.
+    A run names the port in its errors by the path of its node and its
+    attribute (``"body.l1.next"``; ``"Shift.next"`` for a port of the node run
+    as the root).
 
     Example::
 
@@ -182,12 +173,6 @@ class Port[S = Never, R = Never](_Port[S, R]):
 
         sensor, monitor = Sensor(), Monitor()
         sensor.next.connect(monitor.prev)
-
-    Raises:
-        TypeError: ``initial`` is not a tensor, or a dict of tensors with the
-            keys of ``send`` (as ``send`` raises). The shapes and dtypes of
-            ``initial`` are checked when a run starts: ``mujou.run`` raises
-            ``ValueError`` if they differ.
     """
 
     def recv(self) -> R:
@@ -246,9 +231,6 @@ class MultiPort[S = Never, R = Never](_Port[S, R]):
             def on_update(self, dt: float) -> None:
                 super().on_update(dt)
                 self.next.send(sum(self.prev.recv().values(), torch.zeros(3)))
-
-    Raises:
-        TypeError: As ``Port`` raises for ``initial``.
     """
 
     def recv(self) -> dict[Channel, R]:
@@ -318,7 +300,7 @@ class Channel:
 @dataclass(frozen=True, slots=True)
 class Wire:
     """What one port of a running node reads and writes: the slots that the run
-    laid out for it (``session.py``). The node's driver holds it."""
+    laid out for it (``wiring.py``). The node's driver holds it."""
 
     # How errors name the port.
     label: str
@@ -393,7 +375,7 @@ def _wire(port: AnyPort) -> Wire:
     current = running()
     found = None if current is None else current.wires.get(port)
     if found is None:
-        raise outside(label(port))
+        raise outside(repr(port))
     return found
 
 
@@ -411,22 +393,3 @@ def _many(port: AnyPort, with_time: bool) -> dict[Channel | None, object]:
 def _or_nothing(spec: object) -> str:
     """``repr(spec)``, or ``"nothing"`` for a direction without a spec."""
     return "nothing" if spec is None else repr(spec)
-
-
-def assign_owner(port: AnyPort, owner: str, attribute: str) -> None:
-    """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
-    (a node calls this as the port is assigned; the first assignment wins, so a
-    second name does not rename the port, and networks never do)."""
-    if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
-        port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
-
-
-def label(port: AnyPort) -> str:
-    """Name ``port`` in an error by its owner and attribute (``"Shift.next"``)."""
-    return port._label()  # pyright: ignore[reportPrivateUsage]  # Port's own module
-
-
-def initial(port: AnyPort) -> list[torch.Tensor] | None:
-    """The tensors of ``port``'s initial value in field order, or ``None`` (the
-    run's ``Session`` writes them in place of the zeros)."""
-    return port._initial  # pyright: ignore[reportPrivateUsage]  # Port's own module

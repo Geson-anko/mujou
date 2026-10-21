@@ -11,9 +11,13 @@ order, so that no override of a hook can skip it:
 3. call the hook, looked up on the node at each call;
 4. after ``on_update`` and ``load_state_dict``, wait for the work queued on the
    node's stream.
+
+``capture`` copies what ``state_dict`` returns on the node's stream, so that the
+copy stays as taken once the node resumes.
 """
 
 import contextvars
+import copy
 from collections.abc import Callable, Mapping
 from typing import Final, final
 
@@ -85,16 +89,15 @@ class Driver:
         stream = self._stream
         if stream is None:
             # Not torch.cuda.stream(None), which initializes CUDA.
-            return self._state()
+            return self._copy()
         # Unlike the other hooks, it may run on a thread the node does not own
         # (the host's, after the run ends): torch.cuda.stream sets that thread's
         # device and stream back on exit.
         with torch.cuda.stream(stream):
             # Wait for the work of every hook (not only on_update) before
-            # state_dict reads it, and for the copies that state_dict queues on
-            # the node's stream before the framework copies the tree on its own.
+            # state_dict reads it, and for the copies before the node resumes.
             stream.record_event().synchronize()
-            state = self._state()
+            state = self._copy()
             stream.record_event().synchronize()
         return state
 
@@ -103,10 +106,10 @@ class Driver:
             _use(self._stream)
         return self._context.run(hook, *args)
 
-    def _state(self) -> object:
+    def _copy(self) -> object:
         wires, self.wires = self.wires, _NO_WIRES
         try:
-            return self._context.run(self.node.state_dict)
+            return self._context.run(lambda: copy.deepcopy(self.node.state_dict()))
         finally:
             self.wires = wires
 

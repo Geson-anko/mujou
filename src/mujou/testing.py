@@ -52,21 +52,21 @@ import torch
 from mujou._core.network import Network
 from mujou._core.node import Node
 from mujou._core.port import Port
-from mujou._core.run import ManualRun, VirtualTimer, start_run
+from mujou._core.run import ManualRun, VirtualTimer, start
 
 __all__ = ["ManualRun", "run"]
 
 
 # P: as in Run.write.
 def run[P: Port[Any, Any]](
-    component: Node | Network,
-    *components: Node | Network,
+    root: Node | Network,
+    *,
     timer: VirtualTimer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
 ) -> ManualRun:
-    """Run the given nodes and networks as ``mujou.run`` does, with the updates
-    left to ``ManualRun.step``.
+    """Run ``root`` as ``mujou.run`` does, with the updates left to
+    ``ManualRun.step``.
 
     The default ``timer`` is a new ``mujou.time.VirtualTimer`` at time 0 (with
     ``state``, at the time of the state), which ``ManualRun.timer`` returns and
@@ -75,12 +75,4 @@ def run[P: Port[Any, Any]](
 
     The other arguments and the errors are those of ``mujou.run``.
     """
-    return start_run(
-        ManualRun,
-        (component, *components),
-        timer=timer,
-        inputs=inputs,
-        state=state,
-        manual=True,
-        workers=None,
-    )
+    return start(ManualRun, root, timer=timer, inputs=inputs, state=state, workers=None)

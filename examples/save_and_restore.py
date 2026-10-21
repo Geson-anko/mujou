@@ -1,9 +1,10 @@
 """Save the state of a run, and restore it in a new run that goes on from there.
 
 A node collects its state by itself: every attribute that holds a
-``torch.Tensor`` or an ``nn.Module``. ``Run.state_dict`` gathers the states of all
-nodes, the latest messages and the time into one tree, a ``mujou.StateDict``.
-Save it with ``torch.save`` (or pickle), and read it back with ``torch.load``.
+``torch.Tensor`` or an ``nn.Module``, and the state of its generator.
+``Run.state_dict`` gathers the states of all nodes, the latest messages and the
+time into one tree, a plain ``dict`` of CPU tensors. Save it with ``torch.save``
+(or pickle), and read it back with ``torch.load``.
 """
 
 import io
@@ -55,20 +56,21 @@ net = Model()
 with mujou.run(net, inputs={net.prev: one}) as run:
     run.timer.sleep(0.2)
 tree = run.state_dict()  # after a normal end: the state at the stop
-saved = tree["nodes"]["integrator"]  # this node's state_dict()
+saved = tree["nodes"]["integrator"]["state"]  # this node's state_dict()
 print("state of the node:", {k: type(v).__name__ for k, v in saved.items()})
 file = io.BytesIO()  # or a path, such as "state.pt"
-# .cpu(): every tensor on the CPU, so that a machine without the GPU reads it too.
-torch.save(tree.cpu(), file)
+# Every tensor of the tree is on the CPU, so torch.load needs no GPU (a CUDA node's
+# generator state still restores only into a CUDA node).
+torch.save(tree, file)
 
 # A new instance of the same network goes on from the saved state and time, on a
 # timer of its own that starts at the time of the state.
 restored = Model()
 file.seek(0)
-loaded = torch.load(file)  # the default weights_only=True reads a StateDict
+loaded = torch.load(file)  # the default weights_only=True reads the plain dict
 with mujou.run(restored, inputs={restored.prev: one}, state=loaded) as run:
     run.timer.sleep(0.1)
-after = run.state_dict()["nodes"]["integrator"]
+after = run.state_dict()["nodes"]["integrator"]["state"]
 
 x0, x1 = saved["x"].item(), after["x"].item()
 print(f"x = {x0:.3f} at the save, {x1:.3f} after 0.1 s more")

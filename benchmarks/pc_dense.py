@@ -124,7 +124,10 @@ def free(target: str, seconds: float, workers: int) -> list[float]:
         time.sleep(seconds)
         after = run.state_dict()["nodes"]
         elapsed = time.perf_counter() - t0
-    return [(after[p]["updates"] - before[p]["updates"]) / elapsed for p in PATHS]
+    return [
+        (after[p]["state"]["updates"] - before[p]["state"]["updates"]) / elapsed
+        for p in PATHS
+    ]
 
 
 def main() -> None:

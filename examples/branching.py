@@ -90,13 +90,7 @@ class Diamond(mujou.Network):
 # --8<-- [end:network]
 
 
-# --8<-- [start:build]
 net = Diamond()
-graph = net.build()  # what mujou.run runs; mujou.run(net) builds the same graph
-print("nodes:", [path for path, _ in graph.nodes])
-print("output port:", graph.port_path(net.next))
-# --8<-- [end:build]
-
 x = torch.tensor([1.0, 3.0])
 want = 2 * x + (-x) ** 2
 with mujou.run(net, inputs={net.prev: x}) as run:
@@ -104,6 +98,9 @@ with mujou.run(net, inputs={net.prev: x}) as run:
     # time depends on how the threads get scheduled: follow the output until y
     # arrives (TimeoutError after 5 s).
     y, _ = run.wait_for(net.next, lambda y: torch.equal(y, want), timeout=5.0)
+    # --8<-- [start:paths]
+    print("nodes:", list(run.state_dict()["nodes"]))  # their paths from the root
+    # --8<-- [end:paths]
 
 print(f"x = {x}, y = {y}")
 assert torch.equal(y, want)

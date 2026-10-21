@@ -39,7 +39,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import Node, Port, TensorSpec
+from mujou import Group, Node, Port, TensorSpec
 
 VECTOR = TensorSpec((3,))  # every message is a float32 vector of 3
 
@@ -63,7 +63,7 @@ double, shift = Affine(2.0, 0.0), Affine(1.0, 1.0)
 double.next.connect(shift.prev)
 x = torch.tensor([1.0, 2.0, 3.0])
 # Each node updates on a thread of its own until the `with` block ends.
-with mujou.run(double, shift, inputs={double.prev: x}) as run:
+with mujou.run(Group(double=double, shift=shift), inputs={double.prev: x}) as run:
     # y arrives after a few updates: wait for it (and the time it was sent).
     y, t = run.wait_for(shift.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
 

@@ -121,7 +121,8 @@ class Layer(Node):
     ``requires_grad`` to False to freeze one. It is called once on zeros when the
     node is made, to find the shape and dtype of ``h``.
 
-    The state (``Run.state_dict()["nodes"][path]``) holds ``"module"`` (its
+    The state (``Run.state_dict()["nodes"][path]["state"]``) holds
+    ``"generator"`` (the state of the node's ``generator``), ``"module"`` (its
     ``state_dict``), ``"h"`` and ``"lam"`` (``(B, *out)``), the prediction of
     the last update (``"_mu"``), the jump of ``theta`` still to add to ``h``
     (``"_jump"``, and ``"_jumped"`` whether there is one), the ``epoch`` it

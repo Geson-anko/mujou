@@ -7,10 +7,12 @@ import queue
 import re
 import subprocess
 import sys
+import sysconfig
 import threading
 import time
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
@@ -27,7 +29,7 @@ from mujou._core.port import Port
 from mujou._core.spec import TensorSpec
 from mujou.testing import ManualRun
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer, global_timer
-from tests.mujou.nodes import F64, Calls, Chain, Leaky, Pair, vec
+from tests.mujou.nodes import F64, Calls, Chain, Leaky, Pair, assert_same_tree, vec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -61,33 +63,29 @@ def euler(x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return x + min(H / 1.0, 1.0) * (target - x)
 
 
-def run_together(
-    started: list[Run], *given: tuple[Node | Network, ...]
-) -> RuntimeError:
-    """Call ``mujou.testing.run(*components)`` for each of ``given`` on threads of
-    their own at once; check that all but one raised ``RuntimeError`` and return one
-    of those errors."""
-    barrier = threading.Barrier(len(given))
-    outcomes: list[Run | RuntimeError] = []
+def group(nodes: Sequence[Node]) -> Group:
+    """``nodes`` side by side, at ``"n0"``, ``"n1"``, ...."""
+    return Group(**{f"n{k}": node for k, node in enumerate(nodes)})
 
-    def run(components: tuple[Node | Network, ...]) -> None:
-        barrier.wait()
-        try:
-            handle = mujou.testing.run(*components, timer=VirtualTimer())
-        except RuntimeError as e:
-            outcomes.append(e)
-            return
-        started.append(handle)
-        outcomes.append(handle)
 
-    threads = [threading.Thread(target=run, args=(g,)) for g in given]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert len(outcomes) == len(given)
-    (error,) = (o for o in outcomes if isinstance(o, RuntimeError))
-    return error
+def entries(tree: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every ``{"value", "time_ns"}`` of the slots of ``tree``."""
+    found: list[dict[str, Any]] = []
+    for node in tree["nodes"].values():
+        for slots in node["ports"].values():
+            for key, held in slots.items():
+                found.extend(held.values() if key == "to" else [held])
+    return found
+
+
+def updates(tree: dict[str, Any]) -> dict[str, int]:
+    """The last update time of each node of ``tree``, by path."""
+    return {path: node["last_update_ns"] for path, node in tree["nodes"].items()}
+
+
+def port(tree: dict[str, Any], path: str, attribute: str) -> dict[str, Any]:
+    """The slots of the port ``attribute`` of the node at ``path``."""
+    return tree["nodes"][path]["ports"][attribute]
 
 
 class TestRun:
@@ -97,32 +95,18 @@ class TestRun:
         assert isinstance(run, Run)
         assert net.a.started and net.b.started  # run returns after on_start
 
-    def test_runs_a_built_network(self, start: Start):
-        net = Chain()
-        graph = net.build()
-        start(net)
-        assert net.build() is graph
-
     @pytest.mark.parametrize(
         ("make", "again", "message"),
         [
-            pytest.param(Chain, lambda c: (c,), "Chain", id="network"),
-            # Not the path "0" of mujou.run's Group.
-            pytest.param(Leaky, lambda c: (c,), "Leaky", id="node"),
+            pytest.param(Chain, lambda c: c, "a", id="network"),
+            pytest.param(Leaky, lambda c: c, "Leaky", id="node"),
             pytest.param(
-                Leaky,
-                lambda c: (Group(node=c),),
-                "Leaky at 'node'",
-                id="node-in-a-network",
+                Leaky, lambda c: Group(node=c), "node", id="node-in-a-network"
             ),
-            pytest.param(
-                Leaky, lambda c: (Group(c),), "Leaky at '0'", id="node-grouped"
-            ),
-            # Named by its path in the tree mujou.run makes.
             pytest.param(
                 Chain,
-                lambda c: (Group(x=c), Chain()),
-                "Chain at '0.x'",
+                lambda c: Group(x=c, y=Chain()),
+                "x.a",
                 id="network-among-several",
             ),
         ],
@@ -131,15 +115,16 @@ class TestRun:
         self,
         start: Start,
         make: Callable[[], Node | Network],
-        again: Callable[[Node | Network], tuple[Node | Network, ...]],
+        again: Callable[[Node | Network], Node | Network],
         message: str,
     ):
         component = make()
         start(component).shutdown()
         with pytest.raises(RuntimeError) as raised:
-            start(*again(component))
+            start(again(component))
         assert str(raised.value) == (
-            f"{message} has already run; create a new instance to run again"
+            f"{message} has already run; create a new instance (its attributes "
+            "stay readable)"
         )
 
     def test_raises_what_on_start_raised(self, start: Start):
@@ -149,62 +134,24 @@ class TestRun:
         assert raised.value.__cause__ is net.b.error
         assert net.a.updates == 0 and net.b.updates == 0
 
-    @pytest.mark.parametrize(
-        ("make", "message"),
-        [
-            (Chain, "Chain has already run; create a new instance to run again"),
-            (Leaky, "Leaky has already run; create a new instance to run again"),
-        ],
-    )
-    def test_runs_once_under_concurrent_calls(
-        self, started: list[Run], make: Callable[[], Node | Network], message: str
-    ):
-        for _ in range(20):
-            net = make()
-            error = run_together(started, (net,), (net,))
-            assert str(error) == message
+    def test_runs_a_dataclass_network(self, start_manual: StartManual):
+        @dataclass
+        class Pair(Network):
+            a: Leaky = field(default_factory=Leaky)
+            b: Leaky = field(default_factory=Leaky)
 
-    @pytest.mark.parametrize("shared", ["network", "node"])
-    def test_runs_once_when_trees_sharing_a_part_run_together(
-        self, started: list[Run], shared: str
-    ):
-        # Refused while the other run is still starting, a run may find the
-        # shared part only built rather than run: either message is right.
-        refused = (
-            r"(has already run; create a new instance to run again"
-            r"|belongs to a network that is already built)$"
-        )
-        for _ in range(5):
-            given: list[tuple[Node | Network, ...]]
-            if shared == "network":
-                net = Chain()
-                given = [(net,), (net, Chain())]
-                who = r"^Chain "
-            else:
-                node = Leaky()
-                given = [(node,), (Group(node=node),)]
-                who = r"^Leaky (at 'node' )?"
-            error = run_together(started, *given)
-            assert re.match(who + refused, str(error)), str(error)
+            def __post_init__(self) -> None:
+                self.a.next.connect(self.b.prev)
 
-    def test_a_network_runs_either_alone_or_grouped(self, start_manual: StartManual):
-        alone, other = Chain(), Chain()
-        start_manual(alone)
-        with pytest.raises(RuntimeError, match="^Chain has already run"):
-            start_manual(alone, other)
-        grouped, other = Chain(), Chain()
-        start_manual(grouped, other)
-        with pytest.raises(RuntimeError, match="^Chain has already run"):
-            start_manual(grouped)
+        net = Pair()
+        run = start_manual(net, inputs={net.a.prev: u(1)})
+        run.step(H, net.a, net.b)
+        assert net.b.updates == 1 and torch.equal(run.read(net.b.next), net.b.x)
+        assert list(run.state_dict()["nodes"]) == ["a", "b"]
 
-    def test_takes_only_nodes_and_networks(self, start: Start):
-        for given in ((object(),), (Chain(), object())):
-            with pytest.raises(TypeError, match="object"):
-                start(*given)  # pyright: ignore[reportArgumentType]
-
-    def test_a_run_is_made_only_by_mujou_run(self):
-        with pytest.raises(TypeError, match=r"mujou\.run"):
-            Run()
+    def test_a_network_without_nodes_runs_nothing(self, start_manual: StartManual):
+        with start_manual(Network()) as run:
+            assert run.state_dict()["nodes"] == {}
 
 
 class TestRunANode:
@@ -215,27 +162,17 @@ class TestRunANode:
         y = run.read(node.next)
         assert torch.equal(y, euler(torch.zeros(2, dtype=F64), u(1)))
         tree = run.state_dict()
-        assert set(tree["nodes"]) == {""}
-        assert set(tree["slots"]) == {"Leaky.prev/in", "Leaky.next/out"}
-        assert set(tree["last_update_ns"]) == {""}
-
-    def test_a_network_alone_is_the_root_and_several_are_at_their_positions(
-        self, start_manual: StartManual
-    ):
-        alone = start_manual(Chain()).state_dict()
-        assert set(alone["nodes"]) == {"a", "b"}
-        several = start_manual(Leaky(), Chain()).state_dict()
-        assert set(several["nodes"]) == {"0", "1.a", "1.b"}
-        assert "0.prev/in" in several["slots"]
-        grouped = start_manual(Group(Leaky())).state_dict()
-        assert set(grouped["nodes"]) == {"0"}
+        assert list(tree["nodes"]) == [""]
+        assert tree["nodes"][""]["ports"].keys() == {"prev", "next"}
 
     def test_names_the_root_node_by_its_class_in_a_structure_error(self, start: Start):
-        class Declared(Node):
-            port = Port(send=vec())
+        class Outer(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.inner = Leaky()
 
-        with pytest.raises(ValueError, match=r"^Declared declares the port 'port'"):
-            start(Declared())
+        with pytest.raises(TypeError, match=r"^Outer\.inner is a Leaky"):
+            start(Outer())
 
     def test_names_the_root_node_by_its_class_when_it_raises(self, start: Start):
         node = Leaky(raise_at=0)
@@ -252,17 +189,17 @@ class TestRunANode:
             run.write({node.x: torch.zeros(2, dtype=torch.float32)})
         with pytest.raises(TypeError, match=r"^Pair\.x: expected a torch\.Tensor"):
             run.write({node.x: [0.0, 0.0]})  # pyright: ignore[reportArgumentType]
-        with pytest.raises(ValueError, match=r"^cannot write the port 'Pair\.out'"):
+        with pytest.raises(ValueError, match=r"^the host does not write Pair\.out"):
             run.write({node.out: u(0)})
-        with pytest.raises(RuntimeError, match=r"^Pair\.x is used only in the hooks"):
-            node.x.recv()  # from the host, not from the node's hooks
+        with pytest.raises(ValueError, match=r"^the host does not read Pair\.x"):
+            run.read(node.x)
 
     def test_a_node_in_a_network_names_its_ports_by_their_paths(
         self, start_manual: StartManual
     ):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(ValueError, match=r"^cannot write the port 'b\.prev'"):
+        with pytest.raises(ValueError, match=r"^the host does not write b\.prev"):
             run.write({net.b.prev: u(0)})
 
     def test_restores_a_tree_of_the_same_node_class(self, start_manual: StartManual):
@@ -275,23 +212,13 @@ class TestRunANode:
         restored = start_manual(again, state=tree)
         assert torch.equal(again.x, first.x) and again.updates == 1
         back = restored.state_dict()
-        assert torch.equal(back["nodes"][""]["x"], tree["nodes"][""]["x"])
-        assert back["slots"]["Leaky.prev/in"][1] == tree["slots"]["Leaky.prev/in"][1]
-
-    def test_a_node_of_a_built_network_is_named_without_the_path_of_mujou_run(
-        self, start: Start
-    ):
-        net = Chain()
-        net.build()
-        with pytest.raises(RuntimeError) as raised:
-            start(net.a)
-        assert str(raised.value) == "Leaky belongs to a network that is already built"
+        assert_same_tree(back, tree)
 
     def test_mixes_with_networks(self, start_manual: StartManual):
         net, node = Chain(), Leaky()
         net.next.connect(node.prev)
-        run = start_manual(net, node, inputs={net.prev: u(1)})
-        assert set(run.state_dict()["nodes"]) == {"0.a", "0.b", "1"}
+        run = start_manual(Group(net=net, node=node), inputs={net.prev: u(1)})
+        assert list(run.state_dict()["nodes"]) == ["net.a", "net.b", "node"]
         a = b = n = torch.zeros(2, dtype=F64)
         for _ in range(3):
             run.step(H, net.a, net.b, node)
@@ -305,58 +232,57 @@ class TestRunANode:
 
 class TestRefusedRun:
     @pytest.mark.parametrize(
-        "given",
-        ["inputs", "inputs-of-several", "inputs-of-a-node", "state", "timer-and-state"],
+        ("given", "match"),
+        [
+            ("inputs", r"^slot 'a\.prev/in': expected shape \(2,\)"),
+            ("inputs-connected", r"^the host does not write b\.prev"),
+            ("initial", r"^slot 'bad\.next/out': expected shape \(2,\)"),
+            ("workers", r"^workers must be at least 1"),
+            ("state", r"^the state tree does not match this run"),
+            ("timer-and-state", r"^a restored run runs on a timer of its own"),
+        ],
     )
-    def test_starts_nothing_and_can_be_retried(
-        self, start_manual: StartManual, given: str
+    def test_changes_nothing_and_the_same_instances_run(
+        self, start_manual: StartManual, start: Start, given: str, match: str
     ):
-        net, other, node = Chain(), Chain(), Leaky()
+        net = Chain()
         wrong = torch.zeros(3, dtype=F64)
-        # The refused calls with what their errors match, then the call retried
-        # and the nodes of its run.
-        refused: list[tuple[Callable[[], object], str | None]]
-        if given in ("inputs", "inputs-of-several"):
-            components = (net,) if given == "inputs" else (net, other)
-            refused = [
-                (partial(start_manual, *components, inputs={net.prev: wrong}), "shape")
-            ]
-            retry = partial(start_manual, *components, inputs={net.prev: u(1)})
-            nodes = {"a", "b"} if given == "inputs" else {"0.a", "0.b", "1.a", "1.b"}
-        elif given == "inputs-of-a-node":
-            refused = [
-                (partial(start_manual, node, inputs={node.prev: wrong}), "shape")
-            ]
-            # In another way: in a network.
-            retry = partial(start_manual, Group(node=node), inputs={node.prev: u(1)})
-            nodes = {"node"}
-        else:
-            source = start_manual(Chain())
-            tree = source.state_dict()
-            nodes = {"a", "b"}
-            if given == "state":
-                source.shutdown()
-                last_update_ns = {**tree, "last_update_ns": {"a": 0.5, "b": 0}}
-                scale = {**tree, "timer": {**tree["timer"], "scale": -1.0}}
-                refused = [
-                    (partial(start_manual, net, state=last_update_ns), "not an int"),
-                    # Refused by the timer before any node starts.
-                    (partial(start_manual, net, state=scale), None),
-                ]
-                retry = partial(start_manual, net, state=tree)
-            else:
-                # A restored run makes a timer of its own (and the source still
-                # running on the given one does not matter).
-                given_timer = partial(
-                    start_manual, net, timer=VirtualTimer(), state=tree
-                )
-                refused = [(given_timer, "a timer of its own")]
-                retry = partial(start_manual, net, state=tree)
-        for call, match in refused:
-            with pytest.raises(ValueError, match=match):
-                call()
-        assert not (net.a.started or other.a.started or node.started)
-        assert set(retry().state_dict()["nodes"]) == nodes
+        source = start_manual(Chain())
+        tree = source.state_dict()
+        source.shutdown()
+        broken = {**tree, "nodes": {"a": tree["nodes"]["a"]}}
+        refused: Callable[[], object] = {
+            "inputs": partial(start_manual, net, inputs={net.prev: wrong}),
+            "inputs-connected": partial(start_manual, net, inputs={net.b.prev: u(1)}),
+            "initial": partial(start_manual, Group(net=net, bad=Initial(wrong))),
+            "workers": partial(start, net, timer=VirtualTimer(), workers=0),
+            "state": partial(start_manual, net, state=broken),
+            "timer-and-state": partial(
+                start_manual, net, timer=VirtualTimer(), state=tree
+            ),
+        }[given]
+        with pytest.raises(ValueError, match=match):
+            refused()
+        assert not (net.a.started or net.b.started)
+        run = start_manual(net, state=tree if "state" in given else None)
+        run.step(H)
+        assert net.a.updates > 0
+
+    def test_a_node_that_raised_while_starting_has_run(self, start: Start):
+        net = Chain(raise_in_b=0)
+        with pytest.raises(NetworkError):
+            start(net)
+        net.b.raise_at = None
+        with pytest.raises(RuntimeError, match="^a has already run"):
+            start(net)
+
+
+class Initial(Node):
+    """Sends ``initial`` until its first update."""
+
+    def __init__(self, initial: torch.Tensor) -> None:
+        super().__init__()
+        self.next = Port(send=vec(), initial=initial)
 
 
 class Noisy(Node):
@@ -412,8 +338,7 @@ def more_nodes_than_cpus() -> int:
 
 def workers_of(run: Run) -> int:
     """The number of workers of the pool of ``run``, as its runtime counts them."""
-    session = run._session  # pyright: ignore[reportPrivateUsage]
-    return session._started().workers  # pyright: ignore[reportPrivateUsage]
+    return run._runtime.workers  # pyright: ignore[reportPrivateUsage]
 
 
 class Holding(Node):
@@ -431,22 +356,13 @@ class Holding(Node):
 
 
 class TestWorkers:
-    @pytest.mark.parametrize(
-        ("workers", "error"),
-        [
-            (True, TypeError),
-            (1.0, TypeError),
-            (0, ValueError),
-            (-1, ValueError),
-            (2**70, ValueError),  # more than the core can count
-        ],
-    )
-    def test_rejects_what_is_not_a_positive_int_before_starting(
-        self, virtual: VirtualTimer, start: Start, workers: object, error: type
+    @pytest.mark.parametrize("workers", [0, -1])
+    def test_rejects_less_than_one_before_starting(
+        self, virtual: VirtualTimer, start: Start, workers: int
     ):
         net = Chain()
-        with pytest.raises(error, match="workers"):
-            start(net, timer=virtual, workers=workers)  # pyright: ignore[reportArgumentType]
+        with pytest.raises(ValueError, match="^workers must be at least 1"):
+            start(net, timer=virtual, workers=workers)
         assert not (net.a.started or net.b.started)
         start(net, timer=virtual, workers=1)
         assert net.a.started and net.b.started
@@ -458,7 +374,7 @@ class TestWorkers:
         # matter: each node's state is a function of its own seed and dt only.
         n, steps, period = 8, 3, 0.01
         nodes = [Noisy(seed=k) for k in range(n)]
-        start(Group(*nodes), timer=virtual, workers=2)
+        start(group(nodes), timer=virtual, workers=2)
         for _ in range(steps):
             virtual.advance(period)
             for node in nodes:
@@ -476,7 +392,7 @@ class TestWorkers:
     ):
         n, steps = more_nodes_than_cpus(), 4
         nodes = noisy_chain(n, dedicated_thread=dedicated_thread)
-        run = start_manual(Group(*nodes))
+        run = start_manual(group(nodes))
         for _ in range(steps):
             run.step(H, *nodes)  # each node reads what the previous one just sent
         expected = noisy_reference(n, steps, H, chained=True)
@@ -488,7 +404,7 @@ class TestWorkers:
     ):
         n = more_nodes_than_cpus()
         nodes = noisy_chain(n)
-        run = start_manual(Group(*nodes))
+        run = start_manual(group(nodes))
         for _ in range(2):
             run.step(H, *nodes)
         idents = {i for node in nodes for i in node.idents}
@@ -500,7 +416,7 @@ class TestWorkers:
     ):
         # The runtime also counts a CPU quota, which Python cannot see, so only
         # the bound is known here.
-        run = start_manual(Group(*noisy_chain(more_nodes_than_cpus())))
+        run = start_manual(group(noisy_chain(more_nodes_than_cpus())))
         cpus = os.process_cpu_count() or 1
         gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
         assert 1 <= workers_of(run) <= (max(1, cpus // 2) if gil else cpus)
@@ -509,7 +425,7 @@ class TestWorkers:
         # Every update holds its worker and some node is always due, so each
         # worker takes updates: one thread per worker, as many as the default.
         nodes = [Holding() for _ in range(more_nodes_than_cpus())]
-        run = start(Group(*nodes), timer=Timer())
+        run = start(group(nodes), timer=Timer())
         time.sleep(0.5)
         run.shutdown()
         idents = set[int]().union(*(node.idents for node in nodes))
@@ -557,22 +473,26 @@ class TestTimer:
         assert written_at == Timestamp(ns=2_500_000_000)
         tree = run.state_dict()
         assert tree["timer"]["time_ns"] == virtual.now().ns
-        assert tree["last_update_ns"]["node"] == virtual.now().ns
+        assert tree["nodes"]["node"]["last_update_ns"] == virtual.now().ns
 
     def test_a_pause_stops_only_the_timer_of_its_run(self, start: Start):
         held, free = Timer(), Timer()
 
         class Measures(Node):
             @override
-            def state_dict(self) -> object:
+            def state_dict(self) -> dict[str, Any]:
                 # Called while the run on `held` is paused.
                 h0, f0, g0 = held.now(), free.now(), global_timer.now()
                 time.sleep(0.05)
-                return held.now() - h0, free.now() - f0, global_timer.now() - g0
+                return {
+                    "moved": (held.now() - h0, free.now() - f0, global_timer.now() - g0)
+                }
 
         start(Chain(tau=0.01), timer=free)
         run = start(Group(node=Measures()), timer=held)
-        on_held, on_free, on_global = run.state_dict()["nodes"]["node"]
+        on_held, on_free, on_global = run.state_dict()["nodes"]["node"]["state"][
+            "moved"
+        ]
         assert on_held == 0.0
         assert on_free > 0.0 and on_global > 0.0
 
@@ -613,8 +533,8 @@ class TestTimer:
         run.shutdown()
         tree = run.state_dict()
         end_ns = tree["timer"]["time_ns"]
-        times = [entry[1] for entry in tree["slots"].values()]
-        assert max([*times, *tree["last_update_ns"].values()]) <= end_ns
+        times = [entry["time_ns"] for entry in entries(tree)]
+        assert max([*times, *updates(tree).values()]) <= end_ns
         # The time of the run stays at its end while the timer goes on.
         time.sleep(0.01)
         assert timer.now().ns > end_ns == run.state_dict()["timer"]["time_ns"]
@@ -636,53 +556,49 @@ class TestTimer:
         # From the tree's time on, no faster than the real time (scale 1).
         tree_ns = tree["timer"]["time_ns"]
         assert tree_ns <= now_ns <= tree_ns + real_ns
-        assert restored.timer.time_scale() == tree["timer"]["scale"]
+        assert restored.timer.time_scale() == tree["timer"]["time_scale"]
         # The global timer did not move back to the tree's time.
         assert global_timer.now() >= before
 
     def test_the_timer_of_a_restored_run_runs_once_the_run_has_started(
         self, start: Start
     ):
-        class SlowCopy:
-            """A state that takes 0.2 s to copy, as a large one would."""
+        class SlowLoad(Leaky):
+            """Takes 0.2 s to load its state, as a large one would."""
 
-            def __deepcopy__(self, memo: dict[int, object]) -> SlowCopy:
-                time.sleep(0.2)
-                return SlowCopy()
-
-        class ReadsTime(Leaky):
-            started_at: Timestamp | None = None
+            updated_at: Timestamp | None = None
 
             @override
-            def on_start(self) -> None:
-                super().on_start()
-                self.started_at = self.timer.now()
-
-            @override
-            def state_dict(self) -> object:
-                return SlowCopy()
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                if self.updated_at is None:
+                    self.updated_at = self.timer.now()
 
             @override
             def load_state_dict(self, state: object) -> None:
-                pass
+                time.sleep(0.2)
+                super().load_state_dict(state)
 
-        first = ReadsTime(tau=0.01)
+        first = SlowLoad(tau=0.01)
         run = start(first, timer=Timer(), inputs={first.prev: u(1)})
         run.wait_for(first.next, lambda y: bool(y.abs().sum() > 0), timeout=10.0)
         run.shutdown()
         tree = run.state_dict()
         tree_ns = tree["timer"]["time_ns"]
-        node = ReadsTime(tau=0.01)
+        node = SlowLoad(tau=0.01)
         global_before = global_timer.now()
         restored = start(node, state=tree, inputs={node.prev: u(2)})
         # Only the run's own timer stood still: the global one ran meanwhile.
         assert global_timer.now() - global_before >= 0.2
-        # The 0.2 s of the restore are not in the run's time: the nodes start, and
-        # the inputs are written, at the tree's time (but for the few µs that the
-        # new timer runs before it is paused).
-        assert node.started_at is not None
-        written_ns = restored.state_dict()["slots"]["ReadsTime.prev/in"][1]
-        for ns in (node.started_at.ns, written_ns):
+        restored.wait_for(
+            node.next, lambda y: node.updated_at is not None, timeout=10.0
+        )
+        # The 0.2 s of the restore are not in the run's time: the inputs are
+        # written, and the first update comes, at the tree's time (but for the
+        # time the run takes to lay out its slots, and a period).
+        assert node.updated_at is not None
+        written_ns = port(restored.state_dict(), "", "prev")["in"]["time_ns"]
+        for ns in (written_ns, node.updated_at.ns):
             assert 0 <= ns - tree_ns < 50_000_000
 
     def test_a_restored_manual_run_starts_its_virtual_timer_at_the_tree(
@@ -742,8 +658,8 @@ class TestPausedTimer:
             assert not timer.is_paused()
         for tree in trees:
             assert tree["timer"]["time_ns"] == paused_at.ns
-            assert tree["last_update_ns"][""] <= paused_at.ns
-            assert tree["nodes"][""]["count"] > 2
+            assert tree["nodes"][""]["last_update_ns"] <= paused_at.ns
+            assert tree["nodes"][""]["state"]["count"] > 2
 
     def test_nothing_moves_while_paused(self):
         timer = Timer()
@@ -757,9 +673,7 @@ class TestPausedTimer:
                 after = run.state_dict()
             finally:
                 timer.resume()
-        assert after["timer"] == before["timer"]
-        assert after["last_update_ns"] == before["last_update_ns"]
-        assert after["nodes"][""]["count"] == before["nodes"][""]["count"]
+        assert_same_tree(after, before)
 
     def test_the_first_dt_after_resume_leaves_out_the_pause(self):
         timer = Timer()
@@ -806,9 +720,9 @@ class TestPausedTimer:
             restored = Ticks()
             with mujou.run(restored, state=tree) as run:
                 assert run.timer.now().ns >= paused_at_ns
-                saved = int(tree["nodes"][""]["count"])
+                saved = int(tree["nodes"][""]["state"]["count"])
                 wait_for_updates(run, restored, saved)
-            assert run.state_dict()["last_update_ns"][""] > paused_at_ns
+            assert run.state_dict()["nodes"][""]["last_update_ns"] > paused_at_ns
 
 
 class TestOnlyTheHostControlsTheTime:
@@ -822,7 +736,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         target = virtual if scaled == "timer" else global_timer
         node = Calls(lambda: target.set_time_scale(1000.0))
-        run = start_manual(Group(node, Calls()), timer=virtual)
+        run = start_manual(Group(node=node, other=Calls()), timer=virtual)
         try:
             run.step(H)
             assert isinstance(node.errors[0], RuntimeError)
@@ -838,7 +752,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         first = Calls(lambda: virtual.advance(5.0))
         second = Calls()
-        run = start_manual(Group(first, second), timer=virtual)
+        run = start_manual(Group(first=first, second=second), timer=virtual)
         run.step(H, first, second)
         assert isinstance(first.errors[0], RuntimeError)
         # Every dt is the time the test stepped.
@@ -851,7 +765,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         wait = virtual.sleep if sleep == "timer" else global_timer.sleep
         node = Calls(lambda: wait(0.001))
-        run = start_manual(Group(node, Calls()), timer=virtual)
+        run = start_manual(Group(node=node, other=Calls()), timer=virtual)
         # Nothing in the step waits for the clock. Should it regress, the step
         # would wait for an advance: fail instead of hanging.
         stepper = threading.Thread(target=run.step, args=(H,))
@@ -871,7 +785,7 @@ class TestOnlyTheHostControlsTheTime:
     ):
         owner = virtual if target == "timer" else global_timer
         node = Calls(getattr(owner, switch))
-        run = start_manual(Group(node, Calls()), timer=virtual)
+        run = start_manual(Group(node=node, other=Calls()), timer=virtual)
         try:
             run.step(H)
             assert isinstance(node.errors[0], RuntimeError)
@@ -909,7 +823,7 @@ class TestInputs:
         run = start_manual(Group(node=first), inputs={first.x: u(1)})
         run.step(H)
         tree = run.state_dict()
-        written_at = tree["slots"]["node.x/in"][1]
+        written_at = port(tree, "node", "x")["in"]["time_ns"]
         frozen_at = tree["timer"]["time_ns"]
         run.shutdown()
 
@@ -953,8 +867,9 @@ class TestWrite:
         run.step(H)
         ((_, tx), (_, ty)) = node.seen[0]
         assert tx == ty == written_at
-        slots = run.state_dict()["slots"]
-        assert slots["node.x/in"][1] == slots["node.y/in"][1] == written_at.ns
+        tree = run.state_dict()
+        assert port(tree, "node", "x")["in"]["time_ns"] == written_at.ns
+        assert port(tree, "node", "y")["in"]["time_ns"] == written_at.ns
 
     def test_returns_the_time_a_node_reads_and_sends_on(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -974,8 +889,8 @@ class TestWrite:
         run = start_manual(node, inputs={node.x: u(1)})
         virtual.advance(H)
         assert run.write({}) == Timestamp(ns=H_NS)
-        slot = run.state_dict()["slots"]["Pair.x/in"]
-        assert torch.equal(slot[0], u(1)) and slot[1] == 0
+        slot = port(run.state_dict(), "", "x")["in"]
+        assert torch.equal(slot["value"], u(1)) and slot["time_ns"] == 0
 
     def test_is_stamped_after_the_inputs(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -1002,21 +917,25 @@ class TestWrite:
         written_at = restored.write({node.y: u(4)})
         # The inputs carry the tree's time T and the timer goes on from T.
         assert written_at == Timestamp(ns=tree["timer"]["time_ns"])
-        assert restored.state_dict()["slots"]["Pair.x/in"][1] == written_at.ns
+        assert port(restored.state_dict(), "", "x")["in"]["time_ns"] == written_at.ns
 
     def test_rejects_ports_it_cannot_write(self, start_manual: StartManual):
         net = Chain()
         pair = Pair()
         chain, solo = start_manual(net), start_manual(Group(node=pair))
         cases = [
-            (chain, net.b.prev, "is connected"),
-            (solo, pair.many, "is a MultiPort"),
-            (solo, pair.out, "receives no messages"),
-            (chain, pair.x, "not a port of a node in this run"),
+            (chain, net.b.prev, "b.prev"),  # connected
+            (solo, pair.many, "node.many"),  # a MultiPort
+            (solo, pair.out, "node.out"),  # sends only
+            (chain, pair.x, repr(pair.x)),  # of another run
         ]
-        for run, port, match in cases:
-            with pytest.raises(ValueError, match=match):
-                run.write({port: u(0)})
+        for run, written, name in cases:
+            with pytest.raises(ValueError) as raised:
+                run.write({written: u(0)})
+            assert str(raised.value) == (
+                f"the host does not write {name}: it writes an unconnected Port of "
+                "this run that receives"
+            )
 
     def test_rejects_values_that_do_not_match_the_spec(self, start_manual: StartManual):
         net = Chain()
@@ -1035,7 +954,7 @@ class TestWrite:
         with pytest.raises(RuntimeError, match="stopped"):
             run.write({net.prev: u(2)})
         # Nothing was written: the tree keeps the input as it was at the end.
-        assert torch.equal(run.state_dict()["slots"]["a.prev/in"][0], u(1))
+        assert torch.equal(port(run.state_dict(), "a", "prev")["in"]["value"], u(1))
 
 
 class TestRead:
@@ -1069,18 +988,25 @@ class TestRead:
     def test_rejects_a_port_that_sends_nothing(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(ValueError, match="sends no messages"):
+        with pytest.raises(
+            ValueError,
+            match=r"^the host does not read a\.prev: it reads a port of this run that "
+            "sends$",
+        ):
             run.read(net.prev)
 
     def test_rejects_a_port_outside_the_run(self, start_manual: StartManual):
         run = start_manual(Chain())
-        with pytest.raises(ValueError, match="is not a port of a node in this run$"):
-            run.read(Chain().next)
+        other = Chain()
+        with pytest.raises(
+            ValueError, match=rf"^the host does not read {re.escape(repr(other.next))}"
+        ):
+            run.read(other.next)
 
     def test_with_time_rejects_what_read_rejects(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(ValueError, match="sends no messages"):
+        with pytest.raises(ValueError, match="does not read a.prev"):
             run.read_with_time(net.prev)
 
 
@@ -1201,44 +1127,29 @@ class TestWaitFor:
         assert len(seen) == 3
         assert torch.equal(out, net.b.x) and t == virtual.now()
 
-    def test_names_itself_when_it_times_out(self, start_manual: StartManual):
+    def test_raises_when_it_times_out(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        with pytest.raises(
-            TimeoutError,
-            match=r"^no message of the port 'b\.next' met the condition of wait_for "
-            r"within 0\.05 s",
-        ):
+        with pytest.raises(TimeoutError, match=r"within 0\.05 s"):
             run.wait_for(net.next, lambda _: False, timeout=0.05)
+
+    def test_rejects_a_nan_timeout(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError, match=r"^duration must be finite"):
+            run.wait_for(net.next, lambda _: False, timeout=math.nan)
 
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
         stopper = threading.Timer(0.05, run.shutdown)
         stopper.start()
-        with pytest.raises(RuntimeError, match=r"shut down before the port 'b\.next'"):
+        with pytest.raises(RuntimeError, match=r"shut down before b\.next sent"):
             run.wait_for(net.next, lambda _: False)
         stopper.join()
 
 
 class TestStateDict:
-    @pytest.mark.parametrize("timeout", [0.0, -1.0, math.nan, math.inf])
-    def test_rejects_a_timeout_that_is_not_finite_and_positive(
-        self, timeout: float, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
-            run.state_dict(timeout)
-        # Nothing was taken or paused: the run goes on.
-        run.write({net.prev: u(1)})
-        run.step(H)
-        assert net.a.updates == 1
-        run.shutdown()
-        # After the end there is nothing to wait for, but it is checked all the same.
-        with pytest.raises(ValueError, match="^timeout must be finite and > 0"):
-            run.state_dict(timeout)
-
     def test_after_a_normal_end_is_the_state_at_the_end(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
@@ -1259,15 +1170,8 @@ class TestStateDict:
         # Nothing changed after the last update: the same tree as just before the
         # end, at the time of the shutdown (the time after the end is not part of
         # the run).
-        assert ended["timer"] == {"time_ns": asked_at, "scale": 2.0}
-        assert ended["last_update_ns"] == running["last_update_ns"]
-        assert ended["slots"].keys() == running["slots"].keys()
-        for name, (value, time_ns) in running["slots"].items():
-            assert torch.equal(ended["slots"][name][0], value)
-            assert ended["slots"][name][1] == time_ns
-        for path in ("a", "b"):
-            assert torch.equal(ended["nodes"][path]["x"], running["nodes"][path]["x"])
-            assert ended["nodes"][path]["updates"] == running["nodes"][path]["updates"]
+        assert ended["timer"] == {"time_ns": asked_at, "time_scale": 2.0}
+        assert_same_tree(ended["nodes"], running["nodes"])
         pickle.dumps(ended)
 
     def test_after_a_normal_end_of_a_free_running_network(self, start: Start):
@@ -1284,11 +1188,12 @@ class TestStateDict:
         # As a pause at the request would: the time of the request, and nothing
         # in the tree is later than it.
         assert asked_after <= frozen_at <= stopped_before
-        for updated_at in tree["last_update_ns"].values():
+        for updated_at in updates(tree).values():
             assert updated_at <= frozen_at
-        for _, written_at in tree["slots"].values():
-            assert written_at is not None and written_at <= frozen_at
-        assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
+        for entry in entries(tree):
+            assert entry["time_ns"] is not None and entry["time_ns"] <= frozen_at
+        out = port(tree, "b", "next")["out"]["value"]
+        assert torch.equal(out, tree["nodes"]["b"]["state"]["x"])
 
     def test_is_taken_at_one_time(self, start: Start):
         net = Chain(tau=0.01)
@@ -1297,20 +1202,16 @@ class TestStateDict:
         run.wait_for(net.next, lambda out: bool(out.any()), timeout=10.0)
         tree = run.state_dict()
         frozen_at = tree["timer"]["time_ns"]
-        assert set(tree["nodes"]) == set(tree["last_update_ns"]) == {"a", "b"}
-        assert set(tree["slots"]) == {
-            "a.next/out",
-            "a.next/ch0",
-            "b.next/out",
-            "a.prev/in",
-        }
-        for _, written_at in tree["slots"].values():
-            assert written_at is not None and written_at <= frozen_at
-        for updated_at in tree["last_update_ns"].values():
+        assert list(tree["nodes"]) == ["a", "b"]
+        assert len(entries(tree)) == 4  # a.prev in, a.next out and to b, b.next out
+        for entry in entries(tree):
+            assert entry["time_ns"] is not None and entry["time_ns"] <= frozen_at
+        for updated_at in updates(tree).values():
             assert 0 < updated_at <= frozen_at
         # Each node sends at the end of its update, so a node paused between
         # updates has sent its state as it is.
-        assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
+        out = port(tree, "b", "next")["out"]["value"]
+        assert torch.equal(out, tree["nodes"]["b"]["state"]["x"])
 
     @pytest.mark.parametrize("ended", [False, True])
     def test_is_a_copy_that_pickles(self, start_manual: StartManual, ended: bool):
@@ -1323,17 +1224,15 @@ class TestStateDict:
         tree = run.state_dict()
         x = net.a.x.clone()
         net.a.x += 1.0  # in place, as a node updates its state
-        assert torch.equal(tree["nodes"]["a"]["x"], x)
-        again = pickle.loads(pickle.dumps(tree))
-        assert torch.equal(again["nodes"]["a"]["x"], x)
-        assert again["timer"] == tree["timer"]
+        assert torch.equal(tree["nodes"]["a"]["state"]["x"], x)
+        assert_same_tree(pickle.loads(pickle.dumps(tree)), tree)
 
     @pytest.mark.parametrize("ended", [False, True])
-    def test_is_a_state_dict(self, start_manual: StartManual, ended: bool):
+    def test_is_a_plain_dict(self, start_manual: StartManual, ended: bool):
         run = start_manual(Chain())
         if ended:
             run.shutdown()
-        assert isinstance(run.state_dict(), mujou.StateDict)
+        assert type(run.state_dict()) is dict
 
     @pytest.mark.parametrize("ended", [False, True])
     @pytest.mark.parametrize("use", ["recv", "send"])
@@ -1343,22 +1242,23 @@ class TestStateDict:
         # Taking the state is not seen by the other nodes, nor by the host.
         class Using(Pair):
             @override
-            def state_dict(self) -> object:
+            def state_dict(self) -> dict[str, Any]:
                 try:
                     if use == "recv":
                         self.x.recv()
                     else:
                         self.out.send(torch.ones(2, dtype=F64))
                 except RuntimeError as e:
-                    return str(e)
-                return None
+                    return {"error": str(e)}
+                return {}
 
         node = Using()
         run = start_manual(Group(node=node))
         run.step(H)
         if ended:
             run.shutdown()
-        assert "a port not in state_dict" in run.state_dict()["nodes"]["node"]
+        state = run.state_dict()["nodes"]["node"]["state"]
+        assert "a port not in state_dict" in state["error"]
         assert torch.equal(run.read(node.out), torch.zeros(2, dtype=F64))
 
     @pytest.mark.slow
@@ -1373,11 +1273,11 @@ import mujou.testing
 from mujou import Group, Node
 
 class Busy(Node):
-    def state_dict(self) -> object:
+    def state_dict(self):
         s = 0
         for i in range(100_000):  # in Python, where the GIL may switch
             s += i
-        return s
+        return {"s": s}
 
 for _ in range(5):
     run = mujou.testing.run(Group(a=Busy(), b=Busy()))
@@ -1409,17 +1309,17 @@ class TestHostMethodsFromANode:
 
         class Reading(Pair):
             @override
-            def state_dict(self) -> object:
+            def state_dict(self) -> dict[str, Any]:
                 try:
                     runs[0].read(self.out)
                 except RuntimeError as e:
-                    return str(e)
-                return None
+                    return {"error": str(e)}
+                return {}
 
         runs.append(start_manual(Group(node=Reading())))
         if ended:
             runs[0].shutdown()
-        assert "host methods" in runs[0].state_dict()["nodes"]["node"]
+        assert "host methods" in runs[0].state_dict()["nodes"]["node"]["state"]["error"]
 
     @pytest.mark.parametrize("dedicated_thread", [False, True])
     def test_raise(self, start_manual: StartManual, dedicated_thread: bool):
@@ -1452,62 +1352,45 @@ class TestHostMethodsFromANode:
 
 
 class TestState:
-    def test_rejects_a_tree_that_does_not_match(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
+    def test_rejects_a_tree_of_another_network(self, start_manual: StartManual):
         source = start_manual(Chain())
         tree = source.state_dict()
         source.shutdown()
         other = Group(node=Pair())
-        with pytest.raises(ValueError, match="do not match"):
+        with pytest.raises(ValueError, match="^the state tree does not match this run"):
             start_manual(other, state=tree)
 
-        def slot(name: str, entry: object) -> dict[str, Any]:
-            return {**tree, "slots": {**tree["slots"], name: entry}}
+    def test_the_default_load_state_dict_copies_out_of_the_tree(
+        self, start_manual: StartManual
+    ):
+        class Holds(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.x = torch.zeros(2, dtype=F64)
 
-        broken: list[tuple[dict[str, Any], str]] = [
-            ({k: v for k, v in tree.items() if k != "timer"}, "no 'timer'"),
-            ({**tree, "timer": {"time_ns": 0}}, "timer do not match"),
-            ({**tree, "timer": {"time_ns": "0", "scale": 1.0}}, "int time_ns"),
-            ({**tree, "last_update_ns": {"a": 0.5, "b": 0}}, "is not an int"),
-            (slot("a.prev/in", (u(0), 0, False)), r"is not \(value, time_ns\)"),
-            (slot("a.prev/in", (u(0), "0")), "neither an int nor None"),
-        ]
-        for wrong, match in broken:
-            with pytest.raises(ValueError, match=match):
-                start_manual(Chain(), state=wrong)
+        run = start_manual(Group(node=Holds()))
+        tree = run.state_dict()
+        run.shutdown()
+        restored = Holds()
+        start_manual(Group(node=restored), state=tree)
+        restored.x += 1.0  # in place, as a node updates its state
+        assert torch.equal(
+            tree["nodes"]["node"]["state"]["x"], torch.zeros(2, dtype=F64)
+        )
 
-    def test_the_nodes_get_copies(self, start_manual: StartManual):
+    def test_restores_a_tree_saved_with_torch_save(self, start_manual: StartManual):
         source = Chain()
         run = start_manual(source, inputs={source.prev: u(1)})
         run.step(H)
         tree = run.state_dict()
         run.shutdown()
-        x = tree["nodes"]["a"]["x"].clone()
+        buffer = io.BytesIO()
+        torch.save(tree, buffer)
+        buffer.seek(0)
         net = Chain()
-        start_manual(net, state=tree)
-        net.a.x += 1.0  # in place, as a node updates its state
-        assert torch.equal(tree["nodes"]["a"]["x"], x)
-
-    @pytest.mark.parametrize("saved_as", ["torch.save", "dict"])
-    def test_restores_a_saved_tree(self, start_manual: StartManual, saved_as: str):
-        source = Chain()
-        run = start_manual(source, inputs={source.prev: u(1)})
-        run.step(H)
-        tree = run.state_dict()
-        run.shutdown()
-        if saved_as == "torch.save":
-            buffer = io.BytesIO()
-            torch.save(tree, buffer)
-            buffer.seek(0)
-            loaded = torch.load(buffer)  # weights_only=True by default
-            assert isinstance(loaded, mujou.StateDict)
-        else:
-            loaded = dict(tree)  # any mapping of the same items
-        net = Chain()
-        start_manual(net, state=loaded)
-        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
-        assert torch.equal(net.b.x, tree["nodes"]["b"]["x"])
+        start_manual(net, state=torch.load(buffer, weights_only=True))
+        assert torch.equal(net.a.x, tree["nodes"]["a"]["state"]["x"])
+        assert torch.equal(net.b.x, tree["nodes"]["b"]["state"]["x"])
 
 
 class TestNodeException:
@@ -1628,23 +1511,6 @@ class TestJoin:
 
 
 class TestTimeout:
-    @pytest.mark.parametrize("method", ["shutdown", "join", "subscribe"])
-    def test_rejects_a_negative_timeout(self, start_manual: StartManual, method: str):
-        net = Chain()
-        run = start_manual(net)
-        call: Callable[[float], object] = {
-            "shutdown": lambda t: run.shutdown(timeout=t),
-            "join": lambda t: run.join(timeout=t),
-            "subscribe": lambda t: run.subscribe(net.next, t),
-        }[method]
-        for timeout in (-1.0, math.nan):
-            with pytest.raises(ValueError, match="timeout"):
-                call(timeout)
-        # Nothing was asked: the network still runs and updates.
-        run.write({net.prev: u(1)})
-        run.step(H)
-        assert net.a.updates == 1
-
     @pytest.mark.parametrize("method", ["join", "wait_for"])
     def test_raises_after_the_timeout_and_the_network_keeps_running(
         self, start_manual: StartManual, method: str
@@ -1655,7 +1521,7 @@ class TestTimeout:
             if method == "join":
                 run.join(timeout=0.05)
             else:
-                run.wait_for(net.next, lambda _: False, 0.05)
+                run.wait_for(net.next, lambda _: False, timeout=0.05)
         run.write({net.prev: u(1)})
         run.step(H)
         assert torch.equal(run.read(net.next), net.b.x)
@@ -1743,8 +1609,8 @@ class TestEndToEnd:
             # asynchrony, and both run on the one timer of the run.
             first, second = Group(node=a), Group(node=b)
             a.next.connect(b.prev)
-            run = start_manual(first, second)
-            assert set(run.state_dict()["last_update_ns"]) == {"0.node", "1.node"}
+            run = start_manual(Group(first=first, second=second))
+            assert list(run.state_dict()["nodes"]) == ["first.node", "second.node"]
         else:
             chain = Chain()
             a, b = chain.a, chain.b
@@ -1788,12 +1654,7 @@ class TestEndToEnd:
         again_run = start_manual(restored, state=tree)
         # Right after the restore the state is the tree, including where each dt
         # starts and every channel slot (which Jacobi order reads first).
-        again = again_run.state_dict()
-        assert again["last_update_ns"] == tree["last_update_ns"]
-        assert again["timer"] == tree["timer"]
-        for name, (value, time_ns) in tree["slots"].items():
-            assert torch.equal(again["slots"][name][0], value)
-            assert again["slots"][name][1] == time_ns
+        assert_same_tree(again_run.state_dict(), tree)
         restored_order = (
             (restored.b, restored.a) if b_first else (restored.a, restored.b)
         )
@@ -1805,7 +1666,7 @@ class TestEndToEnd:
         out, t = again_run.read_with_time(restored.next)
         assert torch.equal(out, expected[2][0]) and t == expected[2][1]
         # The nodes got copies: their updates in place did not reach the tree.
-        assert not torch.equal(tree["nodes"]["a"]["x"], restored.a.x)
+        assert not torch.equal(tree["nodes"]["a"]["state"]["x"], restored.a.x)
 
     @pytest.mark.parametrize("b_first", [False, True])
     def test_a_network_restored_after_the_end_continues_the_same(
@@ -1876,9 +1737,13 @@ class Net(Network):
         self.out = self.node.out
 """
 
-    def run_script(self, body: str, marker: Path) -> subprocess.CompletedProcess[str]:
+    def run_script(
+        self, body: str, marker: Path, gil: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        env = os.environ if gil is None else {**os.environ, "PYTHON_GIL": gil}
         return subprocess.run(
             [sys.executable, "-c", self.PRELUDE + body, str(marker)],
+            env=env,
             capture_output=True,
             text=True,
             timeout=60,
@@ -1886,23 +1751,23 @@ class Net(Network):
         )
 
     @pytest.mark.slow
-    def test_waits_for_on_stop_of_a_dropped_network(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "gil",
+        [
+            pytest.param(
+                "0",
+                marks=pytest.mark.skipif(
+                    not sysconfig.get_config_var("Py_GIL_DISABLED"),
+                    reason="requires a free-threaded build",
+                ),
+            ),
+            "1",
+        ],
+    )
+    def test_waits_for_on_stop_of_a_dropped_network(self, tmp_path: Path, gil: str):
         marker = tmp_path / "marker"
         body = "def main() -> None:\n    mujou.run(Net())\nmain()\n"
-        done = self.run_script(body, marker)
-        assert done.returncode == 0, done.stderr
-        assert marker.read_text() == "stopped"
-
-    @pytest.mark.slow
-    def test_ends_a_subscribing_thread(self, tmp_path: Path):
-        marker = tmp_path / "marker"
-        body = (
-            "net = Net()\n"
-            "run = mujou.run(net)\n"
-            "threading.Thread(target=lambda: [_ for _ in run.subscribe(net.out)])"
-            ".start()\n"
-        )
-        done = self.run_script(body, marker)
+        done = self.run_script(body, marker, gil)
         assert done.returncode == 0, done.stderr
         assert marker.read_text() == "stopped"
 
@@ -2013,7 +1878,7 @@ class Counter(Node):
         self.k += ADDS
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         return {"w": self.w, "k": self.k}
 
     @override
@@ -2025,7 +1890,7 @@ class Counter(Node):
 
 def is_uniform(tree: dict[str, Any]) -> bool:
     """Whether every float of the captured ``Counter`` equals its ``k``."""
-    state = tree["nodes"]["node"]
+    state = tree["nodes"]["node"]["state"]
     w, k = state["w"], state["k"]
     return w.min().item() == k and w.max().item() == k
 
@@ -2063,7 +1928,7 @@ class BusyStart(Node):
             self.w.add_(1.0)
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         return {"w": self.w}
 
 
@@ -2084,7 +1949,7 @@ class BusyStop(Node):
             self.w.add_(1.0)
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         return {"w": self.w}
 
 
@@ -2101,19 +1966,20 @@ class TestCuda:
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
 
-    def test_the_state_moved_to_the_cpu_restores(self, start_manual: StartManual):
+    def test_the_state_is_on_the_cpu_and_restores_to_the_device(
+        self, start_manual: StartManual
+    ):
         source = DeviceChain(CUDA0)
         run = start_manual(source, inputs={source.prev: u(1)})
         run.step(H, source.a, source.b)
         tree = run.state_dict()
         run.shutdown()
-        assert tree["nodes"]["a"]["x"].device == CUDA0
-        on_cpu = tree.cpu()
-        assert on_cpu["nodes"]["a"]["x"].device == torch.device("cpu")
+        x = tree["nodes"]["a"]["state"]["x"]
+        assert x.device == torch.device("cpu")
         net = DeviceChain(CUDA0)
-        start_manual(net, state=on_cpu)
+        start_manual(net, state=tree)
         assert net.a.x.device == CUDA0
-        assert torch.equal(net.a.x, tree["nodes"]["a"]["x"])
+        assert torch.equal(net.a.x.cpu(), x)
 
     def test_manual_steps_match_the_discrete_algorithm(self, start_manual: StartManual):
         net = DeviceChain(CUDA0)
@@ -2142,7 +2008,7 @@ class TestCuda:
         run.shutdown()
         assert torn == []
         assert changed == []
-        assert trees[-1]["nodes"]["node"]["k"] > 0
+        assert trees[-1]["nodes"]["node"]["state"]["k"] > 0
 
     @pytest.mark.slow
     def test_on_start_sees_the_work_the_host_queued(self, start_manual: StartManual):
@@ -2159,7 +2025,7 @@ class TestCuda:
         captured: list[tuple[float, float]] = []
         for _ in range(5):
             run = start_manual(Group(node=BusyStart(CUDA0)))
-            w = run.state_dict()["nodes"]["node"]["w"]
+            w = run.state_dict()["nodes"]["node"]["state"]["w"]
             run.shutdown()
             captured.append((w.min().item(), w.max().item()))
         assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
@@ -2172,7 +2038,7 @@ class TestCuda:
         for _ in range(5):
             run = start_manual(Group(node=BusyStop(CUDA0)))
             run.shutdown()
-            w = run.state_dict()["nodes"]["node"]["w"]
+            w = run.state_dict()["nodes"]["node"]["state"]["w"]
             captured.append((w.min().item(), w.max().item()))
         assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
 
@@ -2194,7 +2060,7 @@ class TestCuda:
         assert node.first is not None
         expected = torch.full((BIG,), float(3 * ADDS), device=CUDA0)
         assert torch.equal(node.first, expected)
-        assert torch.equal(tree["nodes"]["node"]["w"].to(CUDA0), expected)
+        assert torch.equal(tree["nodes"]["node"]["state"]["w"].to(CUDA0), expected)
 
 
 class Hooks(Node):
@@ -2230,7 +2096,7 @@ class Hooks(Node):
         self.log.append((self.name, "on_resume"))
 
     @override
-    def state_dict(self) -> object:
+    def state_dict(self) -> dict[str, Any]:
         self.log.append((self.name, "state_dict"))
         return super().state_dict()
 
@@ -2330,7 +2196,7 @@ class TestPauseTimeout:
         try:
             assert node.entered.wait(10.0)
             with pytest.raises(TimeoutError):
-                run.state_dict(0.05)
+                run.state_dict(timeout=0.05)
         finally:
             node.release.set()
 

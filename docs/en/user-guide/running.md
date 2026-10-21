@@ -8,7 +8,7 @@
 --8<-- "examples/quickstart.py:run"
 ```
 
-1. `mujou.run(net)` builds the network and starts every node. It returns after `on_start` (and `load_state_dict` on a restore) has finished on every node
+1. `mujou.run(net)` reads and checks the network and starts every node. It returns after `on_start` (and `load_state_dict` on a restore) has finished on every node
 2. From then on, each node repeats `on_update` once every period, on the run's worker threads (see [Threads of a run](#threads-of-a-run)). The host's thread does not stop
 3. The host writes input with `write` and reads output with `read`, `read_with_time`, `subscribe` or `wait_for`. The example above waits with `wait_for` until the expected value arrives
 4. When the `with` statement exits, `shutdown()` is called, and it waits until `on_stop` has finished on every node

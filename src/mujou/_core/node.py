@@ -1,84 +1,88 @@
 """The node, the unit of asynchronous computation."""
 
 import copy
-import inspect
-import math
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Protocol, TypeIs, cast
+from dataclasses import dataclass
+from typing import Any, Protocol, TypeIs, cast, final
 
 import torch
-from torch import nn
 
 from mujou._core._native import ReadOnlyTimer
-from mujou._core.component import Component, is_data_descriptor
+from mujou._core.component import Component
 from mujou._core.port import outside, running
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _Config:
+    """The settings of a node, from ``Node.__init__``."""
+
+    device: torch.device
+    period: float
+    dedicated_thread: bool
+    generator: torch.Generator
 
 
 class Node(Component):
     """A unit of asynchronous computation: the leaf of a network.
 
-    Declare the ports as instance attributes in ``__init__``, after
-    ``super().__init__()`` (``build`` rejects ports declared on the class). The
-    node registers them as they are assigned. A node must not hold other nodes or
-    networks as attributes (assigning one raises ``ValueError``); put them side by
-    side in a ``Network`` instead.
+    Call ``super().__init__(...)`` first in ``__init__`` (``mujou.run`` raises
+    ``TypeError`` for a node that did not), then declare the node's ports and
+    state as attributes of the instance. A run reads the attributes when it
+    starts. A node must not hold other nodes or networks as attributes, nor
+    ports in a list, a tuple or a dict (the run raises ``TypeError``); put
+    nodes side by side in a ``Network`` instead.
 
-    Override the lifecycle hooks below; each does nothing by default, except
-    ``state_dict`` and ``load_state_dict``. As in any subclass, call
-    ``super().__init__()`` first in ``__init__`` and the same hook of ``super()``
-    first in each override. The framework calls the hooks on the thread that
-    runs the node (see "Threads" below), except ``state_dict``:
+    Override the lifecycle hooks below; each does nothing by default. As in any
+    subclass, call the same hook of ``super()`` first in each override. The
+    framework calls the hooks on the thread that runs the node (see "Threads"
+    below), in this order:
 
-    - ``on_start()``: once, when the network runs (also when it was restored).
-      Allocate and initialize the state here. A node with
-      ``dedicated_thread=True`` gets it on its own thread, so it can also make
-      its per-thread settings here.
-    - ``load_state_dict(state)``: only when the network was restored, after
-      ``on_start`` and before the first ``on_update``. ``state`` is a copy of what
-      this node's ``state_dict`` returned. By default it copies the state into the
-      collected tensors and modules (see below). When ``device`` is CUDA, the
-      framework waits for the work queued on the node's stream after it.
+    - ``on_start()``: once, when the run starts (also when it is restored).
+      Open the node's I/O here. A node with ``dedicated_thread=True`` gets it on
+      its own thread, so it can also make its per-thread settings here. Do not
+      send anything that depends on the state here: a restore loads the state
+      after it.
+    - ``load_state_dict(state)``: only when the run was restored, after
+      ``on_start`` and before the first ``on_update``.
     - ``on_update(dt)``: repeatedly, once every ``period`` on average (see
-      below). ``dt`` is the time in seconds on the run's ``timer`` since the
+      below). ``dt`` is the time in seconds on the run's timer since the
       node's last update. Read the ports with ``recv``, update in proportion to
       ``dt``, and write the ports with ``send``. It never waits for other nodes.
-    - ``on_pause()``: when the node has stopped for a pause of the network (as
+    - ``on_pause()``: when the node has stopped for a pause of the run (as
       ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
       the next ``on_update``.
     - ``on_exception()``: once on every node, when a hook of any node has raised,
       before ``on_stop``.
-    - ``on_stop()``: once, when the network stops, also after an exception. It
+    - ``on_stop()``: once, when the run stops, also after an exception. It
       must not change what ``state_dict`` returns: the state taken after a normal
       end is the state at the stop.
-    - ``state_dict()``: when the network's state is taken, on the runtime's control
-      thread while the node is paused (or, after a normal end, on the host's
-      thread that called ``Run.state_dict``). Its ports refuse to receive or
-      send here, so that taking the state is not seen by the other nodes.
-      Return the node's own state as a picklable object;
-      it may hold the live tensors, because the framework copies it before the
-      node resumes. By default it returns the collected tensors and modules (see
-      below).
 
-    The node collects its state by itself, as ``nn.Module`` does: every attribute
-    assigned a ``torch.Tensor`` (``nn.Parameter`` included) or an object with
+    ``state_dict()`` is called when the run's state is taken, while the node is
+    paused (or, after a normal end, on the host's thread that called
+    ``Run.state_dict``). Its ports refuse to receive or send there, so that
+    taking the state is not seen by the other nodes. The framework copies what
+    it returns before the node resumes.
+
+    The state of a node is, as for an ``nn.Module``, every attribute that holds
+    a ``torch.Tensor`` (``nn.Parameter`` included) or an object with
     ``state_dict`` and ``load_state_dict`` (an ``nn.Module``, a
-    ``pc.LearnClock``; not a class), whether or not its name starts with ``_``,
-    is registered under its name.
-    Assigning any other value (``None`` too) under that name, or ``del``, removes
-    it. Ports, numbers, lists and dicts of tensors are not collected, and neither
-    are properties (what a setter stores is, under its own name). To add any
-    other value (a number, a string, a list of them), assign it and call
-    ``self.register_state(name)``: it stays in the state whatever is assigned
-    to it later, until ``del``. The default
-    ``state_dict`` and ``load_state_dict`` save and restore what is registered;
-    override both to choose the state yourself (they may call ``super()``).
-    Allocate the tensors of the state by ``on_start`` and update them in place
-    afterwards: the default ``load_state_dict`` copies into them in place.
+    ``pc.LearnClock``; not a class), every attribute registered with
+    ``register_state``, and the state of ``generator``. What an attribute holds
+    when the state is taken or loaded decides. The settings that ``__init__``
+    computes from its arguments (a time constant, say) are no state: a node
+    restored with other arguments keeps its own. Register the plain values that
+    change while the node runs (a counter, the time last seen). Make the state
+    in ``__init__`` and update it in place: ``load_state_dict`` copies into the
+    tensors that the node holds. To choose the state yourself, override both
+    ``state_dict`` and ``load_state_dict``: extend what ``super().state_dict()``
+    returns, and pass ``super().load_state_dict`` the state without the keys
+    you added.
 
-    If any hook raises, the whole network stops. A hook must not call
-    ``mujou.run`` or the methods of any ``Run`` (``write``, ``read``,
-    ``state_dict``, ...): they raise ``RuntimeError`` there, because a node talks
-    only through its own ports.
+    If any hook raises, the whole run stops. A hook must not call ``mujou.run``
+    or the methods of any ``Run`` (``write``, ``read``, ``state_dict``, ...):
+    they raise ``RuntimeError`` there, because a node talks only through its own
+    ports.
 
     Threads: by default the node runs on the workers, a pool of threads that
     the run shares among its nodes (``mujou.run(..., workers=...)``). Each hook
@@ -121,11 +125,6 @@ class Node(Component):
     Set it only when the node must: such a node keeps a CPU core busy, and takes
     time from the other nodes, whose ``dt`` it makes irregular.
 
-    ``device``, ``generator``, ``period``, ``dedicated_thread`` and ``timer``
-    (the reading side of the run's timer) are reserved names: do not assign
-    attributes of those names (a class attribute ``period`` or
-    ``dedicated_thread`` makes the run raise ``TypeError``).
-
     Example::
 
         class Hidden(Node):
@@ -151,56 +150,42 @@ class Node(Component):
         l1.next.connect(l2.prev)
 
     Args:
+        period: The time between two updates on average, in seconds of the
+            run's timer. ``0.0`` updates as soon as any time has passed.
+        seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
         device: Where the node computes: the CPU or a CUDA device (no other
             device type is supported). Received messages arrive on it.
             ``"cuda"`` without an index is fixed to the host's current CUDA
             device.
-        seed: The seed of ``generator``. ``None`` seeds it nondeterministically.
-        period: The time between two updates on average, in seconds of the
-            run's timer. ``0.0`` updates as soon as any time has passed.
         dedicated_thread: Run the node on a thread of its own instead of the
             run's workers: for a node whose hooks block, or that relies on
             per-thread state set once (in ``on_start``).
 
     Raises:
-        TypeError: ``period`` is a ``bool``, or ``dedicated_thread`` is not a
-            ``bool``.
         ValueError: ``device`` is neither the CPU nor a CUDA device, or is CUDA
-            while CUDA is not available, or ``period`` is negative or not
-            finite.
+            while CUDA is not available, or ``period`` is negative or NaN.
     """
-
-    # Class-level defaults: a subclass that does not call super().__init__()
-    # still runs, but reading its generator raises.
-    _device: torch.device = torch.device("cpu")
-    _seed: int | None = None
-    _period: float = 0.01
-    _generator: torch.Generator | None = None
-    _dedicated_thread: bool = False
 
     def __init__(
         self,
         *,
-        device: torch.device | str = "cpu",
-        seed: int | None = None,
         period: float = 0.01,
+        seed: int | None = None,
+        device: torch.device | str = "cpu",
         dedicated_thread: bool = False,
     ) -> None:
-        if isinstance(period, bool):
-            raise TypeError(f"the period must be a number of seconds, got {period}")
-        if not (math.isfinite(period) and period >= 0):
-            raise ValueError(f"the period must be finite and >= 0, got {period}")
-        # The annotation is not checked at runtime.
-        if not isinstance(dedicated_thread, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise TypeError(
-                f"dedicated_thread must be a bool, got {type(dedicated_thread).__name__}"
-            )
         super().__init__()
-        self._device = _check_device(torch.device(device))
-        self._seed = seed
-        self._period = period
-        self._dedicated_thread = dedicated_thread
-        self._generator = self._make_generator()
+        if not period >= 0:
+            raise ValueError(f"the period must be >= 0 seconds, got {period}")
+        fixed = _check_device(torch.device(device))
+        generator = torch.Generator(fixed)
+        if seed is None:
+            generator.seed()
+        else:
+            generator.manual_seed(seed)
+        self.__config = _Config(fixed, period, dedicated_thread, generator)
+        # The names given to register_state.
+        self.__registered: set[str] = set()
 
     @property
     def device(self) -> torch.device:
@@ -210,111 +195,92 @@ class Node(Component):
         device in the hooks is this one, but an explicit device states the
         intent.
         """
-        return self._device
+        return self.__config.device
 
     @property
     def period(self) -> float:
         """The time between two updates on average, in seconds of the run's
         timer. ``0.0`` updates as soon as any time has passed."""
-        return self._period
+        return self.__config.period
 
     @property
     def dedicated_thread(self) -> bool:
         """Whether the node runs on a thread of its own instead of the run's
         workers."""
-        return self._dedicated_thread
+        return self.__config.dedicated_thread
 
     @property
     def generator(self) -> torch.Generator:
         """The node's own random generator on ``device``, seeded with ``seed``.
 
-        Use it instead of the global generator, which all nodes share (do not
-        call ``torch.manual_seed`` in a node). ``super().__init__`` creates it, so
-        it can be used in ``__init__`` already (to initialize modules, say), and the
-        hooks go on with the same sequence. A restored network runs new instances,
-        whose generators start again from ``seed``; to continue the same sequence
-        after a restore, add ``self.generator.get_state()`` to what
-        ``super().state_dict()`` returns, and in ``load_state_dict`` take it out
-        and ``set_state`` it before passing the rest to ``super()``.
+        ``seed`` sets nothing else: use this generator instead of the global
+        one, which all nodes share (do not call ``torch.manual_seed`` in a
+        node), also to initialize modules (``nn.init.normal_(w,
+        generator=self.generator)``). ``super().__init__`` creates it, so it can
+        be used in ``__init__`` already, and the hooks go on with the same
+        sequence. Its state is part of the node's state, so a restored node
+        goes on with the same sequence too.
+        """
+        return self.__config.generator
+
+    @property
+    def timer(self) -> ReadOnlyTimer:
+        """The reading side of the timer of the run whose hook runs, which
+        measures the ``dt`` of its nodes.
+
+        Read the time with ``self.timer.now()`` in the hooks (``state_dict``
+        included). The timer is the one given to ``mujou.run(..., timer=...)``,
+        the global timer by default, or, for a run restored from a state, a new
+        timer that started at the time of the state (``Run.timer``). A ``ReadOnlyTimer`` only reads: a node
+        does not change the time of its run (``Timer.sleep``,
+        ``set_time_scale`` and ``VirtualTimer.advance`` raise ``RuntimeError``
+        in a hook). It stops at the time the run ends, so the hooks that run
+        after the end (``on_exception``, ``on_stop``) see the time stand still;
+        measure real time there instead. The host reads ``Run.timer``.
 
         Raises:
-            RuntimeError: ``super().__init__()`` has not been called.
+            RuntimeError: This is not read in a hook of this node while it runs
+                (but in ``__init__``, by the host, or by another node).
         """
-        if self._generator is None:
-            raise RuntimeError(
-                "the generator is created by super().__init__(); call it first"
-            )
-        return self._generator
-
-    def _make_generator(self) -> torch.Generator:
-        generator = torch.Generator(self._device)
-        if self._seed is None:
-            generator.seed()
-        else:
-            generator.manual_seed(self._seed)
-        return generator
-
-    if not TYPE_CHECKING:
-        # Hidden from the type checker, which would otherwise accept assignments
-        # to undeclared attributes on every subclass.
-
-        def __setattr__(self, name: str, value: object) -> None:
-            super().__setattr__(name, value)
-            names = _state_names(self)
-            if _is_state(value):
-                # A property is not registered: what its setter stores is. Looked
-                # up only for a new name, as the lookup walks the MRO.
-                if name not in names and not is_data_descriptor(type(self), name):
-                    _set_state_names(self, {**names, name: False})
-            elif names.get(name) is False:
-                # Collected, not registered by register_state: forget it.
-                _forget_state_name(self, name)
-
-        def __delattr__(self, name: str) -> None:
-            super().__delattr__(name)
-            _forget_state_name(self, name)
+        current = running()
+        if current is None or current.node is not self:
+            raise outside(f"{type(self).__name__}.timer")
+        return current.clock
 
     def register_state(self, name: str) -> None:
         """Add the attribute ``name`` to the state, whatever value it holds.
 
-        Use it for values that are not collected by themselves: numbers,
-        strings, ``None``, and lists or dicts of them. The attribute joins the
-        state in the order of registration, the same order as the collected
-        tensors and modules, and stays in it whatever is assigned to it later,
-        until ``del``. Registering a name again (or a collected one) keeps its
-        place. The default ``state_dict`` returns the value as it is, and the
-        default ``load_state_dict`` assigns a deep copy of the saved value (a
-        tensor or a module held at load time is still restored in place).
+        Use it for the plain values that change while the node runs (a
+        counter, the time last seen), which are not state by themselves. The
+        attribute is state while it is assigned, whatever it holds. The default
+        ``state_dict`` returns the value as it is, and the default
+        ``load_state_dict`` assigns a deep copy of the saved value (or copies
+        into a tensor, or loads into an object with ``load_state_dict``, that
+        the attribute holds then).
 
-        Register in ``__init__`` or ``on_start``: a restore loads into new
-        instances, and a name first registered later (in ``on_update``, say) is
-        not registered there yet, so the load rejects it.
+        Register in ``__init__``: a restore loads into new instances, which
+        must have the same state.
 
-        ``torch.load(..., weights_only=True)`` reads only basic types (numbers,
-        strings, ``None``, lists, tuples, dicts and tensors): keep the
-        registered values to those if the state is saved with ``torch.save``.
+        ``torch.load(..., weights_only=True)`` reads only basic types (``int``,
+        ``float``, ``bool``, ``str``, ``None``, and lists, tuples and dicts of
+        them and of tensors): keep the registered values to those if the state
+        is saved with ``torch.save``.
 
         Raises:
-            ValueError: ``name`` is a property (as the reserved ``device``,
-                ``period`` and ``timer`` are).
-            AttributeError: The node has no attribute ``name`` yet; assign it
-                first.
+            AttributeError: The node has no attribute ``name`` (not assigned
+                yet, misspelled, or a property); assign it first.
         """
-        if is_data_descriptor(type(self), name):
-            raise ValueError(
-                f"{name!r} is a property, which is not state; register the "
-                "attribute its setter stores instead"
-            )
         if name not in vars(self):
             raise AttributeError(
-                f"the node has no attribute {name!r} to register as state; assign "
-                "it first"
+                f"{type(self).__name__}.{name} is not assigned: assign it, then "
+                "register it"
             )
-        _set_state_names(self, {**_state_names(self), name: True})
+        self.__registered.add(name)
 
     def on_start(self) -> None:
         """Called once when the run starts (also when it is restored), before any
-        other hook. Allocate and initialize the state here."""
+        other hook. Do not send anything that depends on the state here: a
+        restore loads it later."""
 
     def on_update(self, dt: float) -> None:
         """Called repeatedly with ``dt``, the seconds on the run's timer since the
@@ -337,120 +303,111 @@ class Node(Component):
         change what ``state_dict`` returns. What it raises is logged and
         ignored."""
 
-    def state_dict(self) -> Any:  # Any: an override returns any picklable object.
-        """Return the collected state: a dict with, for each registered attribute
-        in the order of registration, the tensor ``detach``-ed, the object's
-        ``state_dict()`` (a module's, say) or any other value as it is (see
-        ``register_state``), under the attribute's name.
+    def state_dict(self) -> dict[str, Any]:
+        """Return the node's state: ``"generator"``, the state of
+        ``generator``, then each attribute of the state in the order of
+        assignment, under its name: a tensor ``detach``-ed, the ``state_dict()``
+        of an object that has one, or a registered value as it is.
 
         The tensors share memory with the attributes (the framework copies the
         tree). ``requires_grad`` and ``.grad`` are not part of the state, as in
-        ``nn.Module.state_dict``: detaching also makes a tensor that is part of an
-        autograd graph picklable.
-
-        An override that returns ``None`` has no state: a restore does not call
-        ``load_state_dict``.
+        ``nn.Module.state_dict``.
         """
-        return {
-            name: value.detach()
-            if isinstance(value, torch.Tensor)
-            else value.state_dict()
-            if _has_state(value)
-            else value
-            for name, value in _state_items(self)
-        }
+        state: dict[str, Any] = {"generator": self.generator.get_state()}
+        for name, value in self.__items():
+            state[name] = (
+                value.detach()
+                if isinstance(value, torch.Tensor)
+                else value.state_dict()
+                if _has_state(value)
+                else value
+            )
+        return state
 
-    def load_state_dict(self, state: object) -> None:
-        """Restore ``state`` (from the default ``state_dict``) into the
-        registered attributes: ``copy_`` into each tensor and ``load_state_dict``
-        into each module (any object with ``state_dict`` and ``load_state_dict``)
-        in place, without recording gradients, and assign a
-        ``copy.deepcopy`` of the saved value to any other attribute registered
-        with ``register_state``.
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore ``state``, as the default ``state_dict`` returned it, into the
+        attributes of the state, without recording gradients: ``copy_`` into
+        each tensor, ``load_state_dict`` into each object that has one, and
+        assign a ``copy.deepcopy`` of the saved value to any other registered
+        attribute.
 
         The objects stay the same, so references taken in ``__init__`` or
-        ``on_start`` see the restored values, and a tensor that records gradients
-        stays a leaf that does. ``copy_`` casts the dtype and moves the device.
-        A tensor in ``state`` whose name is not registered (one first assigned
-        after ``on_start``) is set as a new attribute, a copy of the value, and
-        registered. Everything is checked before anything is copied, so on an
-        error nothing has changed.
+        ``on_start`` see the restored values, and a tensor that records
+        gradients stays a leaf that does. ``copy_`` casts the dtype and moves
+        the device. The state of ``generator`` is set as it is saved, and a
+        generator keeps its state in a format of its device's type: the state
+        must come from a node on the same type of device (the CPU or CUDA).
 
-        A name is restored by what it holds at load time, not by what it held
-        when saved: a registered name that holds a tensor now but held another
-        value (``None``, say) when saved raises ``TypeError``.
+        An override that keeps a tensor of ``state`` as it is shares its memory
+        with the tree given to ``mujou.run(..., state=...)``: copy it instead.
 
         Raises:
-            TypeError: ``state`` or the state of a module is not a mapping, or
-                the value for a tensor is not a tensor.
-            ValueError: A registered attribute is missing from ``state``, a key
-                that is not registered holds no tensor, or a tensor's shape
-                differs or the tensor has elements that share memory.
-            RuntimeError: A module's state does not have the keys or the shapes
-                of the module's ``state_dict``, as ``nn.Module.load_state_dict``
-                (strict) raises.
+            ValueError: The keys of ``state`` are not those of this node's
+                state, or a tensor's shape differs.
         """
-        tree = _mapping(state, "the default load_state_dict takes")
-        items = _state_items(self)
-        missing = [name for name, _ in items if name not in tree]
-        names = _state_names(self)
-        unexpected = [
-            key
-            for key, value in tree.items()
-            if key not in names and not isinstance(value, torch.Tensor)
-        ]
+        items = self.__items()
+        expected = ["generator", *(name for name, _ in items)]
+        missing = [key for key in expected if key not in state]
+        unexpected = [key for key in state if key not in expected]
         if missing or unexpected:
             raise ValueError(
-                "the state does not match the node's registered attributes: "
-                + "; ".join(
-                    f"{what} {keys}"
-                    for what, keys in (
-                        ("missing", missing),
-                        ("not tensors and not registered", unexpected),
-                    )
-                    if keys
-                )
+                f"the state does not match {type(self).__name__}: missing "
+                f"{missing}, unexpected {unexpected}"
             )
-        for name, value in items:
-            if isinstance(value, torch.Tensor):
-                _check_tensor(name, value, tree[name])
-            elif isinstance(value, nn.Module):
-                _check_module(name, value, tree[name])
         with torch.no_grad():
             for name, value in items:
-                if isinstance(value, torch.Tensor):
-                    value.copy_(cast(torch.Tensor, tree[name]))
-                elif _has_state(value):
-                    value.load_state_dict(tree[name])
-                else:
-                    setattr(self, name, copy.deepcopy(tree[name]))
-            for key, value in tree.items():
-                if key not in names:
-                    setattr(self, key, cast(torch.Tensor, value).clone())
+                self.__load(name, value, state[name])
+        self.generator.set_state(state["generator"])
 
-    @property
-    def timer(self) -> ReadOnlyTimer:
-        """The reading side of the timer of the run whose hook runs, which
-        measures the ``dt`` of its nodes.
+    def __items(self) -> list[tuple[str, object]]:
+        """``(name, value)`` for each attribute of the state, in the order of
+        assignment."""
+        registered = self.__registered
+        return [
+            (name, value)
+            for name, value in vars(self).items()
+            if name in registered or is_state(value)
+        ]
 
-        Read the time with ``self.timer.now()`` in the hooks (``state_dict``
-        included). The timer is the one given to ``mujou.run(..., timer=...)``,
-        or the global timer by default. A ``ReadOnlyTimer`` only reads: a node
-        does not change the time of its run (``Timer.sleep``,
-        ``set_time_scale`` and ``VirtualTimer.advance`` raise ``RuntimeError``
-        in a hook). It stops at the time the run ends, so the hooks that run
-        after the end (``on_exception``, ``on_stop``) see the time stand still;
-        measure real time there instead. ``timer`` is a reserved name: do not
-        assign an attribute of that name. The host reads ``Run.timer``.
+    def __load(self, name: str, value: object, saved: Any) -> None:
+        if isinstance(value, torch.Tensor):
+            shape = tuple(cast(torch.Tensor, saved).shape)
+            if shape != tuple(value.shape):
+                raise ValueError(
+                    f"{type(self).__name__}.{name}: the state has the shape "
+                    f"{shape}, the tensor {tuple(value.shape)}"
+                )
+            value.copy_(saved)
+        elif _has_state(value):
+            value.load_state_dict(saved)
+        else:
+            setattr(self, name, copy.deepcopy(saved))
 
-        Raises:
-            RuntimeError: This is not read in a hook of this node while it runs
-                (but in ``__init__``, by the host, or by another node).
-        """
-        current = running()
-        if current is None or current.node is not self:
-            raise outside(f"{type(self).__name__}.timer")
-        return current.clock
+
+def initialized(node: Node) -> bool:
+    """Whether ``Node.__init__`` has run on ``node``."""
+    return "_Node__config" in vars(node)
+
+
+class _Stateful(Protocol):
+    def state_dict(self) -> Any: ...
+    def load_state_dict(self, state: Any, /) -> Any: ...
+
+
+def _has_state(value: object) -> TypeIs[_Stateful]:
+    """Whether ``value`` has a state of its own: it has ``state_dict`` and
+    ``load_state_dict`` and is not a class (whose methods these would be)."""
+    return (
+        not isinstance(value, type)
+        and hasattr(value, "state_dict")
+        and hasattr(value, "load_state_dict")
+    )
+
+
+def is_state(value: object) -> bool:
+    """Whether an attribute that holds ``value`` is part of a node's state by
+    itself: a tensor, or an object with a state of its own."""
+    return isinstance(value, torch.Tensor) or _has_state(value)
 
 
 def _check_device(device: torch.device) -> torch.device:
@@ -478,139 +435,3 @@ def _check_device(device: torch.device) -> torch.device:
         # set_device needs an index.
         device = torch.device("cuda", torch.cuda.current_device())
     return device
-
-
-# The types of the values collected into the state. A tuple, not a union:
-# isinstance checks a tuple several times faster, and Node.__setattr__ checks every
-# assignment.
-class _Stateful(Protocol):
-    def state_dict(self) -> Any: ...
-    def load_state_dict(self, state: Any, /) -> Any: ...
-
-
-def _has_state(value: object) -> TypeIs[_Stateful]:
-    """Whether ``value`` has a state of its own: it has ``state_dict`` and
-    ``load_state_dict`` and is not a class (whose methods these would be)."""
-    return (
-        not isinstance(value, type)
-        and hasattr(value, "state_dict")
-        and hasattr(value, "load_state_dict")
-    )
-
-
-def _is_state(value: object) -> bool:
-    """Whether an attribute that holds ``value`` is collected into the state by
-    itself: a tensor, or an object with a state of its own."""
-    return isinstance(value, torch.Tensor) or _has_state(value)
-
-
-# The attribute that holds a node's registry of state names. Long, so that it does
-# not meet a name of the user's.
-_STATE_NAMES = "_mujou_state_names"
-
-
-def _state_names(node: Node) -> Mapping[str, bool]:
-    """The names of the attributes of ``node`` that hold state, in the order of
-    registration, each with whether ``register_state`` registered it (``False``
-    when it was collected as a tensor or a module).
-
-    The registry is replaced, never changed, so that a shallow copy of a node
-    (``copy.copy``) does not share changes with the original.
-    """
-    return cast(Mapping[str, bool], vars(node).get(_STATE_NAMES, {}))
-
-
-def _set_state_names(node: Node, names: dict[str, bool]) -> None:
-    vars(node)[_STATE_NAMES] = names  # Not through __setattr__.
-
-
-def _forget_state_name(node: Node, name: str) -> None:
-    names = _state_names(node)
-    if name in names:
-        _set_state_names(node, {k: v for k, v in names.items() if k != name})
-
-
-def _state_items(node: Node) -> list[tuple[str, object]]:
-    """Return ``(attribute name, value)`` for the attributes registered on
-    ``node`` (tensors, modules and any value of ``register_state``), in the order
-    of registration."""
-    return [(name, getattr(node, name)) for name in _state_names(node)]
-
-
-def _mapping(value: object, what: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise TypeError(f"{what} a mapping, got {type(value).__name__}")
-    return cast(Mapping[str, Any], value)
-
-
-def _check_tensor(name: str, tensor: torch.Tensor, source: object) -> None:
-    """Check that ``tensor.copy_(source)`` restores ``tensor`` element by element."""
-    if not isinstance(source, torch.Tensor):
-        raise TypeError(
-            f"the state's {name!r} is a {type(source).__name__}, not a tensor"
-        )
-    if source.shape != tensor.shape:
-        raise ValueError(
-            f"the state's {name!r} has the shape {tuple(source.shape)}, but the "
-            f"tensor has {tuple(tensor.shape)}"
-        )
-    # copy_ refuses to write into elements that share memory (from expand, say).
-    if any(
-        stride == 0 and size > 1
-        for size, stride in zip(tensor.shape, tensor.stride(), strict=True)
-    ):
-        raise ValueError(
-            f"the tensor {name!r} has elements that share memory, so it cannot be "
-            "restored in place"
-        )
-
-
-def _check_module(name: str, module: nn.Module, source: object) -> None:
-    """Check ``source`` against ``module.state_dict()`` as the strict
-    ``module.load_state_dict`` would, before anything is copied."""
-    tree = _mapping(source, f"the state's {name!r} of a module must be")
-    own = module.state_dict()
-    missing = [key for key in own if key not in tree]
-    unexpected = [key for key in tree if key not in own]
-    shapes = [
-        key
-        for key, value in own.items()
-        if key in tree
-        and isinstance(tree[key], torch.Tensor)
-        and cast(torch.Tensor, tree[key]).shape != value.shape
-    ]
-    if missing or unexpected or shapes:
-        raise RuntimeError(
-            f"the state's {name!r} does not match the module: missing {missing}, "
-            f"unexpected {unexpected}, other shapes {shapes}"
-        )
-
-
-def checked_period(node: Node) -> float:
-    """Return the period of ``node`` in seconds for the runtime, which rounds it
-    to ns and at least 1 ns (so ``0.0`` waits only for the time to move).
-
-    Raises:
-        TypeError: A subclass of ``Node`` replaced the reserved ``period``.
-    """
-    _check_reserved(node, "period")
-    return node._period  # pyright: ignore[reportPrivateUsage]  # Node's own module
-
-
-def checked_dedicated(node: Node) -> bool:
-    """Return whether ``node`` runs on a thread of its own, for the runtime.
-
-    Raises:
-        TypeError: A subclass of ``Node`` replaced the reserved
-            ``dedicated_thread``.
-    """
-    _check_reserved(node, "dedicated_thread")
-    return node._dedicated_thread  # pyright: ignore[reportPrivateUsage]  # Node's own module
-
-
-def _check_reserved(node: Node, name: str) -> None:
-    if inspect.getattr_static(type(node), name) is not vars(Node)[name]:
-        raise TypeError(
-            f"{type(node).__qualname__} replaces {name}, a reserved name of Node: "
-            f"pass {name} to Node.__init__ instead"
-        )

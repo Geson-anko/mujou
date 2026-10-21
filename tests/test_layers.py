@@ -23,11 +23,11 @@ LAYERS: list[set[str]] = [
     {"mujou._core.port"},
     {"mujou._core.component"},
     {"mujou._core.node"},
-    {"mujou._core.driver"},
     {"mujou._core.network"},
-    {"mujou._core.graph"},
-    {"mujou._core.state", "mujou._core.lifetime"},
-    {"mujou._core.session"},
+    {"mujou._core.driver"},
+    {"mujou._core.tree"},
+    {"mujou._core.wiring"},
+    {"mujou._core.state"},
     {"mujou._core.run"},
     {"mujou", "mujou.time", "mujou.testing"},
     {
@@ -54,14 +54,7 @@ NATIVE = {
 }
 
 # (importer, imported)
-ALLOWED = {
-    ("mujou", "mujou.time"),
-    ("mujou._core.component", "mujou._core.graph"),
-    ("mujou._core.component", "mujou._core.network"),
-    ("mujou._core.component", "mujou._core.node"),
-    ("mujou._core.network", "mujou._core.graph"),
-    ("mujou._core.session", EXTENSION),
-}
+ALLOWED: set[tuple[str, str]] = set()
 
 
 def module_name(path: Path) -> str:

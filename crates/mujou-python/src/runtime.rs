@@ -218,11 +218,17 @@ fn runtime_error(py: Python<'_>, err: RuntimeError) -> PyErr {
     }
 }
 
-/// A period in seconds as the runtime's ns: rounded as `to_ns` rounds, and at
+/// A period in seconds as the runtime's ns: rounded as `to_ns` rounds, at
 /// least 1 ns (0.0 s becomes 1 ns, which updates as soon as any time has
-/// passed).
+/// passed), and at most `u64::MAX` ns, which infinity is too, as any period
+/// longer than that.
 fn period_to_ns(seconds: f64) -> PyResult<NonZeroU64> {
-    Ok(NonZeroU64::new(to_ns(seconds)?).unwrap_or(NonZeroU64::MIN))
+    let ns = if seconds == f64::INFINITY {
+        u64::MAX
+    } else {
+        to_ns(seconds)?
+    };
+    Ok(NonZeroU64::new(ns).unwrap_or(NonZeroU64::MIN))
 }
 
 /// The number of workers when `start` is given none, if not the core's
@@ -265,10 +271,11 @@ type Record<'py> = (
 /// `stop()` and `capture()`, which returns the node's state. `name` names the
 /// node in the errors and the logs, which name the hooks as the node's author
 /// knows them (`on_update`, `load_state_dict`, `state_dict`, ...). `period` is
-/// its period on the timer in seconds (>= 0), rounded to the nearest ns and at
-/// least 1 ns, so that 0.0 updates as soon as any time has passed; the manual
-/// mode ignores it. `dedicated_thread` runs the node on a thread of its own
-/// instead of the pool. `last_update_ns` is where its first Δt starts (the
+/// its period on the timer in seconds (>= 0), rounded to the nearest ns, at
+/// least 1 ns, so that 0.0 updates as soon as any time has passed, and at most
+/// `u64::MAX` ns (infinity included); the manual mode ignores it.
+/// `dedicated_thread` runs the node on a thread of its own instead of the
+/// pool. `last_update_ns` is where its first Δt starts (the
 /// time at the start if `None`), and `state` what `restore` restores after
 /// `start` (no call if `None`).
 ///

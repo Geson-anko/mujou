@@ -541,10 +541,11 @@ def start(
     `stop()` and `capture()`, which returns the node's state. `name` names the
     node in the errors and the logs, which name the hooks as the node's author
     knows them (`on_update`, `load_state_dict`, `state_dict`, ...). `period` is
-    its period on the timer in seconds (>= 0), rounded to the nearest ns and at
-    least 1 ns, so that 0.0 updates as soon as any time has passed; the manual
-    mode ignores it. `dedicated_thread` runs the node on a thread of its own
-    instead of the pool. `last_update_ns` is where its first Δt starts (the
+    its period on the timer in seconds (>= 0), rounded to the nearest ns, at
+    least 1 ns, so that 0.0 updates as soon as any time has passed, and at most
+    `u64::MAX` ns (infinity included); the manual mode ignores it.
+    `dedicated_thread` runs the node on a thread of its own instead of the
+    pool. `last_update_ns` is where its first Δt starts (the
     time at the start if `None`), and `state` what `restore` restores after
     `start` (no call if `None`).
 

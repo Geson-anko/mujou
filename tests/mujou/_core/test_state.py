@@ -1,105 +1,184 @@
-import copy
 import io
-import pickle
-from collections import OrderedDict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import torch
 from torch import nn
 
-from mujou import StateDict
-from tests.mujou.nodes import assert_same_tree
+from mujou import Group, MultiPort, NetworkError, Node, Port, TensorSpec
+from tests.mujou.nodes import F64, Chain, Hidden, Probe, assert_same_tree, vec
+
+if TYPE_CHECKING:
+    from tests.mujou.conftest import StartManual
+
+H = 1e-3
 
 
-def tree() -> StateDict:
-    """A tree of the shape ``Run.state_dict`` returns, with every kind of value."""
-    module = nn.Linear(2, 1).state_dict()  # an OrderedDict with _metadata
-    x = torch.arange(3.0)
-    return StateDict(
-        nodes={
-            "a": {"x": x, "alias": x, "module": module, "count": 3, "name": "a"},
-            "b": {"history": [torch.ones(1), (torch.zeros(1), 0.5)], "size": x.shape},
-        },
-        slots={"a.next/out": (torch.full((2,), 2.0), 7)},
-        last_update_ns={"a": 5, "b": 6},
-        timer={"time_ns": 7, "scale": 1.0},
-    )
+def u(k: float) -> torch.Tensor:
+    return torch.tensor([k, -k], dtype=F64)
 
 
-def tensors(value: Any) -> list[torch.Tensor]:
-    """Every tensor in ``value``, in order."""
-    if isinstance(value, torch.Tensor):
-        return [value]
-    if isinstance(value, dict):
-        return [t for v in value.values() for t in tensors(v)]  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-    if type(value) in (list, tuple):
-        return [t for v in value for t in tensors(v)]
-    return []
+class Learned(Node):
+    """Holds a module, a tensor and a registered count."""
+
+    def __init__(self) -> None:
+        super().__init__(seed=3)
+        self.out = Port(send=vec())
+        self.linear = nn.Linear(2, 2)
+        self.x = torch.zeros(2, dtype=F64)
+        self.count = 0
+        self.register_state("count")
 
 
-class TestStateDict:
-    def test_is_a_dict(self):
-        t = tree()
-        assert isinstance(t, dict)
-        assert t["timer"] == {"time_ns": 7, "scale": 1.0}
+class TestShape:
+    def test_holds_the_timer_and_each_node_by_its_path(self, start_manual: StartManual):
+        net = Chain()
+        run = start_manual(net, inputs={net.prev: u(1)})
+        run.step(H)
+        tree = run.state_dict()
+        assert list(tree) == ["timer", "nodes"]
+        assert tree["timer"] == {"time_ns": 1_000_000, "time_scale": 1.0}
+        assert list(tree["nodes"]) == ["a", "b"]
+        a = tree["nodes"]["a"]
+        assert list(a) == ["state", "last_update_ns", "ports"]
+        assert a["last_update_ns"] == 1_000_000
+        assert a["state"]["updates"] == 1
+        assert_same_tree(
+            a["ports"],
+            {
+                "prev": {"in": {"value": u(1), "time_ns": 0}},
+                "next": {
+                    "out": {"value": net.a.x, "time_ns": 1_000_000},
+                    "to": {"b.prev": {"value": net.a.x, "time_ns": 1_000_000}},
+                },
+            },
+        )
+        assert_same_tree(
+            tree["nodes"]["b"]["ports"],
+            {
+                "prev": {},
+                "next": {"out": {"value": net.b.x, "time_ns": 1_000_000}, "to": {}},
+            },
+        )
 
-    def test_to_moves_every_tensor_into_new_containers(self):
-        original = tree()
-        before = copy.deepcopy(original)
-        moved = original.to("meta")
-        assert isinstance(moved, StateDict)
-        found = tensors(moved)
-        assert len(found) == len(tensors(original)) == 7
-        assert all(t.device == torch.device("meta") for t in found)
-        # The original keeps its tensors and containers.
-        assert_same_tree(original, before)
-        assert all(t.device == torch.device("cpu") for t in tensors(original))
-        # Every container is new and of the same type, other values are as they were.
-        node, module = moved["nodes"]["a"], moved["nodes"]["a"]["module"]
-        assert node is not original["nodes"]["a"]
-        assert type(module) is OrderedDict
-        assert module is not original["nodes"]["a"]["module"]
-        assert module._metadata == original["nodes"]["a"]["module"]._metadata  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-        history = moved["nodes"]["b"]["history"]
-        assert type(history) is list and type(history[1]) is tuple
-        assert moved["nodes"]["b"]["size"] == torch.Size([3])
-        assert moved["slots"]["a.next/out"][1] == 7
-        assert node["count"] == 3 and node["name"] == "a"
+    def test_a_slot_not_written_yet_has_no_time(self, start_manual: StartManual):
+        tree = start_manual(Chain()).state_dict()
+        assert tree["nodes"]["a"]["ports"]["prev"]["in"]["time_ns"] is None
+        assert tree["nodes"]["b"]["ports"]["next"]["out"]["time_ns"] is None
 
-    def test_to_keeps_a_shared_tensor_shared(self):
-        moved = tree().to("meta")
-        node = moved["nodes"]["a"]
-        assert node["x"] is node["alias"]
+    def test_send_to_writes_only_its_peer(self, start_manual: StartManual):
+        spec = TensorSpec((2, 3))
+        port = MultiPort(send=spec, recv=spec)
+        b, c = Hidden(), Hidden()
+        channel = port.connect(b.prev)
+        port.connect(c.prev)
+        node = Probe(lambda: port.send_to(channel, torch.ones(2, 3)), next=port)
+        run = start_manual(Group(a=node, b=b, c=c))
+        run.step(H, node)
+        to = run.state_dict()["nodes"]["a"]["ports"]["next"]["to"]
+        assert to["b.prev"]["time_ns"] == 1_000_000
+        assert to["c.prev"]["time_ns"] is None
 
-    def test_to_shares_a_tensor_already_on_the_device(self):
-        # As torch.Tensor.to does: no copy. (A move to the CPU is tested on CUDA.)
-        original = tree()
-        moved = original.cpu()
-        assert isinstance(moved, StateDict)
-        assert_same_tree(moved, original)
-        assert moved["nodes"]["a"]["x"] is original["nodes"]["a"]["x"]
-        assert moved["nodes"]["a"] is not original["nodes"]["a"]
+    def test_a_node_state_is_the_default_one(self, start_manual: StartManual):
+        node = Learned()
+        tree = start_manual(Group(node=node)).state_dict()
+        state = tree["nodes"]["node"]["state"]
+        assert list(state) == ["generator", "linear", "x", "count"]
+        assert_same_tree(state["linear"], node.linear.state_dict())
 
-    def test_pickles_as_a_state_dict(self):
-        original = tree()
-        again = pickle.loads(pickle.dumps(original))
-        assert_same_tree(again, original)
-        assert b"mujou\nStateDict" in pickle.dumps(original, protocol=0)
 
-    def test_torch_load_reads_it_with_weights_only(self):
-        original = tree()
+class TestCopies:
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_share_no_memory_with_the_run(self, start_manual: StartManual, ended: bool):
+        node = Learned()
+        run = start_manual(Group(node=node))
+        if ended:
+            run.shutdown()
+        tree = run.state_dict()
+        node.x += 1.0  # in place, as a node updates its state
+        with torch.no_grad():
+            node.linear.weight.add_(1.0)
+        state = tree["nodes"]["node"]["state"]
+        assert torch.equal(state["x"], torch.zeros(2, dtype=F64))
+        assert not torch.equal(state["linear"]["weight"], node.linear.weight)
+
+    def test_torch_load_reads_it_with_weights_only(self, start_manual: StartManual):
+        node = Learned()
+        tree = start_manual(Group(node=node)).state_dict()
         buffer = io.BytesIO()
-        torch.save(original, buffer)
+        torch.save(tree, buffer)
         buffer.seek(0)
-        again = torch.load(buffer)  # weights_only=True by default
-        assert_same_tree(again, original)
+        assert_same_tree(torch.load(buffer, weights_only=True), tree)
 
-    @pytest.mark.cuda
-    def test_moves_from_cuda_to_the_cpu(self):
-        original = tree()  # each tree() has new random weights
-        on_cuda = original.to("cuda")
-        assert all(t.device.type == "cuda" for t in tensors(on_cuda))
-        moved = on_cuda.cpu()
-        assert all(t.device == torch.device("cpu") for t in tensors(moved))
-        assert_same_tree(moved, original)
+
+class TestRestore:
+    def test_goes_on_from_the_tree(self, start_manual: StartManual):
+        first = Learned()
+        run = start_manual(Group(node=first))
+        first.count = 5
+        # Moved on from the seed, which a new node starts from.
+        torch.rand(3, generator=first.generator)
+        run.step(H)
+        tree = run.state_dict()
+        run.shutdown()
+        again = Learned()
+        with torch.no_grad():
+            again.linear.weight.fill_(7.0)
+        restored = start_manual(Group(node=again), state=tree)
+        assert again.count == 5
+        assert torch.equal(again.linear.weight, first.linear.weight)
+        # The generator goes on with the same sequence.
+        assert torch.equal(
+            torch.rand(3, generator=again.generator),
+            torch.rand(3, generator=first.generator),
+        )
+        assert_same_tree(
+            restored.state_dict()["nodes"]["node"]["ports"],
+            tree["nodes"]["node"]["ports"],
+        )
+
+    def test_a_node_state_that_does_not_match_stops_the_run(
+        self, start_manual: StartManual
+    ):
+        source = start_manual(Group(node=Learned()))
+        tree = source.state_dict()
+        source.shutdown()
+        del tree["nodes"]["node"]["state"]["x"]
+        with pytest.raises(
+            NetworkError, match=r"node 'node' raised in load_state_dict"
+        ) as raised:
+            start_manual(Group(node=Learned()), state=tree)
+        assert isinstance(raised.value.__cause__, ValueError)
+        assert "missing ['x']" in str(raised.value.__cause__)
+
+    def test_lists_what_does_not_match(self, start_manual: StartManual):
+        source = start_manual(Chain())
+        tree: dict[str, Any] = source.state_dict()
+        source.shutdown()
+        del tree["nodes"]["b"]
+        del tree["nodes"]["a"]["ports"]["next"]["to"]["b.prev"]
+        tree["nodes"]["a"]["ports"]["extra"] = {}
+        net = Chain()
+        with pytest.raises(ValueError) as raised:
+            start_manual(net, state=tree)
+        assert str(raised.value) == (
+            "the state tree does not match this run: "
+            "missing nodes['a']['ports']['next']['to']['b.prev'], "
+            "unexpected nodes['a']['ports']['extra'], missing nodes['b']"
+        )
+        assert not net.a.started
+
+    def test_lists_what_its_top_does_not_match(self, start_manual: StartManual):
+        source = start_manual(Chain())
+        tree: dict[str, Any] = source.state_dict()
+        source.shutdown()
+        del tree["timer"]["time_scale"]
+        tree["extra"] = {}
+        net = Chain()
+        with pytest.raises(ValueError) as raised:
+            start_manual(net, state=tree)
+        assert str(raised.value) == (
+            "the state tree does not match this run: "
+            "missing timer['time_scale'], unexpected extra"
+        )
+        assert not net.a.started

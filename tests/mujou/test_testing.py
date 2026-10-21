@@ -24,7 +24,6 @@ class TestPublicNames:
         callables = [
             mujou.run,
             mujou.testing.run,
-            mujou.Network.build,
             mujou.Group.__init__,
             *(
                 getattr(mujou.Run, n)

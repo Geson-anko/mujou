@@ -62,6 +62,7 @@ from torch import nn
 
 import mujou
 import mujou.pc as pc
+import mujou.time
 from mujou import TensorSpec
 
 BINS = 8 * 4  # the dt histogram: quarter periods up to 8 periods, then the rest
@@ -111,9 +112,11 @@ def quantile(histogram: torch.Tensor, q: float) -> float:
 
 
 def dt_report(nodes: dict[str, Any]) -> str:
-    """Describe the ``dt`` of the watched nodes from their states."""
+    """Describe the ``dt`` of the watched nodes from their states (the nodes of
+    a state tree)."""
     lines: list[str] = []
-    for path, state in nodes.items():
+    for path, node in nodes.items():
+        state = node["state"]
         if "dt_histogram" in state:
             h = state["dt_histogram"]
             lines.append(
@@ -128,7 +131,8 @@ def check_dt(nodes: dict[str, Any]) -> None:
     """Warn when the ``dt`` of a watched node is too often longer than its period:
     a median over 1.5 periods, or a 99th percentile over 2 (``max_dt``, beyond
     which the node drops the time)."""
-    for path, state in nodes.items():
+    for path, node in nodes.items():
+        state = node["state"]
         if "dt_histogram" not in state:
             continue
         histogram = state["dt_histogram"]

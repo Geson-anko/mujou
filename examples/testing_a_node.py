@@ -95,7 +95,8 @@ def test_restored_run_matches_a_straight_run() -> None:
     half = run_steps(Chain(0.01), 10)
     resumed = run_steps(Chain(0.01), 10, state=half)
 
-    assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
+    resumed_x = resumed["nodes"]["b"]["state"]["x"]
+    assert torch.equal(resumed_x, straight["nodes"]["b"]["state"]["x"])
     print("save and restore: equal to the run that did not stop")
 
 

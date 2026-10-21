@@ -116,7 +116,8 @@ with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
     loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
     assert t is not None
     print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_AFTER})")
-model = run.state_dict()["nodes"]["learner"]["model"]  # the learner's state at the end
+state = run.state_dict()["nodes"]["learner"]["state"]  # the learner's, at the end
+model = state["model"]
 
 weight, bias = model["weight"].item(), model["bias"].item()
 print(f"the learner's weight = {weight:.3f}, bias = {bias:.3f}")

@@ -41,7 +41,7 @@ class Direct:
         self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
 
     def weights(self) -> dict[str, torch.Tensor]:
-        return self.run.state_dict()["nodes"]["out"]["module"]
+        return self.run.state_dict()["nodes"]["out"]["state"]["module"]
 
     def step(
         self, sample: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None

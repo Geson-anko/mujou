@@ -6,6 +6,7 @@ from torch import nn
 
 import mujou.pc as pc
 from mujou import Group, TensorSpec
+from mujou._core.tree import walk
 from mujou.testing import ManualRun
 from mujou.time import Timestamp, VirtualTimer
 
@@ -35,7 +36,7 @@ class TestInput:
             mask = torch.tensor([True, False, True])
             written_at = run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
             run.step(H, inp)
-            sent, _ = run.state_dict()["slots"]["Input.next/out"]
+            sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
             assert torch.equal(sent["h"], x)
             assert torch.equal(sent["y"], y)
             assert torch.equal(sent["mask"], mask)
@@ -48,7 +49,7 @@ class TestInput:
         inp = pc.Input(x=X, y=Y, period=1e-3)
         run = start_manual(inp, timer=VirtualTimer(start=Timestamp(ns=5_000_000)))
         run.step(H, inp)
-        sent, _ = run.state_dict()["slots"]["Input.next/out"]
+        sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
         assert torch.equal(sent["h"], torch.zeros(B, 4))
         assert int(sent["epoch"]) == 0
         assert torch.equal(sent["y"], torch.zeros(B, dtype=torch.int64))
@@ -69,16 +70,24 @@ class TestInput:
             if s in (0, 3):
                 run.write({inp.prev: sample})  # at times 0 and 3 ms
             run.step(H, inp)
-            epochs.append(int(run.state_dict()["slots"]["Input.next/out"][0]["epoch"]))
+            epochs.append(
+                int(
+                    run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"][
+                        "epoch"
+                    ]
+                )
+            )
         assert epochs == [1, 1, 1, 2, 2]
-        assert run.state_dict()["nodes"][""]["_seen_write"] == 3_000_000
+        assert run.state_dict()["nodes"][""]["state"]["_seen_write"] == 3_000_000
 
     def test_connects_to_a_layer(self):
         inp = pc.Input(x=X, y=Y, period=1e-3)
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
         layer = pc.Layer(nn.Linear(4, 5), act=inp.act, tau=tau)
-        inp.next.connect(layer.prev)
-        Group(inp=inp, layer=layer).build()
+        channel = inp.next.connect(layer.prev)
+        tree = walk(Group(inp=inp, layer=layer))
+        assert layer.prev.channels == (channel,)
+        assert tree.path(channel.other(inp.next)) == "layer.prev"
 
     def test_x_and_y_must_have_the_same_batch(self):
         with pytest.raises(ValueError, match="same batch"):

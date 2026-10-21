@@ -52,8 +52,8 @@ class Output(Node):
     ``module`` must treat the samples independently, and is called once on zeros
     when the node is made, as in ``Layer``.
 
-    The state holds ``"module"`` and when to learn (``"clock"``). Read it with
-    ``Run.state_dict()``, as for ``Layer``.
+    The state holds ``"generator"``, ``"module"`` and when to learn
+    (``"clock"``). Read it with ``Run.state_dict()``, as for ``Layer``.
 
     Example::
 

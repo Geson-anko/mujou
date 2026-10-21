@@ -28,8 +28,8 @@ def virtual() -> VirtualTimer:
 class StartManual(Protocol):
     def __call__[P: Port[Any, Any]](
         self,
-        component: Node | Network,
-        *components: Node | Network,
+        root: Node | Network,
+        *,
         timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
@@ -39,8 +39,8 @@ class StartManual(Protocol):
 class Start(Protocol):
     def __call__[P: Port[Any, Any]](
         self,
-        component: Node | Network,
-        *components: Node | Network,
+        root: Node | Network,
+        *,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
@@ -70,17 +70,15 @@ def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
     (or a state, whose run makes its own), shut down at the end of the test."""
 
     def start[P: Port[Any, Any]](
-        component: Node | Network,
-        *components: Node | Network,
+        root: Node | Network,
+        *,
         timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
     ) -> ManualRun:
         if timer is None and state is None:
             timer = virtual
-        run = mujou.testing.run(
-            component, *components, timer=timer, inputs=inputs, state=state
-        )
+        run = mujou.testing.run(root, timer=timer, inputs=inputs, state=state)
         started.append(run)
         return run
 
@@ -93,21 +91,14 @@ def start(started: list[Run]) -> Start:
     down at the end of the test."""
 
     def start[P: Port[Any, Any]](
-        component: Node | Network,
-        *components: Node | Network,
+        root: Node | Network,
+        *,
         timer: Timer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
         workers: int | None = None,
     ) -> Run:
-        run = mujou.run(
-            component,
-            *components,
-            timer=timer,
-            inputs=inputs,
-            state=state,
-            workers=workers,
-        )
+        run = mujou.run(root, timer=timer, inputs=inputs, state=state, workers=workers)
         started.append(run)
         return run
 

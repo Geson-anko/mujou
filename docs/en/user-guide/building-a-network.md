@@ -7,7 +7,7 @@ You write a network as a class that inherits from `mujou.Network`. This page sho
 - nest networks
 - branch and merge
 - pass data along a path
-- check the built structure
+- check the structure
 
 How to think about networks is in [Networks](../concepts.md#networks) and [Ports and channels](../concepts.md#ports-and-channels).
 
@@ -23,11 +23,11 @@ In `__init__`, write these three things in order.
 --8<-- "examples/quickstart.py:network"
 ```
 
-Call `super().__init__()` first: the network registers each node, network and port as it is assigned to an attribute, as `nn.Module` registers submodules, and assigning one before `super().__init__()` raises `AttributeError`.
+`mujou.run` reads the attributes of the network when it starts, in the order of assignment, as `nn.Module` finds its submodules: the nodes and networks among them are the children of the network.
 
 !!! warning "Assign each node to its own attribute"
 
-    Nodes put in a list or a dict are not registered and do not become part of the network: assign each node to an attribute of its own.
+    A run does not look into lists, tuples or dicts: `mujou.run` raises `TypeError` for nodes, networks or ports kept in one. Assign each node to an attribute of its own.
 
 ## Connecting
 
@@ -129,21 +129,10 @@ A node that sends forward and receives feedback from several next nodes declares
 
 To pass data along a path with each value, such as the ID or the target of a sample, make it a field of the message (a `DictSpec`), and have each node copy the field into the message it sends. Every node down the path then sees each value together with the data of the very sample it was computed from. Sending the data on a port of its own does not hold this: a node that reads two ports can read them at different moments and pair a value with the data of another sample. `mujou.pc` passes the target of each sample in its `pc.Activity` this way.
 
-## Checking the built structure
+## Checking the structure
 
-`net.build()` checks the structure and the types, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you need not call it just to run. Call it to check the structure before running.
+`mujou.run` checks the structure before it starts any node: a node that did not call `super().__init__()`, a node that holds a node, parts kept in a list, the same node or port at two places, a port connected to one outside the network, and two nodes that hold the same tensor or module. It raises `TypeError` or `ValueError` with the path of the attribute (`"body.l1.prev"`) and starts nothing, so fix the network and run the same instance again. The paths of the nodes are the keys of the state tree:
 
 ```python
---8<-- "examples/branching.py:build"
+--8<-- "examples/branching.py:paths"
 ```
-
-!!! warning "`build()` freezes the network"
-
-    After `build()`:
-
-    - no node, network or port can be assigned to or removed from the nodes and networks of the tree (`RuntimeError`)
-    - the network cannot become part of a bigger network
-
-    So call it only on the network you will run.
-
-If the structure is invalid, `build()` raises `ValueError` with the reason. The API reference lists `Graph` and the causes.

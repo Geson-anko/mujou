@@ -154,3 +154,17 @@
 - [nit] D25 で消すはずの `as_spec` と `Spec` union への cast が /data/geson/mujou/src/mujou/_core/binding.py:26 に残っている。binding.py はステップ 6 でも触るので、そこで消すならステップ 5 の範囲としてはこのままでよい
 - [nit] GIL ありのビルド（`default_workers` の半分にする経路、`Python::attach` での GIL 取得）は手元で検証していない。CI の GIL ありのジョブで通ることを確かめる
 - [nit] 照合メモ（指定どおり `memory/agents/algorithm-reviewer/` に残すべき内容だが、ハーネスの指示によりここに記す）: (1) 局所性。Port の所有の検査は、Driver ごとの `port_owner` と bindings の thread-local `CURRENT` の 1 か所で行っている。capture 中は `port_owner=None` で、state_dict の中からは送受信できない。受信は `from_dlpack(view).to(device, copy=True)` で新しいテンソルを作り、送信は `.detach().to('cpu')` を Rust の copy_from に渡すので、ノードをまたいで計算グラフが繋がることはない。src/mujou の autograd は pc/functional.py:86,162 の `# mujou: local-autograd` だけで、ステップ 5 では変わっていない。(2) 実行のタイマー。Driver はすべて session の `_clock`（その実行の ReadOnlyTimer 1 本）を共有し、`Node.timer` は hook の中だけで `current().clock` を返す。PC の learner も on_update の中でしか読んでいない。(3) 取得・復元・例外時の終了。core の `Member.hooks: Mutex<N>` が 1 ノードの hook（正常終了の後の capture を含む）を直列にするので、Driver の `port_owner` の書き換えや `Context.run` が重なることはない。free-threaded でも安全。CaptureFailed は NetworkError で包まずに送出し、PauseTimeout は TimeoutError に、Failed は `__cause__` 付きの NetworkError にしている（D27 どおり）。start の途中で失敗したときは stop → join の後に送出し、join のエラーも終了として扱う。(4) PC-ALM の数理。ステップ 5 は src/mujou/_core/pc に触れていない。tests/mujou/_core/pc の差分は時間の API の付け替え（`run.step(H, ...)`、slot 名の接頭辞）と helper の移動だけで、許容誤差（1e-12、1e-10、1e-8、既定 1e-14）も期待値も変わっていない。Jacobi・不動点での BP 一致・α=0・スケジュール不変・ノードの分け方の各オラクルは `just run` ですべて通った（784 passed、Rust は 59 + 50 + 28 passed、pyright 0 errors、mkdocs strict ok、exit 0）。全体の確信度: 局所性・タイマー・PC は高、CUDA の経路は中
+
+## orchestrator の裁定（ステップ 9 の後）
+
+- `__slots__` を持つ Component のサブクラスを拒む検査は残し、台帳の K1 に含める（`@dataclass(slots=True)` の Network は子を黙って失う。G1）。`specs/scenarios.md` の K1 の行に書く
+- K24 を Parameter 単位の共有にも広げる。nn.Module などの `state_dict` を持つ値は、`state_dict(keep_vars=True)` の値（Parameter と buffer）の id も同じ表に入れる。ステップ 11 で行う
+- K10・K11 の文言は「this port」「the other」、ホストからの K12 は `repr(port)` で受け入れる（D49 で Port は自分の名前を知らない）。台帳の K10 の「両端を名指しする」を「両端の spec を示す」に改める
+- K14 の文言は、走ったことのある最初のノードを名指しする形を受け入れる。設計書 7 (e) の例を合わせる
+- `Port.initial` / `MultiPort.initial` は公開の読み取り専用 property として受け入れる（3.1 節に足す）
+- K21（木の形）と K17（inputs の書き込み先）は段 2 で行う形を受け入れる。段 2 は新しいオブジェクトだけを作るので、断られた run は同じインスタンスで再実行できる。D2 と台帳の行を合わせる
+- capture の deepcopy は、テンソルを detach してから行う（状態はデータで、計算グラフを持ち越さない）。ステップ 11 で行い、`register_state` の docstring に書く
+- workers に巨大な値を渡して段 3 で OverflowError になるのは、提供シナリオの外として受け入れる
+- test_run.py の分割（6.5 節）はステップ 11 で行う
+- CUDA の生成器の状態を CPU のノードに戻せないこと（device の種類を変えた復元）は、提供シナリオ S5（同じ形に作り直す）の外とし、docs に書く（ステップ 12）
+- 設計書の本文（3.1、D2、5b、7 (e)）の食い違いは、ステップ 13 で specs/architecture.md・specs/scenarios.md を書くときに、この裁定に合わせる

@@ -53,7 +53,8 @@ with mujou.run(a) as run_a, mujou.run(b) as run_b:
 # Both trees are of T, and no update in them is later than T.
 t_ns = tree_a["timer"]["time_ns"]
 assert tree_b["timer"]["time_ns"] == t_ns
-assert tree_a["last_update_ns"][""] <= t_ns and tree_b["last_update_ns"][""] <= t_ns
+for tree in (tree_a, tree_b):
+    assert tree["nodes"][""]["last_update_ns"] <= t_ns
 data = pickle.dumps({"a": tree_a, "b": tree_b})  # save them together
 # --8<-- [end:pause]
 print(f"both states are of t = {t_ns / 1e9:.3f} s")
@@ -61,7 +62,7 @@ print(f"both states are of t = {t_ns / 1e9:.3f} s")
 # Restore one of them in a new run, which goes on from T on a timer of its own
 # (the global timer does not go back to T).
 saved = pickle.loads(data)
-at_save = saved["a"]["nodes"][""]["elapsed"].item()
+at_save = saved["a"]["nodes"][""]["state"]["elapsed"].item()
 restored = Clock()
 with mujou.run(restored, state=saved["a"]) as run:
     # Wait until it has updated after the restore.

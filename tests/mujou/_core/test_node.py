@@ -5,7 +5,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 H = 1e-3  # seconds per step
 
 
-class Probe(Node):
+class Starts(Node):
     """Overrides ``on_start`` without calling the base, and records the thread's
     settings there."""
 
@@ -51,13 +51,13 @@ class TestThreadSetup:
     ):
         # specs: the framework does not change gradient recording; a new thread
         # records gradients, as in plain PyTorch.
-        node = Probe(seed=0)
+        node = Starts(seed=0)
         start_manual(Group(node=node))
         assert node.grad_enabled is True
         assert node.ident not in (None, threading.get_ident())
 
     def test_the_generator_follows_the_seed(self, start_manual: StartManual):
-        a, b, c = Probe(seed=7), Probe(seed=7), Probe(seed=8)
+        a, b, c = Starts(seed=7), Starts(seed=7), Starts(seed=8)
         for node in (a, b, c):
             start_manual(Group(node=node))
         assert a.draws is not None and b.draws is not None and c.draws is not None
@@ -67,7 +67,7 @@ class TestThreadSetup:
         assert not torch.equal(c.draws, expected)
 
     def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
-        node = Probe(seed=0)
+        node = Starts(seed=0)
         run = start_manual(Group(node=node))
         run.state_dict()
         assert not {"on_update", "state_dict"} & set(vars(node))
@@ -76,15 +76,6 @@ class TestThreadSetup:
         node = InitDraws(seed=7)
         expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
         assert torch.equal(node.draws_in_init, expected)
-
-    def test_reading_the_generator_before_the_base_init_raises(self):
-        class Early(Node):
-            def __init__(self) -> None:
-                _ = self.generator
-                super().__init__()
-
-        with pytest.raises(RuntimeError, match=r"super\(\).__init__"):
-            Early()
 
     def test_on_start_continues_the_sequence_from_init(self, start_manual: StartManual):
         node = InitDraws(seed=7)
@@ -177,7 +168,7 @@ class GradSetter(Node):
         self.record("on_stop")
 
 
-class InitDraws(Probe):
+class InitDraws(Starts):
     """Draws from ``generator`` in ``__init__``, right after the base's."""
 
     def __init__(self, seed: int) -> None:
@@ -211,8 +202,8 @@ class Timed(Node):
         self.keep()
 
     @override
-    def state_dict(self) -> object:
-        return self.timer.now()
+    def state_dict(self) -> dict[str, Any]:
+        return {"now": self.timer.now()}
 
 
 class TestTimer:
@@ -258,7 +249,9 @@ class TestTimer:
         run.shutdown()
         virtual.advance(100.0)  # after the end: not part of the state
         tree = run.state_dict()
-        assert tree["nodes"]["node"] == Timestamp(ns=tree["timer"]["time_ns"])
+        assert tree["nodes"]["node"]["state"]["now"] == Timestamp(
+            ns=tree["timer"]["time_ns"]
+        )
         assert tree["timer"]["time_ns"] == 500_000_000
         # The timer a hook kept stays at the end too.
         assert node.timers[-1].now() == Timestamp(ns=500_000_000)
@@ -268,9 +261,9 @@ class TestTimer:
     ):
         class Slow(Timed):
             @override
-            def state_dict(self) -> object:
+            def state_dict(self) -> dict[str, Any]:
                 time.sleep(0.05)  # while the host's other thread reads
-                return self.timer.now()
+                return {"now": self.timer.now()}
 
         node = Slow()
         run = start_manual(Group(node=node), timer=virtual)
@@ -285,7 +278,8 @@ class TestTimer:
         reader.start()
         try:
             for _ in range(2):
-                assert run.state_dict()["nodes"]["node"] == Timestamp(ns=0)
+                state = run.state_dict()["nodes"]["node"]["state"]
+                assert state["now"] == Timestamp(ns=0)
         finally:
             done.set()
             reader.join()
@@ -327,7 +321,7 @@ class TestTimer:
 
 class TestDevice:
     def test_defaults_to_the_cpu(self):
-        assert Probe().device == torch.device("cpu")
+        assert Starts().device == torch.device("cpu")
 
     def test_takes_a_string(self):
         class OnCpu(Node):
@@ -368,27 +362,16 @@ class Ticker(Node):
 
 class TestPeriod:
     def test_defaults_to_ten_milliseconds(self):
-        assert Probe().period == 0.01
+        assert Starts().period == 0.01
 
-    @pytest.mark.parametrize("period", [0.0, 0.5])
+    @pytest.mark.parametrize("period", [0.0, 0.5, math.inf])
     def test_is_kept(self, period: float):
         assert Node(period=period).period == period
 
-    @pytest.mark.parametrize("period", [-0.01, math.inf, math.nan])
-    def test_rejects_what_is_negative_or_not_finite(self, period: float):
-        with pytest.raises(ValueError, match="period"):
+    @pytest.mark.parametrize("period", [-0.01, math.nan])
+    def test_rejects_what_is_negative_or_nan(self, period: float):
+        with pytest.raises(ValueError, match=r"^the period must be >= 0 seconds"):
             Node(period=period)
-
-    def test_rejects_a_bool(self):
-        with pytest.raises(TypeError, match="period"):
-            Node(period=True)
-
-    def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
-        class OnTheClass(Ticker):
-            period = 0.5  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
-
-        with pytest.raises(TypeError, match="reserved"):
-            start(Group(node=OnTheClass(period=0.0)), timer=virtual)
 
     def test_the_node_waits_for_its_period_on_the_timer(
         self, virtual: VirtualTimer, start: Start
@@ -410,6 +393,16 @@ class TestPeriod:
         virtual.advance(1e-9)
         assert node.dts.get(timeout=5.0) == 1e-9
 
+    def test_an_infinite_period_never_updates(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        node = Ticker(period=math.inf)
+        run = start(Group(node=node), timer=virtual)
+        virtual.advance(1e9)
+        with pytest.raises(queue.Empty):
+            node.dts.get(timeout=0.05)
+        run.shutdown()
+
     def test_a_period_below_a_nanosecond_is_one_nanosecond(
         self, virtual: VirtualTimer, start: Start
     ):
@@ -421,26 +414,16 @@ class TestPeriod:
 
 class TestDedicatedThread:
     def test_defaults_to_the_workers(self):
-        assert Probe().dedicated_thread is False
-
-    @pytest.mark.parametrize("dedicated", [1, None, "yes"])
-    def test_rejects_what_is_not_a_bool(self, dedicated: object):
-        with pytest.raises(TypeError, match="dedicated_thread"):
-            Node(dedicated_thread=dedicated)  # pyright: ignore[reportArgumentType]
-
-    def test_is_a_reserved_name(self, virtual: VirtualTimer, start: Start):
-        class OnTheClass(Ticker):
-            dedicated_thread = True  # pyright: ignore[reportIncompatibleMethodOverride, reportAssignmentType]
-
-        with pytest.raises(TypeError, match="reserved"):
-            start(Group(node=OnTheClass(period=0.0)), timer=virtual)
+        assert Starts().dedicated_thread is False
 
     def test_a_dedicated_node_runs_every_hook_on_one_thread_of_its_own(
         self, start_manual: StartManual
     ):
         dedicated = ThreadRecorder(dedicated_thread=True)
         others = [ThreadRecorder() for _ in range(3)]
-        run = start_manual(Group(dedicated, *others))
+        run = start_manual(
+            Group(dedicated=dedicated, **{f"n{k}": o for k, o in enumerate(others)})
+        )
         for _ in range(3):
             run.step(H)
         run.shutdown()
@@ -473,7 +456,7 @@ class Stateful(Node):
     module and values that are not state."""
 
     def __init__(self, fill: float) -> None:
-        super().__init__()
+        super().__init__(seed=int(fill))
         self.out = Port(send=TensorSpec((3,)))
         self.w = torch.full((2, 3), fill)
         self._h = torch.full((3,), fill + 1)
@@ -494,11 +477,15 @@ def at(state: object, *path: str) -> torch.Tensor:
     return state
 
 
+STATEFUL = ["generator", "w", "_h", "p", "linear"]
+
+
 class TestStateCollection:
     def test_collects_tensors_and_modules_by_attribute_name(self):
         node = Stateful(0.0)
         state = node.state_dict()
-        assert list(state) == ["w", "_h", "p", "linear"]
+        assert list(state) == STATEFUL
+        assert torch.equal(at(state, "generator"), node.generator.get_state())
         assert torch.equal(at(state, "w"), node.w)
         assert torch.equal(at(state, "_h"), node._h)  # pyright: ignore[reportPrivateUsage]
         assert torch.equal(at(state, "p"), node.p.detach())
@@ -521,7 +508,7 @@ class TestStateCollection:
         state = pickle.loads(pickle.dumps(node.state_dict()))
         assert torch.equal(at(state, "y"), torch.full((3,), 4.0))
 
-    def test_follows_reassignment_and_deletion(self):
+    def test_is_what_the_attributes_hold_when_taken(self):
         node = Stateful(0.0)
         node.w = torch.ones(1)  # another tensor under the same name
         setattr(node, "_h", None)  # noqa: B010  # not the declared type
@@ -529,11 +516,11 @@ class TestStateCollection:
         setattr(node, "linear", nn.Identity())  # noqa: B010  # a module without state
         setattr(node, "rate", torch.tensor(0.25))  # noqa: B010  # becomes a tensor
         state = node.state_dict()
-        assert list(state) == ["w", "linear", "rate"]
+        assert list(state) == ["generator", "w", "linear", "rate"]
         assert torch.equal(at(state, "w"), torch.ones(1))
         assert state["linear"] == {}
-        node._h = torch.zeros(3)  # pyright: ignore[reportPrivateUsage]  # registered again, at the end
-        assert list(node.state_dict()) == ["w", "linear", "rate", "_h"]
+        node._h = torch.zeros(3)  # pyright: ignore[reportPrivateUsage]  # at its place
+        assert list(node.state_dict()) == ["generator", "w", "_h", "linear", "rate"]
 
     def test_collects_an_object_with_its_own_state_but_not_a_class(self):
         class Counter:
@@ -554,91 +541,12 @@ class TestStateCollection:
 
         source, target = Holder(), Holder()
         source.counter.n = 3
-        assert source.state_dict() == {"counter": {"n": 3}}
+        state = source.state_dict()
+        assert list(state) == ["generator", "counter"]
+        assert state["counter"] == {"n": 3}
         counter = target.counter
-        target.load_state_dict(copy.deepcopy(source.state_dict()))
+        target.load_state_dict(copy.deepcopy(state))
         assert target.counter is counter and counter.n == 3
-
-    def test_a_node_without_tensors_has_an_empty_state(self):
-        node = Probe()  # draws is None until on_start
-        assert node.state_dict() == {}
-        node.load_state_dict({})
-
-    def test_loads_in_place_into_the_same_objects(self):
-        source, target = Stateful(1.0), Stateful(-1.0)
-        before = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
-        target.load_state_dict(copy.deepcopy(source.state_dict()))
-        after = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
-        assert all(a is b for a, b in zip(after, before, strict=True))
-        assert torch.equal(target.w, source.w)
-        assert torch.equal(target._h, source._h)  # pyright: ignore[reportPrivateUsage]
-        assert torch.equal(target.p, source.p)
-        assert torch.equal(target.linear.weight, source.linear.weight)
-        assert torch.equal(target.linear.bias, source.linear.bias)
-        # The parameter is still a leaf that records gradients.
-        assert target.p.requires_grad and target.p.is_leaf
-
-    @pytest.mark.parametrize(
-        ("change", "error", "match"),
-        [
-            (lambda s: s.pop("p"), ValueError, r"missing \['p'\]$"),
-            (
-                lambda s: s.update(extra=[1.0]),
-                ValueError,
-                r"not tensors and not registered \['extra'\]$",
-            ),
-            (lambda s: s.update(p=torch.zeros(2)), ValueError, "'p'.*shape"),
-            (lambda s: s.update(p=[1.0, 2.0, 3.0]), TypeError, "'p'.*not a tensor"),
-            (
-                lambda s: cast(dict[str, object], s["linear"]).pop("bias"),
-                RuntimeError,
-                r"'linear'.*missing \['bias'\]",
-            ),
-            (
-                lambda s: cast(dict[str, object], s["linear"]).update(
-                    weight=torch.zeros(1)
-                ),
-                RuntimeError,
-                r"'linear'.*other shapes \['weight'\]",
-            ),
-        ],
-    )
-    def test_rejects_a_tree_that_does_not_match_and_changes_nothing(
-        self,
-        change: Callable[[dict[str, object]], object],
-        error: type[Exception],
-        match: str,
-    ):
-        source, target = Stateful(1.0), Stateful(-1.0)
-        state = copy.deepcopy(source.state_dict())
-        change(state)
-        with pytest.raises(error, match=match):
-            target.load_state_dict(state)
-        # Nothing changed, also before the item that does not match.
-        assert torch.equal(target.w, torch.full((2, 3), -1.0))
-        assert torch.equal(target.p, torch.full((3,), 1.0))
-        assert torch.equal(target.linear.weight, torch.full((2, 3), 2.0))
-        assert "extra" not in vars(target)
-
-    def test_rejects_a_tree_that_is_not_a_mapping(self):
-        with pytest.raises(TypeError, match="mapping"):
-            Stateful(0.0).load_state_dict([1, 2])
-
-    def test_sets_a_tensor_that_is_not_registered_yet(self):
-        source, target = Stateful(1.0), Stateful(-1.0)
-        setattr(source, "last", torch.arange(3.0))  # noqa: B010  # not declared
-        state = copy.deepcopy(source.state_dict())
-        target.load_state_dict(state)
-        last = getattr(target, "last")  # noqa: B009  # not declared
-        assert torch.equal(last, torch.arange(3.0))
-        assert last is not state["last"]  # a copy
-        assert list(target.state_dict()) == ["w", "_h", "p", "linear", "last"]
-
-    def test_rejects_a_tensor_whose_elements_share_memory(self):
-        source, target = Stateful(1.0), Stateful(-1.0)
-        target.w = torch.zeros(3).expand(2, 3)
-        with pytest.raises(ValueError, match="'w'.*share memory"):
-            target.load_state_dict(copy.deepcopy(source.state_dict()))
 
     def test_does_not_collect_a_property(self):
         class WithProperty(Node):
@@ -654,21 +562,66 @@ class TestStateCollection:
             def w(self, value: torch.Tensor) -> None:
                 self._w = value.tolist()  # stored as a list: not state
 
-        node = WithProperty()
-        assert node.state_dict() == {}
+        assert list(WithProperty().state_dict()) == ["generator"]
 
-    def test_a_shallow_copy_has_its_own_registry(self):
-        node = Stateful(0.0)
-        clone = copy.copy(node)
-        setattr(clone, "z", torch.zeros(1))  # noqa: B010  # not declared
-        del clone.w
-        assert list(node.state_dict()) == ["w", "_h", "p", "linear"]
-        assert list(clone.state_dict()) == ["_h", "p", "linear", "z"]
+    def test_loads_in_place_into_the_same_objects(self):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        before = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
+        target.load_state_dict(copy.deepcopy(source.state_dict()))
+        after = [target.w, target._h, target.p, target.linear.weight]  # pyright: ignore[reportPrivateUsage]
+        assert all(a is b for a, b in zip(after, before, strict=True))
+        assert torch.equal(target.w, source.w)
+        assert torch.equal(target._h, source._h)  # pyright: ignore[reportPrivateUsage]
+        assert torch.equal(target.p, source.p)
+        assert torch.equal(target.linear.weight, source.linear.weight)
+        assert torch.equal(target.linear.bias, source.linear.bias)
+        # The parameter is still a leaf that records gradients.
+        assert target.p.requires_grad and target.p.is_leaf
+        # The generator goes on with the source's sequence.
+        assert torch.equal(
+            torch.rand(3, generator=target.generator),
+            torch.rand(3, generator=source.generator),
+        )
+
+    @pytest.mark.parametrize(
+        ("change", "match"),
+        [
+            (
+                lambda s: s.pop("p"),
+                r"^the state does not match Stateful: missing \['p'\], unexpected "
+                r"\[\]$",
+            ),
+            (
+                lambda s: s.update(extra=torch.ones(1)),
+                r"^the state does not match Stateful: missing \[\], unexpected "
+                r"\['extra'\]$",
+            ),
+            (
+                lambda s: s.update(p=torch.zeros(2)),
+                r"^Stateful\.p: the state has the shape \(2,\), the tensor \(3,\)$",
+            ),
+        ],
+    )
+    def test_rejects_a_state_that_does_not_match(
+        self, change: Callable[[dict[str, object]], object], match: str
+    ):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        state = copy.deepcopy(source.state_dict())
+        change(state)
+        with pytest.raises(ValueError, match=match):
+            target.load_state_dict(state)
+
+    def test_a_module_rejects_a_state_that_does_not_match(self):
+        source, target = Stateful(1.0), Stateful(-1.0)
+        state = copy.deepcopy(source.state_dict())
+        del state["linear"]["bias"]
+        with pytest.raises(RuntimeError, match="bias"):
+            target.load_state_dict(state)
 
 
 class Counting(Stateful):
-    """``Stateful`` with plain values registered as state: ``count`` between the
-    tensors and the module, and ``log`` (a list) at the end."""
+    """``Stateful`` with plain values registered as state: ``count`` and ``log``
+    (a list), after the module."""
 
     def __init__(self, fill: float) -> None:
         super().__init__(fill)
@@ -678,11 +631,14 @@ class Counting(Stateful):
         self.register_state("log")
 
 
+COUNTING = [*STATEFUL, "count", "log"]
+
+
 class TestRegisterState:
-    def test_adds_any_value_to_the_state_in_the_order_of_registration(self):
+    def test_adds_any_value_to_the_state_in_the_order_of_assignment(self):
         node = Counting(2.0)
         state = node.state_dict()
-        assert list(state) == ["w", "_h", "p", "linear", "count", "log"]
+        assert list(state) == COUNTING
         assert state["count"] == 2 and state["log"] == [2.0]
 
     def test_follows_reassignment_of_any_value(self):
@@ -693,27 +649,27 @@ class TestRegisterState:
         setattr(node, "count", None)  # noqa: B010  # still registered
         state = node.state_dict()
         assert state["count"] is None and state["log"] == []
-        assert list(state) == ["w", "_h", "p", "linear", "count", "log"]
+        assert list(state) == COUNTING
 
-    def test_deletion_forgets_it(self):
+    def test_a_deleted_attribute_is_no_state_until_assigned_again(self):
         node = Counting(2.0)
         del node.count
-        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "log"]
-        node.count = 3  # a plain value again: not state until registered
-        assert "count" not in node.state_dict()
+        assert list(node.state_dict()) == [*STATEFUL, "log"]
+        node.count = 3  # registered: state again, at the end
+        assert list(node.state_dict()) == [*STATEFUL, "log", "count"]
 
-    def test_registering_twice_keeps_the_order(self):
+    def test_registering_twice_or_a_collected_name_changes_nothing(self):
         node = Counting(2.0)
         node.register_state("count")
         node.register_state("w")  # a tensor, already collected
-        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "count", "log"]
+        assert list(node.state_dict()) == COUNTING
 
-    def test_registering_a_collected_name_keeps_it_on_a_plain_value(self):
+    def test_a_registered_name_stays_on_a_plain_value(self):
         node = Counting(2.0)
         node.register_state("w")
         setattr(node, "w", None)  # noqa: B010  # not the declared type
         assert node.state_dict()["w"] is None
-        assert list(node.state_dict()) == ["w", "_h", "p", "linear", "count", "log"]
+        assert list(node.state_dict()) == COUNTING
 
     def test_a_registered_tensor_is_restored_in_place(self):
         source, target = Counting(1.0), Counting(-1.0)
@@ -733,30 +689,13 @@ class TestRegisterState:
         assert target.log is not state["log"]  # a copy
         assert torch.equal(target.w, source.w)
 
-    def test_a_missing_value_is_rejected_and_nothing_changes(self):
-        source, target = Counting(1.0), Counting(-1.0)
-        state = copy.deepcopy(source.state_dict())
-        del state["log"]
-        with pytest.raises(ValueError, match=r"missing \['log'\]$"):
-            target.load_state_dict(state)
-        assert target.count == -1 and torch.equal(target.w, torch.full((2, 3), -1.0))
-
-    def test_rejects_a_name_without_an_attribute(self):
-        node = Stateful(0.0)
-        with pytest.raises(AttributeError, match="'steps'.*assign"):
-            node.register_state("steps")
-
-    @pytest.mark.parametrize("name", ["device", "period", "timer"])
-    def test_rejects_a_property(self, name: str):
-        with pytest.raises(ValueError, match=f"'{name}'.*property"):
+    @pytest.mark.parametrize("name", ["steps", "device", "period", "timer"])
+    def test_rejects_a_name_without_an_attribute(self, name: str):
+        # A property is no attribute of the instance either.
+        with pytest.raises(
+            AttributeError, match=rf"^Stateful\.{name} is not assigned: assign it"
+        ):
             Stateful(0.0).register_state(name)
-
-    def test_a_shallow_copy_has_its_own_registry(self):
-        node = Stateful(0.0)
-        clone = copy.copy(node)
-        clone.register_state("rate")
-        assert "rate" not in node.state_dict()
-        assert clone.state_dict()["rate"] == 0.5
 
 
 INPUT = torch.tensor([1.0, -1.0, 0.5])
@@ -765,11 +704,9 @@ TARGET = torch.tensor([0.5, 2.0])
 
 class Learner(Node):
     """Fits ``linear`` to ``TARGET`` by backpropagation inside the node, and relaxes
-    ``_x`` toward 1 with momentum, both in proportion to ``dt``. ``_last`` is first
-    assigned in ``on_update``. ``elapsed``, a plain float registered as state, sums
-    the ``dt``."""
-
-    _last: torch.Tensor | None = None
+    ``_x`` toward 1 with momentum, both in proportion to ``dt``. ``_last``, ``None``
+    until the first update, and ``elapsed``, which sums the ``dt``, are registered
+    as state."""
 
     def __init__(self, fill: float, device: str = "cpu") -> None:
         super().__init__(seed=0, device=device)
@@ -778,13 +715,12 @@ class Learner(Node):
         with torch.no_grad():
             self.linear.weight.fill_(fill)
             self.linear.bias.fill_(fill)
-        self.elapsed = 0.0
-        self.register_state("elapsed")
-
-    @override
-    def on_start(self) -> None:
         self._x = torch.zeros(3, device=self.device)
         self.steps = torch.zeros((), dtype=torch.int64, device=self.device)
+        self._last: torch.Tensor | None = None
+        self.elapsed = 0.0
+        self.register_state("_last")
+        self.register_state("elapsed")
 
     @override
     def on_update(self, dt: float) -> None:
@@ -826,7 +762,7 @@ class TestRestore:
         restored_node = Learner(5.0, device)
         weight = restored_node.linear.weight
         restored = start_manual(Group(node=restored_node), state=tree)
-        x = restored_node._x  # pyright: ignore[reportPrivateUsage]  # made in on_start
+        x = restored_node._x  # pyright: ignore[reportPrivateUsage]
         for _ in range(m):
             restored.step(H)
         actual = restored_node.state_dict()

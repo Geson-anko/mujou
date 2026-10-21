@@ -154,15 +154,16 @@ class TestRuns:
         a, b, fan = Layer(2), Layer(2), Fan()
         a.out.connect(fan.prev)
         b.out.connect(fan.prev)
-        with mujou.testing.run(a, b, fan) as run:
+        with mujou.testing.run(mujou.Group(a=a, b=b, fan=fan)) as run:
             run.step(0.0)
             value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)
 
-    def test_a_run_takes_at_least_one_component(self) -> None:
-        # Without the ignore pyright reports the call, and an unneeded ignore is
-        # reported too: the signature itself asks for a component.
-        with pytest.raises(TypeError, match="component"):
-            mujou.run()  # pyright: ignore[reportCallIssue]
-        with pytest.raises(TypeError, match="component"):
-            mujou.testing.run()  # pyright: ignore[reportCallIssue]
+    def test_a_run_takes_one_root(self) -> None:
+        # Without the ignores pyright reports the calls, and an unneeded ignore
+        # is reported too: the signature itself asks for one root.
+        a, b = Layer(2), Layer(2)
+        with pytest.raises(TypeError, match="positional argument"):
+            mujou.run(a, b)  # pyright: ignore[reportCallIssue]
+        with pytest.raises(TypeError, match="positional argument"):
+            mujou.testing.run(a, b)  # pyright: ignore[reportCallIssue]
