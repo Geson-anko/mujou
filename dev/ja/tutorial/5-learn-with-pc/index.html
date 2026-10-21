@@ -904,6 +904,8 @@
       
         
       
+        
+      
     
     
     
@@ -1132,6 +1134,34 @@
     
   
     更新則
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mujou.pc の仕組み
   
 
     
@@ -1629,10 +1659,11 @@
 <ul>
 <li><code>mask</code> はどのサンプルに目標があるかを表す。<code>mask</code> が False のサンプルは損失に何も足さない。<code>mask</code> がすべて False なら重みは動かない（活動は動く）。走っている同じ鎖を評価するにはこれを使う。切り替える推論モードは無い</li>
 <li><code>pc.Prediction</code> は <code>y_hat</code> を、その元になったサンプルの <code>y</code>・<code>mask</code>・<code>time</code> と組にして持つ。予測はいつも自分の目標と対になる</li>
-<li><code>run.state_dict()["nodes"]["layer0"]["state"]</code> は最初の層の状態。活動 <code>h</code>、双対変数 <code>lam</code>（平衡点では誤差逆伝播法の credit）、モジュール、クロックと、予測が跳んだときに <code>h</code> を動かすための値（<code>mu</code>・<code>jump</code>・<code>jumped</code>・<code>jumps</code>・<code>seen_jumps</code>。説明は <a href="../../topics/pc/#%E8%87%AA%E5%88%86%E3%81%AE%E3%83%8E%E3%83%BC%E3%83%89%E3%82%92%E6%9B%B8%E3%81%8F">PC-ALM</a>）を持つ</li>
+<li><code>run.state_dict()["nodes"]["layer0"]["state"]</code> は最初の層の状態。活動 <code>h</code>、双対変数 <code>lam</code>（平衡点では誤差逆伝播法の credit）、モジュール、クロックと、予測が跳んだときに <code>h</code> を動かすための値（<code>mu</code>・<code>jump</code>・<code>jumped</code>・<code>jumps</code>・<code>seen_jumps</code>。説明は <a href="../../topics/pc-concepts/#jumps">mujou.pc の仕組み</a>）を持つ</li>
 </ul>
 <h2 id="次へ">次へ<a class="headerlink" href="#次へ" title="Permanent link">&para;</a></h2>
 <ul>
+<li>部品のつながりと、ノードが 1 回の更新で行うこと: <a href="../../topics/pc-concepts/">mujou.pc の仕組み</a></li>
 <li><code>pc.Chain</code> で MNIST を学ぶ 784-256-256-10 のネットワークと BP の比較: <code>examples/mnist/</code>（<code>uv run python examples/mnist/main.py</code>）。説明は <a href="../../topics/pc/#mnist">PC-ALM</a></li>
 <li>時定数と <code>learn_interval</code> の決め方、落とし穴、自作のノード: <a href="../../topics/pc/">PC-ALM</a></li>
 </ul>

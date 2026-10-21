@@ -806,6 +806,8 @@
       
         
       
+        
+      
     
     
     
@@ -1034,6 +1036,34 @@
     
   
     Update Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How mujou.pc Works
   
 
     
@@ -1587,6 +1617,11 @@
 <td><a href="../tutorial/5-learn-with-pc/">5. Learn with PC-ALM</a></td>
 </tr>
 <tr>
+<td>Write a node of PC-ALM of your own (with two inputs)</td>
+<td><code>pc_merge.py</code></td>
+<td><a href="../topics/pc/#nodes-of-your-own">PC-ALM</a></td>
+</tr>
+<tr>
 <td>Learn MNIST with PC-ALM, and compare it with BP</td>
 <td><code>mnist/</code></td>
 <td><a href="../topics/pc/#mnist">PC-ALM</a></td>
@@ -1627,6 +1662,7 @@
 <li><code>online_learning.py</code>: a teacher sends batches from y = a x + b with the <code>a</code> the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again</li>
 <li><code>feedback_alignment.py</code>: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with <code>pc.LearnClock</code></li>
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> and <code>pc.show</code> learn a regression from a stream of batches, measured before each batch is learned from</li>
+<li><code>pc_merge.py</code>: <code>Merge</code>, a node of PC-ALM with two inputs written with <code>pc.functional</code> and <code>pc.LearnClock</code>, joins two towers that learn a regression</li>
 <li><code>mnist/</code>: a 784-256-256-10 network learns MNIST as a <code>pc.Chain</code>, and the same network learns by BP from the same initial weights on the same batches. <code>main.py</code> is the entry point, <code>data.py</code> loads the data, <code>metrics.py</code> measures, <code>bp.py</code> trains the BP baseline and <code>watch.py</code> counts the <code>dt</code> of the nodes (<code>--watch</code>)</li>
 <li><code>save_and_restore.py</code>: takes the state with <code>run.state_dict()</code>, saves it with <code>torch.save</code>, and resumes it in a new instance with <code>mujou.run(..., state=...)</code>, on a timer of the resumed run's own</li>
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code>, and the paths of the nodes (<code>"enc.scale"</code>)</li>

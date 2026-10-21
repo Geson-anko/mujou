@@ -808,6 +808,8 @@
       
         
       
+        
+      
     
     
     
@@ -1036,6 +1038,34 @@
     
   
     更新則
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mujou.pc の仕組み
   
 
     
@@ -1589,6 +1619,11 @@
 <td><a href="../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a></td>
 </tr>
 <tr>
+<td>PC-ALM のノードを自分で書く（入力が 2 つ）</td>
+<td><code>pc_merge.py</code></td>
+<td><a href="../topics/pc/#%E8%87%AA%E5%88%86%E3%81%AE%E3%83%8E%E3%83%BC%E3%83%89%E3%82%92%E6%9B%B8%E3%81%8F">PC-ALM</a></td>
+</tr>
+<tr>
 <td>PC-ALM で MNIST を学び、BP と比べる</td>
 <td><code>mnist/</code></td>
 <td><a href="../topics/pc/#mnist">PC-ALM</a></td>
@@ -1629,6 +1664,7 @@
 <li><code>online_learning.py</code>: 教師がホストの書いて変える <code>a</code> で y = a x + b のバッチを送る。学習するノードは新しいバッチごとに、前のバッチからの時間だけ、素の PyTorch の autograd で学ぶ。ホストは損失が下がり、跳ね上がり、また下がるのを追う</li>
 <li><code>feedback_alignment.py</code>: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、<code>pc.LearnClock</code> によるサンプルごとに 1 回の学習</li>
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> と <code>pc.show</code> で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る</li>
+<li><code>pc_merge.py</code>: 入力を 2 つ持つ PC-ALM のノード <code>Merge</code> を <code>pc.functional</code> と <code>pc.LearnClock</code> で書き、2 本の塔を合流させて回帰を学ぶ</li>
 <li><code>mnist/</code>: 784-256-256-10 のネットワークを <code>pc.Chain</code> で MNIST に学ばせ、同じネットワークを同じ初期重みとバッチで BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読み、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させ、<code>watch.py</code> がノードの <code>dt</code> を数える（<code>--watch</code>）</li>
 <li><code>save_and_restore.py</code>: <code>run.state_dict()</code> で状態を取得し、<code>torch.save</code> で保存し、新しいインスタンスに <code>mujou.run(..., state=...)</code> で再開する。再開した実行は専用のタイマーで走る</li>
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code> と、ノードのパス（<code>"enc.scale"</code>）の付き方</li>

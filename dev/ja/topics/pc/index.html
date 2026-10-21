@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/topics/pc/">
       
       
-        <link rel="prev" href="../update-rules/">
+        <link rel="prev" href="../pc-concepts/">
       
       
         <link rel="next" href="../../examples/">
@@ -810,6 +810,8 @@
       
         
       
+        
+      
     
     
     
@@ -1058,6 +1060,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mujou.pc の仕組み
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1194,6 +1224,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="自分のノードを書く">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#例-入力が-2-つのノード" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        例: 入力が 2 つのノード
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1612,6 +1659,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="自分のノードを書く">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#例-入力が-2-つのノード" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        例: 入力が 2 つのノード
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -1902,17 +1966,72 @@
 <p><code>max_dt</code> ではこれを防げない。<code>max_dt</code> は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。</p>
 </div>
 <h2 id="自分のノードを書く">自分のノードを書く<a class="headerlink" href="#自分のノードを書く" title="Permanent link">&para;</a></h2>
-<p><code>mujou.pc.functional</code> に、ノードを構成する計算がある。<code>vjp</code> と <code>loss_vjp</code>（ノードのエネルギーの勾配）、<code>relax_</code>（<code>h</code> と <code>lam</code> の 1 ステップ）、<code>learn_</code>（重みの更新）。複数の入力を持つノードのように <code>pc.Layer</code> で書けないノードは、これらで書く。</p>
+<p><code>mujou.pc.functional</code> に、ノードを構成する計算がある。<code>vjp</code> と <code>loss_vjp</code>（ノードのエネルギーの勾配）、<code>relax_</code>（<code>h</code> と <code>lam</code> の 1 ステップ）、<code>learn_</code>（重みの更新）。複数の入力を持つノードのように <code>pc.Layer</code> で書けないノードは、これらで書く。ここに出てくる名前（<code>mu</code>・<code>lam</code>・<code>g_in</code>・<code>jumps</code>・<code>Tick</code>）は <a href="../pc-concepts/">mujou.pc の仕組み</a>で説明している。</p>
 <ol>
 <li>クロックを属性に置く: <code>self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)</code>。<code>max_dt</code> は <code>pc.Layer</code> と同じく <code>tau</code> の既定になる。それだけでノードの状態に入る</li>
 <li>毎回の更新で <code>t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)</code> を呼ぶ</li>
+<li><code>pc.functional.vjp</code> で予測 <code>mu</code>、<code>g_in</code>、学ぶなら <code>g_theta</code> を求め、<code>g_in</code> を前のノードへ送る</li>
 <li><code>t.new</code> が True か、活動の <code>jumps</code> が前に読んだものと違えば、<code>h</code> を予測と一緒に 1 回動かす。前回の更新の <code>mu_last</code> で <code>h &lt;- mu + (h - mu_last)</code> とし、自分の <code>jumps</code> に 1 を足す。<code>mu</code>、前に読んだ <code>jumps</code>、自分の <code>jumps</code> は状態に入れる（素の数は <code>register_state</code>）</li>
 <li><code>pc.functional.relax_(..., t.dt, tau)</code> で活動を動かす</li>
 <li><code>h</code> を <code>pc.Activity</code> で送る。自分の <code>jumps</code> と、受け取った活動の <code>y</code>・<code>mask</code>・<code>time</code> を組にする</li>
 <li><code>t.learn</code> なら <code>pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)</code> で学ぶ</li>
 </ol>
-<p>手順 3 を抜くと、ノードは <code>pc.Layer</code> と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 <code>h - mu</code> に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした <code>mu</code> の跳びの分も <code>h</code> を動かし、<code>jumps</code> に 1 を足す。<code>pc.Layer</code> はどちらも 1 回後の更新で行う（docstring に説明がある）。</p>
+<p>手順 4 を抜くと、ノードは <code>pc.Layer</code> と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 <code>h - mu</code> に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした <code>mu</code> の跳びの分も <code>h</code> を動かし、<code>jumps</code> に 1 を足す。<code>pc.Layer</code> はどちらも 1 回後の更新で行う（docstring に説明がある）。</p>
 <p><code>mujou.pc</code> のノードとつなぐには、Port の spec に前のノードの <code>act_spec</code> か <code>pc.activity_spec(h, y, batch)</code> を使う。引数は <a href="../../api/pc/">API リファレンス</a>にある。PC 以外の、ノードをまたいで学ぶ則は<a href="../update-rules/">更新則</a>を参照。</p>
+<h3 id="例-入力が-2-つのノード">例: 入力が 2 つのノード<a class="headerlink" href="#例-入力が-2-つのノード" title="Permanent link">&para;</a></h3>
+<p><code>examples/pc_merge.py</code> の <code>Merge</code> は 2 本の塔（<code>pc.Layer</code>）の活動をつないだものから予測する。毎回の更新で学ぶ（<code>learn_interval=None</code>）ので、重みの跳びの処理は要らない。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Merge</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">"""``mu = module(cat(h_a, h_b))``: a node of PC-ALM with two inputs."""</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span> <span class="n">a</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">Activity</span><span class="p">],</span> <span class="n">b</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">Activity</span><span class="p">]</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">TAU</span><span class="o">.</span><span class="n">period</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LearnClock</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">TAU</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">a</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"h"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">b</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"h"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">h</span> <span class="o">=</span> <span class="n">TensorSpec</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">)))</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">(),</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">(),</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">()</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">jumps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seen</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># the jumps it sent, and read from a, b</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"jumps"</span><span class="p">)</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"seen"</span><span class="p">)</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">activity_spec</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"y"</span><span class="p">],</span> <span class="n">B</span><span class="p">)</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">a</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"h"</span><span class="p">],</span> <span class="n">recv</span><span class="o">=</span><span class="n">a</span><span class="p">)</span>  <span class="c1"># sends back g_in of h_a</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">b</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">"h"</span><span class="p">],</span> <span class="n">recv</span><span class="o">=</span><span class="n">b</span><span class="p">)</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">MultiPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">recv</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">ns</span><span class="p">)</span>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>        <span class="c1"># A new sample or a jump of either input: h jumps with mu, keeping r.</span>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>        <span class="n">seen</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="s2">"jumps"</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="s2">"jumps"</span><span class="p">])]</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>        <span class="n">jump</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seen</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">new</span> <span class="ow">or</span> <span class="n">seen</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seen</span><span class="p">,</span> <span class="n">seen</span>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>        <span class="n">labeled</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># a sample without a target sends no credit</span>
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>        <span class="n">params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>        <span class="n">mu</span><span class="p">,</span> <span class="n">g_in</span><span class="p">,</span> <span class="n">g_theta</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">vjp</span><span class="p">(</span>
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">a</span><span class="p">[</span><span class="s2">"h"</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="s2">"h"</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span>
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>            <span class="k">lambda</span> <span class="n">mu</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">labeled</span><span class="p">,</span> <span class="p">(</span><span class="n">r</span> <span class="k">if</span> <span class="n">jump</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>            <span class="n">params</span><span class="p">,</span>
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>        <span class="p">)</span>
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>        <span class="n">g_a</span><span class="p">,</span> <span class="n">g_b</span> <span class="o">=</span> <span class="n">g_in</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_a</span><span class="p">)</span>
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_b</span><span class="p">)</span>
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>        <span class="k">if</span> <span class="n">jump</span><span class="p">:</span>
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">r</span>
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">jumps</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>        <span class="n">g</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">))</span>
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>        <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">relax_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">TAU</span><span class="p">)</span>
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">=</span> <span class="n">mu</span>
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>        <span class="c1"># The y, mask and time of a go on with h.</span>
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="o">**</span><span class="n">a</span><span class="p">,</span> <span class="s2">"h"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="s2">"jumps"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jumps</span><span class="p">)})</span>
+<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a>        <span class="k">if</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>  <span class="c1"># nothing to learn from samples without a target</span>
+<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a>            <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">learn_</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">g_theta</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">elapsed</span><span class="p">,</span> <span class="n">TAU</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+</code></pre></div>
+<p><code>pc.Layer</code> との違いは 2 つだけ。入力ごとに Port を持って <code>g_in</code> を分けて送り返すことと、どちらかの入力の <code>jumps</code> が変われば <code>h</code> を動かすこと（手順 4）。</p>
 
 
 
