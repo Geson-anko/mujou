@@ -30,8 +30,8 @@ class TestPublicNames:
         # annotates with its types, so it comes with mujou.
         script = (
             "import sys, mujou; "
-            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc') "
-            "if m in sys.modules])"
+            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc', "
+            "'mujou.viz') if m in sys.modules])"
         )
         done = subprocess.run(
             [sys.executable, "-c", script], capture_output=True, text=True, check=True
@@ -81,3 +81,11 @@ class TestTypesPublicNames:
         import mujou.types
 
         assert sorted(mujou.types.__all__) == ["Device", "Message", "Size"]
+
+
+class TestVizPublicNames:
+    def test_exports(self):
+        # The names of mujou.viz; a change here is a change of the public API.
+        import mujou.viz
+
+        assert mujou.viz.__all__ == ["to_html"]
