@@ -519,6 +519,30 @@ class TestStateCollection:
         node._h = torch.zeros(3)  # pyright: ignore[reportPrivateUsage]  # registered again, at the end
         assert list(node.state_dict()) == ["w", "linear", "rate", "_h"]
 
+    def test_collects_an_object_with_its_own_state_but_not_a_class(self):
+        class Counter:
+            def __init__(self) -> None:
+                self.n = 0
+
+            def state_dict(self) -> dict[str, int]:
+                return {"n": self.n}
+
+            def load_state_dict(self, state: Mapping[str, int]) -> None:
+                self.n = state["n"]
+
+        class Holder(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.counter = Counter()
+                self.kind = Counter  # a class: its methods are no state
+
+        source, target = Holder(), Holder()
+        source.counter.n = 3
+        assert source.state_dict() == {"counter": {"n": 3}}
+        counter = target.counter
+        target.load_state_dict(copy.deepcopy(source.state_dict()))
+        assert target.counter is counter and counter.n == 3
+
     def test_a_node_without_tensors_has_an_empty_state(self):
         node = Probe()  # draws is None until on_start
         assert node.state_dict() == {}

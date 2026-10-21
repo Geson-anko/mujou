@@ -33,12 +33,12 @@ LAYERS: list[set[str]] = [
     {"mujou", "mujou.time", "mujou.testing", "mujou.typing"},
     {
         "mujou._core.pc",
+        "mujou._core.pc.clock",
         "mujou._core.pc.messages",
         "mujou._core.pc.losses",
         "mujou._core.pc.time_constants",
     },
     {"mujou._core.pc.functional"},
-    {"mujou._core.pc.learner"},
     {"mujou._core.pc.input", "mujou._core.pc.layer", "mujou._core.pc.output"},
     {"mujou.pc.functional"},
     {"mujou.pc"},

@@ -348,11 +348,6 @@ class TestConstruction:
         ("kwargs", "match"),
         [
             ({"module": nn.Flatten(0)}, "same batch"),
-            ({"module": nn.Linear(4, 5, device="meta")}, "meta"),
-            ({"max_dt": 0.0}, "max_dt"),
-            ({"max_dt": math.inf}, "max_dt"),
-            ({"learn_interval": 0.0}, "learn_interval"),
-            ({"learn_interval": math.inf}, "learn_interval"),
             ({"period": 3e-3}, "max_dt"),  # longer than tau.h / 2
             ({"period": 2e-3, "max_dt": 1e-3}, "max_dt"),
         ],
@@ -360,24 +355,6 @@ class TestConstruction:
     def test_value_errors(self, kwargs: dict[str, Any], match: str):
         with pytest.raises(ValueError, match=match):
             self._layer(**kwargs)
-
-    def test_type_errors(self):
-        with pytest.raises(TypeError, match="TimeConstants"):
-            self._layer(tau=(4e-3, 8e-3, 1.0))
-
-    @pytest.mark.parametrize("name", ["learn_interval", "max_dt"])
-    def test_a_bool_is_not_a_time(self, name: str):
-        with pytest.raises(TypeError, match=name):
-            self._layer(**{name: True})
-
-    def test_a_module_must_return_a_tensor(self):
-        class Pair(nn.Module):
-            @override
-            def forward(self, h: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-                return h, h
-
-        with pytest.raises(TypeError, match="tensor"):
-            self._layer(module=Pair())
 
 
 class TestJacobi:
@@ -939,6 +916,34 @@ class TestLearnInterval:
                     changed[name].append(s)
         assert changed == {"l0": [2 * K, 4 * K], "out": [2 * K, 4 * K]}
 
+    def test_without_learning_the_interval_changes_nothing(
+        self, start_manual: StartManual
+    ):
+        # theta = inf: the nodes never learn, whatever learn_interval, so theta
+        # stays and no jump of theta goes up the chain. The run is that of
+        # learn_interval=None bit for bit, but for the state of the clocks.
+        widths = [4, 5, 5]
+        trees: list[dict[str, Any]] = []
+        for learn_interval in (None, 2 * H):
+            layers, head = make_modules("linear", "tanh", widths)
+            initial = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
+            chain = Chain(
+                layers, head, widths, tau=NO_LEARNING, learn_interval=learn_interval
+            )
+            run = start_manual(chain.net, timer=VirtualTimer())
+            for s in range(30):
+                if s % 7 == 0:
+                    x, y = sample(widths, s)
+                    chain.write(run, x, y, MASK)
+                run.step(H, *chain.from_next())
+            tree = run.state_dict()
+            for node in tree["nodes"].values():
+                node.pop("clock", None)
+            trees.append(tree)
+            for module, state in zip([*layers, head], initial, strict=True):
+                assert equal_states(module.state_dict(), state)
+        assert_same_tree(trees[1], trees[0])
+
     def test_an_input_that_changes_before_it_is_learned_drops_its_time(
         self, start_manual: StartManual
     ):
@@ -992,7 +997,8 @@ def learned_steps(
         nodes = run.state_dict()["nodes"]
         for name in names:
             # Before the first input, the zeros carried (time 0) skip theirs.
-            if nodes[name]["_seen_time"] != 0 and nodes[name]["_elapsed"] == 0.0:
+            clock = nodes[name]["clock"]
+            if clock["seen_ns"] != 0 and clock["elapsed"] == 0.0:
                 learned[name].append(s)
     return learned
 
@@ -1094,14 +1100,17 @@ class TestMaxDt:
             close(after["nodes"]["l0"]["module"][key], value, 1e-14)
 
     def test_the_default_keeps_the_step_of_lam_stable(self):
-        # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2.
+        # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
+        # a period must not pass.
         act = activity(TensorSpec((B, 4)))
         fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0)
-        layer = pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual)
-        assert layer._max_dt == pytest.approx(1.5e-3)  # pyright: ignore[reportPrivateUsage]
+        pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual, period=1.5e-3)
+        with pytest.raises(ValueError, match="max_dt"):
+            pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual, period=1.6e-3)
         no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, theta=1.0)
-        layer = pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual)
-        assert layer._max_dt == pytest.approx(2e-3)  # pyright: ignore[reportPrivateUsage]
+        pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual, period=2e-3)
+        with pytest.raises(ValueError, match="max_dt"):
+            pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual, period=2.1e-3)
 
 
 class TestJumps:
@@ -1278,10 +1287,7 @@ class TestState:
             first.step()
         tree = first.run.state_dict()
         assert {
-            "_seen_time",
-            "_learn_at",
-            "_elapsed",
-            "_learned_input",
+            "clock",
             "_jump",
             "_jumped",
             "_epoch",

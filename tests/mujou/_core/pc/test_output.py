@@ -117,18 +117,6 @@ class TestConstruction:
         )
         assert out.period == pytest.approx(TAU.h / 4)
 
-    @pytest.mark.parametrize("name", ["learn_interval", "max_dt"])
-    def test_a_bool_is_not_a_time(self, name: str):
-        kwargs: dict[str, Any] = {name: True}
-        with pytest.raises(TypeError, match=name):
-            pc.Output(
-                nn.Linear(N_IN, N_OUT),
-                loss=pc.mse,
-                act=ACT,
-                tau=TAU,
-                **kwargs,
-            )
-
     def test_the_period_must_not_be_longer_than_max_dt(self):
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(

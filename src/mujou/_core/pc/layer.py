@@ -1,19 +1,21 @@
 """The hidden node of ``mujou.pc``."""
 
+import math
 from typing import override
 
 import torch
 from torch import nn
 
+from mujou._core.node import Node
+from mujou._core.pc.clock import LearnClock
 from mujou._core.pc.functional import learn_, relax_, rows, vjp
-from mujou._core.pc.learner import Learner
 from mujou._core.pc.messages import Activity, activity_spec
 from mujou._core.pc.time_constants import TimeConstants
 from mujou._core.port import NextPort, PrevPort
 from mujou._core.spec import DictSpec, TensorSpec
 
 
-class Layer(Learner):
+class Layer(Node):
     r"""A node that wraps ``module`` as one constraint ``h = f(h_in; theta)`` of
     PC-ALM.
 
@@ -78,11 +80,13 @@ class Layer(Learner):
     9. when it learns, moves ``theta`` by the time since its last update
        (``functional.learn_``) and computes the jump of ``mu`` it made.
 
-    It learns in its first update once ``learn_interval`` seconds have passed
-    since the host wrote the input (its ``time``, on the run's time),
-    and then every ``learn_interval`` seconds while the input stays, but never
-    in the update that first sees an input (its ``delta`` is still that of the
-    input before); with ``learn_interval=None``, in every update. The nodes
+    Its ``clock`` (a ``LearnClock``) tells when it learns: in its first update
+    once ``learn_interval`` seconds have passed since the host wrote the input
+    (its ``time``, on the run's time), and then every ``learn_interval``
+    seconds while the input stays, but never in the update that first sees an
+    input (its ``delta`` is still that of the input before); with
+    ``learn_interval=None``, in every update; with ``tau.theta`` infinite,
+    never (the clock gets ``learn_interval=math.inf``). The nodes
     read the one timer of the run, so the nodes on a path learn at about the
     same time, however deep they are, and each from the relaxed ``delta`` of
     the same input. ``learn_interval`` must leave the credit time to go down the
@@ -122,8 +126,8 @@ class Layer(Learner):
     the last update (``"_mu"``), the jump of ``theta`` still to add to ``h``
     (``"_jump"``, and ``"_jumped"`` whether there is one), the ``epoch`` it
     sends and the last one it read (``"_epoch"``, ``"_seen_epoch"``) and when to
-    learn (``"_seen_time"``, ``"_learn_at"``, ``"_elapsed"``,
-    ``"_learned_input"``). To watch the node while it runs, read them there:
+    learn (``"clock"``, the state of the ``LearnClock``). To watch the node
+    while it runs, read them there:
     ``Run.state_dict()`` pauses the run, whereas reading ``module``, ``h`` or
     ``lam`` from the host's thread races with the node's updates in place.
     ``act`` is the spec of what the node sends, for the next node.
@@ -152,7 +156,7 @@ class Layer(Learner):
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
             at least about ``2 * depth * period``, or deep chains can diverge.
-            ``None`` updates in every ``on_update``.
+            ``None`` updates in every ``on_update``, ``math.inf`` never.
         period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
             It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
@@ -160,14 +164,11 @@ class Layer(Learner):
         device: Where the node computes.
 
     Raises:
-        TypeError: ``tau`` is not a ``TimeConstants``, ``module`` does not
-            return a tensor, or ``learn_interval`` or ``max_dt`` is a ``bool``.
         ValueError: The first dimension of the output of ``module`` is not the
-            batch of ``act``; a parameter or buffer of ``module`` is not on
-            ``device``; ``learn_interval`` or ``max_dt`` is neither ``None``
-            nor finite and positive; or ``period`` is longer than ``max_dt``.
-            ``module`` raises as PyTorch does when it does not take the ``h``
-            of ``act``.
+            batch of ``act``, or ``LearnClock`` raises: ``learn_interval`` is
+            neither ``None`` nor > 0, ``max_dt`` is not > 0, or ``period`` is
+            longer than ``max_dt``. ``module`` raises as PyTorch does when it
+            does not take the ``h`` of ``act`` on ``device``.
     """
 
     def __init__(
@@ -181,16 +182,22 @@ class Layer(Learner):
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        super().__init__(
-            module,
-            act=act,
-            tau=tau,
-            learn_interval=learn_interval,
-            period=period,
-            max_dt=max_dt,
-            device=device,
+        super().__init__(device=device, period=tau.h / 4 if period is None else period)
+        self._tau = tau
+        self._batch = act.specs["y"].shape[0]
+        self.clock = LearnClock(
+            period=self.period,
+            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
+            # The explicit Euler step of h then lam is stable for dt / tau.h <= 1/2
+            # and dt / tau.lam <= 3 (specs/pc-module.md, "dt が伸びたとき").
+            max_dt=min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt,
         )
-        mu = self._probe()
+        self.module = module
+        # Frozen parameters do not learn.
+        self._params = [p for p in module.parameters() if p.requires_grad]
+        h_in = act.specs["h"]
+        with torch.no_grad():
+            mu = module(h_in.zeros(device=self.device))
         self.h = torch.zeros_like(mu)
         self.lam = torch.zeros_like(mu)
         # The prediction of the last update, from which h moves with a new mu.
@@ -206,13 +213,12 @@ class Layer(Learner):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
         self.act = activity_spec(out, act.specs["y"])
-        self.prev = PrevPort(send=self._input, recv=act)
+        self.prev = PrevPort(send=h_in, recv=act)
         self.next = NextPort(send=self.act, recv=out)
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
-        dt = self._cap(dt)
         activity = self.prev.recv()
         h_in = activity["h"]  # (B, *in)
         epoch_in = int(activity["epoch"])
@@ -220,10 +226,9 @@ class Layer(Learner):
         for g_next in self.next.recv().values():
             g += g_next
         mask = activity["mask"]  # (B,)
-        new, learn = self._tick(dt, int(activity["time"]))
-        if learn and not mask.any():
-            self._learned()  # nothing to learn from this input: drop the time
-            learn = False
+        tick = self.clock.tick(dt, int(activity["time"]), self.timer.now().ns)
+        # Nothing to learn from an input without a target: its time is dropped.
+        learn = tick.learn and bool(mask.any())
         # A sample without a target sends back no credit and adds nothing to
         # g_theta: its delta may be left over from an earlier input.
         labeled = rows(mask, self.h)
@@ -233,7 +238,7 @@ class Layer(Learner):
             h.add_(self._jump)
             self._jumped = False
         # A new sample, or h_in jumped: move h with mu, once.
-        reanchor = new or epoch_in != self._seen_epoch
+        reanchor = tick.new or epoch_in != self._seen_epoch
         self._seen_epoch = epoch_in
 
         def delta(mu: torch.Tensor) -> torch.Tensor:
@@ -246,10 +251,10 @@ class Layer(Learner):
         self.prev.send(g_in)
         if reanchor:
             h.sub_(mu_last).add_(mu)  # h <- mu + (h - mu_last)
-        relax_(h, lam, mu, g, dt, self._tau)
+        relax_(h, lam, mu, g, tick.dt, self._tau)
         mu_last.copy_(mu)
         # The jump of theta is discrete only when it learns at intervals.
-        if reanchor or (jumped and self._interval_ns is not None):
+        if reanchor or (jumped and self.clock.discrete):
             self._epoch += 1
         epoch = torch.tensor(self._epoch, dtype=torch.int64, device=self.device)
         self.next.send(
@@ -262,8 +267,7 @@ class Layer(Learner):
             }
         )
         if learn:
-            learn_(self._params, g_theta, self._elapsed, self._tau, self._batch)
-            self._learned()
+            learn_(self._params, g_theta, tick.elapsed, self._tau, self._batch)
             with torch.no_grad():
                 moved = self.module(h_in)  # mu' = f(h_in; theta_new)
             torch.sub(moved, mu, out=self._jump)

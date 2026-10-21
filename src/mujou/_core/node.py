@@ -4,7 +4,7 @@ import copy
 import inspect
 import math
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeIs, cast
 
 import torch
 from torch import nn
@@ -60,8 +60,10 @@ class Node(Component):
       below).
 
     The node collects its state by itself, as ``nn.Module`` does: every attribute
-    assigned a ``torch.Tensor`` (``nn.Parameter`` included) or an ``nn.Module``,
-    whether or not its name starts with ``_``, is registered under its name.
+    assigned a ``torch.Tensor`` (``nn.Parameter`` included) or an object with
+    ``state_dict`` and ``load_state_dict`` (an ``nn.Module``, a
+    ``pc.LearnClock``; not a class), whether or not its name starts with ``_``,
+    is registered under its name.
     Assigning any other value (``None`` too) under that name, or ``del``, removes
     it. Ports, numbers, lists and dicts of tensors are not collected, and neither
     are properties (what a setter stores is, under its own name). To add any
@@ -259,7 +261,7 @@ class Node(Component):
         def __setattr__(self, name: str, value: object) -> None:
             super().__setattr__(name, value)
             names = _state_names(self)
-            if isinstance(value, _STATE_TYPES):
+            if _is_state(value):
                 # A property is not registered: what its setter stores is. Looked
                 # up only for a new name, as the lookup walks the MRO.
                 if name not in names and not is_data_descriptor(type(self), name):
@@ -337,9 +339,9 @@ class Node(Component):
 
     def state_dict(self) -> Any:  # Any: an override returns any picklable object.
         """Return the collected state: a dict with, for each registered attribute
-        in the order of registration, the tensor ``detach``-ed, the module's
-        ``state_dict()`` or any other value as it is (see ``register_state``),
-        under the attribute's name.
+        in the order of registration, the tensor ``detach``-ed, the object's
+        ``state_dict()`` (a module's, say) or any other value as it is (see
+        ``register_state``), under the attribute's name.
 
         The tensors share memory with the attributes (the framework copies the
         tree). ``requires_grad`` and ``.grad`` are not part of the state, as in
@@ -353,7 +355,7 @@ class Node(Component):
             name: value.detach()
             if isinstance(value, torch.Tensor)
             else value.state_dict()
-            if isinstance(value, nn.Module)
+            if _has_state(value)
             else value
             for name, value in _state_items(self)
         }
@@ -361,7 +363,8 @@ class Node(Component):
     def load_state_dict(self, state: object) -> None:
         """Restore ``state`` (from the default ``state_dict``) into the
         registered attributes: ``copy_`` into each tensor and ``load_state_dict``
-        into each module in place, without recording gradients, and assign a
+        into each module (any object with ``state_dict`` and ``load_state_dict``)
+        in place, without recording gradients, and assign a
         ``copy.deepcopy`` of the saved value to any other attribute registered
         with ``register_state``.
 
@@ -417,8 +420,8 @@ class Node(Component):
             for name, value in items:
                 if isinstance(value, torch.Tensor):
                     value.copy_(cast(torch.Tensor, tree[name]))
-                elif isinstance(value, nn.Module):
-                    value.load_state_dict(cast(Mapping[str, Any], tree[name]))
+                elif _has_state(value):
+                    value.load_state_dict(tree[name])
                 else:
                     setattr(self, name, copy.deepcopy(tree[name]))
             for key, value in tree.items():
@@ -482,7 +485,26 @@ def _check_device(device: torch.device) -> torch.device:
 # The types of the values collected into the state. A tuple, not a union:
 # isinstance checks a tuple several times faster, and Node.__setattr__ checks every
 # assignment.
-_STATE_TYPES: Final = (torch.Tensor, nn.Module)
+class _Stateful(Protocol):
+    def state_dict(self) -> Any: ...
+    def load_state_dict(self, state: Any, /) -> Any: ...
+
+
+def _has_state(value: object) -> TypeIs[_Stateful]:
+    """Whether ``value`` has a state of its own: it has ``state_dict`` and
+    ``load_state_dict`` and is not a class (whose methods these would be)."""
+    return (
+        not isinstance(value, type)
+        and hasattr(value, "state_dict")
+        and hasattr(value, "load_state_dict")
+    )
+
+
+def _is_state(value: object) -> bool:
+    """Whether an attribute that holds ``value`` is collected into the state by
+    itself: a tensor, or an object with a state of its own."""
+    return isinstance(value, torch.Tensor) or _has_state(value)
+
 
 # The attribute that holds a node's registry of state names. Long, so that it does
 # not meet a name of the user's.

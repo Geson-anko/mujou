@@ -1,20 +1,22 @@
 """The output node of ``mujou.pc``."""
 
+import math
 from collections.abc import Callable
 from typing import override
 
 import torch
 from torch import nn
 
+from mujou._core.node import Node
+from mujou._core.pc.clock import LearnClock
 from mujou._core.pc.functional import learn_, loss_vjp
-from mujou._core.pc.learner import Learner
 from mujou._core.pc.messages import Activity, Prediction
 from mujou._core.pc.time_constants import TimeConstants
 from mujou._core.port import NextPort, PrevPort
 from mujou._core.spec import DictSpec, TensorSpec
 
 
-class Output(Learner):
+class Output(Node):
     r"""A node that predicts ``y_hat = module(h_in)`` and whose energy is the loss
     of the samples that have a target.
 
@@ -36,9 +38,9 @@ class Output(Learner):
     ``epoch``: a jump of ``h_in`` needs no move here, as the node holds no
     activity of its own.
 
-    It learns as ``Layer`` does: once ``learn_interval`` seconds have passed
-    since the host wrote the input, but not in the update that first sees it,
-    or in every update with ``None``. When no sample has a target, it does not
+    It learns as ``Layer`` does, by its ``clock``: once ``learn_interval``
+    seconds have passed since the host wrote the input, but not in the update
+    that first sees it, or in every update with ``None``. When no sample has a target, it does not
     learn and drops the time since the last update; so too before the first
     sample arrives, while the activity is zeros (``mask`` all False), and
     when the input changes before it has learned from it. ``B`` is the batch,
@@ -50,8 +52,7 @@ class Output(Learner):
     ``module`` must treat the samples independently, and is called once on zeros
     when the node is made, as in ``Layer``.
 
-    The state holds ``"module"`` and when to learn (``"_seen_time"``,
-    ``"_learn_at"``, ``"_elapsed"``, ``"_learned_input"``). Read it with
+    The state holds ``"module"`` and when to learn (``"clock"``). Read it with
     ``Run.state_dict()``, as for ``Layer``.
 
     Example::
@@ -81,8 +82,7 @@ class Output(Learner):
         device: Where the node computes.
 
     Raises:
-        TypeError: As ``Layer`` raises.
-        ValueError: As ``Layer`` raises, or ``loss`` does
+        ValueError: ``LearnClock`` raises, as in ``Layer``, or ``loss`` does
             not return ``(B,)`` for the output of ``module`` and the target.
     """
 
@@ -98,18 +98,20 @@ class Output(Learner):
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        super().__init__(
-            module,
-            act=act,
-            tau=tau,
-            learn_interval=learn_interval,
-            period=period,
-            max_dt=max_dt,
-            device=device,
+        super().__init__(device=device, period=tau.h / 4 if period is None else period)
+        self._tau = tau
+        self._batch = act.specs["y"].shape[0]
+        self.clock = LearnClock(
+            period=self.period,
+            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
+            max_dt=min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt,
         )
-        y_hat = self._probe()
-        target = act.specs["y"]
+        self.module = module
+        # Frozen parameters do not learn.
+        self._params = [p for p in module.parameters() if p.requires_grad]
+        h_in, target = act.specs["h"], act.specs["y"]
         with torch.no_grad():
+            y_hat = module(h_in.zeros(device=self.device))
             ell = loss(y_hat, target.zeros(device=self.device))
         if ell.shape != (self._batch,):
             raise ValueError(
@@ -118,7 +120,7 @@ class Output(Learner):
                 "nn.MSELoss(), does not (use pc.mse or pc.cross_entropy)"
             )
         self._loss = loss
-        self.prev = PrevPort(send=self._input, recv=act)
+        self.prev = PrevPort(send=h_in, recv=act)
         self.next = NextPort(
             send=DictSpec(
                 Prediction,
@@ -132,10 +134,9 @@ class Output(Learner):
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
-        dt = self._cap(dt)
         activity = self.prev.recv()
         h_in = activity["h"]  # (B, *in)
-        _, learn = self._tick(dt, int(activity["time"]))
+        tick = self.clock.tick(dt, int(activity["time"]), self.timer.now().ns)
         labeled = bool(activity["mask"].any())
         g_theta: list[torch.Tensor] = []
         if labeled:
@@ -145,7 +146,7 @@ class Output(Learner):
                 activity["y"],
                 activity["mask"],
                 self._loss,
-                self._params if learn else (),
+                self._params if tick.learn else (),
             )
             assert g_in is not None  # wrt_input is True
         else:
@@ -161,7 +162,5 @@ class Output(Learner):
                 "time": activity["time"],
             }
         )
-        if learn:
-            if labeled:
-                learn_(self._params, g_theta, self._elapsed, self._tau, self._batch)
-            self._learned()
+        if tick.learn and labeled:
+            learn_(self._params, g_theta, tick.elapsed, self._tau, self._batch)

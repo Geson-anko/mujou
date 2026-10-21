@@ -30,6 +30,7 @@ Import it as a submodule::
     hidden.next.connect(out.prev)
 """
 
+from mujou._core.pc.clock import LearnClock, Tick
 from mujou._core.pc.input import Input
 from mujou._core.pc.layer import Layer
 from mujou._core.pc.losses import cross_entropy, mse
@@ -42,9 +43,11 @@ __all__ = [
     "Activity",
     "Input",
     "Layer",
+    "LearnClock",
     "Output",
     "Prediction",
     "Sample",
+    "Tick",
     "TimeConstants",
     "activity_spec",
     "cross_entropy",
