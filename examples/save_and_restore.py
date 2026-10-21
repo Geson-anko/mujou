@@ -34,7 +34,8 @@ class Integrator(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         self.x += dt * self.prev.recv()  # in place: other references to x stay valid
-        self.next.send(self.readout(self.x))
+        with torch.no_grad():  # computed only to send: no graph
+            self.next.send(self.readout(self.x))
 
 
 class Model(mujou.Network):

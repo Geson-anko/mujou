@@ -26,3 +26,12 @@ class TestTimeConstants:
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):
             TimeConstants(1e-3, 1.0, 1.0)  # pyright: ignore[reportCallIssue]
+
+    def test_the_defaults_of_a_node(self):
+        tau = TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
+        assert tau.period == pytest.approx(1e-3)
+        assert tau.max_dt == pytest.approx(2e-3)  # h / 2
+        assert TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0).max_dt == pytest.approx(
+            1.5e-3  # 3 * lam
+        )
+        assert TimeConstants(h=4e-3, lam=math.inf, theta=1.0).max_dt == 2e-3

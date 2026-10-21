@@ -25,7 +25,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::buffer::{Fill, Message, Messages, lock};
+use crate::buffer::{Fill, Message, Messages};
+use crate::lock;
 use crate::schema::{FieldError, Schema};
 use crate::time::{RunClock, Timestamp, remaining};
 

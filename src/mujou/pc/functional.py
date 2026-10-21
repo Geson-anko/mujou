@@ -209,7 +209,9 @@ def learn_(
 
     That is one gradient step on the mean loss of the batch with the learning
     rate ``elapsed / tau.theta``: ``p -= (elapsed / tau.theta) * g / batch``.
-    ``tau.theta = inf`` leaves ``params`` exactly as they are.
+    ``tau.theta = inf`` makes the rate 0, which leaves ``params`` as they are
+    while the gradients are finite; the nodes of ``mujou.pc`` do not call it
+    then (``LearnClock.of`` never learns).
 
     Args:
         params: The parameters of the node.

@@ -50,7 +50,8 @@ class BufferView:
 
     Read it with `torch.from_dlpack(view)` and copy the result at once: the
     memory belongs to the core and must not be written. `__dlpack__` raises
-    `BufferError` for `copy=True` or a `dl_device` other than the CPU.
+    `BufferError` without a `max_version` of 1 or later, for `copy=True` or for
+    a `dl_device` other than the CPU.
     """
     def __dlpack__(
         self,
@@ -98,6 +99,11 @@ class InputGroup:
 class InputSlot:
     """
     A slot the host writes through its `InputGroup`.
+
+    The same core slot as a `Slot`, as a type of its own so that
+    `InputGroup.write` takes only the slots of an `InputGroup` (never the
+    channel slot of an `Outlet`), and so that only a `Slot` waits for a newer
+    message (`wait_newer`).
     """
     @property
     def name(self, /) -> str: ...
@@ -260,15 +266,16 @@ class Runtime:
         The time of each node's last update on the runtime's timer, in
         nanoseconds.
         """
+    def shutdown(self, /, timeout: SupportsFloat | SupportsIndex | None = None) -> bool:
+        """
+        Asks every node to stop, then waits as `join` does and returns whether
+        the network has stopped. After a timeout the stop stays asked. A bad
+        `timeout` raises before anything changes.
+        """
     def step(self, /, order: SupportsGetItem[int, SupportsIndex] | None = None) -> None:
         """
         Manual mode: lets the nodes in `order` (all, in index order, if `None`)
         update once each, one after another.
-        """
-    def stop(self, /) -> None:
-        """
-        Asks every node to stop and returns without waiting; `join` waits for
-        the end. Does nothing once the network has stopped.
         """
     @property
     def workers(self, /) -> int:
@@ -440,8 +447,8 @@ class Timestamp:
     """
     A time on a timer.
 
-    `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
-    is the exact time in nanoseconds. Timestamps compare and hash by time, so
+    `float(ts)` is the time in seconds; `ts.ns` is the exact time in
+    nanoseconds. Timestamps compare and hash by time, so
     compare only those of one timer: a timestamp does not say which timer it is
     on. `a - b` is the time from `b` to `a` in seconds, a `float` that is
     negative when `b` is later. Timestamps pickle and copy.
@@ -453,7 +460,6 @@ class Timestamp:
     def __gt__(self, value: Timestamp, /) -> bool: ...
     @override
     def __hash__(self, /) -> int: ...
-    def __int__(self, /) -> int: ...
     def __le__(self, value: Timestamp, /) -> bool: ...
     def __lt__(self, value: Timestamp, /) -> bool: ...
     @override
@@ -486,11 +492,21 @@ class VirtualTimer(Timer):
     """
     A timer for tests: its time moves only when `advance` moves it.
 
-    It starts at `start`. Its time scale does not apply to `advance`.
+    It starts at `start`. Its time scale does not apply to `advance`; it is
+    kept as a `Timer` keeps it (`time_scale()` and the state of a run on it).
     `mujou.testing.run` runs a network on a new one unless given one, and
     `ManualRun.step(dt)` advances it.
+
+    Raises:
+        ValueError: `time_scale` is not finite and > 0.
     """
-    def __new__(cls, /, *, start: Timestamp = ...) -> Self: ...
+    def __new__(
+        cls,
+        /,
+        *,
+        start: Timestamp = ...,
+        time_scale: SupportsFloat | SupportsIndex = 1.0,
+    ) -> Self: ...
     def advance(self, /, seconds: SupportsFloat | SupportsIndex) -> None:
         """
         Moves the time forward by `seconds`, at once.

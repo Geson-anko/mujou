@@ -1,12 +1,13 @@
-"""The slots of a run, laid out for its tree, and the drivers of its nodes
+"""The slots of a run, laid out for its tree, and the host's way to them
 (``specs/network.md``, ``specs/execution-model.md``).
 
 ``wire`` lays out, on the run's clock, the slots of every port of the tree: an
 ``Outlet`` for a port that sends (its outbox, which the host reads, and one
 slot per channel), and a slot in the run's ``InputGroup`` for an unconnected
-``Port`` that receives, which the host writes. It gives the driver of each
-node the wire of each of its ports to those slots (``port.py``). It makes only
-new objects: the nodes and the ports stay as they are.
+``Port`` that receives, which the host writes. It gives each port the wire to
+those slots that its node reads and writes through (``port.py``), and checks
+what the host writes and reads (``Wiring.write`` and ``Wiring.outbox``). It
+makes only new objects: the nodes and the ports stay as they are.
 """
 
 from collections.abc import Mapping
@@ -17,7 +18,6 @@ import torch
 
 from mujou._core import _native
 from mujou._core.codec import schema, to_core
-from mujou._core.driver import Driver
 from mujou._core.port import AnyPort, AnySlot, Channel, Port, Wire
 from mujou._core.spec import MessageSpec
 from mujou._core.tree import Tree
@@ -25,23 +25,8 @@ from mujou._core.tree import Tree
 
 @final
 @dataclass(frozen=True, slots=True)
-class Held:
-    """A slot of the run and the spec of the messages it holds."""
-
-    slot: AnySlot
-    spec: MessageSpec[Any]
-
-
-# The slots of one port, as the state tree keys them: "out" (the outbox of a port
-# that sends), "to" (its slot for each peer, by the peer's path) and "in" (the
-# slot the host writes).
-type PortSlots = dict[str, Held | dict[str, Held]]
-
-
-@final
-@dataclass(frozen=True, slots=True)
 class Wiring:
-    """The slots and the drivers of one run of ``tree``."""
+    """The slots of one run of ``tree``."""
 
     tree: Tree
     group: _native.InputGroup
@@ -49,10 +34,8 @@ class Wiring:
     outlets: Mapping[AnyPort, _native.Outlet]
     # The slot of each port that the host writes.
     inputs: Mapping[AnyPort, _native.InputSlot]
-    # The slots of each port of each node: node path -> attribute -> slots.
-    slots: Mapping[str, Mapping[str, PortSlots]]
-    # The driver of each node, in the order of tree.members.
-    drivers: tuple[Driver, ...]
+    # The wires of the ports of each node, in the order of tree.members.
+    wires: tuple[Mapping[AnyPort, Wire], ...]
 
     def write(self, values: Mapping[Any, object]) -> _native.Timestamp:
         """Write ``values`` to the ports the host writes, all at once, and return
@@ -67,6 +50,26 @@ class Wiring:
         return self.group.write(
             [self._item(port, value) for port, value in values.items()]
         )
+
+    def outbox(self, port: AnyPort) -> tuple[_native.Slot, MessageSpec[Any]]:
+        """The slot of ``port`` that the host reads, and the spec of its
+        messages.
+
+        Raises:
+            ValueError: ``port`` is not a port of this run that sends.
+        """
+        outlet = self.outlets.get(port)
+        if outlet is None:
+            raise ValueError(
+                f"the host does not read {self.tree.label(port)}: it reads a port "
+                "of this run that sends"
+            )
+        return outlet.outbox, cast("MessageSpec[Any]", port.send_spec)  # it sends
+
+    def channels(self, port: AnyPort) -> list[_native.Slot]:
+        """The slots of ``port``, a port that sends, for each of its channels,
+        in their order."""
+        return _channels(self.outlets[port], port)
 
     def _item(
         self, port: AnyPort, value: object
@@ -84,7 +87,7 @@ class Wiring:
 
 def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
     """Lay out the slots of ``tree`` on ``clock``, with the ``initial`` value of
-    each port that has one, and make the drivers of its nodes.
+    each port that has one, and the wires of its ports.
 
     Raises:
         TypeError, ValueError: An ``initial`` value does not match the send
@@ -103,25 +106,27 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         for port in tree.owners
         if _written_by_the_host(port)
     }
-    slots = {
-        member.path: {
-            attribute: _slots(tree, port, outlets, inputs)
-            for attribute, port in member.ports.items()
+    # The index of each channel of each port: each end writes its k-th channel
+    # slot for its k-th channel.
+    indices = {
+        port: {channel: k for k, channel in enumerate(port.channels)}
+        for port in tree.owners
+    }
+    wires = tuple(
+        {
+            port: Wire(
+                port=port,
+                label=tree.label(port),
+                device=member.node.device,
+                outlet=outlets.get(port),
+                sources=_sources(port, outlets, inputs, indices),
+                targets=indices[port],
+            )
+            for port in member.ports.values()
         }
         for member in tree.members
-    }
-    drivers = tuple(
-        Driver(
-            member.node,
-            clock,
-            {
-                port: _wire(tree, port, member.node.device, outlets, inputs)
-                for port in member.ports.values()
-            },
-        )
-        for member in tree.members
     )
-    return Wiring(tree, group, outlets, inputs, slots, drivers)
+    return Wiring(tree, group, outlets, inputs, wires)
 
 
 def _written_by_the_host(port: AnyPort) -> bool:
@@ -148,51 +153,11 @@ def _channels(outlet: _native.Outlet, port: AnyPort) -> list[_native.Slot]:
     return [outlet.channel(k) for k in range(len(port.channels))]
 
 
-def _slots(
-    tree: Tree,
-    port: AnyPort,
-    outlets: Mapping[AnyPort, _native.Outlet],
-    inputs: Mapping[AnyPort, _native.InputSlot],
-) -> PortSlots:
-    """The slots of ``port``, as the state tree keys them."""
-    slots: PortSlots = {}
-    outlet = outlets.get(port)
-    if outlet is not None:
-        spec = cast("MessageSpec[Any]", port.send_spec)
-        slots["out"] = Held(outlet.outbox, spec)
-        slots["to"] = {
-            tree.path(channel.other(port)): Held(slot, spec)
-            for channel, slot in zip(
-                port.channels, _channels(outlet, port), strict=True
-            )
-        }
-    if port in inputs:
-        slots["in"] = Held(inputs[port], cast("MessageSpec[Any]", port.recv_spec))
-    return slots
-
-
-def _wire(
-    tree: Tree,
-    port: AnyPort,
-    device: torch.device,
-    outlets: Mapping[AnyPort, _native.Outlet],
-    inputs: Mapping[AnyPort, _native.InputSlot],
-) -> Wire:
-    return Wire(
-        label=tree.label(port),
-        device=device,
-        send_spec=port.send_spec,
-        recv_spec=port.recv_spec,
-        outlet=outlets.get(port),
-        sources=_sources(port, outlets, inputs),
-        targets={channel: k for k, channel in enumerate(port.channels)},
-    )
-
-
 def _sources(
     port: AnyPort,
     outlets: Mapping[AnyPort, _native.Outlet],
     inputs: Mapping[AnyPort, _native.InputSlot],
+    indices: Mapping[AnyPort, Mapping[Channel, int]],
 ) -> tuple[tuple[Channel | None, AnySlot], ...]:
     """The slots ``port`` reads, as ``Wire.sources`` holds them: what the host
     writes, or the slot of each peer for its channel to ``port``."""
@@ -203,7 +168,5 @@ def _sources(
     sources: list[tuple[Channel | None, AnySlot]] = []
     for channel in port.channels:
         peer = channel.other(port)
-        # Each end writes its k-th channel slot for its k-th channel.
-        k = peer.channels.index(channel)
-        sources.append((channel, outlets[peer].channel(k)))
+        sources.append((channel, outlets[peer].channel(indices[peer][channel])))
     return tuple(sources)

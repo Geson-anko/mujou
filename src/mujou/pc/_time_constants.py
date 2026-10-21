@@ -44,6 +44,23 @@ class TimeConstants:
     lam: float
     theta: float
 
+    @property
+    def period(self) -> float:
+        """The default period of a node, ``h / 4``: a step of ``h`` of
+        ``eta_h = 0.25`` per update, about that of the official implementation
+        of PC-ALM, and well within the measured stable range ``eta_h <= 0.5``
+        (``specs/pc.md``)."""
+        return self.h / 4
+
+    @property
+    def max_dt(self) -> float:
+        """The default longest ``dt`` an update counts, ``min(h / 2, 3 * lam)``:
+        the explicit Euler step of ``h`` then ``lam`` is stable for
+        ``dt / h <= 1/2`` and ``dt / lam <= 3`` (``specs/pc.md``, "dt の打ち切り").
+        Every node of a chain caps at the same time, so that they weigh their
+        updates of ``theta`` alike."""
+        return min(self.h / 2, 3 * self.lam)
+
     def __post_init__(self) -> None:
         if not 0 < self.h < math.inf:
             raise ValueError(f"TimeConstants.h must be finite and > 0, got {self.h!r}")

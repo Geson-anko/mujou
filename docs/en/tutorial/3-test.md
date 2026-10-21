@@ -6,11 +6,11 @@ In a run started with `mujou.run`, `dt` follows the real time that passes, and t
 
 Import it with `import mujou.testing`; `import mujou` alone does not.
 
-| Name                           | Role                                                                                                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mujou.testing.run(root, ...)` | Runs the tree with the arguments of `mujou.run` and returns a `ManualRun`. No node updates until `step` updates it. It runs on a new `mujou.time.VirtualTimer` by default |
-| `ManualRun.step(dt, *nodes)`   | Moves the timer `dt` seconds forward, then updates the given nodes once each, in the given order                                                                          |
-| `ManualRun.timer`              | The run's `VirtualTimer`                                                                                                                                                  |
+| Name                           | Role                                                                                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mujou.testing.run(root, ...)` | Runs the tree with the `timer`, `inputs` and `state` of `mujou.run` (no `workers`) and returns a `ManualRun`. No node updates until `step` updates it. It runs on a new `mujou.time.VirtualTimer` by default |
+| `ManualRun.step(dt, *nodes)`   | Moves the timer `dt` seconds forward, then updates the given nodes once each, in the given order                                                                                                             |
+| `ManualRun.timer`              | The run's `VirtualTimer`                                                                                                                                                                                     |
 
 `ManualRun` is a `Run`, so `write`, `read`, `state_dict` and the rest work as with `mujou.run`.
 

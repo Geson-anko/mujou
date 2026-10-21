@@ -66,7 +66,7 @@ def activity_spec(h: TensorSpec, y: TensorSpec) -> DictSpec[Activity]:
 
     Two calls with equal arguments return equal specs. A node of your own that
     connects to the nodes of ``mujou.pc`` declares its ports with it, or with
-    the ``act`` of the node before.
+    the ``act_spec`` of the node before.
 
     Example::
 
@@ -94,5 +94,8 @@ def activity_spec(h: TensorSpec, y: TensorSpec) -> DictSpec[Activity]:
 
 def rows(mask: torch.Tensor, like: torch.Tensor) -> torch.Tensor:
     """Return the ``(B,)`` ``mask`` of an ``Activity`` shaped to select the rows
-    of ``like`` (``(B, *shape)``) in ``torch.where``."""
+    of ``like`` (``(B, *shape)``) in ``torch.where``.
+
+    It is here, with the ``Activity`` whose ``mask`` it shapes, for both
+    ``functional`` and ``Layer``, which apply the mask."""
     return mask.reshape(-1, *([1] * (like.dim() - 1)))

@@ -16,23 +16,26 @@
 | 層 | モジュール | 責務 |
 | --- | --- | --- |
 | 0 | `_core/errors.py`、`_core/_native`（Rust） | `NetworkError`（何も import しない葉。Rust も import して raise に使う）と、Rust の拡張モジュール |
-| 1 | `_core/spec.py` | `MessageSpec`（抽象）、`TensorSpec`、`DictSpec` と、dtype の対応表 `DLPACK` |
+| 1 | `_core/spec.py`、`_core/current.py` | `MessageSpec`（抽象）、`TensorSpec`、`DictSpec` と、dtype の対応表 `DLPACK`。`running()`（いま hook を走らせている Driver を引く唯一の入口）と、hook の外での使用を断る `outside()` |
 | 2 | `_core/codec.py` | torch とコアの唯一の変換（[メッセージ](messages.md#codec)） |
-| 3 | `_core/port.py` | `Port`、`MultiPort`、`Channel`（宣言）と `Wire`（実行中の読み書き）、`running()` |
+| 3 | `_core/port.py` | `Port`、`MultiPort`、`Channel`（宣言）と `Wire`（実行中の読み書き） |
 | 4 | `_core/component.py` | `Node` と `Network` の共通の基底。クラス定義の時点の検査（K1）だけを持つ |
 | 5 | `_core/node.py` | 利用者が継承する `Node`。設定、状態の規則、既定の `state_dict` / `load_state_dict` |
 | 6 | `_core/network.py` | `Network`、`Group(**named)` |
 | 7 | `_core/driver.py` | `Driver`: Rust が hook のたびに呼ぶ、ノード 1 つ分の入口 |
 | 8 | `_core/tree.py` | `walk(root)`: `__dict__` を代入の順に読んで木を作り、検査する純関数 |
-| 9 | `_core/wiring.py` | `wire(tree, clock)`: 木から native のスロットと、各ノードの Driver を作る |
-| 10 | `_core/state.py` | 状態の木と実行の間の変換（`capture` / `restore`） |
-| 11 | `_core/run.py` | `Run`、`ManualRun`、`run()`。起動の 3 段、走った印、終了、atexit |
-| 12 | `mujou/__init__.py`、`mujou/time.py`、`mujou/testing.py` | 公開の入口（再エクスポートだけ） |
-| 13〜17 | `mujou/pc/*` | PC-ALM。公開名だけを import する（[更新手法](update-rules.md)） |
+| 9 | `_core/wiring.py` | `wire(tree, clock)`: 木から native のスロットと、各 Port の Wire を作る。ホストが書ける Port と読める Port の検査（`Wiring.write` / `Wiring.outbox`）もここ |
+| 10 | `_core/state.py` | 状態の木と実行の間の変換（`capture` / `restore`）。木の形（ポートのスロットのキー）を決めるのはここだけ |
+| 11 | `_core/run.py` | `Run`、`ManualRun`、`run()`、実行の種類 `Kind`。起動の 3 段、Driver の生成、走った印、終了、atexit |
+| 12 | `mujou/time.py` | 公開の入口（`_native` のタイマーの再エクスポートだけ）。`mujou.testing` が使うので 1 つ下に置く |
+| 13 | `mujou/__init__.py`、`mujou/testing.py` | 公開の入口（再エクスポートだけ） |
+| 14〜17 | `mujou/pc/*` | PC-ALM。公開名だけを import する（[更新手法](update-rules.md)） |
 
 `network.py` が `node.py` の上にあるのは、`Group` の注釈が `Node` を使うから。`tree.py` が `driver.py` の上にあるのは、木の検査がノードの状態の規則（`node.is_state`）を共有するからで、Driver は木を知らない。`state.py` は `wiring.py` が作ったスロットを読み書きするので、その上に置く。
 
-実行時に `_native` を import してよいのは、`codec.py`（Schema）、`port.py`（`current`）、`node.py`（`ReadOnlyTimer` の型）、`wiring.py`（Outlet、Slot、InputGroup）、`run.py`（`start` とタイマー）、`mujou/time.py`（再エクスポート）の 6 つだけにする。native の型が `_core` 全体に散ると、ABI を変えるたびに触る場所が増えるからである。
+実行時に `_native` を import してよいのは、`current.py`（`current`）、`codec.py`（Schema）、`port.py`（Slot と Outlet の型）、`node.py` と `driver.py`（`ReadOnlyTimer` の型）、`wiring.py`（Outlet、Slot、InputGroup）、`run.py`（`start` とタイマー）、`mujou/time.py`（再エクスポート）の 8 つだけにする。native の型が `_core` 全体に散ると、ABI を変えるたびに触る場所が増えるからである。
+
+名前は、それを定義したモジュールから import する。別のモジュールが import した名前を又借りすると、層の検査は import 文しか見ないので、隠れた依存がすり抜ける（`tests/test_layers.py` が検査する）。例外は再エクスポートを役目とする公開の入口（`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc`）だけ。`_core` のモジュールはタイマーを `_native` から、`mujou.testing` は `mujou.time` から取る。
 
 サブモジュールはすべて明示的に import する（`import mujou.time`、`import mujou.testing`、`import mujou.pc as pc`）。`import mujou` はサブモジュールを読み込まない。規則を 1 文で言えるようにし、`__init__` が pc を読むことによる循環を防ぐ。
 
@@ -47,10 +50,13 @@ crates/mujou-core/src/
   dlpack/import.rs     copy_from: Schema と照合し、stride を扱いながら必ずコピーする
   dlpack/export.rs     DLPack での貸し出し
   slot.rs              Slot（Source で書き手を区別する）、Outlet、InputGroup
-  runtime/mod.rs       Runtime、RunConfig、NodeSpec、NodeHooks、Reply と、共有の状態の操作
-  runtime/lifecycle.rs ノードのライフサイクルの唯一の状態機械
-  runtime/sched.rs     ワーカー（プールと専用スレッド）
+  runtime/mod.rs       ホストの窓口: Runtime、RunConfig、Reply と、スレッドを立てる起動
   runtime/control.rs   制御スレッド（起動・ステップ・取得・停止）
+  runtime/worker.rs    ノードを走らせるスレッドのループ（プールのワーカーと専用スレッド）
+  runtime/shared.rs    全スレッドが共有する状態（Control、Shared）とその操作
+  runtime/sched.rs     ワーカーが仕事を取るキュー（データだけ）
+  runtime/lifecycle.rs ノードのライフサイクルの唯一の状態機械
+  runtime/hooks.rs     NodeHooks と NodeSpec（ランタイムとノードの計算の間の契約の全部）
   runtime/error.rs     Hook、HookError、NodeFailure、RuntimeError
 crates/mujou-python/src/
   lib.rs               #[pymodule] の宣言だけ
@@ -75,11 +81,11 @@ time（葉）          dlpack::ffi（葉）
                     dlpack::{import,export} ← schema, buffer
 slot ← buffer, schema, time
 runtime ← time
-runtime/mod → {lifecycle, sched, control, error}
+runtime/mod → worker → control → shared → {sched, lifecycle, hooks, error}
 mujou-python: wait ← errors ← time ← slot(dlpack) ← runtime ← lib
 ```
 
-`runtime` の子（`sched` と `control`）は親の `Shared` と `Control` を読み、そのメソッドを呼ぶ。使い手が 1 人の trait を挟まないためで、子どうしは互いを知らない。
+`runtime` の中も一方向にする。`Shared` の impl は `shared.rs` に、スレッドのループは `worker.rs` にだけ置くので、どちらもファイル名から辿れる。`worker` が `control` に依存するのは、hook の失敗を制御スレッドに知らせるメッセージ（`Message::Failed`）を送るためだけ。送り口はワーカーとホストの `Runtime` が持ち、`Shared` は持たない。
 
 ## Rust と Python の境界
 
@@ -116,7 +122,7 @@ GPU はコアでサポートしない。コアの値はホストのメモリに�
 
 ## 内部の名前の規約
 
-- private なパッケージ `mujou._core` の中のモジュールの、`_` の無いモジュールレベルの名前は、パッケージ内部の API である（`spec.DLPACK`、`port.Wire`、`port.running`、`tree.walk`、`node.is_state`、`node.initialized` など）。利用者の公開名は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` が再エクスポートしたものだけ（`tests/mujou/test_init.py`）
+- private なパッケージ `mujou._core` の中のモジュールの、`_` の無いモジュールレベルの名前は、パッケージ内部の API である（`spec.DLPACK`、`port.Wire`、`current.running`、`tree.walk`、`node.is_state`、`node.initialized` など）。利用者の公開名は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` が再エクスポートしたものだけ（`tests/mujou/test_init.py`）
 - `mujou.pc` の private なモジュール（`_layer.py` など）の、`_` の無い名前も同じくパッケージ内部の API（`_messages.rows` など）
 - 公開クラス（Node、Port、MultiPort、Network）の `_` 属性には、そのクラスの外から触らない。実行時の事実は実行の側に置いたので、触る必要がある箇所は無い。src の `# pyright: ignore[reportPrivateUsage]` は 0 件にする
 - Node の設定は、名前修飾した 1 属性（`__config`）に置く。利用者の `self._device` などと衝突しない

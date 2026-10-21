@@ -28,468 +28,48 @@
 //! The runtime knows nothing about what the hooks compute or what the nodes
 //! exchange: [`NodeHooks`] is the whole contract, so any update rule fits.
 //!
-//! This module holds the host's side (the [`Runtime`] handle and its
-//! [`Reply`]) and the state shared by every thread of a runtime, with the
-//! operations on it. The rest is in submodules: `lifecycle` is the state
-//! machine of a node, `sched` the threads that run the nodes, `control` the
-//! control thread, and `error` what the runtime reports.
+//! This module holds the host's side: the [`Runtime`] handle, its [`Reply`],
+//! and the start, which spawns the threads. The rest is in submodules, each
+//! depending only on those after it: `control` is the control thread, `worker`
+//! the threads that run the nodes, `shared` the state every thread of a runtime
+//! shares and the operations on it, `sched` the queues of the workers,
+//! `lifecycle` the state machine of a node, `hooks` what a node gives the
+//! runtime, and `error` what the runtime reports.
 
 mod control;
 mod error;
+mod hooks;
 mod lifecycle;
 mod sched;
+mod shared;
+mod worker;
 
-use std::cell::Cell;
-use std::num::{NonZeroU64, NonZeroUsize};
-use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::num::NonZeroUsize;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, TryLockError};
+use std::sync::{Arc, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::time::{PauseHold, RunClock, remaining};
+use crate::time::{RunClock, remaining};
 
 pub use error::{Hook, HookError, NodeFailure, RuntimeError};
+pub use hooks::{NodeHooks, NodeSpec};
 
 use control::{Controller, Message};
-use error::{Panicked, finished_error, panic_message, stopped};
-use lifecycle::{Command, Lifecycle, Next, Work};
-use sched::{Lane, Sched, Worker};
-
-/// The lifecycle hooks of a node, called by the runtime.
-///
-/// Every hook except `capture` runs on the thread that runs the node: its
-/// dedicated thread, or any worker of the pool (a different one from call to
-/// call). The hooks of a node never overlap, and each one sees what the
-/// previous one wrote. `capture` runs on the control thread while the node is
-/// paused, or after a normal end on the thread that asked for it, so it never
-/// overlaps with the other hooks either. It is not called after an exception.
-///
-/// A hook that panics is treated like one that returned an error, under the
-/// hook's [`Hook`]. The hooks with a default do nothing.
-pub trait NodeHooks: Send + 'static {
-    type State: Send + 'static;
-
-    /// Runs the whole body of a runtime thread (a dedicated thread, a worker
-    /// or the control thread). The bindings of a language with per-thread
-    /// state wrap it here, so that the state lives as long as the thread
-    /// instead of one hook call.
-    /// The body waits a lot, so the wrapper must not hold a lock others need.
-    fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
-        body()
-    }
-
-    /// Told that a hook panicked, with the error that will stand for it, so
-    /// that the node can log it. The node may be in an inconsistent state.
-    fn panicked(&mut self, _error: &HookError) {}
-
-    /// Prepares the node on its thread before the first update. The time is
-    /// frozen meanwhile, so the time this takes does not enter the first Δt.
-    fn start(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    /// Restores the node's state, if it has one to restore, right after
-    /// `start` and with the time still frozen.
-    fn restore(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    /// Advances the node by `dt` seconds of the runtime's timer (always > 0).
-    fn update(&mut self, dt: f64) -> Result<(), HookError>;
-
-    fn pause(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    fn resume(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    /// Called once on every node when the system stops because of an exception,
-    /// before `stop`. Its error is ignored.
-    fn exception(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    /// Called once on every node at the end. Its error is ignored.
-    fn stop(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    /// Takes the node's state, while it is paused or after the end.
-    fn capture(&mut self) -> Result<Self::State, HookError>;
-}
-
-/// One node of a runtime.
-pub struct NodeSpec<N> {
-    pub hooks: N,
-    /// How the errors and the node's thread name it.
-    pub name: String,
-    /// The period on the timer when running freely: the node updates at
-    /// targets a period apart, so once every period on average while its
-    /// update and its wake-up fit in the period. A period of 1 ns updates as
-    /// soon as any time has passed. The manual mode ignores it.
-    pub period_ns: NonZeroU64,
-    /// Runs on a thread of its own instead of the pool.
-    pub dedicated_thread: bool,
-    /// Where the first Δt starts: the time at the start if `None`.
-    pub last_update_ns: Option<u64>,
-}
+use error::finished_error;
+use lifecycle::Command;
+use shared::Shared;
+use worker::Worker;
 
 pub struct RunConfig<N> {
     pub nodes: Vec<NodeSpec<N>>,
     /// Run the nodes only when [`Runtime::step`] allows them, one at a time.
     pub manual: bool,
-    /// The number of worker threads for the nodes in the pool. Defaults to the
-    /// available parallelism; never more than the nodes in the pool, so none
-    /// if every node has a dedicated thread.
-    pub workers: Option<NonZeroUsize>,
-}
-
-thread_local! {
-    /// The runtime (the address of its shared state) whose thread this is, or 0.
-    static RUNTIME_OF_THREAD: Cell<usize> = const { Cell::new(0) };
-}
-
-/// The state shared by the control thread and the nodes, under one lock.
-struct Control {
-    life: Lifecycle,
-    sched: Sched,
-    /// Freezes the time from before the nodes start until all of them are
-    /// ready to update.
-    startup: Option<PauseHold>,
-    /// Freezes the time of a capture, from the pause request until the state
-    /// is built.
-    capture: Option<PauseHold>,
-    finished: bool,
-}
-
-/// A node as the threads of its runtime hold it.
-struct Member<N> {
-    name: String,
-    period_ns: u64,
-    /// The start of the node's next Δt. Written only by the thread that runs
-    /// the node, after an update.
-    last_update_ns: AtomicU64,
-    hooks: Mutex<N>,
-}
-
-struct Shared<N: NodeHooks> {
-    clock: Arc<RunClock>,
-    nodes: Vec<Member<N>>,
-    /// The signals of each lane of [`Control::sched`].
-    lanes: Vec<Lane>,
-    /// The number of workers of the pool.
-    workers: usize,
-    control: Mutex<Control>,
-    /// Notified on a change the control thread waits for
-    /// ([`Lifecycle::take_changed`], a failure) and at the end.
-    changed: Condvar,
-    /// [`Lifecycle::word`], stored under the control lock. A node running
-    /// freely reads it without taking the lock, and while it waits on the
-    /// timer (which checks the interrupt condition under the timer's lock, and
-    /// the control lock is taken before the timer's elsewhere).
-    word: AtomicU64,
-    failure: Arc<OnceLock<NodeFailure>>,
-    to_controller: Sender<Message<N>>,
-}
-
-impl<N: NodeHooks> Shared<N> {
-    /// The state of a runtime of `nodes` in `lanes` (see [`lanes`]), with
-    /// `workers` workers in the pool, and the receiving end of its control
-    /// thread's messages.
-    fn new(
-        clock: Arc<RunClock>,
-        nodes: Vec<NodeSpec<N>>,
-        lanes: &[usize],
-        workers: usize,
-        manual: bool,
-    ) -> (Self, Receiver<Message<N>>) {
-        let n_lanes = lanes.iter().max().map_or(1, |&last| last + 1);
-        let life = Lifecycle::new(nodes.len(), manual);
-        let (to_controller, messages) = mpsc::channel();
-        let members = (nodes.into_iter())
-            .map(|spec| Member {
-                name: spec.name,
-                period_ns: spec.period_ns.get(),
-                // Set once the time is frozen for the start.
-                last_update_ns: AtomicU64::new(0),
-                hooks: Mutex::new(spec.hooks),
-            })
-            .collect();
-        let shared = Self {
-            clock,
-            nodes: members,
-            lanes: (0..n_lanes).map(|_| Lane::default()).collect(),
-            workers,
-            word: AtomicU64::new(life.word()),
-            control: Mutex::new(Control {
-                life,
-                sched: Sched::new(lanes, n_lanes),
-                startup: None,
-                capture: None,
-                finished: false,
-            }),
-            changed: Condvar::new(),
-            failure: Arc::new(OnceLock::new()),
-            to_controller,
-        };
-        (shared, messages)
-    }
-
-    /// Identifies this runtime for [`RUNTIME_OF_THREAD`].
-    fn id(&self) -> usize {
-        self as *const Self as usize
-    }
-
-    fn on_own_thread(&self) -> bool {
-        RUNTIME_OF_THREAD.get() == self.id()
-    }
-
-    fn lock(&self) -> MutexGuard<'_, Control> {
-        // Hooks run outside this lock, so a poisoned state is still consistent.
-        self.control.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    fn wait<'a>(&self, guard: MutexGuard<'a, Control>) -> MutexGuard<'a, Control> {
-        self.changed.wait(guard).unwrap_or_else(|e| e.into_inner())
-    }
-
-    fn wait_timeout<'a>(
-        &self,
-        guard: MutexGuard<'a, Control>,
-        timeout: Duration,
-    ) -> MutexGuard<'a, Control> {
-        self.changed
-            .wait_timeout(guard, timeout)
-            .unwrap_or_else(|e| e.into_inner())
-            .0
-    }
-
-    /// Changes the command and wakes every node, including one waiting on the
-    /// timer for its next update. Returns whether it changed. The stop ends
-    /// the clock.
-    fn set_command(&self, c: &mut Control, command: Command) -> bool {
-        if !c.life.set_command(command) {
-            return false;
-        }
-        if command == Command::Stop {
-            self.clock.end();
-        }
-        self.word.store(c.life.word(), Ordering::SeqCst);
-        self.clock.interrupt_waiters();
-        self.wake_all(c);
-        true
-    }
-
-    /// Re-evaluates every node after a change of the control state, and wakes
-    /// the timekeepers once if any node needs them.
-    fn wake_all(&self, c: &mut Control) {
-        let mut look = false;
-        for i in 0..self.nodes.len() {
-            look |= self.schedule(i, c);
-        }
-        if look {
-            for lane in 0..self.lanes.len() {
-                self.interrupt_timekeeper(lane, c);
-            }
-        }
-    }
-
-    /// Re-evaluates node `i` after a change for it.
-    fn wake(&self, c: &mut Control, i: usize) {
-        if self.schedule(i, c) {
-            self.interrupt_timekeeper(c.sched.lane(i), c);
-        }
-    }
-
-    /// Puts node `i` where it waits, unless a worker has it or will decide
-    /// when it takes it, and wakes a worker of its lane if it may have work
-    /// now. Returns whether the timekeeper must look again.
-    ///
-    /// Only the control side wakes anyone here. A worker that puts a node back
-    /// looks at the queues itself right after, and wakes another worker only
-    /// when it leaves work behind ([`Worker::run`]): waking one for the node it
-    /// is about to take again would make the workers chase each other. Waking
-    /// the timekeeper wakes every waiter on the timer (the other runs'
-    /// timekeepers, the nodes waiting alone, the host), so a node of period
-    /// 1 ns putting itself back after each update must not either.
-    fn schedule(&self, i: usize, c: &mut Control) -> bool {
-        if c.sched.busy(i) {
-            return false;
-        }
-        let next = self.advance(i, c);
-        let placed = c.sched.place(i, next, false);
-        if placed.notify {
-            self.lanes[placed.lane].changed.notify_one();
-        }
-        placed.look
-    }
-
-    /// What node `i` does next ([`Lifecycle::advance`]).
-    fn advance(&self, i: usize, c: &mut Control) -> Next {
-        let node = &self.nodes[i];
-        let last_ns = node.last_update_ns.load(Ordering::SeqCst);
-        // Under the control lock, the freeze cannot come in between.
-        let next = c
-            .life
-            .advance(i, last_ns, node.period_ns, || self.clock.now_ns());
-        self.notify_control(c);
-        next
-    }
-
-    /// Records that `work` for node `i` returned ([`Lifecycle::record`]).
-    fn record(&self, i: usize, work: Work, ok: bool, c: &mut Control) {
-        let node = &self.nodes[i];
-        if let (Work::Update { now_ns }, true) = (work, ok) {
-            node.last_update_ns.store(now_ns, Ordering::SeqCst);
-        }
-        if matches!(work, Work::Stop) && c.sched.finish(i) {
-            // Let the idle workers of the lane end too.
-            self.lanes[c.sched.lane(i)].changed.notify_all();
-        }
-        c.life.record(i, work, ok, node.period_ns);
-        self.notify_control(c);
-    }
-
-    /// Wakes the timekeeper of `lane`, if any, so that it looks at the queues
-    /// again.
-    fn interrupt_timekeeper(&self, lane: usize, c: &Control) {
-        if c.sched.has_timekeeper(lane) {
-            self.lanes[lane].epoch.fetch_add(1, Ordering::SeqCst);
-            self.clock.interrupt_waiters();
-        }
-    }
-
-    /// Notifies the control thread of a change it waits for.
-    fn notify_control(&self, c: &mut Control) {
-        if c.life.take_changed() {
-            self.changed.notify_all();
-        }
-    }
-
-    /// The Δt of an update of node `i` at `now_ns`.
-    fn dt(&self, i: usize, now_ns: u64) -> f64 {
-        let last_ns = self.nodes[i].last_update_ns.load(Ordering::SeqCst);
-        lifecycle::dt(now_ns, last_ns)
-    }
-
-    /// Calls a hook on the thread that runs node `i`, with the node locked,
-    /// turning a panic into an error.
-    fn invoke<T>(
-        &self,
-        i: usize,
-        hook: Hook,
-        f: impl FnOnce(&mut N) -> Result<T, HookError>,
-    ) -> Result<T, HookError> {
-        let hooks = &self.nodes[i].hooks;
-        let mut node = match hooks.try_lock() {
-            Ok(node) => node,
-            // Hooks run outside the runtime's locks, so the node is consistent.
-            Err(TryLockError::Poisoned(e)) => e.into_inner(),
-            Err(TryLockError::WouldBlock) => {
-                // The scheduling never lets two threads run a node at once;
-                // only the captures after the end may meet here.
-                debug_assert!(self.lock().finished, "node #{i} is already running");
-                hooks.lock().unwrap_or_else(|e| e.into_inner())
-            }
-        };
-        guarded(&mut *node, hook, f)
-    }
-
-    /// Calls a hook whose error ends the system.
-    fn call<T>(
-        &self,
-        i: usize,
-        hook: Hook,
-        f: impl FnOnce(&mut N) -> Result<T, HookError>,
-    ) -> Result<T, ()> {
-        self.invoke(i, hook, f).map_err(|e| self.fail(i, e))
-    }
-
-    /// Calls `capture` on the control thread while the nodes are paused.
-    fn capture(&self, i: usize) -> Result<N::State, ()> {
-        self.call(i, Hook::Capture, N::capture)
-    }
-
-    /// Takes every node's state after a normal end, on the calling thread,
-    /// and builds the result. A failure of `capture` is reported to the
-    /// caller only: the system has already ended.
-    fn capture_ended<R>(&self, build: impl FnOnce(Vec<N::State>) -> R) -> Result<R, RuntimeError> {
-        stopped(&self.failure)?;
-        let states = (0..self.nodes.len()).map(|i| {
-            self.invoke(i, Hook::Capture, N::capture)
-                .map_err(|e| RuntimeError::CaptureFailed(self.failure_of(i, e)))
-        });
-        build_states(states.collect::<Result<_, _>>()?, build)
-    }
-
-    fn failure_of(&self, i: usize, e: HookError) -> NodeFailure {
-        NodeFailure {
-            name: self.nodes[i].name.clone(),
-            hook: e.hook,
-            error: e.source,
-        }
-    }
-
-    /// Records the failure of node `i` if it is the first and asks everything
-    /// to stop, right where the error was caught: the nodes see the stop at
-    /// their next loop boundary without the control thread having to poll.
-    fn fail(&self, i: usize, e: HookError) {
-        // Only the first failure is reported; the hooks log every error.
-        if self.failure.set(self.failure_of(i, e)).is_err() {
-            return;
-        }
-        let mut c = self.lock();
-        c.life.fail();
-        // The nodes that already left their loops call `exception` too: wake
-        // them even if the system was already stopping.
-        if !self.set_command(&mut c, Command::Stop) {
-            self.wake_all(&mut c);
-        }
-        // The control thread may wait for the failure.
-        self.changed.notify_all();
-        drop(c);
-        // The control thread is gone only after the system finished.
-        let _ = self.to_controller.send(Message::Failed);
-    }
-
-    /// Lets the time run and marks the system finished.
-    fn mark_finished(&self, c: &mut Control) {
-        // Let the time run again even after an exception, or the host's waits
-        // on the timer would never return.
-        c.startup = None;
-        c.capture = None;
-        c.finished = true;
-        self.changed.notify_all();
-    }
-}
-
-/// Calls a hook of `node`, turning a panic into an error of `hook`.
-fn guarded<N: NodeHooks, T>(
-    node: &mut N,
-    hook: Hook,
-    f: impl FnOnce(&mut N) -> Result<T, HookError>,
-) -> Result<T, HookError> {
-    panic::catch_unwind(AssertUnwindSafe(|| f(node))).unwrap_or_else(|payload| {
-        let error = HookError {
-            hook,
-            source: Arc::new(Panicked(panic_message(payload))),
-        };
-        node.panicked(&error);
-        Err(error)
-    })
-}
-
-/// Builds the result of a capture from `states`, turning a panic of `build`
-/// into an error.
-fn build_states<S, R>(states: Vec<S>, build: impl FnOnce(Vec<S>) -> R) -> Result<R, RuntimeError> {
-    panic::catch_unwind(AssertUnwindSafe(|| build(states))).map_err(|payload| {
-        let message = panic_message(payload);
-        RuntimeError::Internal(format!("the build of a capture panicked: {message}"))
-    })
+    /// The number of worker threads for the nodes in the pool, never more
+    /// than the nodes in the pool, so none if every node has a dedicated
+    /// thread.
+    pub workers: NonZeroUsize,
 }
 
 /// The pending reply to a request to the runtime.
@@ -531,6 +111,7 @@ impl<T> Reply<T> {
 /// to stop without waiting.
 pub struct Runtime<N: NodeHooks> {
     shared: Arc<Shared<N>>,
+    to_controller: Sender<Message<N>>,
 }
 
 impl<N: NodeHooks> Runtime<N> {
@@ -555,12 +136,10 @@ impl<N: NodeHooks> Runtime<N> {
         } = config;
         let lanes = lanes(&nodes);
         let pool = lanes.iter().filter(|&&lane| lane == 0).count();
-        let workers = (workers.or_else(|| thread::available_parallelism().ok()))
-            .map_or(1, NonZeroUsize::get)
-            .min(pool);
+        let workers = workers.get().min(pool);
         let last_update_ns: Vec<_> = nodes.iter().map(|spec| spec.last_update_ns).collect();
-        let (shared, messages) = Shared::new(clock, nodes, &lanes, workers, manual);
-        let shared = Arc::new(shared);
+        let shared = Arc::new(Shared::new(clock, nodes, &lanes, workers, manual));
+        let (to_controller, messages) = mpsc::channel();
         shared.lock().startup = Some(shared.clock.hold());
         // Where each first Δt starts: set before any thread exists, so that it
         // is right even if the system ends while starting, and stays right since
@@ -569,13 +148,12 @@ impl<N: NodeHooks> Runtime<N> {
         for (node, last_ns) in shared.nodes.iter().zip(last_update_ns) {
             (node.last_update_ns).store(last_ns.unwrap_or(now_ns), Ordering::SeqCst);
         }
-        let threads = spawn_workers(&shared, &lanes)?;
+        let threads = spawn_workers(&shared, &lanes, &to_controller)?;
         let (started_tx, started_rx) = mpsc::channel();
         let control = move |shared: &Arc<Shared<N>>| {
             let controller = Controller {
                 shared: Arc::clone(shared),
                 threads,
-                done: false,
             };
             controller.run(messages, started_tx);
         };
@@ -587,7 +165,11 @@ impl<N: NodeHooks> Runtime<N> {
             rx: started_rx,
             failure: Arc::clone(&shared.failure),
         };
-        Ok((Self { shared }, reply))
+        let runtime = Self {
+            shared,
+            to_controller,
+        };
+        Ok((runtime, reply))
     }
 
     fn submit<R: Send + 'static>(
@@ -604,7 +186,7 @@ impl<N: NodeHooks> Runtime<N> {
         });
         // If the control thread has ended, the job is dropped with its sender
         // and the reply reports how the system ended.
-        let _ = self.shared.to_controller.send(Message::Job(job));
+        let _ = self.to_controller.send(Message::Job(job));
         Reply { rx, failure }
     }
 
@@ -653,7 +235,7 @@ impl<N: NodeHooks> Runtime<N> {
         // Not through `submit`: there is no reply to wait for, so a node's own
         // thread may ask too.
         let job = Box::new(|controller: &mut Controller<N>| controller.finish());
-        let _ = self.shared.to_controller.send(Message::Job(job));
+        let _ = self.to_controller.send(Message::Job(job));
     }
 
     /// Waits until the system has ended (every node thread joined), for at most
@@ -673,7 +255,7 @@ impl<N: NodeHooks> Runtime<N> {
             }
             c = s.wait_timeout(c, remaining);
         }
-        stopped(&s.failure).map(|()| true)
+        s.check_failure().map(|()| true)
     }
 
     /// The system has ended.
@@ -684,7 +266,7 @@ impl<N: NodeHooks> Runtime<N> {
     /// Fails with the first failure as soon as it is recorded (possibly before
     /// the system has ended).
     pub fn check(&self) -> Result<(), RuntimeError> {
-        stopped(&self.shared.failure)
+        self.shared.check_failure()
     }
 
     /// The number of workers of the pool.
@@ -703,7 +285,7 @@ impl<N: NodeHooks> Runtime<N> {
 }
 
 /// Spawns a thread of the runtime of `s`, which marks itself as one
-/// ([`RUNTIME_OF_THREAD`]) and runs `body` inside [`NodeHooks::on_thread`].
+/// (`Shared::own_thread`) and runs `body` inside [`NodeHooks::on_thread`].
 fn spawn<N: NodeHooks>(
     s: &Arc<Shared<N>>,
     name: String,
@@ -712,7 +294,7 @@ fn spawn<N: NodeHooks>(
     let shared = Arc::clone(s);
     thread::Builder::new().name(name).spawn(move || {
         N::on_thread(move || {
-            RUNTIME_OF_THREAD.set(shared.id());
+            shared.own_thread();
             body(&shared);
         })
     })
@@ -734,24 +316,31 @@ fn lanes<N>(nodes: &[NodeSpec<N>]) -> Vec<usize> {
         .collect()
 }
 
-/// Spawns the worker of each dedicated lane and the workers of the pool.
+/// Spawns the worker of each dedicated lane and the workers of the pool,
+/// which tell the control thread through `to_controller` when a hook fails.
 fn spawn_workers<N: NodeHooks>(
     s: &Arc<Shared<N>>,
     lanes: &[usize],
+    to_controller: &Sender<Message<N>>,
 ) -> Result<Vec<JoinHandle<()>>, RuntimeError> {
+    let dedicated = (lanes.iter().enumerate())
+        .filter(|&(_, &lane)| lane != 0)
+        .map(|(i, &lane)| (format!("mujou-node-{}", s.nodes[i].name), lane, "a node"));
+    let pool = (0..s.workers).map(|k| (format!("mujou-worker-{k}"), 0, "a worker"));
     let mut threads = Vec::with_capacity(s.lanes.len() - 1 + s.workers);
-    for (i, &lane) in lanes.iter().enumerate().filter(|&(_, &lane)| lane != 0) {
-        let name = format!("mujou-node-{}", s.nodes[i].name);
-        match spawn(s, name, move |s| Worker { shared: s, lane }.run()) {
+    for (name, lane, which) in dedicated.chain(pool) {
+        let to_controller = to_controller.clone();
+        let body = move |s: &Arc<Shared<N>>| {
+            let worker = Worker {
+                shared: s,
+                lane,
+                to_controller,
+            };
+            worker.run();
+        };
+        match spawn(s, name, body) {
             Ok(thread) => threads.push(thread),
-            Err(e) => return Err(abandon(s, "a node", &e)),
-        }
-    }
-    for k in 0..s.workers {
-        let name = format!("mujou-worker-{k}");
-        match spawn(s, name, |s| Worker { shared: s, lane: 0 }.run()) {
-            Ok(thread) => threads.push(thread),
-            Err(e) => return Err(abandon(s, "a worker", &e)),
+            Err(e) => return Err(abandon(s, which, &e)),
         }
     }
     Ok(threads)

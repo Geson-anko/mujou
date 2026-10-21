@@ -57,7 +57,7 @@ if t_out is not None and t_out >= t_in:  # y は x を書いた後に送られ�
 
 `timer.pause()` は `timer.resume()` までそのタイマーの時間を止める。`global_timer.pause()` はグローバルタイマーで走るすべての実行を止める。止まっている間は次のようになる。
 
-- そのタイマーで走る全実行のノードは更新せず、`resume` 後の最初の `dt` に停止中の時間は入らない
+- そのタイマーで走る全実行のノードは更新せず、`resume` 後の最初の `dt` に停止中の時間は入らない。ノードには知らされない。`on_pause` と `on_resume` が呼ばれるのは状態の取得の前後だけ
 - そのタイマーの `sleep` は戻らず、`VirtualTimer.advance` は `RuntimeError` になる
 - `run.state_dict()` は取得でき、止めた時刻の状態が返る
 

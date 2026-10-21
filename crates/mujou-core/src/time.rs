@@ -40,11 +40,6 @@ impl Timestamp {
         self.0 as f64 / 1e9
     }
 
-    /// The whole seconds, rounded down.
-    pub const fn whole_secs(self) -> u64 {
-        self.0 / 1_000_000_000
-    }
-
     /// The time from `other` to `self` in seconds, negative when `other` is
     /// later: the difference is exact in `i128`, then rounded once to `f64` and
     /// once by the division, as Python rounds `(a.ns - b.ns) / 1e9`.

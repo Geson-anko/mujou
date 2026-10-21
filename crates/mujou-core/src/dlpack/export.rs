@@ -5,14 +5,12 @@ use std::ptr;
 use std::sync::Arc;
 
 use crate::buffer::Buffer;
-use crate::dlpack::ffi::{
-    DEVICE_CPU, DLDevice, DLManagedTensor, DLManagedTensorVersioned, DLTensor, VERSION,
-};
+use crate::dlpack::ffi::{DEVICE_CPU, DLDevice, DLManagedTensorVersioned, DLTensor, VERSION};
 
 /// What a lent tensor keeps alive: the buffer, so that it cannot go back to its
 /// pool, and the shape and strides that the tensor points to.
-struct Lent<T> {
-    managed: T,
+struct Lent {
+    managed: DLManagedTensorVersioned,
     _buffer: Arc<Buffer>,
     shape: Box<[i64]>,
     strides: Box<[i64]>,
@@ -27,16 +25,11 @@ fn row_major_strides(shape: &[i64]) -> Box<[i64]> {
     strides.into_boxed_slice()
 }
 
-/// Boxes the managed tensor `make` builds around `buffer`, and points it at the
-/// shape, the strides and the box itself (its `manager_ctx`). `parts` picks the
-/// tensor and the context out of the managed struct.
-fn lend<T>(
-    buffer: Arc<Buffer>,
-    make: impl FnOnce(DLTensor) -> T,
-    parts: fn(&mut T) -> (&mut DLTensor, &mut *mut c_void),
-) -> *mut T {
+/// Lends `buffer` as a 1.x DLPack tensor. The buffer stays alive (out of its
+/// pool) until the consumer calls the tensor's deleter.
+pub fn export(buffer: Arc<Buffer>) -> *mut DLManagedTensorVersioned {
     let shape: Box<[i64]> = buffer.field().shape.clone().into_boxed_slice();
-    let tensor = DLTensor {
+    let dl_tensor = DLTensor {
         // The pointer is mutable only because DLPack says so: the buffer is
         // immutable, and every reader copies it out instead of writing to it.
         // READ_ONLY is not set, because consumers may refuse such tensors.
@@ -52,8 +45,15 @@ fn lend<T>(
         strides: ptr::null_mut(),
         byte_offset: 0,
     };
+    let managed = DLManagedTensorVersioned {
+        version: VERSION,
+        manager_ctx: ptr::null_mut(),
+        deleter: Some(delete),
+        flags: 0,
+        dl_tensor,
+    };
     let lent = Box::into_raw(Box::new(Lent {
-        managed: make(tensor),
+        managed,
         strides: row_major_strides(&shape),
         shape,
         _buffer: buffer,
@@ -64,55 +64,18 @@ fn lend<T>(
     unsafe {
         let shape = (*lent).shape.as_mut_ptr();
         let strides = (*lent).strides.as_mut_ptr();
-        let (tensor, ctx) = parts(&mut (*lent).managed);
-        tensor.shape = shape;
-        tensor.strides = strides;
-        *ctx = lent.cast();
-        &raw mut (*lent).managed
+        let managed = &mut (*lent).managed;
+        managed.dl_tensor.shape = shape;
+        managed.dl_tensor.strides = strides;
+        managed.manager_ctx = lent.cast();
+        managed
     }
 }
 
-/// Lends `buffer` as a 1.x DLPack tensor. The buffer stays alive (out of its
-/// pool) until the consumer calls the tensor's deleter.
-pub fn export_versioned(buffer: Arc<Buffer>) -> *mut DLManagedTensorVersioned {
-    let make = |dl_tensor| DLManagedTensorVersioned {
-        version: VERSION,
-        manager_ctx: ptr::null_mut(),
-        deleter: Some(delete_versioned),
-        flags: 0,
-        dl_tensor,
-    };
-    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
-}
-
-/// Lends `buffer` as an unversioned DLPack tensor, for consumers that do not
-/// know the 1.x protocol.
-pub fn export_legacy(buffer: Arc<Buffer>) -> *mut DLManagedTensor {
-    let make = |dl_tensor| DLManagedTensor {
-        dl_tensor,
-        manager_ctx: ptr::null_mut(),
-        deleter: Some(delete_legacy),
-    };
-    lend(buffer, make, |m| (&mut m.dl_tensor, &mut m.manager_ctx))
-}
-
-unsafe extern "C" fn delete_versioned(t: *mut DLManagedTensorVersioned) {
-    // SAFETY: DLPack calls the deleter once, with the tensor `export_versioned`
-    // returned, whose `manager_ctx` is the `Lent` box that owns it.
-    unsafe {
-        drop(Box::from_raw(
-            (*t).manager_ctx.cast::<Lent<DLManagedTensorVersioned>>(),
-        ))
-    };
-}
-
-unsafe extern "C" fn delete_legacy(t: *mut DLManagedTensor) {
-    // SAFETY: as in `delete_versioned`, for `export_legacy`.
-    unsafe {
-        drop(Box::from_raw(
-            (*t).manager_ctx.cast::<Lent<DLManagedTensor>>(),
-        ))
-    };
+unsafe extern "C" fn delete(t: *mut DLManagedTensorVersioned) {
+    // SAFETY: DLPack calls the deleter once, with the tensor `export` returned,
+    // whose `manager_ctx` is the `Lent` box that owns it.
+    unsafe { drop(Box::from_raw((*t).manager_ctx.cast::<Lent>())) };
 }
 
 #[cfg(test)]
@@ -146,23 +109,17 @@ mod tests {
         };
         let messages = Messages::new(Arc::new(Schema::new(vec![field]).unwrap()));
         let pool = Arc::clone(&messages.pools()[0]);
-        for (k, versioned) in [(0, true), (100, false)] {
+        for k in [0, 100] {
             let msg = messages.build(None, fill_range(k)).unwrap();
             let buffer = Arc::clone(&msg.values()[0]);
             let field = buffer.field().clone();
             let expected = buffer.bytes().to_vec();
             let before = Arc::strong_count(&buffer);
-            let (tensor, delete): (&DLTensor, Box<dyn FnOnce()>) = if versioned {
-                let t = export_versioned(Arc::clone(&buffer));
-                // SAFETY: `t` stays valid until its deleter is called below.
-                unsafe {
-                    assert_eq!((*t).version, VERSION);
-                    (&(*t).dl_tensor, Box::new(move || (*t).deleter.unwrap()(t)))
-                }
-            } else {
-                let t = export_legacy(Arc::clone(&buffer));
-                // SAFETY: as above.
-                unsafe { (&(*t).dl_tensor, Box::new(move || (*t).deleter.unwrap()(t))) }
+            let t = export(Arc::clone(&buffer));
+            // SAFETY: `t` stays valid until its deleter is called below.
+            let tensor = unsafe {
+                assert_eq!((*t).version, VERSION);
+                &(*t).dl_tensor
             };
             assert_eq!(Arc::strong_count(&buffer), before + 1);
             // Drop the message: only the tensor holds the buffer now, so later
@@ -179,7 +136,8 @@ mod tests {
             let strides = unsafe { std::slice::from_raw_parts(tensor.strides, 2) };
             assert_eq!(strides, [3, 1]);
             let free = pool.free();
-            delete();
+            // SAFETY: `t` is deleted once, after its last use.
+            unsafe { (*t).deleter.unwrap()(t) };
             assert_eq!(pool.free(), free + 1, "back in its pool");
         }
     }

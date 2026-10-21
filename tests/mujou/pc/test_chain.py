@@ -31,11 +31,17 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     nodes: dict[str, Any] = {"input": pc.Input(x=X, y=Y, period=TAU.h / 4)}
     last = nodes["input"]
     for i, module in enumerate(layers):
-        layer = pc.Layer(module, act=last.act, tau=TAU, learn_interval=LEARN_INTERVAL)
+        layer = pc.Layer(
+            module, act_spec=last.act_spec, tau=TAU, learn_interval=LEARN_INTERVAL
+        )
         last.next.connect(layer.prev)
         nodes[f"layer{i}"] = last = layer
     nodes["output"] = pc.Output(
-        head, act=last.act, loss=pc.mse, tau=TAU, learn_interval=LEARN_INTERVAL
+        head,
+        act_spec=last.act_spec,
+        loss=pc.mse,
+        tau=TAU,
+        learn_interval=LEARN_INTERVAL,
     )
     last.next.connect(nodes["output"].prev)
     return Group(**nodes), nodes["input"]
@@ -88,7 +94,7 @@ class TestChain:
         net = chain(*layers, head)
         nodes = [net.input, getattr(net, "layer0"), getattr(net, "layer1")]
         for sender, receiver in zip(nodes, [*nodes[1:], net.output], strict=True):
-            assert receiver.prev.recv_spec == sender.act
+            assert receiver.prev.recv_spec == sender.act_spec
             assert sender.next.channels == receiver.prev.channels
 
     def test_exposes_the_ports_of_the_host(self):
@@ -110,4 +116,4 @@ class TestChain:
         head = nn.Linear(WIDTHS[0], N_OUT).double()
         net = chain(head)
         assert list(vars(net)) == ["input", "output", "prev", "next"]
-        assert net.output.prev.recv_spec == net.input.act
+        assert net.output.prev.recv_spec == net.input.act_spec

@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use mujou_core::runtime::{
     self as core, Hook, HookError, NodeFailure, NodeHooks, NodeSpec, Reply, RunConfig, RuntimeError,
@@ -230,22 +230,21 @@ fn period_to_ns(seconds: f64) -> PyResult<NonZeroU64> {
     Ok(NonZeroU64::new(ns).unwrap_or(NonZeroU64::MIN))
 }
 
-/// The number of workers when `start` is given none, if not the core's
-/// default (the available parallelism, which on Linux also counts a CPU
-/// quota): half of it, at least 1, while the GIL is enabled. With the GIL,
-/// more workers than that only contend for it: in the benchmark
-/// (`benchmarks/mn_scheduler.py`, 14 cores), torch nodes updated about twice
-/// as fast on 7 or 8 workers as on 14.
-fn default_workers(py: Python<'_>) -> PyResult<Option<NonZeroUsize>> {
+/// The number of workers when `start` is given none: the available
+/// parallelism (which on Linux also counts a CPU quota), or half of it, at
+/// least 1, while the GIL is enabled. With the GIL, more workers than that
+/// only contend for it: in the benchmark (`benchmarks/mn_scheduler.py`, 14
+/// cores), torch nodes updated about twice as fast on 7 or 8 workers as on 14.
+fn default_workers(py: Python<'_>) -> PyResult<NonZeroUsize> {
     let gil = py
         .import(intern!(py, "sys"))?
         .call_method0(intern!(py, "_is_gil_enabled"))?
         .extract::<bool>()?;
+    let cpus = std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
     if !gil {
-        return Ok(None);
+        return Ok(cpus);
     }
-    let cpus = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    Ok(NonZeroUsize::new((cpus / 2).max(1)))
+    Ok(NonZeroUsize::new(cpus.get() / 2).unwrap_or(NonZeroUsize::MIN))
 }
 
 /// A node of `start`: `(driver, name, period, dedicated_thread,
@@ -303,7 +302,7 @@ pub fn start(
     workers: Option<NonZeroUsize>,
 ) -> PyResult<Runtime> {
     let workers = match workers {
-        Some(workers) => Some(workers),
+        Some(workers) => workers,
         None => default_workers(py)?,
     };
     let nodes = (nodes.into_iter())
@@ -396,10 +395,14 @@ impl Runtime {
         wait(py, reply)?
     }
 
-    /// Asks every node to stop and returns without waiting; `join` waits for
-    /// the end. Does nothing once the network has stopped.
-    fn stop(&self) {
+    /// Asks every node to stop, then waits as `join` does and returns whether
+    /// the network has stopped. After a timeout the stop stays asked. A bad
+    /// `timeout` raises before anything changes.
+    #[pyo3(signature = (timeout = None))]
+    fn shutdown(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<bool> {
+        let timeout = timeout.map(to_duration).transpose()?;
         self.0.stop();
+        self.wait_for_end(py, timeout)
     }
 
     /// Waits until the network has stopped, for at most `timeout` seconds (no
@@ -408,18 +411,7 @@ impl Runtime {
     #[pyo3(signature = (timeout = None))]
     fn join(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<bool> {
         let timeout = timeout.map(to_duration).transpose()?;
-        let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
-        let runtime = &self.0;
-        let ended = wait_interruptibly(py, deadline, |step| match runtime.join(Some(step)) {
-            Ok(true) => Some(Ok(())),
-            Ok(false) => None,
-            Err(e) => Some(Err(e)),
-        })?;
-        match ended {
-            Some(Ok(())) => Ok(true),
-            None => Ok(false),
-            Some(Err(e)) => Err(runtime_error(py, e)),
-        }
+        self.wait_for_end(py, timeout)
     }
 
     /// Raises `NetworkError` if a node has raised.
@@ -445,5 +437,22 @@ impl Runtime {
     /// nanoseconds.
     fn last_update_ns(&self) -> Vec<u64> {
         self.0.last_update_ns()
+    }
+}
+
+impl Runtime {
+    fn wait_for_end(&self, py: Python<'_>, timeout: Option<Duration>) -> PyResult<bool> {
+        let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
+        let runtime = &self.0;
+        let ended = wait_interruptibly(py, deadline, |step| match runtime.join(Some(step)) {
+            Ok(true) => Some(Ok(())),
+            Ok(false) => None,
+            Err(e) => Some(Err(e)),
+        })?;
+        match ended {
+            Some(Ok(())) => Ok(true),
+            None => Ok(false),
+            Some(Err(e)) => Err(runtime_error(py, e)),
+        }
     }
 }

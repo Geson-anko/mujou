@@ -99,6 +99,22 @@ class TestWithoutInterval:
         assert clock(learn_interval).discrete is discrete
 
 
+class TestFromTimeConstants:
+    def test_takes_the_default_max_dt_of_tau(self):
+        tau = pc.TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0)
+        learn = pc.LearnClock.of(tau, period=DT, learn_interval=None)
+        # max_dt is min(h / 2, 3 * lam) = 1.5 ms.
+        assert learn.tick(10 * DT, 0, MS).dt == pytest.approx(1.5e-3)
+        given = pc.LearnClock.of(tau, period=DT, learn_interval=None, max_dt=1.2e-3)
+        assert given.tick(10 * DT, 0, MS).dt == pytest.approx(1.2e-3)
+
+    def test_never_learns_with_an_infinite_theta(self):
+        tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=math.inf)
+        learn = pc.LearnClock.of(tau, period=DT, learn_interval=None)
+        ticks = run(learn, [(now, 0) for now in range(1, 20)])
+        assert learned(ticks) == {}
+
+
 class TestChecks:
     @pytest.mark.parametrize(
         ("kwargs", "match"),

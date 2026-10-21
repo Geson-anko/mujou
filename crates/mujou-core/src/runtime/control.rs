@@ -5,9 +5,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::error::finished_error;
+use super::error::{Hook, RuntimeError, finished_error};
+use super::hooks::NodeHooks;
 use super::lifecycle::Command;
-use super::{Control, NodeHooks, RuntimeError, Shared, build_states};
+use super::shared::{Control, Shared, build_states};
 use crate::time::remaining;
 
 /// A request from the host, run on the control thread.
@@ -15,7 +16,7 @@ pub(super) type Job<N> = Box<dyn FnOnce(&mut Controller<N>) + Send>;
 
 pub(super) enum Message<N: NodeHooks> {
     Job(Job<N>),
-    /// A node recorded the first failure; the control thread ends the system.
+    /// A hook of a node failed; the control thread ends the system.
     Failed,
 }
 
@@ -24,7 +25,6 @@ pub(super) enum Message<N: NodeHooks> {
 pub(super) struct Controller<N: NodeHooks> {
     pub(super) shared: Arc<Shared<N>>,
     pub(super) threads: Vec<JoinHandle<()>>,
-    pub(super) done: bool,
 }
 
 impl<N: NodeHooks> Controller<N> {
@@ -34,7 +34,7 @@ impl<N: NodeHooks> Controller<N> {
         started: Sender<Result<(), RuntimeError>>,
     ) {
         let _ = started.send(self.startup());
-        while !self.done {
+        while !self.finished() {
             // `shared` holds a sender, so this does not disconnect.
             match messages.recv() {
                 Ok(Message::Job(job)) => job(&mut self),
@@ -70,9 +70,16 @@ impl<N: NodeHooks> Controller<N> {
         Ok(())
     }
 
+    /// The system has ended.
+    fn finished(&self) -> bool {
+        self.shared.lock().finished
+    }
+
     /// Ends the system if a failure was recorded, and fails if it has ended.
     fn ensure_running(&mut self) -> Result<(), RuntimeError> {
-        if self.done || self.shared.lock().life.failed() {
+        let c = self.shared.lock();
+        if c.finished || c.life.failed() {
+            drop(c);
             return Err(self.end());
         }
         Ok(())
@@ -103,7 +110,7 @@ impl<N: NodeHooks> Controller<N> {
         build: impl FnOnce(Vec<N::State>) -> R,
         timeout: Duration,
     ) -> Result<R, RuntimeError> {
-        if self.done {
+        if self.finished() {
             return self.shared.capture_ended(build);
         }
         self.ensure_running()?;
@@ -137,7 +144,7 @@ impl<N: NodeHooks> Controller<N> {
         }
         // Every node is parked without holding its lock, and the time stands
         // at T: the states are consistent at T.
-        let states = (0..n).map(|i| s.capture(i));
+        let states = (0..n).map(|i| s.call(i, Hook::Capture, N::capture));
         let Ok(states) = states.collect::<Result<Vec<_>, ()>>() else {
             return Err(self.end());
         };
@@ -149,7 +156,7 @@ impl<N: NodeHooks> Controller<N> {
 
     /// Stops every node and ends the system. Does nothing once ended.
     pub(super) fn finish(&mut self) {
-        if self.done {
+        if self.finished() {
             return;
         }
         let s = Arc::clone(&self.shared);
@@ -168,7 +175,6 @@ impl<N: NodeHooks> Controller<N> {
             let _ = thread.join();
         }
         s.mark_finished(&mut s.lock());
-        self.done = true;
     }
 
     /// Ends the system (if not yet ended) and returns how it ended.

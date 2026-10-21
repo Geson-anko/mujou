@@ -31,13 +31,13 @@ class Component:
                 "read; leave them out (a dataclass without slots=True)"
             )
         for name, value in vars(cls).items():
-            if _is_part(value):
+            if is_part(value):
                 raise TypeError(
                     f"{cls.__name__}.{name} is a {type(value).__name__} on the "
                     "class; assign it to an attribute of the instance in __init__"
                 )
 
 
-def _is_part(value: object) -> bool:
+def is_part(value: object) -> bool:
     """Whether ``value`` is part of a tree: a port, a node or a network."""
     return isinstance(value, Port | MultiPort | Component)

@@ -65,7 +65,7 @@
 | `on_start()` | 実行の開始に 1 回 | I/O を開く。状態に依存する出力をしない |
 | `load_state_dict(state)` | 復元するときだけ。`on_start` の後、最初の `on_update` の前 | 状態を戻す |
 | `on_update(dt)` | 自分の周期で繰り返し（[実行の周期](#実行の周期)） | 隣の最新値を読み、$\Delta t$ ぶん更新し、書く。他を待たない |
-| `on_pause()` | 停止の要求で、更新の区切りで止まったとき | I/O の一時停止など |
+| `on_pause()` | 状態の取得のための停止の要求で、更新の区切りで止まったとき。タイマーの `pause` では呼ばない | I/O の一時停止など |
 | `on_resume()` | 停止から再開し、次の `on_update` の前 | I/O の再開、停止中に溜まった外界の値の破棄など |
 | `on_exception()` | どれかのノードの例外で終わるとき、全ノードに 1 回。`on_stop` の前 | アクチュエータの安全停止など、異常終了に固有の処理 |
 | `on_stop()` | 実行の終わりに 1 回。例外による終了でも呼ぶ | 資源の解放。状態を変えない |
@@ -107,7 +107,7 @@
 
 - `capture` は、ノードの `state_dict()` の戻り値のテンソルを detach してから `copy.deepcopy` する。状態はデータで、計算グラフを持ち越さない。複製はノードの stream の上で行い、前後で stream を待つ（どの hook が積んだ仕事も、複製の前に終わる）。正常に終わった後はホストのスレッドで走るので、`torch.cuda.stream` で呼んだスレッドの device と stream を戻す
 - `capture` の間、Driver の `wires` は空になる。Port の lookup が失敗するので、`state_dict` の中の送受信は K12 で断られる
-- 「いま hook を走らせている Driver」は、bindings の thread-local（`_native.current()`）が持つ。Rust が Python を呼ぶ直前に付け、戻ったら外す。Port、`Node.timer`、ホスト専用の操作の検査（K12、K16）は、どれもこの 1 つの事実を見る
+- 「いま hook を走らせている Driver」は、bindings の thread-local（`_native.current()`）が持つ。Rust が Python を呼ぶ直前に付け、戻ったら外す。Python からの入口は `_core/current.py` の `running()` 1 つで、Port、`Node.timer`、ホスト専用の操作の検査（K12、K16）は、どれもこれを通してこの 1 つの事実を見る
 
 ノードのクラスは純 Python で、Rust の基底クラスを継承しない。利用者の MRO と `help(Node)` には private な hook が出てこない。
 

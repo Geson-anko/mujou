@@ -1,7 +1,7 @@
 """The entry of one node for the runtime: its ``Driver`` (``specs/nodes.md``).
 
 The runtime calls one method of the driver for each hook of the node, on the
-thread that runs the node, and ``_native.current()`` returns the driver
+thread that runs the node, and ``current.running()`` returns the driver
 meanwhile. Every method does the framework's work around the hook in the same
 order, so that no override of a hook can skip it:
 
@@ -20,11 +20,12 @@ detached before the copy, and no graph goes with them.
 import contextvars
 import copy
 from collections.abc import Callable, Mapping
-from typing import Final, cast, final
+from typing import Final, final
 
 import torch
 
-from mujou._core.node import Node, ReadOnlyTimer
+from mujou._core._native import ReadOnlyTimer
+from mujou._core.node import Node, map_tensors
 from mujou._core.port import AnyPort, Wire
 
 # The wires of a node in its state_dict: none, so that taking the state is not
@@ -110,29 +111,13 @@ class Driver:
     def _copy(self) -> object:
         wires, self.wires = self.wires, _NO_WIRES
         try:
-            return self._context.run(
-                lambda: copy.deepcopy(_detached(self.node.state_dict()))
-            )
+            return self._context.run(self._detached_state)
         finally:
             self.wires = wires
 
-
-def _detached(value: object) -> object:
-    """``value`` with each tensor in its dicts, lists and tuples detached, in
-    new containers (a dict of the same type: an ``OrderedDict`` keeps the
-    metadata of a module's ``state_dict``)."""
-    if isinstance(value, torch.Tensor):
-        return value.detach()
-    if isinstance(value, dict):
-        items = copy.copy(cast(dict[object, object], value))
-        for key, item in items.items():
-            items[key] = _detached(item)
-        return items
-    if isinstance(value, list):
-        return [_detached(element) for element in cast(list[object], value)]
-    if type(value) is tuple:
-        return tuple(_detached(element) for element in cast(tuple[object, ...], value))
-    return value
+    def _detached_state(self) -> object:
+        """A deep copy of the node's ``state_dict``, its tensors detached."""
+        return copy.deepcopy(map_tensors(self.node.state_dict(), torch.Tensor.detach))
 
 
 def _use(stream: torch.cuda.Stream) -> None:

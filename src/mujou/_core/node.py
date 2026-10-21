@@ -1,7 +1,7 @@
 """The node, the unit of asynchronous computation."""
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeIs, cast, final
 
@@ -9,7 +9,7 @@ import torch
 
 from mujou._core._native import ReadOnlyTimer
 from mujou._core.component import Component
-from mujou._core.port import outside, running
+from mujou._core.current import outside, running
 
 
 @final
@@ -49,9 +49,10 @@ class Node(Component):
       below). ``dt`` is the time in seconds on the run's timer since the
       node's last update. Read the ports with ``recv``, update in proportion to
       ``dt``, and write the ports with ``send``. It never waits for other nodes.
-    - ``on_pause()``: when the node has stopped for a pause of the run (as
-      ``Run.state_dict`` does). ``on_resume()``: when the pause ends, before
-      the next ``on_update``.
+    - ``on_pause()``: when the node has stopped for the run to take its state
+      (``Run.state_dict``). ``on_resume()``: when that pause ends, before the
+      next ``on_update``. A pause of the timer (``Timer.pause``) calls neither:
+      the node only sees no time pass.
     - ``on_exception()``: once on every node, when a hook of any node has raised,
       before ``on_stop``.
     - ``on_stop()``: once, when the run stops, also after an exception. It
@@ -95,35 +96,36 @@ class Node(Component):
     settings back before the hook returns (inside a ``with``, say).
     ``contextvars`` do persist: each node runs its hooks in a
     ``contextvars.Context`` of its own, which starts empty (it does not inherit
-    the host's). A hook that blocks
-    (``time.sleep``, waiting for I/O or a lock) holds its worker meanwhile,
-    and the other nodes' ``dt`` grows; give such a node
-    ``dedicated_thread=True``, so that it runs on a thread of its own, with
-    every hook on that thread.
+    the host's). A hook that blocks (``time.sleep``, waiting for I/O or a
+    lock) holds its worker meanwhile, and the other nodes' ``dt`` grows; give
+    such a node ``dedicated_thread=True``, so that it runs on a thread of its
+    own, with every hook on that thread.
 
     The framework leaves gradient recording as it is, on by default as in
     plain PyTorch: a hook may call ``backward`` directly, and computes without
     a graph inside ``with torch.no_grad():``. No graph crosses nodes: a port
     sends a detached copy. Before each hook, when ``device`` is CUDA, the
     framework makes the device and a stream of the node's own current: the
-    only per-thread settings it makes, and around ``state_dict`` (which may run
-    on the host's thread) it sets the thread's own back. On CUDA it also waits for
-    the work queued on that stream after ``on_update`` (holding its worker
-    meanwhile), after ``load_state_dict`` and around ``state_dict``. It does
-    this around the hooks, so overriding one never skips it.
+    only per-thread settings it makes, and around ``state_dict`` (which may
+    run on the host's thread) it sets the thread's own back. On CUDA it also
+    waits for the work queued on that stream after ``on_update`` (holding its
+    worker meanwhile), after ``load_state_dict`` and around ``state_dict``. It
+    does this around the hooks, so overriding one never skips it.
 
-    The node updates once every ``period`` (0.01 s by default) of the run's timer
-    on average: the time an update takes
-    counts toward the period, and a node that falls a whole ``period`` behind does
-    not update several times in a row to catch up. A pause does not count. ``dt``
-    is still the time that actually passed since the last update, longer than
-    ``period`` when the node is late, so keep updating in proportion to it and
-    stay stable for the longest ``dt`` it can get. A manual run
-    (``ManualRun.step``) ignores the period.
+    The node updates once every ``period`` (0.01 s by default) of the run's
+    timer on average: the time an update takes counts toward the period, and a
+    node that falls a whole ``period`` behind does not update several times in
+    a row to catch up. A pause does not count. ``dt`` is still the time that
+    actually passed since the last update, longer than ``period`` when the
+    node is late, so keep updating in proportion to it and stay stable for the
+    longest ``dt`` it can get. A manual run (``ManualRun.step``) ignores the
+    period.
 
     ``period=0.0`` updates as soon as any time has passed since the last update.
     Set it only when the node must: such a node keeps a CPU core busy, and takes
     time from the other nodes, whose ``dt`` it makes irregular.
+    ``period=math.inf`` never updates by itself: only ``ManualRun.step`` updates
+    such a node.
 
     Example::
 
@@ -230,13 +232,14 @@ class Node(Component):
 
         Read the time with ``self.timer.now()`` in the hooks (``state_dict``
         included). The timer is the one given to ``mujou.run(..., timer=...)``,
-        the global timer by default, or, for a run restored from a state, a new
-        timer that started at the time of the state (``Run.timer``). A ``ReadOnlyTimer`` only reads: a node
-        does not change the time of its run (``Timer.sleep``,
-        ``set_time_scale`` and ``VirtualTimer.advance`` raise ``RuntimeError``
-        in a hook). It stops at the time the run ends, so the hooks that run
-        after the end (``on_exception``, ``on_stop``) see the time stand still;
-        measure real time there instead. The host reads ``Run.timer``.
+        the global timer by default, or, for a run restored from a state, a
+        new timer that started at the time of the state (``Run.timer``). A
+        ``ReadOnlyTimer`` only reads: a node does not change the time of its
+        run (``Timer.sleep``, ``set_time_scale`` and ``VirtualTimer.advance``
+        raise ``RuntimeError`` in a hook). It stops at the time the run ends,
+        so the hooks that run after the end (``on_exception``, ``on_stop``)
+        see the time stand still; measure real time there instead. The host
+        reads ``Run.timer``.
 
         Raises:
             RuntimeError: This is not read in a hook of this node while it runs
@@ -244,7 +247,7 @@ class Node(Component):
         """
         current = running()
         if current is None or current.node is not self:
-            raise outside(f"{type(self).__name__}.timer")
+            raise outside(f"{type(self).__name__}.timer", "the host reads run.timer")
         return current.clock
 
     def register_state(self, name: str) -> None:
@@ -292,11 +295,13 @@ class Node(Component):
         ``dt`` and send."""
 
     def on_pause(self) -> None:
-        """Called when the node has stopped for a pause of the run (to take the
-        state), at the end of its current ``on_update``."""
+        """Called when the node has stopped for the run to take its state
+        (``Run.state_dict``), at the end of its current ``on_update``. A pause
+        of the timer (``Timer.pause``) does not call it."""
 
     def on_resume(self) -> None:
-        """Called when the pause ends, before the next ``on_update``."""
+        """Called when the pause for taking the state ends, before the next
+        ``on_update``."""
 
     def on_exception(self) -> None:
         """Called once on every node when a hook of any node has raised, before
@@ -319,13 +324,7 @@ class Node(Component):
         """
         state: dict[str, Any] = {"generator": self.generator.get_state()}
         for name, value in self.__items():
-            state[name] = (
-                value.detach()
-                if isinstance(value, torch.Tensor)
-                else value.state_dict()
-                if _has_state(value)
-                else value
-            )
+            state[name] = _state_of(value)
         return state
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
@@ -412,6 +411,37 @@ def is_state(value: object) -> bool:
     """Whether an attribute that holds ``value`` is part of a node's state by
     itself: a tensor, or an object with a state of its own."""
     return isinstance(value, torch.Tensor) or _has_state(value)
+
+
+def _state_of(value: object) -> object:
+    """What the default ``state_dict`` returns for an attribute that holds
+    ``value``, as ``Node.__load`` loads it back."""
+    if isinstance(value, torch.Tensor):
+        return value.detach()
+    if _has_state(value):
+        return value.state_dict()
+    return value
+
+
+def map_tensors(value: object, f: Callable[[torch.Tensor], torch.Tensor]) -> object:
+    """``value``, a state, with ``f`` applied to each tensor in its dicts,
+    lists and tuples, in new containers (a dict of the same type: an
+    ``OrderedDict`` keeps the metadata of a module's ``state_dict``). The run
+    detaches the states it takes with it (``driver.py``) and moves them to the
+    CPU (``state.py``)."""
+    if isinstance(value, torch.Tensor):
+        return f(value)
+    if isinstance(value, dict):
+        items = copy.copy(cast(dict[object, object], value))
+        for key, item in items.items():
+            items[key] = map_tensors(item, f)
+        return items
+    if isinstance(value, list):
+        return [map_tensors(element, f) for element in cast(list[object], value)]
+    if type(value) is tuple:
+        elements = cast(tuple[object, ...], value)
+        return tuple(map_tensors(element, f) for element in elements)
+    return value
 
 
 def _check_device(device: torch.device) -> torch.device:

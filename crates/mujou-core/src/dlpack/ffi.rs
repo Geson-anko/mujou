@@ -42,15 +42,6 @@ pub struct DLTensor {
     pub byte_offset: u64,
 }
 
-/// The tensor of the unversioned (pre-1.0) protocol, capsule name `"dltensor"`.
-#[repr(C)]
-#[derive(Debug)]
-pub struct DLManagedTensor {
-    pub dl_tensor: DLTensor,
-    pub manager_ctx: *mut c_void,
-    pub deleter: Option<unsafe extern "C" fn(*mut DLManagedTensor)>,
-}
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DLPackVersion {

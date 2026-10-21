@@ -35,7 +35,9 @@ class Direct:
         self, start_manual: StartManual, module: nn.Module, **kwargs: Any
     ) -> None:
         self.inp = pc.Input(x=X, y=Y, period=H)
-        self.out = pc.Output(module, act=self.inp.act, loss=pc.mse, tau=TAU, **kwargs)
+        self.out = pc.Output(
+            module, act_spec=self.inp.act_spec, loss=pc.mse, tau=TAU, **kwargs
+        )
         self.inp.next.connect(self.out.prev)
         self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
 
@@ -92,13 +94,20 @@ class TestConstruction:
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=nn.MSELoss(),
-                act=ACT,
+                act_spec=ACT,
                 tau=TAU,
+                learn_interval=None,
             )
 
     def test_the_prediction_has_the_target(self):
         act = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64))
-        out = pc.Output(nn.Linear(N_IN, 10), act=act, loss=pc.cross_entropy, tau=TAU)
+        out = pc.Output(
+            nn.Linear(N_IN, 10),
+            act_spec=act,
+            loss=pc.cross_entropy,
+            tau=TAU,
+            learn_interval=None,
+        )
         assert out.next.send_spec == DictSpec(
             pc.Prediction,
             y_hat=TensorSpec((B, 10)),
@@ -111,8 +120,9 @@ class TestConstruction:
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
             loss=pc.mse,
-            act=ACT,
+            act_spec=ACT,
             tau=TAU,
+            learn_interval=None,
         )
         assert out.period == pytest.approx(TAU.h / 4)
 
@@ -121,8 +131,9 @@ class TestConstruction:
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=pc.mse,
-                act=ACT,
+                act_spec=ACT,
                 tau=TAU,
+                learn_interval=None,
                 period=TAU.h,  # max_dt is tau.h / 2
             )
 
@@ -136,7 +147,7 @@ class TestPairing:
         # and learns from that pair only.
         module = head()
         reference = copy.deepcopy(module)
-        direct = Direct(start_manual, module)
+        direct = Direct(start_manual, module, learn_interval=None)
         data = samples(7)
         times: list[int] = []
         for k, (x, y, mask) in enumerate(data):
@@ -196,7 +207,7 @@ class TestMaxDt:
         # max_dt = 2 H only.
         module = head()
         reference = copy.deepcopy(module)
-        direct = Direct(start_manual, module, max_dt=2 * H)
+        direct = Direct(start_manual, module, learn_interval=None, max_dt=2 * H)
         x, y, mask = samples(1)[0]
         direct.step((x, y, mask))  # the output reads zeros: nothing to learn
         direct.run.timer.advance(3 * H)

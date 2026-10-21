@@ -41,12 +41,12 @@ The output catches up with a change of input after a delay, which the network's 
 
 ## Reading
 
-| Way                             | What it returns                                                         | Suited for                             |
-| ------------------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
-| `run.read(port)`                | The latest value                                                        | Reading whenever it suits the host     |
-| `run.read_with_time(port)`      | The latest value and the time it was sent, `(value, Timestamp \| None)` | Telling how new the value is           |
-| `run.subscribe(port)`           | An iterator of `(value, Timestamp \| None)`, each newer than the last   | Handling each new output               |
-| `run.wait_for(port, condition)` | The first `(value, Timestamp \| None)` that meets `condition`           | Waiting until an expected output comes |
+| Way                         | What it returns                                                         | Suited for                             |
+| --------------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
+| `run.read(port)`            | The latest value                                                        | Reading whenever it suits the host     |
+| `run.read_with_time(port)`  | The latest value and the time it was sent, `(value, Timestamp \| None)` | Telling how new the value is           |
+| `run.subscribe(port)`       | An iterator of `(value, Timestamp \| None)`, each newer than the last   | Handling each new output               |
+| `run.wait_for(port, until)` | The first `(value, Timestamp \| None)` that meets `until`               | Waiting until an expected output comes |
 
 They read any port of the run that sends, connected or not: reading a connected port observes a value in the middle of the network without changing it. Each returns a new copy on the CPU of what the port last sent with `send` (its initial value until then, with the time `None`).
 

@@ -322,7 +322,6 @@ mod timestamp {
         let ts = Timestamp::from_ns(2_500_000_001);
         assert_eq!(ts.as_ns(), 2_500_000_001);
         assert_eq!(ts.as_secs_f64(), 2_500_000_001.0 / 1e9);
-        assert_eq!(ts.whole_secs(), 2);
     }
 
     #[test]

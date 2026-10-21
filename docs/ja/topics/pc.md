@@ -19,10 +19,12 @@
 | ノード      | 持つもの                                       | Port                                                                                                                                        |
 | ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pc.Input`  | 書き込みの回数                                 | `prev`: ホストが `pc.Sample`（`x`、`y`、`mask`）を書く。`next`: `x` を `pc.Activity` の `h` として、`y`・`mask`・書き込みの時刻と一緒に送る |
-| `pc.Layer`  | モジュール、活動 `h`、双対変数 `lam`、クロック | `prev` と `next`。`next` は `h` を、入力と一緒に届いた `y`・`mask`・`time` と組にして `pc.Activity` で送る                                  |
+| `pc.Layer`  | モジュール、活動 `h`、双対変数 `lam`、クロック | `prev` と `next`。`next` は `h` を、自分の `jumps` と入力と一緒に届いた `y`・`mask`・`time` と組にして `pc.Activity` で送る                 |
 | `pc.Output` | 最後のモジュール、損失、クロック               | `prev`。`next` はホストが読む `pc.Prediction`（`y_hat`、`y`、`mask`、`time`）を送る                                                         |
 
-`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.h / 4` にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act`（受け取る `pc.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。
+`pc.Activity` は `h`・`jumps`・`y`・`mask`・`time` を運ぶ。`jumps` は送り手の `h` が緩和でなく跳んだ回数。`pc.Input` はホストの書き込みを数え、`pc.Layer` は新しいサンプルや受け取る `h` の跳びに合わせて動いた回数と、間隔を置いて学ぶときに自分の重みが起こした跳びを数える。受け手は `jumps` の変化を見たら自分の `h` を予測と一緒に 1 回動かし、跳びを偏差 `h - mu` に入れない。
+
+`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.h / 4`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
 
 ノードにはバッチの各サンプルを独立に扱う `nn.Module` なら何でも入れられる。1 層でも、層を重ねたものでも、残差ブロックでもよい。`Dropout` と `BatchNorm` は training mode でサンプルを落としたり混ぜたりするので使わない。`LayerNorm` は使える。重みはモジュールを作るときに初期化しておく。ノードは初期化しない。`requires_grad=False` のパラメータは学習しない。
 
@@ -30,15 +32,15 @@
 
 `mujou.pc` の速さはすべて実行のタイマーの秒で指定する。次の表の順に決める。
 
-| 値               | 決めるもの                                   | 決め方                                                                                                                                             | MNIST  |
-| ---------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `tau.h`          | 各活動 `h` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                 | 4 ms   |
-| 周期             | 各ノードが更新する間隔                       | `tau.h / 4`。`Layer`・`Output` の既定で、`pc.Chain` の周期                                                                                         | 1 ms   |
-| `tau.lam`        | 双対変数 `lam` が追従する速さ                | `2 * tau.h`                                                                                                                                        | 8 ms   |
-| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S = 32`                                                                                                                                 | 32 ms  |
-| `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                | 24 ms  |
-| `tau.theta`      | 重みの時定数（学習率はその逆数）             | 見せる時間を、1 バッチあたりの学習率で割る                                                                                                         | 0.32 s |
-| `max_dt`         | 1 回の更新で数える `dt` の上限               | 既定の `min(tau.h / 2, 3 * tau.lam)`（ここでは 2 周期）。周期より短い `max_dt` は `ValueError` になる。`tau.lam < tau.h / 12` なら既定でもそうなる | 2 ms   |
+| 値               | 決めるもの                                   | 決め方                                                                                                                                                           | MNIST  |
+| ---------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `tau.h`          | 各活動 `h` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                               | 4 ms   |
+| 周期             | 各ノードが更新する間隔                       | `tau.period`（`tau.h / 4`）。`Layer`・`Output` の既定で、`pc.Chain` の周期                                                                                       | 1 ms   |
+| `tau.lam`        | 双対変数 `lam` が追従する速さ                | `2 * tau.h`                                                                                                                                                      | 8 ms   |
+| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S = 32`                                                                                                                                               | 32 ms  |
+| `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                              | 24 ms  |
+| `tau.theta`      | 重みの時定数（学習率はその逆数）             | 見せる時間を、1 バッチあたりの学習率で割る                                                                                                                       | 0.32 s |
+| `max_dt`         | 1 回の更新で数える `dt` の上限               | 既定の `tau.max_dt`（`min(tau.h / 2, 3 * tau.lam)`、ここでは 2 周期）。周期より短い `max_dt` は `ValueError` になる。`tau.lam < tau.h / 12` なら既定でもそうなる | 2 ms   |
 
 - **学習率**: 1 回の重みの更新で、重みは「そのノードが前に学んでからの時間 / `tau.theta`」にバッチの勾配の平均を掛けた分だけ動く。1 バッチに 1 回学ぶならその時間は見せる時間なので、`tau.theta = 見せる時間 / lr` とすれば 1 バッチあたりの学習率が `lr` になる。この時間はその間の各更新の `dt`（1 回ごとに `max_dt` で打ち切ったもの）の和で、周期どおりの更新なら `dt` は 1 周期なのでそのまま数えられる
 - **勾配の平均**: サンプルごとの勾配の和をバッチの大きさ `B` で割ったもの。`mask` が False のサンプルは和に何も足さないが、`B` には数える
@@ -97,9 +99,13 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 
 `mujou.pc.functional` に、ノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）、`learn_`（重みの更新）。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。
 
-1. クロックを属性に置く: `self.clock = pc.LearnClock(period=self.period, learn_interval=..., max_dt=...)`。それだけでノードの状態に入る
+1. クロックを属性に置く: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる。それだけでノードの状態に入る
 2. 毎回の更新で `t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼ぶ
-3. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす
-4. `t.learn` なら `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)` で学ぶ
+3. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
+4. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす
+5. `h` を `pc.Activity` で送る。自分の `jumps` と、受け取った活動の `y`・`mask`・`time` を組にする
+6. `t.learn` なら `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)` で学ぶ
 
-`mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act` か `pc.activity_spec(h, y)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。
+手順 3 を抜くと、ノードは `pc.Layer` と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 `h - mu` に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした `mu` の跳びの分も `h` を動かし、`jumps` に 1 を足す。`pc.Layer` はどちらも 1 回後の更新で行う（docstring に説明がある）。
+
+`mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act_spec` か `pc.activity_spec(h, y)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。

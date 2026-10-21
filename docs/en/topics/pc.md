@@ -19,10 +19,12 @@ The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augme
 | Node        | What it holds                                         | Ports                                                                                                                                                 |
 | ----------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pc.Input`  | Its count of writes                                   | `prev`: the host writes a `pc.Sample` (`x`, `y`, `mask`). `next`: sends `x` as the `h` of a `pc.Activity`, with `y`, `mask` and the time of the write |
-| `pc.Layer`  | A module, its activity `h`, the dual `lam`, its clock | `prev` and `next`. `next` sends `h` as a `pc.Activity`, with the `y`, `mask` and `time` that came with its input                                      |
+| `pc.Layer`  | A module, its activity `h`, the dual `lam`, its clock | `prev` and `next`. `next` sends `h` as a `pc.Activity`, with its `jumps` and the `y`, `mask` and `time` that came with its input                      |
 | `pc.Output` | The last module, the loss, its clock                  | `prev`. `next` sends a `pc.Prediction` (`y_hat`, `y`, `mask`, `time`) for the host to read                                                            |
 
-`pc.Chain(*modules, ...)` connects `Input` → `Layer` → ... → `Output`, with every period `tau.h / 4`. For other periods or other shapes, build the nodes one by one: give `pc.Input` the specs `x` and `y` and a `period`, give each `pc.Layer` and `pc.Output` the `act` of the node before it (the spec of the `pc.Activity` it receives), and connect `next` to `prev` along the chain.
+A `pc.Activity` carries `h`, `jumps`, `y`, `mask` and `time`. `jumps` counts the times the sender's `h` jumped rather than relaxed: a `pc.Input` counts the host's writes, and a `pc.Layer` its moves with a new sample or with a jump of the `h` it receives, and the jumps that its own weights make when it learns at intervals. A receiver that sees `jumps` change moves its `h` with its prediction once, so that the jump does not enter its deviation `h - mu`.
+
+`pc.Chain(*modules, ...)` connects `Input` → `Layer` → ... → `Output`, with every period `tau.period` (`tau.h / 4`). For other periods or other shapes, build the nodes one by one: give `pc.Input` the specs `x` and `y` and a `period`, give each `pc.Layer` and `pc.Output` the `act_spec` of the node before it (the spec of the `pc.Activity` it receives), and connect `next` to `prev` along the chain. `pc.show` shows samples to such a network too, when it exposes the `prev` of its `Input` and the `next` of its `Output` as its own `prev` and `next`.
 
 Put in a node any `nn.Module` that treats each sample of the batch on its own: one layer, a stack of layers, or a residual block. `Dropout` and `BatchNorm` in training mode mix or drop samples, so do not use them; `LayerNorm` is fine. Initialize the weights when you make the modules: the nodes do not. A parameter with `requires_grad=False` does not learn.
 
@@ -30,15 +32,15 @@ Put in a node any `nn.Module` that treats each sample of the batch on its own: o
 
 Every rate in `mujou.pc` is a time in seconds of the run's timer. Choose them in this order.
 
-| Value            | What it sets                                                        | How to choose it                                                                                                                                                     | MNIST  |
-| ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `tau.h`          | How fast each activity `h` relaxes                                  | First. The others follow from it                                                                                                                                     | 4 ms   |
-| The period       | How often each node updates                                         | `tau.h / 4`, the default of `Layer` and `Output` and the period of `pc.Chain`                                                                                        | 1 ms   |
-| `tau.lam`        | How fast the dual `lam` follows                                     | `2 * tau.h`                                                                                                                                                          | 8 ms   |
-| The showing time | How long the host shows each batch                                  | `S` periods, with `S = 32`                                                                                                                                           | 32 ms  |
-| `learn_interval` | When the weights update, counted from the write                     | Longer than half of the showing time, shorter than the showing time, and longer than the round trip of the credit. MNIST uses 3/4                                    | 24 ms  |
-| `tau.theta`      | The time constant of the weights (the learning rate is its inverse) | The showing time divided by the learning rate per batch                                                                                                              | 0.32 s |
-| `max_dt`         | The longest `dt` one update counts                                  | The default, `min(tau.h / 2, 3 * tau.lam)` (2 periods here). A `max_dt` shorter than the period raises `ValueError`; so does the default when `tau.lam < tau.h / 12` | 2 ms   |
+| Value            | What it sets                                                        | How to choose it                                                                                                                                                                   | MNIST  |
+| ---------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `tau.h`          | How fast each activity `h` relaxes                                  | First. The others follow from it                                                                                                                                                   | 4 ms   |
+| The period       | How often each node updates                                         | `tau.period` (`tau.h / 4`), the default of `Layer` and `Output` and the period of `pc.Chain`                                                                                       | 1 ms   |
+| `tau.lam`        | How fast the dual `lam` follows                                     | `2 * tau.h`                                                                                                                                                                        | 8 ms   |
+| The showing time | How long the host shows each batch                                  | `S` periods, with `S = 32`                                                                                                                                                         | 32 ms  |
+| `learn_interval` | When the weights update, counted from the write                     | Longer than half of the showing time, shorter than the showing time, and longer than the round trip of the credit. MNIST uses 3/4                                                  | 24 ms  |
+| `tau.theta`      | The time constant of the weights (the learning rate is its inverse) | The showing time divided by the learning rate per batch                                                                                                                            | 0.32 s |
+| `max_dt`         | The longest `dt` one update counts                                  | The default, `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`, 2 periods here). A `max_dt` shorter than the period raises `ValueError`; so does the default when `tau.lam < tau.h / 12` | 2 ms   |
 
 - **The learning rate.** A weight update moves the weights by (the time since the node last learned) / `tau.theta` times the mean gradient of the batch. With one update per batch, that time is the showing time, so `tau.theta = showing time / lr` gives the learning rate `lr` per batch. The time is the sum of the `dt` of the updates in between, each capped at `max_dt`; updates on time have a `dt` of one period, so it is counted in full
 - **The mean gradient.** The sum of the per-sample gradients divided by the batch size `B`. A sample whose `mask` is False adds nothing to the sum but still counts in `B`
@@ -97,9 +99,13 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 
 `mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs:
 
-1. Hold the clock as an attribute: `self.clock = pc.LearnClock(period=self.period, learn_interval=..., max_dt=...)`. It is in the node's state by itself
+1. Hold the clock as an attribute: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does. It is in the node's state by itself
 2. In each update, `t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)`
-3. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
-4. When `t.learn`, learn with `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)`
+3. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
+4. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
+5. Send `h` as a `pc.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
+6. When `t.learn`, learn with `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)`
 
-To connect with the nodes of `mujou.pc`, declare the ports with the `act` of the node before, or with `pc.activity_spec(h, y)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
+Without step 3, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
+
+To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.activity_spec(h, y)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).

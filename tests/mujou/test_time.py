@@ -99,6 +99,14 @@ class TestVirtualTimer:
         timer.advance(1.0)
         assert timer.now() == Timestamp(ns=1_000_000_000)
 
+    def test_keeps_the_given_scale(self):
+        timer = VirtualTimer(time_scale=2.0)
+        assert timer.time_scale() == 2.0
+        timer.advance(1.0)
+        assert timer.now() == Timestamp(ns=1_000_000_000)
+        with pytest.raises(ValueError):
+            VirtualTimer(time_scale=0.0)
+
     def test_sleep_returns_once_advanced_far_enough(self):
         timer = VirtualTimer()
         done = threading.Event()
@@ -180,11 +188,10 @@ class TestGlobalTimer:
 
 
 class TestTimestamp:
-    def test_float_is_seconds_and_int_is_whole_seconds(self):
+    def test_float_is_seconds(self):
         ts = Timestamp(ns=2_500_000_001)
         assert ts.ns == 2_500_000_001
         assert float(ts) == 2_500_000_001 / 1e9
-        assert int(ts) == 2
 
     def test_compares_and_hashes_by_time(self):
         early, late = Timestamp(ns=1), Timestamp(ns=2)

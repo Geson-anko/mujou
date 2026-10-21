@@ -1,6 +1,5 @@
 """The hidden node of ``mujou.pc``."""
 
-import math
 from typing import override
 
 import torch
@@ -83,15 +82,15 @@ class Layer(Node):
     seconds while the input stays, but never in the update that first sees an
     input (its ``delta`` is still that of the input before); with
     ``learn_interval=None``, in every update; with ``tau.theta`` infinite,
-    never (the clock gets ``learn_interval=math.inf``). The nodes read the one
-    timer of the run, so the nodes on a path learn at about the same time,
-    however deep they are, and each from the relaxed ``delta`` of the same
-    input. A ``learn_interval`` longer than the round trip of the credit down
-    the path and back (``2 * hops * period``, with ``hops`` the number of
-    connections from the ``Input`` to the ``Output``) is recommended: with intervals of a
-    few periods, every node learns, and so advances its ``jumps``, in almost
-    every update, the nodes above move ``h`` with every change of ``mu``, and
-    deep chains have been seen to diverge however slowly ``theta`` moves. The
+    never (``LearnClock.of``). The nodes read the one timer of the run, so the
+    nodes on a path learn at about the same time, however deep they are, and
+    each from the relaxed ``delta`` of the same input. A ``learn_interval``
+    longer than the round trip of the credit down the path and back
+    (``2 * hops * period``, with ``hops`` the number of connections from the
+    ``Input`` to the ``Output``) is recommended: with intervals of a few
+    periods, every node learns, and so advances its ``jumps``, in almost every
+    update, the nodes above move ``h`` with every change of ``mu``, and deep
+    chains have been seen to diverge however slowly ``theta`` moves. The
     node does not learn when no sample of the input has a target (every
     ``mask`` is False): that time is dropped from the next update, which would
     otherwise learn from the ``delta`` left over from an earlier input. Nor
@@ -105,8 +104,8 @@ class Layer(Node):
     the coupling makes the network diverge, which no split of the step inside
     the node prevents. The time beyond ``max_dt`` is dropped, from the
     relaxation and from the weight of the next update of ``theta`` alike. The
-    default ``min(tau.h / 2, 3 * tau.lam)`` keeps the step of ``h`` and ``lam``
-    stable in the node itself.
+    default ``tau.max_dt``, ``min(tau.h / 2, 3 * tau.lam)``, keeps the step of
+    ``h`` and ``lam`` stable in the node itself.
 
     ``module`` must treat the samples of the batch independently (no
     ``BatchNorm`` in training mode): the gradient of each sample must be its
@@ -127,7 +126,7 @@ class Layer(Node):
     learn (``"clock"``, the state of the ``LearnClock``). To watch the node
     while it runs, read them there: ``Run.state_dict()`` pauses the run,
     whereas reading ``module``, ``h`` or ``lam`` from the host's thread races
-    with the node's updates in place. ``act`` is the spec of what the node
+    with the node's updates in place. ``act_spec`` is the spec of what the node
     sends, for the next node.
 
     Example::
@@ -135,11 +134,11 @@ class Layer(Node):
         B = 64
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
         inp = pc.Input(
-            x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=tau.h / 4
+            x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=tau.period
         )
         hidden = pc.Layer(
             nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
-            act=inp.act,
+            act_spec=inp.act_spec,
             tau=tau,
             learn_interval=24e-3,
         )
@@ -148,52 +147,50 @@ class Layer(Node):
 
     Args:
         module: The function ``f``, ``(B, *in) -> (B, *out)``, on ``device``.
-        act: The spec of the activity ``h_in`` it receives: the ``act`` of the
-            node before.
+        act_spec: The spec of the activity ``h_in`` it receives: the
+            ``act_spec`` of the node before.
         tau: The time constants.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
             longer than ``2 * hops * period`` is recommended. ``None`` updates
-            in every ``on_update``, ``math.inf`` never.
-        period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
-            It must not be longer than ``max_dt``.
+            in every ``on_update``, for a stream whose input changes at every
+            frame (good values for it have not been measured yet);
+            ``math.inf`` never updates.
+        period: The period of the node in seconds; ``None`` is ``tau.period``
+            (``tau.h / 4``). It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
-            ``min(tau.h / 2, 3 * tau.lam)``.
+            ``tau.max_dt`` (``min(tau.h / 2, 3 * tau.lam)``).
         device: Where the node computes.
 
     Raises:
         ValueError: The first dimension of the output of ``module`` is not the
-            batch of ``act``, or ``LearnClock`` raises: ``learn_interval`` is
-            neither ``None`` nor > 0, ``max_dt`` is not > 0, or ``period`` is
-            longer than ``max_dt``. ``module`` raises as PyTorch does when it
-            does not take the ``h`` of ``act`` on ``device``.
+            batch of ``act_spec``, or ``LearnClock`` raises: ``learn_interval``
+            is neither ``None`` nor > 0, ``max_dt`` is not > 0, or ``period``
+            is longer than ``max_dt``. ``module`` raises as PyTorch does when it
+            does not take the ``h`` of ``act_spec`` on ``device``.
     """
 
     def __init__(
         self,
         module: nn.Module,
         *,
-        act: DictSpec[Activity],
+        act_spec: DictSpec[Activity],
         tau: TimeConstants,
-        learn_interval: float | None = None,
+        learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        super().__init__(device=device, period=tau.h / 4 if period is None else period)
+        super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
-        self._batch = act.specs["y"].shape[0]
-        self.clock = LearnClock(
-            period=self.period,
-            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
-            # The explicit Euler step of h then lam is stable for dt / tau.h <= 1/2
-            # and dt / tau.lam <= 3 (specs/pc.md, "dt の打ち切り").
-            max_dt=min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt,
+        self._batch = act_spec.specs["y"].shape[0]
+        self.clock = LearnClock.of(
+            tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
-        h_in = act.specs["h"]
+        h_in = act_spec.specs["h"]
         with torch.no_grad():
             mu = module(h_in.zeros(device=self.device))
         self.h = torch.zeros_like(mu)
@@ -210,9 +207,9 @@ class Layer(Node):
         for name in ("jumped", "jumps", "seen_jumps"):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
-        self.act = activity_spec(out, act.specs["y"])
-        self.prev = Port(send=h_in, recv=act)
-        self.next = MultiPort(send=self.act, recv=out)
+        self.act_spec = activity_spec(out, act_spec.specs["y"])
+        self.prev = Port(send=h_in, recv=act_spec)
+        self.next = MultiPort(send=self.act_spec, recv=out)
 
     @override
     def on_update(self, dt: float) -> None:
@@ -223,8 +220,9 @@ class Layer(Node):
         learn = tick.learn and bool(act["mask"].any())
         jumped = self._take_jump()
         # A new sample, or h_in jumped: h moves with mu, once.
-        reanchor = tick.new or int(act["jumps"]) != self.seen_jumps
-        self.seen_jumps = int(act["jumps"])
+        seen_jumps = int(act["jumps"])
+        reanchor = tick.new or seen_jumps != self.seen_jumps
+        self.seen_jumps = seen_jumps
         mu, g_theta = self._predict(act, reanchor, learn)
         self._relax(mu, reanchor, tick.dt)
         # The jump of theta is discrete only when it learns at intervals.

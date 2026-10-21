@@ -5,17 +5,18 @@
 A port declares the spec of the message it sends and of the one it receives, and
 its connections: a dict from each peer to the ``Channel`` between them. A port
 holds nothing of a run: the driver of the running node (``driver.py``) holds the
-wire of each of its ports, and a port finds its own there.
+wire of each of its ports, and a port finds its own there (``current.py``).
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Final, Never, Protocol, cast, final, override
+from typing import Any, Final, Never, cast, final, override
 
 import torch
 
 from mujou._core import _native
 from mujou._core.codec import from_core, to_core
+from mujou._core.current import outside, running
 from mujou._core.spec import MessageSpec
 
 # Any (here and below): ports and messages of every type are handled alike.
@@ -193,7 +194,7 @@ class Port[S = Never, R = Never](_Port[S, R]):
             RuntimeError: The caller is not a hook of the node that owns the port,
                 while it runs (or is its ``state_dict``).
         """
-        return cast(R, _one(self, with_time=False))
+        return cast(R, _wire(self).recv_one()[0])
 
     def recv_with_time(self) -> tuple[R, _native.Timestamp | None]:
         """Like ``recv``, but return ``(message, time)``.
@@ -206,7 +207,7 @@ class Port[S = Never, R = Never](_Port[S, R]):
         state, ``None`` included. Raises as ``recv`` does.
         """
         # Quoted, here and below: an expression would be built at every call.
-        return cast("tuple[R, _native.Timestamp | None]", _one(self, with_time=True))
+        return cast("tuple[R, _native.Timestamp | None]", _wire(self).recv_one())
 
 
 class MultiPort[S = Never, R = Never](_Port[S, R]):
@@ -241,15 +242,14 @@ class MultiPort[S = Never, R = Never](_Port[S, R]):
         Raises:
             RuntimeError: As ``Port.recv`` raises.
         """
-        return cast("dict[Channel, R]", _many(self, with_time=False))
+        received = _wire(self).recv_all()
+        return {channel: cast(R, value) for channel, (value, _) in received.items()}
 
     def recv_with_time(self) -> dict[Channel, tuple[R, _native.Timestamp | None]]:
         """Like ``recv``, but each message comes as ``(message, time)``, as
         ``Port.recv_with_time`` gives it."""
-        return cast(
-            "dict[Channel, tuple[R, _native.Timestamp | None]]",
-            _many(self, with_time=True),
-        )
+        received = _wire(self).recv_all()
+        return cast("dict[Channel, tuple[R, _native.Timestamp | None]]", received)
 
     def send_to(self, channel: Channel, msg: S) -> None:
         """Send ``msg`` only to the peer across ``channel``, one of ``channels``
@@ -279,11 +279,6 @@ class Channel:
     def __init__(self, a: AnyPort, b: AnyPort) -> None:
         self._ends = (a, b)
 
-    @property
-    def ends(self) -> tuple[AnyPort, AnyPort]:
-        """The two ports: the one ``connect`` was called on, then its argument."""
-        return self._ends
-
     def other(self, port: AnyPort) -> AnyPort:
         """Return the end of this channel that is not ``port`` (``port`` itself
         for a port connected to itself)."""
@@ -302,12 +297,11 @@ class Wire:
     """What one port of a running node reads and writes: the slots that the run
     laid out for it (``wiring.py``). The node's driver holds it."""
 
+    port: AnyPort
     # How errors name the port.
     label: str
     # Where the received messages arrive: the owning node's device.
     device: torch.device
-    send_spec: MessageSpec[Any] | None
-    recv_spec: MessageSpec[Any] | None
     # Where send writes: None for a port that does not send.
     outlet: _native.Outlet | None
     # What the port reads, (channel, slot) in connection order: an unconnected
@@ -316,11 +310,17 @@ class Wire:
     # The index of each channel among the outlet's channel slots, for send_to.
     targets: Mapping[Channel, int]
 
-    def read(self, slot: AnySlot, with_time: bool) -> object:
-        message = slot.read()
-        spec = cast("MessageSpec[Any]", self.recv_spec)  # a source has a recv spec
-        value = from_core(spec, message.values, self.device)
-        return (value, message.timestamp) if with_time else value
+    def recv_one(self) -> tuple[object, _native.Timestamp | None]:
+        """The message of the one source of a ``Port`` and its time."""
+        ((_, slot),) = self.sources
+        return self._read(slot)
+
+    def recv_all(self) -> dict[Channel, tuple[object, _native.Timestamp | None]]:
+        """The message of each peer of a ``MultiPort`` and its time, in
+        connection order."""
+        # A MultiPort reads its peers only, never the host.
+        sources = cast("tuple[tuple[Channel, AnySlot], ...]", self.sources)
+        return {channel: self._read(slot) for channel, slot in sources}
 
     def send(self, msg: object) -> None:
         self._outlet().send(self._tensors(msg))
@@ -328,66 +328,31 @@ class Wire:
     def send_to(self, channel: Channel, msg: object) -> None:
         self._outlet().send_to(self.targets[channel], self._tensors(msg))
 
+    def _read(self, slot: AnySlot) -> tuple[object, _native.Timestamp | None]:
+        message = slot.read()
+        spec = cast("MessageSpec[Any]", self.port.recv_spec)  # it has a source
+        return from_core(spec, message.values, self.device), message.timestamp
+
     def _outlet(self) -> _native.Outlet:
         return cast(_native.Outlet, self.outlet)  # Never is the type of what it sends
 
     def _tensors(self, msg: object) -> list[torch.Tensor]:
         """The tensors of ``msg`` in host memory, for the outlet to copy."""
-        return to_core(cast("MessageSpec[Any]", self.send_spec), msg, self.label)
+        return to_core(cast("MessageSpec[Any]", self.port.send_spec), msg, self.label)
 
 
-class Running(Protocol):
-    """What a hook sees of the node it runs as: the node's driver
-    (``driver.py``)."""
-
-    @property
-    def node(self) -> object: ...
-
-    @property
-    def wires(self) -> Mapping[AnyPort, Wire]:
-        """The wires of the node's ports: none in its ``state_dict``."""
-        ...
-
-    @property
-    def clock(self) -> _native.ReadOnlyTimer: ...
-
-
-def running() -> Running | None:
-    """The driver of the node whose hook the calling thread runs, or ``None``
-    outside the hooks."""
-    return cast("Running | None", _native.current())
-
-
-_OUTSIDE: Final = (
-    "is used only in the hooks of the node that owns it, while it runs (a port not "
-    "in state_dict); declare ports in __init__, and use run.read, run.write and "
-    "run.timer from the host"
+_HINT: Final = (
+    "a port is not used in state_dict either. Declare ports in __init__, and use "
+    "run.read and run.write from the host"
 )
-
-
-def outside(name: str) -> RuntimeError:
-    """The error for a port or a node's timer, which ``name`` names, used
-    outside the hooks of the node that owns it."""
-    return RuntimeError(f"{name} {_OUTSIDE}")
 
 
 def _wire(port: AnyPort) -> Wire:
     current = running()
-    found = None if current is None else current.wires.get(port)
+    found: Wire | None = None if current is None else current.wires.get(port)
     if found is None:
-        raise outside(repr(port))
+        raise outside(repr(port), _HINT)
     return found
-
-
-def _one(port: AnyPort, with_time: bool) -> object:
-    wire = _wire(port)
-    ((_, slot),) = wire.sources
-    return wire.read(slot, with_time)
-
-
-def _many(port: AnyPort, with_time: bool) -> dict[Channel | None, object]:
-    wire = _wire(port)
-    return {channel: wire.read(slot, with_time) for channel, slot in wire.sources}
 
 
 def _or_nothing(spec: object) -> str:

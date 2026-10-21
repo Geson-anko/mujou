@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import torch
 
 import mujou.pc as pc
-from mujou import TensorSpec
+from mujou import Network, TensorSpec
 from mujou.time import Timer
 from tests.mujou.nodes import F64, assert_same_tree, close
 from tests.mujou.pc._reference import N_OUT, TAU, B, forward, make_modules, sample
@@ -45,7 +45,9 @@ class TestShow:
     ):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         before = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
-        net = pc.Chain(*layers, head, x=X, y=Y, loss=pc.mse, tau=TAU)
+        net = pc.Chain(
+            *layers, head, x=X, y=Y, loss=pc.mse, tau=TAU, learn_interval=None
+        )
         x, y = sample(WIDTHS, 0)
         unlabeled = torch.zeros(B, dtype=torch.bool)
         run = start(net, timer=Timer())
@@ -58,3 +60,31 @@ class TestShow:
         close(prediction["y_hat"], y_hat, 1e-12)
         for module, state in zip([*layers, head], before, strict=True):
             assert_same_tree(module.state_dict(), state)
+
+    def test_shows_a_network_built_by_hand(self, start: Start):
+        class ByHand(Network):
+            def __init__(self) -> None:
+                super().__init__()
+                self.input = pc.Input(x=X, y=Y, period=TAU.period)
+                head = make_modules("linear", "tanh", WIDTHS[:1])[1]
+                self.output = pc.Output(
+                    head,
+                    act_spec=self.input.act_spec,
+                    loss=pc.mse,
+                    tau=TAU,
+                    learn_interval=None,
+                    period=TAU.period / 2,
+                )
+                self.input.next.connect(self.output.prev)
+                self.prev, self.next = self.input.prev, self.output.next
+
+        net = ByHand()
+        x, y = sample(WIDTHS, 0)
+        unlabeled = torch.zeros(B, dtype=torch.bool)
+        run = start(net, timer=Timer())
+        prediction = pc.show(
+            run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=0.02
+        )
+        run.shutdown()
+        with torch.no_grad():
+            close(prediction["y_hat"], net.output.module(x), 1e-12)

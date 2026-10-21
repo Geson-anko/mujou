@@ -82,7 +82,9 @@ class TestInput:
     def test_connects_to_a_layer(self):
         inp = pc.Input(x=X, y=Y, period=1e-3)
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
-        layer = pc.Layer(nn.Linear(4, 5), act=inp.act, tau=tau)
+        layer = pc.Layer(
+            nn.Linear(4, 5), act_spec=inp.act_spec, tau=tau, learn_interval=None
+        )
         channel = inp.next.connect(layer.prev)
         assert inp.next.channels == layer.prev.channels == (channel,)
         assert channel.other(inp.next) is layer.prev

@@ -1,6 +1,5 @@
 import threading
 from collections.abc import Callable, Sequence
-from types import CapsuleType
 
 import pytest
 import torch
@@ -152,26 +151,12 @@ class TestOutlet:
         with pytest.raises(IndexError):
             outlet.channel(0)
 
-    def test_accepts_producers_without_max_version(self):
-        class OldProducer:
-            def __init__(self, t: torch.Tensor) -> None:
-                self._t = t
-
-            def __dlpack__(self) -> CapsuleType:
-                return self._t.__dlpack__()
-
-        outlet = Outlet(tensor_schema((3,)), 0, "p", clock=CLOCK)
-        outlet.send([OldProducer(torch.tensor([1.0, 2.0, 3.0]))])
-        assert torch.equal(
-            values(outlet.outbox.read())[0], torch.tensor([1.0, 2.0, 3.0])
-        )
-
-    def test_lends_unversioned_capsules_to_old_consumers(self):
+    def test_lends_only_over_dlpack_1(self):
         outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         outlet.send([torch.tensor([1.0, 2.0])])
         (view,) = outlet.outbox.read().values
-        y = torch.from_dlpack(view.__dlpack__()).clone()
-        assert torch.equal(y, torch.tensor([1.0, 2.0]))
+        with pytest.raises(BufferError, match="max_version"):
+            view.__dlpack__()
         assert view.__dlpack_device__() == (1, 0)
 
     @pytest.mark.parametrize(

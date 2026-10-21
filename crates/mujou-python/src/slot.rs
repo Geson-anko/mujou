@@ -165,7 +165,8 @@ impl PySchema {
 ///
 /// Read it with `torch.from_dlpack(view)` and copy the result at once: the
 /// memory belongs to the core and must not be written. `__dlpack__` raises
-/// `BufferError` for `copy=True` or a `dl_device` other than the CPU.
+/// `BufferError` without a `max_version` of 1 or later, for `copy=True` or for
+/// a `dl_device` other than the CPU.
 #[pyclass(frozen, module = "mujou._core._native")]
 pub struct BufferView(Arc<Buffer>);
 
@@ -192,8 +193,13 @@ impl BufferView {
                 "a message buffer cannot be copied by its producer; copy the tensor after from_dlpack",
             ));
         }
-        let versioned = max_version.is_some_and(|(major, _)| major >= VERSION.major);
-        export_capsule(py, Arc::clone(&self.0), versioned)
+        if max_version.is_none_or(|(major, _)| major < VERSION.major) {
+            return Err(PyBufferError::new_err(
+                "a message buffer is lent over DLPack 1.x only; pass max_version=(1, 0) \
+                 (torch.from_dlpack does)",
+            ));
+        }
+        export_capsule(py, Arc::clone(&self.0))
     }
 
     fn __dlpack_device__(&self) -> (i32, i32) {
@@ -419,6 +425,11 @@ impl PyInputGroup {
 }
 
 /// A slot the host writes through its `InputGroup`.
+///
+/// The same core slot as a `Slot`, as a type of its own so that
+/// `InputGroup.write` takes only the slots of an `InputGroup` (never the
+/// channel slot of an `Outlet`), and so that only a `Slot` waits for a newer
+/// message (`wait_newer`).
 #[pyclass(frozen, module = "mujou._core._native", name = "InputSlot")]
 pub struct PyInputSlot(Arc<core::Slot>);
 

@@ -5,42 +5,29 @@ from mujou._core.network import Group, Network
 from mujou._core.port import MultiPort, Port
 from mujou._core.spec import TensorSpec
 from mujou._core.tree import walk
-from mujou._core.wiring import Held, wire
+from mujou._core.wiring import Wiring, wire
 from mujou.time import ReadOnlyTimer, VirtualTimer
 from tests.mujou.nodes import F64, Chain, Hidden, Probe, vec
 
 
-def wired(root: Network) -> dict[str, dict[str, dict[str, object]]]:
-    """The keys of the slots of each port of each node, and the names of the
-    slots."""
-    wiring = wire(walk(root), ReadOnlyTimer(VirtualTimer()))
-    return {
-        path: {
-            attribute: {
-                key: held.slot.name
-                if isinstance(held, Held)
-                else {peer: h.slot.name for peer, h in held.items()}
-                for key, held in slots.items()
-            }
-            for attribute, slots in ports.items()
-        }
-        for path, ports in wiring.slots.items()
-    }
+def wired(root: Network | Probe) -> Wiring:
+    return wire(walk(root), ReadOnlyTimer(VirtualTimer()))
 
 
 class TestSlots:
-    def test_by_port_as_the_state_tree_keys_them(self):
-        assert wired(Chain()) == {
-            "a": {
-                "prev": {"in": "a.prev/in"},
-                "next": {"out": "a.next/out", "to": {"b.prev": "a.next/ch0"}},
-            },
-            "b": {"prev": {}, "next": {"out": "b.next/out", "to": {}}},
-        }
+    def test_are_named_by_the_path_of_the_port(self):
+        net = Chain()
+        wiring = wired(net)
+        assert wiring.inputs[net.a.prev].name == "a.prev/in"
+        assert wiring.outlets[net.a.next].outbox.name == "a.next/out"
+        assert [slot.name for slot in wiring.channels(net.a.next)] == ["a.next/ch0"]
+        assert wiring.channels(net.b.next) == []
+        # A connected port reads its peer, not the host.
+        assert net.b.prev not in wiring.inputs
 
     def test_a_port_of_the_root_node_is_named_by_its_class(self):
         node = Probe(out=Port(send=vec()), inp=Port(recv=vec()))
-        wiring = wire(walk(node), ReadOnlyTimer(VirtualTimer()))
+        wiring = wired(node)
         assert wiring.outlets[node.out].outbox.name == "Probe.out/out"  # pyright: ignore[reportAttributeAccessIssue]
         assert wiring.inputs[node.inp].name == "Probe.inp/in"  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -49,31 +36,22 @@ class TestSlots:
         sinks = [Probe(inp=Port(recv=vec())) for _ in range(2)]
         for sink in sinks:
             source.out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
-        net = Group(source=source, x=sinks[0], y=sinks[1])
-        assert wired(net)["source"]["out"] == {
-            "out": "source.out/out",
-            "to": {"x.inp": "source.out/ch0", "y.inp": "source.out/ch1"},
-        }
+        wiring = wired(Group(source=source, x=sinks[0], y=sinks[1]))
+        names = [slot.name for slot in wiring.channels(source.out)]  # pyright: ignore[reportAttributeAccessIssue]
+        assert names == ["source.out/ch0", "source.out/ch1"]
 
-    def test_a_multiport_has_a_slot_for_each_peer_and_none_for_the_host(self):
-        a, b, c = Hidden(), Hidden(), Hidden()
+    def test_an_unconnected_multiport_reads_nothing_of_the_host(self):
+        a, b = Hidden(), Hidden()
         a.next.connect(b.prev)
-        a.next.connect(c.prev)
-        slots = wired(Group(a=a, b=b, c=c))
-        assert slots["a"]["next"]["to"] == {
-            "b.prev": "a.next/ch0",
-            "c.prev": "a.next/ch1",
-        }
-        # An unconnected MultiPort reads nothing of the host.
-        assert "in" not in slots["c"]["next"]
+        wiring = wired(Group(a=a, b=b))
+        assert [slot.name for slot in wiring.channels(a.next)] == ["a.next/ch0"]
+        assert b.next not in wiring.inputs
 
     def test_a_port_connected_to_itself_has_a_slot_for_itself(self):
         node = Probe(loop=MultiPort(send=vec(), recv=vec()))
         node.loop.connect(node.loop)  # pyright: ignore[reportAttributeAccessIssue]
-        assert wired(Group(node=node))["node"]["loop"] == {
-            "out": "node.loop/out",
-            "to": {"node.loop": "node.loop/ch0"},
-        }
+        wiring = wired(Group(node=node))
+        assert [slot.name for slot in wiring.channels(node.loop)] == ["node.loop/ch0"]  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class TestInitial:

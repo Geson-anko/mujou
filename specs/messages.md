@@ -23,6 +23,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 - コアが受け取るのは、ホストから読めるメモリの値（DLPack のデバイス種別が CPU か pinned memory）だけ
 - 非連続のテンソルの stride は、Rust の `copy_from` が扱う。Python で `.contiguous()` してから渡すとコピーが 2 回になる
 - 密でないテンソル（sparse など）は torch の `__dlpack__` が `BufferError` で断る（検査は書かない）
+- DLPack は 1.x（versioned）だけを使う。値は `torch.Tensor` だけで、依存する torch の `__dlpack__` は `max_version` を受け取り、`torch.from_dlpack` も渡すので、旧版（unversioned）の経路に入る場面が無い
 
 ## codec
 

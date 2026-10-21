@@ -25,8 +25,8 @@ class Input(Node):
 
     Before the host first writes, the node sends zeros with ``mask`` False,
     ``jumps`` 0 and ``time`` 0. The state holds ``"jumps"`` and the time (ns)
-    of the last write seen (``"seen_write"``, -1 before any). ``act`` is the
-    spec of what the node sends, for the next node.
+    of the last write seen (``"seen_write"``, ``None`` before any).
+    ``act_spec`` is the spec of what the node sends, for the next node.
 
     Example::
 
@@ -35,8 +35,9 @@ class Input(Node):
             x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=1e-3
         )
         ...
+        mask = torch.ones(B, dtype=torch.bool)
         with mujou.run(net) as run:
-            run.write({inp.prev: {"x": x, "y": y, "mask": torch.ones(B, dtype=torch.bool)}})
+            run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
 
     Args:
         x: The spec of the inputs ``x``, ``(B, *in)``.
@@ -58,12 +59,12 @@ class Input(Node):
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(device=device, period=period)
-        self.act = activity_spec(x, y)
-        mask = self.act.specs["mask"]
+        self.act_spec = activity_spec(x, y)
+        mask = self.act_spec.specs["mask"]
         self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
-        self.next = MultiPort(send=self.act, recv=x)
+        self.next = MultiPort(send=self.act_spec, recv=x)
         self.jumps = 0
-        self.seen_write = -1
+        self.seen_write: int | None = None
         self.register_state("jumps")
         self.register_state("seen_write")
 

@@ -142,15 +142,13 @@ def start_runtime(virtual_timer: VirtualTimer) -> Iterator[StartRuntime]:
 
     yield start_runtime
     for runtime in started:
-        runtime.stop()
         with contextlib.suppress(NetworkError):
-            runtime.join()
+            runtime.shutdown()
 
 
 def shut_down(runtime: Runtime) -> None:
     """Stop ``runtime`` and wait for its end, as the host does."""
-    runtime.stop()
-    runtime.join()
+    runtime.shutdown()
 
 
 def recorders(log: Log, *names: str) -> list[Recorder]:

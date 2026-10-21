@@ -52,7 +52,8 @@ import torch
 from mujou._core.network import Network
 from mujou._core.node import Node
 from mujou._core.port import Port
-from mujou._core.run import ManualRun, VirtualTimer, start
+from mujou._core.run import MANUAL_RUN, ManualRun, start
+from mujou.time import VirtualTimer
 
 __all__ = ["ManualRun", "run"]
 
@@ -73,6 +74,10 @@ def run[P: Port[Any, Any]](
     ``ManualRun.step`` advances. Pass a ``VirtualTimer`` of your own to share it
     between runs: a ``step`` of one then moves the time of the others too.
 
-    The other arguments and the errors are those of ``mujou.run``.
+    ``inputs`` and ``state`` are those of ``mujou.run``, and so are the errors.
+    There is no ``workers``: the nodes update one at a time, in the order that
+    ``ManualRun.step`` gives.
     """
-    return start(ManualRun, root, timer=timer, inputs=inputs, state=state, workers=None)
+    return start(
+        MANUAL_RUN, root, timer=timer, inputs=inputs, state=state, workers=None
+    )

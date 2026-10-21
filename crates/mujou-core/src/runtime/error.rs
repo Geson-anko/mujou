@@ -139,11 +139,3 @@ pub(super) fn finished_error(failure: &OnceLock<NodeFailure>) -> RuntimeError {
         None => RuntimeError::Finished,
     }
 }
-
-/// Fails with the failure, if one was recorded.
-pub(super) fn stopped(failure: &OnceLock<NodeFailure>) -> Result<(), RuntimeError> {
-    match failure.get() {
-        Some(failure) => Err(RuntimeError::Failed(failure.clone())),
-        None => Ok(()),
-    }
-}

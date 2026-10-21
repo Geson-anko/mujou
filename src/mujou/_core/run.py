@@ -5,11 +5,15 @@ A run starts in three stages:
 
 1. Check: read the tree of the root (``tree.walk``), and check that none of its
    nodes has run and that the arguments go together. Nothing changes.
-2. Lay out: make the run's timer, its slots and the drivers of its nodes
-   (``wiring.wire``), restore the slots of a state (``state.restore``, which
-   also checks that the state has the shape of the tree) and write the inputs
+2. Lay out: make the run's timer, its slots (``wiring.wire``) and the drivers
+   of its nodes, restore the slots of a state (``state.restore``, which also
+   checks that the state has the shape of the tree) and write the inputs
    (checking that the host writes those ports). Only new objects change.
 3. Mark every node as run, and start the nodes.
+
+The kind of run (``Kind``) says what changes between ``mujou.run`` and
+``mujou.testing.run``: the class of the run, whether the nodes update by hand,
+and the timer.
 
 A run refused in the first two stages has changed nothing that the user made:
 the same instances run once the cause is fixed. Only the hooks of the nodes can
@@ -22,13 +26,14 @@ import math
 import time
 import weakref
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from types import TracebackType
-from typing import Any, Final, NamedTuple, Self, cast, override
+from typing import Any, Final, NamedTuple, Self, cast, final, override
 
 import torch
 
 from mujou._core import _native
-from mujou._core._native import (  # by name: the API reference shows them
+from mujou._core._native import (
     ReadOnlyTimer,
     Timer,
     Timestamp,
@@ -36,12 +41,12 @@ from mujou._core._native import (  # by name: the API reference shows them
     global_timer,
 )
 from mujou._core.codec import from_core
+from mujou._core.current import running
 from mujou._core.driver import Driver
 from mujou._core.errors import NetworkError
 from mujou._core.network import Network
 from mujou._core.node import Node
-from mujou._core.port import AnyPort, MultiPort, Port
-from mujou._core.spec import MessageSpec
+from mujou._core.port import MultiPort, Port
 from mujou._core.state import capture, cpu, restore, saved_time
 from mujou._core.tree import Tree, walk
 from mujou._core.wiring import Wiring, wire
@@ -52,7 +57,7 @@ _POLL: Final = 0.05
 _CPU: Final = torch.device("cpu")
 
 
-class NodeSpec(NamedTuple):
+class _NodeEntry(NamedTuple):
     """A node as ``_native.start`` takes it."""
 
     driver: Driver
@@ -222,7 +227,7 @@ class Run:
         """
         _host()
         self._check()
-        outbox, spec = self._outbox(port)
+        outbox, spec = self._wiring.outbox(port)
         message = outbox.read()
         return cast(S, from_core(spec, message.values, _CPU)), message.timestamp
 
@@ -260,7 +265,7 @@ class Run:
         """
         _host()
         self._check()
-        outbox, spec = self._outbox(port)
+        outbox, spec = self._wiring.outbox(port)
         deadline = time.monotonic() + timeout
         # The value at the time of this call comes first.
         messages = self._follow(outbox, outbox.read(), timeout, deadline)
@@ -400,11 +405,15 @@ class Run:
                 asked: the nodes take no more updates and the run goes on
                 stopping in the background (an ``on_stop`` may still be
                 running). ``join`` waits for the end.
+            ValueError: ``timeout`` is negative or NaN; nothing changes.
             NetworkError: The run stopped because a node raised.
         """
         _host()
-        self._runtime.stop()
-        if not self._join(timeout):
+        try:
+            stopped = self._runtime.shutdown(timeout)
+        finally:
+            self._forget_if_ended()
+        if not stopped:
             raise TimeoutError(
                 f"the run did not stop within {timeout} s; it goes on stopping, "
                 "and join() waits for it"
@@ -482,15 +491,6 @@ class Run:
         if self._runtime.finished:
             _RUNNING.discard(self)
 
-    def _outbox(self, port: AnyPort) -> tuple[_native.Slot, MessageSpec[Any]]:
-        outlet = self._wiring.outlets.get(port)
-        if outlet is None:
-            raise ValueError(
-                f"the host does not read {self._wiring.tree.label(port)}: it reads "
-                "a port of this run that sends"
-            )
-        return outlet.outbox, cast("MessageSpec[Any]", port.send_spec)  # it sends
-
     def _follow(
         self,
         outbox: _native.Slot,
@@ -501,8 +501,8 @@ class Run:
         self._check()
         yield last
         while True:
-            self._check()
             finished = self._runtime.finished
+            self._check()  # after finished: an end by an exception raises here
             if finished:
                 # After the end nothing is written, so one last look without
                 # waiting.
@@ -518,7 +518,6 @@ class Run:
                 message = outbox.wait_newer(last, min(remaining, _POLL))
             if message is None:
                 if finished:
-                    self._check()  # the end may have come from an exception
                     return
                 continue
             last = message
@@ -538,10 +537,11 @@ class ManualRun(Run):
         self,
         wiring: Wiring,
         runtime: _native.Runtime,
-        timer: Timer,
+        timer: VirtualTimer,
         clock: ReadOnlyTimer,
     ) -> None:
         super().__init__(wiring, runtime, timer, clock)
+        self._virtual = timer
         # The index of each node in the runtime, for step.
         self._indices = {member.node: i for i, member in enumerate(wiring.tree.members)}
 
@@ -550,7 +550,7 @@ class ManualRun(Run):
     def timer(self) -> VirtualTimer:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
         or the one given to it."""
-        return cast(VirtualTimer, self._timer)  # mujou.testing.run gave start one
+        return self._virtual
 
     def step(self, dt: float, *nodes: Node) -> None:
         """Advance the timer by ``dt`` seconds, then update each of ``nodes``
@@ -660,46 +660,78 @@ def run[P: Port[Any, Any]](
             does not have the timer, nodes, ports and peers of the tree.
         NetworkError: A node raised while starting; the run has stopped.
     """
-    return start(Run, root, timer=timer, inputs=inputs, state=state, workers=workers)
+    return start(RUN, root, timer=timer, inputs=inputs, state=state, workers=workers)
 
 
-def start[R: Run](
-    kind: type[R],
+@final
+@dataclass(frozen=True, slots=True)
+class Kind[R: Run, T: Timer]:
+    """A kind of run: the class ``start`` makes, whether its nodes update only
+    by ``ManualRun.step``, and the timer it runs on."""
+
+    make: Callable[[Wiring, _native.Runtime, T, ReadOnlyTimer], R]
+    manual: bool
+    # The timer of a run given none.
+    default: Callable[[], T]
+    # The class of the timer of a restored run, made at the time and the time
+    # scale of the state.
+    restored: type[T]
+
+    def timer(self, given: T | None, state: Mapping[str, Any] | None) -> T:
+        """The timer of a run given ``given`` and ``state`` (not both).
+
+        Raises:
+            ValueError: The top of ``state`` is not that of a state tree.
+        """
+        if state is None:
+            return self.default() if given is None else given
+        time_ns, time_scale = saved_time(state)
+        return self.restored(start=Timestamp(ns=time_ns), time_scale=time_scale)
+
+
+# mujou.run: the nodes run freely, on global_timer by default.
+RUN: Final = Kind(Run, manual=False, default=lambda: global_timer, restored=Timer)
+# mujou.testing.run: the nodes update by hand, on a new VirtualTimer by default.
+MANUAL_RUN: Final = Kind(
+    ManualRun, manual=True, default=VirtualTimer, restored=VirtualTimer
+)
+
+
+def start[R: Run, T: Timer](
+    kind: Kind[R, T],
     root: Node | Network,
     *,
-    timer: Timer | None,
+    timer: T | None,
     inputs: Mapping[Any, object] | None,
     state: Mapping[str, Any] | None,
     workers: int | None,
 ) -> R:
-    """Run ``root`` as ``mujou.run`` does and return a ``kind`` for it: a
-    ``ManualRun`` runs in manual mode, on a new ``VirtualTimer`` by default."""
+    """Run ``root`` as ``mujou.run`` does, as a run of ``kind``."""
     _host()
     # 1. Check.
     tree = walk(root)
-    _check(tree, timer, state, workers)
+    _check_arguments(tree, timer, state, workers)
     # 2. Lay out. The timer of a restored run runs from here: the rest of the
     # layout (a few ms at most) is in its time and in the first dt of its nodes.
-    manual = kind is ManualRun
-    run_timer = _timer(timer, state, manual)
+    run_timer = kind.timer(timer, state)
     clock = ReadOnlyTimer(run_timer)
     wiring = wire(tree, clock)
     restored = None if state is None else restore(wiring, state)
     if inputs:
         wiring.write(inputs)
-    nodes = _nodes(wiring, restored)
+    nodes = _nodes(wiring, clock, restored)
     # What this thread queued for the nodes (tensors made in __init__, say) is
     # done before their streams use it.
     _synchronize(tree)
     # 3. Mark and start.
     _RAN.update(member.node for member in tree.members)
-    runtime = _native.start(nodes, clock, manual=manual, workers=workers)
-    handle = kind(wiring, runtime, run_timer, clock)
+    runtime = _native.start(nodes, clock, manual=kind.manual, workers=workers)
+    handle = kind.make(wiring, runtime, run_timer, clock)
     _RUNNING.add(handle)
     return handle
 
 
-def _check(
+def _check_arguments(
     tree: Tree,
     timer: Timer | None,
     state: Mapping[str, Any] | None,
@@ -727,40 +759,27 @@ def _check(
         raise ValueError(f"workers must be at least 1, got {workers}")
 
 
-def _nodes(wiring: Wiring, restored: list[tuple[object, int]] | None) -> list[NodeSpec]:
-    """The nodes of ``wiring`` as ``_native.start`` takes them, with the state
-    and the last update time of each from ``restored``."""
-    saved = restored or [(None, None)] * len(wiring.drivers)
+def _nodes(
+    wiring: Wiring, clock: ReadOnlyTimer, restored: list[tuple[object, int]] | None
+) -> list[_NodeEntry]:
+    """The nodes of ``wiring`` as ``_native.start`` takes them, each with its
+    driver on ``clock``, and the state and the last update time of each from
+    ``restored``."""
+    members = wiring.tree.members
+    saved = restored or [(None, None)] * len(members)
     return [
-        NodeSpec(
-            driver,
+        _NodeEntry(
+            Driver(member.node, clock, wires),
             wiring.tree.name(member.path),
             member.node.period,
             member.node.dedicated_thread,
             last_update_ns,
             state,
         )
-        for member, driver, (state, last_update_ns) in zip(
-            wiring.tree.members, wiring.drivers, saved, strict=True
+        for member, wires, (state, last_update_ns) in zip(
+            members, wiring.wires, saved, strict=True
         )
     ]
-
-
-def _timer(timer: Timer | None, state: Mapping[str, Any] | None, manual: bool) -> Timer:
-    """The timer of a run given ``timer`` and ``state``: for a restored run, a new
-    one at the time and time scale of the state."""
-    if state is None:
-        if timer is not None:
-            return timer
-        return VirtualTimer() if manual else global_timer
-    time_ns, time_scale = saved_time(state)
-    start_at = Timestamp(ns=time_ns)
-    if not manual:
-        return Timer(start=start_at, time_scale=time_scale)
-    restored = VirtualTimer(start=start_at)
-    # Kept for the next state, though it does not apply to a virtual timer.
-    restored.set_time_scale(time_scale)
-    return restored
 
 
 def _synchronize(tree: Tree) -> None:
@@ -779,7 +798,7 @@ def _host() -> None:
     Raises:
         RuntimeError: It is.
     """
-    if _native.current() is not None:
+    if running() is not None:
         raise RuntimeError(
             "a node's hook cannot call the host methods of a run; a node talks "
             "only through its own ports"
@@ -798,9 +817,9 @@ def _stop_every_run() -> None:
     """Shut down the runs still running at the interpreter's exit, waiting for
     their ``on_stop``: their threads must not call into a finalizing
     interpreter."""
-    for running in list(_RUNNING):
+    for left in list(_RUNNING):
         with contextlib.suppress(NetworkError):  # logged, and the host has gone
-            running.shutdown()
+            left.shutdown()
 
 
 atexit.register(_stop_every_run)

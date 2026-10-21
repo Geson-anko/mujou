@@ -22,7 +22,7 @@ self.prev = Port(recv=TensorSpec((32, 784)))  # receives only
 self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # both ways
 ```
 
-`TensorSpec(shape, dtype)` is one tensor; its dtype is `torch.float32` unless given, whatever `torch.get_default_dtype()` is. A value sent must match the spec in shape and dtype: no dtype is converted. The dtypes a spec takes are in `TensorSpec.dtypes`.
+`TensorSpec(shape, dtype)` is one tensor; its dtype is `torch.float32` unless given, whatever `torch.get_default_dtype()` is. A value sent must match the spec in shape and dtype: no dtype is converted. The dtypes a spec takes are in `TensorSpec.dtypes`. A spec also makes values of its shape and dtype, for the state of a node or a test: `spec.zeros()` and `spec.empty()` (a dict of them for a `DictSpec`), and `TensorSpec.rand(generator=...)`.
 
 Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a `DictSpec` gives a `TensorSpec` for each key of a `TypedDict`, the whole dict arrives at once, and type checkers know the type of each key.
 

@@ -25,8 +25,8 @@ batch 300: loss 0.0067 (the mean of the last 50)
 
 - `x` and `y` are the specs of the inputs and targets, batch first. The batch size `B` is written only here
 - `loss` returns the loss of each sample, shape `(B,)`: `pc.mse` or `pc.cross_entropy`, or a function of your own of that shape
-- `tau` holds the time constants, in seconds of the run's timer: `h` for the activities (every node of the chain updates once every `tau.h / 4`), `lam` for the duals and `theta` for the weights
-- `learn_interval` is when the nodes learn, counted from each write: here once per batch, three quarters of the way through it. A learning step weighs the time since the node last learned, so with one step per batch, the learning rate per batch is the showing time divided by `tau.theta`
+- `tau` holds the time constants, in seconds of the run's timer: `h` for the activities (every node of the chain updates once every `tau.period`, which is `tau.h / 4`), `lam` for the duals and `theta` for the weights
+- `learn_interval` is when the nodes learn, counted from each write: here once per batch, three quarters of the way through it. A learning step weighs the time since the node last learned, so with one step per batch, the learning rate per batch is the showing time divided by `tau.theta`. It has no default: `None` learns in every update, for a stream whose input changes at every frame, and good values for that mode have not been measured yet
 
 Inside a node, the module is differentiated by autograd, as in BP. Initialize the weights when you make the modules (here from `torch.manual_seed` in the host, before the run); the nodes do not.
 
@@ -40,7 +40,7 @@ Inside a node, the module is differentiated by autograd, as in BP. Initialize th
 
 - `mask` says which samples have a target. A sample whose `mask` is False adds nothing to the loss: with every `mask` False, no weight moves (the activities still do), which is how to evaluate the same running chain. There is no inference mode to switch to
 - A `pc.Prediction` holds `y_hat` with the `y`, `mask` and `time` of the sample it was made from, so a prediction always pairs with its own target
-- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module and its clock
+- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module and its clock, and what it keeps to move `h` when its prediction jumps (`mu`, `jump`, `jumped`, `jumps` and `seen_jumps`, explained in [PC-ALM](../topics/pc.md#nodes-of-your-own))
 
 ## Next
 

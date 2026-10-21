@@ -8,8 +8,8 @@ activities (``Activity``) flow to the next node and gradients of the energy to
 the previous one. The target of each sample travels with its input in the
 ``Activity``, so the output node pairs every prediction with its own target.
 ``Chain`` connects the nodes for a sequence of modules, and ``show`` shows it a
-sample. Each node gives the spec of what it sends as ``act``, which the next
-node takes, to build other shapes by hand. ``LearnClock`` and ``functional``
+sample. Each node gives the spec of what it sends as ``act_spec``, which the
+next node takes, to build other shapes by hand. ``LearnClock`` and ``functional``
 hold the parts the nodes are made of, for writing nodes of your own.
 
 Import it as a submodule::

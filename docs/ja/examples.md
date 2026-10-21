@@ -45,4 +45,4 @@ uv run python examples/quickstart.py
 uv run python examples/mnist/main.py
 ```
 
-どのプログラムも GPU を使わない。`mnist/` 以外は 10 秒ほどで終わる。`mnist/` は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。
+どのプログラムも GPU を使わない。`mnist/` 以外は 15 秒以内に終わる。`mnist/` は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。

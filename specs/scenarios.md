@@ -27,7 +27,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | S4 | 時間 | グローバルタイマーか、実行ごとの `Timer` を使う。sleep / pause / time scale |
 | S5 | 保存と再開 | `state_dict` → `torch.save` → 同じ形に作り直した新しいインスタンスで `mujou.run(..., state=tree)`（保存した時刻から始まる専用のタイマーで続く） |
 | S6 | テスト | `mujou.testing.run` と `ManualRun.step(dt, *nodes)` |
-| S7 | PC-ALM で学習する | `pc.Chain` / `pc.show`、個別のノード（`act` で繋ぐ）、`pc.LearnClock` と `pc.functional` による自作ノード |
+| S7 | PC-ALM で学習する | `pc.Chain` / `pc.show`、個別のノード（`act_spec` で繋ぐ）、`pc.LearnClock` と `pc.functional` による自作ノード |
 | S8 | ノードの例外 | 全ノードが止まり（`on_exception` → `on_stop`）、ホストに `NetworkError` が届く |
 | S9 | CUDA | ノードの `device="cuda"` |
 
@@ -70,7 +70,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K9 | S1/S3/S5 | send / send_to / write / inputs / initial / 復元する値の、構造（Tensor か、dict のキーの過不足）または shape・dtype の誤り | 構造は `codec.to_core`、shape・dtype は Rust の `copy_from`。どちらもポートの label とフィールドを名指しする。inputs・initial・復元は段 2 | 構造は `TypeError`、shape・dtype は `ValueError` | 最も多い誤り。2 か所はそれぞれ、自分にしか見えないものを 1 回ずつ見る | `_core/test_codec.py` の `TestStructure`、`_core/native/test_slot.py` の `test_rejects_mismatch_naming_slot_and_field`、`_core/test_port.py` の `TestInitial` |
 | K10 | S2 | `connect` で spec が逆向きに一致しない | `Port.connect`（両端の spec を示す） | `TypeError` | 根本の誤り | `_core/test_port.py` の `test_rejects_specs_that_are_not_reversed` |
 | K11 | S2 | 受け取る `Port` に、別の相手を繋ぐ（どちらの端から繋いでも） | `Port.connect`（両端を見て「MultiPort を使う」） | `ValueError` | recv が曖昧になり、黙って片方だけを読む | `_core/test_port.py` の `test_a_port_that_receives_takes_one_peer` |
-| K12 | S1 | Port の recv / recv_with_time / send / send_to を、所有ノードの hook の外で使う（`__init__`、他のノード、ホスト、run の外、`on_start` で作った Port、そのノードの `state_dict` の中）。`Node.timer` をそのノードの hook の外で読む | Port は Driver の `wires` の lookup（`port.py` の `_wire(port)`）、timer は `Node.timer` が走っている Driver のノードと照合する | `RuntimeError` | 局所性の不変原則。状態を取るための停止が、他のノードとホストから見えないようにする（`state_dict` の間は Driver の `wires` が空） | `_core/test_port.py` の `TestOutsideTheHooks`、`_core/test_node.py` の `TestTimer`、`_core/test_state.py` の `test_the_ports_refuse_in_the_node_state_dict` |
+| K12 | S1 | Port の recv / recv_with_time / send / send_to を、所有ノードの hook の外で使う（`__init__`、他のノード、ホスト、run の外、`on_start` で作った Port、そのノードの `state_dict` の中）。`Node.timer` をそのノードの hook の外で読む | Port は Driver の `wires` の lookup（`port.py` の `_wire(port)`）、timer は `Node.timer` が走っている Driver のノードと照合する。どちらも `current.running()` を通し、文言は `current.outside(name, hint)` の 1 つの文に、用途ごとの案内（Port なら `__init__` での宣言と `run.read` / `run.write`、timer なら `run.timer`）を足す | `RuntimeError` | 局所性の不変原則。状態を取るための停止が、他のノードとホストから見えないようにする（`state_dict` の間は Driver の `wires` が空） | `_core/test_port.py` の `TestOutsideTheHooks`、`_core/test_node.py` の `TestTimer`、`_core/test_state.py` の `test_the_ports_refuse_in_the_node_state_dict` |
 | K13 | S2 | 同じオブジェクト（Node・Network・Port）が、木の 2 か所にある | `tree.walk`（段 1、両方のパス） | `ValueError` | 1 つのノードが 2 回走るか、1 つのポートに書き手が 2 人できる | `_core/test_tree.py` の `test_the_same_node_at_two_places` ほか |
 | K14 | S3 | 走ったことのあるインスタンスを、もう一度走らせる | `run` の段 1（走ったことのある最初のノードを名指しする） | `RuntimeError` | notebook で起きやすい | `_core/test_run.py` の `test_runs_once` |
 | K15 | S2 | 繋いだ相手のノードを、木に入れ忘れる | `tree.walk`（段 1） | `ValueError` | recv が zeros のまま、黙って進む | `_core/test_tree.py` の `test_a_port_connected_to_one_outside_the_tree` |
@@ -111,7 +111,8 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
   - DLPack で読めない値、ホストのメモリに無い値（`FieldError::InvalidDLPack` / `UnsupportedDevice`。codec は CPU のテンソルだけを渡す）
   - `Outlet` に無いチャネルの番号（`IndexError`。`Wire.targets` は connect の順の番号だけを持つ）
   - `InputGroup.write` に別のグループのスロットか、同じスロットを 2 回渡す（コアが panic する。`Wiring.write` は、その run の Port から引いたスロットを 1 回ずつ渡す）
-  - `RuntimeError::Internal`（スレッドを作れない、capture の build が panic した、など）
+  - `RuntimeError::Internal`（スレッドを作れない、capture の build が panic した、手動でない runtime に `step` を頼んだ、など。`step` を呼ぶのは `ManualRun` だけ）
+  - BufferView の `__dlpack__` に DLPack 1.x の `max_version` が無い（`BufferError`。torch の `from_dlpack` は必ず渡す）
 
 ## 自然に出る例外（G2）
 
@@ -121,6 +122,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 - `TensorSpec` の次元が 1 未満: Rust の `Schema` が段 2 で `ValueError` を出す
 - `DictSpec` に TypedDict でないクラスを渡す: キーが無いので、キーの照合（K8）が断る。キーの注釈が `torch.Tensor` でない TypedDict は、pyright が見る型の誤り（G3）
 - `Timestamp(ns=)` が 0 から 2⁶⁴ − 1 の外: 整数の変換が `OverflowError` を出す
-- timeout が負か NaN、`sleep` / `advance` の秒が有限で 0 以上でない、time scale が有限で 0 より大きくない: コアの時間（単調に進む ns）への変換が `ValueError` を出す
+- `state_dict` / `shutdown` / `join` の timeout が負か NaN、`sleep` / `advance` の秒が有限で 0 以上でない、time scale が有限で 0 より大きくない: コアの時間（単調に進む ns）への変換が `ValueError` を出す。`shutdown` は止める要求を出す前に変換するので、断られた呼び出しは何も変えない
+- `subscribe` / `wait_for` の timeout が負: 期限がもう過ぎているので、最初の値の次の待ちで `TimeoutError` になる（最初の値は待たずに渡す）。NaN は待ちの秒の変換が `ValueError` を出す
 - `learn_` に渡す列の長さの違い: `zip(strict=True)` が `ValueError` を出す
 - 引数の型の誤り（`TimeConstants` に文字列を渡す、など）: pyright が見る（G3）。実行時は、その値を使う演算が例外を出す

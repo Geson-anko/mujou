@@ -71,7 +71,7 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 - 目標 `y` と `mask` は入力に付随させ、活動と同じメッセージで運ぶ。各ノードは受け取った `y`、`mask`、`time` をそのまま次のメッセージに写す。読み手は 1 回の読み出しで同じサンプルの組を得るので、`Output` は常に、受け取った活動と同じメッセージの `y` と予測を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、ホストが伝播より速く次のサンプルを書いても組み違えない。別のポートで運ぶと、読み手は 2 つのスロットを別々の瞬間に読むので、別のサンプルの組になりうる
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい。学習モードと推論モードの区別は持ち込まない
 - 1 ホップごとに `y`、`mask`、`time` をコピーするコストは、分類（`y` が `(B,)`）では h より小さく、回帰（`y` が `(B, d)`）では h と同じ大きさになる（[性能の基準値](research/benchmarks.md)）
-- `act` は、ノードが送る `Activity` の spec。`Input` と `Layer` が公開し、次のノードが `act=` で受け取る。B（バッチの大きさ）は `act` の `y` から読む。自作のノードは `activity_spec(h, y)` か前のノードの `act` で繋ぐ。h と y の先頭の次元の照合は `activity_spec` の 1 か所だけで行う（K28）。`Layer` は自分の出力の `act` を `activity_spec` で作るので、module の出力の先頭の次元の検査も同じ 1 か所を通る
+- `act_spec` は、ノードが送る `Activity` の spec。`Input` と `Layer` が公開し、次のノードが `act_spec=` で受け取る。名前を `act` にしないのは、研究者が `act` をまず活性化関数と読むから。B（バッチの大きさ）は `act_spec` の `y` から読む。自作のノードは `activity_spec(h, y)` か前のノードの `act_spec` で繋ぐ。h と y の先頭の次元の照合は `activity_spec` の 1 か所だけで行う（K28）。`Layer` は自分の出力の `act_spec` を `activity_spec` で作るので、module の出力の先頭の次元の検査も同じ 1 か所を通る
 
 | ノード | ポート | 受け取る | 送る |
 | --- | --- | --- | --- |
@@ -120,10 +120,10 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 時間あたりの学習の速さは $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
 
-学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。`tick(dt, time_ns, now_ns)` は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
+学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt` と、`theta` が inf なら学ばない規則）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time_ns, now_ns)` は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
 
 - ホストが入力を書いた時刻（`time`）から `learn_interval` ごとの時刻 `time + k * learn_interval`（$k = 1, 2, \dots$）を過ぎた最初の更新で学習する。ただし、その入力を初めて見た更新では学習しない。その更新の $\delta$ は、前の入力の $r + \lambda$ に新しい入力のヤコビアンを掛けたもので、新しい入力の credit ではない
-- `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない。`TimeConstants` の `theta` が inf なら、`Layer` と `Output` は `learn_interval=inf` を渡す。格子の点が無限の先にあるので、学習の時刻に達しない
+- `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない。`TimeConstants` の `theta` が inf なら、`LearnClock.of` が `learn_interval=inf` にする。格子の点が無限の先にあるので、学習の時刻に達しない
 - `learn` を返した時点で学習したものとして数え直す（$\Sigma\Delta t$ と次の格子）。ノードが mask の無い入力で学習を飛ばしても同じで、その時間は捨てる。前の入力から持ち越した $\delta$ で学習しないため
 - 学習しないまま入力が切り替わったら（入力が `learn_interval` より速く変わる）$\Sigma\Delta t$ を捨てる。溜めたままにすると、入力が止まった最初の学習にまとめて掛かり、学習率が際限なく跳ね上がる
 - $\Sigma\Delta t$ は `max_dt` で打ち切った `dt` の和。学習の時刻は実行の時間で決まる（打ち切った時間も含む）
@@ -138,7 +138,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ### learn_interval の目安
 
-`learn_interval` は、credit が経路を往復する時間（2 × ホップ数 × period。ホップ数は Input から Output までの接続の数）より長くすることを勧める。検査はしない。
+`learn_interval` は、credit が経路を往復する時間（2 × ホップ数 × period。ホップ数は Input から Output までの接続の数）より長くすることを勧める。検査はしない。既定値は置かない（`Layer`・`Output`・`Chain` の必須のキーワード）。毎回学ぶ `None` はストリーム向けで、よい値をまだ測っていないので、省いたときに黙ってそのモードで走らせない。
 
 間隔が短いと各ノードがほぼ毎回の更新で学習して `jumps` が進み、次のノードが毎回付け替えるので、跳びの連鎖が $u$ の形に戻る。ResBlock 8 ノードの鎖（往復 18 周期）での実測では、`None` と 16 周期は credit に収束し、4 周期は有界だが credit の約 4 倍、発散したのは 2 周期と 1 周期だけだった。2 × ホップ数 × 周期は安定の境界ではないので、それより短い値を断ると安定な設定まで拒むことになる。
 
@@ -174,7 +174,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - `prev`（`Sample` を受ける）と `next`（`Prediction` を送る）を公開する
 - 名前を `Sequential` にしなかったのは、同じ式の中で `nn.Sequential` と並び、読み違えを生むから。`x` / `y` は `Sample` のキーと一致し、`input` は組み込み関数を隠す
 
-`show(run, chain, sample, *, seconds) -> Prediction` は、`sample` を書き、その書き込みに対する最初の予測（学習する前の、prequential な予測）を返す。返すのは、書き込みから `seconds` の間サンプルを提示し続けた後。
+`show(run, chain, sample, *, seconds) -> Prediction` は、`sample` を書き、その書き込みに対する最初の予測（学習する前の、prequential な予測）を返す。返すのは、書き込みから `seconds` の間サンプルを提示し続けた後。`chain` は `Chain` に限らず、`Sample` を受け取る `prev` と `Prediction` を送る `next` を持つもの（Protocol）を取る。周期や形を変えて手で組んだネットワークにも、同じ 1 つのやり方で見せられる。
 
 - 評価は mask をすべて False にした `Sample` で行う。教師の有無は `Sample` の mask が表すので、`y=None` のような特別扱いは持たない。評価では、伝播に足りる短い `seconds` でよい
 - outbox は最新値のスロットなので、ホストが学習の始まりより遅れると、学習を始めた後の予測を読みうる
@@ -190,7 +190,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - `learn_(params, g_theta, elapsed, tau, batch)`: $\theta$ の 1 歩
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock(...)` を属性に置き（それだけで状態に入る）、毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼び、`relax_(..., tick.dt, tau)` で活動を動かし、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act` か `activity_spec(h, y)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y)` を使う。
 
 ## 記事の公式実装との違い
 

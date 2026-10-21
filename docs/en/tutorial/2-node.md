@@ -18,7 +18,7 @@ The node writes three things.
 
 ## Update in proportion to `dt`
 
-`dt` is the time in seconds since this node's previous update, on the run's timer. The first `dt` counts from when the run's timer starts, after every node's `on_start`.
+`dt` is the time in seconds since this node's previous update, on the run's timer. The first `dt` counts from the start of the run, once every node's `on_start` has returned.
 
 Make every update proportional to `dt`. For $\frac{dx}{dt} = f(x)$, the simplest update is explicit Euler, `x += dt * f(x)`. A node updates at its own rate, and that rate varies with the load. With updates proportional to `dt`, every node follows the same dynamics on the same flow of time; a busy machine only makes `dt` longer. With a fixed step per update instead, a node that loops faster would change faster.
 

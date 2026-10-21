@@ -210,7 +210,7 @@ fn events(log: &Log, id: usize) -> Vec<Event> {
 enum Mode {
     /// Each node on a dedicated thread.
     Dedicated,
-    /// The pool with the default number of workers.
+    /// The pool with as many workers as the available parallelism.
     Pool,
     /// The pool with a single worker, fewer than the nodes.
     OneWorker,
@@ -236,9 +236,9 @@ fn mode_config<N>(mode: Mode, mut config: RunConfig<N>) -> RunConfig<N> {
         node.dedicated_thread = mode == Mode::Dedicated;
     }
     config.workers = match mode {
-        Mode::OneWorker => Some(NonZeroUsize::MIN),
-        Mode::TwoWorkers => NonZeroUsize::new(2),
-        Mode::Dedicated | Mode::Pool => None,
+        Mode::OneWorker => NonZeroUsize::MIN,
+        Mode::TwoWorkers => NonZeroUsize::new(2).unwrap(),
+        Mode::Dedicated | Mode::Pool => parallelism(),
     };
     config
 }
@@ -282,8 +282,13 @@ fn config<N>(hooks: Vec<N>) -> RunConfig<N> {
     RunConfig {
         nodes,
         manual: false,
-        workers: None,
+        workers: parallelism(),
     }
+}
+
+/// The available parallelism, as many workers as the CPUs.
+fn parallelism() -> NonZeroUsize {
+    std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
 }
 
 /// [`config`] in the manual mode.
@@ -305,7 +310,7 @@ fn assert_exception_then_stop_once(events: &[Event]) {
 /// `config` on a pool of `workers` workers.
 fn pool<N>(workers: usize, config: RunConfig<N>) -> RunConfig<N> {
     RunConfig {
-        workers: NonZeroUsize::new(workers),
+        workers: NonZeroUsize::new(workers).unwrap(),
         ..config
     }
 }

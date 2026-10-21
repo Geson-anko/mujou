@@ -1,6 +1,5 @@
 """The output node of ``mujou.pc``."""
 
-import math
 from collections.abc import Callable
 from typing import override
 
@@ -60,7 +59,7 @@ class Output(Node):
 
         out = pc.Output(
             nn.Linear(256, 10),
-            act=hidden.act,  # hidden: a pc.Layer
+            act_spec=hidden.act_spec,  # hidden: a pc.Layer
             loss=pc.cross_entropy,
             tau=tau,
             learn_interval=24e-3,
@@ -70,16 +69,18 @@ class Output(Node):
 
     Args:
         module: The function ``f``, ``(B, *in) -> (B, *out)``, on ``device``.
-        act: The spec of the activity ``h_in`` it receives: the ``act`` of the
-            node before.
+        act_spec: The spec of the activity ``h_in`` it receives: the
+            ``act_spec`` of the node before.
         loss: The loss of each sample, ``(y_hat, y) -> (B,)``.
-        tau: The time constants; ``tau.theta`` is used, and ``tau.h`` gives the
-            default period.
+        tau: The time constants; ``tau.theta`` is used, and the defaults of
+            ``period`` and ``max_dt``.
         learn_interval: As in ``Layer``.
-        period: The period of the node in seconds; ``None`` is ``tau.h / 4``.
-            It must not be longer than ``max_dt``.
+        period: The period of the node in seconds; ``None`` is ``tau.period``
+            (``tau.h / 4``). It must not be longer than ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
-            towards the weight of the update of ``theta``.
+            towards the weight of the update of ``theta``. The default
+            ``tau.max_dt`` is that of ``Layer``, so that every node of a chain
+            counts the same time.
         device: Where the node computes.
 
     Raises:
@@ -91,27 +92,26 @@ class Output(Node):
         self,
         module: nn.Module,
         *,
-        act: DictSpec[Activity],
+        act_spec: DictSpec[Activity],
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
-        learn_interval: float | None = None,
+        learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        super().__init__(device=device, period=tau.h / 4 if period is None else period)
+        super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
         self._loss = loss
-        self._batch = act.specs["y"].shape[0]
-        self.clock = LearnClock(
-            period=self.period,
-            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
-            max_dt=min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt,
+        self._batch = act_spec.specs["y"].shape[0]
+        self.clock = LearnClock.of(
+            tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
-        h_in, y, mask = act.specs["h"], act.specs["y"], act.specs["mask"]
+        specs = act_spec.specs
+        h_in, y, mask = specs["h"], specs["y"], specs["mask"]
         y_hat, _, _ = loss_vjp(
             module,
             h_in.zeros(device=self.device),
@@ -119,14 +119,14 @@ class Output(Node):
             mask.zeros(device=self.device),
             loss,
         )
-        self.prev = Port(send=h_in, recv=act)
+        self.prev = Port(send=h_in, recv=act_spec)
         self.next = Port(
             send=DictSpec(
                 Prediction,
                 y_hat=TensorSpec(y_hat.shape, y_hat.dtype),
                 y=y,
                 mask=mask,
-                time=act.specs["time"],
+                time=specs["time"],
             )
         )
 

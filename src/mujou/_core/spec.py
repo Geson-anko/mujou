@@ -4,6 +4,9 @@ A message is either one ``torch.Tensor`` (``TensorSpec``) or a ``TypedDict`` who
 values are ``torch.Tensor`` (``DictSpec``). A spec fixes the shape and the dtype of
 every value, so the slots that hold the message can be laid out when the network
 is built (``specs/messages.md``).
+
+``DLPACK``, the DLPack code of each supported dtype, is here rather than in the
+codec: ``TensorSpec.dtypes`` is its keys, and the codec reads the same one table.
 """
 
 import typing

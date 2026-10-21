@@ -16,12 +16,10 @@ from typing import TypeIs, cast, final
 import torch
 from torch import nn
 
+from mujou._core.component import is_part
 from mujou._core.network import Network
 from mujou._core.node import Node, initialized, is_state
 from mujou._core.port import AnyPort, MultiPort, Port
-
-# What a tree is made of: the run sees each only as an attribute of its own.
-_PARTS = (Port, MultiPort, Node, Network)
 
 
 @final
@@ -66,7 +64,7 @@ class Tree:
         if found is None:
             return repr(port)
         owner, attribute = found
-        return f"{self.name(owner)}.{attribute}"
+        return _label(self.root, owner, attribute)
 
 
 def walk(root: Node | Network) -> Tree:
@@ -175,7 +173,8 @@ class _Walker:
             items = cast(Iterable[object], value)
         else:
             return
-        if any(isinstance(item, _PARTS) for item in items):
+        # The run sees a part only as an attribute of its own.
+        if any(is_part(item) for item in items):
             raise TypeError(
                 f"{where} holds ports, nodes or networks in a {kind}, which a run "
                 "does not read; assign each to an attribute of its own (or use a "
@@ -184,7 +183,7 @@ class _Walker:
 
     def _at(self, path: str, attribute: str) -> str:
         """Name the attribute ``attribute`` of the component at ``path``."""
-        return f"{path or self.root}.{attribute}"
+        return _label(self.root, path, attribute)
 
 
 def _is_port(value: object) -> TypeIs[AnyPort]:
@@ -193,3 +192,9 @@ def _is_port(value: object) -> TypeIs[AnyPort]:
 
 def _join(path: str, attribute: str) -> str:
     return f"{path}.{attribute}" if path else attribute
+
+
+def _label(root: str, path: str, attribute: str) -> str:
+    """Name the attribute ``attribute`` of the component at ``path`` in an
+    error: by the path, or by ``root``, the class of the root, at the root."""
+    return f"{path or root}.{attribute}"

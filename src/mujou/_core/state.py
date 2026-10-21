@@ -2,20 +2,40 @@
 ``mujou.run(..., state=...)`` restores (``specs/execution-model.md``).
 
 The tree is a plain ``dict`` of copies on the CPU, which share no memory with
-the run; ``Run.state_dict`` documents its shape. Its ports mirror the slots that
-``wiring.wire`` lays out: ``capture`` reads them and ``restore`` writes them.
+the run; ``Run.state_dict`` documents its shape, which this module alone makes.
+Its ports mirror the slots that ``wiring.wire`` lays out (``_slots``):
+``capture`` reads them and ``restore`` writes them.
 """
 
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Final, cast
+from dataclasses import dataclass
+from typing import Any, Final, cast, final
 
 import torch
 
 from mujou._core.codec import from_core, to_core
-from mujou._core.wiring import Held, PortSlots, Wiring
+from mujou._core.node import map_tensors
+from mujou._core.port import AnyPort, AnySlot
+from mujou._core.spec import MessageSpec
+from mujou._core.wiring import Wiring
 
 # Where the tree holds its tensors.
 _CPU: Final = torch.device("cpu")
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _Held:
+    """A slot of the run and the spec of the messages it holds."""
+
+    slot: AnySlot
+    spec: MessageSpec[Any]
+
+
+# The slots of one port, as the tree keys them: "out" (the outbox of a port that
+# sends), "to" (its slot for each peer, by the path of the peer's port) and "in"
+# (the slot the host writes).
+type _PortSlots = dict[str, _Held | dict[str, _Held]]
 
 
 def capture(
@@ -36,8 +56,8 @@ def capture(
                 "state": state,
                 "last_update_ns": updated_ns,
                 "ports": {
-                    attribute: _read(slots)
-                    for attribute, slots in wiring.slots[member.path].items()
+                    attribute: _read(_slots(wiring, port))
+                    for attribute, port in member.ports.items()
                 },
             }
             for member, state, updated_ns in zip(
@@ -48,10 +68,10 @@ def capture(
 
 
 def cpu(tree: dict[str, Any]) -> dict[str, Any]:
-    """``tree`` with the tensors of every node's state on the CPU, moved in the
-    tree's own containers (the rest of the tree is on the CPU already)."""
+    """``tree`` with the tensors of every node's state on the CPU (the rest of
+    the tree is on the CPU already)."""
     for node in tree["nodes"].values():
-        node["state"] = _cpu(node["state"])
+        node["state"] = map_tensors(node["state"], torch.Tensor.cpu)
     return tree
 
 
@@ -80,28 +100,51 @@ def restore(wiring: Wiring, tree: Mapping[str, Any]) -> list[tuple[object, int]]
         TypeError: A value restored to a slot is not of its structure.
     """
     nodes: Mapping[str, Any] = tree["nodes"]
+    slots = {
+        member.path: {
+            attribute: _slots(wiring, port) for attribute, port in member.ports.items()
+        }
+        for member in wiring.tree.members
+    }
     expected = {
         path: {"state": None, "last_update_ns": None, "ports": ports}
-        for path, ports in wiring.slots.items()
+        for path, ports in slots.items()
     }
     _match(_mismatches(expected, nodes, "nodes"))
-    for path, ports in wiring.slots.items():
-        for attribute, slots in ports.items():
-            _write(slots, nodes[path]["ports"][attribute])
+    for path, ports in slots.items():
+        for attribute, port_slots in ports.items():
+            _write(port_slots, nodes[path]["ports"][attribute])
     return [
         (nodes[member.path]["state"], nodes[member.path]["last_update_ns"])
         for member in wiring.tree.members
     ]
 
 
-def _read(slots: PortSlots | dict[str, Held]) -> dict[str, Any]:
+def _slots(wiring: Wiring, port: AnyPort) -> _PortSlots:
+    """The slots of ``port``, as the tree keys them."""
+    slots: _PortSlots = {}
+    outlet = wiring.outlets.get(port)
+    if outlet is not None:
+        spec = cast("MessageSpec[Any]", port.send_spec)
+        slots["out"] = _Held(outlet.outbox, spec)
+        slots["to"] = {
+            wiring.tree.path(channel.other(port)): _Held(slot, spec)
+            for channel, slot in zip(port.channels, wiring.channels(port), strict=True)
+        }
+    slot = wiring.inputs.get(port)
+    if slot is not None:
+        slots["in"] = _Held(slot, cast("MessageSpec[Any]", port.recv_spec))
+    return slots
+
+
+def _read(slots: _PortSlots | dict[str, _Held]) -> dict[str, Any]:
     return {
-        key: _entry(held) if isinstance(held, Held) else _read(held)
+        key: _entry(held) if isinstance(held, _Held) else _read(held)
         for key, held in slots.items()
     }
 
 
-def _entry(held: Held) -> dict[str, Any]:
+def _entry(held: _Held) -> dict[str, Any]:
     message = held.slot.read()
     time = message.timestamp
     return {
@@ -110,9 +153,9 @@ def _entry(held: Held) -> dict[str, Any]:
     }
 
 
-def _write(slots: PortSlots | dict[str, Held], entries: Mapping[str, Any]) -> None:
+def _write(slots: _PortSlots | dict[str, _Held], entries: Mapping[str, Any]) -> None:
     for key, held in slots.items():
-        if isinstance(held, Held):
+        if isinstance(held, _Held):
             entry = entries[key]
             values = to_core(held.spec, entry["value"], held.slot.name)
             held.slot.restore(values, entry["time_ns"])
@@ -148,20 +191,3 @@ def _mismatches(
 
 def _where(at: str, key: str) -> str:
     return f"{at}[{key!r}]" if at else key
-
-
-def _cpu(value: object) -> object:
-    if isinstance(value, torch.Tensor):
-        return value.cpu()
-    if isinstance(value, dict):
-        items = cast(dict[object, object], value)
-        for key, item in items.items():
-            items[key] = _cpu(item)
-        return items
-    if isinstance(value, list):
-        elements = cast(list[object], value)
-        elements[:] = [_cpu(element) for element in elements]
-        return elements
-    if type(value) is tuple:
-        return tuple(_cpu(element) for element in cast(tuple[object, ...], value))
-    return value

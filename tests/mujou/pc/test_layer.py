@@ -1,4 +1,5 @@
 import copy
+import functools
 import math
 import random
 from collections.abc import Callable, Sequence
@@ -54,11 +55,11 @@ class HandChain:
             "max_dt": max_dt,
         }
         self.layers: list[pc.Layer] = []
-        act = self.inp.act
+        act = self.inp.act_spec
         for module in layers:
-            self.layers.append(pc.Layer(module, act=act, **learning))
-            act = self.layers[-1].act
-        self.out = pc.Output(head, act=act, loss=pc.mse, **learning)
+            self.layers.append(pc.Layer(module, act_spec=act, **learning))
+            act = self.layers[-1].act_spec
+        self.out = pc.Output(head, act_spec=act, loss=pc.mse, **learning)
         senders = [self.inp, *self.layers]
         for sender, receiver in zip(senders, [*self.layers, self.out], strict=True):
             sender.next.connect(receiver.prev)
@@ -90,7 +91,11 @@ def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:
 
 class TestConstruction:
     def _layer(self, **kwargs: Any) -> pc.Layer:
-        args: dict[str, Any] = {"act": activity(TensorSpec((B, 4))), "tau": TAU}
+        args: dict[str, Any] = {
+            "act_spec": activity(TensorSpec((B, 4))),
+            "tau": TAU,
+            "learn_interval": None,
+        }
         module = kwargs.pop("module", nn.Linear(4, 5))
         return pc.Layer(module, **(args | kwargs))
 
@@ -102,7 +107,7 @@ class TestConstruction:
 
     def test_the_dtype_comes_from_the_module(self):
         layer = self._layer(
-            module=nn.Linear(4, 5).double(), act=activity(TensorSpec((B, 4), F64))
+            module=nn.Linear(4, 5).double(), act_spec=activity(TensorSpec((B, 4), F64))
         )
         assert layer.next.send_spec == activity(TensorSpec((B, 5), F64))
 
@@ -423,8 +428,16 @@ class TestScalar:
             head.weight.fill_(w2)
         one = TensorSpec((1, 1), F64)
         inp = pc.Input(x=one, y=one, period=H)
-        layer = pc.Layer(first.double(), act=inp.act, tau=NO_LEARNING)
-        out = pc.Output(head.double(), act=layer.act, loss=pc.mse, tau=NO_LEARNING)
+        layer = pc.Layer(
+            first.double(), act_spec=inp.act_spec, tau=NO_LEARNING, learn_interval=None
+        )
+        out = pc.Output(
+            head.double(),
+            act_spec=layer.act_spec,
+            loss=pc.mse,
+            tau=NO_LEARNING,
+            learn_interval=None,
+        )
         inp.next.connect(layer.prev)
         layer.next.connect(out.prev)
         run = start_manual(Group(inp=inp, layer=layer, out=out))
@@ -900,15 +913,17 @@ class TestMaxDt:
     def test_the_default_keeps_the_step_of_lam_stable(self):
         # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
         # a period must not pass.
-        act = activity(TensorSpec((B, 4)))
+        layer = functools.partial(
+            pc.Layer, act_spec=activity(TensorSpec((B, 4))), learn_interval=None
+        )
         fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0)
-        pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual, period=1.5e-3)
+        layer(nn.Linear(4, 5), tau=fast_dual, period=1.5e-3)
         with pytest.raises(ValueError, match="max_dt"):
-            pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual, period=1.6e-3)
+            layer(nn.Linear(4, 5), tau=fast_dual, period=1.6e-3)
         no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, theta=1.0)
-        pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual, period=2e-3)
+        layer(nn.Linear(4, 5), tau=no_dual, period=2e-3)
         with pytest.raises(ValueError, match="max_dt"):
-            pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual, period=2.1e-3)
+            layer(nn.Linear(4, 5), tau=no_dual, period=2.1e-3)
 
 
 class TestJumps:

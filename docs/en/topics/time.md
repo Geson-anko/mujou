@@ -57,7 +57,7 @@ The global timer can be scaled too, which changes every run on it:
 
 `timer.pause()` stops the time of the timer until `timer.resume()`; `global_timer.pause()` stops every run on the global timer. While it is paused:
 
-- the nodes of every run on the timer do not update, and the first `dt` after `resume` does not count the pause
+- the nodes of every run on the timer do not update, and the first `dt` after `resume` does not count the pause. The nodes are not told: `on_pause` and `on_resume` run only around taking the state
 - `sleep` on the timer does not return, and `VirtualTimer.advance` raises `RuntimeError`
 - `run.state_dict()` still works, and gives the state at the time of the pause
 

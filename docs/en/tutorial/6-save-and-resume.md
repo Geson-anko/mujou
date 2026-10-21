@@ -18,7 +18,7 @@ This page takes the state of a run, saves it, and resumes from it in a new run. 
 
 The tree is a plain `dict` of copies on the CPU, keyed by the paths of the nodes: the state of each node, the latest message on each channel with its time, the time of each node's last update, and the time of the timer. Its exact shape is in the API reference of [`Run.state_dict`](../api/run.md#mujou.Run.state_dict).
 
-Taking it pauses the run: each node stops between two updates, never in the middle of one, so every value in the tree is of the same time. The paused time does not enter any `dt` afterwards.
+Taking it pauses the run: each node stops between two updates, never in the middle of one, so every value in the tree is of the same time. The paused time does not enter any `dt` afterwards. Each node's `on_pause` and `on_resume` run around this pause, to hold its I/O meanwhile; a pause of the timer (`run.timer.pause()`) calls neither.
 
 | When you take it       | What you get                                                                                                                     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,8 @@ Taking it pauses the run: each node stops between two updates, never in the midd
 ## When you resume
 
 - **The resumed run has a timer of its own.** It runs on a new `Timer` (`run.timer`) that starts at the time and the time scale of the tree, so `mujou.time.global_timer` and the other runs do not go back. Passing `timer=` with `state=` raises `ValueError`, and `global_timer.pause()` does not pause a resumed run: pause its `run.timer`
-- **Build the same network.** The resumed network must have the node paths, ports and connections of the one the tree came from; otherwise `mujou.run` raises `ValueError`, listing what is missing and what is in excess. Renaming an attribute changes a path, so a tree saved before the rename no longer resumes. The default `load_state_dict` raises `ValueError` for a node state with other keys or shapes
+- **Build the same network.** The resumed network must have the node paths, ports and connections of the one the tree came from; otherwise `mujou.run` raises `ValueError`, listing what is missing and what is in excess. Renaming an attribute changes a path, so a tree saved before the rename no longer resumes. In both cases nothing has started, and the same instances run once the tree is fixed
+- **Keep the state of each node.** A node state with other keys or shapes makes the default `load_state_dict` raise `ValueError` while the node starts, so `mujou.run` raises `NetworkError` (its `__cause__` is the `ValueError`), and those instances do not run again: build new ones
 - **Inputs.** With both `state=` and `inputs=`, the values of `inputs` replace those of the tree
 
 ## Values of your own in the state

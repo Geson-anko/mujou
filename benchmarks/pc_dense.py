@@ -81,12 +81,14 @@ def build(target: str, period: float) -> tuple[mujou.Group, dict[Any, pc.Sample]
     }
     inp = CountedInput(x=TensorSpec((B, 784)), y=y, period=period)
     l1 = CountedLayer(
-        nn.Sequential(nn.Linear(784, 256), nn.Tanh()), act=inp.act, **common
+        nn.Sequential(nn.Linear(784, 256), nn.Tanh()), act_spec=inp.act_spec, **common
     )
     l2 = CountedLayer(
-        nn.Sequential(nn.Linear(256, 256), nn.Tanh()), act=l1.act, **common
+        nn.Sequential(nn.Linear(256, 256), nn.Tanh()), act_spec=l1.act_spec, **common
     )
-    out = CountedOutput(nn.Linear(256, width), act=l2.act, loss=loss, **common)
+    out = CountedOutput(
+        nn.Linear(256, width), act_spec=l2.act_spec, loss=loss, **common
+    )
     inp.next.connect(l1.prev)
     l1.next.connect(l2.prev)
     l2.next.connect(out.prev)

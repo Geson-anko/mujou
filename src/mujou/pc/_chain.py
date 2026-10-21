@@ -2,11 +2,12 @@
 sample."""
 
 from collections.abc import Callable
+from typing import Never, Protocol
 
 import torch
 from torch import nn
 
-from mujou import Network, Run, TensorSpec
+from mujou import Network, Port, Run, TensorSpec
 from mujou.pc._input import Input
 from mujou.pc._layer import Layer
 from mujou.pc._messages import Prediction, Sample
@@ -20,11 +21,11 @@ class Chain(Network):
 
     ``modules[:-1]`` each become a ``Layer`` and ``modules[-1]`` the ``Output``,
     after an ``Input`` of the samples ``x`` and targets ``y``. Each node takes
-    the ``act`` of the one before and the nodes are connected in order. The
-    children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is in
-    ``layer{i}``), which are also their paths in ``Run.state_dict()``. Every
-    node runs with the period ``tau.h / 4``; for other periods, build the nodes
-    one by one.
+    the ``act_spec`` of the one before and the nodes are connected in order.
+    The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
+    in ``layer{i}``), which are also their paths in ``Run.state_dict()``. Every
+    node runs with the period ``tau.period`` (``tau.h / 4``); for other
+    periods, build the nodes one by one (``show`` shows them samples too).
 
     The host writes a ``Sample`` to ``prev`` and reads a ``Prediction`` from
     ``next``, or does both with ``show``.
@@ -51,7 +52,7 @@ class Chain(Network):
         loss: The loss of each sample, as in ``Output``.
         tau: The time constants of every node.
         learn_interval: As in ``Layer``. Longer than the round trip of the
-            credit, ``2 * len(modules) * tau.h / 4``, is recommended.
+            credit, ``2 * len(modules) * tau.period``, is recommended.
         max_dt: As in ``Layer``.
         device: Where the nodes compute.
 
@@ -66,17 +67,17 @@ class Chain(Network):
         y: TensorSpec,
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
-        learn_interval: float | None = None,
+        learn_interval: float | None,
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__()
-        self.input = Input(x=x, y=y, period=tau.h / 4, device=device)
+        self.input = Input(x=x, y=y, period=tau.period, device=device)
         last: Input | Layer = self.input
         for i, module in enumerate(modules[:-1]):
             layer = Layer(
                 module,
-                act=last.act,
+                act_spec=last.act_spec,
                 tau=tau,
                 learn_interval=learn_interval,
                 max_dt=max_dt,
@@ -87,7 +88,7 @@ class Chain(Network):
             last = layer
         self.output = Output(
             modules[-1],
-            act=last.act,
+            act_spec=last.act_spec,
             loss=loss,
             tau=tau,
             learn_interval=learn_interval,
@@ -99,10 +100,23 @@ class Chain(Network):
         self.next = self.output.next
 
 
-def show(run: Run, chain: Chain, sample: Sample, *, seconds: float) -> Prediction:
+class _Shown(Protocol):
+    """What ``show`` shows a sample: a ``Chain``, or a network built by hand whose
+    ``prev`` takes a ``Sample`` and whose ``next`` sends a ``Prediction``."""
+
+    @property
+    def prev(self) -> Port[Never, Sample]: ...
+
+    @property
+    def next(self) -> Port[Prediction, Never]: ...
+
+
+def show(run: Run, chain: _Shown, sample: Sample, *, seconds: float) -> Prediction:
     """Return the prediction ``chain`` makes for ``sample`` before it learns from
     it (a prequential prediction), after showing it ``seconds`` long.
 
+    ``chain`` is a ``Chain``, or any network of the nodes of ``mujou.pc`` that
+    exposes the ``prev`` of its ``Input`` and the ``next`` of its ``Output``.
     Writes ``sample`` to ``chain.prev``, waits for the first prediction the
     host reads for that write, and returns it once ``seconds`` (of
     ``run.timer``) have passed since the write, while the nodes learn from the

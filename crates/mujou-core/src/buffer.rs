@@ -9,8 +9,9 @@
 
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
+use crate::lock;
 use crate::schema::{FieldSpec, Schema};
 
 /// One storage unit of a buffer. Allocating in units of 64 bytes aligns every
@@ -207,9 +208,4 @@ impl Messages {
     pub(crate) fn pools(&self) -> &[Arc<BufferPool>] {
         &self.pools
     }
-}
-
-pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    // Nothing panics while holding these locks, so a poisoned value is still valid.
-    m.lock().unwrap_or_else(|e| e.into_inner())
 }

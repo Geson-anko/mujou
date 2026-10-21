@@ -28,8 +28,8 @@ mujou のコアには 2 つの責務がある。1 つは各ノードを非同期
 | `start`、`Runtime` | 実行 |
 | `current` | いま hook を走らせている Driver |
 
-- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `NodeSpec(driver, name, period, dedicated_thread, last_update_ns, state)` の列で、並べたリストの長さを照合する引数を表せなくした
-- `Runtime` は `step(order)`、`capture(build, timeout)`、`stop()`（待たない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
+- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`run.py`）の列で、並べたリストの長さを照合する引数を表せなくした
+- `Runtime` は `step(order)`、`capture(build, timeout)`、`shutdown(timeout) -> bool`（止める要求を出して待つ。timeout の変換は要求の前に行い、断られた呼び出しは何も変えない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
 - 正常に終わった後の取得も `Runtime.capture` の同じ口で行う
 - bindings は `Runtime` の hook を、`Hook` から Driver のメソッド名への対応表で呼ぶ。Python を呼ぶ直前に thread-local の `CURRENT` に Driver を付け、戻ったら外す（`current.rs`）。core の `RUNTIME_OF_THREAD`（このスレッドがどのランタイムのものか）は、内部の `Reentrant` の検査のためにあり、「hook の中か」とは別の事実
 - 例外は Python の `mujou._core.errors.NetworkError` を `import_exception!` で参照する。停止の timeout は組み込みの `TimeoutError`
@@ -69,7 +69,7 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 
 プールのワーカー数は `mujou.run(..., workers=None)` で選ぶ。
 
-- 既定は bindings が決める。free-threaded ではコアの `available_parallelism`（cgroup の CPU quota と affinity を数える）、GIL が有効なとき（`sys._is_gil_enabled()`）はその半分（少なくとも 1）。Python の `os.process_cpu_count()` は quota を数えないので、コンテナの中で quota を超える
+- 既定は bindings だけが決め、コアの `RunConfig.workers` は常に数（`NonZeroUsize`）を受け取る。free-threaded では `available_parallelism`（cgroup の CPU quota と affinity を数える）、GIL が有効なとき（`sys._is_gil_enabled()`）はその半分（少なくとも 1）。Python の `os.process_cpu_count()` は quota を数えないので、コンテナの中で quota を超える
 - 実効の数は `min(要求か既定, プールに載るノードの数)` で、プールに載るノードが無ければ 0 本。全ノードが専用スレッドの実行も正しい使い方なので、0 を許す。明示した値が 1 未満なら K20
 - GIL ありの既定を半分にしたのは、GIL の取り合いで論理コア数のワーカーが約半分の速さになったためである。物理コア数は使わない。SMT の無い機械でしか測れておらず、free-threaded では論理コア数が最速だった（[性能の基準値](research/benchmarks.md#mn-スケジューラの比較)）
 

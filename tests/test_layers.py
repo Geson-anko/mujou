@@ -4,7 +4,11 @@ A module imports only modules of lower layers (not of its own), and only the
 modules in ``NATIVE`` import the extension ``mujou._core._native``. ``mujou.pc``
 is written as a user's code is: on the modules in ``PUBLIC`` only, never on
 ``mujou._core``. Every import is at the top level of its module: none under
-``TYPE_CHECKING`` or in a function, which would hide a dependency.
+``TYPE_CHECKING`` or in a function, which would hide a dependency. A name is
+imported from the module that defines it, not through another that imported
+it (except the modules in ``REEXPORTING``), which would hide the dependency
+too: the modules of ``mujou._core`` take the timers from the extension, and
+``mujou.testing`` from ``mujou.time``, which re-exports them.
 """
 
 import ast
@@ -17,7 +21,7 @@ EXTENSION = "mujou._core._native"
 # From the bottom up.
 LAYERS: list[set[str]] = [
     {"mujou._core", EXTENSION, "mujou._core.errors"},
-    {"mujou._core.spec"},
+    {"mujou._core.spec", "mujou._core.current"},
     {"mujou._core.codec"},
     {"mujou._core.port"},
     {"mujou._core.component"},
@@ -28,14 +32,10 @@ LAYERS: list[set[str]] = [
     {"mujou._core.wiring"},
     {"mujou._core.state"},
     {"mujou._core.run"},
-    {"mujou", "mujou.time", "mujou.testing"},
-    {
-        "mujou.pc._messages",
-        "mujou.pc._time_constants",
-        "mujou.pc._losses",
-        "mujou.pc._clock",
-    },
-    {"mujou.pc.functional"},
+    {"mujou.time"},
+    {"mujou", "mujou.testing"},
+    {"mujou.pc._messages", "mujou.pc._time_constants", "mujou.pc._losses"},
+    {"mujou.pc._clock", "mujou.pc.functional"},
     {"mujou.pc._input", "mujou.pc._layer", "mujou.pc._output"},
     {"mujou.pc._chain"},
     {"mujou.pc"},
@@ -43,15 +43,20 @@ LAYERS: list[set[str]] = [
 RANK = {module: rank for rank, layer in enumerate(LAYERS) for module in layer}
 
 NATIVE = {
+    "mujou._core.current",
     "mujou._core.codec",
     "mujou._core.port",
     "mujou._core.node",
+    "mujou._core.driver",
     "mujou._core.wiring",
     "mujou._core.run",
     "mujou.time",
 }
 
 PUBLIC = {"mujou", "mujou.time", "mujou.testing"}
+# The modules that re-export names of other modules: those of PUBLIC and the
+# entry of mujou.pc. Every other module is imported only for what it defines.
+REEXPORTING = PUBLIC | {"mujou.pc"}
 
 
 def module_name(path: Path) -> str:
@@ -76,6 +81,19 @@ def imports(path: Path, modules: set[str]) -> Iterator[str]:
         else:
             continue
         yield from (name for name in names if name in modules)
+
+
+def defined(path: Path) -> set[str]:
+    """The names that the module at ``path`` defines at its top level."""
+    names: set[str] = set()
+    for node in ast.parse(path.read_text(), str(path)).body:
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.TypeAlias):
+            names.add(node.name.id if isinstance(node, ast.TypeAlias) else node.name)
+        elif isinstance(node, ast.Assign):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
 
 
 def in_pc(module: str) -> bool:
@@ -115,6 +133,21 @@ class TestLayers:
                 and node not in module.body
             ]
         assert nested == []
+
+    def test_names_come_from_the_module_that_defines_them(self):
+        modules = sources()
+        borrowed = [
+            f"{importer}: {node.module}.{alias.name}"
+            for importer, path in modules.items()
+            for node in ast.walk(ast.parse(path.read_text(), str(path)))
+            if isinstance(node, ast.ImportFrom)
+            and node.module in modules
+            and node.module not in REEXPORTING
+            for alias in node.names
+            if f"{node.module}.{alias.name}" not in modules.keys() | {EXTENSION}
+            and alias.name not in defined(modules[node.module])
+        ]
+        assert borrowed == []
 
     def test_pc_may_import_the_public_modules_only(self):
         assert not breaks_the_rule("mujou.pc._layer", "mujou")

@@ -22,7 +22,7 @@ self.prev = Port(recv=TensorSpec((32, 784)))  # 受け取るだけ
 self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # 両方向
 ```
 
-`TensorSpec(shape, dtype)` はテンソル 1 つ。dtype を省くと、`torch.get_default_dtype()` の設定によらず `torch.float32` になる。送る値は shape と dtype の両方が spec と一致しなければならず、dtype は変換しない。spec が取れる dtype は `TensorSpec.dtypes` にある。
+`TensorSpec(shape, dtype)` はテンソル 1 つ。dtype を省くと、`torch.get_default_dtype()` の設定によらず `torch.float32` になる。送る値は shape と dtype の両方が spec と一致しなければならず、dtype は変換しない。spec が取れる dtype は `TensorSpec.dtypes` にある。spec はその shape と dtype の値も作れるので、ノードの状態やテストに使える。`spec.zeros()` と `spec.empty()`（`DictSpec` ならその dict）、`TensorSpec.rand(generator=...)` がある。
 
 2 つの Port の値は別々に届くので、読む側は一方の新しい値ともう一方の古い値を同時に読むことがある。入力とその目標のように組になる値は 1 つのメッセージで送る。`DictSpec` は `TypedDict` のキーごとに `TensorSpec` を与えるもので、dict 全体が一度に届き、キーごとの型は型検査器にも伝わる。
 

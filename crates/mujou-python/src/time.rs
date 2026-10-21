@@ -151,19 +151,24 @@ fn timer_error(err: TimerError) -> PyErr {
 
 /// A timer for tests: its time moves only when `advance` moves it.
 ///
-/// It starts at `start`. Its time scale does not apply to `advance`.
+/// It starts at `start`. Its time scale does not apply to `advance`; it is
+/// kept as a `Timer` keeps it (`time_scale()` and the state of a run on it).
 /// `mujou.testing.run` runs a network on a new one unless given one, and
 /// `ManualRun.step(dt)` advances it.
+///
+/// Raises:
+///     ValueError: `time_scale` is not finite and > 0.
 #[pyclass(extends = PyTimer, frozen, module = "mujou.time", name = "VirtualTimer")]
 pub struct PyVirtualTimer;
 
 #[pymethods]
 impl PyVirtualTimer {
     #[new]
-    #[pyo3(signature = (*, start = PyTimestamp(Timestamp::from_ns(0))))]
-    fn new(start: PyTimestamp) -> PyClassInitializer<Self> {
-        let timer = PyTimer(Arc::new(Timer::new(Source::Virtual, start.0)));
-        PyClassInitializer::from(timer).add_subclass(Self)
+    #[pyo3(signature = (*, start = PyTimestamp(Timestamp::from_ns(0)), time_scale = 1.0))]
+    fn new(start: PyTimestamp, time_scale: f64) -> PyResult<PyClassInitializer<Self>> {
+        let timer = Timer::new(Source::Virtual, start.0);
+        timer.set_time_scale(time_scale).map_err(timer_error)?;
+        Ok(PyClassInitializer::from(PyTimer(Arc::new(timer))).add_subclass(Self))
     }
 
     /// Moves the time forward by `seconds`, at once.
@@ -232,8 +237,8 @@ impl PyReadOnlyTimer {
 
 /// A time on a timer.
 ///
-/// `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
-/// is the exact time in nanoseconds. Timestamps compare and hash by time, so
+/// `float(ts)` is the time in seconds; `ts.ns` is the exact time in
+/// nanoseconds. Timestamps compare and hash by time, so
 /// compare only those of one timer: a timestamp does not say which timer it is
 /// on. `a - b` is the time from `b` to `a` in seconds, a `float` that is
 /// negative when `b` is later. Timestamps pickle and copy.
@@ -267,10 +272,6 @@ impl PyTimestamp {
 
     fn __float__(&self) -> f64 {
         self.0.as_secs_f64()
-    }
-
-    fn __int__(&self) -> u64 {
-        self.0.whole_secs()
     }
 
     /// The time from `other` to this one, in seconds: `(self.ns - other.ns) /

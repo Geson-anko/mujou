@@ -93,6 +93,7 @@ def train_pc(
     )
     # --8<-- [end:chain]
     if args.watch:
+        # The children of a network are its attributes: no API lists them.
         for node in vars(net).values():
             if isinstance(node, mujou.Node):  # input, layer0, layer1, output
                 watch.watch(node)

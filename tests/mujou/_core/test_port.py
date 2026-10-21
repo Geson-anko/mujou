@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 H = 1e-3  # seconds per step
 # The error of a port, or a node's timer, used outside its owner's hooks (K12).
-OUTSIDE = "is used only in the hooks of the node that owns it"
+OUTSIDE = "is used only in the hooks of its node while it runs"
 
 type AnyPort = Port[Any, Any] | MultiPort[Any, Any]
 
@@ -49,9 +49,8 @@ class TestConnect:
         assert a.channels == (ab, ca)
         assert b.channels == (ab,)
         assert c.channels == (ca,)
-        assert ab.ends == (a, b)
         assert ab.other(a) is b and ab.other(b) is a
-        assert ca.ends == (c, a)
+        assert ca.other(c) is a and ca.other(a) is c
 
     @pytest.mark.parametrize("make", [Port, MultiPort])
     def test_the_same_peer_again_gives_the_same_channel(self, make: type[AnyPort]):
@@ -60,7 +59,7 @@ class TestConnect:
         assert a.connect(b) is ab
         assert b.connect(a) is ab
         assert a.channels == (ab,) and b.channels == (ab,)
-        assert ab.ends == (a, b)
+        assert ab.other(a) is b
 
     @pytest.mark.parametrize("make", [Port, MultiPort])
     def test_a_port_connects_to_itself_once(self, make: type[AnyPort]):
@@ -68,13 +67,13 @@ class TestConnect:
         aa = a.connect(a)
         assert a.connect(a) is aa
         assert a.channels == (aa,)
-        assert aa.ends == (a, a) and aa.other(a) is a
+        assert aa.other(a) is a
 
     def test_one_way_ports_connect(self):
         sender = Port(send=h())
         receiver = Port(recv=h())
         ch = sender.connect(receiver)
-        assert ch.ends == (sender, receiver)
+        assert ch.other(sender) is receiver
         assert sender.recv_spec is None and receiver.send_spec is None
 
     @pytest.mark.parametrize(

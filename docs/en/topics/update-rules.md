@@ -30,7 +30,7 @@ The program prints the loss of `output` on each batch before learning from it, w
 
 ## Relaying the target
 
-The activity carries the target `y` of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, `output` always compares a prediction with its own target, and `hidden` learns only from the error whose `time` is that of the input it holds. The nodes of `mujou.pc` carry `y`, `mask` and `time` in their `pc.Activity` the same way.
+The activity carries the target `y` of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, `output` always compares a prediction with its own target, and `hidden` learns only from the error whose `time` is that of the input it holds. The nodes of `mujou.pc` carry `y`, `mask` and `time` in their `pc.Activity` the same way, with `jumps`, the count of the times the sender's `h` jumped, which tells the receiver to move its own `h` with its prediction ([PC-ALM](pc.md#the-nodes)).
 
 ## Telling what is new
 

@@ -3,7 +3,9 @@
 
 import math
 from collections.abc import Mapping
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Self
+
+from mujou.pc._time_constants import TimeConstants
 
 
 class Tick(NamedTuple):
@@ -46,10 +48,15 @@ class LearnClock:
     first update sees a new input, also one written at time 0.
 
     The state (``state_dict()``) holds the time of the input seen last
-    (``"seen_ns"``), the time from which the next update learns
+    (``"seen_ns"``, ``None`` before any), the time from which the next update
+    learns
     (``"learn_at_ns"``), ``"elapsed"``, and whether the clock has learned since
     the input changed (``"learned_input"``). An attribute of a node that holds a
     ``LearnClock`` is in the node's state by itself.
+
+    It is not tied to PC-ALM: any node that learns from inputs the host writes
+    can use it. ``LearnClock.of`` makes the clock of a node of PC-ALM from its
+    time constants.
 
     Example::
 
@@ -94,10 +101,34 @@ class LearnClock:
             else max(1, round(learn_interval * 1e9))
         )
         self._max_dt = max_dt
-        self._seen_ns = -1
+        # None before the first input.
+        self._seen_ns: int | None = None
         self._learn_at_ns: float = 0
         self._elapsed = 0.0
         self._learned_input = False
+
+    @classmethod
+    def of(
+        cls,
+        tau: TimeConstants,
+        *,
+        period: float,
+        learn_interval: float | None,
+        max_dt: float | None = None,
+    ) -> Self:
+        """Return the clock of a node of PC-ALM with the time constants ``tau``,
+        as ``Layer`` and ``Output`` make theirs: ``max_dt`` defaults to
+        ``tau.max_dt``, and with ``tau.theta`` infinite the clock never learns
+        (``learn_interval=math.inf``), as the parameters would not move.
+
+        Raises:
+            ValueError: As ``LearnClock`` raises.
+        """
+        return cls(
+            period=period,
+            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
+            max_dt=tau.max_dt if max_dt is None else max_dt,
+        )
 
     @property
     def discrete(self) -> bool:

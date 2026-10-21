@@ -81,6 +81,24 @@ class TestShape:
             },
         )
 
+    def test_a_port_keys_its_slot_for_each_peer_by_the_peer_port(
+        self, start_manual: StartManual
+    ):
+        source = Probe(out=Port(send=vec()), loop=MultiPort(send=vec(), recv=vec()))
+        sinks = [Probe(inp=Port(recv=vec())) for _ in range(2)]
+        for sink in sinks:
+            source.out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        source.loop.connect(source.loop)  # pyright: ignore[reportAttributeAccessIssue]
+        net = Group(source=source, x=sinks[0], y=sinks[1], h=Hidden())
+        tree = start_manual(net).state_dict()
+        ports = tree["nodes"]["source"]["ports"]
+        assert list(ports["out"]) == ["out", "to"]
+        assert list(ports["out"]["to"]) == ["x.inp", "y.inp"]
+        assert list(ports["loop"]["to"]) == ["source.loop"]
+        # An unconnected Port that receives reads the host; a MultiPort does not.
+        assert list(tree["nodes"]["h"]["ports"]["prev"]) == ["out", "to", "in"]
+        assert list(tree["nodes"]["h"]["ports"]["next"]) == ["out", "to"]
+
     def test_a_slot_not_written_yet_has_no_time(self, start_manual: StartManual):
         tree = start_manual(Chain()).state_dict()
         assert tree["nodes"]["a"]["ports"]["prev"]["in"]["time_ns"] is None
@@ -463,7 +481,7 @@ class TestStateDict:
         if ended:
             run.shutdown()
         state = run.state_dict()["nodes"]["node"]["state"]
-        assert "a port not in state_dict" in state["error"]
+        assert "a port is not used in state_dict" in state["error"]
         assert torch.equal(run.read(node.out), torch.zeros(2, dtype=F64))
 
     @pytest.mark.slow

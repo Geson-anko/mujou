@@ -45,4 +45,4 @@ uv run python examples/quickstart.py
 uv run python examples/mnist/main.py
 ```
 
-None of the programs uses a GPU. Each finishes within about 10 seconds, except `mnist/`: it downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes.
+None of the programs uses a GPU. Each finishes within 15 seconds, except `mnist/`: it downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes.

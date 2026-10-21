@@ -1268,6 +1268,18 @@ class TestShutdown:
         assert node.stopped.is_set()
         run.state_dict()  # a normal end
 
+    @pytest.mark.parametrize("timeout", [-1.0, math.nan])
+    def test_a_bad_timeout_raises_before_the_stop(
+        self, start_manual: StartManual, timeout: float
+    ):
+        net = Chain()
+        run = start_manual(net)
+        with pytest.raises(ValueError):
+            run.shutdown(timeout=timeout)
+        run.write({net.prev: u(1)})
+        run.step(H)  # still running
+        assert torch.equal(run.read(net.next), net.b.x)
+
     def test_raises_what_a_node_raised(self, start_manual: StartManual):
         net = Chain(raise_in_b=1)
         run = start_manual(net)
