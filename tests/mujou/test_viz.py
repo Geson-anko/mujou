@@ -188,6 +188,20 @@ class TestToHtml:
         with pytest.raises(ValueError, match=r"^a\.prev is connected to MultiPort"):
             to_html(Group(a=a))  # b is outside the tree
 
+    def test_leaves_out_a_reference_to_a_port_outside_the_tree(self):
+        # The run does not read it either: it runs this tree.
+        class Forgot(Network):
+            def __init__(self) -> None:
+                super().__init__()
+                self.a = Sensor()
+                self.prev = Monitor().prev  # its node is not assigned
+
+        assert graph(to_html(Forgot()))["root"]["ports"] == []
+
+    def test_names_a_child_by_its_attribute(self):
+        found = graph(to_html(Group(**{"a.b": Sensor()})))
+        assert found["root"]["children"][0]["name"] == "a.b"
+
     def test_escapes_the_script(self):
         # A name may be any string: it must not end the script that holds it.
         name = "</script><b>x</b>"

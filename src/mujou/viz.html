@@ -204,7 +204,6 @@ function portSpec(p) {
   if (p.send && p.recv && p.send !== p.recv) return `in ${short(p.recv)} · out ${short(p.send)}`;
   return short(p.send || p.recv);
 }
-function isHost(p) { return p.host && !peers.has(p.path); }
 function footer(c) { const n = countNodes(c); return `${n} node${n === 1 ? "" : "s"} · click to open`; }
 
 // The visible box of a component: itself, or its outermost closed network.
@@ -214,8 +213,6 @@ function visible(c) {
   for (const k of chain) if (k.kind === "network" && !open.has(k.path)) return k;
   return c;
 }
-// The rows of a box: the ports of a node, or the ports a closed network exposes.
-function rows(c) { return c.ports; }
 
 // Lay out c and its open descendants: c.w, c.h, and each child's c.dx, c.dy
 // inside c.
@@ -224,12 +221,12 @@ function layout(c) {
   if (c.kind === "node" || !open.has(c.path)) {
     let w = Math.max(MIN_W, title + 2 * PAD + (c.kind === "network" ? 18 : 0));
     if (c.kind === "network") w = Math.max(w, 2 * PAD + width(footer(c), PLAIN));
-    for (const r of rows(c)) {
-      const p = ports.get(r.path), tag = isHost(p) ? 6 + width("host", HOST) : 0;
+    for (const r of c.ports) {
+      const p = ports.get(r.path), tag = p.host ? 6 + width("host", HOST) : 0;
       w = Math.max(w, 2 * PAD + 18 + width(r.name, PLAIN) + tag + 16 + width(portSpec(p), MONO));
     }
     c.w = w;
-    c.h = NODE_HEAD + rows(c).length * ROW + (c.kind === "network" ? FOOT : 6);
+    c.h = NODE_HEAD + c.ports.length * ROW + (c.kind === "network" ? FOOT : 6);
     return;
   }
   const kids = c.children;
@@ -279,7 +276,7 @@ function layout(c) {
   });
   const colW = columns.map((col) => Math.max(...col.map((j) => kids[j].w)));
   const colH = columns.map((col) => col.reduce((s, j) => s + kids[j].h, 0) + GAP_Y * (col.length - 1));
-  const innerH = Math.max(...colH);
+  const innerH = Math.max(0, ...colH);
   let x = NET_PAD;
   columns.forEach((col, r) => {
     let y = NET_HEAD + NET_PAD + (innerH - colH[r]) / 2;
@@ -308,15 +305,18 @@ function el(name, attrs, parent, text) {
 }
 
 const layers = {};
+function relayout() {
+  layout(G.root);
+  place(G.root, 0, 0);
+}
+
 function render() {
-  const root = G.root;
-  layout(root);
-  place(root, 0, 0);
+  if (selected && visible(selected) !== selected) closePanel();
   const g = document.getElementById("view");
   g.replaceChildren();
   g.classList.remove("dim");
   for (const name of ["frames", "edges", "boxes"]) layers[name] = el("g", {}, g);
-  draw(root);
+  draw(G.root);
   drawEdges();
   applyView();
   justOpened = null;
@@ -347,12 +347,12 @@ function draw(c) {
   el("text", { class: "name", x: c.x + PAD, y: c.y + 18 }, b, c.name);
   if (c.class !== c.name) el("text", { class: "cls", x: c.x + PAD, y: c.y + 33 }, b, c.class);
   if (closed) el("text", { class: "glyph", x: c.x + c.w - PAD - 8, y: c.y + 18 }, b, "+");
-  if (rows(c).length) el("line", { class: "sep", x1: c.x, x2: c.x + c.w, y1: c.y + NODE_HEAD, y2: c.y + NODE_HEAD }, b);
-  rows(c).forEach((r, i) => {
+  if (c.ports.length) el("line", { class: "sep", x1: c.x, x2: c.x + c.w, y1: c.y + NODE_HEAD, y2: c.y + NODE_HEAD }, b);
+  c.ports.forEach((r, i) => {
     const p = ports.get(r.path), y = c.y + NODE_HEAD + i * ROW + 14;
-    el("text", { class: isHost(p) ? "glyph host" : "glyph", x: c.x + PAD, y }, b, glyph(p));
+    el("text", { class: p.host ? "glyph host" : "glyph", x: c.x + PAD, y }, b, glyph(p));
     el("text", { x: c.x + PAD + 18, y }, b, r.name);
-    if (isHost(p)) el("text", { class: "host", x: c.x + PAD + 24 + width(r.name, PLAIN), y }, b, "host");
+    if (p.host) el("text", { class: "host", x: c.x + PAD + 24 + width(r.name, PLAIN), y }, b, "host");
     el("text", { class: "spec", x: c.x + c.w - PAD, y, "text-anchor": "end" }, b, portSpec(p));
   });
   if (closed) el("text", { class: "meta", x: c.x + PAD, y: c.y + c.h - 7 }, b, footer(c));
@@ -364,34 +364,40 @@ function draw(c) {
 // The point of a box where an edge for the port at path meets it, on the side
 // that faces x.
 function anchor(c, path, x) {
-  const i = rows(c).findIndex((r) => r.path === path);
+  const i = c.ports.findIndex((r) => r.path === path);
   const y = i < 0 ? c.y + c.h / 2 : c.y + NODE_HEAD + i * ROW + ROW / 2;
   const right = x > c.x + c.w / 2;
   return { x: right ? c.x + c.w : c.x, y, s: right ? 1 : -1 };
 }
 
 function drawEdges() {
-  // The channels between the same rows of the same boxes are drawn once.
+  // The channels between the same rows of the same boxes, either way, are drawn
+  // once, with a head at each end where one of them receives.
   const drawn = new Map();
   for (const e of G.edges) {
     const a = visible(owners.get(e.from)), b = visible(owners.get(e.to));
     if (a === b) continue;
-    const ra = rows(a).some((r) => r.path === e.from) ? e.from : "";
-    const rb = rows(b).some((r) => r.path === e.to) ? e.to : "";
-    const key = `${a.path}|${ra}|${b.path}|${rb}`;
-    const both = !!ports.get(e.to).send;
-    const d = drawn.get(key);
-    if (d) { d.n++; d.both ||= both; continue; }
-    drawn.set(key, { a, b, ra, rb, n: 1, both });
+    const ra = a.ports.some((r) => r.path === e.from) ? e.from : "";
+    const rb = b.ports.some((r) => r.path === e.to) ? e.to : "";
+    const back = !!ports.get(e.to).send;  // the "from" end receives too
+    const ends = [`${a.path}|${ra}`, `${b.path}|${rb}`];
+    const d = drawn.get(ends.join("|")) || drawn.get(`${ends[1]}|${ends[0]}`);
+    if (!d) {
+      drawn.set(ends.join("|"), { a, b, ra, rb, n: 1, atA: back, atB: true });
+    } else {
+      d.n++;
+      if (d.a === a && d.ra === ra) d.atA ||= back;
+      else { d.atA = true; d.atB ||= back; }
+    }
   }
-  for (const { a, b, ra, rb, n, both } of drawn.values()) {
+  for (const { a, b, ra, rb, n, atA, atB } of drawn.values()) {
     const p = anchor(a, ra, b.x + b.w / 2), q = anchor(b, rb, a.x + a.w / 2);
     const dx = Math.max(40, Math.abs(q.x - p.x) / 2);
     const g = el("g", { class: "edge", "data-a": a.path, "data-b": b.path }, layers.edges);
     el("path", {
       d: `M${p.x},${p.y} C${p.x + p.s * dx},${p.y} ${q.x + q.s * dx},${q.y} ${q.x},${q.y}`,
-      "marker-end": "url(#head)",
-      ...(both ? { "marker-start": "url(#head)" } : {}),
+      ...(atB ? { "marker-end": "url(#head)" } : {}),
+      ...(atA ? { "marker-start": "url(#head)" } : {}),
     }, g);
     if (n > 1) el("text", { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 - 6, "text-anchor": "middle" }, g, `×${n}`);
   }
@@ -404,7 +410,7 @@ function highlight(path) {
     const hl = path !== null && (e.dataset.a === path || e.dataset.b === path);
     e.classList.toggle("hl", hl);
     const line = e.querySelector("path"), head = hl ? "url(#head-hl)" : "url(#head)";
-    line.setAttribute("marker-end", head);
+    if (line.hasAttribute("marker-end")) line.setAttribute("marker-end", head);
     if (line.hasAttribute("marker-start")) line.setAttribute("marker-start", head);
   }
 }
@@ -419,8 +425,7 @@ function toggle(c) {
     open.add(c.path);
     justOpened = c.path;
   }
-  layout(G.root);
-  place(G.root, 0, 0);
+  relayout();
   view.x -= (c.x - before.x) * view.k;
   view.y -= (c.y - before.y) * view.k;
   render();
@@ -473,7 +478,7 @@ function select(c) {
   html += `<dl><dt>path</dt><dd><code>${esc(where)}</code></dd><dt>period</dt><dd>${esc(c.period)} s</dd><dt>device</dt><dd>${esc(c.device)}</dd></dl><h3>Ports</h3>`;
   for (const p of c.ports) {
     const to = peers.get(p.path) || [];
-    html += `<div class="port"><div class="name">${glyph(p)} ${esc(p.name)} <span class="kind">${p.class}</span></div><dl>`;
+    html += `<div class="port"><div class="name">${glyph(p)} ${esc(p.name)} <span class="kind">${esc(p.class)}</span></div><dl>`;
     if (p.send) html += `<dt>send</dt><dd><code>${esc(p.send)}</code></dd>`;
     if (p.recv) html += `<dt>recv</dt><dd><code>${esc(p.recv)}</code></dd>`;
     html += `<dt>peers</dt><dd>${to.length ? to.map((t) => `<code>${esc(t)}</code>`).join("<br>") : p.host ? "the host writes it" : "none"}</dd></dl></div>`;
@@ -481,11 +486,13 @@ function select(c) {
   panel.innerHTML = html;
   panel.hidden = false;
   reveal(c);
-  document.getElementById("close").addEventListener("click", () => {
-    panel.hidden = true;
-    selected = null;
-    for (const b of layers.boxes.querySelectorAll(".box")) b.classList.remove("selected");
-  });
+  document.getElementById("close").addEventListener("click", closePanel);
+}
+
+function closePanel() {
+  document.getElementById("panel").hidden = true;
+  selected = null;
+  for (const b of layers.boxes.querySelectorAll(".box")) b.classList.remove("selected");
 }
 
 // Pan by dragging the background, zoom by scrolling.
@@ -504,7 +511,9 @@ function select(c) {
     view.y = ev.clientY - drag.y;
     applyView();
   });
-  svg.addEventListener("pointerup", () => { drag = null; svg.classList.remove("panning"); });
+  for (const end of ["pointerup", "pointercancel"]) {
+    svg.addEventListener(end, () => { drag = null; svg.classList.remove("panning"); });
+  }
   svg.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
@@ -518,15 +527,16 @@ function select(c) {
 
 document.getElementById("expand").addEventListener("click", () => {
   for (const c of components.values()) if (c.kind === "network") open.add(c.path);
-  render(); fit();
+  relayout(); render(); fit();
 });
 document.getElementById("collapse").addEventListener("click", () => {
   open.clear(); open.add(G.root.path);
-  render(); fit();
+  relayout(); render(); fit();
 });
-document.getElementById("fit").addEventListener("click", fit);
+document.getElementById("fit").addEventListener("click", () => fit(true));
 document.getElementById("title").textContent = G.root.name;
 document.title = `${G.root.name} — mujou`;
+relayout();
 render();
 fit();
 </script>

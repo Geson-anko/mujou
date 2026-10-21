@@ -3,17 +3,20 @@
 ``to_html`` reads the tree of a root as ``mujou.run`` does (``tree.py``) and
 embeds it, as JSON, in a page that draws it (``viz.html``): the networks as
 boxes, which open and close on a click, the nodes with their ports, and the
-channels between them. The page is self-contained, so it opens offline.
+channels between them. The page is self-contained, so it opens offline, and
+it reads nothing but that JSON (``tests/mujou/test_viz.py`` checks it).
 """
 
 import json
+from collections.abc import Mapping
 from importlib import resources
-from typing import Any, TypeIs
+from typing import Any
 
 from mujou.network import Network
 from mujou.node import Node
-from mujou.port import AnyPort, MultiPort, Port
-from mujou.tree import Tree, walk
+from mujou.port import AnyPort
+from mujou.tree import Member, Tree, is_port, join, walk
+from mujou.wiring import written_by_the_host
 
 __all__ = ["to_html"]
 
@@ -38,44 +41,45 @@ def to_html(root: Node | Network) -> str:
             as ``mujou.run`` raises.
     """
     tree = walk(root)
-    graph = {"root": _component(tree, root, ""), "edges": _edges(tree)}
+    members = {member.path: member for member in tree.members}
+    graph = {
+        "root": _component(tree, members, root, "", tree.root),
+        "edges": _edges(tree),
+    }
     # "<" escaped, so that no name ends the script that holds the graph.
     data = json.dumps(graph).replace("<", "\\u003c")
     page = resources.files("mujou").joinpath("viz.html").read_text("utf-8")
     return page.replace("/*GRAPH*/", data)
 
 
-def _component(tree: Tree, component: Node | Network, path: str) -> dict[str, Any]:
-    name = path.rpartition(".")[2] or tree.name(path)
+def _component(
+    tree: Tree,
+    members: Mapping[str, Member],
+    component: Node | Network,
+    path: str,
+    name: str,
+) -> dict[str, Any]:
+    head = {"name": name, "path": path, "class": type(component).__name__}
     if isinstance(component, Node):
-        return {
+        return head | {
             "kind": "node",
-            "name": name,
-            "path": path,
-            "class": type(component).__name__,
-            "period": f"{component.period:g}",
+            "period": repr(component.period),
             "device": str(component.device),
             "ports": [
                 _port(tree, attribute, port)
-                for attribute, port in vars(component).items()
-                if _is_port(port)
+                for attribute, port in members[path].ports.items()
             ],
         }
     children: list[dict[str, Any]] = []
     ports: list[dict[str, str]] = []
     for attribute, value in vars(component).items():
         if isinstance(value, Node | Network):
-            children.append(_component(tree, value, _join(path, attribute)))
-        elif _is_port(value):
+            where = join(path, attribute)
+            children.append(_component(tree, members, value, where, attribute))
+        # A port of a node outside the tree is a reference the run never reads.
+        elif is_port(value) and value in tree.owners:
             ports.append({"name": attribute, "path": tree.path(value)})
-    return {
-        "kind": "network",
-        "name": name,
-        "path": path,
-        "class": type(component).__name__,
-        "children": children,
-        "ports": ports,
-    }
+    return head | {"kind": "network", "children": children, "ports": ports}
 
 
 def _port(tree: Tree, attribute: str, port: AnyPort) -> dict[str, Any]:
@@ -85,10 +89,7 @@ def _port(tree: Tree, attribute: str, port: AnyPort) -> dict[str, Any]:
         "class": type(port).__name__,
         "send": _spec(port.send_spec),
         "recv": _spec(port.recv_spec),
-        # An unconnected Port that receives reads what the host writes.
-        "host": isinstance(port, Port)
-        and port.recv_spec is not None
-        and not port.channels,
+        "host": written_by_the_host(port),
     }
 
 
@@ -109,13 +110,5 @@ def _edges(tree: Tree) -> list[dict[str, str]]:
     return edges
 
 
-def _is_port(value: object) -> TypeIs[AnyPort]:
-    return isinstance(value, Port | MultiPort)
-
-
 def _spec(spec: object) -> str | None:
     return None if spec is None else repr(spec)
-
-
-def _join(path: str, attribute: str) -> str:
-    return f"{path}.{attribute}" if path else attribute
