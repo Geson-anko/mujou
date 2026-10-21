@@ -55,11 +55,12 @@ class Merge(Node):
         seen = [int(a["jumps"]), int(b["jumps"])]
         jump, self.seen = t.new or seen != self.seen, seen
         r = self.h - self.mu
+        labeled = a["mask"].unsqueeze(-1)  # a sample without a target sends no credit
         params = list(self.module.parameters())
         mu, g_in, g_theta = pc.functional.vjp(
             self.module,
             torch.cat([a["h"], b["h"]], dim=-1),
-            lambda mu: (r if jump else self.h - mu) + self.lam,  # delta
+            lambda mu: torch.where(labeled, (r if jump else self.h - mu) + self.lam, 0),
             params,
         )
         g_a, g_b = g_in.split(self.sizes, dim=-1)
@@ -73,7 +74,8 @@ class Merge(Node):
         self.mu = mu
         # The y, mask and time of a go on with h.
         self.next.send({**a, "h": self.h, "jumps": torch.tensor(self.jumps)})
-        pc.functional.learn_(params, g_theta, t.elapsed, TAU, B)
+        if a["mask"].any():  # nothing to learn from samples without a target
+            pc.functional.learn_(params, g_theta, t.elapsed, TAU, B)
 
 
 # --8<-- [end:merge]
