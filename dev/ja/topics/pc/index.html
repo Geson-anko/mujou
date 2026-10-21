@@ -1,0 +1,1906 @@
+
+<!doctype html>
+<html lang="ja" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+      
+      
+      
+        <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/topics/pc/">
+      
+      
+        <link rel="prev" href="../update-rules/">
+      
+      
+        <link rel="next" href="../../examples/">
+      
+      
+        
+          <link rel="alternate" href="../../../topics/pc/" hreflang="en">
+        
+          <link rel="alternate" href="./" hreflang="ja">
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>PC-ALM - Mujou</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mujou">
+  <meta property="og:title" content="PC-ALM - Mujou">
+  <meta property="og:description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+  <meta property="og:url" content="https://geson-anko.github.io/mujou/dev/ja/topics/pc/">
+  <meta property="og:image" content="https://geson-anko.github.io/mujou/dev/assets/hero.jpg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="722">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PC-ALM - Mujou">
+  <meta name="twitter:description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+  <meta name="twitter:image" content="https://geson-anko.github.io/mujou/dev/assets/hero.jpg">
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#-pc-alm" class="md-skip">
+          コンテンツにスキップ
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="ヘッダー">
+    <a href="../../" title="Mujou" class="md-header__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../../assets/icon.jpg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mujou
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PC-ALM
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="言語切り替え">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../../topics/pc/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="ja" class="md-select__link">
+              日本語
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="検索" placeholder="検索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="検索">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="共有" aria-label="共有" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="クリア" aria-label="クリア" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            検索を初期化
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Geson-anko/mujou" title="リポジトリへ" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="タブ" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ホーム
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../install/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  インストール
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Mujou の仕組み
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorial/1-run/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  チュートリアル
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  トピック
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  サンプル
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/node-and-ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API リファレンス
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="ナビゲーション" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../" title="Mujou" class="md-nav__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../../assets/icon.jpg" alt="logo">
+
+    </a>
+    Mujou
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Geson-anko/mujou" title="リポジトリへ" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ホーム
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    インストール
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mujou の仕組み
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    チュートリアル
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    チュートリアル
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/1-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. ネットワークを走らせる
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/2-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. ノードを書く
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/3-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. ノードをテストする
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/4-learn-in-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. ノードの中で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/5-learn-with-pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/6-save-and-resume/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. 保存と再開
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    トピック
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    トピック
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Port と Channel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Group
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../host-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ホストの入出力
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threads-and-devices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    スレッドとデバイス
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    例外と終了
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../update-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    更新則
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目次">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目次
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bp-との違い" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BP との違い
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ノード" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノード
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#時定数を決める" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        時定数を決める
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mnist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MNIST
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#落とし穴" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        落とし穴
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#自分のノードを書く" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分のノードを書く
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    サンプル
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API リファレンス
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API リファレンス
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/node-and-ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ノードと Port
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ネットワーク
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    実行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    テスト
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目次">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目次
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bp-との違い" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BP との違い
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ノード" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノード
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#時定数を決める" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        時定数を決める
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mnist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MNIST
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#落とし穴" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        落とし穴
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#自分のノードを書く" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分のノードを書く
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="-pc-alm">🧠 PC-ALM<a class="headerlink" href="#-pc-alm" title="Permanent link">&para;</a></h1>
+<p><code>mujou.pc</code> は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）で学習させるモジュール。<a href="../../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a>では <code>pc.Chain</code> で鎖を組み、<code>pc.show</code> でバッチを見せた。このページでは時定数の決め方、BP との違い、落とし穴、MNIST、自作のノードを説明する。</p>
+<h2 id="bp-との違い">BP との違い<a class="headerlink" href="#bp-との違い" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>普通の PyTorch の BP</th>
+<th><code>mujou.pc</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>推論と学習</td>
+<td>forward、backward、<code>optimizer.step()</code> を順に</td>
+<td>同時に進む。各ノードが自分の周期で更新し、入力を見せている間に学習する</td>
+</tr>
+<tr>
+<td>1 回の学習</td>
+<td>1 バッチ</td>
+<td>ホストがバッチを一定の時間（<code>S</code> 周期）見せる。ノードは目標に向かって緩和し、その後に重みを更新する</td>
+</tr>
+<tr>
+<td>目標</td>
+<td>バッチと一緒に損失関数に渡す</td>
+<td>入力と一緒に書き込み、活動と組にしてノードからノードへ出力ノードまで運ぶ</td>
+</tr>
+<tr>
+<td>学習とテスト</td>
+<td><code>model.train()</code> / <code>model.eval()</code></td>
+<td>モードは無い。<code>mask</code> が False のサンプルからは学習しないので、テストのバッチも走っている同じノードに流す</td>
+</tr>
+<tr>
+<td>損失</td>
+<td>普通はバッチの平均</td>
+<td>サンプルごとの損失で、shape は <code>(B,)</code>。出力ノードが合計する</td>
+</tr>
+<tr>
+<td>勾配を取る範囲</td>
+<td>モデル全体を通して <code>.backward()</code></td>
+<td>各ノードの内側だけ。隣のノードとは活動とエネルギーの勾配をメッセージでやり取りする</td>
+</tr>
+<tr>
+<td>計算量</td>
+<td>1 バッチに forward と backward が 1 回ずつ</td>
+<td>1 周期にノードごとに forward と VJP が 1 回なので、1 バッチで <code>S</code> 回。MNIST では CPU 上で 1 バッチに BP の約 40 倍かかる</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ノード">ノード<a class="headerlink" href="#ノード" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>ノード</th>
+<th>持つもの</th>
+<th>Port</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.Input</code></td>
+<td>書き込みの回数</td>
+<td><code>prev</code>: ホストが <code>pc.Sample</code>（<code>x</code>、<code>y</code>、<code>mask</code>）を書く。<code>next</code>: <code>x</code> を <code>pc.Activity</code> の <code>h</code> として、<code>y</code>・<code>mask</code>・書き込みの時刻と一緒に送る</td>
+</tr>
+<tr>
+<td><code>pc.Layer</code></td>
+<td>モジュール、活動 <code>h</code>、双対変数 <code>lam</code>、クロック</td>
+<td><code>prev</code> と <code>next</code>。<code>next</code> は <code>h</code> を、自分の <code>jumps</code> と入力と一緒に届いた <code>y</code>・<code>mask</code>・<code>time</code> と組にして <code>pc.Activity</code> で送る</td>
+</tr>
+<tr>
+<td><code>pc.Output</code></td>
+<td>最後のモジュール、損失、クロック</td>
+<td><code>prev</code>。<code>next</code> はホストが読む <code>pc.Prediction</code>（<code>y_hat</code>、<code>y</code>、<code>mask</code>、<code>time</code>）を送る</td>
+</tr>
+</tbody>
+</table>
+<p><code>pc.Activity</code> は <code>h</code>・<code>jumps</code>・<code>y</code>・<code>mask</code>・<code>time</code> を運ぶ。<code>jumps</code> は送り手の <code>h</code> が緩和でなく跳んだ回数。<code>pc.Input</code> はホストの書き込みを数え、<code>pc.Layer</code> は新しいサンプルや受け取る <code>h</code> の跳びに合わせて動いた回数と、間隔を置いて学ぶときに自分の重みが起こした跳びを数える。受け手は <code>jumps</code> の変化を見たら自分の <code>h</code> を予測と一緒に 1 回動かし、跳びを偏差 <code>h - mu</code> に入れない。</p>
+<p><code>pc.Chain(*modules, ...)</code> は <code>Input</code> → <code>Layer</code> → ... → <code>Output</code> をつなぎ、周期はどれも <code>tau.period</code>（<code>tau.h / 4</code>）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。<code>pc.Input</code> には spec の <code>x</code> と <code>y</code>、<code>period</code> を渡す。各 <code>pc.Layer</code> と <code>pc.Output</code> には前のノードの <code>act_spec</code>（受け取る <code>pc.Activity</code> の spec）を渡し、鎖に沿って <code>next</code> を <code>prev</code> につなぐ。<code>Input</code> の <code>prev</code> と <code>Output</code> の <code>next</code> を自分の <code>prev</code> と <code>next</code> として公開すれば、そのネットワークにも <code>pc.show</code> でサンプルを見せられる。</p>
+<p>ノードにはバッチの各サンプルを独立に扱う <code>nn.Module</code> なら何でも入れられる。1 層でも、層を重ねたものでも、残差ブロックでもよい。<code>Dropout</code> と <code>BatchNorm</code> は training mode でサンプルを落としたり混ぜたりするので使わない。<code>LayerNorm</code> は使える。重みはモジュールを作るときに初期化しておく。ノードは初期化しない。<code>requires_grad=False</code> のパラメータは学習しない。</p>
+<h2 id="時定数を決める">時定数を決める<a class="headerlink" href="#時定数を決める" title="Permanent link">&para;</a></h2>
+<p><code>mujou.pc</code> の速さはすべて実行のタイマーの秒で指定する。次の表の順に決める。</p>
+<table>
+<thead>
+<tr>
+<th>値</th>
+<th>決めるもの</th>
+<th>決め方</th>
+<th>MNIST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tau.h</code></td>
+<td>各活動 <code>h</code> が緩和する速さ</td>
+<td>最初に決める。ほかはここから決まる</td>
+<td>4 ms</td>
+</tr>
+<tr>
+<td>周期</td>
+<td>各ノードが更新する間隔</td>
+<td><code>tau.period</code>（<code>tau.h / 4</code>）。<code>Layer</code>・<code>Output</code> の既定で、<code>pc.Chain</code> の周期</td>
+<td>1 ms</td>
+</tr>
+<tr>
+<td><code>tau.lam</code></td>
+<td>双対変数 <code>lam</code> が追従する速さ</td>
+<td><code>2 * tau.h</code></td>
+<td>8 ms</td>
+</tr>
+<tr>
+<td>見せる時間</td>
+<td>ホストが各バッチを見せる長さ</td>
+<td><code>S</code> 周期。<code>S = 32</code></td>
+<td>32 ms</td>
+</tr>
+<tr>
+<td><code>learn_interval</code></td>
+<td>ホストの書き込みから重みを更新するまでの時間</td>
+<td>見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4</td>
+<td>24 ms</td>
+</tr>
+<tr>
+<td><code>tau.theta</code></td>
+<td>重みの時定数（学習率はその逆数）</td>
+<td>見せる時間を、1 バッチあたりの学習率で割る</td>
+<td>0.32 s</td>
+</tr>
+<tr>
+<td><code>max_dt</code></td>
+<td>1 回の更新で数える <code>dt</code> の上限</td>
+<td>既定の <code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>、ここでは 2 周期）。周期より短い <code>max_dt</code> は <code>ValueError</code> になる。<code>tau.lam &lt; tau.h / 12</code> なら既定でもそうなる</td>
+<td>2 ms</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>学習率</strong>: 1 回の重みの更新で、重みは「そのノードが前に学んでからの時間 / <code>tau.theta</code>」にバッチの勾配の平均を掛けた分だけ動く。1 バッチに 1 回学ぶならその時間は見せる時間なので、<code>tau.theta = 見せる時間 / lr</code> とすれば 1 バッチあたりの学習率が <code>lr</code> になる。この時間はその間の各更新の <code>dt</code>（1 回ごとに <code>max_dt</code> で打ち切ったもの）の和で、周期どおりの更新なら <code>dt</code> は 1 周期なのでそのまま数えられる</li>
+<li><strong>勾配の平均</strong>: サンプルごとの勾配の和をバッチの大きさ <code>B</code> で割ったもの。<code>mask</code> が False のサンプルは和に何も足さないが、<code>B</code> には数える</li>
+<li><strong><code>learn_interval</code> を見せる時間の半分から全体の間にする理由</strong>: <code>learn_interval</code> はホストが書き込んだ時刻（活動の <code>time</code>）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから <code>learn_interval</code> 後に学び、バッチを見せている間は以後 <code>learn_interval</code> ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない</li>
+<li><strong>credit の往復</strong>: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ <code>2 × ホップ数 × 周期</code>（ホップ数は経路上の接続の数。MNIST では <code>Input</code> から <code>Output</code> まで 3 本で 6 周期）。<code>learn_interval</code> はこれより長くすることを勧める。短いと、落ち着く前の credit から重みが学ぶ。設計時の測定では、往復が 18 周期の深い鎖が、16 周期では収束し、4 周期では有界だが約 4 倍ずれ、2 周期と 1 周期では発散した</li>
+<li><strong>入力がフレームごとに変わるストリーム</strong>: <code>learn_interval=None</code> を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は <code>1 / tau.theta</code> になる。ストリームに適した値はまだ測っていない</li>
+<li><strong>安定性</strong>: <code>tau.h</code> に対して周期が短いほど安定する。設計時の測定では、ReLU で <code>period / tau.h</code> が 0.5 までは安定し、<code>period / tau.lam</code> は 0.1〜0.3 が最もよかった。<code>S = 32</code> で BP と同じ精度が出た。それより短い見せる時間は確かめていない</li>
+</ul>
+<h2 id="mnist">MNIST<a class="headerlink" href="#mnist" title="Permanent link">&para;</a></h2>
+<p><code>examples/mnist/</code> は 784-256-256-10 の ReLU ネットワークを <code>pc.Chain</code> で MNIST に学習させ、同じネットワークを同じ初期重みと同じバッチで BP でも学習させる。3 epoch 後のテスト精度は PC-ALM が 97.60%、BP が 97.54% だった（seed 0）。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py<span class="w">            </span><span class="c1"># 3 epoch、約 2 分</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py<span class="w"> </span>--epochs<span class="w"> </span><span class="m">1</span><span class="w"> </span>--watch
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">period</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span> <span class="o">/</span> <span class="mi">4</span>  <span class="c1"># the period of every node of pc.Chain</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">shown</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">steps</span> <span class="o">*</span> <span class="n">period</span>  <span class="c1"># how long the host shows each batch</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># The learning rate of one batch is shown / tau.theta: the nodes learn once</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># per batch, for the time since they last learned.</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">tau</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">TimeConstants</span><span class="p">(</span><span class="n">h</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">theta</span><span class="o">=</span><span class="n">shown</span> <span class="o">/</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">,</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">workers</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">epochs</span><span class="p">):</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="n">right</span> <span class="o">=</span> <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>            <span class="n">batches</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">train_x</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">train_y</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">shuffle</span><span class="p">(</span><span class="n">epoch</span><span class="p">))</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="p">):</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>            <span class="n">p</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">net</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">),</span> <span class="n">seconds</span><span class="o">=</span><span class="n">shown</span><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>                <span class="k">raise</span> <span class="ne">SystemExit</span><span class="p">(</span><span class="s2">"PC-ALM diverged: lower --time-scale"</span><span class="p">)</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>            <span class="n">right</span> <span class="o">+=</span> <span class="n">correct</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">],</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>  <span class="c1"># before learning from it</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>            <span class="n">total</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>            <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">watch</span> <span class="ow">and</span> <span class="n">epoch</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">100</span><span class="p">:</span>  <span class="c1"># a pause to look</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>                <span class="n">watch</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="n">seconds</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="c1"># Test: the same nodes, with no label to learn from.</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="n">test_right</span> <span class="o">=</span> <span class="n">test_total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">test_x</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">test_y</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">):</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>            <span class="n">unlabeled</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>  <span class="c1"># keep mask to score with</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>            <span class="n">p</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">show</span><span class="p">(</span>
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>                <span class="n">run</span><span class="p">,</span> <span class="n">net</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">unlabeled</span><span class="p">),</span> <span class="n">seconds</span><span class="o">=</span><span class="n">shown</span>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>            <span class="p">)</span>
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>            <span class="n">test_right</span> <span class="o">+=</span> <span class="n">correct</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">],</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>            <span class="n">test_total</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Epoch</span><span class="p">(</span><span class="n">right</span> <span class="o">/</span> <span class="n">total</span><span class="p">,</span> <span class="n">test_right</span> <span class="o">/</span> <span class="n">test_total</span><span class="p">,</span> <span class="n">seconds</span><span class="p">))</span>
+<a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="nb">print</span><span class="p">(</span>
+<a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>            <span class="sa">f</span><span class="s2">"PC-ALM epoch </span><span class="si">{</span><span class="n">epoch</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: prequential </span><span class="si">{</span><span class="n">right</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">total</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">, "</span>
+<a id="__codelineno-2-28" name="__codelineno-2-28" href="#__codelineno-2-28"></a>            <span class="sa">f</span><span class="s2">"test </span><span class="si">{</span><span class="n">test_right</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">test_total</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">seconds</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s"</span>
+<a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>        <span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><strong>prequential 精度</strong>（学習中）: 各バッチへの最初の予測で測る。<code>pc.show</code> が返すもので、どのノードもまだそのバッチから学んでいない時点のもの。まだ見ていないデータをどれだけ当てられるかを表す</li>
+<li><strong>テスト精度</strong>: ホストはテストのバッチを <code>mask</code> をすべて False にして見せるので、どのノードもそこから学ばない。採点には元の <code>mask</code> を取っておく。切り替える推論モードは無い</li>
+<li><strong>最後のバッチ</strong>: <code>data.batches</code> は、どのバッチも spec の大きさになるよう、最後のバッチの不足分を <code>mask</code> が False のゼロで埋める。正解を数えるのは、元の <code>mask</code> が True のサンプルだけ</li>
+<li><strong><code>--watch</code></strong> は各ノードの <code>dt</code> を数え（<code>watch.py</code>）、更新が中央値で 1.5 周期、99% 点で 2 周期より遅れると警告する</li>
+<li><code>data.py</code>・<code>metrics.py</code>・<code>bp.py</code> は <code>mujou.pc</code> に依存しない。データは素のテンソルで、BP の基準は素の PyTorch</li>
+</ul>
+<h2 id="落とし穴">落とし穴<a class="headerlink" href="#落とし穴" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">損失関数はサンプルごとの損失を返す</p>
+<p><code>pc.cross_entropy</code>、<code>pc.mse</code>、または <code>(y_hat, y) -&gt; (B,)</code> の自作の関数を渡す。<code>nn.MSELoss()</code> のように平均を返す損失を渡すと、<code>pc.Output</code> が <code>ValueError</code> を送出する。<code>pc.mse</code> は特徴について合計した <code>0.5 * ||y - y_hat||^2</code> で、平均ではない。</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">予測は出力ノードから読む</p>
+<p>予測を送るのは <code>pc.Output</code> の <code>next</code>（<code>pc.Chain</code> なら <code>net.next</code>）だけ。<code>Layer</code> の <code>next</code> が送るのは活動 <code>h</code> と、中継する <code>y</code>・<code>mask</code>・<code>time</code> で、予測は含まない。層の <code>lam</code> を見るときは <code>run.state_dict()["nodes"]["layer0"]["state"]["lam"]</code> を読む。走っている間にノードの属性を読むと、その更新と競合する。</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">最初のサンプルが届くまで活動はゼロ</p>
+<p>ホストの最初の書き込みが届くまで、ノードが受け取る活動は <code>time</code> が 0 で <code>mask</code> がすべて False。このとき <code>run.read(net.next)</code> は <code>mask</code> がすべて False の予測を返し、ノードは学ばない。書いたバッチの予測を得るには、<code>pc.show</code> のように <code>write</code> が返した時刻と <code>time</code> を照合する。</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">負荷が高いとネットワークが発散する</p>
+<p>ノードはそれぞれ更新しながらメッセージをやり取りする。あるノードが遅れると、隣のノードはその古いメッセージから学び続け、ネットワークが発散するか精度が落ちる。MNIST は <code>y_hat</code> が有限でないと止まる。予測が有限のまま発散したときは、精度の低下としてしか見えない。わかっている原因は 2 つ。</p>
+<ul>
+<li><strong>時間の速さが速すぎる</strong>: MNIST は <code>--time-scale</code> で実行のタイマーを速める。1 でなく 2 にすると、最も遅いノードが周期の大半を計算に使い、その更新の 1% が 2 周期より遅れた。<code>--watch</code> で 1 epoch 回し、警告が出ず発散もしない最も速い時間の速さを選ぶ</li>
+<li><strong>ほかのプロセスがコアを使っている</strong>: コアを待つノードがあると、隣のノードが先に進む。32 コアの機械で時間の速さ 1 なら、busy loop 26 本と並べて 1 epoch を完走し、32 本では発散した。0.5 なら 32 本でも完走した。ほかに何も動いていない機械で回すか、時間の速さを下げる</li>
+</ul>
+<p><code>max_dt</code> ではこれを防げない。<code>max_dt</code> は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。</p>
+</div>
+<h2 id="自分のノードを書く">自分のノードを書く<a class="headerlink" href="#自分のノードを書く" title="Permanent link">&para;</a></h2>
+<p><code>mujou.pc.functional</code> に、ノードを構成する計算がある。<code>vjp</code> と <code>loss_vjp</code>（ノードのエネルギーの勾配）、<code>relax_</code>（<code>h</code> と <code>lam</code> の 1 ステップ）、<code>learn_</code>（重みの更新）。複数の入力を持つノードのように <code>pc.Layer</code> で書けないノードは、これらで書く。</p>
+<ol>
+<li>クロックを属性に置く: <code>self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)</code>。<code>max_dt</code> は <code>pc.Layer</code> と同じく <code>tau</code> の既定になる。それだけでノードの状態に入る</li>
+<li>毎回の更新で <code>t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)</code> を呼ぶ</li>
+<li><code>t.new</code> が True か、活動の <code>jumps</code> が前に読んだものと違えば、<code>h</code> を予測と一緒に 1 回動かす。前回の更新の <code>mu_last</code> で <code>h &lt;- mu + (h - mu_last)</code> とし、自分の <code>jumps</code> に 1 を足す。<code>mu</code>、前に読んだ <code>jumps</code>、自分の <code>jumps</code> は状態に入れる（素の数は <code>register_state</code>）</li>
+<li><code>pc.functional.relax_(..., t.dt, tau)</code> で活動を動かす</li>
+<li><code>h</code> を <code>pc.Activity</code> で送る。自分の <code>jumps</code> と、受け取った活動の <code>y</code>・<code>mask</code>・<code>time</code> を組にする</li>
+<li><code>t.learn</code> なら <code>pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)</code> で学ぶ</li>
+</ol>
+<p>手順 3 を抜くと、ノードは <code>pc.Layer</code> と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 <code>h - mu</code> に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした <code>mu</code> の跳びの分も <code>h</code> を動かし、<code>jumps</code> に 1 を足す。<code>pc.Layer</code> はどちらも 1 回後の更新で行う（docstring に説明がある）。</p>
+<p><code>mujou.pc</code> のノードとつなぐには、Port の spec に前のノードの <code>act_spec</code> か <code>pc.activity_spec(h, y)</code> を使う。引数は <a href="../../api/pc/">API リファレンス</a>にある。PC 以外の、ノードをまたいで学ぶ則は<a href="../update-rules/">更新則</a>を参照。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  ページトップへ戻る
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      画像: 落合陽一「リキッドユニバース」をもとに新たに制作
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Geson-anko/mujou" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.top", "navigation.sections", "navigation.indexes", "search.highlight", "search.share", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f", "clipboard.copy": "\u30af\u30ea\u30c3\u30d7\u30dc\u30fc\u30c9\u3078\u30b3\u30d4\u30fc", "search.result.more.one": "\u3053\u306e\u30da\u30fc\u30b8\u5185\u306b\u3082\u30461\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.more.other": "\u3053\u306e\u30da\u30fc\u30b8\u5185\u306b\u3042\u3068#\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.none": "\u4f55\u3082\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3067\u3057\u305f", "search.result.one": "1\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.other": "#\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.placeholder": "\u691c\u7d22\u30ad\u30fc\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044", "search.result.term.missing": "\u691c\u7d22\u306b\u542b\u307e\u308c\u306a\u3044", "select.version": "\u30d0\u30fc\u30b8\u30e7\u30f3\u5207\u308a\u66ff\u3048"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

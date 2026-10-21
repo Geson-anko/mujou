@@ -13,10 +13,10 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/concepts/">
       
       
-        <link rel="prev" href="../getting-started/quickstart/">
+        <link rel="prev" href="../install/">
       
       
-        <link rel="next" href="../user-guide/">
+        <link rel="next" href="../tutorial/1-run/">
       
       
         
@@ -297,20 +297,17 @@
   
   
   
-    
-    
-      <li class="md-tabs__item">
-        <a href="../getting-started/installation/" class="md-tabs__link">
-          
+    <li class="md-tabs__item">
+      <a href="../install/" class="md-tabs__link">
+        
   
   
     
   
-  はじめに
+  インストール
 
-        </a>
-      </li>
-    
+      </a>
+    </li>
   
 
       
@@ -343,13 +340,13 @@
     
     
       <li class="md-tabs__item">
-        <a href="../user-guide/" class="md-tabs__link">
+        <a href="../tutorial/1-run/" class="md-tabs__link">
           
   
   
     
   
-  ユーザーガイド
+  チュートリアル
 
         </a>
       </li>
@@ -365,17 +362,36 @@
     
     
       <li class="md-tabs__item">
-        <a href="../examples/" class="md-tabs__link">
+        <a href="../topics/ports/" class="md-tabs__link">
           
+  
+  
+    
+  
+  トピック
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../examples/" class="md-tabs__link">
+        
   
   
     
   
   サンプル
 
-        </a>
-      </li>
-    
+      </a>
+    </li>
   
 
       
@@ -387,7 +403,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../api/" class="md-tabs__link">
+        <a href="../api/node-and-ports/" class="md-tabs__link">
           
   
   
@@ -478,66 +494,8 @@
   
   
   
-    
-    
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
-        
-          
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    はじめに
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_2">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    はじめに
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../install/" class="md-nav__link">
         
   
   
@@ -553,42 +511,6 @@
   
 
       </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    クイックスタート
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
     </li>
   
 
@@ -660,10 +582,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ノード" class="md-nav__link">
+  <a href="#1-ノード" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ノード
+        1. ノード
       
     </span>
   </a>
@@ -671,10 +593,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#port-と-channel" class="md-nav__link">
+  <a href="#2-port-と-channel" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Port と Channel
+        2. Port と Channel
       
     </span>
   </a>
@@ -682,10 +604,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ネットワーク" class="md-nav__link">
+  <a href="#3-メッセージの型spec" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ネットワーク
+        3. メッセージの型（spec）
       
     </span>
   </a>
@@ -693,10 +615,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#グローバル時間" class="md-nav__link">
+  <a href="#4-ネットワークとパス" class="md-nav__link">
     <span class="md-ellipsis">
       
-        グローバル時間
+        4. ネットワークとパス
       
     </span>
   </a>
@@ -704,10 +626,65 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#状態" class="md-nav__link">
+  <a href="#5-実行" class="md-nav__link">
     <span class="md-ellipsis">
       
-        状態
+        5. 実行
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-時間" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. 時間
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-状態" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. 状態
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-テスト" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. テスト
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-学習" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. 学習
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ノードが守る規則" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが守る規則
       
     </span>
   </a>
@@ -730,18 +707,6 @@
   
     
     
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
       
         
       
@@ -771,15 +736,14 @@
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <div class="md-nav__link md-nav__container">
-            <a href="../user-guide/" class="md-nav__link ">
-              
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
     
   
-    ユーザーガイド
+    チュートリアル
   
 
     
@@ -787,43 +751,35 @@
   
   
 
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
+            <span class="md-nav__icon md-icon"></span>
+          </label>
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
   
-    ユーザーガイド
+    チュートリアル
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
               
-            
-              
                 
   
   
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/writing-a-node/" class="md-nav__link">
+      <a href="../tutorial/1-run/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ノードを書く
+    1. ネットワークを走らせる
   
 
     
@@ -844,14 +800,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/building-a-network/" class="md-nav__link">
+      <a href="../tutorial/2-node/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ネットワークを組む
+    2. ノードを書く
   
 
     
@@ -872,14 +828,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/running/" class="md-nav__link">
+      <a href="../tutorial/3-test/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ネットワークを走らせる
+    3. ノードをテストする
   
 
     
@@ -900,14 +856,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/group/" class="md-nav__link">
+      <a href="../tutorial/4-learn-in-a-node/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ネットワークを束ねる
+    4. ノードの中で学習する
   
 
     
@@ -928,14 +884,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/state/" class="md-nav__link">
+      <a href="../tutorial/5-learn-with-pc/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    状態の保存と復元
+    5. PC-ALM で学習する
   
 
     
@@ -956,14 +912,119 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/time/" class="md-nav__link">
+      <a href="../tutorial/6-save-and-resume/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    時間の制御
+    6. 保存と再開
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    トピック
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    トピック
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Port と Channel
   
 
     
@@ -984,14 +1045,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/torch/" class="md-nav__link">
+      <a href="../topics/groups/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ノードの中の PyTorch
+    Group
   
 
     
@@ -1012,7 +1073,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/errors/" class="md-nav__link">
+      <a href="../topics/host-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ホストの入出力
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/threads-and-devices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    スレッドとデバイス
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/errors/" class="md-nav__link">
         
   
   
@@ -1040,14 +1185,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/testing/" class="md-nav__link">
+      <a href="../topics/update-rules/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    テスト
+    更新則
   
 
     
@@ -1068,14 +1213,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../user-guide/pc/" class="md-nav__link">
+      <a href="../topics/pc/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    PC-ALM で学習する
+    PC-ALM
   
 
     
@@ -1102,167 +1247,15 @@
   
   
   
-    
-    
-      
-        
-          
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../examples/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    サンプル
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    サンプル
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../api/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    API リファレンス
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    API リファレンス
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
     <li class="md-nav__item">
-      <a href="../api/node/" class="md-nav__link">
+      <a href="../examples/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    ノード
+    サンプル
   
 
     
@@ -1274,7 +1267,72 @@
     </li>
   
 
-              
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API リファレンス
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API リファレンス
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
             
               
                 
@@ -1283,14 +1341,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/port/" class="md-nav__link">
+      <a href="../api/node-and-ports/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Port と Channel
+    ノードと Port
   
 
     
@@ -1339,6 +1397,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api/run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    実行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api/time/" class="md-nav__link">
         
   
@@ -1346,63 +1432,7 @@
   <span class="md-ellipsis">
     
   
-    グローバル時間
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/typing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    型
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/errors/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    例外
+    時間
   
 
     
@@ -1506,10 +1536,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ノード" class="md-nav__link">
+  <a href="#1-ノード" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ノード
+        1. ノード
       
     </span>
   </a>
@@ -1517,10 +1547,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#port-と-channel" class="md-nav__link">
+  <a href="#2-port-と-channel" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Port と Channel
+        2. Port と Channel
       
     </span>
   </a>
@@ -1528,10 +1558,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ネットワーク" class="md-nav__link">
+  <a href="#3-メッセージの型spec" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ネットワーク
+        3. メッセージの型（spec）
       
     </span>
   </a>
@@ -1539,10 +1569,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#グローバル時間" class="md-nav__link">
+  <a href="#4-ネットワークとパス" class="md-nav__link">
     <span class="md-ellipsis">
       
-        グローバル時間
+        4. ネットワークとパス
       
     </span>
   </a>
@@ -1550,10 +1580,65 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#状態" class="md-nav__link">
+  <a href="#5-実行" class="md-nav__link">
     <span class="md-ellipsis">
       
-        状態
+        5. 実行
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-時間" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. 時間
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-状態" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. 状態
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-テスト" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. テスト
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-学習" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. 学習
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ノードが守る規則" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが守る規則
       
     </span>
   </a>
@@ -1581,15 +1666,7 @@
 
 
 <h1 id="-mujou-の仕組み">🧠 Mujou の仕組み<a class="headerlink" href="#-mujou-の仕組み" title="Permanent link">&para;</a></h1>
-<p>mujou の考え方を、次の 5 つに分けて説明する。</p>
-<ul>
-<li><strong>ノード</strong>: 計算の単位</li>
-<li><strong>Port と Channel</strong>: ノード同士をつなぐ口と接続</li>
-<li><strong>ネットワーク</strong>: ノードの組み合わせ方</li>
-<li><strong>グローバル時間</strong>: すべてのノードが従う時間の流れ</li>
-<li><strong>状態</strong>: 実行中のネットワークから取得し、後で復元できるもの</li>
-</ul>
-<p>コードの書き方は<a href="../user-guide/">ユーザーガイド</a>を参照。</p>
+<p>mujou を使うのに要る 9 つの考え方を、出会う順に説明する。最後の節はノードが守る規則。実際の使い方は<a href="../tutorial/1-run/">チュートリアル</a>で扱う。</p>
 <pre class="mermaid"><code>flowchart TB
     H["ホスト（ネットワークを動かす Python のコード）"]
     subgraph N["ネットワーク"]
@@ -1599,119 +1676,49 @@
     T["実行のタイマー"]
     H --&gt;|"mujou.run(net) が返す Run で、入力を書き、出力を読み、状態を取得する"| N
     T -.-&gt;|"時刻と dt"| N</code></pre>
-<h2 id="ノード">ノード<a class="headerlink" href="#ノード" title="Permanent link">&para;</a></h2>
-<p>ノードは計算の単位で、<code>mujou.Node</code> を継承したクラスとして書く。</p>
-<p>ノードの内側では PyTorch のコードを同期的に実行する。ノードの内側に閉じていれば誤差逆伝播法（BP）も使える。</p>
-<p>ノード同士はすべて非同期に動く。mujou はノード同士で共有するスレッドの上で <code>on_update(dt)</code> を繰り返し呼び、ノードはほかのノードを待たない。<code>on_update</code> のたびにノードは次のことをする。</p>
-<ol>
-<li>隣のノードが送った最新の値を読む</li>
-<li>自分の状態を更新する</li>
-<li>結果を送る</li>
-</ol>
-<p>ループは mujou が回すので、ノードは自分で <code>while</code> ループを持たない。実行の開始時や終了時などにも、mujou はノードが override できる hook を呼ぶ。呼ばれる順は API リファレンスの <a href="../api/node/"><code>Node</code></a> を参照。</p>
-<p>エポックも、学習と推論の切り替えも、メッセージを受け取るたびに呼ばれる hook も無い。</p>
-<p>1 つのノードにどれだけの計算を入れるかはノードのクラスで決まる。1 つの層でも、複数の層でも、モデル全体でもよい。ノードの境界がそのまま非同期の境界になる。複数の層を同期的に計算したいときや、BP で一緒に学習させたいときは、それらを 1 つのノードのクラスにまとめる。</p>
-<div class="admonition info">
-<p class="admonition-title">ノードが守る 3 つの規則</p>
+<h2 id="1-ノード">1. ノード<a class="headerlink" href="#1-ノード" title="Permanent link">&para;</a></h2>
+<p>ノードは計算の単位で、<code>mujou.Node</code> を継承したクラスとして書く。1 回分の処理を <code>on_update(dt)</code> に書くと、mujou がそれを繰り返し呼ぶ。ノードは自分でループを持たない。<code>on_start</code> や <code>on_stop</code> などほかの hook も mujou が呼び、その順は API リファレンスの <a href="../api/node-and-ports/#mujou.Node"><code>Node</code></a> にある。</p>
+<p>ノードの内側では PyTorch のコードを同期的に実行し、勾配も通常の PyTorch と同じく記録する。ノード同士はすべて非同期に動き、ほかのノードを待たず、自分の Port だけでやり取りする。状態は自分の属性に持つ。</p>
+<p>1 つのノードにどれだけの計算を入れるかはノードのクラスで決まる。1 つの層でも、複数の層でも、モデル全体でもよい。ノードの境界がそのまま非同期の境界になるので、一緒に計算したい層（BP で一緒に学習させたい層も）は 1 つのノードのクラスにまとめる。</p>
+<h2 id="2-port-と-channel">2. Port と Channel<a class="headerlink" href="#2-port-と-channel" title="Permanent link">&para;</a></h2>
+<p><strong>Port</strong> はノードの接続口。<code>connect</code> が 2 つの Port を 1 本の <strong>Channel</strong> でつなぎ、それを返す。</p>
 <ul>
-<li><strong>計算グラフをつなげない</strong>: ノードをまたいで計算グラフをつなげない。送った値は送信時に計算グラフから切り離されるので、勾配はノード間を通らない</li>
-<li><strong>Port だけでやり取りする</strong>: ほかのノードやホストとは自分の Port だけでやり取りする</li>
-<li><strong>時間は読むだけ</strong>: 時間を動かせるのはホストだけ</li>
+<li><code>Port</code> の <code>recv()</code> は値を 1 つ返すので、受け取る相手は 1 つまで。送るだけの <code>Port</code> はいくつの相手にでも届く</li>
+<li><code>MultiPort</code> は同じ種類の相手を束ねる。<code>recv()</code> は <code>dict[Channel, 値]</code> を <code>connect</code> の順で返し、どう束ねるかはノードが決める。役割の違う入力（予測と誤差など）は別々の <code>Port</code> で受ける</li>
+<li>循環してつないでもよい</li>
 </ul>
-</div>
-<p>どれかのノードが例外を投げると実行全体が止まる。例外を投げたノードだけを止め、ほかのノードを動かし続けることはない（<a href="../user-guide/errors/">例外と終了</a>）。</p>
-<p>既定の更新手法は <a href="https://pub.sakana.ai/pc-alm/">PC-ALM</a>（Augmented Lagrangian Predictive Coding。実装予定）で、各ノードは局所的な更新だけで学ぶ。更新手法は mujou に組み込まれていないので、上の 3 つを守る限りノードはどの手法でも使える。</p>
-<h2 id="port-と-channel">Port と Channel<a class="headerlink" href="#port-と-channel" title="Permanent link">&para;</a></h2>
-<p><strong>Port</strong> はノードが持つ接続口である。<strong>Channel</strong> は 2 つの Port をつなぐ 1 本の接続で、<code>connect</code> で作る。</p>
-<p>Channel は向きごとに値の置き場所を 1 つずつ持ち、各置き場所に書けるのはその向きの送り手だけである。</p>
-<p>Port は送る値と受け取る値の型を shape と dtype で宣言する。互いの送る型が相手の受け取る型と一致するときだけ、2 つの Port は接続できる。この検査は <code>connect</code> を呼んだときに mujou が行う。dtype は変換しない。</p>
-<p>読み書きの動作は次のとおり。</p>
+<p>読むときは待たず、値も溜まらない。<code>recv()</code> は相手が送った最新の値を返す。相手が最初に送るまでは相手の Port の初期値（既定はゼロ）を返し、その時刻は <code>None</code>。値には送った時刻が付くので、新しいかどうかがわかる。詳しくは <a href="../topics/ports/">Port と Channel</a>。</p>
+<h2 id="3-メッセージの型spec">3. メッセージの型（spec）<a class="headerlink" href="#3-メッセージの型spec" title="Permanent link">&para;</a></h2>
+<p>Port は送るものと受け取るものを spec で宣言する。テンソル 1 つなら <code>TensorSpec(shape, dtype)</code>、一緒に届けたいテンソルの組なら <code>TypedDict</code> の <code>DictSpec</code>。値はいつも <code>torch.Tensor</code>（かその dict）である。互いの送る spec が相手の受け取る spec と一致するときだけ接続でき、<code>send</code> は計算グラフから切り離したコピーを送る。</p>
+<h2 id="4-ネットワークとパス">4. ネットワークとパス<a class="headerlink" href="#4-ネットワークとパス" title="Permanent link">&para;</a></h2>
+<p><code>Network</code> は組み立て専用の入れ物。<code>nn.Module</code> に子のモジュールを持たせるのと同じように、ノードを属性に代入して Port をつなぐ。<code>Group(**named)</code> は子に名前を付けて並べるだけのネットワーク。ネットワーク自身は何も実行せず、実行中も中のノードはそれぞれ独立に動く。</p>
+<p>ノードの<strong>パス</strong>はルートからの属性名をドットでつないだもので、<code>"body.l1"</code> のようになる。パスは状態のキーになる。</p>
+<h2 id="5-実行">5. 実行<a class="headerlink" href="#5-実行" title="Permanent link">&para;</a></h2>
+<p><code>mujou.run(root)</code> は木を検査して全ノードを起動し、ホスト（利用者のプログラム）の窓口 <code>Run</code> を返す。ホストは <code>write</code> で入力を書き、<code>read</code> や <code>wait_for</code> などで出力を読み、<code>run.timer</code> で待つ。ルートは 1 回だけ走る。もう一度走らせるときは新しいインスタンスを作る。終わった後は、ノードの属性をホストが読んでよい。</p>
+<h2 id="6-時間">6. 時間<a class="headerlink" href="#6-時間" title="Permanent link">&para;</a></h2>
+<p>実行ごとに時間軸は 1 本で、それが実行のタイマーである。すべてのノードとホストがこれを使う。自分の <code>Timer</code> を渡さない実行は <code>mujou.time.global_timer</code> で走る。ホストは <code>run.timer</code> で時間を操作し、ノードは <code>self.timer</code> で読むだけ。</p>
+<p><code>dt</code> は前回の更新からの秒数で、実行のタイマーで測る。ノードは <code>dt</code> に比例して更新するので、更新の速さが違い揺らぐノード同士でも同じダイナミクスに従う。マシンが混んでも <code>dt</code> が伸びるだけで済む。各ノードは平均 <code>period</code> ごとに 1 回更新する。timeout だけは例外で実時間の秒。詳しくは<a href="../topics/time/">時間</a>。</p>
+<h2 id="7-状態">7. 状態<a class="headerlink" href="#7-状態" title="Permanent link">&para;</a></h2>
+<p>ノードの状態は自動で集まる。テンソルの属性、<code>state_dict</code> と <code>load_state_dict</code> を持つ属性（<code>nn.Module</code> など）、乱数生成器の状態である。それ以外で実行中に変わる値（カウンタ、最後に見た時刻、リプレイバッファのようなテンソルのリスト）は <code>register_state</code> で加える。規則は API リファレンスの <a href="../api/node-and-ports/#mujou.Node"><code>Node</code></a> にある。</p>
+<p><code>run.state_dict()</code> は実行を止めずに、その時点の実行全体の状態を取得する。各ノードの状態、各 Channel の最新のメッセージ、時刻を 1 つの素の dict にまとめたもの。<code>mujou.run(新しいインスタンス, state=tree)</code> でその続きから走らせると、保存した時刻から始まる専用のタイマーで走る。手順は<a href="../tutorial/6-save-and-resume/">保存と再開</a>。</p>
+<h2 id="8-テスト">8. テスト<a class="headerlink" href="#8-テスト" title="Permanent link">&para;</a></h2>
+<p><code>mujou.testing.run</code> は仮想のタイマーの上で決定的に走らせる。<code>run.step(dt, *nodes)</code> は時間を <code>dt</code> だけ進めてから、ノードを 1 回ずつ更新する。手順は<a href="../tutorial/3-test/">ノードをテストする</a>。</p>
+<h2 id="9-学習">9. 学習<a class="headerlink" href="#9-学習" title="Permanent link">&para;</a></h2>
+<p>更新則はノードの中に書く。ノードの内側の BP（誤差逆伝播法）でも、PC-ALM（<code>mujou.pc</code> のノード）でも、自作の則でもよい。mujou はノード・Port・スケジューラに更新則を組み込まない。Port はコピーを送るので、ノードをまたぐ計算グラフは作れない。ノードの間を流れるのは活動・誤差・目標などのメッセージである。<a href="../tutorial/4-learn-in-a-node/">ノードの中で学習する</a>、<a href="../tutorial/5-learn-with-pc/">PC-ALM で学習する</a>、<a href="../topics/update-rules/">更新則</a>を参照。</p>
+<p>学習のモードも推論のモードも、エポックも無い。走っているネットワークは、入力を受け取り、出力を出し、同時に学ぶ。</p>
+<h2 id="ノードが守る規則">ノードが守る規則<a class="headerlink" href="#ノードが守る規則" title="Permanent link">&para;</a></h2>
+<p>ほかのページはこの節へのリンクだけを張り、同じことを繰り返さない。</p>
 <ul>
-<li><strong>待たない</strong>: 読む側はその時点の最新の値を受け取る。新しい値が来るまで待つことはない</li>
-<li><strong>溜まらない</strong>: 誰にも読まれないまま上書きされる値もあれば、同じ値を何度も読むこともある。どちらも正常な動作</li>
-<li><strong>初期値</strong>: 送り手がまだ書いていなければ、送り手の Port の初期値（既定はゼロ）を読む。送り手が書いたかどうかは <code>has_received()</code> でわかる</li>
-<li><strong>コピー</strong>: 値はどれも計算グラフから切り離された <code>torch.Tensor</code> のコピー。受け取ったテンソルを書き換えても、ほかのノードには影響しない</li>
-<li><strong>時刻付き</strong>: 値には送った時刻が付く。新しい値かどうかは、値を時刻と一緒に読み（<code>recv_with_time()</code>）、前回読んだ値の時刻と比べればわかる。時刻が進んでいれば新しい値</li>
+<li><strong><code>time.sleep</code> でブロックしない。</strong> ノードはワーカースレッドをほかのノードと共有し、ブロッキングする hook はその間ワーカーをふさぐ。ほかのノードの <code>dt</code> が伸びる。一定間隔で更新するなら <code>period</code> を使い、デバイス・ソケット・lock を待つしかないノードには <code>dedicated_thread=True</code> を渡す。ホストは <code>run.timer.sleep</code> で待つ。こちらは実行の時間の速さと一時停止に従うが、<code>time.sleep</code> はどちらにも従わない</li>
+<li><strong>ノードは 1 回だけ走る。</strong> 走ったノードやネットワークをもう一度走らせると <code>RuntimeError</code> になる。もう一度走らせるときは新しいインスタンスを作る。終わった後も属性は読める</li>
+<li><strong>走っている間はホストからノードの属性を読まない。</strong> ノードの更新と競合する。Port を <code>run.read</code> で読むか、<code>run.state_dict()</code> を取得する</li>
+<li><strong><code>on_start</code> では状態に依存する出力をしない。</strong> 復元するときは <code>on_start</code> の後に状態を読み込む</li>
+<li><strong><code>on_stop</code> で状態を変えない。</strong> 正常に終了した後に取得する状態は、<code>on_stop</code> の後にノードが残したもの。<code>on_stop</code> では I/O などの資源だけを解放する</li>
+<li><strong>実行中に変わる値は登録する。</strong> テンソルとモジュールは自動で集まる。素の値（カウンタ、最後に見た時刻）とテンソルを入れたリストや dict（リプレイバッファなど）は <code>register_state</code> しないと、復元したときに初めからになる</li>
+<li><strong>計算グラフは 1 回の更新の中に閉じる。</strong> hook は通常の PyTorch と同じく勾配を記録する。パラメータの更新は <code>torch.no_grad()</code> の中で行い、パラメータから計算した値を属性で次の更新へ持ち越すときは detach する。そうしないとグラフが伸び続ける</li>
+<li><strong>例外で終わった後は時刻が止まる。</strong> 実行の時刻は終了の時点で止まるので、<code>on_exception</code> と <code>on_stop</code> の中では <code>self.timer</code> が進まない。ロボットを 1 秒かけて減速させるような処理は実時間で測る</li>
+<li><strong>時間を動かせるのはホストだけ、ノードは Port だけで話す。</strong> hook の中で <code>Timer.sleep</code>・<code>pause</code>・<code>resume</code>・<code>set_time_scale</code>・<code>VirtualTimer.advance</code> や <code>Run</code> のメソッドを呼ぶと <code>RuntimeError</code> になる。1 つのノードが時間を動かすと、同じ実行のほかのすべてのノードの <code>dt</code> が変わってしまう。送った値は切り離されたコピーなので、<code>backward()</code> はほかのノードに届かない</li>
 </ul>
-<p>1 つの Port を複数の相手に接続することもできる。その場合は Channel ごとに値を 1 つずつ受け取り、それらをどう束ねるか（足す、平均するなど）はノードが決める。</p>
-<p>どこにも接続していない Port を残してもよい。接続していない Port がネットワークの入力と出力になる。</p>
-<ul>
-<li>ホストは接続していない入力の Port に入力を書く。書いた値はホストが次に書くまでその Port に残る</li>
-<li>ホストは値を送るどの Port からも、送られた最新の値を読める。接続していない出力の Port だけでなく、ノード同士をつなぐ Port も読める</li>
-</ul>
-<h2 id="ネットワーク">ネットワーク<a class="headerlink" href="#ネットワーク" title="Permanent link">&para;</a></h2>
-<p>ネットワークはノードの組み合わせ方を宣言するもので、<code>mujou.Network</code> を継承したクラスとして書く。PyTorch の <code>nn.Module</code> に子のモジュールを持たせるのと同じ書き方で、次の 3 段階で組む。</p>
-<ol>
-<li>ノードや別のネットワークを属性として持つ</li>
-<li>それらの Port を <code>connect</code> でつなぐ</li>
-<li>外からつなぎたい Port をネットワーク自身の属性として公開する</li>
-</ol>
-<p>Port を公開したネットワークは、ノードと同じようにほかのノードやネットワークと接続できる。</p>
-<p>ネットワークを使うのは組み立てるときだけである。ネットワークは hook を持たず、自身では何も実行しない。実行中も中のノードはそれぞれ独立に動き、ネットワークで囲んでも同期はしない。</p>
-<p><code>mujou.run(net)</code> は構造と型を検査し、凍結してから走らせる。その後は接続を足せない。</p>
-<p>各ノードにはパスという名前が付く。パスはルートからの属性名を <code>.</code> でつないだもので、<code>"body.l1"</code> のようになる。状態ではこのパスを使う。</p>
-<div class="admonition warning">
-<p class="admonition-title">名前や接続を変えると状態を復元できない</p>
-<p>属性の名前や接続を変えると、変える前に取得した状態は復元できなくなる。</p>
-</div>
-<h2 id="グローバル時間">グローバル時間<a class="headerlink" href="#グローバル時間" title="Permanent link">&para;</a></h2>
-<p>mujou は学習するネットワークを、時間とともに連続的に変わる系として扱う。<code>dt</code> はそのノードの前回の更新からの経過時間（秒）である。</p>
-<p>ノードは状態を <code>dt</code> に比例して更新する。状態 <span class="arithmatex">\(x\)</span> が <span class="arithmatex">\(\frac{dx}{dt} = f(x)\)</span> に従うなら、1 回の更新は次のようになる（陽的 Euler 法）。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">dt</span> <span class="o">*</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-</code></pre></div>
-<p>更新の速さはノードごとに違い、負荷によっても揺らぐ。更新量を反復 1 回あたりで決めると、速く回るノードほど状態が大きく変わってしまう。<code>dt</code> に比例させれば、どのノードも同じ時間の流れの上で同じダイナミクスに従う。負荷が高くなっても <code>dt</code> が伸びるだけで済む。</p>
-<div class="admonition warning">
-<p class="admonition-title">長い <code>dt</code> に気を付ける</p>
-<p>Mujou は <code>dt</code> を打ち切らない。<code>dt</code> は実際に経った時間で、打ち切るとその一部が失われる。<code>dt</code> が大きくてノード自身の状態の更新が不安定になるなら、1 回の <code>on_update</code> の中で刻みを分割する。不安定さが他のノードとの結合から来るとき（読んだメッセージは <code>dt</code> の間そのまま）は、分割しても安定にならない。そのようなノードは、失う時間と引き換えに、自分が使う <code>dt</code> を打ち切ってよい。</p>
-</div>
-<p>ノードは周期を持つ（既定は 0.01 秒）。更新の間隔は 1 回ごとに揺らぐが、平均すると周期ごとに 1 回更新する。遅れたときの <code>dt</code> は周期より長くなる。<code>dt</code> は実際に経った時間なので、周期を決めていても更新は <code>dt</code> に比例させる。</p>
-<p>タイマーは実行ごとに 1 つあり、その実行のすべてのノードとホストがそれを使う。既定ではプロセスに 1 つのグローバルタイマーを使う。ホストは時間を実時間より速くも遅くも進められるが、ノードは時間を読むだけである。</p>
-<div class="admonition tip">
-<p class="admonition-title">ホストは <code>mujou.time.sleep</code> で待つ</p>
-<p>ホストがその時間で待つとき（たとえば入力を 2 秒見せるとき）は <code>mujou.time.sleep</code> を使う。標準の <code>time.sleep</code> は実時間で待つので使わない。</p>
-</div>
-<p>実行中のネットワークの状態を取得するとき、mujou は実行を一時停止してそのタイマーを止める。止まっていた時間は再開後のどの <code>dt</code> にも入らないので、ノードから見ると一時停止は無かったのと同じである。</p>
-<p>一時停止は同じタイマーを使うすべての実行の時間を止める。ほかの実行と時間を止め合わないようにするには、その実行に専用のタイマーを持たせる（<a href="../user-guide/time/">時間の制御</a>）。</p>
-<p>一時停止は状態の取得と観測のためのもので、学習の手順の一部にしてはならない。</p>
-<h2 id="状態">状態<a class="headerlink" href="#状態" title="Permanent link">&para;</a></h2>
-<p>実行中のネットワークの状態は、実行を終了させずに取得でき、後でその状態から再開できる。状態は 1 つの木で、次のものを持つ。</p>
-<ul>
-<li>ノードのパスごとの、各ノードの状態（重み、活動などのテンソル）</li>
-<li>値の置き場所ごとの、最新の値とその時刻</li>
-<li>各ノードの最後の更新の時刻と、タイマーの時刻</li>
-</ul>
-<p>ネットワークはノードとその間を流れる値を合わせたものなので、置き場所の値も状態に含める。置き場所の値が初期値に戻ると、隣のノードはそれまでにたどり着いた平衡から外れてしまう。</p>
-<p>ノードは <code>nn.Module</code> と同じように自分の状態を自分で集める。属性に代入したテンソルと <code>nn.Module</code> は自動で状態に入る。</p>
-<p>状態を取得する間は、前の節で述べた一時停止が起きる。各ノードは <code>on_update</code> の途中では止まらず、1 回の更新を終えてから次の更新を始めるまでの間で止まる。そのため木の中の値はすべて同じ時点のものになる。</p>
-<table>
-<thead>
-<tr>
-<th>状態を取得するとき</th>
-<th>得られるもの</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>ネットワークの実行中</td>
-<td>その時点の状態</td>
-</tr>
-<tr>
-<td>正常に終了した後</td>
-<td><code>on_stop</code> の後にノードが残した値</td>
-</tr>
-<tr>
-<td>例外で終了した後</td>
-<td>取得できず <code>NetworkError</code> になる。残したい状態は実行中に取得しておく</td>
-</tr>
-</tbody>
-</table>
-<p>正常に終了した後の木が持つタイマーの時刻は、<code>shutdown()</code> が終了を求めた時刻と、ノードが最後に更新か送信をした時刻のうち遅いほうである。この木から復元した実行は、終了した後に経った時間を数えない。</p>
-<div class="admonition warning">
-<p class="admonition-title"><code>on_stop</code> で状態を変えない</p>
-<p>正常に終了した後の木は <code>on_stop</code> の後に取得するので、<code>on_stop</code> で状態を変えるとその変更が木に入る。たとえば <code>on_stop</code> で <code>self.w = None</code> とすると、木から <code>w</code> が消える。<code>on_stop</code> では状態を変えず、I/O などの資源だけを解放する。</p>
-</div>
-<p>復元するには、木を <code>mujou.run(net, state=tree)</code> に渡す。ネットワークは木を取得した時刻から、同じノードの状態と置き場所の値で続きを走る。走らせるネットワークは、木を取得したネットワークと同じノードのパスと接続を持たなければならない。</p>
-<p>木をファイルに保存する方法（<code>torch.save</code>、<code>pickle</code> など）は利用者が決める。手順は<a href="../user-guide/state/">状態の保存と復元</a>を参照。</p>
 
 
 
