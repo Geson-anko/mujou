@@ -12,7 +12,7 @@
 - **実行の配置の指定**: 複数のノードを同じワーカーで決まった順に回すことを、利用者がどう指定するか
 - **スロットと時刻の lock**: スロットの読み書きと時刻の読み取りは mutex を取る。lock を持つスレッドが横取りされるとその間は待つ。問題になったら RwLock や seqlock などを検討する
 - **時刻の分解能**: 時刻は ns の整数で持ち、Δt も ns の差から作るので、長い実行でも分解能は落ちない。f64 を通るのは、タイマーが anchor からの実経過にスケールを掛ける所（`time.rs` の `ns_at`）だけで、anchor を張り替えずに約 104 日（$2^{53}$ ns）進むと 1 ns より粗くなる。手当てが要るかは決めていない
-- **pinned memory**: GPU のノードの転送に pinned memory を使うかどうか。今は使っておらず、測っていない
+- **pinned memory**: GPU のノードの転送と状態の取得に pinned memory を使うかどうか。今は使っていない。268 MB を GPU から CPU へ移すと、通常のメモリで約 100 ms、pinned memory で約 10 ms だった（`research/benchmarks.md` の R10）
 
 ## ユーザーの確認待ち
 
@@ -25,10 +25,6 @@
 
 ## 検証が残っているもの
 
-- **GPU のノードの capture のコスト**（素の dict の木、停止中は device の上で複製し、再開の後に CPU へ移す）: GPU の無い環境でしか測っていない。許せないほど悪ければ、残す場所を選ぶ引数を `state_dict` に足す
-- **CUDA のノードで hook ごとに device と stream を設定するコスト**: 未計測。目立つなら、スレッドが切り替わったかを Driver に渡す形を検討する（core に enter のキャッシュは戻さない）
-- **CUDA の経路のテスト**（`TestCuda`、slow を含む）: GPU のマシンで回す
-- **GIL ありのビルド**: 既定のワーカー数を半分にする経路と、インタプリタの終了のテストを、GIL ありの通常ビルドの CI で確かめる
 - **mujou.pc の判断の確認**: `theta=inf` を `learn_interval=inf` で表すこと、学習した時刻を `tick` の `now_ns` で記録すること（実時間では 1 区間ずれうる）、教師なしの `Output` の `g_in` を `loss_vjp` の mask の処理で $J^\top 0$ にすること、`learn_interval` の推奨の文言
 
 ## mujou.pc

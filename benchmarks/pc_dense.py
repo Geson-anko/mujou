@@ -5,6 +5,7 @@ hand on an otherwise idle machine and read the Markdown table it prints::
 
     uv run python benchmarks/pc_dense.py
     uv run python benchmarks/pc_dense.py --steps 4000 --seconds 5
+    uv run python benchmarks/pc_dense.py --device cuda   # the nodes on the GPU
 
 A chain ``Input`` -> 784-256 ``Layer`` -> 256-256 ``Layer`` -> ``Output`` of
 ``mujou.pc`` (B = 64) learns one fixed sample, with a dense target (a
@@ -70,24 +71,32 @@ class CountedOutput(Counted, pc.Output):
     pass
 
 
-def build(target: str, period: float) -> tuple[mujou.Group, dict[Any, pc.Sample]]:
-    """The chain for ``target``, with nodes of ``period``, and its input."""
+def build(
+    target: str, period: float, device: str
+) -> tuple[mujou.Group, dict[Any, pc.Sample]]:
+    """The chain for ``target``, with nodes of ``period`` on ``device``, and its
+    input."""
     y, width, loss = TARGETS[target]
     torch.manual_seed(0)
     common: dict[str, Any] = {
         "tau": TAU,
         "learn_interval": 8 * PERIOD,
         "period": period,
+        "device": device,
     }
-    inp = CountedInput(x=TensorSpec((B, 784)), y=y, period=period)
+    inp = CountedInput(x=TensorSpec((B, 784)), y=y, period=period, device=device)
     l1 = CountedLayer(
-        nn.Sequential(nn.Linear(784, 256), nn.Tanh()), act_spec=inp.act_spec, **common
+        nn.Sequential(nn.Linear(784, 256), nn.Tanh()).to(device),
+        act_spec=inp.act_spec,
+        **common,
     )
     l2 = CountedLayer(
-        nn.Sequential(nn.Linear(256, 256), nn.Tanh()), act_spec=l1.act_spec, **common
+        nn.Sequential(nn.Linear(256, 256), nn.Tanh()).to(device),
+        act_spec=l1.act_spec,
+        **common,
     )
     out = CountedOutput(
-        nn.Linear(256, width), act_spec=l2.act_spec, loss=loss, **common
+        nn.Linear(256, width).to(device), act_spec=l2.act_spec, loss=loss, **common
     )
     inp.next.connect(l1.prev)
     l1.next.connect(l2.prev)
@@ -104,9 +113,9 @@ def build(target: str, period: float) -> tuple[mujou.Group, dict[Any, pc.Sample]
     return net, {inp.prev: sample}
 
 
-def manual(target: str, steps: int) -> float:
+def manual(target: str, steps: int, device: str) -> float:
     """µs per step of the four nodes in a manual run."""
-    net, inputs = build(target, PERIOD)
+    net, inputs = build(target, PERIOD, device)
     with mujou.testing.run(net, inputs=inputs) as run:
         for _ in range(steps // 10):
             run.step(PERIOD)
@@ -116,9 +125,9 @@ def manual(target: str, steps: int) -> float:
         return (time.perf_counter() - t0) / steps * 1e6
 
 
-def free(target: str, seconds: float, workers: int) -> list[float]:
+def free(target: str, seconds: float, workers: int, device: str) -> list[float]:
     """Updates per second of each node in a free run."""
-    net, inputs = build(target, 0.0)
+    net, inputs = build(target, 0.0, device)
     with mujou.run(net, inputs=inputs, workers=workers) as run:
         time.sleep(0.2)
         before = run.state_dict()["nodes"]
@@ -138,6 +147,7 @@ def main() -> None:
     parser.add_argument("--seconds", type=float, default=3.0)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
     torch.set_num_threads(1)  # one torch thread per node, as examples/mnist
 
@@ -146,7 +156,7 @@ def main() -> None:
         f"- Python {platform.python_version()} (GIL {'on' if gil else 'off'}), "
         f"torch {torch.__version__}"
     )
-    print(f"- {platform.platform()}, {platform.machine()}")
+    print(f"- {platform.platform()}, {platform.machine()}, device {args.device}")
     print(
         f"- manual: {args.steps} steps per run; free: {args.seconds:g} s per run, "
         f"{args.workers} workers; {args.repeats} runs"
@@ -156,8 +166,11 @@ def main() -> None:
     print(" | ".join(f"free {p} updates/s" for p in PATHS) + " |")
     print("| --- | --- | --- | " + " | ".join("---" for _ in PATHS) + " |")
     for target in TARGETS:
-        steps = [manual(target, args.steps) for _ in range(args.repeats)]
-        rates = [free(target, args.seconds, args.workers) for _ in range(args.repeats)]
+        steps = [manual(target, args.steps, args.device) for _ in range(args.repeats)]
+        rates = [
+            free(target, args.seconds, args.workers, args.device)
+            for _ in range(args.repeats)
+        ]
         median = [statistics.median(r[i] for r in rates) for i in range(len(PATHS))]
         print(
             f"| {target} | {statistics.median(steps):.1f} | {min(steps):.1f} | "
