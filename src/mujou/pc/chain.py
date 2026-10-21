@@ -10,9 +10,10 @@ from torch import nn
 from mujou import Network, Port, Run, TensorSpec
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
-from mujou.pc.messages import Prediction, Sample, Size
+from mujou.pc.messages import Prediction, Sample
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
+from mujou.types import Size
 
 
 class Chain(Network):

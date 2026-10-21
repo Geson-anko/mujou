@@ -6,6 +6,7 @@ from typing import TypedDict
 import torch
 
 from mujou import DictSpec, TensorSpec
+from mujou.types import Size
 
 
 class Activity(TypedDict):
@@ -61,11 +62,6 @@ class Prediction(TypedDict):
     y: torch.Tensor
     mask: torch.Tensor
     time: torch.Tensor
-
-
-# A shape: an int n is (n,), and () has no dimension. The batch of mujou.pc is
-# one (activity_spec). Unlike torch.Size, it takes an int as well.
-type Size = int | tuple[int, ...]
 
 
 def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Activity]:

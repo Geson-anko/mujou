@@ -8,6 +8,7 @@ from torch import nn
 import mujou.pc as pc
 from mujou import Group, Network, TensorSpec
 from mujou.time import VirtualTimer
+from mujou.types import Size
 from tests.mujou.nodes import F64, assert_same_tree
 from tests.mujou.pc._reference import MASK, N_OUT, TAU, B, H, make_modules, sample
 
@@ -128,7 +129,7 @@ class TestChain:
 
 def learned(
     start_manual: StartManual,
-    batch: pc.Size,
+    batch: Size,
     x: torch.Tensor,
     y: torch.Tensor,
     mask: torch.Tensor,

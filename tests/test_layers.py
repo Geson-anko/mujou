@@ -20,7 +20,7 @@ EXTENSION = "mujou._native"
 
 # From the bottom up.
 LAYERS: list[set[str]] = [
-    {EXTENSION, "mujou.errors"},
+    {EXTENSION, "mujou.errors", "mujou.types"},
     {"mujou.spec", "mujou.current"},
     {"mujou.codec"},
     {"mujou.port"},
@@ -53,7 +53,7 @@ NATIVE = {
     "mujou.time",
 }
 
-PUBLIC = {"mujou", "mujou.time", "mujou.testing"}
+PUBLIC = {"mujou", "mujou.time", "mujou.testing", "mujou.types"}
 # The modules that re-export names of other modules: those of PUBLIC and the
 # entry of mujou.pc. Every other module is imported only for what it defines.
 REEXPORTING = PUBLIC | {"mujou.pc"}

@@ -2,7 +2,7 @@
 
 ::: mujou.pc
     options:
-      members: [Chain, show, Input, Layer, Output, TimeConstants, LearnClock, Tick, Sample, Activity, Prediction, activity_spec, Size, MSELoss, CrossEntropyLoss]
+      members: [Chain, show, Input, Layer, Output, TimeConstants, LearnClock, Tick, Sample, Activity, Prediction, activity_spec, MSELoss, CrossEntropyLoss]
       # The nodes would repeat every member of Node.
       inherited_members: false
 

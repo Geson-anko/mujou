@@ -23,7 +23,7 @@
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ、torch.Tensor / TypedDict、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
 - [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
-- [pc のバッチの shape](project_batch_shape.md) — `batch: pc.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
+- [pc のバッチの shape](project_batch_shape.md) — `batch: mujou.types.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → device の上で複製 → 再開 → CPU へ移して返す。木は素の dict（timer と nodes）。正常終了後も取得できる。保存はユーザー。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook の例外でも全体を終了。end は失敗を検出した時刻、全ノードの on_exception → on_stop、以後のホストの呼び出しが NetworkError。例外時の状態は取得しない
@@ -38,7 +38,7 @@
 - [実行の API とモジュール構成](project_runtime_api_revision.md) — モジュールは公開、private は Rust の mujou._native だけ。build と Graph は持たず、mujou.run がハンドル Run を返す。state_dict は実行中と正常終了の後
 - [ノードの実行周期](project_node_period.md) — `Node(period=0.01)` が既定、`0.0` は明示したときだけ、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す。Δt は実経過。手動モードは周期を無視。シグネチャと復元後の目標は確認待ち
 - [run はルート 1 つ、write は時刻を返す](project_run_node_and_write_time.md) — `mujou.run(root)`（並べるのは Group、R4）。ノード単体もルート（パス ""）。`Run.write` が `Timestamp` を返す
-- [Group と mujou.typing の廃止](project_group_and_typing.md) — 並べるだけの入れ物は `Group(**named)`。`mujou.typing` は廃止し、`MessageSpec` はトップレベル
+- [Group と mujou.typing の廃止](project_group_and_typing.md) — 並べるだけの入れ物は `Group(**named)`。`mujou.typing` は廃止し、`MessageSpec` はトップレベル。汎用の注釈の型は公開モジュール `mujou.types`
 - [`__dict__` が唯一のレジストリ](project_port_registry.md) — 子とポートはインスタンスの属性に代入するだけ。run の段 1 で tree.walk が代入の順に読む（R7）
 - [M:N スケジューリング](project_mn_scheduler.md) — Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True)、mujou.run(workers=None)。既定は available_parallelism（GIL ありは半分、確認待ち）で、実効の数は 0 もありうる。ノードはワーカー間を移ってよい
 - [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。hook は通常の PyTorch と同じく勾配を記録、ノードをまたぐグラフは Port の detach コピーで作れない

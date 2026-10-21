@@ -1,6 +1,6 @@
 ---
 name: project-group-and-typing
-description: ノードやネットワークを並べるだけの入れ物は Group(**named)（位置引数は持たない、R4）。mujou.typing は廃止し、MessageSpec はトップレベルの mujou.MessageSpec
+description: ノードやネットワークを並べるだけの入れ物は Group(**named)（位置引数は持たない、R4）。mujou.typing は廃止し、MessageSpec はトップレベルの mujou.MessageSpec。汎用の注釈の型は公開モジュール mujou.types（2026-10-21）
 metadata:
   type: project
 ---
@@ -10,4 +10,6 @@ metadata:
 
 **Why:** 位置引数で並べると、同じノードのパスが組み方によって変わり、保存した木が合わなくなる。
 
-**How to apply:** 並べて走らせるときは `mujou.run(Group(enc=..., dec=...))`。注釈に要る型を新しく公開するときは、トップレベルに置く。
+- **汎用の型は公開モジュール `mujou.types` に置く（2026-10-21、ユーザーの決定）。** `Size`（`int | tuple[int, ...]`）のように、pc に限らずプロジェクトで使える注釈の型を集め、利用者は `from mujou.types import Size` で使う。トップレベルの `mujou` には再公開しない。名前を `typing` にしないのは標準ライブラリと紛れるから。既存の汎用の型を集める作業は別の PR で行う
+
+**How to apply:** 並べて走らせるときは `mujou.run(Group(enc=..., dec=...))`。注釈に要る汎用の型は `mujou.types` に置く。`MessageSpec` のようにクラスとして中身を持つものはトップレベルに置く。

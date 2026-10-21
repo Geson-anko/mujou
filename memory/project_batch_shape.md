@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-2026-10-21 ユーザーの決定。`mujou.pc` のバッチは `batch: Size = ()`（`type Size = int | tuple[int, ...]`、`pc.Size` として公開。ユーザーの提案）。`()` はバッチの無い 1 サンプル、int の `B` は `(B,)`、多次元も取る。`activity_spec(h, y, batch)`・`Input(batch=)`・`Chain(batch=)` で宣言し、`Layer` / `Output` は `act_spec` の mask の shape から読む。
+2026-10-21 ユーザーの決定。`mujou.pc` のバッチは `batch: Size = ()`（`type Size = int | tuple[int, ...]`、汎用の型なので公開モジュール `mujou.types` に置く。ユーザーの提案と決定）。`()` はバッチの無い 1 サンプル、int の `B` は `(B,)`、多次元も取る。`activity_spec(h, y, batch)`・`Input(batch=)`・`Chain(batch=)` で宣言し、`Layer` / `Output` は `act_spec` の mask の shape から読む。
 
 損失は torch の `F.mse_loss` / `nn.MSELoss` に倣い、関数 `pc.functional.mse` / `pc.functional.cross_entropy`（`batch=()`）とクラス `pc.MSELoss(batch=())` / `pc.CrossEntropyLoss(batch=())`。`pc.mse` / `pc.cross_entropy` は消した。
 
