@@ -15,6 +15,9 @@
     "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly"
   ],
+  "hostRequirements": {
+    "gpu": "optional"
+  },
   "containerEnv": {
     "UV_PROJECT_ENVIRONMENT": ".venv-devcontainer",
     "UV_LINK_MODE": "copy",
