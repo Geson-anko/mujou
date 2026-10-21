@@ -7,10 +7,10 @@ import torch
 from torch import nn
 
 from mujou import DictSpec, Node, Port, TensorSpec
-from mujou.pc._clock import LearnClock
-from mujou.pc._messages import Activity, Prediction
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.clock import LearnClock
 from mujou.pc.functional import learn_, loss_vjp
+from mujou.pc.messages import Activity, Prediction
+from mujou.pc.time_constants import TimeConstants
 
 
 class Output(Node):

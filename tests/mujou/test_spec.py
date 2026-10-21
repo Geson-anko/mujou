@@ -3,7 +3,7 @@ from typing import TypedDict, cast
 import pytest
 import torch
 
-from mujou._core.spec import DLPACK, DictSpec, TensorSpec
+from mujou.spec import DLPACK, DictSpec, TensorSpec
 
 
 class Feedback(TypedDict):

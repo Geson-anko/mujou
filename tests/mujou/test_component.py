@@ -3,10 +3,10 @@ from typing import Any
 
 import pytest
 
-from mujou._core.network import Network
-from mujou._core.node import Node
-from mujou._core.port import MultiPort, Port
-from mujou._core.spec import TensorSpec
+from mujou.network import Network
+from mujou.node import Node
+from mujou.port import MultiPort, Port
+from mujou.spec import TensorSpec
 from tests.mujou.nodes import Hidden
 
 

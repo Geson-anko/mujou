@@ -19,7 +19,7 @@ the time: ``sleep``, ``pause``, ``resume``, ``set_time_scale`` and
 ``VirtualTimer.advance`` raise ``RuntimeError`` in a node's hook.
 """
 
-from mujou._core._native import (
+from mujou._native import (
     ReadOnlyTimer as ReadOnlyTimer,
     Timer as Timer,
     Timestamp as Timestamp,

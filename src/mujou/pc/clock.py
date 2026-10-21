@@ -5,7 +5,7 @@ import math
 from collections.abc import Mapping
 from typing import Any, NamedTuple, Self
 
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.time_constants import TimeConstants
 
 
 class Tick(NamedTuple):

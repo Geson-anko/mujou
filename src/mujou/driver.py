@@ -24,9 +24,9 @@ from typing import Final, final
 
 import torch
 
-from mujou._core._native import ReadOnlyTimer
-from mujou._core.node import Node, map_tensors
-from mujou._core.port import AnyPort, Wire
+from mujou._native import ReadOnlyTimer
+from mujou.node import Node, map_tensors
+from mujou.port import AnyPort, Wire
 
 # The wires of a node in its state_dict: none, so that taking the state is not
 # seen by the other nodes.

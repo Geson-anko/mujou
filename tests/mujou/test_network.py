@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
-from mujou._core.network import Group, Network
-from mujou._core.tree import walk
+from mujou.network import Group, Network
+from mujou.tree import walk
 from tests.mujou.nodes import Chain, Hidden
 
 

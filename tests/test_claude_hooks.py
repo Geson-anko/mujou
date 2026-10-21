@@ -130,9 +130,9 @@ class TestPostToolUseLocalityGuard:
     @pytest.mark.parametrize(
         "relative",
         [
-            "src/mujou/_core/run.py",
+            "src/mujou/execution.py",
             ".claude/worktrees/wt/src/mujou/train.py",
-            ".claude/worktrees/wt/src/mujou/_core/run.py",
+            ".claude/worktrees/wt/src/mujou/execution.py",
         ],
     )
     def test_warns_in_subpackages_and_worktrees(self, tmp_path: Path, relative: str):

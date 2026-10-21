@@ -22,8 +22,8 @@ from collections.abc import Callable, Sequence
 
 import torch
 
-from mujou.pc._messages import rows
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.messages import rows
+from mujou.pc.time_constants import TimeConstants
 
 __all__ = ["learn_", "loss_vjp", "relax_", "vjp"]
 

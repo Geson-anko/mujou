@@ -7,9 +7,9 @@ from typing import Any, Protocol, TypeIs, cast, final
 
 import torch
 
-from mujou._core._native import ReadOnlyTimer
-from mujou._core.component import Component
-from mujou._core.current import outside, running
+from mujou._native import ReadOnlyTimer
+from mujou.component import Component
+from mujou.current import outside, running
 
 
 @final

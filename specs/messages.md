@@ -6,7 +6,7 @@
 
 利用者がやり取りするメッセージの中の値は、すべて `torch.Tensor` である。ノードがポートで送受信する値も、ホストが読み書きする値も同じ。mujou は独自のテンソル型も dtype も公開しない。
 
-サポートする dtype は `TensorSpec.dtypes`（16 / 32 / 64 bit の浮動小数点と bfloat16、8〜64 bit の符号付き整数、`uint8`、`bool`）。表の正本は `mujou._core.spec.DLPACK`（torch の dtype から DLPack の dtype への対応）で、`TensorSpec.dtypes` はそのキー。torch には `torch.dtype` を DLPack の dtype に直す公開 API が無いので、torch に依存する側が表を持つ。spec.py（層 1）に置けば、`TensorSpec` の検査（K7）と codec（層 2）が下から上へ一方向に読める。
+サポートする dtype は `TensorSpec.dtypes`（16 / 32 / 64 bit の浮動小数点と bfloat16、8〜64 bit の符号付き整数、`uint8`、`bool`）。表の正本は `mujou.spec.DLPACK`（torch の dtype から DLPack の dtype への対応）で、`TensorSpec.dtypes` はそのキー。torch には `torch.dtype` を DLPack の dtype に直す公開 API が無いので、torch に依存する側が表を持つ。spec.py（層 1）に置けば、`TensorSpec` の検査（K7）と codec（層 2）が下から上へ一方向に読める。
 
 バッチを使う場合は、バッチ次元も shape の一部として扱う。フレームワークはバッチ次元を特別扱いしない。
 
@@ -27,7 +27,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 
 ## codec
 
-torch とコアの変換は `_core/codec.py` の 1 か所だけが行う。spec の公開の属性（`shape`、`dtype`、`specs`）だけを読む。
+torch とコアの変換は `codec.py` の 1 か所だけが行う。spec の公開の属性（`shape`、`dtype`、`specs`）だけを読む。
 
 - メッセージは、フィールドの順に並べたテンソルの列として扱う。Tensor のメッセージは名前 `""` のフィールド 1 つ、dict のメッセージはキーごとに 1 つ。正規化は `fields(spec)` の 1 つの `isinstance` だけで、残りの処理は Tensor と dict を区別しない
 - Python が検査するのは、Rust には見えない構造（Tensor か、dict のキーに過不足が無いか）だけ（K9 の構造、`TypeError`）。shape と dtype の検査は、Rust の `copy_from` にポートの label を渡して 1 回だけ行う（K9 の shape・dtype、`ValueError`）。Rust は memcpy の健全性のために照合をやめられないので、どのみち消せない方に正本を置き、send の hot path から Python の分岐を消した

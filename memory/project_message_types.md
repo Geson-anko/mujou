@@ -8,7 +8,7 @@ metadata:
 2026-10-13 決定。詳細は `specs/messages.md`。
 
 - **スロットの書き手は 1 つ。** 送るポートが outbox と相手ごとのスロットに書き、ホストが未接続の受け取るポートのスロットに書く。読み手は N 個可
-- **利用者が扱う値は `torch.Tensor` だけ（2026-10-15）。** コアの値の型は `mujou._core._native` の内部に閉じる
+- **利用者が扱う値は `torch.Tensor` だけ（2026-10-15）。** コアの値の型は `mujou._native` の内部に閉じる
 - **dtype は torch の dtype。** 一覧は `TensorSpec.dtypes`（正本は `spec.DLPACK`）。バッチは shape の一部で特別扱いしない
 - **コアの値はホストのメモリ上の不変なバッファ。** torch とは DLPack で受け渡し、読み書きとも必ずコピーする（ゼロコピーにすると、利用者が受け取った値を書き換えたときに他の読み手のバッファまで変わる）。変換は `codec.py` の 1 か所、shape と dtype の検査は Rust の `copy_from` の 1 か所
 - **メッセージの型は `torch.Tensor` と `TypedDict` の 2 種類。** `TensorSpec` と `DictSpec(TD, **specs)`。値が無いこと（`Tensor | None`）は表さない

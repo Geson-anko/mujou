@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING, Any, Never, TypedDict, cast, override
 import pytest
 import torch
 
-from mujou._core.network import Group
-from mujou._core.node import Node
-from mujou._core.port import Channel, MultiPort, Port
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou.network import Group
+from mujou.node import Node
+from mujou.port import Channel, MultiPort, Port
+from mujou.spec import DictSpec, TensorSpec
 from mujou.time import Timestamp, VirtualTimer
 from tests.mujou.nodes import Probe
 

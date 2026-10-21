@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 import pytest
 import torch
 
-from mujou._core._native import (
+from mujou._native import (
     InputGroup,
     Message,
     Outlet,
@@ -14,7 +14,7 @@ from mujou._core._native import (
     VirtualTimer,
     global_timer,
 )
-from mujou._core.spec import DLPACK
+from mujou.spec import DLPACK
 
 # The clock of a run on the global timer, for the slots of the tests that do not
 # look at the time.

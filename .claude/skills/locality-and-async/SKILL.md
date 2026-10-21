@@ -40,7 +40,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 
 - ノードはワーカーの間を移る。1 つのノードの hook は重ならず、前の hook の書き込みは次の hook から見える
 - hook の間で保たれるのは、ノードごとの `contextvars.Context` と、Driver が hook のたびに設定する CUDA の device と stream だけ。`threading.local`・`threading.current_thread()` に頼らない。勾配の記録はフレームワークが切り替えない（通常の PyTorch と同じく記録する）
-- フレームワーク側で hook の前後に毎回要る処理は、`src/mujou/_core/driver.py` の `Driver` に書く（利用者の `Node` に private な hook を足さない）
+- フレームワーク側で hook の前後に毎回要る処理は、`src/mujou/driver.py` の `Driver` に書く（利用者の `Node` に private な hook を足さない）
 - ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは `dedicated_thread=True` にする
 - **所有者の検査の正本は K12（Driver の `wires` の lookup）。** ポートのメソッドは、いま hook を走らせている Driver（bindings の thread-local、`_native.current()`）の `wires` から自分の Wire を引き、引けなければ `RuntimeError`。同じワーカーでも、ほかのノードのポートは読み書きできない。`state_dict` の間は `wires` が空なので、状態の取得はほかのノードから見えない（`specs/scenarios.md`）
 - スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない

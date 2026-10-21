@@ -93,4 +93,4 @@ jobs:
         run: just test-py
 
       - name: Check that the committed type stub is up to date
-        run: just stub && git diff --exit-code src/mujou/_core/_native.pyi
+        run: just stub && git diff --exit-code src/mujou/_native.pyi

@@ -15,25 +15,25 @@
 
 | 層 | モジュール | 責務 |
 | --- | --- | --- |
-| 0 | `_core/errors.py`、`_core/_native`（Rust） | `NetworkError`（何も import しない葉。Rust も import して raise に使う）と、Rust の拡張モジュール |
-| 1 | `_core/spec.py`、`_core/current.py` | `MessageSpec`（抽象）、`TensorSpec`、`DictSpec` と、dtype の対応表 `DLPACK`。`running()`（いま hook を走らせている Driver を引く唯一の入口）と、hook の外での使用を断る `outside()` |
-| 2 | `_core/codec.py` | torch とコアの唯一の変換（[メッセージ](messages.md#codec)） |
-| 3 | `_core/port.py` | `Port`、`MultiPort`、`Channel`（宣言）と `Wire`（実行中の読み書き） |
-| 4 | `_core/component.py` | `Node` と `Network` の共通の基底。クラス定義の時点の検査（K1）だけを持つ |
-| 5 | `_core/node.py` | 利用者が継承する `Node`。設定、状態の規則、既定の `state_dict` / `load_state_dict` |
-| 6 | `_core/network.py` | `Network`、`Group(**named)` |
-| 7 | `_core/driver.py` | `Driver`: Rust が hook のたびに呼ぶ、ノード 1 つ分の入口 |
-| 8 | `_core/tree.py` | `walk(root)`: `__dict__` を代入の順に読んで木を作り、検査する純関数 |
-| 9 | `_core/wiring.py` | `wire(tree, clock)`: 木から native のスロットと、各 Port の Wire を作る。ホストが書ける Port と読める Port の検査（`Wiring.write` / `Wiring.outbox`）もここ |
-| 10 | `_core/state.py` | 状態の木と実行の間の変換（`capture` / `restore`）。木の形（ポートのスロットのキー）を決めるのはここだけ |
-| 11 | `_core/run.py` | `Run`、`ManualRun`、`run()`、実行の種類 `Kind`。起動の 3 段、Driver の生成、走った印、終了、atexit |
+| 0 | `errors.py`、`_native`（Rust） | `NetworkError`（何も import しない葉。Rust も import して raise に使う）と、Rust の拡張モジュール |
+| 1 | `spec.py`、`current.py` | `MessageSpec`（抽象）、`TensorSpec`、`DictSpec` と、dtype の対応表 `DLPACK`。`running()`（いま hook を走らせている Driver を引く唯一の入口）と、hook の外での使用を断る `outside()` |
+| 2 | `codec.py` | torch とコアの唯一の変換（[メッセージ](messages.md#codec)） |
+| 3 | `port.py` | `Port`、`MultiPort`、`Channel`（宣言）と `Wire`（実行中の読み書き） |
+| 4 | `component.py` | `Node` と `Network` の共通の基底。クラス定義の時点の検査（K1）だけを持つ |
+| 5 | `node.py` | 利用者が継承する `Node`。設定、状態の規則、既定の `state_dict` / `load_state_dict` |
+| 6 | `network.py` | `Network`、`Group(**named)` |
+| 7 | `driver.py` | `Driver`: Rust が hook のたびに呼ぶ、ノード 1 つ分の入口 |
+| 8 | `tree.py` | `walk(root)`: `__dict__` を代入の順に読んで木を作り、検査する純関数 |
+| 9 | `wiring.py` | `wire(tree, clock)`: 木から native のスロットと、各 Port の Wire を作る。ホストが書ける Port と読める Port の検査（`Wiring.write` / `Wiring.outbox`）もここ |
+| 10 | `state.py` | 状態の木と実行の間の変換（`capture` / `restore`）。木の形（ポートのスロットのキー）を決めるのはここだけ |
+| 11 | `execution.py` | `Run`、`ManualRun`、`run()`、実行の種類 `Kind`。起動の 3 段、Driver の生成、走った印、終了、atexit |
 | 12 | `mujou/time.py` | 公開の入口（`_native` のタイマーの再エクスポートだけ）。`mujou.testing` が使うので 1 つ下に置く |
 | 13 | `mujou/__init__.py`、`mujou/testing.py` | 公開の入口（再エクスポートだけ） |
 | 14〜17 | `mujou/pc/*` | PC-ALM。公開名だけを import する（[更新手法](update-rules.md)） |
 
 `network.py` が `node.py` の上にあるのは、`Group` の注釈が `Node` を使うから。`tree.py` が `driver.py` の上にあるのは、木の検査がノードの状態の規則（`node.is_state`）を共有するからで、Driver は木を知らない。`state.py` は `wiring.py` が作ったスロットを読み書きするので、その上に置く。
 
-実行時に `_native` を import してよいのは、`current.py`（`current`）、`codec.py`（Schema）、`port.py`（Slot と Outlet の型）、`node.py` と `driver.py`（`ReadOnlyTimer` の型）、`wiring.py`（Outlet、Slot、InputGroup）、`run.py`（`start` とタイマー）、`mujou/time.py`（再エクスポート）の 8 つだけにする。native の型が `_core` 全体に散ると、ABI を変えるたびに触る場所が増えるからである。
+実行時に `_native` を import してよいのは、`current.py`（`current`）、`codec.py`（Schema）、`port.py`（Slot と Outlet の型）、`node.py` と `driver.py`（`ReadOnlyTimer` の型）、`wiring.py`（Outlet、Slot、InputGroup）、`execution.py`（`start` とタイマー）、`mujou/time.py`（再エクスポート）の 8 つだけにする。native の型がパッケージ全体に散ると、ABI を変えるたびに触る場所が増えるからである。
 
 名前は、それを定義したモジュールから import する。別のモジュールが import した名前を又借りすると、層の検査は import 文しか見ないので、隠れた依存がすり抜ける（`tests/test_layers.py` が検査する）。例外は再エクスポートを役目とする公開の入口（`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc`）だけ。`_core` のモジュールはタイマーを `_native` から、`mujou.testing` は `mujou.time` から取る。
 
@@ -61,7 +61,7 @@ crates/mujou-core/src/
 crates/mujou-python/src/
   lib.rs               #[pymodule] の宣言だけ
   wait.rs              シグナルを見ながら待つ処理と、秒の変換の唯一の実装
-  errors.rs            mujou._core.errors.NetworkError の参照
+  errors.rs            mujou.errors.NetworkError の参照
   current.rs           thread-local の CURRENT と current()
   time.rs              Timer、VirtualTimer、ReadOnlyTimer、Timestamp、global_timer
   slot.rs              Schema、Outlet、Slot、InputSlot、InputGroup、Message、BufferView
@@ -122,9 +122,9 @@ GPU はコアでサポートしない。コアの値はホストのメモリに�
 
 ## 内部の名前の規約
 
-- private なパッケージ `mujou._core` の中のモジュールの、`_` の無いモジュールレベルの名前は、パッケージ内部の API である（`spec.DLPACK`、`port.Wire`、`current.running`、`tree.walk`、`node.is_state`、`node.initialized` など）。利用者の公開名は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` が再エクスポートしたものだけ（`tests/mujou/test_init.py`）
-- `mujou.pc` の private なモジュール（`_layer.py` など）の、`_` の無い名前も同じくパッケージ内部の API（`_messages.rows` など）
+- モジュールは公開する。Python の慣習どおり、private かどうかは名前の `_` で示し、パッケージごと隠さない。private なモジュールは Rust の拡張モジュール `mujou._native` だけ（ABI の都合で中身を変えるので、利用者に触らせない）。利用者が traceback や「定義へ移動」で辿った先が、そのまま読める公開のファイルになる
+- 公開 API は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` の `__all__` と docs に載る名前だけ（`tests/mujou/test_init.py`）。複数のモジュールが使う内部の名前（`spec.DLPACK`、`port.Wire`、`current.running`、`tree.walk`、`node.is_state`、`messages.rows` など）は `_` を付けず、`__all__` に入れないことで公開 API ではないことを表す。1 つのモジュールの中だけで使う名前には `_` を付ける
 - 公開クラス（Node、Port、MultiPort、Network）の `_` 属性には、そのクラスの外から触らない。実行時の事実は実行の側に置いたので、触る必要がある箇所は無い。src の `# pyright: ignore[reportPrivateUsage]` は 0 件にする
 - Node の設定は、名前修飾した 1 属性（`__config`）に置く。利用者の `self._device` などと衝突しない
 - フレームワークは、ノードの設定を公開の property（`period`、`device`、`dedicated_thread`、`generator`）だけから読む。サブクラスが property を置き換えても、フレームワークと食い違わない
-- 走った印は `run.py` の `WeakSet` が持つ。印を付けるのも見るのも `run.py` だけ。そのため Node のサブクラスで `__eq__` を定義する（hash できなくなる）ことはサポートしない
+- 走った印は `execution.py` の `WeakSet` が持つ。印を付けるのも見るのも `execution.py` だけ。そのため Node のサブクラスで `__eq__` を定義する（hash できなくなる）ことはサポートしない

@@ -45,10 +45,10 @@ src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 - `tests/mujou/nodes.py`: 複数のテストモジュールが使うテスト用のノードと比較の helper（`Leaky`、`Probe` など）。共通のノードはここに 1 回だけ定義する
 - `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.testing` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）
 - `tests/mujou/test_pyright.py`: 利用者のコードを pyright strict にかけて型を検証する横断テスト（`MultiPort.recv()` の dict 型、`Port[Never, T].send` の禁止など）
-- `tests/mujou/_core/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、GIL を有効にしないこと、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
+- `tests/mujou/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、GIL を有効にしないこと、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
 - `tests/mujou/pc/_reference.py`: 純 PyTorch で仕様から書いた Jacobi の参照実装（`test_layer.py` などのオラクル）
 
-ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`_core/native/` は bindings 固有のこと（dtype・DLPack の変換、例外の型、GIL とスレッドの状態、pickle、ログ）、公開 API の振る舞いは `test_run.py` / `test_port.py` などが持つ。
+ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`native/` は bindings 固有のこと（dtype・DLPack の変換、例外の型、GIL とスレッドの状態、pickle、ログ）、公開 API の振る舞いは `test_execution.py` / `test_port.py` などが持つ。
 
 ガードの台帳（`specs/scenarios.md`）の各 K には、それを固定するテストが 1 本ある。台帳の「テスト」の列が対応を持つ。
 

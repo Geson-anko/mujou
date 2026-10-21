@@ -8,11 +8,11 @@ import torch
 from torch import nn
 
 from mujou import Network, Port, Run, TensorSpec
-from mujou.pc._input import Input
-from mujou.pc._layer import Layer
-from mujou.pc._messages import Prediction, Sample
-from mujou.pc._output import Output
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.input import Input
+from mujou.pc.layer import Layer
+from mujou.pc.messages import Prediction, Sample
+from mujou.pc.output import Output
+from mujou.pc.time_constants import TimeConstants
 
 
 class Chain(Network):

@@ -1,4 +1,4 @@
-"""The extension module ``mujou._core._native``: its attributes, the GIL, and its
+"""The extension module ``mujou._native``: its attributes, the GIL, and its
 generated stub (``just stub``) against the module itself.
 
 pyo3 cannot introspect everything, and ``crates/mujou-stubgen`` fixes the types
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from mujou._core import _native
+from mujou import _native
 
 STUB = Path(_native.__file__).parent / "_native.pyi"
 
@@ -66,7 +66,7 @@ class TestCoreModule:
             [
                 sys.executable,
                 "-c",
-                "import sys, mujou._core._native; print(sys._is_gil_enabled())",
+                "import sys, mujou._native; print(sys._is_gil_enabled())",
             ],
             capture_output=True,
             text=True,

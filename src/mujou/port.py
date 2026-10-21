@@ -14,10 +14,10 @@ from typing import Any, Final, Never, cast, final, override
 
 import torch
 
-from mujou._core import _native
-from mujou._core.codec import from_core, to_core
-from mujou._core.current import outside, running
-from mujou._core.spec import MessageSpec
+from mujou import _native
+from mujou.codec import from_core, to_core
+from mujou.current import outside, running
+from mujou.spec import MessageSpec
 
 # Any (here and below): ports and messages of every type are handled alike.
 type AnyPort = Port[Any, Any] | MultiPort[Any, Any]

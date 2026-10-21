@@ -1,13 +1,13 @@
 """The import layers of ``src/mujou``: the source of truth for the rule.
 
 A module imports only modules of lower layers (not of its own), and only the
-modules in ``NATIVE`` import the extension ``mujou._core._native``. ``mujou.pc``
-is written as a user's code is: on the modules in ``PUBLIC`` only, never on
-``mujou._core``. Every import is at the top level of its module: none under
+modules in ``NATIVE`` import the extension ``mujou._native``. ``mujou.pc``
+is written as a user's code is: on the documented entries in ``PUBLIC`` only,
+never on the modules behind them (``mujou.node``, ``mujou.port``, ...). Every import is at the top level of its module: none under
 ``TYPE_CHECKING`` or in a function, which would hide a dependency. A name is
 imported from the module that defines it, not through another that imported
 it (except the modules in ``REEXPORTING``), which would hide the dependency
-too: the modules of ``mujou._core`` take the timers from the extension, and
+too: the modules of ``mujou`` take the timers from the extension, and
 ``mujou.testing`` from ``mujou.time``, which re-exports them.
 """
 
@@ -16,40 +16,40 @@ from collections.abc import Iterator
 from pathlib import Path
 
 SRC = Path(__file__).parents[1] / "src"
-EXTENSION = "mujou._core._native"
+EXTENSION = "mujou._native"
 
 # From the bottom up.
 LAYERS: list[set[str]] = [
-    {"mujou._core", EXTENSION, "mujou._core.errors"},
-    {"mujou._core.spec", "mujou._core.current"},
-    {"mujou._core.codec"},
-    {"mujou._core.port"},
-    {"mujou._core.component"},
-    {"mujou._core.node"},
-    {"mujou._core.network"},
-    {"mujou._core.driver"},
-    {"mujou._core.tree"},
-    {"mujou._core.wiring"},
-    {"mujou._core.state"},
-    {"mujou._core.run"},
+    {EXTENSION, "mujou.errors"},
+    {"mujou.spec", "mujou.current"},
+    {"mujou.codec"},
+    {"mujou.port"},
+    {"mujou.component"},
+    {"mujou.node"},
+    {"mujou.network"},
+    {"mujou.driver"},
+    {"mujou.tree"},
+    {"mujou.wiring"},
+    {"mujou.state"},
+    {"mujou.execution"},
     {"mujou.time"},
     {"mujou", "mujou.testing"},
-    {"mujou.pc._messages", "mujou.pc._time_constants", "mujou.pc._losses"},
-    {"mujou.pc._clock", "mujou.pc.functional"},
-    {"mujou.pc._input", "mujou.pc._layer", "mujou.pc._output"},
-    {"mujou.pc._chain"},
+    {"mujou.pc.messages", "mujou.pc.time_constants", "mujou.pc.losses"},
+    {"mujou.pc.clock", "mujou.pc.functional"},
+    {"mujou.pc.input", "mujou.pc.layer", "mujou.pc.output"},
+    {"mujou.pc.chain"},
     {"mujou.pc"},
 ]
 RANK = {module: rank for rank, layer in enumerate(LAYERS) for module in layer}
 
 NATIVE = {
-    "mujou._core.current",
-    "mujou._core.codec",
-    "mujou._core.port",
-    "mujou._core.node",
-    "mujou._core.driver",
-    "mujou._core.wiring",
-    "mujou._core.run",
+    "mujou.current",
+    "mujou.codec",
+    "mujou.port",
+    "mujou.node",
+    "mujou.driver",
+    "mujou.wiring",
+    "mujou.execution",
     "mujou.time",
 }
 
@@ -150,6 +150,6 @@ class TestLayers:
         assert borrowed == []
 
     def test_pc_may_import_the_public_modules_only(self):
-        assert not breaks_the_rule("mujou.pc._layer", "mujou")
-        assert not breaks_the_rule("mujou.pc._layer", "mujou.pc.functional")
-        assert breaks_the_rule("mujou.pc._layer", "mujou._core.node")
+        assert not breaks_the_rule("mujou.pc.layer", "mujou")
+        assert not breaks_the_rule("mujou.pc.layer", "mujou.pc.functional")
+        assert breaks_the_rule("mujou.pc.layer", "mujou.node")

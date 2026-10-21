@@ -96,7 +96,7 @@
 
 ## Driver
 
-ランタイムは、ノード 1 つにつき 1 つの `Driver`（`_core/driver.py`）のメソッド（`start` / `restore` / `update` / `pause` / `resume` / `exception` / `stop` / `capture`）を、hook 1 回につき 1 回だけ呼ぶ。Driver はどのメソッドでも同じ順で動く。
+ランタイムは、ノード 1 つにつき 1 つの `Driver`（`driver.py`）のメソッド（`start` / `restore` / `update` / `pause` / `resume` / `exception` / `stop` / `capture`）を、hook 1 回につき 1 回だけ呼ぶ。Driver はどのメソッドでも同じ順で動く。
 
 1. CUDA のノードなら、ノードの device と stream をこのスレッドの現在のものにする
 2. ノード専用の `contextvars.Context` に入る
@@ -107,7 +107,7 @@
 
 - `capture` は、ノードの `state_dict()` の戻り値のテンソルを detach してから `copy.deepcopy` する。状態はデータで、計算グラフを持ち越さない。複製はノードの stream の上で行い、前後で stream を待つ（どの hook が積んだ仕事も、複製の前に終わる）。正常に終わった後はホストのスレッドで走るので、`torch.cuda.stream` で呼んだスレッドの device と stream を戻す
 - `capture` の間、Driver の `wires` は空になる。Port の lookup が失敗するので、`state_dict` の中の送受信は K12 で断られる
-- 「いま hook を走らせている Driver」は、bindings の thread-local（`_native.current()`）が持つ。Rust が Python を呼ぶ直前に付け、戻ったら外す。Python からの入口は `_core/current.py` の `running()` 1 つで、Port、`Node.timer`、ホスト専用の操作の検査（K12、K16）は、どれもこれを通してこの 1 つの事実を見る
+- 「いま hook を走らせている Driver」は、bindings の thread-local（`_native.current()`）が持つ。Rust が Python を呼ぶ直前に付け、戻ったら外す。Python からの入口は `current.py` の `running()` 1 つで、Port、`Node.timer`、ホスト専用の操作の検査（K12、K16）は、どれもこれを通してこの 1 つの事実を見る
 
 ノードのクラスは純 Python で、Rust の基底クラスを継承しない。利用者の MRO と `help(Node)` には private な hook が出てこない。
 

@@ -23,7 +23,7 @@ cd mujou
 just setup   # uv venv --clear, uv sync, pre-commit install
 ```
 
-`uv sync` builds the native module `mujou._core._native` from the Rust crates with maturin. `uv sync` and `uv run` rebuild it when `pyproject.toml`, `Cargo.toml`, `Cargo.lock`, or any `Cargo.toml` or `.rs` file under `crates/` changes (`cache-keys` in `[tool.uv]` of `pyproject.toml`).
+`uv sync` builds the native module `mujou._native` from the Rust crates with maturin. `uv sync` and `uv run` rebuild it when `pyproject.toml`, `Cargo.toml`, `Cargo.lock`, or any `Cargo.toml` or `.rs` file under `crates/` changes (`cache-keys` in `[tool.uv]` of `pyproject.toml`).
 
 ## Dev container
 
@@ -54,7 +54,7 @@ just container just run   # start the container if needed, then run `just run` i
 | `just run`             | `format`, `test`, `type` and `docs-build`, in this order                                            |
 | `just docs`            | Serve the documentation at <http://127.0.0.1:8000> with live reload. Arguments go to `mkdocs serve` |
 | `just docs-build`      | Build the documentation into `site/`; any warning (a broken link, a missing API object) fails       |
-| `just stub`            | Generate `src/mujou/_core/_native.pyi` from the Rust signatures and doc comments                    |
+| `just stub`            | Generate `src/mujou/_native.pyi` from the Rust signatures and doc comments                          |
 | `just clean`           | Remove `dist/`, `build/`, `site/`, `htmlcov/`, `.coverage`, `__pycache__/` and `.pytest_cache/`     |
 | `just container <cmd>` | Run `<cmd>` in the dev container, in this checkout                                                  |
 
@@ -64,18 +64,18 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 
 ## Project layout
 
-| Path                   | Contents                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `src/mujou/`           | The Python package. Public names are in `mujou.*`; the implementation is in the private package `mujou._core` |
-| `crates/mujou-core`    | The core in pure Rust                                                                                         |
-| `crates/mujou-python`  | The PyO3 bindings, built as `mujou._core._native`                                                             |
-| `crates/mujou-stubgen` | Writes the type stub `_native.pyi` from the built extension (used by `just stub`)                             |
-| `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                             |
-| `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                            |
-| `specs/`               | Design specifications for developers, in Japanese: the current design and the reasons for it                  |
-| `examples/`            | Programs for users, as guides. The tests do not run them                                                      |
+| Path                   | Contents                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/mujou/`           | The Python package, one module per responsibility. The API is what `__all__` of `mujou`, `mujou.time`, `mujou.testing` and `mujou.pc` lists; only the extension `mujou._native` is private |
+| `crates/mujou-core`    | The core in pure Rust                                                                                                                                                                      |
+| `crates/mujou-python`  | The PyO3 bindings, built as `mujou._native`                                                                                                                                                |
+| `crates/mujou-stubgen` | Writes the type stub `_native.pyi` from the built extension (used by `just stub`)                                                                                                          |
+| `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                                                                                                          |
+| `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                                                                                                         |
+| `specs/`               | Design specifications for developers, in Japanese: the current design and the reasons for it                                                                                               |
+| `examples/`            | Programs for users, as guides. The tests do not run them                                                                                                                                   |
 
-`src/mujou/_core/_native.pyi` is generated and committed. After changing the bindings, run `just stub` and commit the result. A pre-commit hook runs `just stub` when the Rust sources, `pyproject.toml` or the stub change, and fails when the stub was stale; the Test workflow in CI checks it too.
+`src/mujou/_native.pyi` is generated and committed. After changing the bindings, run `just stub` and commit the result. A pre-commit hook runs `just stub` when the Rust sources, `pyproject.toml` or the stub change, and fails when the stub was stale; the Test workflow in CI checks it too.
 
 ## Design rules
 
