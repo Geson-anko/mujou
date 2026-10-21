@@ -3,10 +3,8 @@
 A module imports only modules of lower layers (not of its own), and only the
 modules in ``NATIVE`` import the extension ``mujou._core._native``. ``mujou.pc``
 is written as a user's code is: on the modules in ``PUBLIC`` only, never on
-``mujou._core``. Every import statement counts, wherever it is: at the top, under
-``TYPE_CHECKING`` or in a function. ``ALLOWED`` lists the imports that break the rule today. It only
-shrinks: an import that breaks the rule and is not in it fails, and so does an
-entry that no longer breaks it.
+``mujou._core``. Every import is at the top level of its module: none under
+``TYPE_CHECKING`` or in a function, which would hide a dependency.
 """
 
 import ast
@@ -55,9 +53,6 @@ NATIVE = {
 
 PUBLIC = {"mujou", "mujou.time", "mujou.testing"}
 
-# (importer, imported)
-ALLOWED: set[tuple[str, str]] = set()
-
 
 def module_name(path: Path) -> str:
     parts = path.relative_to(SRC).with_suffix("").parts
@@ -99,7 +94,7 @@ class TestLayers:
     def test_every_module_has_a_layer(self):
         assert sources().keys() | {EXTENSION} == RANK.keys()
 
-    def test_imports_go_down_but_the_allowed_ones(self):
+    def test_imports_go_down(self):
         modules = sources().keys() | {EXTENSION}
         broken = {
             (importer, imported)
@@ -107,8 +102,19 @@ class TestLayers:
             for imported in imports(path, modules)
             if breaks_the_rule(importer, imported)
         }
-        assert broken - ALLOWED == set(), "imports that break the layers"
-        assert ALLOWED - broken == set(), "fixed: remove them from ALLOWED"
+        assert broken == set(), "imports that break the layers"
+
+    def test_every_import_is_at_the_top_level(self):
+        nested: list[str] = []
+        for path in sources().values():
+            module = ast.parse(path.read_text(), str(path))
+            nested += [
+                f"{path}:{node.lineno}"
+                for node in ast.walk(module)
+                if isinstance(node, ast.Import | ast.ImportFrom)
+                and node not in module.body
+            ]
+        assert nested == []
 
     def test_pc_may_import_the_public_modules_only(self):
         assert not breaks_the_rule("mujou.pc._layer", "mujou")

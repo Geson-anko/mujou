@@ -13,6 +13,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import TypeIs, cast, final
 
+import torch
+from torch import nn
+
 from mujou._core.network import Network
 from mujou._core.node import Node, initialized, is_state
 from mujou._core.port import AnyPort, MultiPort, Port
@@ -74,8 +77,9 @@ def walk(root: Node | Network) -> Tree:
             a network, or a node or a network holds a port, a node or a network
             in a list, a tuple or a dict.
         ValueError: A node, a network or a port is at two places of the tree;
-            two nodes hold the same state; or a port is connected to a port
-            outside the tree.
+            two nodes hold the same state (a tensor, an object with a state, or
+            a parameter or a buffer of a module); or a port is connected to a
+            port outside the tree.
     """
     walker = _Walker(type(root).__name__)
     walker.component(root, "")
@@ -136,6 +140,17 @@ class _Walker:
                 self._own(value, path, where)
         self.members.append(Member(path, node, ports))
 
+    def _own(self, value: object, path: str, where: str) -> None:
+        """Record that the node at ``path`` holds ``value`` in its state, at
+        ``where``: the value itself and, for a module, each of its parameters
+        and buffers, which another node may hold too (a tied weight)."""
+        self._one_writer(value, path, where)
+        if isinstance(value, nn.Module):
+            for key, item in value.state_dict(keep_vars=True).items():
+                # Not its extra state, which may be any value (an interned int).
+                if isinstance(item, torch.Tensor):
+                    self._one_writer(item, path, f"{where}.{key}")
+
     def _once(self, value: object, where: str) -> None:
         first = self._seen.setdefault(id(value), where)
         if first != where:
@@ -144,7 +159,7 @@ class _Walker:
                 "node, a network or a port is at one place of the tree"
             )
 
-    def _own(self, value: object, path: str, where: str) -> None:
+    def _one_writer(self, value: object, path: str, where: str) -> None:
         owner, first = self._states.setdefault(id(value), (path, where))
         if owner != path:
             raise ValueError(

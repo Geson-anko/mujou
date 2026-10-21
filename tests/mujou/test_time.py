@@ -172,7 +172,6 @@ class TestReadOnlyTimer:
 class TestGlobalTimer:
     def test_is_one_timer(self):
         assert isinstance(global_timer, Timer)
-        assert mujou.time.global_timer is global_timer
 
     def test_follows_the_real_clock(self):
         first = global_timer.now()
@@ -203,11 +202,6 @@ class TestTimestamp:
         assert type(difference) is float
         # Rounded as the difference of the exact nanoseconds is.
         assert difference == (a - b) / 1e9
-
-    @pytest.mark.parametrize("ns", [-1, 2**64])
-    def test_rejects_nanoseconds_out_of_range(self, ns: int):
-        with pytest.raises(ValueError, match="2\\*\\*64"):
-            Timestamp(ns=ns)
 
     def test_repr_rebuilds_it(self):
         ts = Timestamp(ns=123)

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 
 import pytest
 import torch
@@ -207,6 +207,31 @@ class TestChecks:
             match=r"^a\.held and b\.held hold the same \w+: a state has one writer",
         ):
             walk(Group(a=a, b=b))
+
+    def test_two_nodes_holding_the_same_parameter(self):
+        a, b = nn.Linear(2, 2), nn.Linear(2, 2)
+        b.weight = a.weight  # tied
+        with pytest.raises(
+            ValueError,
+            match=r"^a\.held\.weight and b\.held\.weight hold the same Parameter",
+        ):
+            walk(Group(a=Holder(a), b=Holder(b)))
+        with pytest.raises(
+            ValueError, match=r"^a\.held and b\.held\.weight hold the same Parameter"
+        ):
+            walk(Group(a=Holder(a.weight), b=Holder(b)))
+
+    def test_two_modules_may_have_the_same_extra_state(self):
+        class Counted(nn.Linear):
+            @override
+            def get_extra_state(self) -> object:
+                return 0  # the same int object in every module
+
+            @override
+            def set_extra_state(self, state: object) -> None:
+                pass
+
+        walk(Group(a=Holder(Counted(2, 2)), b=Holder(Counted(2, 2))))
 
     def test_one_node_may_hold_its_state_twice(self):
         node = Holder(torch.zeros(2))

@@ -90,8 +90,8 @@ class InputGroup:
         No reader sees some of the slots new and others old at any one moment;
         a reader that reads two slots one after the other may still see a write
         complete in between. If any value is invalid, no slot changes. Raises as
-        `Outlet.send` does, and `ValueError` for a slot of another group or a
-        slot given twice.
+        `Outlet.send` does. Every slot is one of this group's, given once (the
+        core panics otherwise).
         """
 
 @final
@@ -107,8 +107,8 @@ class InputSlot:
         Sets the value and its time (`None` for a value the host had not
         written), dropping any pending write.
 
-        Call it only while no node runs (before the start, or while every node
-        is paused). Raises as `Outlet.send` does.
+        Call it only before the run starts, while the host writes nothing.
+        Raises as `Outlet.send` does.
         """
     def __new__(cls, /) -> NoReturn:
         """
@@ -322,9 +322,8 @@ class Slot:
         Sets the value and its time as they were when the state was taken
         (`None` for a value its writer had not written).
 
-        Call it only while no node runs (before the start, or while every node
-        is paused): it writes beside the slot's own writer. Raises as
-        `Outlet.send` does.
+        Call it only before the run starts: it writes beside the slot's own
+        writer. Raises as `Outlet.send` does.
         """
     def wait_newer(
         self, /, last: Message, timeout: SupportsFloat | SupportsIndex
@@ -463,9 +462,6 @@ class Timestamp:
         """
         Takes the time in nanoseconds, by keyword only: a bare number could
         mean seconds.
-
-        Raises:
-            ValueError: `ns` is negative or does not fit in 64 bits.
         """
     @override
     def __reduce__(self, /) -> Any:

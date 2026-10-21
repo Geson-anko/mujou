@@ -330,19 +330,6 @@ class TestStart:
         runtime.step()
         assert nodes[1].dts == [(3 * H_NS - ahead_ns) / 1e9]
 
-    def test_invalid_workers_start_nothing(
-        self, virtual_timer: VirtualTimer, start_runtime: StartRuntime
-    ):
-        log = Log()
-        nodes = recorders(log, "a")
-        with pytest.raises(ValueError):
-            start_runtime(nodes, workers=0)
-        assert log.events == []
-        assert not virtual_timer.is_paused()
-        # Nothing was used up: the nodes can still start.
-        runtime = start_runtime(nodes)
-        assert runtime.join(timeout=0) is False
-
     def test_a_runtime_without_references_stops(self, virtual_timer: VirtualTimer):
         log = Log()
         clock = ReadOnlyTimer(virtual_timer)

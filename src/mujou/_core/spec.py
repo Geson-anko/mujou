@@ -71,10 +71,8 @@ class MessageSpec(ABC, Generic[_M]):
 class TensorSpec(MessageSpec[torch.Tensor]):
     """The shape and the dtype of a message that is one ``torch.Tensor``.
 
-    ``dtype`` defaults to ``torch.get_default_dtype()`` at the time the spec is
-    created; changing the default later does not change existing specs. Every
-    dimension is an ``int`` of at least 1, and ``()`` is a scalar. A batch dimension
-    is just a part of the shape.
+    Every dimension is at least 1, and ``()`` is a scalar. A batch dimension is
+    just a part of the shape.
 
     Two specs are equal when their shapes and dtypes are equal. A message whose shape
     or dtype differs from the spec is an error; dtypes are never converted. A spec
@@ -86,43 +84,29 @@ class TensorSpec(MessageSpec[torch.Tensor]):
 
     Example::
 
-        spec = TensorSpec((32, 256))  # the default dtype, usually float32
+        spec = TensorSpec((32, 256))  # float32
         spec = TensorSpec((32, 256), torch.bfloat16)
         x0 = spec.zeros()
-        noise = TensorSpec((4,)).rand(seed=0)  # deterministic
+        noise = TensorSpec((4,)).rand(generator=torch.Generator().manual_seed(0))
         ones = spec.empty(device="cuda").fill_(1.0)
 
     Raises:
-        TypeError: A dimension is not an ``int``, or ``dtype`` is not in
-            ``dtypes``.
-        ValueError: A dimension is less than 1.
+        TypeError: ``dtype`` is not in ``dtypes``.
     """
 
     dtypes: ClassVar[frozenset[torch.dtype]] = frozenset(DLPACK)
     """The dtypes a spec takes."""
 
-    def __init__(self, shape: Sequence[int], dtype: torch.dtype | None = None) -> None:
-        # User input: copy first (an iterator would be consumed by the checks), then
-        # check the types at runtime.
-        dims = tuple(cast(Sequence[object], shape))
-        for d in dims:
-            if isinstance(d, bool) or not isinstance(d, int):
-                raise TypeError(
-                    f"TensorSpec dimensions must be int, got {d!r} in shape {dims!r}"
-                )
-            if d < 1:
-                raise ValueError(
-                    f"TensorSpec dimensions must be >= 1, got {d} in shape {dims!r}"
-                )
-        if dtype is None:
-            dtype = torch.get_default_dtype()
+    def __init__(
+        self, shape: Sequence[int], dtype: torch.dtype = torch.float32
+    ) -> None:
         if dtype not in TensorSpec.dtypes:
             supported = ", ".join(str(t) for t in DLPACK)
             raise TypeError(
                 f"TensorSpec dtype {dtype} is not supported; use one of "
                 f"TensorSpec.dtypes ({supported})"
             )
-        self._shape = cast(tuple[int, ...], dims)
+        self._shape = tuple(shape)
         self._dtype = dtype
 
     @property
@@ -150,27 +134,15 @@ class TensorSpec(MessageSpec[torch.Tensor]):
 
     def rand(
         self,
-        seed: int | None = None,
         *,
         generator: torch.Generator | None = None,
         device: torch.device | str = "cpu",
     ) -> torch.Tensor:
         """Return a tensor of this spec drawn uniformly from [0, 1) on ``device``.
 
-        Pass ``seed`` or a ``generator`` on ``device`` to make the result
-        deterministic; without either, the global torch generator is used. The
-        same seed draws different values on different kinds of device.
-
-        Raises:
-            TypeError: The dtype is not a floating point dtype.
-            ValueError: Both ``seed`` and ``generator`` are given.
+        Pass a ``generator`` on ``device`` to make the result deterministic;
+        without one, the global torch generator is used.
         """
-        if not self._dtype.is_floating_point:
-            raise TypeError(f"rand needs a floating point dtype, got {self._dtype}")
-        if seed is not None:
-            if generator is not None:
-                raise ValueError("pass either seed or generator, not both")
-            generator = torch.Generator(device).manual_seed(seed)
         return torch.rand(
             self._shape, dtype=self._dtype, generator=generator, device=device
         )
@@ -195,9 +167,9 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
     """The spec of a message that is a ``TypedDict`` of ``torch.Tensor`` values.
 
     Give the ``TypedDict`` class and one ``TensorSpec`` per key. Every key of the
-    ``TypedDict`` must be required and annotated as ``torch.Tensor`` (no nesting),
-    and the keyword arguments must name exactly its keys. The keys keep the order in
-    which the ``TypedDict`` defines them.
+    ``TypedDict`` is required and annotated as ``torch.Tensor`` (no nesting), and
+    the keyword arguments name exactly its keys. The keys keep the order in which
+    the ``TypedDict`` defines them.
 
     Two specs are equal when they use the same ``TypedDict`` class and equal
     ``TensorSpec`` for every key.
@@ -215,48 +187,22 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         msg: Feedback = spec.zeros()
 
     Raises:
-        TypeError: ``typed_dict`` is not a ``TypedDict``, a key is not required, a
-            value is not annotated as ``torch.Tensor``, or a spec is not a
-            ``TensorSpec``.
-        ValueError: The ``TypedDict`` has no key, or the keyword arguments miss a
-            key or name an unknown key.
+        TypeError: The keyword arguments miss a key of the ``TypedDict`` or name
+            a key it does not have.
     """
 
     def __init__(self, typed_dict: type[TD], /, **specs: TensorSpec) -> None:
-        if not typing.is_typeddict(typed_dict):
-            raise TypeError(f"DictSpec needs a TypedDict class, got {typed_dict!r}")
-        name = typed_dict.__qualname__
-        optional: frozenset[str] = getattr(typed_dict, "__optional_keys__")
-        if optional:
-            raise TypeError(
-                f"every key of {name} must be required, got optional keys "
-                f"{sorted(optional)}"
-            )
-        hints = typing.get_type_hints(typed_dict)
-        if not hints:
-            raise ValueError(f"DictSpec needs a TypedDict with keys, {name} has none")
-        for key, hint in hints.items():
-            if hint is not torch.Tensor:
-                raise TypeError(
-                    f"{name}[{key!r}] must be annotated as torch.Tensor, got {hint!r}"
-                )
-        missing = [k for k in hints if k not in specs]
-        unknown = [k for k in specs if k not in hints]
+        keys = typing.get_type_hints(typed_dict)
+        missing = [k for k in keys if k not in specs]
+        unknown = [k for k in specs if k not in keys]
         if missing or unknown:
-            raise ValueError(
-                f"DictSpec({name}) keys do not match the TypedDict: "
-                f"missing {missing}, unknown {unknown}"
+            raise TypeError(
+                f"DictSpec({typed_dict.__qualname__}) keys do not match the "
+                f"TypedDict: missing {missing}, unknown {unknown}"
             )
-        values = cast(Mapping[str, object], specs)  # user input: check at runtime
-        for key, spec in values.items():
-            if not isinstance(spec, TensorSpec):
-                raise TypeError(
-                    f"DictSpec({name}) needs a TensorSpec for {key!r}, "
-                    f"got {type(spec).__name__}"
-                )
         self._typed_dict = typed_dict
         self._specs: Mapping[str, TensorSpec] = MappingProxyType(
-            {k: specs[k] for k in hints}
+            {k: specs[k] for k in keys}
         )
 
     @property

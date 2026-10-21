@@ -20,7 +20,6 @@ use mujou_core::schema::{FieldError, FieldSpec, Schema, SchemaError};
 use mujou_core::slot::{self as core, SlotError, Target};
 use mujou_core::time::Timestamp;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
-use pyo3::intern;
 use pyo3::prelude::*;
 
 fn to_py_err(err: SlotError) -> PyErr {
@@ -47,24 +46,14 @@ fn borrow_values<'py>(
     fields: &[FieldSpec],
     slot: &str,
 ) -> PyResult<Borrowed<'py>> {
-    if values.hasattr(intern!(values.py(), "__dlpack__"))? {
-        // A tensor is iterable too; iterating it would split it into rows.
-        return Err(PyTypeError::new_err(format!(
-            "slot '{slot}': expected a sequence of tensors, got a single tensor"
-        )));
-    }
     let values: Vec<Bound<'py, PyAny>> = values.try_iter()?.collect::<PyResult<_>>()?;
+    // An internal error: the codec gives one value per field, and the copy
+    // fills each field from its own value.
     if values.len() != fields.len() {
-        let expected = match fields {
-            [field] if field.name.is_empty() => "1 tensor".to_owned(),
-            _ => {
-                let names: Vec<String> = fields.iter().map(|f| format!("'{}'", f.name)).collect();
-                format!("{} tensors (fields {})", fields.len(), names.join(", "))
-            }
-        };
         return Err(PyValueError::new_err(format!(
-            "slot '{slot}': expected {expected}, got {}",
-            values.len()
+            "slot '{slot}': {} values for {} fields",
+            values.len(),
+            fields.len()
         )));
     }
     let (capsules, tensors) = values
@@ -278,9 +267,8 @@ impl PySlot {
     /// Sets the value and its time as they were when the state was taken
     /// (`None` for a value its writer had not written).
     ///
-    /// Call it only while no node runs (before the start, or while every node
-    /// is paused): it writes beside the slot's own writer. Raises as
-    /// `Outlet.send` does.
+    /// Call it only before the run starts: it writes beside the slot's own
+    /// writer. Raises as `Outlet.send` does.
     fn restore(&self, values: Values<'_>, time_ns: Option<u64>) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema().fields(), slot.name(), |fill| {
@@ -396,8 +384,8 @@ impl PyInputGroup {
     /// No reader sees some of the slots new and others old at any one moment;
     /// a reader that reads two slots one after the other may still see a write
     /// complete in between. If any value is invalid, no slot changes. Raises as
-    /// `Outlet.send` does, and `ValueError` for a slot of another group or a
-    /// slot given twice.
+    /// `Outlet.send` does. Every slot is one of this group's, given once (the
+    /// core panics otherwise).
     fn write(
         &self,
         py: Python<'_>,
@@ -407,18 +395,6 @@ impl PyInputGroup {
         let mut borrowed = Vec::with_capacity(items.len());
         for (slot, values) in &items {
             let slot = &*slot.0;
-            if !slot.belongs_to(&self.0) {
-                return Err(PyValueError::new_err(format!(
-                    "slot '{}' belongs to another input group",
-                    slot.name()
-                )));
-            }
-            if slots.iter().any(|&s| std::ptr::eq(s, slot)) {
-                return Err(PyValueError::new_err(format!(
-                    "slot '{}' appears more than once in one write",
-                    slot.name()
-                )));
-            }
             borrowed.push(borrow_values(
                 &values.0,
                 slot.schema().fields(),
@@ -460,8 +436,8 @@ impl PyInputSlot {
     /// Sets the value and its time (`None` for a value the host had not
     /// written), dropping any pending write.
     ///
-    /// Call it only while no node runs (before the start, or while every node
-    /// is paused). Raises as `Outlet.send` does.
+    /// Call it only before the run starts, while the host writes nothing.
+    /// Raises as `Outlet.send` does.
     fn restore(&self, values: Values<'_>, time_ns: Option<u64>) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema().fields(), slot.name(), |fill| {

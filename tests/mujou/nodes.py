@@ -6,10 +6,7 @@ from typing import Any, cast, override
 
 import torch
 
-from mujou._core.network import Network
-from mujou._core.node import Node
-from mujou._core.port import MultiPort, Port
-from mujou._core.spec import TensorSpec
+from mujou import MultiPort, Network, Node, Port, TensorSpec
 from mujou.time import Timestamp
 
 F64 = torch.float64
@@ -182,6 +179,26 @@ def assert_same_tree(actual: Any, expected: Any) -> None:
             assert_same_tree(a, e)
     else:
         assert actual == expected
+
+
+def entries(tree: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every ``{"value", "time_ns"}`` of the slots of ``tree``."""
+    found: list[dict[str, Any]] = []
+    for node in tree["nodes"].values():
+        for slots in node["ports"].values():
+            for key, held in slots.items():
+                found.extend(held.values() if key == "to" else [held])
+    return found
+
+
+def updates(tree: dict[str, Any]) -> dict[str, int]:
+    """The last update time of each node of ``tree``, by path."""
+    return {path: node["last_update_ns"] for path, node in tree["nodes"].items()}
+
+
+def port_slots(tree: dict[str, Any], path: str, attribute: str) -> dict[str, Any]:
+    """The slots of the port ``attribute`` of the node at ``path``."""
+    return tree["nodes"][path]["ports"][attribute]
 
 
 def close(actual: torch.Tensor, expected: torch.Tensor, atol: float = 1e-14) -> None:

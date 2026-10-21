@@ -486,6 +486,14 @@ class TestSend:
         # The output the host reads changes only with send to every peer.
         assert torch.equal(run.read(out), torch.zeros(2, 3))
 
+    def test_rejects_a_tensor_that_is_not_dense(self, start_manual: StartManual):
+        out = Port(send=TensorSpec((2, 2)))
+        node = Probe(lambda: out.send(torch.eye(2).to_sparse()), out=out)
+        run = start_manual(Group(node=node))
+        run.step(H)
+        assert isinstance(node.results[0], BufferError)
+        assert torch.equal(run.read(out), torch.zeros(2, 2))
+
     def test_to_a_channel_of_another_port(self, start_manual: StartManual):
         out, inp = MultiPort(send=h()), Port(recv=h())
         foreign = Port(send=h()).connect(Port(recv=h()))

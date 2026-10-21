@@ -43,7 +43,7 @@ For inputs of different roles (a teacher signal next to the input, say), declare
 
 Give each port the type of the values it sends as `send=`, and the type of the values it receives as `recv=`. Write a type as `TensorSpec(shape, dtype)`.
 
-If you leave out the dtype, it is `torch.get_default_dtype()` at the time the spec is created (usually `float32`). On a one-way port, leave out the argument you do not use. Both are keyword arguments.
+If you leave out the dtype, it is `float32`, whatever `torch.get_default_dtype()` is. On a one-way port, leave out the argument you do not use. Both are keyword arguments.
 
 ```python
 self.prev = Port(recv=TensorSpec((32, 784)))                       # receive only

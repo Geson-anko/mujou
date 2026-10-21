@@ -16,7 +16,7 @@ use mujou_core::runtime::{
     self as core, Hook, HookError, NodeFailure, NodeHooks, NodeSpec, Reply, RunConfig, RuntimeError,
 };
 use pyo3::call::PyCallArgs;
-use pyo3::exceptions::{PyRuntimeError, PyTimeoutError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTimeoutError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
@@ -211,7 +211,6 @@ fn runtime_error(py: Python<'_>, err: RuntimeError) -> PyErr {
         // `state_dict` raised, as any call on its thread would.
         RuntimeError::CaptureFailed(failure) => cause(py, &failure),
         RuntimeError::PauseTimeout { .. } => PyTimeoutError::new_err(err.to_string()),
-        RuntimeError::InvalidArgument(_) => PyValueError::new_err(err.to_string()),
         RuntimeError::Finished | RuntimeError::Reentrant | RuntimeError::Internal(_) => {
             PyRuntimeError::new_err(err.to_string())
         }

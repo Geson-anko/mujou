@@ -261,6 +261,10 @@ class Node(Component):
         Register in ``__init__``: a restore loads into new instances, which
         must have the same state.
 
+        The state is data: when the run takes it, it detaches every tensor of
+        what ``state_dict`` returns (in its dicts, lists and tuples) and copies
+        the result, so no graph goes with it.
+
         ``torch.load(..., weights_only=True)`` reads only basic types (``int``,
         ``float``, ``bool``, ``str``, ``None``, and lists, tuples and dicts of
         them and of tensors): keep the registered values to those if the state

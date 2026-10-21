@@ -5,21 +5,22 @@ thread that runs the node, and ``_native.current()`` returns the driver
 meanwhile. Every method does the framework's work around the hook in the same
 order, so that no override of a hook can skip it:
 
-1. enter the node's own ``contextvars.Context``;
-2. on CUDA, make the node's device and stream current (and, around
+1. on CUDA, make the node's device and stream current (and, around
    ``state_dict``, set the calling thread's back afterwards);
+2. enter the node's own ``contextvars.Context``;
 3. call the hook, looked up on the node at each call;
 4. after ``on_update`` and ``load_state_dict``, wait for the work queued on the
    node's stream.
 
 ``capture`` copies what ``state_dict`` returns on the node's stream, so that the
-copy stays as taken once the node resumes.
+copy stays as taken once the node resumes. The state is data: its tensors are
+detached before the copy, and no graph goes with them.
 """
 
 import contextvars
 import copy
 from collections.abc import Callable, Mapping
-from typing import Final, final
+from typing import Final, cast, final
 
 import torch
 
@@ -109,9 +110,29 @@ class Driver:
     def _copy(self) -> object:
         wires, self.wires = self.wires, _NO_WIRES
         try:
-            return self._context.run(lambda: copy.deepcopy(self.node.state_dict()))
+            return self._context.run(
+                lambda: copy.deepcopy(_detached(self.node.state_dict()))
+            )
         finally:
             self.wires = wires
+
+
+def _detached(value: object) -> object:
+    """``value`` with each tensor in its dicts, lists and tuples detached, in
+    new containers (a dict of the same type: an ``OrderedDict`` keeps the
+    metadata of a module's ``state_dict``)."""
+    if isinstance(value, torch.Tensor):
+        return value.detach()
+    if isinstance(value, dict):
+        items = copy.copy(cast(dict[object, object], value))
+        for key, item in items.items():
+            items[key] = _detached(item)
+        return items
+    if isinstance(value, list):
+        return [_detached(element) for element in cast(list[object], value)]
+    if type(value) is tuple:
+        return tuple(_detached(element) for element in cast(tuple[object, ...], value))
+    return value
 
 
 def _use(stream: torch.cuda.Stream) -> None:

@@ -67,12 +67,9 @@ pub enum RuntimeError {
     CaptureFailed(NodeFailure),
     /// A capture gave up because these nodes did not pause in time. The system
     /// keeps running.
-    PauseTimeout {
-        nodes: Vec<String>,
-    },
+    PauseTimeout { nodes: Vec<String> },
     /// The system has already stopped normally.
     Finished,
-    InvalidArgument(String),
     /// A thread of this runtime (a hook or a callback of the runtime) asked it
     /// to do something it would have to wait for, which would never finish.
     Reentrant,
@@ -96,7 +93,6 @@ impl fmt::Display for RuntimeError {
                 nodes.join(", ")
             ),
             Self::Finished => write!(f, "the runtime has finished"),
-            Self::InvalidArgument(message) => f.write_str(message),
             Self::Reentrant => write!(
                 f,
                 "cannot wait for the runtime from one of its own threads (a hook or a callback)"

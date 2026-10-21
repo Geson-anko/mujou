@@ -43,7 +43,7 @@ Port の種類は、いくつの相手から受け取るかで選ぶ。慣習で
 
 各 Port には送る値の型を `send=`、受け取る値の型を `recv=` で渡す。型は `TensorSpec(shape, dtype)` で書く。
 
-dtype を省くと spec を作った時点の `torch.get_default_dtype()`（通常は `float32`）になる。片方向の Port では使わない方の引数を省く。どちらもキーワード引数で渡す。
+dtype を省くと、`torch.get_default_dtype()` の設定によらず `float32` になる。片方向の Port では使わない方の引数を省く。どちらもキーワード引数で渡す。
 
 ```python
 self.prev = Port(recv=TensorSpec((32, 784)))                       # 受け取るだけ

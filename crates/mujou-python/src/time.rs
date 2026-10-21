@@ -253,18 +253,10 @@ pub struct PyTimestamp(pub Timestamp);
 impl PyTimestamp {
     /// Takes the time in nanoseconds, by keyword only: a bare number could
     /// mean seconds.
-    ///
-    /// Raises:
-    ///     ValueError: `ns` is negative or does not fit in 64 bits.
     #[new]
     #[pyo3(signature = (*, ns))]
-    fn new(ns: i128) -> PyResult<Self> {
-        let ns = u64::try_from(ns).map_err(|_| {
-            PyValueError::new_err(format!(
-                "a timestamp is from 0 to 2**64 - 1 nanoseconds, got {ns}"
-            ))
-        })?;
-        Ok(Self(Timestamp::from_ns(ns)))
+    fn new(ns: u64) -> Self {
+        Self(Timestamp::from_ns(ns))
     }
 
     /// The time in nanoseconds.

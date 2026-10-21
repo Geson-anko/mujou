@@ -211,10 +211,8 @@ class TestOutlet:
             "p",
             clock=CLOCK,
         )
-        with pytest.raises(ValueError, match="expected 2 tensors") as exc:
+        with pytest.raises(ValueError, match=r"^slot 'p/out': 1 values for 2 fields"):
             outlet.send([torch.zeros(2)])
-        assert "slot 'p/out'" in str(exc.value)
-        assert "'x', 'y'" in str(exc.value)
 
     def test_rejects_values_without_dlpack_naming_slot_and_field(self):
         outlet = Outlet(schema(("x", (2,), torch.float32)), 0, "p", clock=CLOCK)
@@ -227,11 +225,6 @@ class TestOutlet:
         with pytest.raises(BufferError) as exc:
             outlet.send([torch.zeros(2, requires_grad=True)])
         assert any("slot 'p/out'" in note for note in exc.value.__notes__)
-
-    def test_rejects_a_bare_tensor_for_the_sequence(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
-        with pytest.raises(TypeError, match="sequence"):
-            outlet.send(torch.zeros(2))  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.parametrize("index", [3, -1])
     def test_rejects_unknown_channel(self, index: int):
@@ -278,18 +271,6 @@ class TestInputGroup:
             group.write([(x, [torch.ones(2)]), (y, [torch.ones(3)])])
         assert torch.equal(values(x.read())[0], torch.zeros(2))
         assert torch.equal(values(y.read())[0], torch.zeros(2))
-
-    def test_rejects_slot_given_twice(self):
-        group = InputGroup(clock=CLOCK)
-        x = group.input(tensor_schema((2,)), "x")
-        with pytest.raises(ValueError, match="more than once"):
-            group.write([(x, [torch.ones(2)]), (x, [torch.zeros(2)])])
-        assert torch.equal(values(x.read())[0], torch.zeros(2))
-
-    def test_rejects_slot_of_another_group(self):
-        other = InputGroup(clock=CLOCK).input(tensor_schema((2,)), "x")
-        with pytest.raises(ValueError, match="another input group"):
-            InputGroup(clock=CLOCK).write([(other, [torch.ones(2)])])
 
 
 class TestTime:
