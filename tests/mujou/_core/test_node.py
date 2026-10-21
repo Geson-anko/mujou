@@ -1,4 +1,5 @@
 import copy
+import io
 import math
 import pickle
 import queue
@@ -688,6 +689,25 @@ class TestRegisterState:
         assert target.count == 5 and target.log == [1.0, 2.0]
         assert target.log is not state["log"]  # a copy
         assert torch.equal(target.w, source.w)
+
+    def test_a_list_of_tensors_is_state_once_registered(self):
+        # A replay buffer: no state by itself, saved and restored once registered.
+        class Replaying(Stateful):
+            def __init__(self, fill: float, size: int) -> None:
+                super().__init__(fill)
+                self.buffer = [torch.full((2,), fill + i) for i in range(size)]
+
+        assert "buffer" not in Replaying(1.0, 2).state_dict()
+        source, target = Replaying(1.0, 2), Replaying(-1.0, 0)
+        source.register_state("buffer")
+        target.register_state("buffer")
+        saved = io.BytesIO()
+        torch.save(source.state_dict(), saved)
+        saved.seek(0)
+        target.load_state_dict(torch.load(saved, weights_only=True))
+        assert len(target.buffer) == 2
+        for got, want in zip(target.buffer, source.buffer, strict=True):
+            assert torch.equal(got, want) and got is not want
 
     @pytest.mark.parametrize("name", ["steps", "device", "period", "timer"])
     def test_rejects_a_name_without_an_attribute(self, name: str):

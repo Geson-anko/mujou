@@ -73,7 +73,9 @@ class Node(Component):
     when the state is taken or loaded decides. The settings that ``__init__``
     computes from its arguments (a time constant, say) are no state: a node
     restored with other arguments keeps its own. Register the plain values that
-    change while the node runs (a counter, the time last seen). Make the state
+    change while the node runs (a counter, the time last seen), and the
+    containers of tensors (a list as a replay buffer, a dict of tensors): a
+    list or a dict is no state by itself, even of tensors. Make the state
     in ``__init__`` and update it in place: ``load_state_dict`` copies into the
     tensors that the node holds. To choose the state yourself, override both
     ``state_dict`` and ``load_state_dict``: extend what ``super().state_dict()``
@@ -254,7 +256,8 @@ class Node(Component):
         """Add the attribute ``name`` to the state, whatever value it holds.
 
         Use it for the plain values that change while the node runs (a
-        counter, the time last seen), which are not state by themselves. The
+        counter, the time last seen) and for the containers of tensors (a list
+        as a replay buffer), which are not state by themselves. The
         attribute is state while it is assigned, whatever it holds. The default
         ``state_dict`` returns the value as it is, and the default
         ``load_state_dict`` assigns a deep copy of the saved value (or copies

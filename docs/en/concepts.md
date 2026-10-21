@@ -54,7 +54,7 @@ Each run has one time axis, its timer, used by every node and by the host: `mujo
 
 ## 7. State
 
-A node's state is collected automatically: its tensor attributes, its attributes with `state_dict` and `load_state_dict` (an `nn.Module`, say), and the state of its random generator. Other values that change while it runs (a counter, the time last seen) join with `register_state`. The rules are in the API reference of [`Node`](api/node-and-ports.md#mujou.Node).
+A node's state is collected automatically: its tensor attributes, its attributes with `state_dict` and `load_state_dict` (an `nn.Module`, say), and the state of its random generator. Other values that change while it runs (a counter, the time last seen, a list of tensors such as a replay buffer) join with `register_state`. The rules are in the API reference of [`Node`](api/node-and-ports.md#mujou.Node).
 
 `run.state_dict()` takes the state of the whole run at one time, without ending it: the nodes' states, the latest message on each channel and the time, in one plain dict. `mujou.run(new_instance, state=tree)` goes on from there, on a timer of its own that starts at the saved time. See [Save and Resume](tutorial/6-save-and-resume.md).
 
@@ -77,7 +77,7 @@ The other pages link here instead of repeating these.
 - **Do not read a node's attributes from the host while it runs.** It races with the node's updates. Read the ports with `run.read`, or take `run.state_dict()`
 - **Send nothing that depends on the state in `on_start`.** A restore loads the state after `on_start`
 - **Do not change the state in `on_stop`.** The state taken after a normal end is the state the nodes left after `on_stop`. Release resources such as I/O there
-- **Register the values that change while running.** Tensors and modules are collected by themselves; plain values (a counter, the time last seen) need `register_state`, or a restore starts them again
+- **Register the values that change while running.** Tensors and modules are collected by themselves; plain values (a counter, the time last seen) and containers of tensors (a list as a replay buffer) need `register_state`, or a restore starts them again
 - **Keep the graph inside one update.** Hooks record gradients as plain PyTorch does. Update the parameters inside `torch.no_grad()`, and detach a value computed from the parameters before you carry it to the next update in an attribute, or the graph keeps growing
 - **After an exception, the time stands still.** The run's time stops when the run ends, so `self.timer` does not move in `on_exception` and `on_stop`: measure real time there (to slow a robot down over a second, say)
 - **Only the host moves the time, and only through ports does a node talk.** In a hook, `Timer.sleep`, `pause`, `resume`, `set_time_scale`, `VirtualTimer.advance` and the methods of `Run` raise `RuntimeError`: a node that moved the time would change the `dt` of every other node of the run. `backward()` cannot reach another node, since a sent value is a detached copy

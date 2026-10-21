@@ -21,7 +21,7 @@ batch 300: loss 0.0067 (the mean of the last 50)
 --8<-- "examples/pc_regression.py:chain"
 ```
 
-`pc.Chain` makes one node for each module and connects them in order, as `nn.Sequential` computes them: a `pc.Input` that takes the samples, a `pc.Layer` for each module but the last (`layer0`, `layer1`), and a `pc.Output` for the last, with the loss. The children of the chain are `input`, `layer0`, `layer1` and `output`, which are also their paths in the state.
+`pc.Chain` makes one node for each module and connects them in order, as `nn.Sequential` computes them: a `pc.Input` that takes the samples, a `pc.Layer` for each module but the last (`layer0`, `layer1`), and a `pc.Output` for the last, with the loss. The children of the chain are `input`, `layer0`, `layer1` and `output`, which are also their paths in the state; `net.layers` gives the layers in order, `net.layers[0]` being `layer0`.
 
 - `x` and `y` are the specs of the inputs and targets, batch first. The batch size `B` is written only here
 - `loss` returns the loss of each sample, shape `(B,)`: `pc.mse` or `pc.cross_entropy`, or a function of your own of that shape

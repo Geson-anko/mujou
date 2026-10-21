@@ -21,7 +21,7 @@ batch 300: loss 0.0067 (the mean of the last 50)
 --8<-- "examples/pc_regression.py:chain"
 ```
 
-`pc.Chain` はモジュールごとにノードを 1 つ作り、`nn.Sequential` が計算する順につなぐ。サンプルを受け取る `pc.Input`、最後以外の各モジュールの `pc.Layer`（`layer0`、`layer1`）、損失を持つ最後の `pc.Output` である。鎖の子は `input`・`layer0`・`layer1`・`output` で、これがそのまま状態のパスになる。
+`pc.Chain` はモジュールごとにノードを 1 つ作り、`nn.Sequential` が計算する順につなぐ。サンプルを受け取る `pc.Input`、最後以外の各モジュールの `pc.Layer`（`layer0`、`layer1`）、損失を持つ最後の `pc.Output` である。鎖の子は `input`・`layer0`・`layer1`・`output` で、これがそのまま状態のパスになる。層は `net.layers` で順に取れる（`net.layers[0]` が `layer0`）。
 
 - `x` と `y` は入力と目標の spec で、バッチを先頭に置く。バッチの大きさ `B` を書くのはここだけ
 - `loss` はサンプルごとの損失を shape `(B,)` で返す。`pc.mse` か `pc.cross_entropy`、または同じ形の自作の関数

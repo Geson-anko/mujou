@@ -86,13 +86,14 @@ class TestChain:
             "prev",
             "next",
         ]
-        assert getattr(net, "layer1").module is layers[1]
+        assert [layer.module for layer in net.layers] == layers
+        assert net.layers[1] is getattr(net, "layer1")
         assert net.output.module is head
 
     def test_each_node_takes_the_act_of_the_one_before(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head)
-        nodes = [net.input, getattr(net, "layer0"), getattr(net, "layer1")]
+        nodes = [net.input, *net.layers]
         for sender, receiver in zip(nodes, [*nodes[1:], net.output], strict=True):
             assert receiver.prev.recv_spec == sender.act_spec
             assert sender.next.channels == receiver.prev.channels

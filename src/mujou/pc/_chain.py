@@ -23,7 +23,8 @@ class Chain(Network):
     after an ``Input`` of the samples ``x`` and targets ``y``. Each node takes
     the ``act_spec`` of the one before and the nodes are connected in order.
     The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
-    in ``layer{i}``), which are also their paths in ``Run.state_dict()``. Every
+    in ``layer{i}``, also ``layers[i]``), which are also their paths in
+    ``Run.state_dict()``. Every
     node runs with the period ``tau.period`` (``tau.h / 4``); for other
     periods, build the nodes one by one (``show`` shows them samples too).
 
@@ -98,6 +99,12 @@ class Chain(Network):
         last.next.connect(self.output.prev)
         self.prev = self.input.prev
         self.next = self.output.next
+
+    @property
+    def layers(self) -> tuple[Layer, ...]:
+        """The ``Layer`` of each module but the last, in order: ``layers[i]`` is
+        the child ``layer{i}``."""
+        return tuple(v for v in vars(self).values() if isinstance(v, Layer))
 
 
 class _Shown(Protocol):
