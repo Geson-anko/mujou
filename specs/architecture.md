@@ -28,7 +28,7 @@
 | 10 | `state.py` | 状態の木と実行の間の変換（`capture` / `restore`）。木の形（ポートのスロットのキー）を決めるのはここだけ |
 | 11 | `execution.py` | `Run`、`ManualRun`、`run()`、実行の種類 `Kind`。起動の 3 段、Driver の生成、走った印、終了、atexit |
 | 12 | `mujou/time.py` | 公開の入口（`_native` のタイマーの再エクスポートだけ）。`mujou.testing` が使うので 1 つ下に置く |
-| 13 | `mujou/__init__.py`、`mujou/testing.py` | 公開の入口（再エクスポートだけ） |
+| 13 | `mujou/__init__.py`、`mujou/testing.py`、`mujou/viz.py` | 公開の入口（再エクスポートだけ）と、`walk` で読んだ木を自己完結の HTML（テンプレートは `viz.html`）に描く `to_html` |
 | 14〜17 | `mujou/pc/*` | PC-ALM。公開名だけを import する（[更新手法](update-rules.md)） |
 
 `network.py` が `node.py` の上にあるのは、`Group` の注釈が `Node` を使うから。`tree.py` が `driver.py` の上にあるのは、木の検査がノードの状態の規則（`node.is_state`）を共有するからで、Driver は木を知らない。`state.py` は `wiring.py` が作ったスロットを読み書きするので、その上に置く。
@@ -123,7 +123,7 @@ GPU はコアでサポートしない。コアの値はホストのメモリに�
 ## 内部の名前の規約
 
 - モジュールは公開する。Python の慣習どおり、private かどうかは名前の `_` で示し、パッケージごと隠さない。private なモジュールは Rust の拡張モジュール `mujou._native` だけ（ABI の都合で中身を変えるので、利用者に触らせない）。利用者が traceback や「定義へ移動」で辿った先が、そのまま読める公開のファイルになる
-- 公開 API は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` の `__all__` と docs に載る名前だけ（`tests/mujou/test_init.py`）。複数のモジュールが使う内部の名前（`spec.DLPACK`、`port.Wire`、`current.running`、`tree.walk`、`node.is_state`、`messages.rows` など）は `_` を付けず、`__all__` に入れないことで公開 API ではないことを表す。1 つのモジュールの中だけで使う名前には `_` を付ける
+- 公開 API は、`mujou`、`mujou.time`、`mujou.testing`、`mujou.pc`、`mujou.viz` の `__all__` と docs に載る名前だけ（`tests/mujou/test_init.py`）。複数のモジュールが使う内部の名前（`spec.DLPACK`、`port.Wire`、`current.running`、`tree.walk`、`node.is_state`、`messages.rows` など）は `_` を付けず、`__all__` に入れないことで公開 API ではないことを表す。1 つのモジュールの中だけで使う名前には `_` を付ける
 - 公開クラス（Node、Port、MultiPort、Network）の `_` 属性には、そのクラスの外から触らない。実行時の事実は実行の側に置いたので、触る必要がある箇所は無い。src の `# pyright: ignore[reportPrivateUsage]` は 0 件にする
 - Node の設定は、名前修飾した 1 属性（`__config`）に置く。利用者の `self._device` などと衝突しない
 - フレームワークは、ノードの設定を公開の property（`period`、`device`、`dedicated_thread`、`generator`）だけから読む。サブクラスが property を置き換えても、フレームワークと食い違わない

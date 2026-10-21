@@ -132,6 +132,7 @@ plugins:
             Threads and Devices: スレッドとデバイス
             Errors and Shutdown: 例外と終了
             Update Rules: 更新則
+            Visualize a Network: ネットワークの可視化
             Examples: サンプル
             API Reference: API リファレンス
             Nodes and Ports: ノードと Port
@@ -139,6 +140,7 @@ plugins:
             Runs: 実行
             Testing: テスト
             Types: 型
+            Visualization: 可視化
   # The API pages are built once per language, so mujou.Node has a page in each:
   # a reference goes to the one of its own language.
   - autorefs:
@@ -195,6 +197,7 @@ nav:
       - Errors and Shutdown: topics/errors.md
       - Update Rules: topics/update-rules.md
       - PC-ALM: topics/pc.md
+      - Visualize a Network: topics/visualize.md
   - Examples: examples.md
   - API Reference:
       - Nodes and Ports: api/node-and-ports.md
@@ -204,6 +207,7 @@ nav:
       - Testing: api/testing.md
       - Types: api/types.md
       - PC-ALM: api/pc.md
+      - Visualization: api/viz.md
 
 extra_css:
   - stylesheets/extra.css
