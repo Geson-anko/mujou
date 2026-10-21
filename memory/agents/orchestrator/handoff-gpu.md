@@ -6,7 +6,7 @@
 
 - ブランチ `refactor/2026-10-20/restructure`（PR は下の「PR」）。mujou の作り直しは全ステップと最終レビューまで終わり、commit 済み。`just run` は GPU の無い環境で通っている（pytest 710 passed / 22 skipped、pyright 0 errors、docs の strict ビルド成功）
 - 決定はすべてユーザーが承認済み（`memory/project_restructure_2026_10_20.md`）。設計の正本は `specs/architecture.md` と `specs/scenarios.md`。作り直しの設計書と、作業中の裁定は同じフォルダの `restructure-design.md` と `restructure-carryover.md`（経緯の記録。正本は specs）
-- 前のコンテナには GPU が無かった。torch は CUDA 版（`2.14.1+cu130`）だが、`.devcontainer/devcontainer.json` に GPU を渡す設定（`"runArgs": ["--gpus", "all"]` など）が無いので、`torch.cuda.is_available()` が False だった。GPU のテストの前に、コンテナから GPU が見えることを確かめる:
+- 前のコンテナには GPU が無く、`torch.cuda.is_available()` が False だった（torch は CUDA 版 `2.14.1+cu130`）。main の #94 で `.devcontainer/devcontainer.json` に `"hostRequirements": {"gpu": "optional"}` が入り、このブランチにも取り込んだ。GPU のテストの前に、コンテナから GPU が見えることを確かめる:
 
   ```bash
   nvidia-smi
