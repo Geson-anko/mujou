@@ -104,7 +104,7 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
             schema(cast("MessageSpec[Any]", port.recv_spec)), tree.label(port)
         )
         for port in tree.owners
-        if _written_by_the_host(port)
+        if written_by_the_host(port)
     }
     # The index of each channel of each port: each end writes its k-th channel
     # slot for its k-th channel.
@@ -129,7 +129,7 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
     return Wiring(tree, group, outlets, inputs, wires)
 
 
-def _written_by_the_host(port: AnyPort) -> bool:
+def written_by_the_host(port: AnyPort) -> bool:
     """An unconnected ``Port`` that receives reads what the host writes."""
     return isinstance(port, Port) and port.recv_spec is not None and not port.channels
 

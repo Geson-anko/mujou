@@ -54,7 +54,7 @@ class Tree:
         """The path of ``port``, a port of the tree (``"body.l1.next"``, or
         ``"next"`` for a port of a node that is the root)."""
         owner, attribute = self.owners[port]
-        return _join(owner, attribute)
+        return join(owner, attribute)
 
     def label(self, port: AnyPort) -> str:
         """Name ``port`` in an error: as its owner and attribute
@@ -114,7 +114,7 @@ class _Walker:
         for attribute, value in vars(component).items():
             self._no_parts_in(value, self._at(path, attribute))
             if isinstance(value, Node | Network):
-                self.component(value, _join(path, attribute))
+                self.component(value, join(path, attribute))
 
     def _node(self, node: Node, path: str) -> None:
         if not initialized(node):
@@ -130,7 +130,7 @@ class _Walker:
                     f"{where} is a {type(value).__name__}: a node holds no nodes "
                     "or networks; put them side by side in a Network"
                 )
-            if _is_port(value):
+            if is_port(value):
                 self._once(value, where)
                 ports[attribute] = value
                 self.owners[value] = (path, attribute)
@@ -186,11 +186,11 @@ class _Walker:
         return _label(self.root, path, attribute)
 
 
-def _is_port(value: object) -> TypeIs[AnyPort]:
+def is_port(value: object) -> TypeIs[AnyPort]:
     return isinstance(value, Port | MultiPort)
 
 
-def _join(path: str, attribute: str) -> str:
+def join(path: str, attribute: str) -> str:
     return f"{path}.{attribute}" if path else attribute
 
 

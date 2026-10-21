@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mujou graph</title>
+<!-- Drawn by mujou.viz.to_html: the graph is the JSON of #mujou-graph. -->
+<style>
+:root {
+  --bg: #f6f5fa;
+  --surface: #ffffff;
+  --text: #1f1d2b;
+  --muted: #6c6880;
+  --line: #d9d5e6;
+  --accent: #6a3fd4;
+  --accent-soft: #ece6fb;
+  --frame: rgba(106, 63, 212, 0.045);
+  --frame-line: #cfc4ef;
+  --edge: #8e86a8;
+  --host: #c2581d;
+  --shadow: rgba(31, 29, 43, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16151d;
+    --surface: #221f2d;
+    --text: #ebe8f4;
+    --muted: #a19bb8;
+    --line: #3a3550;
+    --accent: #a98bff;
+    --accent-soft: #2f2747;
+    --frame: rgba(169, 139, 255, 0.06);
+    --frame-line: #4a3f73;
+    --edge: #8a83a3;
+    --host: #f08a4b;
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+header .hint { color: var(--muted); flex: 1; min-width: 0; }
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+main { flex: 1; display: flex; min-height: 0; position: relative; }
+svg { flex: 1; display: block; cursor: grab; user-select: none; }
+svg.panning { cursor: grabbing; }
+.legend {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  gap: 16px;
+  pointer-events: none;
+}
+.legend b { color: var(--host); font-weight: 600; }
+aside {
+  width: 360px;
+  max-width: 45vw;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  padding: 14px 16px;
+}
+aside[hidden] { display: none; }
+aside h2 { font-size: 15px; margin: 0 0 2px; word-break: break-all; }
+aside .sub { color: var(--muted); margin-bottom: 12px; }
+aside dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 14px; }
+aside dt { color: var(--muted); }
+aside dd { margin: 0; word-break: break-all; }
+aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 14px 0 6px; }
+aside .port { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+aside .port .name { font-weight: 600; }
+aside .port .kind { color: var(--muted); font-weight: 400; }
+aside code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+aside .close { float: right; }
+aside .link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.box rect.body { fill: var(--surface); stroke: var(--line); filter: drop-shadow(0 1px 2px var(--shadow)); }
+.box.closed rect.body { fill: var(--accent-soft); stroke: var(--frame-line); }
+.box.selected rect.body { stroke: var(--accent); stroke-width: 2; }
+.box { cursor: pointer; }
+.box:hover rect.body { stroke: var(--accent); }
+.frame rect.body { fill: var(--frame); stroke: var(--frame-line); stroke-dasharray: 4 3; }
+.frame.root rect.body { stroke-dasharray: none; }
+.frame .head { cursor: pointer; }
+.frame .head:hover text.name { fill: var(--accent); }
+text { fill: var(--text); }
+text.name { font-weight: 600; }
+text.cls, text.meta, text.spec { fill: var(--muted); }
+text.spec { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+text.glyph { fill: var(--accent); }
+text.host { fill: var(--host); font-size: 11px; }
+text.glyph.host { font-size: 13px; }
+line.sep { stroke: var(--line); }
+.edge path { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.edge text { fill: var(--muted); font-size: 11px; }
+.edge.hl path { stroke: var(--accent); stroke-width: 2.5; }
+.dim .edge:not(.hl) { opacity: 0.25; }
+marker path { fill: var(--edge); }
+#head-hl path { fill: var(--accent); }
+#view { transform-origin: 0 0; }
+#view.moving { transition: transform 0.3s ease; }
+.new { animation: pop 0.22s ease-out; }
+@keyframes pop { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <span class="hint">Click a network to open or close it, a node to see its ports. Drag to pan, scroll to zoom.</span>
+  <button id="expand">Expand all</button>
+  <button id="collapse">Collapse all</button>
+  <button id="fit">Fit</button>
+</header>
+<main>
+  <svg id="canvas" aria-label="graph of the network">
+    <defs>
+      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="head-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>
+    <g id="view"></g>
+  </svg>
+  <div class="legend"><span>&rarr; sends &nbsp; &larr; receives &nbsp; &#8644; both</span><span><b>host</b> the host writes it</span></div>
+  <aside id="panel" hidden></aside>
+</main>
+<script type="application/json" id="mujou-graph">/*GRAPH*/</script>
+<script>
+"use strict";
+const G = JSON.parse(document.getElementById("mujou-graph").textContent);
+const SVG = "http://www.w3.org/2000/svg";
+// Sizes, in px.
+const NODE_HEAD = 40, NET_HEAD = 30, ROW = 20, FOOT = 22, PAD = 12, NET_PAD = 18;
+const GAP_X = 90, GAP_Y = 22, MIN_W = 120;
+
+// Index the tree: each component by path, its parent, the node of each port.
+const components = new Map(), owners = new Map(), ports = new Map();
+(function index(c, parent) {
+  c.parent = parent;
+  components.set(c.path, c);
+  if (c.kind === "node") {
+    for (const p of c.ports) { owners.set(p.path, c); ports.set(p.path, p); }
+  } else {
+    for (const child of c.children) index(child, c);
+  }
+})(G.root, null);
+const peers = new Map();
+for (const e of G.edges) {
+  for (const [a, b] of [[e.from, e.to], [e.to, e.from]]) {
+    if (!peers.has(a)) peers.set(a, []);
+    peers.get(a).push(b);
+  }
+}
+function countNodes(c) {
+  return c.kind === "node" ? 1 : c.children.reduce((n, k) => n + countNodes(k), 0);
+}
+
+const open = new Set([G.root.path]);
+let selected = null, justOpened = null;
+const view = { k: 1, x: 0, y: 0 };
+
+// Text widths, measured in the fonts of the page.
+const ctx = document.createElement("canvas").getContext("2d");
+const FAMILY = getComputedStyle(document.body).fontFamily;
+function width(text, font) { ctx.font = font; return ctx.measureText(text).width; }
+const BOLD = `600 13px ${FAMILY}`, PLAIN = `13px ${FAMILY}`;
+const MONO = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+const HOST = `11px ${FAMILY}`;
+
+function glyph(p) { return p.send && p.recv ? "⇄" : p.send ? "→" : "←"; }
+// "TensorSpec((2, 3), torch.float32)" -> "(2, 3)"; other dtypes are kept.
+function short(spec) {
+  if (!spec) return "";
+  const t = /^TensorSpec\((\(.*\)), torch\.(\w+)\)$/.exec(spec);
+  if (t) return t[2] === "float32" ? t[1] : `${t[1]} ${t[2]}`;
+  const d = /^DictSpec\(([^,)]+)/.exec(spec);
+  return d ? d[1] : spec;
+}
+function portSpec(p) {
+  if (p.send && p.recv && p.send !== p.recv) return `in ${short(p.recv)} · out ${short(p.send)}`;
+  return short(p.send || p.recv);
+}
+function footer(c) { const n = countNodes(c); return `${n} node${n === 1 ? "" : "s"} · click to open`; }
+
+// The visible box of a component: itself, or its outermost closed network.
+function visible(c) {
+  const chain = [];
+  for (let k = c; k; k = k.parent) chain.unshift(k);
+  for (const k of chain) if (k.kind === "network" && !open.has(k.path)) return k;
+  return c;
+}
+
+// Lay out c and its open descendants: c.w, c.h, and each child's c.dx, c.dy
+// inside c.
+function layout(c) {
+  const title = Math.max(width(c.name, BOLD), width(c.class, PLAIN));
+  if (c.kind === "node" || !open.has(c.path)) {
+    let w = Math.max(MIN_W, title + 2 * PAD + (c.kind === "network" ? 18 : 0));
+    if (c.kind === "network") w = Math.max(w, 2 * PAD + width(footer(c), PLAIN));
+    for (const r of c.ports) {
+      const p = ports.get(r.path), tag = p.host ? 6 + width("host", HOST) : 0;
+      w = Math.max(w, 2 * PAD + 18 + width(r.name, PLAIN) + tag + 16 + width(portSpec(p), MONO));
+    }
+    c.w = w;
+    c.h = NODE_HEAD + c.ports.length * ROW + (c.kind === "network" ? FOOT : 6);
+    return;
+  }
+  const kids = c.children;
+  kids.forEach(layout);
+  // The edges between the children of c, each child once per pair.
+  const at = new Map(kids.map((k, i) => [k, i]));
+  const child = (node) => { let k = node; while (k && k.parent !== c) k = k.parent; return k; };
+  const succ = kids.map(() => new Set());
+  for (const e of G.edges) {
+    const a = child(owners.get(e.from)), b = child(owners.get(e.to));
+    if (a && b && a !== b) succ[at.get(a)].add(at.get(b));
+  }
+  // Ranks by the longest path, after dropping the edges that close a cycle.
+  const state = kids.map(() => 0), dag = kids.map(() => []);
+  const visit = (i) => {
+    state[i] = 1;
+    for (const j of succ[i]) {
+      if (state[j] === 1) continue;
+      dag[i].push(j);
+      if (state[j] === 0) visit(j);
+    }
+    state[i] = 2;
+  };
+  kids.forEach((_, i) => { if (state[i] === 0) visit(i); });
+  const rank = kids.map(() => 0);
+  for (let changed = true; changed;) {
+    changed = false;
+    dag.forEach((js, i) => js.forEach((j) => {
+      if (rank[j] < rank[i] + 1) { rank[j] = rank[i] + 1; changed = true; }
+    }));
+  }
+  const columns = [];
+  kids.forEach((_, i) => (columns[rank[i]] ||= []).push(i));
+  // Order each column by the mean place of its predecessors.
+  const place = new Map();
+  columns.forEach((col, r) => {
+    if (r > 0) {
+      const mean = (j) => {
+        const ps = [];
+        dag.forEach((js, i) => { if (js.includes(j) && place.has(i)) ps.push(place.get(i)); });
+        return ps.length ? ps.reduce((s, v) => s + v, 0) / ps.length : Infinity;
+      };
+      const keys = new Map(col.map((j) => [j, mean(j)]));
+      col.sort((a, b) => (keys.get(a) - keys.get(b)) || (a - b));
+    }
+    col.forEach((j, n) => place.set(j, n));
+  });
+  const colW = columns.map((col) => Math.max(...col.map((j) => kids[j].w)));
+  const colH = columns.map((col) => col.reduce((s, j) => s + kids[j].h, 0) + GAP_Y * (col.length - 1));
+  const innerH = Math.max(0, ...colH);
+  let x = NET_PAD;
+  columns.forEach((col, r) => {
+    let y = NET_HEAD + NET_PAD + (innerH - colH[r]) / 2;
+    for (const j of col) {
+      kids[j].dx = x + (colW[r] - kids[j].w) / 2;
+      kids[j].dy = y;
+      y += kids[j].h + GAP_Y;
+    }
+    x += colW[r] + GAP_X;
+  });
+  c.w = Math.max(x - GAP_X + NET_PAD, title + 60);
+  c.h = NET_HEAD + 2 * NET_PAD + innerH;
+}
+
+function place(c, x, y) {
+  c.x = x; c.y = y;
+  if (c.kind === "network" && open.has(c.path)) for (const k of c.children) place(k, x + k.dx, y + k.dy);
+}
+
+function el(name, attrs, parent, text) {
+  const e = document.createElementNS(SVG, name);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+const layers = {};
+function relayout() {
+  layout(G.root);
+  place(G.root, 0, 0);
+}
+
+function render() {
+  if (selected && visible(selected) !== selected) closePanel();
+  const g = document.getElementById("view");
+  g.replaceChildren();
+  g.classList.remove("dim");
+  for (const name of ["frames", "edges", "boxes"]) layers[name] = el("g", {}, g);
+  draw(G.root);
+  drawEdges();
+  applyView();
+  justOpened = null;
+}
+
+function isNew(c) { return justOpened !== null && c.parent && c.parent.path === justOpened; }
+
+function draw(c) {
+  if (c.kind === "network" && open.has(c.path)) {
+    const f = el("g", { class: "frame" + (c.parent ? "" : " root") + (isNew(c) ? " new" : "") }, layers.frames);
+    el("rect", { class: "body", x: c.x, y: c.y, width: c.w, height: c.h, rx: 10 }, f);
+    const head = el("g", { class: "head" }, f);
+    el("rect", { x: c.x, y: c.y, width: c.w, height: NET_HEAD, fill: "transparent" }, head);
+    el("text", { class: "glyph", x: c.x + 12, y: c.y + 20 }, head, c.parent ? "▾" : "");
+    const nx = c.x + (c.parent ? 26 : 14);
+    el("text", { class: "name", x: nx, y: c.y + 20 }, head, c.name);
+    if (c.class !== c.name) el("text", { class: "cls", x: nx + width(c.name, BOLD) + 8, y: c.y + 20 }, head, c.class);
+    head.addEventListener("click", (ev) => { ev.stopPropagation(); if (c.parent) toggle(c); });
+    for (const k of c.children) draw(k);
+    return;
+  }
+  const closed = c.kind === "network";
+  const b = el("g", {
+    class: "box" + (closed ? " closed" : "") + (selected === c ? " selected" : "") + (isNew(c) ? " new" : ""),
+    "data-path": c.path,
+  }, layers.boxes);
+  el("rect", { class: "body", x: c.x, y: c.y, width: c.w, height: c.h, rx: 8 }, b);
+  el("text", { class: "name", x: c.x + PAD, y: c.y + 18 }, b, c.name);
+  if (c.class !== c.name) el("text", { class: "cls", x: c.x + PAD, y: c.y + 33 }, b, c.class);
+  if (closed) el("text", { class: "glyph", x: c.x + c.w - PAD - 8, y: c.y + 18 }, b, "+");
+  if (c.ports.length) el("line", { class: "sep", x1: c.x, x2: c.x + c.w, y1: c.y + NODE_HEAD, y2: c.y + NODE_HEAD }, b);
+  c.ports.forEach((r, i) => {
+    const p = ports.get(r.path), y = c.y + NODE_HEAD + i * ROW + 14;
+    el("text", { class: p.host ? "glyph host" : "glyph", x: c.x + PAD, y }, b, glyph(p));
+    el("text", { x: c.x + PAD + 18, y }, b, r.name);
+    if (p.host) el("text", { class: "host", x: c.x + PAD + 24 + width(r.name, PLAIN), y }, b, "host");
+    el("text", { class: "spec", x: c.x + c.w - PAD, y, "text-anchor": "end" }, b, portSpec(p));
+  });
+  if (closed) el("text", { class: "meta", x: c.x + PAD, y: c.y + c.h - 7 }, b, footer(c));
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); if (closed) toggle(c); else select(c); });
+  b.addEventListener("mouseenter", () => highlight(c.path));
+  b.addEventListener("mouseleave", () => highlight(null));
+}
+
+// The point of a box where an edge for the port at path meets it, on the side
+// that faces x.
+function anchor(c, path, x) {
+  const i = c.ports.findIndex((r) => r.path === path);
+  const y = i < 0 ? c.y + c.h / 2 : c.y + NODE_HEAD + i * ROW + ROW / 2;
+  const right = x > c.x + c.w / 2;
+  return { x: right ? c.x + c.w : c.x, y, s: right ? 1 : -1 };
+}
+
+function drawEdges() {
+  // The channels between the same rows of the same boxes, either way, are drawn
+  // once, with a head at each end where one of them receives.
+  const drawn = new Map();
+  for (const e of G.edges) {
+    const a = visible(owners.get(e.from)), b = visible(owners.get(e.to));
+    if (a === b) continue;
+    const ra = a.ports.some((r) => r.path === e.from) ? e.from : "";
+    const rb = b.ports.some((r) => r.path === e.to) ? e.to : "";
+    const back = !!ports.get(e.to).send;  // the "from" end receives too
+    const ends = [`${a.path}|${ra}`, `${b.path}|${rb}`];
+    const d = drawn.get(ends.join("|")) || drawn.get(`${ends[1]}|${ends[0]}`);
+    if (!d) {
+      drawn.set(ends.join("|"), { a, b, ra, rb, n: 1, atA: back, atB: true });
+    } else {
+      d.n++;
+      if (d.a === a && d.ra === ra) d.atA ||= back;
+      else { d.atA = true; d.atB ||= back; }
+    }
+  }
+  for (const { a, b, ra, rb, n, atA, atB } of drawn.values()) {
+    const p = anchor(a, ra, b.x + b.w / 2), q = anchor(b, rb, a.x + a.w / 2);
+    const dx = Math.max(40, Math.abs(q.x - p.x) / 2);
+    const g = el("g", { class: "edge", "data-a": a.path, "data-b": b.path }, layers.edges);
+    el("path", {
+      d: `M${p.x},${p.y} C${p.x + p.s * dx},${p.y} ${q.x + q.s * dx},${q.y} ${q.x},${q.y}`,
+      ...(atB ? { "marker-end": "url(#head)" } : {}),
+      ...(atA ? { "marker-start": "url(#head)" } : {}),
+    }, g);
+    if (n > 1) el("text", { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 - 6, "text-anchor": "middle" }, g, `×${n}`);
+  }
+}
+
+function highlight(path) {
+  const g = document.getElementById("view");
+  g.classList.toggle("dim", path !== null);
+  for (const e of layers.edges.children) {
+    const hl = path !== null && (e.dataset.a === path || e.dataset.b === path);
+    e.classList.toggle("hl", hl);
+    const line = e.querySelector("path"), head = hl ? "url(#head-hl)" : "url(#head)";
+    if (line.hasAttribute("marker-end")) line.setAttribute("marker-end", head);
+    if (line.hasAttribute("marker-start")) line.setAttribute("marker-start", head);
+  }
+}
+
+// Open or close a network, keeping its box where it was on the screen.
+function toggle(c) {
+  const before = { x: c.x, y: c.y };
+  if (open.has(c.path)) {
+    open.delete(c.path);
+    for (const p of [...open]) if (p.startsWith(c.path + ".")) open.delete(p);
+  } else {
+    open.add(c.path);
+    justOpened = c.path;
+  }
+  relayout();
+  view.x -= (c.x - before.x) * view.k;
+  view.y -= (c.y - before.y) * view.k;
+  render();
+  // Then show the whole graph, if it no longer fits.
+  const r = canvasRect(), k = view.k;
+  const fits = view.x >= 0 && view.y >= 0 && view.x + G.root.w * k <= r.width && view.y + G.root.h * k <= r.height;
+  if (!fits) fit(true);
+}
+
+function canvasRect() { return document.getElementById("canvas").getBoundingClientRect(); }
+
+// Move the view; animate for a jump the eye should follow.
+function applyView(animate) {
+  const g = document.getElementById("view");
+  g.classList.toggle("moving", !!animate);
+  g.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+}
+
+function fit(animate) {
+  const r = canvasRect(), m = 32;
+  const k = Math.min(1.25, (r.width - 2 * m) / G.root.w, (r.height - 2 * m) / G.root.h);
+  view.k = k;
+  view.x = (r.width - G.root.w * k) / 2;
+  view.y = (r.height - G.root.h * k) / 2;
+  applyView(animate);
+}
+
+// Pan so that the box of c is on the screen.
+function reveal(c) {
+  const r = canvasRect(), m = 24, k = view.k;
+  const left = view.x + c.x * k, right = left + c.w * k, top = view.y + c.y * k, bottom = top + c.h * k;
+  let dx = 0, dy = 0;
+  if (right > r.width - m) dx = r.width - m - right;
+  if (left + dx < m) dx = m - left;
+  if (bottom > r.height - m) dy = r.height - m - bottom;
+  if (top + dy < m) dy = m - top;
+  if (dx || dy) { view.x += dx; view.y += dy; applyView(true); }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+}
+
+function select(c) {
+  selected = c;
+  for (const b of layers.boxes.querySelectorAll(".box")) b.classList.toggle("selected", b.dataset.path === c.path);
+  const panel = document.getElementById("panel");
+  const where = c.path || "(the root)";
+  let html = `<button class="close" id="close">Close</button><h2>${esc(c.name)}</h2><div class="sub">${esc(c.class)}</div>`;
+  html += `<dl><dt>path</dt><dd><code>${esc(where)}</code></dd><dt>period</dt><dd>${esc(c.period)} s</dd><dt>device</dt><dd>${esc(c.device)}</dd></dl><h3>Ports</h3>`;
+  for (const p of c.ports) {
+    const to = peers.get(p.path) || [];
+    html += `<div class="port"><div class="name">${glyph(p)} ${esc(p.name)} <span class="kind">${esc(p.class)}</span></div><dl>`;
+    if (p.send) html += `<dt>send</dt><dd><code>${esc(p.send)}</code></dd>`;
+    if (p.recv) html += `<dt>recv</dt><dd><code>${esc(p.recv)}</code></dd>`;
+    html += `<dt>peers</dt><dd>${to.length ? to.map((t) => `<code>${esc(t)}</code>`).join("<br>") : p.host ? "the host writes it" : "none"}</dd></dl></div>`;
+  }
+  panel.innerHTML = html;
+  panel.hidden = false;
+  reveal(c);
+  document.getElementById("close").addEventListener("click", closePanel);
+}
+
+function closePanel() {
+  document.getElementById("panel").hidden = true;
+  selected = null;
+  for (const b of layers.boxes.querySelectorAll(".box")) b.classList.remove("selected");
+}
+
+// Pan by dragging the background, zoom by scrolling.
+(function () {
+  const svg = document.getElementById("canvas");
+  let drag = null;
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest(".box, .head")) return;
+    drag = { x: ev.clientX - view.x, y: ev.clientY - view.y };
+    svg.classList.add("panning");
+    svg.setPointerCapture(ev.pointerId);
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!drag) return;
+    view.x = ev.clientX - drag.x;
+    view.y = ev.clientY - drag.y;
+    applyView();
+  });
+  for (const end of ["pointerup", "pointercancel"]) {
+    svg.addEventListener(end, () => { drag = null; svg.classList.remove("panning"); });
+  }
+  svg.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    const r = svg.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    const k = Math.min(4, Math.max(0.1, view.k * Math.exp(-ev.deltaY * 0.0015)));
+    view.x = mx - (mx - view.x) * (k / view.k);
+    view.y = my - (my - view.y) * (k / view.k);
+    view.k = k;
+    applyView();
+  }, { passive: false });
+})();
+
+document.getElementById("expand").addEventListener("click", () => {
+  for (const c of components.values()) if (c.kind === "network") open.add(c.path);
+  relayout(); render(); fit();
+});
+document.getElementById("collapse").addEventListener("click", () => {
+  open.clear(); open.add(G.root.path);
+  relayout(); render(); fit();
+});
+document.getElementById("fit").addEventListener("click", () => fit(true));
+document.getElementById("title").textContent = G.root.name;
+document.title = `${G.root.name} — mujou`;
+relayout();
+render();
+fit();
+</script>
+</body>
+</html>

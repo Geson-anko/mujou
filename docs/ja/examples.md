@@ -20,6 +20,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 | 新しい出力を追い続ける（途中の値は飛ばしうる）       | `subscribe.py`          | [ホストの入出力](topics/host-io.md#%E8%AA%AD%E3%82%80)                                                                           |
 | 実行専用のタイマー、時間の速さ、複数の実行の一時停止 | `timers.py`             | [時間](topics/time.md)                                                                                                           |
 | ノードが例外を投げたときの動きを知る                 | `errors.py`             | [例外と終了](topics/errors.md)                                                                                                   |
+| ネットワークのグラフを描いてブラウザで開く           | `visualize.py`          | [ネットワークの可視化](topics/visualize.md)                                                                                      |
 
 ## 各プログラムが示すこと
 
@@ -37,6 +38,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 - `subscribe.py`: `run.subscribe` がまず最新の出力を、その後は新しい出力を 1 つずつ返す。`break` で止める
 - `timers.py`: `Timestamp`、時間の速さを変えた実行専用の `Timer`、グローバルタイマーの速さ、グローバルタイマーを止めて 2 つの実行の状態を同じ時刻で取得すること。一方から再開した実行は専用のタイマーで続く
 - `errors.py`: ホストが受け取る `NetworkError` とその `__cause__`、`on_exception` → `on_stop` の順、`on_start` の例外は `mujou.run` が送出すること
+- `visualize.py`: 2 つのネットワークと 1 つのノードからなるネットワークと `pc.Chain` のページを、走らせずに `mujou.viz.to_html` で書き出す
 
 ## 走らせ方
 

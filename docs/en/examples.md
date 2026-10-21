@@ -20,6 +20,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 | Follow every new output (values in between may be skipped)      | `subscribe.py`          | [Host I/O](topics/host-io.md#reading)                                                              |
 | Use a timer of a run's own, a time scale, or pause several runs | `timers.py`             | [Time](topics/time.md)                                                                             |
 | See what happens when a node raises                             | `errors.py`             | [Errors and Shutdown](topics/errors.md)                                                            |
+| Draw the graph of a network, and open it in a browser           | `visualize.py`          | [Visualize a Network](topics/visualize.md)                                                         |
 
 ## What each program shows
 
@@ -37,6 +38,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 - `subscribe.py`: `run.subscribe` yields the latest output, then each newer one, and stops with `break`
 - `timers.py`: `Timestamp`, a `Timer` of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own
 - `errors.py`: the `NetworkError` the host receives and its `__cause__`, the order `on_exception` → `on_stop`, and `mujou.run` raising for an exception in `on_start`
+- `visualize.py`: `mujou.viz.to_html` writes the page of a network of two networks and a node, and of a `pc.Chain`, without running them
 
 ## How to run them
 
