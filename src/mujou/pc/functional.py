@@ -26,8 +26,9 @@ from collections.abc import Callable, Sequence
 import torch
 import torch.nn.functional as F
 
-from mujou.pc.messages import Size, batch_shape, rows
+from mujou.pc.messages import batch_shape, rows
 from mujou.pc.time_constants import TimeConstants
+from mujou.types import Size
 
 __all__ = ["cross_entropy", "learn_", "loss_vjp", "mse", "relax_", "vjp"]
 

@@ -10,7 +10,7 @@ each sample (``specs/pc.md``). Each class holds its ``batch`` for the functions 
 import torch
 
 from mujou.pc.functional import cross_entropy, mse
-from mujou.pc.messages import Size
+from mujou.types import Size
 
 
 class MSELoss:

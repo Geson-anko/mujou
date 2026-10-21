@@ -5,7 +5,8 @@ from typing import override
 import torch
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
-from mujou.pc.messages import Sample, Size, activity_spec
+from mujou.pc.messages import Sample, activity_spec
+from mujou.types import Size
 
 
 class Input(Node):

@@ -29,7 +29,7 @@ class TestPublicNames:
         # one has imported them all.
         script = (
             "import sys, mujou; "
-            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc') "
+            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.types', 'mujou.pc') "
             "if m in sys.modules])"
         )
         done = subprocess.run(
@@ -55,7 +55,6 @@ class TestPcPublicNames:
             "Output",
             "Prediction",
             "Sample",
-            "Size",
             "Tick",
             "TimeConstants",
             "activity_spec",
@@ -73,3 +72,11 @@ class TestPcPublicNames:
 
     def test_pc_is_a_submodule_outside_the_top_level(self):
         assert "pc" not in mujou.__all__
+
+
+class TestTypesPublicNames:
+    def test_exports(self):
+        # The names of mujou.types; a change here is a change of the public API.
+        import mujou.types
+
+        assert sorted(mujou.types.__all__) == ["Size"]

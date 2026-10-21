@@ -41,7 +41,7 @@ from mujou.pc.clock import LearnClock, Tick
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
 from mujou.pc.losses import CrossEntropyLoss, MSELoss
-from mujou.pc.messages import Activity, Prediction, Sample, Size, activity_spec
+from mujou.pc.messages import Activity, Prediction, Sample, activity_spec
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
 
@@ -58,7 +58,6 @@ __all__ = [
     "Activity",
     "Prediction",
     "activity_spec",
-    "Size",
     "MSELoss",
     "CrossEntropyLoss",
     "functional",

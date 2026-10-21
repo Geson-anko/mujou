@@ -2,7 +2,8 @@ import pytest
 import torch
 
 from mujou import DictSpec, TensorSpec
-from mujou.pc import Activity, Size, activity_spec
+from mujou.pc import Activity, activity_spec
+from mujou.types import Size
 
 
 class TestActivitySpec:

@@ -138,6 +138,7 @@ plugins:
             Networks: ネットワーク
             Runs: 実行
             Testing: テスト
+            Types: 型
   # The API pages are built once per language, so mujou.Node has a page in each:
   # a reference goes to the one of its own language.
   - autorefs:
@@ -201,6 +202,7 @@ nav:
       - Runs: api/run.md
       - Time: api/time.md
       - Testing: api/testing.md
+      - Types: api/types.md
       - PC-ALM: api/pc.md
 
 extra_css:
