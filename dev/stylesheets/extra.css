@@ -116,3 +116,11 @@
   stroke: var(--md-default-fg-color--light);
   stroke-width: 1.2;
 }
+
+/* A page of mujou.viz, embedded in docs/{en,ja}/topics/visualize.md. */
+.md-typeset iframe.mujou-viz {
+  width: 100%;
+  height: 32rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+}

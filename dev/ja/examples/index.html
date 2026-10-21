@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/examples/">
       
       
-        <link rel="prev" href="../topics/pc/">
+        <link rel="prev" href="../topics/visualize/">
       
       
         <link rel="next" href="../api/node-and-ports/">
@@ -810,6 +810,8 @@
       
         
       
+        
+      
     
     
     
@@ -1107,6 +1109,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/visualize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ネットワークの可視化
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1229,6 +1259,8 @@
   
     
     
+      
+        
       
         
       
@@ -1485,6 +1517,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    可視化
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1653,6 +1713,11 @@
 <td><code>errors.py</code></td>
 <td><a href="../topics/errors/">例外と終了</a></td>
 </tr>
+<tr>
+<td>ネットワークのグラフを描いてブラウザで開く</td>
+<td><code>visualize.py</code></td>
+<td><a href="../topics/visualize/">ネットワークの可視化</a></td>
+</tr>
 </tbody>
 </table>
 <h2 id="各プログラムが示すこと">各プログラムが示すこと<a class="headerlink" href="#各プログラムが示すこと" title="Permanent link">&para;</a></h2>
@@ -1671,6 +1736,7 @@
 <li><code>subscribe.py</code>: <code>run.subscribe</code> がまず最新の出力を、その後は新しい出力を 1 つずつ返す。<code>break</code> で止める</li>
 <li><code>timers.py</code>: <code>Timestamp</code>、時間の速さを変えた実行専用の <code>Timer</code>、グローバルタイマーの速さ、グローバルタイマーを止めて 2 つの実行の状態を同じ時刻で取得すること。一方から再開した実行は専用のタイマーで続く</li>
 <li><code>errors.py</code>: ホストが受け取る <code>NetworkError</code> とその <code>__cause__</code>、<code>on_exception</code> → <code>on_stop</code> の順、<code>on_start</code> の例外は <code>mujou.run</code> が送出すること</li>
+<li><code>visualize.py</code>: 2 つのネットワークと 1 つのノードからなるネットワークと <code>pc.Chain</code> のページを、走らせずに <code>mujou.viz.to_html</code> で書き出す</li>
 </ul>
 <h2 id="走らせ方">走らせ方<a class="headerlink" href="#走らせ方" title="Permanent link">&para;</a></h2>
 <p>ソースからビルドした環境（<a href="../install/">インストール</a>）で、リポジトリのルートから実行する。</p>

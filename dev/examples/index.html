@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/examples/">
       
       
-        <link rel="prev" href="../topics/pc/">
+        <link rel="prev" href="../topics/visualize/">
       
       
         <link rel="next" href="../api/node-and-ports/">
@@ -808,6 +808,8 @@
       
         
       
+        
+      
     
     
     
@@ -1105,6 +1107,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/visualize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualize a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1227,6 +1257,8 @@
   
     
     
+      
+        
       
         
       
@@ -1483,6 +1515,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1651,6 +1711,11 @@
 <td><code>errors.py</code></td>
 <td><a href="../topics/errors/">Errors and Shutdown</a></td>
 </tr>
+<tr>
+<td>Draw the graph of a network, and open it in a browser</td>
+<td><code>visualize.py</code></td>
+<td><a href="../topics/visualize/">Visualize a Network</a></td>
+</tr>
 </tbody>
 </table>
 <h2 id="what-each-program-shows">What each program shows<a class="headerlink" href="#what-each-program-shows" title="Permanent link">&para;</a></h2>
@@ -1669,6 +1734,7 @@
 <li><code>subscribe.py</code>: <code>run.subscribe</code> yields the latest output, then each newer one, and stops with <code>break</code></li>
 <li><code>timers.py</code>: <code>Timestamp</code>, a <code>Timer</code> of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own</li>
 <li><code>errors.py</code>: the <code>NetworkError</code> the host receives and its <code>__cause__</code>, the order <code>on_exception</code> → <code>on_stop</code>, and <code>mujou.run</code> raising for an exception in <code>on_start</code></li>
+<li><code>visualize.py</code>: <code>mujou.viz.to_html</code> writes the page of a network of two networks and a node, and of a <code>pc.Chain</code>, without running them</li>
 </ul>
 <h2 id="how-to-run-them">How to run them<a class="headerlink" href="#how-to-run-them" title="Permanent link">&para;</a></h2>
 <p>Run them from the root of the repository, in an environment built from source (see <a href="../install/">Installation</a>).</p>

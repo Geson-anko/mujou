@@ -78,6 +78,13 @@
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/types/"/>
     </url>
     <url>
+        <loc>https://geson-anko.github.io/mujou/dev/api/viz/</loc>
+        <lastmod>2026-10-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/viz/"/>
+        <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/viz/"/>
+    </url>
+    <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/errors/</loc>
         <lastmod>2026-10-21</lastmod>
         <changefreq>daily</changefreq>
@@ -139,6 +146,13 @@
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/update-rules/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/update-rules/"/>
+    </url>
+    <url>
+        <loc>https://geson-anko.github.io/mujou/dev/topics/visualize/</loc>
+        <lastmod>2026-10-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/visualize/"/>
+        <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/visualize/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/1-run/</loc>
@@ -260,6 +274,13 @@
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/types/"/>
     </url>
     <url>
+        <loc>https://geson-anko.github.io/mujou/dev/ja/api/viz/</loc>
+        <lastmod>2026-10-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/viz/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/viz/"/>
+    </url>
+    <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/errors/</loc>
         <lastmod>2026-10-21</lastmod>
         <changefreq>daily</changefreq>
@@ -321,6 +342,13 @@
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/update-rules/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/update-rules/"/>
+    </url>
+    <url>
+        <loc>https://geson-anko.github.io/mujou/dev/ja/topics/visualize/</loc>
+        <lastmod>2026-10-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/visualize/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/visualize/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/1-run/</loc>
