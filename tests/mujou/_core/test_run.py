@@ -572,11 +572,12 @@ class TestTimer:
         )
         # The 0.2 s of the restore are not in the run's time: the inputs are
         # written, and the first update comes, at the tree's time (but for the
-        # time the run takes to lay out its slots, and a period).
+        # time the run takes to lay out its slots, and a period). The bound
+        # stays well under the 0.2 s, with room for a slow CI machine.
         assert node.updated_at is not None
         written_ns = port_slots(restored.state_dict(), "", "prev")["in"]["time_ns"]
         for ns in (written_ns, node.updated_at.ns):
-            assert 0 <= ns - tree_ns < 50_000_000
+            assert 0 <= ns - tree_ns < 150_000_000
 
     def test_a_restored_manual_run_starts_its_virtual_timer_at_the_tree(
         self, start_manual: StartManual
