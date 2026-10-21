@@ -13,6 +13,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 | ノードの中の BP で、ストリームから学び続ける         | `online_learning.py`    | [4. ノードの中で学習する](tutorial/4-learn-in-a-node.md)                                                                         |
 | 自作の則でノードをまたいで学ぶ                       | `feedback_alignment.py` | [更新則](topics/update-rules.md)                                                                                                 |
 | PC-ALM で回帰を数十行で学ぶ                          | `pc_regression.py`      | [5. PC-ALM で学習する](tutorial/5-learn-with-pc.md)                                                                              |
+| PC-ALM のノードを自分で書く（入力が 2 つ）           | `pc_merge.py`           | [PC-ALM](topics/pc.md#%E8%87%AA%E5%88%86%E3%81%AE%E3%83%8E%E3%83%BC%E3%83%89%E3%82%92%E6%9B%B8%E3%81%8F)                         |
 | PC-ALM で MNIST を学び、BP と比べる                  | `mnist/`                | [PC-ALM](topics/pc.md#mnist)                                                                                                     |
 | 状態を保存し、その続きから再開する                   | `save_and_restore.py`   | [6. 保存と再開](tutorial/6-save-and-resume.md)                                                                                   |
 | 複数のネットワークを一緒に走らせる                   | `group.py`              | [Group](topics/groups.md)                                                                                                        |
@@ -30,6 +31,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 - `online_learning.py`: 教師がホストの書いて変える `a` で y = a x + b のバッチを送る。学習するノードは新しいバッチごとに、前のバッチからの時間だけ、素の PyTorch の autograd で学ぶ。ホストは損失が下がり、跳ね上がり、また下がるのを追う
 - `feedback_alignment.py`: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、`pc.LearnClock` によるサンプルごとに 1 回の学習
 - `pc_regression.py`: `pc.Chain` と `pc.show` で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る
+- `pc_merge.py`: 入力を 2 つ持つ PC-ALM のノード `Merge` を `pc.functional` と `pc.LearnClock` で書き、2 本の塔を合流させて回帰を学ぶ
 - `mnist/`: 784-256-256-10 のネットワークを `pc.Chain` で MNIST に学ばせ、同じネットワークを同じ初期重みとバッチで BP でも学ばせる。入口は `main.py`。`data.py` がデータを読み、`metrics.py` が測り、`bp.py` が BP の基準を学習させ、`watch.py` がノードの `dt` を数える（`--watch`）
 - `save_and_restore.py`: `run.state_dict()` で状態を取得し、`torch.save` で保存し、新しいインスタンスに `mujou.run(..., state=...)` で再開する。再開した実行は専用のタイマーで走る
 - `group.py`: `Group(enc=..., dec=...)` と、ノードのパス（`"enc.scale"`）の付き方

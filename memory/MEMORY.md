@@ -49,6 +49,7 @@
 
 - [文書の言語](feedback_doc_language.md) — 仕様書（specs/）・計画書・CLAUDE.md・skill・memory は日本語、docs/ の本文は英語と日本語、docstring とコメントは英語。コミットと PR タイトルは英語の規約形式
 - [日本語の文体](feedback_japanese_style.md) — 翻訳調にしない。読点を減らす、主語と補足を削る、短い項目は体言止め。基準はユーザーが直した docs/ja/index.md
+- [解説ページは教材サイト級に](feedback_docs_teaching_quality.md) — 仕組みの解説は節ごとに要点・図・表・コード。基準は docs/{en,ja}/concepts.md（2026-10-21）
 - [質問は最後にまとめる](feedback_questions_at_end.md) — 確認事項は推奨案で進め、質問は報告の最後に一覧で出す（2026-10-19）
 - [example は手引き](feedback_examples_are_guides.md) — examples/ は利用者への手引きで動作確認用ではない。テストで実行せず、just type が静的に検査する（2026-10-20）
 - [向きは属性名の prev / next](feedback_direction_names.md) — クラスは Port / MultiPort（R2）。Up / Down、Bottom / Top は重力方向の直感と食い違うので使わない（2026-10-20）

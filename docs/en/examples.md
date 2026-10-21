@@ -13,6 +13,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 | Keep learning from a stream, with BP inside a node              | `online_learning.py`    | [4. Learn in a Node](tutorial/4-learn-in-a-node.md)                                                |
 | Learn across nodes with a rule of your own                      | `feedback_alignment.py` | [Update Rules](topics/update-rules.md)                                                             |
 | Learn a regression with PC-ALM, in a few lines                  | `pc_regression.py`      | [5. Learn with PC-ALM](tutorial/5-learn-with-pc.md)                                                |
+| Write a node of PC-ALM of your own (with two inputs)            | `pc_merge.py`           | [PC-ALM](topics/pc.md#nodes-of-your-own)                                                           |
 | Learn MNIST with PC-ALM, and compare it with BP                 | `mnist/`                | [PC-ALM](topics/pc.md#mnist)                                                                       |
 | Save the state and resume from it                               | `save_and_restore.py`   | [6. Save and Resume](tutorial/6-save-and-resume.md)                                                |
 | Run several networks together                                   | `group.py`              | [Groups](topics/groups.md)                                                                         |
@@ -30,6 +31,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 - `online_learning.py`: a teacher sends batches from y = a x + b with the `a` the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again
 - `feedback_alignment.py`: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with `pc.LearnClock`
 - `pc_regression.py`: `pc.Chain` and `pc.show` learn a regression from a stream of batches, measured before each batch is learned from
+- `pc_merge.py`: `Merge`, a node of PC-ALM with two inputs written with `pc.functional` and `pc.LearnClock`, joins two towers that learn a regression
 - `mnist/`: a 784-256-256-10 network learns MNIST as a `pc.Chain`, and the same network learns by BP from the same initial weights on the same batches. `main.py` is the entry point, `data.py` loads the data, `metrics.py` measures, `bp.py` trains the BP baseline and `watch.py` counts the `dt` of the nodes (`--watch`)
 - `save_and_restore.py`: takes the state with `run.state_dict()`, saves it with `torch.save`, and resumes it in a new instance with `mujou.run(..., state=...)`, on a timer of the resumed run's own
 - `group.py`: `Group(enc=..., dec=...)`, and the paths of the nodes (`"enc.scale"`)
