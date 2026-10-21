@@ -5,12 +5,14 @@ This module is the one place that defines the tree::
 
     {
         "nodes": {path: the node's state_dict(), ...},
-        "slots": {slot name: (value, time_ns, sent), ...},
+        "slots": {slot name: (value, time_ns), ...},
         "last_update_ns": {path: int, ...},
         "timer": {"time_ns": int, "scale": float},
     }
 
-Values are copies: the tree shares no memory with the run, in either direction.
+A slot's ``time_ns`` is ``None`` while its writer has not written (zeros, or an
+initial value). Values are copies: the tree shares no memory with the run, in
+either direction.
 The tree is a ``StateDict``, a ``dict`` that also moves all its tensors to a device.
 """
 
@@ -124,13 +126,13 @@ def make_tree(
     The copies queue on the calling thread's current streams;
     synchronize them before the nodes update in place again.
     """
-    values: dict[str, tuple[object, int, bool]] = {}
+    values: dict[str, tuple[object, int | None]] = {}
     for name, (slot, spec) in slots.items():
         message = slot.read()
+        time = message.timestamp
         values[name] = (
             from_core(spec, message.values, _CPU),
-            message.timestamp.ns,
-            message.sent,
+            None if time is None else time.ns,
         )
     return StateDict(
         {
@@ -149,11 +151,11 @@ def read_tree(
     state: Mapping[str, Any],
     paths: Sequence[str],
     slots: Mapping[str, SlotSpecs],
-) -> tuple[list[tuple[AnySlot, list[torch.Tensor], int, bool]], dict[str, Any]]:
+) -> tuple[list[tuple[AnySlot, list[torch.Tensor], int | None]], dict[str, Any]]:
     """Check ``state`` against a run of the nodes at ``paths`` with ``slots``,
     and copy it, changing nothing.
 
-    Returns ``(slot, tensors in host memory, time_ns, sent)`` for each slot to
+    Returns ``(slot, tensors in host memory, time_ns)`` for each slot to
     restore, and what ``Runtime.start``
     restores: the nodes' states (copies, so that the nodes' updates in place
     never reach ``state``) and their last update times. The timer is
@@ -201,27 +203,22 @@ def saved_time(state: Mapping[str, Any]) -> tuple[int, float]:
 
 def _slot_restores(
     entries: Mapping[str, object], slots: Mapping[str, SlotSpecs]
-) -> list[tuple[AnySlot, list[torch.Tensor], int, bool]]:
-    """Check each slot's ``(value, time_ns, sent)`` in the tree and copy the
-    values to the host, without restoring anything yet."""
-    restores: list[tuple[AnySlot, list[torch.Tensor], int, bool]] = []
+) -> list[tuple[AnySlot, list[torch.Tensor], int | None]]:
+    """Check each slot's ``(value, time_ns)`` in the tree and copy the values to
+    the host, without restoring anything yet."""
+    restores: list[tuple[AnySlot, list[torch.Tensor], int | None]] = []
     for name, (slot, spec) in slots.items():
         entry = entries[name]
-        if not isinstance(entry, tuple) or len(cast(tuple[object, ...], entry)) != 3:
+        if not isinstance(entry, tuple) or len(cast(tuple[object, ...], entry)) != 2:
+            raise ValueError(f"the state tree's slot {name!r} is not (value, time_ns)")
+        value, time_ns = cast(tuple[object, object], entry)
+        if time_ns is not None and not _is_int(time_ns):
             raise ValueError(
-                f"the state tree's slot {name!r} is not (value, time_ns, sent)"
-            )
-        value, time_ns, sent = cast(tuple[object, object, object], entry)
-        if not _is_int(time_ns):
-            raise ValueError(
-                f"the state tree's slot {name!r} has a time that is not an int"
-            )
-        if not isinstance(sent, bool):
-            raise ValueError(
-                f"the state tree's slot {name!r} has a sent flag that is not a bool"
+                f"the state tree's slot {name!r} has a time that is neither an int "
+                "nor None"
             )
         tensors = to_core(spec, value, name)
-        restores.append((slot, tensors, cast(int, time_ns), sent))
+        restores.append((slot, tensors, cast(int | None, time_ns)))
     return restores
 
 

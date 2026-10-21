@@ -44,7 +44,7 @@
 t_in = run.write({net.prev: x})
 run.timer.sleep(0.1)
 y, t_out = run.read_with_time(net.next)
-if t_out >= t_in:               # y は x を書いた後に送られた
+if t_out is not None and t_out >= t_in:  # y は x を書いた後に送られた
     print(t_out - t_in)  # x を書いてから y が送られるまでの秒数
 ```
 

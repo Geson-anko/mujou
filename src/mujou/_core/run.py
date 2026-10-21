@@ -150,9 +150,10 @@ class Run:
         """
         return cast(S, _host(self).read(port)[0])
 
-    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
+    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp | None]:
         """Return the latest message ``port`` sent, as ``read`` does, and the time
-        it was sent at.
+        it was sent at: ``None`` before the first ``send`` (the port's
+        ``initial``, or the restored value of a port that had not sent).
 
         The time is on the run's timer. A ``Timestamp`` does not say which timer
         it is on: compare it only with times of the same timer (``run.timer``).
@@ -161,16 +162,16 @@ class Run:
             ValueError: As ``read`` raises.
             NetworkError: The run stopped because a node raised.
         """
-        return cast(tuple[S, Timestamp], _host(self).read(port))
+        return cast(tuple[S, Timestamp | None], _host(self).read(port))
 
     def subscribe[S](
         self, port: Port[S, Any, Any], timeout: float = math.inf
-    ) -> Iterator[tuple[S, Timestamp]]:
+    ) -> Iterator[tuple[S, Timestamp | None]]:
         """Iterate over the messages ``port`` sends, with their times.
 
-        The first step yields the latest message at the time of this call (before
-        the first ``send``, the port's ``initial`` or the restored value) without
-        waiting. Each
+        The first step yields the latest message at the time of this call without
+        waiting (before the first ``send``, the port's ``initial`` or the restored
+        value, with the time ``read_with_time`` gives it). Each
         later step waits until a newer message is sent and yields the latest;
         messages sent in between are skipped. Only the consumer waits: the
         sending node never does. The iterator ends when the run shuts down
@@ -196,16 +197,19 @@ class Run:
             NetworkError: The run stopped because a node raised (also from the
                 iterator).
         """
-        return cast(Iterator[tuple[S, Timestamp]], _host(self).subscribe(port, timeout))
+        return cast(
+            Iterator[tuple[S, Timestamp | None]], _host(self).subscribe(port, timeout)
+        )
 
     def wait_for[S](
         self,
         port: Port[S, Any, Any],
         condition: Callable[[S], bool],
         timeout: float = math.inf,
-    ) -> tuple[S, Timestamp]:
+    ) -> tuple[S, Timestamp | None]:
         """Wait until ``port`` sends a message that meets ``condition``, and return
-        it with its time.
+        it with its time (``None`` if the message that meets it is the one before
+        the first ``send``, as ``read_with_time`` gives it).
 
         Checks the latest message first, then each newer one as ``subscribe``
         yields them (messages sent in between are skipped). Only the host waits:
@@ -276,7 +280,7 @@ class Run:
 
             {
                 "nodes": {"body.l1": ..., ...},  # each node's state_dict()
-                "slots": {"body.l1.next/out": (value, time_ns, sent), ...},
+                "slots": {"body.l1.next/out": (value, time_ns), ...},
                 "last_update_ns": {"body.l1": int, ...},
                 "timer": {"time_ns": int, "scale": float},
             }
@@ -285,7 +289,8 @@ class Run:
         the path of the port through its owning node (``"body.l1.prev/in"``, not
         an exposed name such as ``"prev/in"``) and holds its latest message:
         ``/out`` what ``read`` returns, ``/ch0``, ``/ch1``, ... each channel, and
-        ``/in`` what the host wrote. A node run alone is the root: it is keyed
+        ``/in`` what the host wrote; its ``time_ns`` is ``None`` while nothing
+        was written. A node run alone is the root: it is keyed
         ``""`` and its slots ``"prev/in"``, ``"next/out"``, ....
 
         The tensors of the tree stay on their nodes' devices. ``tree.cpu()``

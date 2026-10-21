@@ -69,7 +69,7 @@ def test_chain_follows_the_discrete_algorithm() -> None:
         y, t = run.read_with_time(net.next)
 
     assert torch.equal(y, b)  # the same operations: equal to the last bit
-    assert t.ns == steps * 1_000_000  # sent at the time of the last step
+    assert t is not None and t.ns == steps * 1_000_000  # sent at the last step
     print(f"after {steps} steps of {h} s: y = {y}, equal to the reference")
 
 

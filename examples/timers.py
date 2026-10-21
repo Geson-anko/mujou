@@ -49,6 +49,7 @@ with mujou.run(clock, timer=timer) as run:
     # threads get scheduled: wait until it has sent a time from 2 s on. The timeout
     # is in real seconds, whatever the timer's scale.
     seen, t = run.wait_for(clock.next, lambda now: now.item() >= 2.0, timeout=5.0)
+    assert t is not None  # None only for the zeros before the first send
 elapsed_real = time.perf_counter() - start_real
 elapsed_global = global_timer.now() - start_global
 print(

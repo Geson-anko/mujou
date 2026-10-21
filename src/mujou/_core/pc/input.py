@@ -25,10 +25,10 @@ class Input(Node):
     time as the zeros before it (time 0). ``x`` is clamped: what the next node
     sends back on ``next`` is not read.
 
-    Before the host first writes, the node sends zeros with ``mask`` False and
-    ``epoch`` 0. The state holds the ``epoch`` (``"_epoch"``) and the time (ns)
-    of the last write seen (``"_seen_write"``, -1 before any). ``act`` is the
-    spec of what the node sends, for the next node.
+    Before the host first writes, the node sends zeros with ``mask`` False,
+    ``epoch`` 0 and ``time`` 0. The state holds the ``epoch`` (``"_epoch"``)
+    and the time (ns) of the last write seen (``"_seen_write"``, -1 before
+    any). ``act`` is the spec of what the node sends, for the next node.
 
     Example::
 
@@ -73,10 +73,11 @@ class Input(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         sample, written_at = self.prev.recv_with_time()
-        if self.prev.has_received() and written_at.ns != self._seen_write:
+        if written_at is not None and written_at.ns != self._seen_write:
             self._seen_write = written_at.ns
             self._epoch += 1
-        time = torch.tensor(written_at.ns, dtype=torch.int64, device=self.device)
+        written_ns = 0 if written_at is None else written_at.ns
+        time = torch.tensor(written_ns, dtype=torch.int64, device=self.device)
         epoch = torch.tensor(self._epoch, dtype=torch.int64, device=self.device)
         self.next.send(
             {

@@ -69,6 +69,7 @@ with mujou.run(net) as run:
     # x takes a few updates to pass through the nodes: wait until y arrives, with
     # the time it was sent (TimeoutError after 5 s of real time).
     y, t = run.wait_for(net.next, lambda y: torch.equal(y, 2 * x + 1), timeout=5.0)
+    assert t is not None  # None only for the zeros before the first send
 
 print(f"y = {y} at t = {float(t):.3f} s")
 # --8<-- [end:run]

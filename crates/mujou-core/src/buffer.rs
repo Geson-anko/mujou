@@ -118,13 +118,12 @@ impl fmt::Debug for Buffer {
     }
 }
 
-/// An immutable value of a slot: one buffer per field, in schema order, the
-/// time it was written at on the writer's timer, and whether its writer sent it.
+/// An immutable value of a slot: one buffer per field, in schema order, and
+/// the time its writer wrote it at on the run's clock.
 #[derive(Debug)]
 pub struct Message {
     values: Vec<Arc<Buffer>>,
-    time_ns: u64,
-    sent: bool,
+    time_ns: Option<u64>,
 }
 
 impl Message {
@@ -133,14 +132,10 @@ impl Message {
         &self.values
     }
 
-    pub fn time_ns(&self) -> u64 {
+    /// The time the slot's writer wrote it at, or `None` for the value the slot
+    /// holds until its writer first writes (zeros, or an initial value).
+    pub fn time_ns(&self) -> Option<u64> {
         self.time_ns
-    }
-
-    /// Whether the slot's writer sent it (or a restore said so), rather than it
-    /// being the value the slot was created or initialized with.
-    pub fn sent(&self) -> bool {
-        self.sent
     }
 }
 
@@ -181,37 +176,28 @@ impl Messages {
         Ok(buffers.into_iter().map(Arc::new).collect())
     }
 
-    pub(crate) fn message(
-        &self,
-        values: Vec<Arc<Buffer>>,
-        time_ns: u64,
-        sent: bool,
-    ) -> Arc<Message> {
+    pub(crate) fn message(&self, values: Vec<Arc<Buffer>>, time_ns: Option<u64>) -> Arc<Message> {
         debug_assert_eq!(values.len(), self.schema.fields().len());
-        Arc::new(Message {
-            values,
-            time_ns,
-            sent,
-        })
+        Arc::new(Message { values, time_ns })
     }
 
     /// A message of every field, filled by `fill`.
     pub(crate) fn build<E>(
         &self,
-        time_ns: u64,
-        sent: bool,
+        time_ns: Option<u64>,
         fill: impl Fill<E>,
     ) -> Result<Arc<Message>, E> {
         let values = self.fill(fill)?;
-        Ok(self.message(values, time_ns, sent))
+        Ok(self.message(values, time_ns))
     }
 
-    pub(crate) fn zeros(&self, time_ns: u64) -> Arc<Message> {
+    /// Zeros that no writer wrote.
+    pub(crate) fn zeros(&self) -> Arc<Message> {
         let zero = |bytes: &mut [&mut [u8]]| {
             bytes.iter_mut().for_each(|b| b.fill(0));
             Ok::<_, std::convert::Infallible>(())
         };
-        let Ok(msg) = self.build(time_ns, false, zero);
+        let Ok(msg) = self.build(None, zero);
         msg
     }
 }

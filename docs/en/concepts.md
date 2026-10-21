@@ -62,7 +62,7 @@ Reading and writing work like this.
 
 - **No waiting**: a reader gets the latest value at that moment. It never waits for a new value
 - **No queue**: a value may be overwritten before anyone reads it, and the same value may be read many times. Both are normal
-- **Initial value**: before the sender has written, the reader gets the initial value of the sender's port (zeros by default). `has_received()` tells whether the sender has written yet
+- **Initial value**: before the sender has written, the reader gets the initial value of the sender's port (zeros by default). Its time is `None`, which tells that the sender has not written yet
 - **A copy**: every value is a copy of a `torch.Tensor`, detached from the computation graph. Changing a received tensor affects no other node
 - **With its time**: every value carries the time it was sent. To tell whether a value is new, read it with its time (`recv_with_time()`) and compare that time with the time of the value read last. If the time has moved on, the value is new
 

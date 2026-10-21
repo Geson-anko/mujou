@@ -157,9 +157,9 @@ def on_start(self) -> None:
 
 メッセージが 1 回だけ扱う出来事（学習のサンプルなど）を表すときは、`recv_with_time()` で時刻も読み、時刻が変わっていなければ更新を飛ばす。
 
-相手が最初に送るまで、`recv()` は Port の初期値（送る側が `initial=` を宣言していなければゼロ）を返し、`has_received()` は `False` を返す。この値も飛ばす。ホストが書く Port では `inputs=` と `run.write` で書いた値が送られた値になる。
+相手が最初に送るまで、`recv()` は Port の初期値（送る側が `initial=` を宣言していなければゼロ）を返し、`recv_with_time()` の時刻は `None` になる。この値も飛ばす。ホストが書く Port では `inputs=` と `run.write` で書いた値が送られた値になる。
 
-復元した実行では、状態を取得した時点で送られていた値に対して `has_received()` が `True` を返す。`self.last` は `None` から始め直すので、ノードはその値をもう 1 回扱う（たいていは状態を取得する前に扱い済み）。
+復元した実行では、状態を取得した時点で送られていた値はその時刻を、送られていなかった値は `None` を保つ。`self.last` は `None` から始め直すので、ノードは送られていた値をもう 1 回扱う（たいていは状態を取得する前に扱い済み）。
 
 ```python
 @override
@@ -171,10 +171,8 @@ def on_start(self) -> None:
 @override
 def on_update(self, dt: float) -> None:
     super().on_update(dt)
-    if not self.prev.has_received():  # 初期値。相手はまだ送っていない
-        return
     sample, t = self.prev.recv_with_time()
-    if t == self.last:  # 前回の更新から新しいメッセージが無い
+    if t is None or t == self.last:  # 相手がまだ送っていないか、新しいメッセージが無い
         return
     self.last = t
     ...  # サンプルから 1 回だけ学習する

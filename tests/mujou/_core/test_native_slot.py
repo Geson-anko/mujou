@@ -292,26 +292,29 @@ class TestInputGroup:
             InputGroup(clock=CLOCK).write([(other, [torch.ones(2)])])
 
 
-class TestSent:
-    def test_marks_what_the_writers_wrote(self):
+class TestTime:
+    def test_only_what_the_writers_wrote_has_a_time(self):
         outlet = Outlet(tensor_schema((2,)), 1, "p", clock=CLOCK)
         group = InputGroup(clock=CLOCK)
         x = group.input(tensor_schema((2,)), "x")
-        assert not outlet.outbox.read().sent and not outlet.channel(0).read().sent
-        assert not x.read().sent
+        assert outlet.outbox.read().timestamp is None
+        assert outlet.channel(0).read().timestamp is None
+        assert x.read().timestamp is None
         outlet.send([torch.ones(2)])
-        group.write([(x, [torch.ones(2)])])
-        assert outlet.outbox.read().sent and outlet.channel(0).read().sent
-        assert x.read().sent
+        written_at = group.write([(x, [torch.ones(2)])])
+        assert outlet.outbox.read().timestamp == outlet.channel(0).read().timestamp
+        assert outlet.outbox.read().timestamp is not None
+        assert x.read().timestamp == written_at
 
-    @pytest.mark.parametrize("sent", [False, True])
-    def test_restore_sets_it(self, sent: bool):
+    @pytest.mark.parametrize("time_ns", [None, 5])
+    def test_restore_sets_it(self, time_ns: int | None):
         outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         x = InputGroup(clock=CLOCK).input(tensor_schema((2,)), "x")
-        outlet.outbox.restore([torch.ones(2)], 5, sent=sent)
-        x.restore([torch.ones(2)], 5, sent=sent)
-        assert outlet.outbox.read().sent is sent
-        assert x.read().sent is sent
+        outlet.outbox.restore([torch.ones(2)], time_ns)
+        x.restore([torch.ones(2)], time_ns)
+        expected = None if time_ns is None else Timestamp(ns=time_ns)
+        assert outlet.outbox.read().timestamp == expected
+        assert x.read().timestamp == expected
 
 
 class TestClocks:
@@ -323,13 +326,7 @@ class TestClocks:
         outlet = Outlet(tensor_schema((1,)), 1, "p", clock=clock)
         group = InputGroup(clock=clock)
         x = group.input(tensor_schema((1,)), "x")
-        at_start = Timestamp(ns=1_500_000_000)
-        assert outlet.channel(0).read().timestamp == x.read().timestamp == at_start
-
-        given.advance(0.5)
         outlet.send([torch.ones(1)])
         written_at = group.write([(x, [torch.ones(1)])])
         sent = outlet.outbox.read().timestamp
-        assert sent == x.read().timestamp == written_at == Timestamp(ns=2_000_000_000)
-        assert float(sent) == 2.0
-        assert at_start < sent
+        assert sent == x.read().timestamp == written_at == Timestamp(ns=1_500_000_000)

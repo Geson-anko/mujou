@@ -415,7 +415,7 @@ class TestJacobi:
                 close(state["lam"], reference.lam[i], 1e-12)
                 for key, value in layer.state_dict().items():
                     close(state["module"][key], value, 1e-12)
-                sent, _, _ = tree["slots"][f"l{i}.next/out"]
+                sent, _ = tree["slots"][f"l{i}.next/out"]
                 close(sent["h"], reference.h[i + 1], 1e-12)
                 assert int(sent["epoch"]) == reference.epoch[i + 1]
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
@@ -861,7 +861,7 @@ def layer_update(
     module.load_state_dict(tree["nodes"]["l0"]["module"])
     params = list(module.parameters())
     state = tree["nodes"]["l0"]
-    sent, _, _ = tree["slots"]["inp.next/out"]
+    sent, _ = tree["slots"]["inp.next/out"]
     labeled = sent["mask"][:, None]
     h = h_before_mu(state)
 

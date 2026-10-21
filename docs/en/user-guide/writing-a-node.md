@@ -157,9 +157,9 @@ For noise in a continuous-time update, scale its standard deviation by $\sqrt{dt
 
 When a message is an event to handle once (a training sample, say), read its time with `recv_with_time()` and skip the update while the time has not changed.
 
-Until the peer first sends, `recv()` returns the port's initial value (zeros unless the sender declares `initial=`), and `has_received()` returns `False`: skip that value too. For a port the host writes, the `inputs=` value and each `run.write` count as sent.
+Until the peer first sends, `recv()` returns the port's initial value (zeros unless the sender declares `initial=`), and the time from `recv_with_time()` is `None`: skip that value too. For a port the host writes, the `inputs=` value and each `run.write` count as sent.
 
-In a restored run, `has_received()` returns `True` for a value that had been sent when the state was taken. `self.last` starts again from `None`, so the node handles that value once more (usually it was handled before the state was taken).
+In a restored run, a value that had been sent when the state was taken keeps its time, and one that had not keeps `None`. `self.last` starts again from `None`, so the node handles a sent value once more (usually it was handled before the state was taken).
 
 ```python
 @override
@@ -171,10 +171,8 @@ def on_start(self) -> None:
 @override
 def on_update(self, dt: float) -> None:
     super().on_update(dt)
-    if not self.prev.has_received():  # the initial value: the peer has not sent yet
-        return
     sample, t = self.prev.recv_with_time()
-    if t == self.last:  # nothing new since the last update
+    if t is None or t == self.last:  # the peer has not sent yet, or nothing new
         return
     self.last = t
     ...  # learn from the sample once

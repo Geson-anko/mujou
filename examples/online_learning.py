@@ -69,10 +69,8 @@ class Learner(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         self.elapsed += dt
-        if not self.prev.has_received():  # zeros: the teacher has not sent yet
-            return
         sample, t = self.prev.recv_with_time()
-        if t == self.last:  # nothing new since the last update
+        if t is None or t == self.last:  # the teacher has not sent, or nothing new
             return
         self.last = t
         x, y = sample["x"], sample["y"]
@@ -106,14 +104,17 @@ with mujou.run(net, inputs={teacher.a: torch.tensor(A_BEFORE)}) as run:
     # How fast the learner learns depends on time, not on how often it runs:
     # follow its loss, giving each phase up to 5 s of real time.
     loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
+    assert t is not None  # the loss on a batch, not the initial inf
     print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_BEFORE})")
     # The world changes: the same learner keeps learning, with no new phase.
     changed_at = run.write({teacher.a: torch.tensor(A_AFTER)})
     loss, t = run.wait_for(learner.loss, lambda loss: loss.item() > 1e-2, timeout=5.0)
+    assert t is not None
     print(
         f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (a changed at {float(changed_at):.2f} s)"
     )
     loss, t = run.wait_for(learner.loss, learned, timeout=5.0)
+    assert t is not None
     print(f"t = {float(t):.2f} s: loss = {loss.item():.6f}  (learned a = {A_AFTER})")
 model = run.state_dict()["nodes"]["learner"]["model"]  # the learner's state at the end
 

@@ -103,11 +103,10 @@ class Session:
             self._slots[slot.name] = (slot, spec)
         values = initial(port)
         if values is not None:
-            # In place of the zeros, with their time (the clock's when the run was
-            # laid out). A restore later replaces them, as it does the zeros.
-            time_ns = outlet.outbox.read().timestamp.ns
+            # In place of the zeros, and like them without a time: the port has
+            # not sent them. A restore later replaces them, as it does the zeros.
             for slot in slots:
-                slot.restore(values, time_ns, sent=False)
+                slot.restore(values, None)
 
     def _sources(
         self, port: AnyPort, name: str
@@ -295,7 +294,7 @@ class Session:
             items.append((slot, to_core(spec, value, self._labels[port])))
         return items
 
-    def read(self, port: AnyPort) -> tuple[object, _native.Timestamp]:
+    def read(self, port: AnyPort) -> tuple[object, _native.Timestamp | None]:
         self.check()
         outbox, spec = self._outbox(port)
         message = outbox.read()
@@ -303,7 +302,7 @@ class Session:
 
     def subscribe(
         self, port: AnyPort, timeout: float
-    ) -> Iterator[tuple[object, _native.Timestamp]]:
+    ) -> Iterator[tuple[object, _native.Timestamp | None]]:
         _wait(timeout)  # checks it
         # The whole iteration counts from this call, on the real clock.
         deadline = time.monotonic() + timeout
@@ -321,7 +320,7 @@ class Session:
         last: _native.Message,
         timeout: float,
         deadline: float,
-    ) -> Iterator[tuple[object, _native.Timestamp]]:
+    ) -> Iterator[tuple[object, _native.Timestamp | None]]:
         self.check()
         yield from_core(spec, last.values, _CPU), last.timestamp
         while True:
@@ -406,8 +405,8 @@ class Session:
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
         self._synchronize_current_streams()
-        for slot, tensors, time_ns, sent in restores:
-            slot.restore(tensors, time_ns, sent)
+        for slot, tensors, time_ns in restores:
+            slot.restore(tensors, time_ns)
         return restored
 
     def _synchronize_current_streams(self) -> None:

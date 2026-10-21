@@ -44,7 +44,7 @@ Comparing the time that `write` returns with the time that `read_with_time` retu
 t_in = run.write({net.prev: x})
 run.timer.sleep(0.1)
 y, t_out = run.read_with_time(net.next)
-if t_out >= t_in:               # y was sent after x was written
+if t_out is not None and t_out >= t_in:  # y was sent after x was written
     print(t_out - t_in)  # seconds from writing x until y was sent
 ```
 

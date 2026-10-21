@@ -36,6 +36,8 @@ with mujou.run(clock) as run:
     received: list[tuple[float, float]] = []
     # timeout: give up after 5 s of real time instead of waiting forever.
     for value, t in run.subscribe(clock.next, timeout=5.0):
+        if t is None:  # the zeros the port holds until the clock first sends
+            continue
         received.append((value.item(), float(t)))
         if len(received) == 20:
             break

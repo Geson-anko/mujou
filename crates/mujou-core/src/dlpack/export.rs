@@ -147,7 +147,7 @@ mod tests {
         let messages = Messages::new(Arc::new(Schema::new(vec![field]).unwrap()));
         let pool = Arc::clone(&messages.pools()[0]);
         for (k, versioned) in [(0, true), (100, false)] {
-            let msg = messages.build(0, true, fill_range(k)).unwrap();
+            let msg = messages.build(None, fill_range(k)).unwrap();
             let buffer = Arc::clone(&msg.values()[0]);
             let field = buffer.field().clone();
             let expected = buffer.bytes().to_vec();
@@ -169,7 +169,7 @@ mod tests {
             // messages must not reuse it.
             drop((buffer, msg));
             for j in 1..=3 {
-                drop(messages.build(0, true, fill_range(-j)).unwrap());
+                drop(messages.build(None, fill_range(-j)).unwrap());
             }
             let mut copy = vec![0u8; field.nbytes()];
             // SAFETY: the exported tensor describes the live buffer.

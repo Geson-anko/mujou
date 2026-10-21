@@ -79,6 +79,9 @@ with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as ru
     # scheduled: read every 0.1 s until the loss has fallen, giving up after 5 s.
     for _ in range(50):
         prediction, t = run.read_with_time(regressor.next)
+        if t is None:  # the zeros the port holds until the node first sends
+            run.timer.sleep(0.1)
+            continue
         losses.append(nn.functional.mse_loss(prediction, y).item())
         print(f"t = {float(t):.2f} s: loss = {losses[-1]:.5f}")
         if losses[-1] < 1e-2 * losses[0]:

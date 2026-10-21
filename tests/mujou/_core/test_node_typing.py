@@ -68,7 +68,7 @@ class TestStrictTyping:
         with mujou.run(net, inputs=values) as run:
             run.write(values)
             _, t = run.read_with_time(net.layer.out)
-            assert t.ns >= 0
+            assert t is None or t.ns >= 0
 
     def test_a_typed_dict_message_is_written(self) -> None:
         node = DictSink()

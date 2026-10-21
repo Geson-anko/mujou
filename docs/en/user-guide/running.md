@@ -92,20 +92,20 @@ Reading right after `write` returns the output for the previous input. To match 
 
 There are four ways to read output.
 
-| Way                             | What it returns                                                                | Suited for                                  |
-| ------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
-| `run.read(port)`                | The latest value at that moment                                                | The host reads whenever it suits it         |
-| `run.read_with_time(port)`      | The latest value at that moment and the time it was sent, `(value, Timestamp)` | Reading the value with its time             |
-| `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
-| `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
+| Way                             | What it returns                                                                        | Suited for                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `run.read(port)`                | The latest value at that moment                                                        | The host reads whenever it suits it         |
+| `run.read_with_time(port)`      | The latest value at that moment and the time it was sent, `(value, Timestamp \| None)` | Reading the value with its time             |
+| `run.subscribe(port)`           | An iterator that yields `(value, Timestamp \| None)` in turn                           | Handling the output each time it is renewed |
+| `run.wait_for(port, condition)` | The first `(value, Timestamp \| None)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)).
+All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)), or `None` for a value the node has not sent.
 
 Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
 `read` and `read_with_time` behave as follows.
 
-- It returns the value that the node holding the port last sent with `send`. If the node has not sent yet, it returns the port's initial value (`initial`, or zeros). Values sent with `send_to` are not reflected in `read`
+- It returns the value that the node holding the port last sent with `send`. If the node has not sent yet, it returns the port's initial value (`initial`, or zeros), whose time is `None`. Values sent with `send_to` are not reflected in `read`
 - The value is a new copy on the CPU
 
 `subscribe` goes as follows.

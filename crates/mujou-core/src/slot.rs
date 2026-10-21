@@ -175,16 +175,16 @@ impl Slot {
         newer
     }
 
-    /// Sets the value, its time and whether it was sent as they were when the
-    /// state was taken (`sent` is false for an initial value), dropping any
-    /// pending write.
+    /// Sets the value and its time as they were when the state was taken
+    /// (`None` for a value its writer had not written), dropping any pending
+    /// write.
     ///
     /// Call it only while no node runs and the host does not write (before the
     /// start, or while every node is paused with the timer frozen): it is a
     /// second way to write the slot, beside its writer, and the readers' handles
     /// reach it too.
-    pub fn restore<E>(&self, time_ns: u64, sent: bool, fill: impl Fill<E>) -> Result<(), E> {
-        let msg = self.messages.build(time_ns, sent, fill)?;
+    pub fn restore<E>(&self, time_ns: Option<u64>, fill: impl Fill<E>) -> Result<(), E> {
+        let msg = self.messages.build(time_ns, fill)?;
         self.publish(msg);
         Ok(())
     }
@@ -238,8 +238,8 @@ pub struct Outlet {
 
 impl Outlet {
     /// Creates the outward slot `"{name}/out"` and the channel slots
-    /// `"{name}/ch{k}"`, all holding zeros stamped with the current time.
-    /// Every message is stamped with the time on `clock`.
+    /// `"{name}/ch{k}"`, all holding zeros without a time. Every message sent is
+    /// stamped with the time on `clock`.
     ///
     /// The slots and the host's inputs of one run must use the clock of its
     /// runtime: on another clock, the times of the messages would not be on
@@ -248,7 +248,7 @@ impl Outlet {
     /// later messages.
     pub fn new(schema: Arc<Schema>, channels: usize, name: &str, clock: Arc<RunClock>) -> Self {
         let messages = Messages::new(schema);
-        let zeros = messages.zeros(clock.now_ns());
+        let zeros = messages.zeros();
         let slot = |name: String| {
             let (messages, zeros) = (Arc::clone(&messages), Arc::clone(&zeros));
             Arc::new(Slot::new(name, messages, Source::Own, zeros))
@@ -285,7 +285,7 @@ impl Outlet {
     /// slot. Panics if a `Target::Channel` does not exist.
     pub fn send<E>(&self, target: Target, fill: impl Fill<E>) -> Result<(), E> {
         let values = self.messages.fill(fill)?;
-        let msg = self.messages.message(values, self.clock.now_ns(), true);
+        let msg = self.messages.message(values, Some(self.clock.now_ns()));
         match target {
             Target::All => {
                 for slot in &self.channels {
@@ -326,10 +326,10 @@ impl InputGroup {
         })
     }
 
-    /// Creates the slot `"{name}/in"`, holding zeros stamped with the current time.
+    /// Creates the slot `"{name}/in"`, holding zeros without a time.
     pub fn input(self: &Arc<Self>, schema: Arc<Schema>, name: &str) -> Arc<Slot> {
         let messages = Messages::new(schema);
-        let zeros = messages.zeros(self.clock.now_ns());
+        let zeros = messages.zeros();
         let source = Source::Group(Arc::clone(self));
         Arc::new(Slot::new(format!("{name}/in"), messages, source, zeros))
     }
@@ -368,7 +368,7 @@ impl InputGroup {
         // published (its version is at most `version`) and becomes current.
         let version = self.version.load(Ordering::Relaxed);
         for (slot, values) in slots.iter().zip(filled) {
-            let next = Some((version + 1, slot.messages.message(values, time_ns, true)));
+            let next = Some((version + 1, slot.messages.message(values, Some(time_ns))));
             let mut pair = lock(&slot.value);
             let current = Arc::clone(pair.resolve(version));
             let old = std::mem::replace(&mut *pair, Pair { current, next });
@@ -464,13 +464,13 @@ mod tests {
     }
 
     #[test]
-    fn starts_with_zeros_at_creation_time() {
+    fn starts_with_zeros_without_a_time() {
         let timer = timer();
         timer.advance_ns(5).unwrap();
         let outlet = Outlet::new(pair_schema(), 1, "n.p", clock_of(&timer));
         let msg = outlet.channel(0).load();
         assert_eq!(values(&msg), [0, 0]);
-        assert_eq!(msg.time_ns(), 5);
+        assert_eq!(msg.time_ns(), None);
         assert_eq!(outlet.outbox().name(), "n.p/out");
         assert_eq!(outlet.channel(0).name(), "n.p/ch0");
     }
@@ -483,27 +483,44 @@ mod tests {
         outlet.send(Target::All, fill_k(7)).unwrap();
         let out = outlet.outbox().load();
         assert_eq!(values(&out), [7]);
-        assert_eq!(out.time_ns(), 42);
+        assert_eq!(out.time_ns(), Some(42));
         for slot in outlet.channels() {
             assert!(Arc::ptr_eq(&slot.load(), &out));
         }
     }
 
     #[test]
-    fn only_written_messages_are_sent() {
-        let outlet = Outlet::new(scalar_schema(), 2, "p", clock());
-        assert!(!outlet.outbox().load().sent());
+    fn only_written_messages_have_a_time() {
+        let timer = timer();
+        let outlet = Outlet::new(scalar_schema(), 2, "p", clock_of(&timer));
+        assert_eq!(outlet.outbox().load().time_ns(), None);
+        timer.advance_ns(3).unwrap();
         outlet.send(Target::Channel(1), fill_k(1)).unwrap();
-        assert!(outlet.channel(1).load().sent());
-        assert!(!outlet.channel(0).load().sent());
+        assert_eq!(outlet.channel(1).load().time_ns(), Some(3));
+        assert_eq!(outlet.channel(0).load().time_ns(), None);
         outlet.send(Target::All, fill_k(2)).unwrap();
-        assert!(outlet.outbox().load().sent() && outlet.channel(0).load().sent());
+        assert_eq!(outlet.outbox().load().time_ns(), Some(3));
+        assert_eq!(outlet.channel(0).load().time_ns(), Some(3));
 
+        let group = InputGroup::new(clock_of(&timer));
+        let input = group.input(scalar_schema(), "i");
+        assert_eq!(input.load().time_ns(), None);
+        group.write(&[&input], |_, bytes| fill_k(3)(bytes)).unwrap();
+        assert_eq!(input.load().time_ns(), Some(3));
+    }
+
+    /// A write at time 0 is a new message even though the zeros before it hold
+    /// the same value, so a waiting host sees it.
+    #[test]
+    fn a_write_at_time_zero_is_newer_than_the_zeros() {
         let group = InputGroup::new(clock());
         let input = group.input(scalar_schema(), "i");
-        assert!(!input.load().sent());
-        group.write(&[&input], |_, bytes| fill_k(3)(bytes)).unwrap();
-        assert!(input.load().sent());
+        let zeros = input.load();
+        group.write(&[&input], |_, bytes| fill_k(0)(bytes)).unwrap();
+        let written = input
+            .wait_newer(&zeros, Duration::ZERO)
+            .expect("a newer message");
+        assert_eq!((values(&written), written.time_ns()), (vec![0], Some(0)));
     }
 
     #[test]
@@ -662,18 +679,15 @@ mod tests {
     }
 
     #[test]
-    fn restore_sets_value_time_and_whether_sent() {
+    fn restore_sets_value_and_time() {
         let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
         let slot = outlet.channel(0);
-        slot.restore(123, true, fill_k(4)).unwrap();
+        slot.restore(Some(123), fill_k(4)).unwrap();
         let msg = slot.load();
-        assert_eq!(
-            (values(&msg), msg.time_ns(), msg.sent()),
-            (vec![4], 123, true)
-        );
+        assert_eq!((values(&msg), msg.time_ns()), (vec![4], Some(123)));
         assert_eq!(values(&outlet.outbox().load()), [0]);
-        slot.restore(1, false, fill_k(4)).unwrap();
-        assert!(!slot.load().sent());
+        slot.restore(None, fill_k(4)).unwrap();
+        assert_eq!(slot.load().time_ns(), None);
     }
 
     #[test]
@@ -691,7 +705,7 @@ mod tests {
             .unwrap();
         let (ma, mb) = (a.load(), b.load());
         assert_eq!((values(&ma), values(&mb)), (vec![1], vec![2]));
-        assert_eq!((ma.time_ns(), mb.time_ns()), (77, 77));
+        assert_eq!((ma.time_ns(), mb.time_ns()), (Some(77), Some(77)));
         assert_eq!(written_at, Timestamp::from_ns(77));
     }
 
@@ -718,14 +732,11 @@ mod tests {
         let group = InputGroup::new(clock());
         let a = group.input(scalar_schema(), "a");
         group.write(&[&a], |_, bytes| fill_k(1)(bytes)).unwrap();
-        a.restore(9, true, fill_k(2)).unwrap();
+        a.restore(Some(9), fill_k(2)).unwrap();
         let msg = a.load();
-        assert_eq!(
-            (values(&msg), msg.time_ns(), msg.sent()),
-            (vec![2], 9, true)
-        );
-        a.restore(9, false, fill_k(2)).unwrap();
-        assert!(!a.load().sent());
+        assert_eq!((values(&msg), msg.time_ns()), (vec![2], Some(9)));
+        a.restore(None, fill_k(2)).unwrap();
+        assert_eq!(a.load().time_ns(), None);
     }
 
     /// The observable form of "no reader ever sees a mix of old and new values":

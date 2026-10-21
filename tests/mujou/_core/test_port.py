@@ -54,10 +54,10 @@ class TestPortTypes:
             # Only for the type checker: recv raises before a run.
             assert_type(single.recv(), torch.Tensor)
             assert_type(multi.recv(), dict[Channel, Feedback])
-            assert_type(nxt.recv_with_time(), dict[Channel, tuple[Feedback, Timestamp]])
-            assert_type(prev.recv_with_time(), tuple[torch.Tensor, Timestamp])
-            assert_type(single.has_received(), bool)
-            assert_type(multi.has_received(), dict[Channel, bool])
+            assert_type(
+                nxt.recv_with_time(), dict[Channel, tuple[Feedback, Timestamp | None]]
+            )
+            assert_type(prev.recv_with_time(), tuple[torch.Tensor, Timestamp | None])
 
         assert not single.multi and not prev.multi and not nxt_single.multi
         assert multi.multi and prev_multi.multi and nxt.multi
@@ -324,15 +324,25 @@ class TestRecv:
         assert isinstance(node.results[0], TypeError)
 
 
-class TestHasReceived:
-    def test_is_false_for_the_initial_value_and_true_once_sent(
-        self, start_manual: StartManual
-    ):
+def written(port: Port[Any, torch.Tensor]) -> bool:
+    """Whether the writer of ``port`` has written what ``recv`` returns."""
+    _, time = port.recv_with_time()
+    return time is not None
+
+
+def written_by_channel(
+    port: Port[Any, torch.Tensor, Multi],
+) -> dict[Channel, bool]:
+    return {ch: time is not None for ch, (_, time) in port.recv_with_time().items()}
+
+
+class TestNoTimeUntilWritten:
+    def test_the_initial_value_has_no_time_until_sent(self, start_manual: StartManual):
         out = NextPort(send=h(), initial=torch.ones(2, 3))
         inp = PrevPort(recv=h())
         out.connect(inp)
         source = Probe(lambda: out.send(torch.zeros(2, 3)), next=out)
-        sink = Probe(inp.has_received, prev=inp)
+        sink = Probe(lambda: written(inp), prev=inp)
         run = start_manual(Group(source=source, sink=sink))
         run.step(H, sink)
         run.step(H, source, sink)  # sends the zeros: a value equal to the initial one
@@ -349,40 +359,42 @@ class TestHasReceived:
             "quiet": Probe(next=quiet),
             "talker": Probe(lambda: talker.send(torch.ones(2, 3)), next=talker),
         }
-        sink = Probe(merge.has_received, prev=merge)
+        sink = Probe(lambda: written_by_channel(merge), prev=merge)
         unconnected = Port(recv=h(), multi=True)
-        lonely = Probe(unconnected.has_received, prev=unconnected)
+        lonely = Probe(lambda: written_by_channel(unconnected), prev=unconnected)
         run = start_manual(Group(**nodes, sink=sink, lonely=lonely))
         run.step(H, *nodes.values(), sink, lonely)
         assert sink.results == [{to_quiet: False, to_talker: True}]
         assert lonely.results == [{}]
 
-    def test_send_to_counts_only_for_that_peer(self, start_manual: StartManual):
+    def test_send_to_gives_a_time_only_for_that_peer(self, start_manual: StartManual):
         out = NextPort(send=h())
         a, b = PrevPort(recv=h()), PrevPort(recv=h())
         to_a = out.connect(a)
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
-        sink_a, sink_b = Probe(a.has_received, prev=a), Probe(b.has_received, prev=b)
+        sink_a = Probe(lambda: written(a), prev=a)
+        sink_b = Probe(lambda: written(b), prev=b)
         run = start_manual(Group(source=source, a=sink_a, b=sink_b))
         run.step(H, source, sink_a, sink_b)
         assert (sink_a.results, sink_b.results) == ([True], [False])
 
-    def test_counts_what_the_host_writes(self, start_manual: StartManual):
-        given, written = Port(recv=h()), Port(recv=h())
+    def test_what_the_host_writes_has_its_time(self, start_manual: StartManual):
+        given, later = Port(recv=h()), Port(recv=h())
         node = Probe(
-            lambda: (given.has_received(), written.has_received()),
+            lambda: (given.recv_with_time()[1], later.recv_with_time()[1]),
             given=given,
-            written=written,
+            later=later,
         )
         run = start_manual(Group(node=node), inputs={given: torch.ones(2, 3)})
         run.step(H)
-        run.write({written: torch.ones(2, 3)})
+        written_at = run.write({later: torch.ones(2, 3)})
         run.step(H)
-        assert node.results == [(True, False), (True, True)]
+        start = Timestamp(ns=0)
+        assert node.results == [(start, None), (start, written_at)]
 
     @pytest.mark.parametrize("with_inputs", [False, True])
-    def test_a_restored_run_keeps_what_was_sent(
+    def test_a_restored_run_keeps_what_was_not_written(
         self, start_manual: StartManual, with_inputs: bool
     ):
         def build() -> tuple[Group, Probe, Probe, Port[Never, torch.Tensor]]:
@@ -393,7 +405,7 @@ class TestHasReceived:
             host = Port(recv=h())
             source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
             sink = Probe(
-                lambda: (a.has_received(), b.has_received(), host.has_received()),
+                lambda: (written(a), written(b), written(host)),
                 a=a,
                 b=b,
                 host=host,
@@ -411,19 +423,6 @@ class TestHasReceived:
         run = start_manual(restored, state=tree, inputs=inputs)
         run.step(H, sink)
         assert sink.results == [(True, False, with_inputs)]
-
-    def test_rejects_a_port_that_receives_nothing(self, start_manual: StartManual):
-        out = Port(send=h())
-        node = Probe(out.has_received, out=out)
-        run = start_manual(Group(node=node))
-        run.step(H)
-        assert isinstance(node.results[0], TypeError)
-
-    def test_only_the_owning_node_asks(self, start_manual: StartManual):
-        inp = Port(recv=h())
-        start_manual(Group(node=Probe(inp=inp)))
-        with pytest.raises(RuntimeError, match="only the node that owns"):
-            inp.has_received()  # from the host
 
 
 class TestSend:
@@ -536,12 +535,11 @@ class TestInitial:
         run = start_manual(Group(source=Probe(next=out), a=sink_a, b=sink_b))
         run.step(H, sink_a, sink_b)  # the source does not send
         ((value, written_at),) = cast(
-            list[tuple[torch.Tensor, Timestamp]], sink_a.results
+            list[tuple[torch.Tensor, Timestamp | None]], sink_a.results
         )
         assert torch.equal(value, twos)
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
-        # Stamped as the zeros would be: with the time the run started (0).
-        assert written_at.ns == 0
+        assert written_at is None  # as the zeros: the port has not sent it
         assert torch.equal(run.read(out), twos)
 
     def test_send_to_replaces_it_for_that_peer_only(self, start_manual: StartManual):

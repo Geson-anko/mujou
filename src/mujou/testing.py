@@ -41,7 +41,7 @@ Example::
     with mujou.testing.run(net, inputs={net.prev: x}) as run:
         run.step(0.001, net.a, net.b)  # 1 ms later, a, then b reads a's new value
         y, t = run.read_with_time(net.next)
-    assert torch.equal(y, 4 * x) and t.ns == 1_000_000
+    assert torch.equal(y, 4 * x) and t is not None and t.ns == 1_000_000
 """
 
 from collections.abc import Mapping

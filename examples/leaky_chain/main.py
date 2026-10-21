@@ -45,9 +45,10 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
         b, t_b = run.read_with_time(net.b.next)
         # Each output against the exact one at the time it was sent. On a busy
         # machine a node may not have sent since the step: its time is then
-        # earlier than start, and the difference is negative.
-        exact_a, _ = step_response(t_a - start)
-        _, exact_b = step_response(t_b - start)
+        # earlier than start, and the difference is negative (None, before its
+        # first send, counts as long before the step).
+        exact_a, _ = step_response(-math.inf if t_a is None else t_a - start)
+        _, exact_b = step_response(-math.inf if t_b is None else t_b - start)
         print(
             f"a = {a.item():.3f} (exact {exact_a:.3f}), "
             f"b = {b.item():.3f} (exact {exact_b:.3f})"

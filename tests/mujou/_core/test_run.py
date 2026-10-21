@@ -52,6 +52,7 @@ class Echo(Node):
     @override
     def on_update(self, dt: float) -> None:
         _, t = self.prev.recv_with_time()
+        assert t is not None  # the host writes before each step
         self.next.send(torch.tensor(t.ns))
 
 
@@ -917,10 +918,10 @@ class TestInputs:
             restored.step(H)
             restored.shutdown()
         assert torch.equal(kept.seen[0][0][0], u(1))
-        assert kept.seen[0][0][1].ns == written_at
+        assert kept.seen[0][0][1] == Timestamp(ns=written_at)
         assert torch.equal(replaced.seen[0][0][0], u(3))
         # Written for the restored run, so stamped with the tree's time.
-        assert replaced.seen[0][0][1].ns == frozen_at
+        assert replaced.seen[0][0][1] == Timestamp(ns=frozen_at)
 
 
 class TestWrite:
@@ -983,7 +984,7 @@ class TestWrite:
         run.step(H)
         assert node.seen[0][0][1] == Timestamp(ns=H_NS)  # the time of the start
         written_at = run.write({node.x: u(2)})
-        assert written_at == Timestamp(ns=2 * H_NS) > node.seen[0][0][1]
+        assert written_at == Timestamp(ns=2 * H_NS)  # later than the inputs
 
     def test_after_a_restore_continues_from_the_time_of_the_tree(
         self, start_manual: StartManual
@@ -1061,7 +1062,7 @@ class TestRead:
         run = start_manual(net)
         out, t = run.read_with_time(net.next)
         assert torch.equal(out, torch.zeros(2, dtype=F64))
-        assert t == Timestamp(ns=0)
+        assert t is None
 
     def test_rejects_a_port_that_sends_nothing(self, start_manual: StartManual):
         net = Chain()
@@ -1126,6 +1127,8 @@ class TestSubscribe:
         times: list[Timestamp] = []
         stopper = threading.Thread(target=run.shutdown)
         for _, t in run.subscribe(net.next):
+            if t is None:  # the zeros before the first send
+                continue
             times.append(t)
             if len(times) == 5:
                 stopper.start()
@@ -1257,9 +1260,9 @@ class TestStateDict:
         assert ended["timer"] == {"time_ns": asked_at, "scale": 2.0}
         assert ended["last_update_ns"] == running["last_update_ns"]
         assert ended["slots"].keys() == running["slots"].keys()
-        for name, (value, time_ns, sent) in running["slots"].items():
+        for name, (value, time_ns) in running["slots"].items():
             assert torch.equal(ended["slots"][name][0], value)
-            assert ended["slots"][name][1:] == (time_ns, sent)
+            assert ended["slots"][name][1] == time_ns
         for path in ("a", "b"):
             assert torch.equal(ended["nodes"][path]["x"], running["nodes"][path]["x"])
             assert ended["nodes"][path]["updates"] == running["nodes"][path]["updates"]
@@ -1281,8 +1284,8 @@ class TestStateDict:
         assert asked_after <= frozen_at <= stopped_before
         for updated_at in tree["last_update_ns"].values():
             assert updated_at <= frozen_at
-        for _, written_at, _ in tree["slots"].values():
-            assert written_at <= frozen_at
+        for _, written_at in tree["slots"].values():
+            assert written_at is not None and written_at <= frozen_at
         assert torch.equal(tree["slots"]["b.next/out"][0], tree["nodes"]["b"]["x"])
 
     def test_is_taken_at_one_time(self, start: Start):
@@ -1299,8 +1302,8 @@ class TestStateDict:
             "b.next/out",
             "a.prev/in",
         }
-        for _, written_at, _ in tree["slots"].values():
-            assert written_at <= frozen_at
+        for _, written_at in tree["slots"].values():
+            assert written_at is not None and written_at <= frozen_at
         for updated_at in tree["last_update_ns"].values():
             assert 0 < updated_at <= frozen_at
         # Each node sends at the end of its update, so a node paused between
@@ -1465,8 +1468,8 @@ class TestState:
             ({**tree, "timer": {"time_ns": 0}}, "timer do not match"),
             ({**tree, "timer": {"time_ns": "0", "scale": 1.0}}, "int time_ns"),
             ({**tree, "last_update_ns": {"a": 0.5, "b": 0}}, "is not an int"),
-            (slot("a.prev/in", (u(0), 0)), r"is not \(value, time_ns, sent\)"),
-            (slot("a.prev/in", (u(0), 0, 1)), "sent flag that is not a bool"),
+            (slot("a.prev/in", (u(0), 0, False)), r"is not \(value, time_ns\)"),
+            (slot("a.prev/in", (u(0), "0")), "neither an int nor None"),
         ]
         for wrong, match in broken:
             with pytest.raises(ValueError, match=match):
@@ -1786,9 +1789,9 @@ class TestEndToEnd:
         again = again_run.state_dict()
         assert again["last_update_ns"] == tree["last_update_ns"]
         assert again["timer"] == tree["timer"]
-        for name, (value, time_ns, sent) in tree["slots"].items():
+        for name, (value, time_ns) in tree["slots"].items():
             assert torch.equal(again["slots"][name][0], value)
-            assert again["slots"][name][1:] == (time_ns, sent)
+            assert again["slots"][name][1] == time_ns
         restored_order = (
             (restored.b, restored.a) if b_first else (restored.a, restored.b)
         )

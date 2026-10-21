@@ -78,7 +78,7 @@ class InputGroup:
         """
     def input(self, /, schema: Schema, name: str) -> InputSlot:
         """
-        Creates the slot `"{name}/in"` holding zeros.
+        Creates the slot `"{name}/in"` holding zeros without a time.
         """
     def write(
         self, /, items: SupportsGetItem[int, tuple[InputSlot, Sequence[Any]]]
@@ -102,12 +102,10 @@ class InputSlot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(
-        self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
-    ) -> None:
+    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex | None) -> None:
         """
-        Sets the value, its time and whether it was sent, dropping any pending
-        write.
+        Sets the value and its time (`None` for a value the host had not
+        written), dropping any pending write.
 
         Call it only while no node runs (before the start, or while every node
         is paused). Raises as `Outlet.send` does.
@@ -120,19 +118,14 @@ class InputSlot:
 @final
 class Message:
     """
-    An immutable value of a slot, the time it was written at on the writer's
-    timer, and whether the writer sent it.
+    An immutable value of a slot, and the time its writer wrote it at on the
+    run's clock.
     """
     @property
-    def sent(self, /) -> bool:
+    def timestamp(self, /) -> Timestamp | None:
         """
-        Whether the slot's writer sent it (or a restore said so), rather than it
-        being the value the slot was created or initialized with.
-        """
-    @property
-    def timestamp(self, /) -> Timestamp:
-        """
-        The time it was written at.
+        The time it was written at, or `None` for the value the slot holds
+        until its writer first writes (zeros, or an initial value).
         """
     @property
     def values(self, /) -> list[BufferView]:
@@ -176,8 +169,8 @@ class Outlet:
         clock: ReadOnlyTimer,
     ) -> Self:
         """
-        Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
-        Every message is stamped with the time on `clock`.
+        Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros
+        without a time. Every message sent is stamped with the time on `clock`.
 
         The slots and the host's inputs of one run must use the clock its
         runtime runs on: on another clock, the times of the messages would not
@@ -324,12 +317,10 @@ class Slot:
     @property
     def name(self, /) -> str: ...
     def read(self, /) -> Message: ...
-    def restore(
-        self, /, values: Sequence[Any], time_ns: SupportsIndex, sent: bool
-    ) -> None:
+    def restore(self, /, values: Sequence[Any], time_ns: SupportsIndex | None) -> None:
         """
-        Sets the value, its time and whether it was sent as they were when the
-        state was taken (`sent` is false for an initial value).
+        Sets the value and its time as they were when the state was taken
+        (`None` for a value its writer had not written).
 
         Call it only while no node runs (before the start, or while every node
         is paused): it writes beside the slot's own writer. Raises as

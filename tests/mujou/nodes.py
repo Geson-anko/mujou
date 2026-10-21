@@ -95,7 +95,10 @@ class Pair(Node):
         self.many = Port(recv=vec(), multi=True)
         self.out = Port(send=vec())
         self.seen: list[
-            tuple[tuple[torch.Tensor, Timestamp], tuple[torch.Tensor, Timestamp]]
+            tuple[
+                tuple[torch.Tensor, Timestamp | None],
+                tuple[torch.Tensor, Timestamp | None],
+            ]
         ] = []
 
     @override

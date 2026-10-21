@@ -67,14 +67,6 @@ class Binding:
         (value,) = received.values()
         return value
 
-    def has_received(self) -> object:
-        self._receiving()
-        received = {channel: slot.read().sent for channel, slot in self._sources}
-        if self._multi:
-            return received
-        (sent,) = received.values()
-        return sent
-
     def send(self, msg: object) -> None:
         outlet = self._sending()
         outlet.send(self._tensors(msg))

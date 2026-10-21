@@ -7,6 +7,7 @@ from torch import nn
 import mujou.pc as pc
 from mujou import Group, TensorSpec
 from mujou.testing import ManualRun
+from mujou.time import Timestamp, VirtualTimer
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -34,7 +35,7 @@ class TestInput:
             mask = torch.tensor([True, False, True])
             written_at = run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
             run.step(H, inp)
-            sent, _, _ = run.state_dict()["slots"]["Input.next/out"]
+            sent, _ = run.state_dict()["slots"]["Input.next/out"]
             assert torch.equal(sent["h"], x)
             assert torch.equal(sent["y"], y)
             assert torch.equal(sent["mask"], mask)
@@ -43,9 +44,11 @@ class TestInput:
     def test_sends_zeros_without_a_target_before_the_host_writes(
         self, start_manual: StartManual
     ):
-        inp, run = self._run(start_manual)
+        # At time 0 whatever the time of the run's timer.
+        inp = pc.Input(x=X, y=Y, period=1e-3)
+        run = start_manual(inp, timer=VirtualTimer(start=Timestamp(ns=5_000_000)))
         run.step(H, inp)
-        sent, _, _ = run.state_dict()["slots"]["Input.next/out"]
+        sent, _ = run.state_dict()["slots"]["Input.next/out"]
         assert torch.equal(sent["h"], torch.zeros(B, 4))
         assert int(sent["epoch"]) == 0
         assert torch.equal(sent["y"], torch.zeros(B, dtype=torch.int64))
