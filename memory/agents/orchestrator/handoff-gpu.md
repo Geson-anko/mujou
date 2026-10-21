@@ -64,4 +64,4 @@ UV_PROJECT_ENVIRONMENT=.venv-gil uv run --python 3.14 python benchmarks/mn_sched
 
 ## PR
 
-（PR を出した後に URL を書く）
+https://github.com/Geson-anko/mujou/pull/93（`refactor/2026-10-20/restructure` → `main`。merge はユーザーが判断する。GPU のテストで直したものは、このブランチに commit して push すれば PR に載る）
