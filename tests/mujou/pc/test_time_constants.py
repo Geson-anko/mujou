@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from mujou._core.pc.time_constants import TimeConstants
+from mujou.pc import TimeConstants
 
 
 class TestTimeConstants:
@@ -22,11 +22,6 @@ class TestTimeConstants:
         tau = TimeConstants(h=1e-3, lam=math.inf, theta=math.inf)
         assert tau.lam == math.inf
         assert tau.theta == math.inf
-
-    @pytest.mark.parametrize("value", [True, "1.0", None])
-    def test_a_field_must_be_a_number(self, value: object):
-        with pytest.raises(TypeError, match="TimeConstants.lam"):
-            TimeConstants(h=1e-3, lam=value, theta=1.0)  # pyright: ignore[reportArgumentType]
 
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):

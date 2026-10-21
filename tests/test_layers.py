@@ -1,9 +1,10 @@
 """The import layers of ``src/mujou``: the source of truth for the rule.
 
 A module imports only modules of lower layers (not of its own), and only the
-modules in ``NATIVE`` import the extension ``mujou._core._native``. Every import
-statement counts, wherever it is: at the top, under ``TYPE_CHECKING`` or in a
-function. ``ALLOWED`` lists the imports that break the rule today. It only
+modules in ``NATIVE`` import the extension ``mujou._core._native``. ``mujou.pc``
+is written as a user's code is: on the modules in ``PUBLIC`` only, never on
+``mujou._core``. Every import statement counts, wherever it is: at the top, under
+``TYPE_CHECKING`` or in a function. ``ALLOWED`` lists the imports that break the rule today. It only
 shrinks: an import that breaks the rule and is not in it fails, and so does an
 entry that no longer breaks it.
 """
@@ -31,15 +32,14 @@ LAYERS: list[set[str]] = [
     {"mujou._core.run"},
     {"mujou", "mujou.time", "mujou.testing"},
     {
-        "mujou._core.pc",
-        "mujou._core.pc.clock",
-        "mujou._core.pc.messages",
-        "mujou._core.pc.losses",
-        "mujou._core.pc.time_constants",
+        "mujou.pc._messages",
+        "mujou.pc._time_constants",
+        "mujou.pc._losses",
+        "mujou.pc._clock",
     },
-    {"mujou._core.pc.functional"},
-    {"mujou._core.pc.input", "mujou._core.pc.layer", "mujou._core.pc.output"},
     {"mujou.pc.functional"},
+    {"mujou.pc._input", "mujou.pc._layer", "mujou.pc._output"},
+    {"mujou.pc._chain"},
     {"mujou.pc"},
 ]
 RANK = {module: rank for rank, layer in enumerate(LAYERS) for module in layer}
@@ -52,6 +52,8 @@ NATIVE = {
     "mujou._core.run",
     "mujou.time",
 }
+
+PUBLIC = {"mujou", "mujou.time", "mujou.testing"}
 
 # (importer, imported)
 ALLOWED: set[tuple[str, str]] = set()
@@ -81,8 +83,14 @@ def imports(path: Path, modules: set[str]) -> Iterator[str]:
         yield from (name for name in names if name in modules)
 
 
+def in_pc(module: str) -> bool:
+    return module == "mujou.pc" or module.startswith("mujou.pc.")
+
+
 def breaks_the_rule(importer: str, imported: str) -> bool:
     if imported == EXTENSION and importer not in NATIVE:
+        return True
+    if in_pc(importer) and not (in_pc(imported) or imported in PUBLIC):
         return True
     return RANK[imported] >= RANK[importer]
 
@@ -101,3 +109,8 @@ class TestLayers:
         }
         assert broken - ALLOWED == set(), "imports that break the layers"
         assert ALLOWED - broken == set(), "fixed: remove them from ALLOWED"
+
+    def test_pc_may_import_the_public_modules_only(self):
+        assert not breaks_the_rule("mujou.pc._layer", "mujou")
+        assert not breaks_the_rule("mujou.pc._layer", "mujou.pc.functional")
+        assert breaks_the_rule("mujou.pc._layer", "mujou._core.node")

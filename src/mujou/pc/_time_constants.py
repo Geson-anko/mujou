@@ -19,7 +19,9 @@ class TimeConstants:
 
     ($r = h - \mu$), and a step of ``dt`` seconds moves them by ``dt / tau`` of
     the right-hand side (the discrete step sizes are ``eta_h = dt / h``,
-    ``alpha = dt / lam`` and ``eta_theta = dt / theta``).
+    ``alpha = dt / lam`` and ``eta_theta = dt / theta``). One update of
+    ``theta`` that weighs ``elapsed`` seconds is thus one step of SGD on the
+    mean gradient of the batch with the learning rate ``elapsed / theta``.
 
     ``lam=math.inf`` makes the dual stay at zero (``alpha = 0``, plain predictive
     coding), and ``theta=math.inf`` makes the parameters stay where they are (no
@@ -34,9 +36,8 @@ class TimeConstants:
         pc_only = TimeConstants(h=4e-3, lam=math.inf, theta=1.28)
 
     Raises:
-        TypeError: A field is not a number (``bool`` is not one).
-        ValueError: ``h`` is not finite and positive, or ``lam`` or ``theta`` is
-            not positive (NaN is not).
+        ValueError: ``h`` is not finite and > 0, or ``lam`` or ``theta`` is not
+            > 0 (NaN is not).
     """
 
     h: float
@@ -44,13 +45,9 @@ class TimeConstants:
     theta: float
 
     def __post_init__(self) -> None:
-        # User input: check the types at runtime.
-        for name in ("h", "lam", "theta"):
-            value: object = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, int | float):
-                raise TypeError(f"TimeConstants.{name} must be a number, got {value!r}")
-            # NaN fails `value > 0`, so it is rejected here too.
+        if not 0 < self.h < math.inf:
+            raise ValueError(f"TimeConstants.h must be finite and > 0, got {self.h!r}")
+        for name in ("lam", "theta"):
+            value: float = getattr(self, name)
             if not value > 0:
                 raise ValueError(f"TimeConstants.{name} must be > 0, got {value!r}")
-        if not math.isfinite(self.h):
-            raise ValueError(f"TimeConstants.h must be finite, got {self.h!r}")

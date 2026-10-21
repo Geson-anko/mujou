@@ -7,13 +7,11 @@ from typing import override
 import torch
 from torch import nn
 
-from mujou._core.node import Node
-from mujou._core.pc.clock import LearnClock
-from mujou._core.pc.functional import learn_, loss_vjp
-from mujou._core.pc.messages import Activity, Prediction
-from mujou._core.pc.time_constants import TimeConstants
-from mujou._core.port import Port
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou import DictSpec, Node, Port, TensorSpec
+from mujou.pc._clock import LearnClock
+from mujou.pc._messages import Activity, Prediction
+from mujou.pc._time_constants import TimeConstants
+from mujou.pc.functional import learn_, loss_vjp
 
 
 class Output(Node):
@@ -30,27 +28,30 @@ class Output(Node):
     $$
 
     it sends $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
-    previous node (``functional.loss_vjp``), zeros when no sample has a target.
-    Each ``on_update(dt)`` caps ``dt`` at ``max_dt`` as ``Layer`` does, reads
-    the ``Activity``, sends ``g_in``, sends a ``Prediction``
-    (``y_hat`` with the ``y``, ``mask`` and ``time`` it was paired with) for
-    the host to read, and updates ``theta`` when it learns. It does not read the
-    ``epoch``: a jump of ``h_in`` needs no move here, as the node holds no
-    activity of its own.
+    previous node (``functional.loss_vjp``): zero for a sample without a target
+    while its ``y_hat`` is finite. Each ``on_update(dt)`` caps ``dt`` at
+    ``max_dt`` as ``Layer`` does, reads the ``Activity``, sends ``g_in``, sends a
+    ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
+    paired with) for the host to read, and updates ``theta`` when it learns. It
+    does not read the ``jumps``: a jump of ``h_in`` needs no move here, as the
+    node holds no activity of its own.
 
     It learns as ``Layer`` does, by its ``clock``: once ``learn_interval``
     seconds have passed since the host wrote the input, but not in the update
-    that first sees it, or in every update with ``None``. When no sample has a target, it does not
-    learn and drops the time since the last update; so too before the first
-    sample arrives, while the activity is zeros (``mask`` all False), and
-    when the input changes before it has learned from it. ``B`` is the batch,
-    not the number of samples with a target: a sample without one adds zero.
+    that first sees it, or in every update with ``None``. When no sample has a
+    target, it does not learn and drops the time since the last update; so too
+    before the first sample arrives, while the activity is zeros (``mask`` all
+    False), and when the input changes before it has learned from it. ``B`` is
+    the batch, not the number of samples with a target: a sample without one
+    adds zero.
 
     ``loss`` returns the loss of each sample, ``(B,)``, such as ``mse`` or
     ``cross_entropy``, and the node sums them. A loss that averages (such as
-    ``nn.MSELoss()``) would scale the gradient that flows back by ``1 / B``.
-    ``module`` must treat the samples independently, and is called once on zeros
-    when the node is made, as in ``Layer``.
+    ``nn.MSELoss()``) would scale the gradient that flows back by ``1 / B``, so
+    the node refuses it when it is made: it calls ``module`` and ``loss`` once
+    on zeros then (``functional.loss_vjp``), which also finds the shape of
+    ``y_hat``. ``module`` must treat the samples independently, as in
+    ``Layer``.
 
     The state holds ``"generator"``, ``"module"`` and when to learn
     (``"clock"``). Read it with ``Run.state_dict()``, as for ``Layer``.
@@ -100,6 +101,7 @@ class Output(Node):
     ) -> None:
         super().__init__(device=device, period=tau.h / 4 if period is None else period)
         self._tau = tau
+        self._loss = loss
         self._batch = act.specs["y"].shape[0]
         self.clock = LearnClock(
             period=self.period,
@@ -109,24 +111,21 @@ class Output(Node):
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
-        h_in, target = act.specs["h"], act.specs["y"]
-        with torch.no_grad():
-            y_hat = module(h_in.zeros(device=self.device))
-            ell = loss(y_hat, target.zeros(device=self.device))
-        if ell.shape != (self._batch,):
-            raise ValueError(
-                f"loss must return the loss of each sample, of shape ({self._batch},), "
-                f"got {tuple(ell.shape)}; a loss that averages, such as "
-                "nn.MSELoss(), does not (use pc.mse or pc.cross_entropy)"
-            )
-        self._loss = loss
+        h_in, y, mask = act.specs["h"], act.specs["y"], act.specs["mask"]
+        y_hat, _, _ = loss_vjp(
+            module,
+            h_in.zeros(device=self.device),
+            y.zeros(device=self.device),
+            mask.zeros(device=self.device),
+            loss,
+        )
         self.prev = Port(send=h_in, recv=act)
         self.next = Port(
             send=DictSpec(
                 Prediction,
                 y_hat=TensorSpec(y_hat.shape, y_hat.dtype),
-                y=target,
-                mask=act.specs["mask"],
+                y=y,
+                mask=mask,
                 time=act.specs["time"],
             )
         )
@@ -134,33 +133,21 @@ class Output(Node):
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
-        activity = self.prev.recv()
-        h_in = activity["h"]  # (B, *in)
-        tick = self.clock.tick(dt, int(activity["time"]), self.timer.now().ns)
-        labeled = bool(activity["mask"].any())
-        g_theta: list[torch.Tensor] = []
-        if labeled:
-            y_hat, g_in, g_theta = loss_vjp(
-                self.module,
-                h_in,
-                activity["y"],
-                activity["mask"],
-                self._loss,
-                self._params if tick.learn else (),
-            )
-            assert g_in is not None  # wrt_input is True
-        else:
-            with torch.no_grad():
-                y_hat = self.module(h_in)
-            g_in = torch.zeros_like(h_in)  # no target, no loss
+        act = self.prev.recv()
+        tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)
+        # Nothing to learn from an input without a target: its time is dropped.
+        learn = tick.learn and bool(act["mask"].any())
+        y_hat, g_in, g_theta = loss_vjp(
+            self.module,
+            act["h"],
+            act["y"],
+            act["mask"],
+            self._loss,
+            self._params if learn else (),
+        )
         self.prev.send(g_in)
         self.next.send(
-            {
-                "y_hat": y_hat,
-                "y": activity["y"],
-                "mask": activity["mask"],
-                "time": activity["time"],
-            }
+            {"y_hat": y_hat, "y": act["y"], "mask": act["mask"], "time": act["time"]}
         )
-        if tick.learn and labeled:
+        if learn:
             learn_(self._params, g_theta, tick.elapsed, self._tau, self._batch)

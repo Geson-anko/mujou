@@ -5,7 +5,7 @@ from typing import TypedDict
 
 import torch
 
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou import DictSpec, TensorSpec
 
 
 class Activity(TypedDict):
@@ -13,18 +13,19 @@ class Activity(TypedDict):
     its samples.
 
     - ``h``: the activity, ``(B, *out)``.
-    - ``epoch``: ``()`` int64, the number of times the sender's ``h`` has jumped
-      by more than its continuous relaxation: an ``Input`` counts the writes of
-      the host, and a ``Layer`` counts its moves with a new sample and with a
-      jump of the ``h`` it receives, and the jumps of its own ``theta`` when it
+    - ``jumps``: ``()`` int64, the number of times the sender's ``h`` has jumped
+      rather than relaxed continuously: an ``Input`` counts the writes of the
+      host, and a ``Layer`` counts its moves with a new sample and with a jump
+      of the ``h`` it receives, and the jumps of its own ``theta`` when it
       learns at intervals (``learn_interval`` not ``None``). A change tells the
       receiver to move its own ``h`` with its prediction, so that the jump
       does not enter its deviation ``h - mu`` (``Layer``).
     - ``y``: the target of each sample, ``(B, *target)``.
     - ``mask``: ``(B,)`` bool, whether each sample has a target. A sample whose
       ``mask`` is False adds nothing to the loss, whatever its ``y`` is.
-    - ``time``: ``()`` int64, the time in nanoseconds at which the host wrote the
-      input that ``h`` was computed from.
+    - ``time``: ``()`` int64, the time in nanoseconds that ``Run.write``
+      returned for the input ``h`` was computed from; 0 before the host first
+      writes.
 
     ``y``, ``mask`` and ``time`` come from the ``Sample`` the host wrote, and
     every node passes them on with the ``h`` it computed from it, in the same
@@ -33,7 +34,7 @@ class Activity(TypedDict):
     """
 
     h: torch.Tensor
-    epoch: torch.Tensor
+    jumps: torch.Tensor
     y: torch.Tensor
     mask: torch.Tensor
     time: torch.Tensor
@@ -84,8 +85,14 @@ def activity_spec(h: TensorSpec, y: TensorSpec) -> DictSpec[Activity]:
     return DictSpec(
         Activity,
         h=h,
-        epoch=TensorSpec((), torch.int64),
+        jumps=TensorSpec((), torch.int64),
         y=y,
         mask=TensorSpec(batch, torch.bool),
         time=TensorSpec((), torch.int64),
     )
+
+
+def rows(mask: torch.Tensor, like: torch.Tensor) -> torch.Tensor:
+    """Return the ``(B,)`` ``mask`` of an ``Activity`` shaped to select the rows
+    of ``like`` (``(B, *shape)``) in ``torch.where``."""
+    return mask.reshape(-1, *([1] * (like.dim() - 1)))

@@ -2,7 +2,7 @@ import copy
 import math
 import random
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 import torch
@@ -12,71 +12,29 @@ import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun
 from mujou.time import VirtualTimer
-from tests.mujou.nodes import assert_same_tree, close
+from tests.mujou.nodes import F64, assert_same_tree, close
+from tests.mujou.pc._reference import (
+    MASK,
+    N_OUT,
+    NO_LEARNING,
+    TAU,
+    B,
+    H,
+    Reference,
+    credits,
+    forward,
+    make_modules,
+    masked_mse,
+    sample,
+)
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
 
-H = 1e-3  # seconds per step
 
-B = 3
-F64 = torch.float64
-N_OUT = 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
-NO_LEARNING = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=math.inf)
-MASK = torch.tensor([True, False, True])
-
-
-class ResBlock(nn.Module):
-    """``h + fc2(act(fc1(h)))``: a residual block as the ``f`` of one node."""
-
-    def __init__(self, n: int, act: Callable[[torch.Tensor], torch.Tensor]) -> None:
-        super().__init__()
-        self.fc1, self.fc2 = nn.Linear(n, n), nn.Linear(n, n)
-        self.act = act
-
-    @override
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
-        return h + self.fc2(self.act(self.fc1(h)))
-
-
-class Act(nn.Module):
-    def __init__(self, act: Callable[[torch.Tensor], torch.Tensor]) -> None:
-        super().__init__()
-        self.act = act
-
-    @override
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
-        return self.act(h)
-
-
-def identity(h: torch.Tensor) -> torch.Tensor:
-    return h
-
-
-ACTS = {"linear": identity, "tanh": torch.tanh}
-
-
-def make_modules(
-    block: str, act: str, widths: Sequence[int], seed: int = 0
-) -> tuple[list[nn.Module], nn.Module]:
-    """The modules of the layers and the head, float64: ``Linear`` then the
-    activation, or a residual block (of constant width)."""
-    layers: list[nn.Module] = []
-    with torch.random.fork_rng():
-        torch.manual_seed(seed)
-        for n_in, n_out in zip(widths[:-1], widths[1:], strict=True):
-            if block == "linear":
-                layers.append(nn.Sequential(nn.Linear(n_in, n_out), Act(ACTS[act])))
-            else:
-                assert n_in == n_out
-                layers.append(ResBlock(n_in, ACTS[act]))
-        head = nn.Linear(widths[-1], N_OUT)
-    return [m.double() for m in layers], head.double()
-
-
-class Chain:
-    """``Input -> Layer -> ... -> Output (mse)`` over ``B`` samples, float64."""
+class HandChain:
+    """``Input -> Layer -> ... -> Output (mse)`` over ``B`` samples, float64,
+    wired by hand."""
 
     def __init__(
         self,
@@ -123,198 +81,6 @@ class Chain:
 
 def activity(h: TensorSpec) -> DictSpec[pc.Activity]:
     return pc.activity_spec(h, TensorSpec((B, N_OUT)))
-
-
-def sample(widths: Sequence[int], seed: int) -> tuple[torch.Tensor, torch.Tensor]:
-    generator = torch.Generator().manual_seed(seed)
-    x = torch.randn(B, widths[0], dtype=F64, generator=generator)
-    y = torch.randn(B, N_OUT, dtype=F64, generator=generator)
-    return x, y
-
-
-def masked_mse(
-    y_hat: torch.Tensor, y: torch.Tensor, mask: torch.Tensor
-) -> torch.Tensor:
-    """The loss of the output node, written out: sum_b mask_b 0.5 ||y_b - y_hat_b||^2."""
-    return (0.5 * (y - y_hat) ** 2).sum(dim=1)[mask].sum()
-
-
-def forward(
-    layers: Sequence[nn.Module], head: nn.Module, x: torch.Tensor
-) -> tuple[list[torch.Tensor], torch.Tensor]:
-    """``[h_1, ..., h_L]`` and ``y_hat`` of the forward pass, in the graph."""
-    hs = [x]
-    for module in layers:
-        hs.append(module(hs[-1]))
-    return hs[1:], head(hs[-1])
-
-
-def credits(
-    layers: Sequence[nn.Module],
-    head: nn.Module,
-    x: torch.Tensor,
-    y: torch.Tensor,
-    mask: torch.Tensor,
-) -> list[torch.Tensor]:
-    """``-d loss / d h_i`` of backpropagation through the whole network."""
-    hs, y_hat = forward(layers, head, x)
-    grads = torch.autograd.grad(masked_mse(y_hat, y, mask), hs)
-    return [-g for g in grads]
-
-
-class Clock:
-    """When a node learns, as ``specs/pc-module.md`` states it: from the time
-    ``time`` (ns) the host wrote the input, every ``interval`` (ns) after it,
-    never in the update that first sees the input; ``elapsed`` is the time since
-    the last update, dropped when the input changes before the node learned."""
-
-    def __init__(self, interval: int | None) -> None:
-        self.interval = interval
-        self.seen, self.learn_at, self.elapsed, self.learned_input = -1, 0, 0.0, False
-
-    def tick(self, dt: float, time: int, now: int) -> tuple[bool, bool]:
-        new = time != self.seen
-        if new:
-            self.seen = time
-            if self.interval is not None:
-                self.learn_at = time + self.interval
-            if not self.learned_input:
-                self.elapsed = 0.0
-            self.learned_input = False
-        self.elapsed += dt
-        return new, self.interval is None or (not new and now >= self.learn_at)
-
-    def learned(self, now: int) -> None:
-        self.elapsed, self.learned_input = 0.0, True
-        if self.interval is not None:
-            behind = now - self.learn_at
-            self.learn_at += (behind // self.interval + 1) * self.interval
-
-
-class Reference:
-    """PC-ALM in plain PyTorch: every node moves at once from the values of the
-    previous step (a Jacobi update).
-
-    ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity of layer
-    ``i`` (its state, which it sent), each with the epoch, target, mask and time
-    it carries; all start at zero (mask False, time 0), as the ports do. A layer
-    moves its ``h`` with its prediction, ``h <- mu + (h - mu_last)``, when the
-    carried time or the epoch of ``h_in`` changes, and then advances its epoch.
-    When it learns, it keeps the jump ``f(h_in; theta_new) - f(h_in; theta)``
-    and adds it to ``h`` in its next step, advancing its epoch for it only when
-    it learns at intervals. The input's epoch counts the writes.
-    """
-
-    def __init__(
-        self,
-        layers: Sequence[nn.Module],
-        head: nn.Module,
-        widths: Sequence[int],
-        learn_interval: float | None = None,
-    ) -> None:
-        self.layers = [copy.deepcopy(m) for m in layers]
-        self.head = copy.deepcopy(head)
-        interval = None if learn_interval is None else round(learn_interval * 1e9)
-        self.clocks = [Clock(interval) for _ in widths]  # the layers, then the head
-        self.lam = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
-        self.mu_last = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
-        self.jump: list[torch.Tensor | None] = [None for _ in widths[1:]]
-        self.seen_epoch = [0 for _ in widths[1:]]
-        self.input_seen = -1
-        self.epoch = [0 for _ in widths]  # what each sender sent
-        self.h = [torch.zeros(B, n, dtype=F64) for n in widths]
-        self.carried = [
-            (torch.zeros(B, N_OUT, dtype=F64), torch.zeros(B, dtype=torch.bool), 0)
-            for _ in widths
-        ]
-        self.g_in: list[torch.Tensor] = [torch.zeros(B, n, dtype=F64) for n in widths]
-
-    def step(
-        self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        mask: torch.Tensor,
-        time: int,
-        dt: float,
-        now: int,
-    ) -> None:
-        tau = TAU
-        # The output: the gradient of the masked loss.
-        y_c, mask_c, time_c = self.carried[-1]
-        _, learn = self.clocks[-1].tick(dt, time_c, now)
-        h_in = self.h[-1].clone().requires_grad_()
-        params = list(self.head.parameters())
-        self.y_hat = self.head(h_in)
-        g_next, *g_theta = torch.autograd.grad(
-            masked_mse(self.y_hat, y_c, mask_c), [h_in, *params]
-        )
-        self.y_hat = self.y_hat.detach()
-        self.prediction_carried = (y_c, mask_c)
-        self.g_in[-1] = g_next
-        if learn:
-            self._learn(params, g_theta, mask_c, self.clocks[-1], now)
-        # The layers, from the last: each with the g the next one made from the
-        # previous values.
-        h_new, epoch_new = list(self.h), list(self.epoch)
-        for i in reversed(range(len(self.layers))):
-            _, mask_i, time_i = self.carried[i]
-            clock = self.clocks[i]
-            new, learn = clock.tick(dt, time_i, now)
-            if learn and not mask_i.any():
-                clock.learned(now)
-                learn = False
-            h = self.h[i + 1]
-            jump = self.jump[i]
-            if jump is not None:  # theta moved in the step before
-                h = h + jump
-                self.jump[i] = None
-            reanchor = new or self.epoch[i] != self.seen_epoch[i]
-            self.seen_epoch[i] = self.epoch[i]
-            module = self.layers[i]
-            h_in = self.h[i].clone().requires_grad_()
-            params = list(module.parameters())
-            mu = module(h_in)
-            # r = h - mu, which is h - mu_last when h moves with mu below.
-            r = h - (self.mu_last[i] if reanchor else mu.detach())
-            delta = torch.where(mask_i[:, None], r + self.lam[i], 0.0)
-            g_in, *g_theta = torch.autograd.grad(mu, [h_in, *params], -delta)
-            mu = mu.detach()
-            if reanchor:
-                h = mu + (h - self.mu_last[i])
-            h = h - (dt / tau.h) * (h - mu + self.lam[i] + g_next)
-            self.lam[i] = self.lam[i] + (dt / tau.lam) * (h - mu)
-            self.mu_last[i] = mu
-            h_new[i + 1] = h
-            if reanchor or (jump is not None and clock.interval is not None):
-                epoch_new[i + 1] = self.epoch[i + 1] + 1
-            if learn:
-                self._learn(params, g_theta, mask_i, clock, now)
-                with torch.no_grad():
-                    moved = module(self.h[i])
-                self.jump[i] = moved - mu
-                self.mu_last[i] = moved
-            self.g_in[i] = g_in
-            g_next = g_in
-        h_new[0] = x
-        if time != self.input_seen:  # a write the input has not seen
-            self.input_seen = time
-            epoch_new[0] = self.epoch[0] + 1
-        self.h, self.epoch = h_new, epoch_new
-        self.carried = [(y, mask, time), *self.carried[:-1]]
-
-    def _learn(
-        self,
-        params: Sequence[torch.Tensor],
-        g_theta: list[torch.Tensor],
-        mask: torch.Tensor,
-        clock: Clock,
-        now: int,
-    ) -> None:
-        if mask.any():
-            with torch.no_grad():
-                for p, g in zip(params, g_theta, strict=True):
-                    p -= (clock.elapsed / TAU.theta) * g / B
-        clock.learned(now)
 
 
 def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:
@@ -366,7 +132,7 @@ class TestJacobi:
         # once; stepping from the output to the input reads only values of the
         # previous step everywhere, so the two agree to rounding. Learning in
         # every step, the layers move h by the jumps of their own theta; at
-        # intervals, these jumps also go up the chain with the epoch.
+        # intervals, these jumps also go up the chain with the counts of jumps.
         widths = [4, 5, 5]
         layers = [
             make_modules("linear", "tanh", widths[:2])[0][0],
@@ -374,7 +140,7 @@ class TestJacobi:
         ]
         head = make_modules("linear", "tanh", widths, seed=2)[1]
         reference = Reference(layers, head, widths, learn_interval)
-        chain = Chain(layers, head, widths, learn_interval=learn_interval)
+        chain = HandChain(layers, head, widths, learn_interval=learn_interval)
         run = start_manual(chain.net)
         samples = [sample(widths, seed) for seed in (0, 1)]
         x, y = samples[0]
@@ -394,7 +160,7 @@ class TestJacobi:
                     close(state["module"][key], value, 1e-12)
                 sent = tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]
                 close(sent["h"], reference.h[i + 1], 1e-12)
-                assert int(sent["epoch"]) == reference.epoch[i + 1]
+                assert int(sent["jumps"]) == reference.jumps[i + 1]
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
                 assert torch.equal(sent["mask"], reference.carried[i + 1][1])
                 close(
@@ -403,8 +169,8 @@ class TestJacobi:
                     1e-12,
                 )
             assert (
-                int(tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["epoch"])
-                == reference.epoch[0]
+                int(tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["jumps"])
+                == reference.jumps[0]
             )
             for key, value in reference.head.state_dict().items():
                 close(tree["nodes"]["out"]["state"]["module"][key], value, 1e-12)
@@ -418,7 +184,7 @@ class TestJacobi:
             assert torch.equal(prediction["y"], reference.prediction_carried[0])
             assert torch.equal(prediction["mask"], reference.prediction_carried[1])
         if learn_interval is not None:  # the chain did jump
-            assert reference.epoch[-1] > reference.epoch[0] + 1
+            assert reference.jumps[-1] > reference.jumps[0] + 1
 
 
 # Steps to the fixed point from h = lam = 0, to 1e-10 at TAU and these sizes.
@@ -436,7 +202,7 @@ class TestFixedPoint:
     ):
         widths = [4, 4, 4] if block == "res" else [4, 5, 3]
         layers, head = make_modules(block, act, widths)
-        chain = Chain(layers, head, widths, tau=NO_LEARNING)
+        chain = HandChain(layers, head, widths, tau=NO_LEARNING)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -470,7 +236,7 @@ class TestFixedPoint:
         widths = [4, 4, 4] if block == "res" else [4, 5, 3]
         layers, head = make_modules(block, act, widths)
         sgd = [copy.deepcopy(m) for m in [*layers, head]]
-        chain = Chain(layers, head, widths, learn_interval=RELAX_STEPS * H)
+        chain = HandChain(layers, head, widths, learn_interval=RELAX_STEPS * H)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -508,7 +274,7 @@ class TestDeepChain:
         with torch.no_grad():
             forward_hs, y_hat = forward(layers, head, x)
         y = y_hat + noise
-        chain = Chain(layers, head, widths, tau=NO_LEARNING)
+        chain = HandChain(layers, head, widths, tau=NO_LEARNING)
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         run_steps(run, chain.from_next(), DEEP_STEPS)
@@ -530,7 +296,7 @@ class TestDeepChain:
         # made lam grow to 1e5 in 500 steps here with learn_interval=None,
         # however slow theta was, before it settled elsewhere.) 16 periods is
         # about the round trip 2 * depth * period of this chain (18 periods); an
-        # interval much shorter advances the epoch in almost every update, the
+        # interval much shorter advances the jumps in almost every update, the
         # nodes above move h with every change of mu again, and lam grows
         # (4 periods: about 4 times the credit; 1 or 2 periods: it diverges).
         widths = [8] * 9
@@ -541,7 +307,7 @@ class TestDeepChain:
         y = y_hat + noise
         bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
         slow = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=1e9)
-        chain = Chain(layers, head, widths, tau=slow, learn_interval=learn_interval)
+        chain = HandChain(layers, head, widths, tau=slow, learn_interval=learn_interval)
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         for _ in range(DEEP_STEPS // 100):
@@ -574,7 +340,7 @@ class TestNodeBoundaries:
             ([whole], [widths[0], widths[-1]]),
             ([copy.deepcopy(m) for m in layers], widths),
         ]:
-            chain = Chain(
+            chain = HandChain(
                 modules,
                 copy.deepcopy(head),
                 chain_widths,
@@ -610,7 +376,7 @@ class TestPcLimit:
         widths = [4, 5, 3]
         layers, head = make_modules("linear", "tanh", widths)
         tau = pc.TimeConstants(h=TAU.h, lam=math.inf, theta=math.inf)
-        chain = Chain(layers, head, widths, tau=tau)
+        chain = HandChain(layers, head, widths, tau=tau)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -630,7 +396,7 @@ class TestPcLimit:
         ]
         for i in range(len(layers)):
             state = tree["nodes"][f"l{i}"]["state"]
-            r = state["h"] - state["_mu"]
+            r = state["h"] - state["mu"]
             close(r, -g[i], 1e-10)  # r = -g
             assert r.abs().max() > 1e-3
         # The gradient of the energy of PC with respect to each h is zero.
@@ -685,14 +451,14 @@ class TestSchedules:
         x, y = sample(widths, 0)
         expected = credits(*make_modules("res", "tanh", widths), x, y, MASK)
         shuffle = random.Random(0)
-        orders: list[Callable[[Chain], list[Any]]] = [
-            Chain.from_next,
-            Chain.from_prev,
+        orders: list[Callable[[HandChain], list[Any]]] = [
+            HandChain.from_next,
+            HandChain.from_prev,
             lambda chain: shuffle.sample(chain.from_prev(), k=len(chain.from_prev())),
         ]
         for order in orders:
             layers, head = make_modules("res", "tanh", widths)
-            chain = Chain(layers, head, widths, tau=NO_LEARNING)
+            chain = HandChain(layers, head, widths, tau=NO_LEARNING)
             run = start_manual(chain.net, timer=VirtualTimer())
             chain.write(run, x, y, MASK)
             for _ in range(RELAX_STEPS):
@@ -705,7 +471,7 @@ class TestSchedules:
         # Learning at intervals, twice, at the fixed point each time: whatever
         # the order, each update is one step of SGD, the second from the
         # parameters of the first. The jumps that the first update makes go up
-        # the chain with the epochs, and the chain relaxes to the next fixed
+        # the chain with the counts of jumps, and the chain relaxes to the next fixed
         # point.
         widths = [4, 5, 3]
         x, y = sample(widths, 0)
@@ -721,14 +487,16 @@ class TestSchedules:
                 for p, g in zip(params, grads, strict=True):
                     p -= rate * g
         shuffle = random.Random(0)
-        orders: list[Callable[[Chain], list[Any]]] = [
-            Chain.from_next,
-            Chain.from_prev,
+        orders: list[Callable[[HandChain], list[Any]]] = [
+            HandChain.from_next,
+            HandChain.from_prev,
             lambda chain: shuffle.sample(chain.from_prev(), k=len(chain.from_prev())),
         ]
         for order in orders:
             layers, head = make_modules("linear", "tanh", widths)
-            chain = Chain(layers, head, widths, tau=tau, learn_interval=RELAX_STEPS * H)
+            chain = HandChain(
+                layers, head, widths, tau=tau, learn_interval=RELAX_STEPS * H
+            )
             run = start_manual(chain.net, timer=VirtualTimer())
             chain.write(run, x, y, MASK)
             for _ in range(2 * RELAX_STEPS):
@@ -752,7 +520,7 @@ class TestWithoutTeacher:
         ]
         head = make_modules("linear", "tanh", widths, seed=2)[1]
         before = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
-        chain = Chain(layers, head, widths)
+        chain = HandChain(layers, head, widths)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, torch.zeros(B, dtype=torch.bool))
@@ -780,7 +548,7 @@ class TestWithoutTeacher:
         # so the new forward pass reaches l1 in three steps (Input, l0, l1).
         widths = [4, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = Chain(layers, head, widths)
+        chain = HandChain(layers, head, widths)
         run = start_manual(chain.net)
         no_target = torch.zeros(B, dtype=torch.bool)
         x, y = sample(widths, 0)
@@ -809,7 +577,7 @@ K, M = 3, 5
 
 
 class Learning:
-    """``Chain`` of ``widths``, stepped from the output with a host that writes a
+    """``HandChain`` of ``widths``, stepped from the output with a host that writes a
     new labeled input (at a time other than zero) every ``M`` steps.
 
     With ``state``, the run starts from it, as if it had taken ``steps`` steps.
@@ -827,7 +595,7 @@ class Learning:
     ) -> None:
         self.widths = list(widths)
         layers, head = make_modules("linear", "tanh", self.widths, seed=seed)
-        self.chain = Chain(
+        self.chain = HandChain(
             layers, head, self.widths, learn_interval=K * H, max_dt=max_dt
         )
         # A timer of its own, as the restored run has.
@@ -847,7 +615,7 @@ class Learning:
 def h_before_mu(state: dict[str, Any]) -> torch.Tensor:
     """The ``h`` of a layer in a step, from its state before the step, once it
     took the jump of its ``theta`` of the step before (if any)."""
-    return state["h"] + state["_jump"] if state["_jumped"] else state["h"]
+    return state["h"] + state["jump"] if state["jumped"] else state["h"]
 
 
 def layer_update(
@@ -872,7 +640,7 @@ def layer_update(
     h = h_before_mu(state)
 
     def delta(mu: torch.Tensor) -> torch.Tensor:
-        r = h - (state["_mu"] if reanchor else mu)
+        r = h - (state["mu"] if reanchor else mu)
         return torch.where(labeled, r + state["lam"], 0.0)
 
     _, _, g_theta = pc.functional.vjp(module, sent["h"], delta, params)
@@ -920,11 +688,11 @@ class TestLearnInterval:
         # do not see it as new, and learn 2 K steps after time 0 as for the
         # zeros; before the input arrives, the mask (all False) keeps them from
         # learning. The layer and the output learn in the same step. (The
-        # input's epoch still moves h with it: at step K, the credit would not
+        # input's count of jumps still moves h with it: at step K, the credit would not
         # have reached the layer yet, delta = 0.)
         widths = [4, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = Chain(layers, head, widths, learn_interval=2 * K * H)
+        chain = HandChain(layers, head, widths, learn_interval=2 * K * H)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         assert chain.write(run, x, y, MASK) == 0
@@ -956,7 +724,7 @@ class TestLearnInterval:
         for learn_interval in (None, 2 * H):
             layers, head = make_modules("linear", "tanh", widths)
             initial = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
-            chain = Chain(
+            chain = HandChain(
                 layers, head, widths, tau=NO_LEARNING, learn_interval=learn_interval
             )
             run = start_manual(chain.net, timer=VirtualTimer())
@@ -1006,7 +774,7 @@ class TestLearnInterval:
 
 
 def learned_steps(
-    chain: Chain,
+    chain: HandChain,
     widths: Sequence[int],
     run: ManualRun,
     order: Callable[[], Sequence[Any]],
@@ -1044,10 +812,10 @@ class TestLearnTime:
         for name in ("from_next", "from_prev", "random"):
             widths = [4, 5, 5, 5]
             layers, head = make_modules("linear", "tanh", widths)
-            chain = Chain(layers, head, widths, learn_interval=8 * H)
+            chain = HandChain(layers, head, widths, learn_interval=8 * H)
             run = start_manual(chain.net, timer=VirtualTimer())
 
-            def order(chain: Chain = chain, name: str = name) -> list[Any]:
+            def order(chain: HandChain = chain, name: str = name) -> list[Any]:
                 if name == "random":
                     nodes = chain.from_prev()
                     return shuffle.sample(nodes, k=len(nodes))
@@ -1066,7 +834,7 @@ class TestLearnTime:
         # the next time on the grid of the write (step 5), if any.
         widths = [4, 5, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = Chain(layers, head, widths, learn_interval=2 * H)
+        chain = HandChain(layers, head, widths, learn_interval=2 * H)
         run = start_manual(chain.net, timer=VirtualTimer())
         learned = learned_steps(chain, widths, run, chain.from_next, 6)
         assert learned == {"l0": [3, 5], "l1": [4, 5], "l2": [5], "out": [6]}
@@ -1096,7 +864,7 @@ def relaxed(
         mu = module(before["nodes"][f"{h_in}"]["ports"]["next"]["out"]["value"]["h"])
     h, lam = h_before_mu(state), state["lam"]
     if reanchor:
-        h = mu + (h - state["_mu"])
+        h = mu + (h - state["mu"])
     g_sent = after["nodes"][f"{g}"]["ports"]["prev"]["out"]["value"]
     h = h - (dt / TAU.h) * (h - mu + lam + g_sent)  # tau_h dh/dt = -(r + lam + g)
     lam = lam + (dt / TAU.lam) * (h - mu)  # tau_lam dlam/dt = r
@@ -1118,7 +886,7 @@ class TestMaxDt:
         for _ in range(4):
             learning.step()
         before = learning.run.state_dict()
-        assert before["nodes"]["l0"]["state"]["_jumped"]
+        assert before["nodes"]["l0"]["state"]["jumped"]
         learning.run.timer.advance(4 * H)
         learning.step()
         after = learning.run.state_dict()
@@ -1151,54 +919,54 @@ class TestJumps:
         # h moves with mu at steps 2 and 7 (new inputs); at step 5 it takes the
         # jump f(h_in; theta_new) - f(h_in; theta) that learning made at step 4,
         # at the h_in of step 4, and only relaxes otherwise. Each of these
-        # advances the epoch it sends (and the first update, from zeros).
+        # advances the jumps it sends (and the first update, from zeros).
         learning = Learning(start_manual)
         module = learning.chain.layers[0].module
-        epochs: list[int] = []
+        jumps: list[int] = []
         for s in range(1, 9):
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            epochs.append(
-                int(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["epoch"])
+            jumps.append(
+                int(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["jumps"])
             )
             if s == 1:
                 continue  # the first update moves h from zeros
             h, lam = relaxed(before, after, module, H, reanchor=s in (2, 7))
             close(after["nodes"]["l0"]["state"]["h"], h, 1e-14)
             close(after["nodes"]["l0"]["state"]["lam"], lam, 1e-14)
-            assert after["nodes"]["l0"]["state"]["_jumped"] == (s == 4)
+            assert after["nodes"]["l0"]["state"]["jumped"] == (s == 4)
             if s == 4:
                 h_in = before["nodes"]["inp"]["ports"]["next"]["out"]["value"]["h"]
                 old, new = copy.deepcopy(module), copy.deepcopy(module)
                 old.load_state_dict(before["nodes"]["l0"]["state"]["module"])
                 new.load_state_dict(after["nodes"]["l0"]["state"]["module"])
                 with torch.no_grad():
-                    close(after["nodes"]["l0"]["state"]["_mu"], new(h_in), 1e-14)
+                    close(after["nodes"]["l0"]["state"]["mu"], new(h_in), 1e-14)
                     close(
-                        after["nodes"]["l0"]["state"]["_jump"],
+                        after["nodes"]["l0"]["state"]["jump"],
                         new(h_in) - old(h_in),
                         1e-14,
                     )
-        assert epochs == [1, 2, 2, 2, 3, 3, 4, 4]
+        assert jumps == [1, 2, 2, 2, 3, 3, 4, 4]
 
     def test_a_jump_below_moves_the_next_h_with_r_unchanged(
         self, start_manual: StartManual
     ):
         # l1 reads the first input at step 3. Both layers learn at step 4 and
-        # take their own jumps at step 5; l0 sends its jump with a new epoch,
+        # take their own jumps at step 5; l0 sends its jump with a new count of jumps,
         # which l1 reads at step 6 and moves with: h - mu_last before the move
-        # is h - mu after it. At step 8, l1 reads a new input and the epoch l0
-        # advanced for it at step 7: one move, one new epoch.
+        # is h - mu after it. At step 8, l1 reads a new input and the count l0
+        # advanced for it at step 7: one move, one new count.
         learning = Learning(start_manual, widths=(4, 5, 5))
         module = learning.chain.layers[1].module
-        epochs: list[int] = []
+        jumps: list[int] = []
         for s in range(1, 10):
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            epochs.append(
-                int(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["epoch"])
+            jumps.append(
+                int(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["jumps"])
             )
             if s < 3:
                 continue  # the moves from zeros and the zeros of l0
@@ -1214,16 +982,16 @@ class TestJumps:
             )
             close(after["nodes"]["l1"]["state"]["h"], h, 1e-14)
             close(after["nodes"]["l1"]["state"]["lam"], lam, 1e-14)
-        assert epochs == [1, 2, 3, 3, 4, 5, 5, 6, 6]
+        assert jumps == [1, 2, 3, 3, 4, 5, 5, 6, 6]
 
     def test_learning_in_every_update_moves_no_node_above(
         self, start_manual: StartManual
     ):
         # With learn_interval=None, theta moves by dt in every update: each layer
-        # takes its own jump, but advances its epoch only for the new input.
+        # takes its own jump, but advances its jumps only for the new input.
         widths = [4, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = Chain(layers, head, widths)
+        chain = HandChain(layers, head, widths)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -1232,10 +1000,10 @@ class TestJumps:
             run.step(H, *chain.from_next())
             tree = run.state_dict()
             for i in range(2):
-                assert tree["nodes"][f"l{i}"]["state"]["_jumped"]
+                assert tree["nodes"][f"l{i}"]["state"]["jumped"]
                 assert (
                     int(
-                        tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["epoch"]
+                        tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["jumps"]
                     )
                     == 2 + i
                 )
@@ -1250,7 +1018,7 @@ class TestUnlabeled:
         # moves, and the theta of every node stays the same to the bit.
         widths = [4, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = Chain(layers, head, widths, learn_interval=learn_interval)
+        chain = HandChain(layers, head, widths, learn_interval=learn_interval)
         run = start_manual(chain.net, timer=VirtualTimer())
         before = run.state_dict()["nodes"]
         no_target = torch.zeros(B, dtype=torch.bool)
@@ -1260,7 +1028,9 @@ class TestUnlabeled:
                 chain.write(run, x, y, no_target)
             run.step(H, *chain.from_next())
         after = run.state_dict()["nodes"]
-        for path in ("l0", "l1", "out"):
+        learners = [path for path, node in after.items() if "module" in node["state"]]
+        assert sorted(learners) == ["l0", "l1", "out"]
+        for path in learners:
             assert_same_tree(
                 after[path]["state"]["module"], before[path]["state"]["module"]
             )
@@ -1311,7 +1081,7 @@ class TestUnlabeled:
         learning.step(masks)  # step 9: learns from the second input
         after = learning.run.state_dict()
         state = before["nodes"]["l0"]["state"]
-        assert (state["h"] - state["_mu"] + state["lam"])[1].abs().max() > 1e-6
+        assert (state["h"] - state["mu"] + state["lam"])[1].abs().max() > 1e-6
         g_in = after["nodes"]["l0"]["ports"]["prev"]["out"]["value"]
         assert torch.equal(g_in[1], torch.zeros_like(g_in[1]))
         expected = layer_update(before, module, 5 * H)
@@ -1341,16 +1111,16 @@ class TestState:
         tree = first.run.state_dict()
         assert {
             "clock",
-            "_jump",
-            "_jumped",
-            "_epoch",
-            "_seen_epoch",
-            "_mu",
+            "jump",
+            "jumped",
+            "jumps",
+            "seen_jumps",
+            "mu",
             "module",
             "h",
             "lam",
         } <= set(tree["nodes"]["l0"]["state"])
-        assert {"_epoch", "_seen_write"} <= set(tree["nodes"]["inp"]["state"])
+        assert {"jumps", "seen_write"} <= set(tree["nodes"]["inp"]["state"])
         first.run.shutdown()
         restored = Learning(start_manual, seed=1, state=tree, steps=6)
         for _ in range(10):

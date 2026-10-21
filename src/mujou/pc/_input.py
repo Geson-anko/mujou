@@ -4,10 +4,8 @@ from typing import override
 
 import torch
 
-from mujou._core.node import Node
-from mujou._core.pc.messages import Sample, activity_spec
-from mujou._core.port import MultiPort, Port
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
+from mujou.pc._messages import Sample, activity_spec
 
 
 class Input(Node):
@@ -20,15 +18,15 @@ class Input(Node):
     (ns) at which the host wrote them: the nodes on the path pass them on with
     the activity computed from ``x``, so that the output node pairs each
     prediction with its own target. A new ``time`` tells them the input
-    changed. The ``epoch`` counts the writes the node has seen, so that the next
+    changed. ``jumps`` counts the writes the node has seen, so that the next
     node moves its ``h`` with a new ``x`` even when it was written at the same
     time as the zeros before it (time 0). ``x`` is clamped: what the next node
     sends back on ``next`` is not read.
 
     Before the host first writes, the node sends zeros with ``mask`` False,
-    ``epoch`` 0 and ``time`` 0. The state holds the ``epoch`` (``"_epoch"``)
-    and the time (ns) of the last write seen (``"_seen_write"``, -1 before
-    any). ``act`` is the spec of what the node sends, for the next node.
+    ``jumps`` 0 and ``time`` 0. The state holds ``"jumps"`` and the time (ns)
+    of the last write seen (``"seen_write"``, -1 before any). ``act`` is the
+    spec of what the node sends, for the next node.
 
     Example::
 
@@ -64,25 +62,25 @@ class Input(Node):
         mask = self.act.specs["mask"]
         self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
         self.next = MultiPort(send=self.act, recv=x)
-        self._epoch = 0
-        self._seen_write = -1
-        for name in ("_epoch", "_seen_write"):
-            self.register_state(name)
+        self.jumps = 0
+        self.seen_write = -1
+        self.register_state("jumps")
+        self.register_state("seen_write")
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         sample, written_at = self.prev.recv_with_time()
-        if written_at is not None and written_at.ns != self._seen_write:
-            self._seen_write = written_at.ns
-            self._epoch += 1
+        if written_at is not None and written_at.ns != self.seen_write:
+            self.seen_write = written_at.ns
+            self.jumps += 1
         written_ns = 0 if written_at is None else written_at.ns
         time = torch.tensor(written_ns, dtype=torch.int64, device=self.device)
-        epoch = torch.tensor(self._epoch, dtype=torch.int64, device=self.device)
+        jumps = torch.tensor(self.jumps, dtype=torch.int64, device=self.device)
         self.next.send(
             {
                 "h": sample["x"],
-                "epoch": epoch,
+                "jumps": jumps,
                 "y": sample["y"],
                 "mask": sample["mask"],
                 "time": time,

@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from mujou._core.pc.losses import cross_entropy, mse
+from mujou.pc import cross_entropy, mse
 
 
 def _generator() -> torch.Generator:

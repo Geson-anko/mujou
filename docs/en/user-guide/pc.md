@@ -113,4 +113,4 @@ The example sets `torch.set_num_threads(1)`, since the nodes already compute in 
 
 ## Writing a node of your own
 
-`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. Such a node receives and sends `pc.Activity` (`DictSpec(pc.Activity, h=..., epoch=TensorSpec((), torch.int64))`) to connect with the nodes of `mujou.pc`. See the [API reference](../api/pc.md).
+`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. Such a node receives and sends `pc.Activity` to connect with the nodes of `mujou.pc`; declare its ports with the `act` of the node before or with `pc.activity_spec(h, y)`. See the [API reference](../api/pc.md).

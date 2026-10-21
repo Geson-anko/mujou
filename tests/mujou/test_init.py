@@ -40,12 +40,13 @@ class TestPublicNames:
 
 class TestPcPublicNames:
     def test_exports(self):
-        # The names of specs/pc-module.md; a change here is a change of the
+        # The names of mujou.pc; a change here is a change of the
         # public API.
         import mujou.pc
 
         assert sorted(mujou.pc.__all__) == [
             "Activity",
+            "Chain",
             "Input",
             "Layer",
             "LearnClock",
@@ -58,6 +59,7 @@ class TestPcPublicNames:
             "cross_entropy",
             "functional",
             "mse",
+            "show",
         ]
         assert sorted(mujou.pc.functional.__all__) == [
             "learn_",

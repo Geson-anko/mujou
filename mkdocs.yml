@@ -137,6 +137,10 @@ plugins:
             Errors: 例外
             Examples: サンプル
             API Reference: API リファレンス
+  # The API pages are built once per language, so mujou.Node has a page in each:
+  # a reference goes to the one of its own language.
+  - autorefs:
+      resolve_closest: true
   - mkdocstrings:
       handlers:
         python:

@@ -8,14 +8,13 @@ from torch import nn
 import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun
-from tests.mujou.nodes import close
+from tests.mujou.nodes import F64, close
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
 
 H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
-F64 = torch.float64
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.

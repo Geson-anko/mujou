@@ -113,4 +113,4 @@
 
 ## 自分のノードを書く
 
-`mujou.pc.functional` に、ノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）、`learn_`（重みの更新）。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらを使って書く。そのノードを `mujou.pc` のノードとつなぐには、`pc.Activity`（`DictSpec(pc.Activity, h=..., epoch=TensorSpec((), torch.int64))`）を受け取り、送る。詳しくは [API リファレンス](../api/pc.md)を参照。
+`mujou.pc.functional` に、ノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）、`learn_`（重みの更新）。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらを使って書く。そのノードを `mujou.pc` のノードとつなぐには、`pc.Activity` を受け取り、送る。ポートの spec には、前のノードの `act` か `pc.activity_spec(h, y)` を使う。詳しくは [API リファレンス](../api/pc.md)を参照。

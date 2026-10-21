@@ -6,9 +6,8 @@ import pytest
 import torch
 from torch import nn
 
-from mujou._core.pc.functional import learn_, loss_vjp, relax_, vjp
-from mujou._core.pc.losses import cross_entropy, mse
-from mujou._core.pc.time_constants import TimeConstants
+from mujou.pc import TimeConstants, cross_entropy, mse
+from mujou.pc.functional import learn_, loss_vjp, relax_, vjp
 
 B = 3
 EPS = 1e-6  # central differences: truncation ~EPS^2, rounding ~1e-16 / EPS
@@ -88,10 +87,9 @@ class TestVjp:
                 return (0.5 * (h - module(h_in) + lam).square().sum()).item()
 
         params = list(module.parameters())
-        mu, g_in, g_theta = vjp(module, h_in, h - mu0 + lam, params)
+        mu, g_in, g_theta = vjp(module, h_in, lambda mu: h - mu + lam, params)
 
         torch.testing.assert_close(mu, mu0, rtol=0, atol=0)
-        assert g_in is not None
         torch.testing.assert_close(
             g_in, numerical_grad(energy, h_in), rtol=RTOL, atol=ATOL
         )
@@ -101,32 +99,21 @@ class TestVjp:
                 g, numerical_grad(energy, p), rtol=RTOL, atol=ATOL
             )
 
-    def test_without_the_input(self):
+    def test_without_parameters(self):
         module = _make("linear-tanh")
         h_in = _randn(B, 4, seed=1)
-        delta = _randn(B, 5, seed=2)
-        params = list(module.parameters())
-        _, g_in, g_theta = vjp(module, h_in, delta, params, wrt_input=False)
-        _, _, expected = vjp(module, h_in, delta, params)
-        assert g_in is None
-        for g, e in zip(g_theta, expected, strict=True):
-            torch.testing.assert_close(g, e, rtol=0, atol=0)
-
-    def test_prediction_only(self):
-        module = _make("linear-tanh")
-        h_in = _randn(B, 4, seed=1)
-        mu, g_in, g_theta = vjp(module, h_in, torch.zeros(B, 5), wrt_input=False)
+        mu, _, g_theta = vjp(module, h_in, torch.zeros_like)
         with torch.no_grad():
             torch.testing.assert_close(mu, module(h_in), rtol=0, atol=0)
-        assert g_in is None
         assert g_theta == []
 
     def test_unused_parameters_get_zeros(self):
         with torch.random.fork_rng():
             torch.manual_seed(0)
             module = WithUnused().double()
+        delta = _randn(B, 4, seed=2)
         _, _, g_theta = vjp(
-            module, _randn(B, 4, seed=1), _randn(B, 4, seed=2), [module.unused]
+            module, _randn(B, 4, seed=1), lambda _: delta, [module.unused]
         )
         assert torch.equal(g_theta[0], torch.zeros(2, dtype=torch.float64))
 
@@ -134,35 +121,30 @@ class TestVjp:
         module = _make("linear-tanh")
         h_in = _randn(B, 4, seed=1)
         before = h_in.clone()
-        mu, g_in, _ = vjp(module, h_in, _randn(B, 5, seed=2))
+        delta = _randn(B, 5, seed=2)
+        mu, g_in, _ = vjp(module, h_in, lambda _: delta)
         assert torch.equal(h_in, before)
         assert not h_in.requires_grad
         assert mu.grad_fn is None
-        assert g_in is not None
         assert g_in.grad_fn is None
 
-    @pytest.mark.parametrize("wrt_input", [True, False])
-    def test_delta_may_be_made_from_mu(self, wrt_input: bool):
+    def test_delta_is_made_from_mu_without_gradients(self):
         module = _make("linear-tanh")
         h_in = _randn(B, 4, seed=1)
-        h, lam = _randn(B, 5, seed=2), _randn(B, 5, seed=3)
-        with torch.no_grad():
-            mu0 = module(h_in)
-        params = list(module.parameters())
-        made = vjp(module, h_in, lambda mu: h - mu + lam, params, wrt_input=wrt_input)
-        given = vjp(module, h_in, h - mu0 + lam, params, wrt_input=wrt_input)
-        assert torch.equal(made[0], given[0])
-        assert (made[1] is None) == (given[1] is None)
-        if made[1] is not None and given[1] is not None:
-            assert torch.equal(made[1], given[1])
-        for g, e in zip(made[2], given[2], strict=True):
-            assert torch.equal(g, e)
+        seen: list[torch.Tensor] = []
 
-    @pytest.mark.parametrize("wrt_input", [True, False])
-    def test_delta_must_have_the_shape_of_mu(self, wrt_input: bool):
+        def delta(mu: torch.Tensor) -> torch.Tensor:
+            seen.append(mu)
+            return torch.zeros_like(mu)
+
+        mu, _, _ = vjp(module, h_in, delta, list(module.parameters()))
+        assert torch.equal(seen[0], mu)
+        assert not seen[0].requires_grad
+
+    def test_delta_must_have_the_shape_of_mu(self):
         module = _make("linear-tanh")
         with pytest.raises(ValueError, match="delta"):
-            vjp(module, _randn(B, 4, seed=1), torch.zeros(B), wrt_input=wrt_input)
+            vjp(module, _randn(B, 4, seed=1), lambda _: torch.zeros(B))
 
 
 class TestLossVjp:
@@ -187,7 +169,6 @@ class TestLossVjp:
 
         with torch.no_grad():
             torch.testing.assert_close(y_hat, module(h_in), rtol=0, atol=0)
-        assert g_in is not None
         torch.testing.assert_close(
             g_in, numerical_grad(ell, h_in), rtol=RTOL, atol=ATOL
         )
@@ -205,25 +186,26 @@ class TestLossVjp:
         params = list(module.parameters())
         _, g_in, g_theta = loss_vjp(module, h_in, y, mask, mse, params)
         _, g_in_nan, g_theta_nan = loss_vjp(module, h_in, y_nan, mask, mse, params)
-        assert g_in is not None
-        assert g_in_nan is not None
         assert torch.equal(g_in_nan, g_in)
         for g, g_nan in zip(g_theta, g_theta_nan, strict=True):
             assert torch.equal(g_nan, g)
 
-    def test_without_the_input(self):
+    @pytest.mark.parametrize("loss_name", ["mse", "cross_entropy"])
+    def test_without_a_target_g_in_is_zero(self, loss_name: str):
+        # Every mask False: the energy is zero, and g_in is J^T 0 (y_hat finite).
         module = _make("linear-tanh")
-        mask = torch.tensor([True, True, False])
+        y = _randn(B, 5, seed=2) if loss_name == "mse" else torch.tensor([4, 0, 2])
+        loss = mse if loss_name == "mse" else cross_entropy
         params = list(module.parameters())
-        args = (module, _randn(B, 4, seed=1), _randn(B, 5, seed=2), mask, mse)
-        _, g_in, g_theta = loss_vjp(*args, params, wrt_input=False)
-        _, _, expected = loss_vjp(*args, params)
-        assert g_in is None
-        for g, e in zip(g_theta, expected, strict=True):
-            torch.testing.assert_close(g, e, rtol=0, atol=0)
+        no_target = torch.zeros(B, dtype=torch.bool)
+        _, g_in, g_theta = loss_vjp(
+            module, _randn(B, 4, seed=1), y, no_target, loss, params
+        )
+        assert torch.equal(g_in, torch.zeros_like(g_in))
+        for g in g_theta:
+            assert torch.equal(g, torch.zeros_like(g))
 
-    @pytest.mark.parametrize("wrt_input", [True, False])
-    def test_loss_must_be_per_sample(self, wrt_input: bool):
+    def test_loss_must_be_per_sample(self):
         module = _make("linear-tanh")
 
         def mean_loss(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -236,7 +218,6 @@ class TestLossVjp:
                 _randn(B, 5, seed=2),
                 torch.ones(B, dtype=torch.bool),
                 mean_loss,
-                wrt_input=wrt_input,
             )
 
 
@@ -295,12 +276,3 @@ class TestLearn:
         before = params[0].clone()
         learn_(params, [_randn(4, 5, seed=2)], 1.0, tau, batch=B)
         assert torch.equal(params[0], before)
-
-    def test_one_gradient_per_parameter(self):
-        tau = TimeConstants(h=4e-3, lam=8e-3, theta=0.5)
-        params = [_randn(4, seed=1), _randn(4, seed=2)]
-        before = [p.clone() for p in params]
-        with pytest.raises(ValueError, match="one gradient per parameter"):
-            learn_(params, [_randn(4, seed=3)], 1e-3, tau, batch=B)
-        for p, p0 in zip(params, before, strict=True):
-            assert torch.equal(p, p0)
