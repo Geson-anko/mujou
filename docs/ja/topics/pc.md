@@ -127,3 +127,13 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 手順 3 を抜くと、ノードは `pc.Layer` と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 `h - mu` に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした `mu` の跳びの分も `h` を動かし、`jumps` に 1 を足す。`pc.Layer` はどちらも 1 回後の更新で行う（docstring に説明がある）。
 
 `mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act_spec` か `pc.activity_spec(h, y, batch)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。
+
+### 例: 入力が 2 つのノード
+
+`examples/pc_merge.py` の `Merge` は 2 本の塔（`pc.Layer`）の活動をつないだものから予測する。毎回の更新で学ぶ（`learn_interval=None`）ので、重みの跳びの処理は要らない。
+
+```python
+--8<-- "examples/pc_merge.py:merge"
+```
+
+`pc.Layer` との違いは 2 つだけ。入力ごとに Port を持って `g_in` を分けて送り返すことと、どちらかの入力の `jumps` が変われば `h` を動かすこと。

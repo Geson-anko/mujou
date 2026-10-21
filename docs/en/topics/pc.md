@@ -127,3 +127,13 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 Without step 3, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
 
 To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.activity_spec(h, y, batch)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
+
+### Example: a node with two inputs
+
+`Merge` in `examples/pc_merge.py` predicts from the activities of two towers (`pc.Layer`) side by side. It learns in every update (`learn_interval=None`), so it needs no handling of the jumps of its weights.
+
+```python
+--8<-- "examples/pc_merge.py:merge"
+```
+
+It differs from `pc.Layer` in two things only: it has a port for each input and sends each its own part of `g_in`, and it moves `h` when the `jumps` of either input change.
