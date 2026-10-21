@@ -335,7 +335,8 @@ class Node(Component):
         attributes of the state, without recording gradients: ``copy_`` into
         each tensor, ``load_state_dict`` into each object that has one, and
         assign a ``copy.deepcopy`` of the saved value to any other registered
-        attribute.
+        attribute, with the tensors in it (in its dicts, lists and tuples)
+        moved to ``device``.
 
         The objects stay the same, so references taken in ``__init__`` or
         ``on_start`` see the restored values, and a tensor that records
@@ -387,7 +388,10 @@ class Node(Component):
         elif _has_state(value):
             value.load_state_dict(saved)
         else:
-            setattr(self, name, copy.deepcopy(saved))
+            # The tree keeps its tensors on the CPU; the node holds them on its
+            # device.
+            copied = copy.deepcopy(saved)
+            setattr(self, name, map_tensors(copied, lambda t: t.to(self.device)))
 
 
 def initialized(node: Node) -> bool:
