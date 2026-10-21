@@ -132,6 +132,7 @@ plugins:
             Threads and Devices: スレッドとデバイス
             Errors and Shutdown: 例外と終了
             Update Rules: 更新則
+            How mujou.pc Works: mujou.pc の仕組み
             Examples: サンプル
             API Reference: API リファレンス
             Nodes and Ports: ノードと Port
@@ -194,6 +195,7 @@ nav:
       - Threads and Devices: topics/threads-and-devices.md
       - Errors and Shutdown: topics/errors.md
       - Update Rules: topics/update-rules.md
+      - How mujou.pc Works: topics/pc-concepts.md
       - PC-ALM: topics/pc.md
   - Examples: examples.md
   - API Reference:

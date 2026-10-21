@@ -115,16 +115,17 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 
 ## Nodes of your own
 
-`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs:
+`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
 
 1. Hold the clock as an attribute: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does. It is in the node's state by itself
 2. In each update, `t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)`
-3. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
-4. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
-5. Send `h` as a `pc.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
-6. When `t.learn`, learn with `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)`
+3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, and send `g_in` to the node before
+4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
+5. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
+6. Send `h` as a `pc.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
+7. When `t.learn`, learn with `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)`
 
-Without step 3, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
+Without step 4, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
 
 To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.activity_spec(h, y, batch)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
 
@@ -136,4 +137,4 @@ To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` o
 --8<-- "examples/pc_merge.py:merge"
 ```
 
-It differs from `pc.Layer` in two things only: it has a port for each input and sends each its own part of `g_in`, and it moves `h` when the `jumps` of either input change.
+It differs from `pc.Layer` in two things only: it has a port for each input and sends each its own part of `g_in`, and it moves `h` when the `jumps` of either input change (step 4).

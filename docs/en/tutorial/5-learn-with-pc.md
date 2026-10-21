@@ -40,9 +40,10 @@ Inside a node, the module is differentiated by autograd, as in BP. Initialize th
 
 - `mask` says which samples have a target. A sample whose `mask` is False adds nothing to the loss: with every `mask` False, no weight moves (the activities still do), which is how to evaluate the same running chain. There is no inference mode to switch to
 - A `pc.Prediction` holds `y_hat` with the `y`, `mask` and `time` of the sample it was made from, so a prediction always pairs with its own target
-- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module and its clock, and what it keeps to move `h` when its prediction jumps (`mu`, `jump`, `jumped`, `jumps` and `seen_jumps`, explained in [PC-ALM](../topics/pc.md#nodes-of-your-own))
+- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module and its clock, and what it keeps to move `h` when its prediction jumps (`mu`, `jump`, `jumped`, `jumps` and `seen_jumps`, explained in [How mujou.pc Works](../topics/pc-concepts.md#jumps))
 
 ## Next
 
+- How the parts connect, and what a node does in one update: [How mujou.pc Works](../topics/pc-concepts.md)
 - A 784-256-256-10 network that learns MNIST with `pc.Chain` and compares itself with BP: `examples/mnist/` (`uv run python examples/mnist/main.py`), explained in [PC-ALM](../topics/pc.md#mnist)
 - How to choose the time constants and `learn_interval`, the pitfalls, and nodes of your own: [PC-ALM](../topics/pc.md)
