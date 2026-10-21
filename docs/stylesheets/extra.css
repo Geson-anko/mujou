@@ -62,3 +62,57 @@
   font-size: 0.7rem;
   color: var(--md-default-fg-color--light);
 }
+
+/* Hand-drawn SVG diagrams (the How Mujou Works page): colors from the theme, so
+   that they follow the light and dark schemes. */
+.md-typeset figure.mujou-diagram {
+  margin: 1em 0 1.6em;
+}
+
+.md-typeset figure.mujou-diagram svg {
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+}
+
+.md-typeset figure.mujou-diagram figcaption {
+  max-width: none;
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.mujou-diagram .mujou-label {
+  fill: var(--md-default-fg-color);
+  font-size: 13px;
+}
+
+.mujou-diagram .mujou-note {
+  fill: var(--md-default-fg-color--light);
+  font-size: 12px;
+}
+
+.mujou-diagram .mujou-axis {
+  stroke: var(--md-default-fg-color--light);
+  stroke-width: 1.5;
+}
+
+.mujou-diagram .mujou-lane {
+  stroke: var(--md-default-fg-color--lighter);
+  stroke-width: 1;
+}
+
+.mujou-diagram .mujou-tick-a line {
+  stroke: var(--md-typeset-a-color);
+  stroke-width: 3;
+}
+
+.mujou-diagram .mujou-tick-b line {
+  stroke: var(--md-accent-fg-color);
+  stroke-width: 3;
+}
+
+.mujou-diagram .mujou-brace {
+  fill: none;
+  stroke: var(--md-default-fg-color--light);
+  stroke-width: 1.2;
+}
