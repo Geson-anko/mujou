@@ -26,10 +26,11 @@ class TestPublicNames:
 
     def test_imports_no_submodule(self):
         # Each is imported by name (import mujou.time), in a new interpreter: this
-        # one has imported them all.
+        # one has imported them all. mujou.types is not one of them: the core
+        # annotates with its types, so it comes with mujou.
         script = (
             "import sys, mujou; "
-            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.types', 'mujou.pc') "
+            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc') "
             "if m in sys.modules])"
         )
         done = subprocess.run(
@@ -79,4 +80,4 @@ class TestTypesPublicNames:
         # The names of mujou.types; a change here is a change of the public API.
         import mujou.types
 
-        assert sorted(mujou.types.__all__) == ["Size"]
+        assert sorted(mujou.types.__all__) == ["Device", "Message", "Size"]

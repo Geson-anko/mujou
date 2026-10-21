@@ -49,6 +49,7 @@ from mujou.node import Node
 from mujou.port import MultiPort, Port
 from mujou.state import capture, cpu, restore, saved_time
 from mujou.tree import Tree, walk
+from mujou.types import Message
 from mujou.wiring import Wiring, wire
 
 # Real seconds between the checks of `subscribe` for the end of the run.
@@ -162,12 +163,8 @@ class Run:
         return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any] would reject (Mapping keys are invariant). A
-    # dict message is a Mapping[str, object]: a TypedDict is not a
-    # Mapping[str, torch.Tensor].
-    def write[P: Port[Any, Any]](
-        self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
-    ) -> Timestamp:
+    # Port[Any, Any] would reject (Mapping keys are invariant).
+    def write[P: Port[Any, Any]](self, values: Mapping[P, Message]) -> Timestamp:
         """Write messages to unconnected ports that receive, and return the time
         they are stamped with.
 
@@ -592,7 +589,7 @@ def run[P: Port[Any, Any]](
     root: Node | Network,
     *,
     timer: Timer | None = None,
-    inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
+    inputs: Mapping[P, Message] | None = None,
     state: Mapping[str, Any] | None = None,
     workers: int | None = None,
 ) -> Run:

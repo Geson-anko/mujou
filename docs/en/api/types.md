@@ -2,4 +2,4 @@
 
 ::: mujou.types
     options:
-      members: [Size]
+      members: [Size, Device, Message]

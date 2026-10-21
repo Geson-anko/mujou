@@ -6,7 +6,7 @@ import torch
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
 from mujou.pc.messages import Sample, activity_spec
-from mujou.types import Size
+from mujou.types import Device, Size
 
 
 class Input(Node):
@@ -63,7 +63,7 @@ class Input(Node):
         y: TensorSpec,
         period: float,
         batch: Size = (),
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
     ) -> None:
         super().__init__(device=device, period=period)
         self.act_spec = activity_spec(x, y, batch)

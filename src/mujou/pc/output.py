@@ -11,6 +11,7 @@ from mujou.pc.clock import LearnClock
 from mujou.pc.functional import learn_, loss_vjp
 from mujou.pc.messages import Activity, Prediction
 from mujou.pc.time_constants import TimeConstants
+from mujou.types import Device
 
 
 class Output(Node):
@@ -102,7 +103,7 @@ class Output(Node):
         learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau

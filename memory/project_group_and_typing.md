@@ -10,6 +10,6 @@ metadata:
 
 **Why:** 位置引数で並べると、同じノードのパスが組み方によって変わり、保存した木が合わなくなる。
 
-- **汎用の型は公開モジュール `mujou.types` に置く（2026-10-21、ユーザーの決定）。** `Size`（`int | tuple[int, ...]`）のように、pc に限らずプロジェクトで使える注釈の型を集め、利用者は `from mujou.types import Size` で使う。トップレベルの `mujou` には再公開しない。名前を `typing` にしないのは標準ライブラリと紛れるから。既存の汎用の型を集める作業は別の PR で行う
+- **汎用の型は公開モジュール `mujou.types` に置く（2026-10-21、ユーザーの決定）。** `Size`（`int | tuple[int, ...]`）のように、pc に限らずプロジェクトで使える注釈の型を集め、利用者は `from mujou.types import Size` で使う。トップレベルの `mujou` には再公開しない。名前を `typing` にしないのは標準ライブラリと紛れるから。集めた型は `Size`・`Device`（`torch.device | str`）・`Message`（`torch.Tensor | Mapping[str, object]`、ホストが書くメッセージ）。`Node | Network` や `AnyPort` のようにクラスに結びつく型は、層の下の `mujou.types` から import できないので元のモジュールに残す。`StateDict`（`Mapping[str, Any]`）は場所ごとに意味が違うので集めない（いずれも 2026-10-21、ユーザーの選択）
 
 **How to apply:** 並べて走らせるときは `mujou.run(Group(enc=..., dec=...))`。注釈に要る汎用の型は `mujou.types` に置く。`MessageSpec` のようにクラスとして中身を持つものはトップレベルに置く。

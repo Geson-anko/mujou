@@ -1,14 +1,25 @@
-"""The types of mujou that annotations use, such as ``Size``.
+"""The types of mujou that annotations use.
 
-``Size`` is a shape: an int ``n`` is ``(n,)``, and ``()`` has no dimension, as
-the batch of ``mujou.pc`` (``mujou.pc.activity_spec``). Unlike ``torch.Size``,
-it takes an int as well.
+- ``Size`` is a shape: an int ``n`` is ``(n,)``, and ``()`` has no dimension,
+  as the batch of ``mujou.pc`` (``mujou.pc.activity_spec``). Unlike
+  ``torch.Size``, it takes an int as well.
+- ``Device`` is where a node computes or a tensor is made: a ``torch.device``
+  or its name, such as ``"cpu"`` or ``"cuda:0"``.
+- ``Message`` is a message the host writes: a ``torch.Tensor``, or a dict of
+  them (a ``TypedDict`` of the port's ``DictSpec``).
 
-Import it from here::
+Import them from here::
 
-    from mujou.types import Size
+    from mujou.types import Device, Message, Size
 """
 
-__all__ = ["Size"]
+from collections.abc import Mapping
+
+import torch
+
+__all__ = ["Device", "Message", "Size"]
 
 type Size = int | tuple[int, ...]
+type Device = torch.device | str
+# A TypedDict is a Mapping[str, object], not a Mapping[str, torch.Tensor].
+type Message = torch.Tensor | Mapping[str, object]
