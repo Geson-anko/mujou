@@ -10,7 +10,7 @@ The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augme
 | One training step         | One batch                                            | The host shows a batch for a while (`S` periods). The nodes relax towards the target, then update their weights            |
 | The target                | Passed to the loss with the batch                    | Written with the input, and carried in the activity from node to node until the output node                                |
 | Training and test         | `model.train()` / `model.eval()`                     | No modes. A sample whose `mask` is False is not learned from, so the test batches go through the same running nodes        |
-| The loss                  | Usually the batch mean                               | The loss of each sample, shape `(B,)`. The output node sums it                                                             |
+| The loss                  | Usually the batch mean                               | The loss of each sample, of the shape of the batch. The output node sums it                                                |
 | Where gradients are taken | `.backward()` through the whole model                | Inside each node only. A node exchanges activities and energy gradients with its neighbors as messages                     |
 | Cost                      | One forward and backward per batch                   | One forward and VJP per node per period, so `S` of them per batch. On the CPU, MNIST takes about 40 times longer per batch |
 
@@ -43,7 +43,7 @@ Every rate in `mujou.pc` is a time in seconds of the run's timer. Choose them in
 | `max_dt`         | The longest `dt` one update counts                                  | The default, `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`, 2 periods here). A `max_dt` shorter than the period raises `ValueError`; so does the default when `tau.lam < tau.h / 12` | 2 ms   |
 
 - **The learning rate.** A weight update moves the weights by (the time since the node last learned) / `tau.theta` times the mean gradient of the batch. With one update per batch, that time is the showing time, so `tau.theta = showing time / lr` gives the learning rate `lr` per batch. The time is the sum of the `dt` of the updates in between, each capped at `max_dt`; updates on time have a `dt` of one period, so it is counted in full
-- **The mean gradient.** The sum of the per-sample gradients divided by the batch size `B`. A sample whose `mask` is False adds nothing to the sum but still counts in `B`
+- **The mean gradient.** The sum of the per-sample gradients divided by `B`, the number of samples in the batch (1 without a batch). A sample whose `mask` is False adds nothing to the sum but still counts in `B`
 - **Why `learn_interval` is between half and all of the showing time.** It is counted from the time the host wrote the input (the `time` of the activity), not from when a node received it, so the nodes learn at about the same time however deep they are. A node learns `learn_interval` after each write, and again every `learn_interval` while the batch is still shown: shorter than half, it learns twice or more per batch. If it is as long as the showing time or longer, the next batch is written first, and the node never learns
 - **The round trip of the credit.** A node never learns in the update in which it first sees a batch, and the credit needs time to go down the path and back: about `2 * hops * period`, with `hops` the number of connections on the path (3 connections and 6 periods for MNIST, from the `Input` to the `Output`). A `learn_interval` longer than that is recommended. Shorter, the weights learn from a credit that has not settled: in the measurements behind the design, a deep chain whose round trip was 18 periods converged with 16 periods, stayed bounded but off by about 4 times with 4, and diverged with 2 and 1
 - **A stream whose input changes at every frame.** Pass `learn_interval=None`: the node then learns in every update, whether or not the input changed, and `1 / tau.theta` is the learning rate per second. Good values for streams have not been measured yet
@@ -72,11 +72,29 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 - **`--watch`** counts the `dt` of each node (`watch.py`), and warns when the updates come later than 1.5 periods (median) or 2 periods (99%)
 - `data.py`, `metrics.py` and `bp.py` do not depend on `mujou.pc`: the data are plain tensors, and the BP baseline is plain PyTorch
 
+## The batch
+
+The batch is the shape that every tensor of the messages starts with. Give it as `batch` to `pc.Chain`, `pc.Input` or `pc.activity_spec`, and start the specs `x` and `y` with it. `pc.Layer` and `pc.Output` take it from the `act_spec` they receive.
+
+| `batch`        | `x` (784 inputs) | `y` (one class) | `mask`   | For                                             |
+| -------------- | ---------------- | --------------- | -------- | ----------------------------------------------- |
+| `()` (default) | `(784,)`         | `()`            | `()`     | One sample at a time, as from a sensor          |
+| `64`           | `(64, 784)`      | `(64,)`         | `(64,)`  | 64 samples                                      |
+| `(8, 4)`       | `(8, 4, 784)`    | `(8, 4)`        | `(8, 4)` | 4 agents in each of 8 environments, for example |
+
+- The samples must be independent: the module must compute each one on its own, along every dimension of the batch. A dimension that the module mixes, such as the time of a sequence, is a dimension of the sample, not of the batch: 64 sequences of `T` steps are `batch=64` with `x` of `(64, T, 784)`
+- A batch of several dimensions learns as the same samples in one dimension: `(8, 4)` as `32`
+- The losses take the batch too: `pc.MSELoss(batch)` and `pc.CrossEntropyLoss(batch)`. For `pc.CrossEntropyLoss`, `y` holds the classes, int64 of the shape of `y_hat` without its class dimension, or the probabilities of the classes, of the shape of `y_hat`. The classes are the dimension of `y_hat` right after the batch, as in `nn.CrossEntropyLoss`, and the dimensions after them, such as the pixels of an image, are averaged
+
 ## Pitfalls
+
+!!! warning "Give the batch to the chain and to the loss"
+
+    The default `batch` is `()`, one sample, and the batch is never read from the shapes of the specs. With specs of 64 samples and no `batch` anywhere, the chain takes the 64 samples as one sample and `pc.MSELoss()` averages over them: it still runs, but the credit of each sample is 1/64 of what it should be. Pass the same `batch` to `pc.Chain` (or `pc.Input`) and to the loss. If only one of them has it, `pc.Output` raises an error.
 
 !!! warning "The loss returns the loss of each sample"
 
-    Pass `pc.cross_entropy`, `pc.mse`, or your own function `(y_hat, y) -> (B,)`. A loss that averages, such as `nn.MSELoss()`, makes `pc.Output` raise `ValueError`. `pc.mse` is `0.5 * ||y - y_hat||^2` summed over the features, not the mean.
+    Pass `pc.MSELoss(batch)`, `pc.CrossEntropyLoss(batch)`, or your own function `(y_hat, y)` that returns the shape of the batch. A loss that averages over the batch, such as `nn.MSELoss()`, makes `pc.Output` raise `ValueError`. `pc.MSELoss` averages over every dimension of each sample (all but the batch), as `nn.MSELoss` does, with no `0.5`: the weights follow the gradient of `nn.MSELoss()` on the batch.
 
 !!! warning "Read predictions from the output node"
 
@@ -108,4 +126,4 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 
 Without step 3, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
 
-To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.activity_spec(h, y)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
+To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.activity_spec(h, y, batch)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
