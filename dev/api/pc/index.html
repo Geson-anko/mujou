@@ -1397,6 +1397,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.Size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Size
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.Chain" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2172,6 +2183,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.MSELoss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MSELoss
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.CrossEntropyLoss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CrossEntropyLoss
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.show" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2187,28 +2220,6 @@
     <span class="md-ellipsis">
       
         activity_spec
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.mse" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        mse
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.cross_entropy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        cross_entropy
       
     </span>
   </a>
@@ -2270,6 +2281,28 @@
     <span class="md-ellipsis">
       
         learn_
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.mse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.cross_entropy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cross_entropy
       
     </span>
   </a>
@@ -2336,6 +2369,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.Size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Size
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.Chain" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3111,6 +3155,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.MSELoss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MSELoss
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.CrossEntropyLoss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CrossEntropyLoss
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.show" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3126,28 +3192,6 @@
     <span class="md-ellipsis">
       
         activity_spec
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.mse" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        mse
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.cross_entropy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        cross_entropy
       
     </span>
   </a>
@@ -3215,6 +3259,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.mse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.functional.cross_entropy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cross_entropy
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3265,8 +3331,13 @@ the previous one. The target of each sample travels with its input in the
 <code>Activity</code>, so the output node pairs every prediction with its own target.
 <code>Chain</code> connects the nodes for a sequence of modules, and <code>show</code> shows it a
 sample. Each node gives the spec of what it sends as <code>act_spec</code>, which the
-next node takes, to build other shapes by hand. <code>LearnClock</code> and <code>functional</code>
-hold the parts the nodes are made of, for writing nodes of your own.</p>
+next node takes, to build other shapes by hand. <code>MSELoss</code> and
+<code>CrossEntropyLoss</code> give the loss of each sample. <code>LearnClock</code> and
+<code>functional</code> hold the parts the nodes are made of, for writing nodes of your
+own.</p>
+<p>The samples are independent and the shapes start with the batch, <code>batch</code>:
+<code>()</code> (the default) for one sample at a time, <code>B</code> for <code>B</code> samples, or a
+shape of several dimensions.</p>
 <p>Import it as a submodule::</p>
 <div class="highlight"><pre><span></span><code>import mujou.pc as pc
 
@@ -3276,7 +3347,8 @@ net = pc.Chain(
     nn.Linear(256, 10),
     x=TensorSpec((B, 784)),
     y=TensorSpec((B,), torch.int64),
-    loss=pc.cross_entropy,
+    batch=B,
+    loss=pc.CrossEntropyLoss(B),
     tau=pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28),
     learn_interval=0.15,
 )
@@ -3300,6 +3372,23 @@ net = pc.Chain(
 
 
 
+<div class="doc doc-object doc-type_alias">
+
+
+
+<h3 id="mujou.pc.Size" class="doc doc-heading">
+            <span class="doc doc-object-name doc-type_alias-name">Size</span>
+
+
+<a href="#mujou.pc.Size" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">Size</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-class">
 
@@ -3317,9 +3406,10 @@ net = pc.Chain(
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">loss</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="n">Tensor</span><span class="p">],</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span><span class="p">,</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">learn_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3347,7 +3437,8 @@ net = pc.Chain(
     nn.Linear(256, 10),
     x=TensorSpec((B, 784)),
     y=TensorSpec((B,), torch.int64),
-    loss=pc.cross_entropy,
+    batch=B,
+    loss=pc.CrossEntropyLoss(B),
     tau=pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28),
     learn_interval=0.15,
 )
@@ -3390,7 +3481,7 @@ with mujou.run(net) as run:
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The spec of the inputs, <code>(B, *in)</code>.</p>
+                <p>The spec of the inputs, <code>(*batch, *in)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3406,7 +3497,7 @@ with mujou.run(net) as run:
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The spec of the targets, <code>(B, *target)</code>.</p>
+                <p>The spec of the targets, <code>(*batch, *target)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3466,6 +3557,27 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
                       <code><span title="float">float</span> | None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch, as in <code>Input</code>: <code>()</code> for one sample, <code>B</code> for
+<code>B</code> samples.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
                   </span>
               </p>
             </td>
@@ -3568,7 +3680,7 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
   </span>
 
 <a href="#mujou.pc.Chain.input" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">input</span> <span class="o">=</span> <span class="n">Input</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">tau</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">input</span> <span class="o">=</span> <span class="n">Input</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">tau</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3696,7 +3808,14 @@ the child <code>layer{i}</code>.</p>
 
 
 <a href="#mujou.pc.Input" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Input</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Input</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">x</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">y</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">(),</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3724,7 +3843,10 @@ of the last write seen (<code>"seen_write"</code>, <code>None</code> before any)
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>B = 64
 inp = pc.Input(
-    x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=1e-3
+    x=TensorSpec((B, 784)),
+    y=TensorSpec((B,), torch.int64),
+    period=1e-3,
+    batch=B,
 )
 ...
 mask = torch.ones(B, dtype=torch.bool)
@@ -3747,7 +3869,7 @@ with mujou.run(net) as run:
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The spec of the inputs <code>x</code>, <code>(B, *in)</code>.</p>
+                <p>The spec of the inputs <code>x</code>, <code>(*batch, *in)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3763,7 +3885,7 @@ with mujou.run(net) as run:
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The spec of the targets <code>y</code>, <code>(B, *target)</code>.</p>
+                <p>The spec of the targets <code>y</code>, <code>(*batch, *target)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -3786,6 +3908,27 @@ node.</p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
                       <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch that <code>x</code> and <code>y</code> start with, as in
+<code>activity_spec</code>: <code>()</code> for one sample, <code>B</code> for <code>B</code> samples.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
                   </span>
               </p>
             </td>
@@ -3830,7 +3973,7 @@ node.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The first dimensions of <code>x</code> and <code>y</code> differ.</p>
+                <p><code>x</code> or <code>y</code> does not start with <code>batch</code>.</p>
               </div>
             </td>
           </tr>
@@ -3868,7 +4011,7 @@ node.</p>
   </span>
 
 <a href="#mujou.pc.Input.act_spec" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4032,7 +4175,8 @@ the dual <code>lam</code> of the constraint. With <span class="arithmatex">\(r =
 \tau_\lambda \dot\lambda = r,\qquad
 \tau_\theta \dot\theta = -g_\theta / B,
 \]</div>
-<p>where <span class="arithmatex">\(g_\theta = -J_\theta^\top \delta\)</span> and the node sends
+<p>where <span class="arithmatex">\(B\)</span> is the number of samples in the batch (1 without one),
+<span class="arithmatex">\(g_\theta = -J_\theta^\top \delta\)</span> and the node sends
 <span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top \delta\)</span> to the previous node (both from one
 vector-Jacobian product of <code>module</code>, <code>functional.vjp</code>). At a fixed point,
 <span class="arithmatex">\(r = 0\)</span> (<code>h</code> is the forward pass) and <code>lam</code> is the credit
@@ -4119,7 +4263,7 @@ freeze one. It is called once on zeros when the node is made, to find the
 shape and dtype of <code>h</code>.</p>
 <p>The state (<code>Run.state_dict()["nodes"][path]["state"]</code>) holds
 <code>"generator"</code> (the state of the node's <code>generator</code>), <code>"module"</code> (its
-<code>state_dict</code>), <code>"h"</code> and <code>"lam"</code> (<code>(B, *out)</code>), the prediction of
+<code>state_dict</code>), <code>"h"</code> and <code>"lam"</code> (<code>(*batch, *out)</code>), the prediction of
 the last update (<code>"mu"</code>), the jump of <code>theta</code> still to add to <code>h</code>
 (<code>"jump"</code>, and <code>"jumped"</code> whether there is one), the <code>jumps</code> it sends
 and the last ones it read (<code>"jumps"</code>, <code>"seen_jumps"</code>) and when to
@@ -4132,7 +4276,10 @@ sends, for the next node.</p>
 <div class="highlight"><pre><span></span><code>B = 64
 tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
 inp = pc.Input(
-    x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=tau.period
+    x=TensorSpec((B, 784)),
+    y=TensorSpec((B,), torch.int64),
+    period=tau.period,
+    batch=B,
 )
 hidden = pc.Layer(
     nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
@@ -4159,7 +4306,8 @@ hidden.next.connect(out.prev)  # out: a pc.Output, or another pc.Layer
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The function <code>f</code>, <code>(B, *in) -&gt; (B, *out)</code>, on <code>device</code>.</p>
+                <p>The function <code>f</code>, <code>(*batch, *in) -&gt; (*batch, *out)</code>, on
+<code>device</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4176,7 +4324,7 @@ hidden.next.connect(out.prev)  # out: a pc.Output, or another pc.Layer
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The spec of the activity <code>h_in</code> it receives: the
-<code>act_spec</code> of the node before.</p>
+<code>act_spec</code> of the node before, which also gives the batch.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4310,8 +4458,8 @@ frame (good values for it have not been measured yet);
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The first dimension of the output of <code>module</code> is not the
-batch of <code>act_spec</code>, or <code>LearnClock</code> raises: <code>learn_interval</code>
+                <p>The output of <code>module</code> does not start with the batch of
+<code>act_spec</code>, or <code>LearnClock</code> raises: <code>learn_interval</code>
 is neither <code>None</code> nor &gt; 0, <code>max_dt</code> is not &gt; 0, or <code>period</code>
 is longer than <code>max_dt</code>. <code>module</code> raises as PyTorch does when it
 does not take the <code>h</code> of <code>act_spec</code> on <code>device</code>.</p>
@@ -4552,7 +4700,7 @@ does not take the <code>h</code> of <code>act_spec</code> on <code>device</code>
   </span>
 
 <a href="#mujou.pc.Layer.act_spec" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s1">'y'</span><span class="p">])</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s1">'y'</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4671,7 +4819,8 @@ was computed from, however fast the host writes. With</p>
 \ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
 \tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta},
 \]</div>
-<p>it sends <span class="arithmatex">\(g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}\)</span> to the
+<p>where <span class="arithmatex">\(B\)</span> is the number of samples in the batch (1 without one), it sends
+<span class="arithmatex">\(g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}\)</span> to the
 previous node (<code>functional.loss_vjp</code>): zero for a sample without a target
 while its <code>y_hat</code> is finite. Each <code>on_update(dt)</code> caps <code>dt</code> at
 <code>max_dt</code> as <code>Layer</code> does, reads the <code>Activity</code>, sends <code>g_in</code>, sends a
@@ -4685,10 +4834,11 @@ that first sees it, or in every update with <code>None</code>. When no sample ha
 target, it does not learn and drops the time since the last update; so too
 before the first sample arrives, while the activity is zeros (<code>mask</code> all
 False), and when the input changes before it has learned from it. <code>B</code> is
-the batch, not the number of samples with a target: a sample without one
-adds zero.</p>
-<p><code>loss</code> returns the loss of each sample, <code>(B,)</code>, such as <code>mse</code> or
-<code>cross_entropy</code>, and the node sums them. A loss that averages (such as
+the number of samples in the batch, not the number of samples with a
+target: a sample without one adds zero.</p>
+<p><code>loss</code> returns the loss of each sample, of the shape of the batch (that
+of <code>mask</code>), such as <code>MSELoss(batch)</code> or <code>CrossEntropyLoss(batch)</code>,
+and the node sums them. A loss that averages over the batch (such as
 <code>nn.MSELoss()</code>) would scale the gradient that flows back by <code>1 / B</code>, so
 the node refuses it when it is made: it calls <code>module</code> and <code>loss</code> once
 on zeros then (<code>functional.loss_vjp</code>), which also finds the shape of
@@ -4700,7 +4850,7 @@ on zeros then (<code>functional.loss_vjp</code>), which also finds the shape of
 <div class="highlight"><pre><span></span><code>out = pc.Output(
     nn.Linear(256, 10),
     act_spec=hidden.act_spec,  # hidden: a pc.Layer
-    loss=pc.cross_entropy,
+    loss=pc.CrossEntropyLoss(B),
     tau=tau,
     learn_interval=24e-3,
 )
@@ -4723,7 +4873,8 @@ hidden.next.connect(out.prev)
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The function <code>f</code>, <code>(B, *in) -&gt; (B, *out)</code>, on <code>device</code>.</p>
+                <p>The function <code>f</code>, <code>(*batch, *in) -&gt; (*batch, *out)</code>, on
+<code>device</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4740,7 +4891,7 @@ hidden.next.connect(out.prev)
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The spec of the activity <code>h_in</code> it receives: the
-<code>act_spec</code> of the node before.</p>
+<code>act_spec</code> of the node before, which also gives the batch.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4756,7 +4907,7 @@ hidden.next.connect(out.prev)
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The loss of each sample, <code>(y_hat, y) -&gt; (B,)</code>.</p>
+                <p>The loss of each sample, <code>(y_hat, y) -&gt; batch</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4889,7 +5040,8 @@ counts the same time.</p>
             <td class="doc-raises-details">
               <div class="doc-md-description">
                 <p><code>LearnClock</code> raises, as in <code>Layer</code>, or <code>loss</code> does
-not return <code>(B,)</code> for the output of <code>module</code> and the target.</p>
+not return the shape of the batch for the output of <code>module</code> and
+the target.</p>
               </div>
             </td>
           </tr>
@@ -5738,8 +5890,8 @@ update included: the weight of the update when <code>learn</code> is True.</p>
 
 
 
-        <p>What the host writes to an input node: the input <code>x</code> (<code>(B, *in)</code>), and
-the <code>y</code> and <code>mask</code> of <code>Activity</code>.</p>
+        <p>What the host writes to an input node: the input <code>x</code> (<code>(*batch, *in)</code>),
+and the <code>y</code> and <code>mask</code> of <code>Activity</code>.</p>
 
 
 
@@ -5855,8 +6007,10 @@ the <code>y</code> and <code>mask</code> of <code>Activity</code>.</p>
 
         <p>The activity a node sends to the next nodes, with the target of each of
 its samples.</p>
+<p>The shapes start with the batch, <code>batch</code>: <code>()</code> for one sample, <code>(B,)</code>
+for <code>B</code> samples, or more dimensions (see <code>activity_spec</code>).</p>
 <ul>
-<li><code>h</code>: the activity, <code>(B, *out)</code>.</li>
+<li><code>h</code>: the activity, <code>(*batch, *out)</code>.</li>
 <li><code>jumps</code>: <code>()</code> int64, the number of times the sender's <code>h</code> has jumped
   rather than relaxed continuously: an <code>Input</code> counts the writes of the
   host, and a <code>Layer</code> counts its moves with a new sample and with a jump
@@ -5864,8 +6018,8 @@ its samples.</p>
   learns at intervals (<code>learn_interval</code> not <code>None</code>). A change tells the
   receiver to move its own <code>h</code> with its prediction, so that the jump
   does not enter its deviation <code>h - mu</code> (<code>Layer</code>).</li>
-<li><code>y</code>: the target of each sample, <code>(B, *target)</code>.</li>
-<li><code>mask</code>: <code>(B,)</code> bool, whether each sample has a target. A sample whose
+<li><code>y</code>: the target of each sample, <code>(*batch, *target)</code>.</li>
+<li><code>mask</code>: <code>batch</code> bool, whether each sample has a target. A sample whose
   <code>mask</code> is False adds nothing to the loss, whatever its <code>y</code> is.</li>
 <li><code>time</code>: <code>()</code> int64, the time in nanoseconds that <code>Run.write</code>
   returned for the input <code>h</code> was computed from; 0 before the host first
@@ -6032,7 +6186,7 @@ fast the host writes.</p>
 
 
 
-        <p>What an output node sends: the prediction <code>y_hat</code> (<code>(B, *out)</code>), and the
+        <p>What an output node sends: the prediction <code>y_hat</code> (<code>(*batch, *out)</code>), and the
 <code>y</code>, <code>mask</code> and <code>time</code> of the activity it was computed from (see
 <code>Activity</code>).</p>
 
@@ -6153,6 +6307,173 @@ fast the host writes.</p>
 
 </div>
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.MSELoss" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">MSELoss</span>
+
+
+<a href="#mujou.pc.MSELoss" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">MSELoss</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">())</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The mean squared error of each sample: <code>functional.mse</code> with <code>batch</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>loss = pc.MSELoss()  # one sample: y_hat (out,) -&gt; ()
+loss = pc.MSELoss(64)  # y_hat (64, out) -&gt; (64,)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch that the shapes start with; <code>()</code> for one sample.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.CrossEntropyLoss" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">CrossEntropyLoss</span>
+
+
+<a href="#mujou.pc.CrossEntropyLoss" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">CrossEntropyLoss</span><span class="p">(</span><span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">())</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>The cross entropy of each sample: <code>functional.cross_entropy</code> with
+<code>batch</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>loss = pc.CrossEntropyLoss()  # one sample: y_hat (C,), y () -&gt; ()
+loss = pc.CrossEntropyLoss(64)  # y_hat (64, C), y (64,) -&gt; (64,)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch that the shapes start with; <code>()</code> for one sample.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-function">
 
@@ -6261,18 +6582,27 @@ spec of <code>chain.prev</code>.</p>
 
 
 <a href="#mujou.pc.activity_spec" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">activity_spec</span><span class="p">(</span><span class="n">h</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Activity</span><span class="p">]</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">activity_spec</span><span class="p">(</span><span class="n">h</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">TensorSpec</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">())</span> <span class="o">-&gt;</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">Activity</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Return the spec of an <code>Activity</code> whose <code>h</code> is of the spec <code>h</code> and whose
-targets are of the spec <code>y</code>.</p>
+        <p>Return the spec of an <code>Activity</code> whose <code>h</code> is of the spec <code>h</code>, whose
+targets are of the spec <code>y</code> and whose samples are <code>batch</code>.</p>
+<p><code>batch</code> is the shape that <code>h</code> and <code>y</code> start with, and that of
+<code>mask</code>: <code>()</code> (the default) for one sample, <code>B</code> or <code>(B,)</code> for <code>B</code>
+samples, or more dimensions, such as <code>(E, A)</code> for <code>A</code> agents in each
+of <code>E</code> environments. The samples must be independent of each other
+(<code>Layer</code>); a dimension that a module mixes, such as the time of a
+sequence, belongs to <code>h</code>, not to the batch.</p>
 <p>Two calls with equal arguments return equal specs. A node of your own that
 connects to the nodes of <code>mujou.pc</code> declares its ports with it, or with
 the <code>act_spec</code> of the node before.</p>
 <p>Example::</p>
-<div class="highlight"><pre><span></span><code>act = pc.activity_spec(TensorSpec((64, 256)), TensorSpec((64,), torch.int64))
+<div class="highlight"><pre><span></span><code>act = pc.activity_spec(TensorSpec((256,)), TensorSpec((), torch.int64))
+act = pc.activity_spec(
+    TensorSpec((64, 256)), TensorSpec((64,), torch.int64), batch=64
+)
 </code></pre></div>
 
 
@@ -6292,213 +6622,7 @@ the <code>act_spec</code> of the node before.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>The first dimensions of <code>h</code> and <code>y</code> (the batch <code>B</code>)
-differ.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="mujou.pc.mse" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">mse</span>
-
-
-<a href="#mujou.pc.mse" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">mse</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return <code>0.5 * ||y_b - y_hat_b||^2</code> of each sample <code>b</code>.</p>
-<p>The squared error is summed over every dimension but the first. Unlike
-<code>nn.MSELoss</code>, there is no mean and the half is there, so the gradient with
-respect to <code>y_hat</code> is <code>y_hat - y</code>.</p>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">PARAMETER</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>y_hat</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>The prediction, <code>(B, *out)</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="torch.Tensor">Tensor</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>y</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>The target, of the same shape as <code>y_hat</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="torch.Tensor">Tensor</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RETURNS</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <span class="doc-returns-annotation">
-                    <code><span title="torch.Tensor">Tensor</span></code>
-                </span>
-            </td>
-            <td class="doc-returns-details">
-              <div class="doc-md-description">
-                <p>The loss of each sample, <code>(B,)</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RAISES</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-              <span class="doc-raises-annotation">
-                  <code><span title="ValueError">ValueError</span></code>
-              </span>
-            </td>
-            <td class="doc-raises-details">
-              <div class="doc-md-description">
-                <p>The shapes differ (a broadcast would silently give <code>(B, B)</code>).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="mujou.pc.cross_entropy" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">cross_entropy</span>
-
-
-<a href="#mujou.pc.cross_entropy" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">cross_entropy</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return the cross entropy of each sample, as
-<code>F.cross_entropy(y_hat, y, reduction="none")</code>.</p>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">PARAMETER</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>y_hat</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>The logits, <code>(B, C)</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="torch.Tensor">Tensor</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>y</code>
-            </td>
-            <td class="doc-param-details">
-              <div class="doc-md-description">
-                <p>The class of each sample, <code>(B,)</code> int64, or the probability of each
-class, <code>(B, C)</code>.</p>
-              </div>
-              <p>
-                  <span class="doc-param-annotation">
-                    <b>TYPE:</b>
-                      <code><span title="torch.Tensor">Tensor</span></code>
-                  </span>
-              </p>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<table>
-      <thead>
-        <tr>
-          <th><span class="doc-section-title">RETURNS</span></th>
-          <th><span>DESCRIPTION</span></th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <span class="doc-returns-annotation">
-                    <code><span title="torch.Tensor">Tensor</span></code>
-                </span>
-            </td>
-            <td class="doc-returns-details">
-              <div class="doc-md-description">
-                <p>The loss of each sample, <code>(B,)</code>.</p>
+                <p><code>h</code> or <code>y</code> does not start with <code>batch</code>.</p>
               </div>
             </td>
           </tr>
@@ -6542,10 +6666,13 @@ previous node, and keeps its activity <code>h</code> and the dual <code>lam</cod
   the previous node, which adds the values it receives into its <code>g</code>.</li>
 <li><code>loss_vjp</code> does the same for an output node, whose energy is the loss.</li>
 <li><code>relax_</code> moves <code>h</code> and <code>lam</code> by <code>dt</code> seconds; <code>learn_</code> moves <code>theta</code>.</li>
+<li><code>mse</code> and <code>cross_entropy</code> are losses of each sample, for <code>loss_vjp</code>
+  (<code>MSELoss</code> and <code>CrossEntropyLoss</code> hold their <code>batch</code>).</li>
 </ul>
 <p>Every <code>g</code> here is a gradient of an energy; the update subtracts it. Gradients are
-summed over the batch, and the <code>1 / B</code> is applied to <code>theta</code> only (in
-<code>learn_</code>), so <code>lam</code> holds the credit of each sample.</p>
+summed over the batch, and the <code>1 / B</code> (<code>B</code> the number of samples) is applied
+to <code>theta</code> only (in <code>learn_</code>), so <code>lam</code> holds the credit of each sample.
+The shapes start with the batch, <code>batch</code> (see <code>activity_spec</code>).</p>
 
 
 
@@ -6612,8 +6739,8 @@ no graph reaches the node that sent it.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The function <code>f</code> of the node, <code>(B, *in) -&gt; (B, *out)</code>. It must
-treat the samples independently.</p>
+                <p>The function <code>f</code> of the node, <code>(*batch, *in) -&gt;
+(*batch, *out)</code>. It must treat the samples independently.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6629,7 +6756,7 @@ treat the samples independently.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The activity of the previous node, <code>(B, *in)</code>.</p>
+                <p>The activity of the previous node, <code>(*batch, *in)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6645,7 +6772,7 @@ treat the samples independently.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Makes <span class="arithmatex">\(\delta\)</span> of the node, <code>(B, *out)</code>, from <code>mu</code> (detached,
+                <p>Makes <span class="arithmatex">\(\delta\)</span> of the node, <code>(*batch, *out)</code>, from <code>mu</code> (detached,
 without gradients), such as <code>lambda mu: h - mu + lam</code>.</p>
               </div>
               <p>
@@ -6697,7 +6824,7 @@ without gradients), such as <code>lambda mu: h - mu + lam</code>.</p>
             </td>
             <td class="doc-returns-details">
               <div class="doc-md-description">
-                <p><code>(mu, g_in, g_theta)</code>: <code>mu</code> (<code>(B, *out)</code>, detached), <code>g_in</code></p>
+                <p><code>(mu, g_in, g_theta)</code>: <code>mu</code> (<code>(*batch, *out)</code>, detached), <code>g_in</code></p>
               </div>
             </td>
           </tr>
@@ -6709,7 +6836,7 @@ without gradients), such as <code>lambda mu: h - mu + lam</code>.</p>
             </td>
             <td class="doc-returns-details">
               <div class="doc-md-description">
-                <p>(<code>(B, *in)</code>) and <code>g_theta</code> (one tensor per parameter, in the order of</p>
+                <p>(<code>(*batch, *in)</code>) and <code>g_theta</code> (one tensor per parameter, in the order of</p>
               </div>
             </td>
           </tr>
@@ -6805,7 +6932,8 @@ detached first.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The function <code>f</code> of the node, <code>(B, *in) -&gt; (B, *out)</code>.</p>
+                <p>The function <code>f</code> of the node, <code>(*batch, *in) -&gt;
+(*batch, *out)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6821,7 +6949,7 @@ detached first.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The activity of the previous node, <code>(B, *in)</code>.</p>
+                <p>The activity of the previous node, <code>(*batch, *in)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6837,7 +6965,7 @@ detached first.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The target, <code>(B, *target)</code>.</p>
+                <p>The target, <code>(*batch, *target)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6853,7 +6981,7 @@ detached first.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Whether each sample has a target, <code>(B,)</code> bool.</p>
+                <p>Whether each sample has a target, <code>batch</code> bool.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6869,8 +6997,8 @@ detached first.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The loss of each sample, <code>(y_hat, y) -&gt; (B,)</code>, such as
-<code>mse</code> or <code>cross_entropy</code>.</p>
+                <p>The loss of each sample, <code>(y_hat, y) -&gt; batch</code>, such as
+<code>MSELoss(batch)</code> or <code>CrossEntropyLoss(batch)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6944,8 +7072,8 @@ detached first.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>loss</code> does not return <code>(B,)</code>, as a loss that averages
-(<code>nn.MSELoss()</code>) does.</p>
+                <p><code>loss</code> does not return the shape of <code>mask</code>, as a loss
+that averages over the batch (<code>nn.MSELoss()</code>) does.</p>
               </div>
             </td>
           </tr>
@@ -7000,7 +7128,7 @@ exactly as it is.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The activity of the node, <code>(B, *out)</code>.</p>
+                <p>The activity of the node, <code>(*batch, *out)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -7016,7 +7144,7 @@ exactly as it is.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The dual of the node's activity, <code>(B, *out)</code>.</p>
+                <p>The dual of the node's activity, <code>(*batch, *out)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -7032,7 +7160,7 @@ exactly as it is.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The prediction <code>f(h_in)</code> of the node, <code>(B, *out)</code>.</p>
+                <p>The prediction <code>f(h_in)</code> of the node, <code>(*batch, *out)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -7048,7 +7176,7 @@ exactly as it is.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The sum of the gradients the next nodes sent, <code>(B, *out)</code>.</p>
+                <p>The sum of the gradients the next nodes sent, <code>(*batch, *out)</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -7116,7 +7244,7 @@ exactly as it is.</p>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">g_theta</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">elapsed</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">tau</span><span class="p">:</span> <span class="n">TimeConstants</span><span class="p">,</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span><span class="p">,</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
 </code></pre></div>
 
@@ -7125,7 +7253,8 @@ exactly as it is.</p>
         <p>Move <code>params</code> in place by <code>elapsed</code> seconds of
 <code>tau_theta * dtheta/dt = -g_theta / B</code>.</p>
 <p>That is one gradient step on the mean loss of the batch with the learning
-rate <code>elapsed / tau.theta</code>: <code>p -= (elapsed / tau.theta) * g / batch</code>.
+rate <code>elapsed / tau.theta</code>: <code>p -= (elapsed / tau.theta) * g / B</code>, where
+<code>B</code> is the number of samples in <code>batch</code> (1 for <code>()</code>).
 <code>tau.theta = inf</code> makes the rate 0, which leaves <code>params</code> as they are
 while the gradients are finite; the nodes of <code>mujou.pc</code> do not call it
 then (<code>LearnClock.of</code> never learns).</p>
@@ -7215,14 +7344,298 @@ then (<code>LearnClock.of</code> never learns).</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>The batch size <code>B</code>.</p>
+                <p>The batch, the shape the activities start with.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="int">int</span></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
                   </span>
               </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.mse" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mse</span>
+
+
+<a href="#mujou.pc.functional.mse" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">mse</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">())</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the mean squared error of each sample of <code>batch</code>.</p>
+<p>The squared error is averaged over the dimensions of a sample, as
+<code>nn.MSELoss</code> averages it, but not over the batch: the mean of the result
+is <code>nn.MSELoss()(y_hat, y)</code>, and with the <code>1 / B</code> of <code>learn_</code>,
+<code>theta</code> follows its gradient.</p>
+<p>With <code>d</code> values in a sample, its gradient with respect to <code>y_hat</code> is
+<code>(2 / d) * (y_hat - y)</code>: that of <code>0.5 * ||y - y_hat||^2</code> for <code>d = 2</code>,
+twice it for <code>d = 1</code>. The larger it is, the more strongly the output
+pulls on the activities, and the shorter the period that keeps their
+explicit steps stable; for a scalar target, a loss of your own such as
+<code>0.5 * mse(y_hat, y, batch)</code> keeps the pull of the half.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_hat</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The prediction, <code>(*batch, *out)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The target, of the same shape as <code>y_hat</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch that the shapes start with; <code>()</code> for one sample.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>batch</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The shapes differ (a broadcast would silently give
+another shape), or they do not start with <code>batch</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.pc.functional.cross_entropy" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">cross_entropy</span>
+
+
+<a href="#mujou.pc.functional.cross_entropy" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">cross_entropy</span><span class="p">(</span><span class="n">y_hat</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">())</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the cross entropy of each sample of <code>batch</code>.</p>
+<p>The classes are the dimension right after the batch, as in
+<code>F.cross_entropy</code> (<code>(N, C)</code> and <code>(C,)</code> alike). A sample with more
+dimensions, such as one class for each pixel (<code>(*batch, C, H, W)</code>), has
+its cross entropy averaged over them, as <code>nn.CrossEntropyLoss</code> does, but
+not over the batch: the mean of the result is
+<code>nn.CrossEntropyLoss()(y_hat, y)</code>. A class of <code>-100</code> (the
+<code>ignore_index</code> of torch) adds zero but still counts in that mean; leave a
+sample out with <code>mask</code> instead.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>y_hat</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The logits, <code>(*batch, C, *rest)</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>y</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The class of each sample, <code>(*batch, *rest)</code> int64, or the
+probability of each class, of the shape of <code>y_hat</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="torch.Tensor">Tensor</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The batch that the shapes start with; <code>()</code> for one sample.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>()</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="torch.Tensor">Tensor</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>The loss of each sample, <code>batch</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>y_hat</code> or <code>y</code> does not start with <code>batch</code>.</p>
+              </div>
             </td>
           </tr>
       </tbody>

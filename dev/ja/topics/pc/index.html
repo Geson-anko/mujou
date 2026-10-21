@@ -1165,6 +1165,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#バッチ" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        バッチ
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#落とし穴" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1541,6 +1552,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#バッチ" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        バッチ
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#落とし穴" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1617,7 +1639,7 @@
 <tr>
 <td>損失</td>
 <td>普通はバッチの平均</td>
-<td>サンプルごとの損失で、shape は <code>(B,)</code>。出力ノードが合計する</td>
+<td>サンプルごとの損失で、shape はバッチの shape。出力ノードが合計する</td>
 </tr>
 <tr>
 <td>勾配を取る範囲</td>
@@ -1719,7 +1741,7 @@
 </table>
 <ul>
 <li><strong>学習率</strong>: 1 回の重みの更新で、重みは「そのノードが前に学んでからの時間 / <code>tau.theta</code>」にバッチの勾配の平均を掛けた分だけ動く。1 バッチに 1 回学ぶならその時間は見せる時間なので、<code>tau.theta = 見せる時間 / lr</code> とすれば 1 バッチあたりの学習率が <code>lr</code> になる。この時間はその間の各更新の <code>dt</code>（1 回ごとに <code>max_dt</code> で打ち切ったもの）の和で、周期どおりの更新なら <code>dt</code> は 1 周期なのでそのまま数えられる</li>
-<li><strong>勾配の平均</strong>: サンプルごとの勾配の和をバッチの大きさ <code>B</code> で割ったもの。<code>mask</code> が False のサンプルは和に何も足さないが、<code>B</code> には数える</li>
+<li><strong>勾配の平均</strong>: サンプルごとの勾配の和を、バッチのサンプルの数 <code>B</code>（バッチが無ければ 1）で割ったもの。<code>mask</code> が False のサンプルは和に何も足さないが、<code>B</code> には数える</li>
 <li><strong><code>learn_interval</code> を見せる時間の半分から全体の間にする理由</strong>: <code>learn_interval</code> はホストが書き込んだ時刻（活動の <code>time</code>）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから <code>learn_interval</code> 後に学び、バッチを見せている間は以後 <code>learn_interval</code> ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない</li>
 <li><strong>credit の往復</strong>: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ <code>2 × ホップ数 × 周期</code>（ホップ数は経路上の接続の数。MNIST では <code>Input</code> から <code>Output</code> まで 3 本で 6 周期）。<code>learn_interval</code> はこれより長くすることを勧める。短いと、落ち着く前の credit から重みが学ぶ。設計時の測定では、往復が 18 周期の深い鎖が、16 周期では収束し、4 周期では有界だが約 4 倍ずれ、2 周期と 1 周期では発散した</li>
 <li><strong>入力がフレームごとに変わるストリーム</strong>: <code>learn_interval=None</code> を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は <code>1 / tau.theta</code> になる。ストリームに適した値はまだ測っていない</li>
@@ -1739,10 +1761,11 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">,</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">workers</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">epochs</span><span class="p">):</span>
@@ -1781,10 +1804,55 @@
 <li><strong><code>--watch</code></strong> は各ノードの <code>dt</code> を数え（<code>watch.py</code>）、更新が中央値で 1.5 周期、99% 点で 2 周期より遅れると警告する</li>
 <li><code>data.py</code>・<code>metrics.py</code>・<code>bp.py</code> は <code>mujou.pc</code> に依存しない。データは素のテンソルで、BP の基準は素の PyTorch</li>
 </ul>
+<h2 id="バッチ">バッチ<a class="headerlink" href="#バッチ" title="Permanent link">&para;</a></h2>
+<p>バッチはメッセージのどのテンソルも先頭に持つ shape。<code>pc.Chain</code>・<code>pc.Input</code>・<code>pc.activity_spec</code> に <code>batch</code> で渡し、spec の <code>x</code> と <code>y</code> もこの shape で始める。<code>pc.Layer</code> と <code>pc.Output</code> は受け取る <code>act_spec</code> から読む。</p>
+<table>
+<thead>
+<tr>
+<th><code>batch</code></th>
+<th><code>x</code>（入力 784）</th>
+<th><code>y</code>（クラス 1 つ）</th>
+<th><code>mask</code></th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>()</code>（既定）</td>
+<td><code>(784,)</code></td>
+<td><code>()</code></td>
+<td><code>()</code></td>
+<td>センサーのように 1 サンプルずつ受け取る</td>
+</tr>
+<tr>
+<td><code>64</code></td>
+<td><code>(64, 784)</code></td>
+<td><code>(64,)</code></td>
+<td><code>(64,)</code></td>
+<td>64 サンプル</td>
+</tr>
+<tr>
+<td><code>(8, 4)</code></td>
+<td><code>(8, 4, 784)</code></td>
+<td><code>(8, 4)</code></td>
+<td><code>(8, 4)</code></td>
+<td>たとえば 8 個の環境それぞれに 4 エージェント</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>サンプルは互いに独立であること。module はバッチのどの次元についても、各サンプルを別々に計算する。系列の時間のように module が混ぜる次元はバッチでなくサンプルの次元。<code>T</code> ステップの系列 64 本なら <code>batch=64</code> で <code>x</code> は <code>(64, T, 784)</code></li>
+<li>多次元のバッチは同じサンプルを 1 次元に並べたものと同じように学ぶ。<code>(8, 4)</code> は <code>32</code> と同じ</li>
+<li>損失もバッチを受け取る。<code>pc.MSELoss(batch)</code> と <code>pc.CrossEntropyLoss(batch)</code>。<code>pc.CrossEntropyLoss</code> の <code>y</code> はクラス（int64 で、<code>y_hat</code> からクラスの次元を除いた shape）かクラスごとの確率（<code>y_hat</code> と同じ shape）。クラスの次元は <code>nn.CrossEntropyLoss</code> と同じく <code>y_hat</code> のバッチの直後。その後ろの次元（画像の画素など）は平均する</li>
+</ul>
 <h2 id="落とし穴">落とし穴<a class="headerlink" href="#落とし穴" title="Permanent link">&para;</a></h2>
 <div class="admonition warning">
+<p class="admonition-title">バッチは鎖と損失の両方に渡す</p>
+<p><code>batch</code> の既定は <code>()</code>（1 サンプル）で、spec の shape からは読まない。64 サンプルの spec でどこにも <code>batch</code> を渡さないと、鎖は 64 サンプルを 1 つのサンプルとして扱い <code>pc.MSELoss()</code> はそれらを平均する。それでも動くが、各サンプルの credit は本来の 1/64 になる。<code>pc.Chain</code>（か <code>pc.Input</code>）と損失に同じ <code>batch</code> を渡す。片方だけに渡すと <code>pc.Output</code> がエラーを送出する。</p>
+</div>
+<div class="admonition warning">
 <p class="admonition-title">損失関数はサンプルごとの損失を返す</p>
-<p><code>pc.cross_entropy</code>、<code>pc.mse</code>、または <code>(y_hat, y) -&gt; (B,)</code> の自作の関数を渡す。<code>nn.MSELoss()</code> のように平均を返す損失を渡すと、<code>pc.Output</code> が <code>ValueError</code> を送出する。<code>pc.mse</code> は特徴について合計した <code>0.5 * ||y - y_hat||^2</code> で、平均ではない。</p>
+<p><code>pc.MSELoss(batch)</code>、<code>pc.CrossEntropyLoss(batch)</code>、またはバッチの shape を返す <code>(y_hat, y)</code> の自作の関数を渡す。<code>nn.MSELoss()</code> のようにバッチで平均する損失を渡すと、<code>pc.Output</code> が <code>ValueError</code> を送出する。<code>pc.MSELoss</code> は <code>nn.MSELoss</code> と同じく各サンプルのすべての次元（バッチ以外）で平均し、<code>0.5</code> は付けない。重みはバッチに対する <code>nn.MSELoss()</code> の勾配に沿って動く。</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">予測は出力ノードから読む</p>
@@ -1814,7 +1882,7 @@
 <li><code>t.learn</code> なら <code>pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)</code> で学ぶ</li>
 </ol>
 <p>手順 3 を抜くと、ノードは <code>pc.Layer</code> と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 <code>h - mu</code> に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした <code>mu</code> の跳びの分も <code>h</code> を動かし、<code>jumps</code> に 1 を足す。<code>pc.Layer</code> はどちらも 1 回後の更新で行う（docstring に説明がある）。</p>
-<p><code>mujou.pc</code> のノードとつなぐには、Port の spec に前のノードの <code>act_spec</code> か <code>pc.activity_spec(h, y)</code> を使う。引数は <a href="../../api/pc/">API リファレンス</a>にある。PC 以外の、ノードをまたいで学ぶ則は<a href="../update-rules/">更新則</a>を参照。</p>
+<p><code>mujou.pc</code> のノードとつなぐには、Port の spec に前のノードの <code>act_spec</code> か <code>pc.activity_spec(h, y, batch)</code> を使う。引数は <a href="../../api/pc/">API リファレンス</a>にある。PC 以外の、ノードをまたいで学ぶ則は<a href="../update-rules/">更新則</a>を参照。</p>
 
 
 

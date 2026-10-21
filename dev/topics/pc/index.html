@@ -1163,6 +1163,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-batch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The batch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pitfalls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1539,6 +1550,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-batch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The batch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pitfalls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1615,7 +1637,7 @@
 <tr>
 <td>The loss</td>
 <td>Usually the batch mean</td>
-<td>The loss of each sample, shape <code>(B,)</code>. The output node sums it</td>
+<td>The loss of each sample, of the shape of the batch. The output node sums it</td>
 </tr>
 <tr>
 <td>Where gradients are taken</td>
@@ -1717,7 +1739,7 @@
 </table>
 <ul>
 <li><strong>The learning rate.</strong> A weight update moves the weights by (the time since the node last learned) / <code>tau.theta</code> times the mean gradient of the batch. With one update per batch, that time is the showing time, so <code>tau.theta = showing time / lr</code> gives the learning rate <code>lr</code> per batch. The time is the sum of the <code>dt</code> of the updates in between, each capped at <code>max_dt</code>; updates on time have a <code>dt</code> of one period, so it is counted in full</li>
-<li><strong>The mean gradient.</strong> The sum of the per-sample gradients divided by the batch size <code>B</code>. A sample whose <code>mask</code> is False adds nothing to the sum but still counts in <code>B</code></li>
+<li><strong>The mean gradient.</strong> The sum of the per-sample gradients divided by <code>B</code>, the number of samples in the batch (1 without a batch). A sample whose <code>mask</code> is False adds nothing to the sum but still counts in <code>B</code></li>
 <li><strong>Why <code>learn_interval</code> is between half and all of the showing time.</strong> It is counted from the time the host wrote the input (the <code>time</code> of the activity), not from when a node received it, so the nodes learn at about the same time however deep they are. A node learns <code>learn_interval</code> after each write, and again every <code>learn_interval</code> while the batch is still shown: shorter than half, it learns twice or more per batch. If it is as long as the showing time or longer, the next batch is written first, and the node never learns</li>
 <li><strong>The round trip of the credit.</strong> A node never learns in the update in which it first sees a batch, and the credit needs time to go down the path and back: about <code>2 * hops * period</code>, with <code>hops</code> the number of connections on the path (3 connections and 6 periods for MNIST, from the <code>Input</code> to the <code>Output</code>). A <code>learn_interval</code> longer than that is recommended. Shorter, the weights learn from a credit that has not settled: in the measurements behind the design, a deep chain whose round trip was 18 periods converged with 16 periods, stayed bounded but off by about 4 times with 4, and diverged with 2 and 1</li>
 <li><strong>A stream whose input changes at every frame.</strong> Pass <code>learn_interval=None</code>: the node then learns in every update, whether or not the input changed, and <code>1 / tau.theta</code> is the learning rate per second. Good values for streams have not been measured yet</li>
@@ -1737,10 +1759,11 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">,</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">workers</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">epochs</span><span class="p">):</span>
@@ -1779,10 +1802,55 @@
 <li><strong><code>--watch</code></strong> counts the <code>dt</code> of each node (<code>watch.py</code>), and warns when the updates come later than 1.5 periods (median) or 2 periods (99%)</li>
 <li><code>data.py</code>, <code>metrics.py</code> and <code>bp.py</code> do not depend on <code>mujou.pc</code>: the data are plain tensors, and the BP baseline is plain PyTorch</li>
 </ul>
+<h2 id="the-batch">The batch<a class="headerlink" href="#the-batch" title="Permanent link">&para;</a></h2>
+<p>The batch is the shape that every tensor of the messages starts with. Give it as <code>batch</code> to <code>pc.Chain</code>, <code>pc.Input</code> or <code>pc.activity_spec</code>, and start the specs <code>x</code> and <code>y</code> with it. <code>pc.Layer</code> and <code>pc.Output</code> take it from the <code>act_spec</code> they receive.</p>
+<table>
+<thead>
+<tr>
+<th><code>batch</code></th>
+<th><code>x</code> (784 inputs)</th>
+<th><code>y</code> (one class)</th>
+<th><code>mask</code></th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>()</code> (default)</td>
+<td><code>(784,)</code></td>
+<td><code>()</code></td>
+<td><code>()</code></td>
+<td>One sample at a time, as from a sensor</td>
+</tr>
+<tr>
+<td><code>64</code></td>
+<td><code>(64, 784)</code></td>
+<td><code>(64,)</code></td>
+<td><code>(64,)</code></td>
+<td>64 samples</td>
+</tr>
+<tr>
+<td><code>(8, 4)</code></td>
+<td><code>(8, 4, 784)</code></td>
+<td><code>(8, 4)</code></td>
+<td><code>(8, 4)</code></td>
+<td>4 agents in each of 8 environments, for example</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The samples must be independent: the module must compute each one on its own, along every dimension of the batch. A dimension that the module mixes, such as the time of a sequence, is a dimension of the sample, not of the batch: 64 sequences of <code>T</code> steps are <code>batch=64</code> with <code>x</code> of <code>(64, T, 784)</code></li>
+<li>A batch of several dimensions learns as the same samples in one dimension: <code>(8, 4)</code> as <code>32</code></li>
+<li>The losses take the batch too: <code>pc.MSELoss(batch)</code> and <code>pc.CrossEntropyLoss(batch)</code>. For <code>pc.CrossEntropyLoss</code>, <code>y</code> holds the classes, int64 of the shape of <code>y_hat</code> without its class dimension, or the probabilities of the classes, of the shape of <code>y_hat</code>. The classes are the dimension of <code>y_hat</code> right after the batch, as in <code>nn.CrossEntropyLoss</code>, and the dimensions after them, such as the pixels of an image, are averaged</li>
+</ul>
 <h2 id="pitfalls">Pitfalls<a class="headerlink" href="#pitfalls" title="Permanent link">&para;</a></h2>
 <div class="admonition warning">
+<p class="admonition-title">Give the batch to the chain and to the loss</p>
+<p>The default <code>batch</code> is <code>()</code>, one sample, and the batch is never read from the shapes of the specs. With specs of 64 samples and no <code>batch</code> anywhere, the chain takes the 64 samples as one sample and <code>pc.MSELoss()</code> averages over them: it still runs, but the credit of each sample is 1/64 of what it should be. Pass the same <code>batch</code> to <code>pc.Chain</code> (or <code>pc.Input</code>) and to the loss. If only one of them has it, <code>pc.Output</code> raises an error.</p>
+</div>
+<div class="admonition warning">
 <p class="admonition-title">The loss returns the loss of each sample</p>
-<p>Pass <code>pc.cross_entropy</code>, <code>pc.mse</code>, or your own function <code>(y_hat, y) -&gt; (B,)</code>. A loss that averages, such as <code>nn.MSELoss()</code>, makes <code>pc.Output</code> raise <code>ValueError</code>. <code>pc.mse</code> is <code>0.5 * ||y - y_hat||^2</code> summed over the features, not the mean.</p>
+<p>Pass <code>pc.MSELoss(batch)</code>, <code>pc.CrossEntropyLoss(batch)</code>, or your own function <code>(y_hat, y)</code> that returns the shape of the batch. A loss that averages over the batch, such as <code>nn.MSELoss()</code>, makes <code>pc.Output</code> raise <code>ValueError</code>. <code>pc.MSELoss</code> averages over every dimension of each sample (all but the batch), as <code>nn.MSELoss</code> does, with no <code>0.5</code>: the weights follow the gradient of <code>nn.MSELoss()</code> on the batch.</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Read predictions from the output node</p>
@@ -1812,7 +1880,7 @@
 <li>When <code>t.learn</code>, learn with <code>pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)</code></li>
 </ol>
 <p>Without step 3, the node follows other dynamics than <code>pc.Layer</code>: a new sample or a jump below enters its deviation <code>h - mu</code> and the credit it sends back. A node that learns at intervals also moves <code>h</code> by the jump of <code>mu</code> that its update of the weights makes, and adds 1 to its <code>jumps</code>; <code>pc.Layer</code> does both one update later, as its docstring describes.</p>
-<p>To connect with the nodes of <code>mujou.pc</code>, declare the ports with the <code>act_spec</code> of the node before, or with <code>pc.activity_spec(h, y)</code>. The arguments are in the <a href="../../api/pc/">API reference</a>. A rule other than PC that learns across nodes is in <a href="../update-rules/">Update Rules</a>.</p>
+<p>To connect with the nodes of <code>mujou.pc</code>, declare the ports with the <code>act_spec</code> of the node before, or with <code>pc.activity_spec(h, y, batch)</code>. The arguments are in the <a href="../../api/pc/">API reference</a>. A rule other than PC that learns across nodes is in <a href="../update-rules/">Update Rules</a>.</p>
 
 
 
