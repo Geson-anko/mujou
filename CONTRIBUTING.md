@@ -37,7 +37,6 @@ just container just run   # start the container if needed, then run `just run` i
 - The container keeps its own Linux virtualenv in `.venv-devcontainer/` of each checkout (`UV_PROJECT_ENVIRONMENT`), next to the host's `.venv/`. Cargo builds share each checkout's `target/` with the host: the host triple is part of cargo's artifact hashes, so Linux and macOS artifacts live side by side. Do not point several checkouts at one `CARGO_TARGET_DIR`; cargo does not tell path dependencies of different checkouts apart.
 - Files are written as the `vscode` user. On Linux hosts the Dev Container CLI changes its UID/GID to yours (`updateRemoteUserUID`); Docker Desktop on macOS maps ownership to the host user by itself. No `sudo` is needed.
 - The container runs `uv sync` instead of `just setup`, and installs the pre-commit hook only if none exists, because the hook records the absolute path of the Python that installed it. The main checkout's `.venv-devcontainer/bin` is on `PATH`, so a hook installed on the host still finds `pre-commit` in the container. If you open a fresh clone in the container first, run `just setup` on the host before committing there.
-- Claude Code keeps its settings, credentials and conversations in the Docker volume `mujou-claude-config` (`CLAUDE_CONFIG_DIR=/home/vscode/.claude`), so they survive a rebuild of the container. Claude Code is not installed in the image. To start over, remove the volume with `docker volume rm mujou-claude-config`.
 - The container gets the host's GPUs when the host has any (`hostRequirements.gpu: optional`). This needs the NVIDIA driver and the NVIDIA Container Toolkit on the host; the CUDA runtime comes with the PyTorch wheels. Without a GPU, the container starts as usual.
 - `core.fileMode` is `false` inside the container only, because Docker Desktop bind mounts report every file as executable. To commit a new executable from the container, use `git update-index --chmod=+x <file>`.
 
@@ -74,7 +73,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 | `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                                   |
 | `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                                  |
 | `specs/`               | Design specifications for developers, in Japanese. They record design decisions, including ones not implemented yet |
-| `examples/`            | Programs for users. The tests run every one of them                                                                 |
+| `examples/`            | Programs for users, as guides. The tests do not run them                                                            |
 
 `src/mujou/_core/_native.pyi` is generated and committed. After changing the bindings, run `just stub` and commit the result. A pre-commit hook runs `just stub` when the Rust sources, `pyproject.toml` or the stub change, and fails when the stub was stale; the Test workflow in CI checks it too.
 
@@ -95,7 +94,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Prefer oracles derived from theory, such as finite differences and known equilibria, to checks that "the loss went down".
 - Keep tests deterministic. Run on a `VirtualTimer` and step the nodes by hand with `mujou.testing.run` and `ManualRun.step`, and fix the seeds (a node's `seed`).
 - Mark long-running convergence or training checks with `@pytest.mark.slow`. Markers are strict: register new ones under `markers` in `pyproject.toml`.
-- `tests/test_examples.py` runs every program in `examples/`. The rules for examples are in [examples/README.md](examples/README.md).
+- The tests do not run the programs in `examples/`, which are guides for users. Run the ones your change affects by hand. The rules for examples are in [examples/README.md](examples/README.md).
 
 ## Documentation
 

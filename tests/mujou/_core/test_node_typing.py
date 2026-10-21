@@ -55,6 +55,30 @@ class Fan(Node):
         self.next.send(sum(self.prev.recv().values(), torch.zeros(2)))
 
 
+class Relay(Node):
+    """Passes on the feedback its input carries, and reads it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prev = PrevPort(recv=TensorSpec((2,)), recv_carry=FEEDBACK)
+        self.next = NextPort(send=TensorSpec((2,)), send_carry=self.prev)
+        self.made = NextPort(send=TensorSpec((2,)), send_carry=FEEDBACK)
+        self.seen: list[Feedback] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        x = self.prev.recv()
+        feedback = self.prev.carried()
+        assert_type(feedback, Feedback)
+        assert_type(self.prev.carried("error"), torch.Tensor)
+        self.seen.append(feedback)
+        self.next.send(x)
+        self.made.send(x, carry=feedback)
+        for channel in self.made.channels:
+            self.made.send_to(channel, x, carry=feedback)
+
+
 class Wrapped(Network):
     def __init__(self) -> None:
         super().__init__()
@@ -98,6 +122,22 @@ class TestStrictTyping:
             run.step()
             value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)
+
+    def test_carried_data(self) -> None:
+        relay, other = Relay(), Relay()
+        relay.made.connect(other.prev)
+        with mujou.testing.run(relay, other) as run:
+            run.timer.advance(0.001)
+            run.step()
+            assert len(relay.seen) == len(other.seen) == 1
+            # The host reads only the value of a port that carries data, and
+            # cannot write a port that receives carried data.
+            assert_type(run.read(relay.next), torch.Tensor)
+            with pytest.raises(ValueError, match="carried data"):
+                run.write({relay.prev: torch.ones(2)})
+        # Carried data comes from one peer.
+        with pytest.raises(TypeError, match="no recv_carry"):
+            PrevPort(recv=TensorSpec((2,)), multi=True, recv_carry=FEEDBACK)  # pyright: ignore[reportArgumentType]
 
     def test_a_run_takes_at_least_one_component(self) -> None:
         # Without the ignore pyright reports the call, and an unneeded ignore is

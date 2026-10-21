@@ -13,7 +13,7 @@ from mujou.testing import ManualRun, VirtualTimer
 from mujou.time import Timer
 
 # P: a dict built in a test has a precise key type, which a Mapping keyed by
-# Port[Any, Any, Any] would reject (Mapping keys are invariant).
+# Port[Any, Any, Any, Any, Any] would reject (Mapping keys are invariant).
 type Inputs[P] = Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
 
 H_NS = 1_000_000
@@ -44,7 +44,7 @@ def virtual() -> VirtualTimer:
 
 
 class StartManual(Protocol):
-    def __call__[P: Port[Any, Any, Any]](
+    def __call__[P: Port[Any, Any, Any, Any, Any]](
         self,
         component: Node | Network,
         *components: Node | Network,
@@ -55,7 +55,7 @@ class StartManual(Protocol):
 
 
 class Start(Protocol):
-    def __call__[P: Port[Any, Any, Any]](
+    def __call__[P: Port[Any, Any, Any, Any, Any]](
         self,
         component: Node | Network,
         *components: Node | Network,
@@ -87,7 +87,7 @@ def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
     """``mujou.testing.run`` on the test's ``virtual`` timer unless given another,
     shut down at the end of the test."""
 
-    def start[P: Port[Any, Any, Any]](
+    def start[P: Port[Any, Any, Any, Any, Any]](
         component: Node | Network,
         *components: Node | Network,
         timer: Timer | None = None,
@@ -112,7 +112,7 @@ def start(started: list[Run]) -> Start:
     """``mujou.run`` (free running, on the global timer unless given another), shut
     down at the end of the test."""
 
-    def start[P: Port[Any, Any, Any]](
+    def start[P: Port[Any, Any, Any, Any, Any]](
         component: Node | Network,
         *components: Node | Network,
         timer: Timer | None = None,

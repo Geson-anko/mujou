@@ -152,7 +152,7 @@ class Linear(Node):
 - `on_update` にかかった時間も、起床の遅れも、周期の中に数える
 - 手動モード（`mujou.testing.run` と `ManualRun.step`。テストで決まった順に 1 ステップずつ回す）では周期を使わない。$\Delta t > 0$ なら更新する
 
-$\Delta t$ は周期ではなく、前回の更新からの実際の経過時間である。おおむね $P$ だが、遅れれば $P$ より長く、遅れた次の更新では $P$ より短い。遅れが $P$ に近いほど次の $\Delta t$ は 0 に近づく（常に $\Delta t > 0$）。$\Delta t$ の上限（`max_dt`）は今は持たない（[未決定事項](open-decisions.md#時定数)）。そのため、`on_update` は `period` より長い $\Delta t$ でも安定でなければならない。陽的な離散化で $\Delta t/\tau$ が大きすぎるなら、ノードの内側で刻みを分割する。$\Delta t$ を打ち切ると経過時間が失われ、連続時間の定式化からずれる。
+$\Delta t$ は周期ではなく、前回の更新からの実際の経過時間である。おおむね $P$ だが、遅れれば $P$ より長く、遅れた次の更新では $P$ より短い。遅れが $P$ に近いほど次の $\Delta t$ は 0 に近づく（常に $\Delta t > 0$）。$\Delta t$ の上限（`max_dt`）は今は持たない（[未決定事項](open-decisions.md#時定数)）。そのため、`on_update` は `period` より長い $\Delta t$ でも安定でなければならない。陽的な離散化で $\Delta t/\tau$ が大きすぎるなら、ノードの内側で刻みを分割する。$\Delta t$ を打ち切ると経過時間が失われ、連続時間の定式化からずれる。ただし刻みの分割が安定にするのはノード自身の状態だけで、隣のノードとの陽的な結合（読んだメッセージを $\Delta t$ の間固定する）は安定にならない。それが不安定になるノードは、失う時間と引き換えに自分で $\Delta t$ を打ち切ってよい（`mujou.pc` のノードは `max_dt` で打ち切る。[mujou.pc の実装計画](pc-module.md#dt-が伸びたとき)）。
 
 #### pamiq-core との違い
 
@@ -169,16 +169,21 @@ pamiq-core の `SleepIntervalAdjustor`（`interaction/interval_adjustors.py`）�
 | 操作 | 登録 |
 | --- | --- |
 | Tensor か nn.Module を代入 | 登録する。登録済みの名前なら順序はそのまま |
-| ほかの値（`None` を含む）で上書き | 外す |
+| `register_state(name)` を呼ぶ | 登録する。登録済みの名前なら順序はそのまま |
+| ほかの値（`None` を含む）で上書き | 自動で登録した名前は外す。`register_state` で登録した名前は外さない |
 | `del` | 外す |
 
-Port・数値・Tensor のリストや dict は集めない。property も集めない（setter が別の名前の属性に Tensor を置けば、そちらが集まる）。
+Port・数値・Tensor のリストや dict は自動では集めない。数値などを状態に入れるには、代入してから `self.register_state("name")` を呼ぶ。値の型は問わないが、想定は int・float・str・None とそのコンテナ。順序は Tensor・nn.Module の自動登録と同じ 1 本の順序で、呼んだ時点の位置に入る。Tensor の名前を登録してもよく、その場の更新で復元される点は変わらない。まだインスタンスに無い名前（`name not in vars(self)`）は `AttributeError`、property（`device`・`period`・`timer` などの予約名を含む）は `ValueError` にする。登録は `__init__` か `on_start` で行う。復元は新しいインスタンスへ load するので、それより後で初めて登録した名前は復元先で登録されておらず、`load_state_dict` が `ValueError`（not tensors and not registered）にする。Tensor と違い、登録に無い普通の値を load で新しく登録する救済は無い。
+
+property も集めない（setter が別の名前の属性に Tensor を置けば、そちらが集まる）。
+
+登録表は順序付きの名前の集合で、値は `register_state` で登録したかどうかの bool。表は差し替えるだけで書き換えないので、浅いコピー（`copy.copy`）は元のノードと表を共有しない。普通の値の代入では表を 1 回引くだけで、検索は増えない（[ネットワーク](network.md) の `__setattr__` の速さ）。
 
 状態にする Tensor は `on_start` までに確保し、その後はその場で更新するのが基本である。後で初めて代入したものも復元できるが、その場の更新ではなく新しいテンソルになる。`on_stop` で GPU メモリを返すつもりで `self._w = None` とすると、そのキーは終了後の `state_dict()` から消える（`on_stop` は `state_dict()` が返すものを変えない、という規約に反する）。
 
-既定の `state_dict()` は、属性名をキーにした dict を返す。値は、Tensor なら `detach()` したもの（記憶域は共有し、コピーはフレームワークが取る）、nn.Module ならその `state_dict()` である。`requires_grad` は木に入れない（`nn.Module.state_dict` と同じ）。`detach` するので、ノード内 BP のグラフにつながったテンソルでも pickle できる。
+既定の `state_dict()` は、属性名をキーにした dict を返す。値は、Tensor なら `detach()` したもの（記憶域は共有し、コピーはフレームワークが取る）、nn.Module ならその `state_dict()`、`register_state` で登録したそのほかの値はそのままである。`requires_grad` は木に入れない（`nn.Module.state_dict` と同じ）。`detach` するので、ノード内 BP のグラフにつながったテンソルでも pickle できる。
 
-既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。木にあって登録に無い Tensor（`on_start` の後で初めて代入したもの）は、木の値のコピーを新しい属性として置く（登録される）。
+既定の `load_state_dict(state)` は、登録した Tensor へ `torch.no_grad()` の下で `copy_` し、nn.Module には `load_state_dict`（strict）を呼ぶ。どちらもその場で書き換え、オブジェクトを差し替えない。そのため `on_start` で取った参照は復元後の値を指し、`requires_grad` の leaf は leaf のまま勾配を記録し続ける。`copy_` なので dtype とデバイスは合わせられる。`register_state` で登録した Tensor・nn.Module でない値は、木の値の `copy.deepcopy` を属性に代入して差し替える。木にあって登録に無い Tensor（`on_start` の後で初めて代入したもの）は、木の値のコピーを新しい属性として置く（登録される）。
 
 | 不一致 | 例外 |
 | --- | --- |

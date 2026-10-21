@@ -11,5 +11,6 @@ These pages are generated from the docstrings. The API may still change before t
 | [Types](typing.md)            | The module `mujou.typing`: `Single`, `Multi` and `MessageSpec`, for type annotations |
 | [Errors](errors.md)           | `NetworkError` and `PauseTimeoutError`                                               |
 | [Testing](testing.md)         | The module `mujou.testing`: manual runs and the virtual timer                        |
+| [PC-ALM](pc.md)               | The module `mujou.pc`: the PC-ALM nodes, their messages and losses, `pc.functional`  |
 
-`import mujou` gives everything on these pages except `mujou.testing`. Import that module with `import mujou.testing`.
+`import mujou` gives everything on these pages except `mujou.testing` and `mujou.pc`. Import those modules with `import mujou.testing` and `import mujou.pc as pc`.
