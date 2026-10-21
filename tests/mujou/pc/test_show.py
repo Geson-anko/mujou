@@ -25,7 +25,9 @@ class TestShow:
         # write; seconds is three times that.
         head = make_modules("linear", "tanh", WIDTHS[:1])[1]
         initial = copy.deepcopy(head)
-        net = pc.Chain(head, x=X, y=Y, loss=pc.mse, tau=TAU, learn_interval=0.05)
+        net = pc.Chain(
+            head, x=X, y=Y, batch=B, loss=pc.MSELoss(B), tau=TAU, learn_interval=0.05
+        )
         x, y = sample(WIDTHS, 0)
         labeled = torch.ones(B, dtype=torch.bool)
         run = start(net, timer=Timer())
@@ -46,7 +48,14 @@ class TestShow:
         layers, head = make_modules("linear", "tanh", WIDTHS)
         before = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
         net = pc.Chain(
-            *layers, head, x=X, y=Y, loss=pc.mse, tau=TAU, learn_interval=None
+            *layers,
+            head,
+            x=X,
+            y=Y,
+            batch=B,
+            loss=pc.MSELoss(B),
+            tau=TAU,
+            learn_interval=None,
         )
         x, y = sample(WIDTHS, 0)
         unlabeled = torch.zeros(B, dtype=torch.bool)
@@ -65,12 +74,12 @@ class TestShow:
         class ByHand(Network):
             def __init__(self) -> None:
                 super().__init__()
-                self.input = pc.Input(x=X, y=Y, period=TAU.period)
+                self.input = pc.Input(x=X, y=Y, period=TAU.period, batch=B)
                 head = make_modules("linear", "tanh", WIDTHS[:1])[1]
                 self.output = pc.Output(
                     head,
                     act_spec=self.input.act_spec,
-                    loss=pc.mse,
+                    loss=pc.MSELoss(B),
                     tau=TAU,
                     learn_interval=None,
                     period=TAU.period / 2,

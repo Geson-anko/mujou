@@ -2,13 +2,13 @@ import pytest
 import torch
 
 from mujou import DictSpec, TensorSpec
-from mujou.pc import Activity, activity_spec
+from mujou.pc import Activity, Size, activity_spec
 
 
 class TestActivitySpec:
     def test_fields(self):
         h, y = TensorSpec((4, 3)), TensorSpec((4, 10), torch.float64)
-        assert dict(activity_spec(h, y).specs) == {
+        assert dict(activity_spec(h, y, batch=4).specs) == {
             "h": h,
             "jumps": TensorSpec((), torch.int64),
             "y": y,
@@ -18,11 +18,35 @@ class TestActivitySpec:
 
     def test_equal_arguments_give_equal_specs(self):
         def make() -> DictSpec[Activity]:
-            return activity_spec(TensorSpec((4, 3)), TensorSpec((4,), torch.int64))
+            return activity_spec(
+                TensorSpec((4, 3)), TensorSpec((4,), torch.int64), batch=4
+            )
 
         assert make() == make()
 
-    @pytest.mark.parametrize("shape", [(3,), (5, 2), ()])
-    def test_h_and_y_must_have_the_same_batch(self, shape: tuple[int, ...]):
-        with pytest.raises(ValueError, match="same batch"):
-            activity_spec(TensorSpec((4, 3)), TensorSpec(shape))
+    def test_without_a_batch_the_mask_is_a_scalar(self):
+        act = activity_spec(TensorSpec((3,)), TensorSpec((), torch.int64))
+        assert act.specs["mask"] == TensorSpec((), torch.bool)
+
+    def test_an_int_is_a_batch_of_one_dimension(self):
+        h, y = TensorSpec((4, 3)), TensorSpec((4,), torch.int64)
+        assert activity_spec(h, y, batch=4) == activity_spec(h, y, batch=(4,))
+
+    def test_a_batch_of_several_dimensions(self):
+        act = activity_spec(TensorSpec((2, 4, 3)), TensorSpec((2, 4)), batch=(2, 4))
+        assert act.specs["mask"] == TensorSpec((2, 4), torch.bool)
+
+    @pytest.mark.parametrize(
+        ("h", "y", "batch"),
+        [
+            ((4, 3), (3,), 4),  # y
+            ((3,), (4,), 4),  # h
+            ((4,), (), 4),  # y too short
+            ((2, 4, 3), (2, 3), (2, 4)),
+        ],
+    )
+    def test_h_and_y_must_start_with_the_batch(
+        self, h: tuple[int, ...], y: tuple[int, ...], batch: Size
+    ):
+        with pytest.raises(ValueError, match="start with the batch"):
+            activity_spec(TensorSpec(h), TensorSpec(y), batch=batch)

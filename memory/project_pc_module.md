@@ -13,7 +13,7 @@ metadata:
 - **ノードは任意の微分可能な `nn.Module` を包む。** ノードの内側は VJP、ノードの間は PC-ALM。VJP はバッチの和、1/B は θ の勾配にだけ（ユーザーの承認）
 - **状態は h と λ で持ち、入力が変わってもリセットしない。** μ が離散的に跳ぶとき（新しいサンプル、前のノードの h の跳び、自分の θ の更新）だけ h を付け替え、跳びの回数 `jumps` を `Activity` で次へ連鎖させる。ずれ u = h − μ を状態にする形は深い鎖で発散したので採らない
 - **目標は入力に付随させる（2026-10-20、ユーザーの決定）。** `Activity` は `{h, jumps, y, mask, time}` で、各ノードが y・mask・time を次へ写す（コアの carry は廃止した: [[project-carry]]）
-- **ノードは `act` で繋ぐ。** `Input` と `Layer` が送る spec を `act` で公開し、次のノードが `act=` で受け取る。B の照合は `activity_spec` の 1 か所（K28）
+- **ノードは `act` で繋ぐ。** `Input` と `Layer` が送る spec を `act` で公開し、次のノードが `act=` で受け取る。バッチの照合は `activity_spec` の 1 か所（K28）。バッチの shape は [[project-batch-shape]]
 - **学習の時刻は、ホストが入力を書いた時刻から `learn_interval` ごと**（plan-implementer の判断をユーザーが承認）。`LearnClock(*, period, learn_interval, max_dt)` と `Tick` に切り出した。`learn_interval=None` は毎回、`math.inf` は学習しない。目安は 2 × ホップ数 × period より長く（検査はしない）
 - **dt は `max_dt`（既定 min(τ_h/2, 3τ_λ)）で打ち切る。** 周期の既定は τ_h/4（ユーザーの提案）。λ は更新後の h の r で更新（公式実装と同じ順）
 - **過負荷で発散するのは許容する**（ユーザー「過負荷では仕方ない」）

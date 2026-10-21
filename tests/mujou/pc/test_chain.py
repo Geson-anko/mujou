@@ -21,14 +21,20 @@ LEARN_INTERVAL = 3 * H
 
 def chain(*modules: nn.Module) -> pc.Chain:
     return pc.Chain(
-        *modules, x=X, y=Y, loss=pc.mse, tau=TAU, learn_interval=LEARN_INTERVAL
+        *modules,
+        x=X,
+        y=Y,
+        batch=B,
+        loss=pc.MSELoss(B),
+        tau=TAU,
+        learn_interval=LEARN_INTERVAL,
     )
 
 
 def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     """The nodes of ``chain(*layers, head)``, made and connected one by one, and
     the input."""
-    nodes: dict[str, Any] = {"input": pc.Input(x=X, y=Y, period=TAU.h / 4)}
+    nodes: dict[str, Any] = {"input": pc.Input(x=X, y=Y, period=TAU.h / 4, batch=B)}
     last = nodes["input"]
     for i, module in enumerate(layers):
         layer = pc.Layer(
@@ -39,7 +45,7 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     nodes["output"] = pc.Output(
         head,
         act_spec=last.act_spec,
-        loss=pc.mse,
+        loss=pc.MSELoss(B),
         tau=TAU,
         learn_interval=LEARN_INTERVAL,
     )
@@ -118,3 +124,92 @@ class TestChain:
         net = chain(head)
         assert list(vars(net)) == ["input", "output", "prev", "next"]
         assert net.output.prev.recv_spec == net.input.act_spec
+
+
+def learned(
+    start_manual: StartManual,
+    batch: pc.Size,
+    x: torch.Tensor,
+    y: torch.Tensor,
+    mask: torch.Tensor,
+    loss: type[pc.MSELoss | pc.CrossEntropyLoss] = pc.MSELoss,
+) -> dict[str, dict[str, Any]]:
+    """The state of each node of a chain over ``batch`` that learns with
+    ``loss`` after 20 steps with the sample ``(x, y, mask)``, written once."""
+    layers, head = make_modules("linear", "tanh", WIDTHS)
+    net = pc.Chain(
+        *layers,
+        head,
+        x=TensorSpec(tuple(x.shape), F64),
+        y=TensorSpec(tuple(y.shape), y.dtype),
+        batch=batch,
+        loss=loss(batch),
+        tau=TAU,
+        learn_interval=LEARN_INTERVAL,
+    )
+    run = start_manual(net, timer=VirtualTimer())
+    run.write({net.prev: {"x": x, "y": y, "mask": mask}})
+    for _ in range(20):
+        run.step(H)
+    return {path: node["state"] for path, node in run.state_dict()["nodes"].items()}
+
+
+def assert_learned_alike(
+    states: dict[str, dict[str, Any]], expected: dict[str, dict[str, Any]]
+) -> None:
+    """The weights are equal, and the activities of each sample."""
+    for path in ["layer0", "layer1", "output"]:
+        for name, weight in expected[path]["module"].items():
+            torch.testing.assert_close(
+                states[path]["module"][name], weight, rtol=1e-12, atol=1e-14
+            )
+    for path in ["layer0", "layer1"]:
+        for name in ["h", "lam"]:
+            got, want = states[path][name], expected[path][name]
+            torch.testing.assert_close(
+                got, want.reshape(got.shape), rtol=1e-12, atol=1e-14
+            )
+
+
+class TestBatch:
+    def _sample(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        generator = torch.Generator().manual_seed(0)
+        x = torch.randn(6, WIDTHS[0], dtype=F64, generator=generator)
+        y = torch.randn(6, N_OUT, dtype=F64, generator=generator)
+        return x, y, torch.tensor([True, False, True, True, True, False])
+
+    def test_two_dimensions_learn_as_the_flattened_batch(
+        self, start_manual: StartManual
+    ):
+        x, y, mask = self._sample()
+        expected = learned(start_manual, 6, x, y, mask)
+        states = learned(
+            start_manual,
+            (2, 3),
+            x.reshape(2, 3, -1),
+            y.reshape(2, 3, -1),
+            mask.reshape(2, 3),
+        )
+        assert_learned_alike(states, expected)
+        initial = make_modules("linear", "tanh", WIDTHS)[1].state_dict()["weight"]
+        assert not torch.equal(expected["output"]["module"]["weight"], initial)
+
+    def test_no_batch_learns_as_a_batch_of_one(self, start_manual: StartManual):
+        x, y, mask = self._sample()
+        expected = learned(start_manual, 1, x[:1], y[:1], mask[:1])
+        states = learned(start_manual, (), x[0], y[0], mask[0])
+        assert_learned_alike(states, expected)
+
+    def test_one_class_without_a_batch_learns_as_a_batch_of_one(
+        self, start_manual: StartManual
+    ):
+        # The target is a scalar: the class of the one sample.
+        x, _, _ = self._sample()
+        y = torch.tensor([1, 0, 1, 1, 0, 1])
+        expected = learned(
+            start_manual, 1, x[:1], y[:1], torch.tensor([True]), pc.CrossEntropyLoss
+        )
+        states = learned(
+            start_manual, (), x[0], y[0], torch.tensor(True), pc.CrossEntropyLoss
+        )
+        assert_learned_alike(states, expected)

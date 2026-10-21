@@ -1,47 +1,37 @@
-import pytest
 import torch
-from torch import nn
 
-from mujou.pc import cross_entropy, mse
+from mujou.pc import CrossEntropyLoss, MSELoss
+from mujou.pc.functional import cross_entropy, mse
 
 
 def _generator() -> torch.Generator:
     return torch.Generator().manual_seed(0)
 
 
-class TestMse:
-    def test_half_squared_error_of_each_sample(self):
+class TestMSELoss:
+    def test_is_the_function_with_its_batch(self):
         g = _generator()
-        y_hat = torch.randn(3, 2, 4, generator=g, dtype=torch.float64)
-        y = torch.randn(3, 2, 4, generator=g, dtype=torch.float64)
-        ell = mse(y_hat, y)
-        assert ell.shape == (3,)
-        for b in range(3):
-            expected = 0.5 * sum(
-                (y[b, i, j] - y_hat[b, i, j]).item() ** 2
-                for i in range(2)
-                for j in range(4)
-            )
-            assert ell[b].item() == pytest.approx(expected, rel=1e-14)
+        y_hat = torch.randn(2, 3, 4, generator=g, dtype=torch.float64)
+        y = torch.randn(2, 3, 4, generator=g, dtype=torch.float64)
+        for batch in [(), 2, (2, 3)]:
+            assert torch.equal(MSELoss(batch)(y_hat, y), mse(y_hat, y, batch))
 
-    def test_one_value_per_sample(self):
-        y_hat = torch.tensor([1.0, 2.0], dtype=torch.float64)
-        y = torch.tensor([0.0, 0.0], dtype=torch.float64)
-        assert torch.equal(mse(y_hat, y), torch.tensor([0.5, 2.0], dtype=torch.float64))
-
-    def test_shapes_must_match(self):
-        with pytest.raises(ValueError, match="same shape"):
-            mse(torch.zeros(3, 1), torch.zeros(3))
+    def test_without_a_batch_by_default(self):
+        y_hat, y = torch.zeros(3), torch.ones(3)
+        assert MSELoss()(y_hat, y).shape == ()
 
 
-class TestCrossEntropy:
-    def test_mean_is_the_mean_loss_of_torch(self):
-        # The per-sample loss has no 1/B in it.
+class TestCrossEntropyLoss:
+    def test_is_the_function_with_its_batch(self):
         g = _generator()
-        y_hat = torch.randn(5, 4, generator=g, dtype=torch.float64)
-        y = torch.randint(0, 4, (5,), generator=g)
-        ell = cross_entropy(y_hat, y)
-        assert ell.shape == (5,)
-        torch.testing.assert_close(
-            ell.mean(), nn.CrossEntropyLoss()(y_hat, y), rtol=1e-14, atol=0
+        y_hat = torch.randn(2, 3, 4, generator=g, dtype=torch.float64)
+        y = torch.randint(0, 4, (2, 3), generator=g)  # 4 classes after (2, 3)
+        assert torch.equal(
+            CrossEntropyLoss((2, 3))(y_hat, y), cross_entropy(y_hat, y, (2, 3))
         )
+        y = torch.randint(0, 3, (2, 4), generator=g)  # 3 classes, 4 per sample
+        assert torch.equal(CrossEntropyLoss(2)(y_hat, y), cross_entropy(y_hat, y, 2))
+
+    def test_without_a_batch_by_default(self):
+        y_hat, y = torch.zeros(4), torch.tensor(1)
+        assert CrossEntropyLoss()(y_hat, y).shape == ()

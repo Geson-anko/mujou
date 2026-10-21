@@ -11,21 +11,25 @@ previous node, and keeps its activity ``h`` and the dual ``lam`` of the constrai
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
 - ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds; ``learn_`` moves ``theta``.
+- ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
+  (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
 
 Every ``g`` here is a gradient of an energy; the update subtracts it. Gradients are
-summed over the batch, and the ``1 / B`` is applied to ``theta`` only (in
-``learn_``), so ``lam`` holds the credit of each sample.
+summed over the batch, and the ``1 / B`` (``B`` the number of samples) is applied
+to ``theta`` only (in ``learn_``), so ``lam`` holds the credit of each sample.
+The shapes start with the batch, ``batch`` (see ``activity_spec``).
 """
 
 import math
 from collections.abc import Callable, Sequence
 
 import torch
+import torch.nn.functional as F
 
-from mujou.pc.messages import rows
+from mujou.pc.messages import Size, batch_shape, rows
 from mujou.pc.time_constants import TimeConstants
 
-__all__ = ["learn_", "loss_vjp", "relax_", "vjp"]
+__all__ = ["cross_entropy", "learn_", "loss_vjp", "mse", "relax_", "vjp"]
 
 
 def vjp(
@@ -50,17 +54,17 @@ def vjp(
     no graph reaches the node that sent it.
 
     Args:
-        module: The function ``f`` of the node, ``(B, *in) -> (B, *out)``. It must
-            treat the samples independently.
-        h_in: The activity of the previous node, ``(B, *in)``.
-        delta: Makes $\delta$ of the node, ``(B, *out)``, from ``mu`` (detached,
+        module: The function ``f`` of the node, ``(*batch, *in) ->
+            (*batch, *out)``. It must treat the samples independently.
+        h_in: The activity of the previous node, ``(*batch, *in)``.
+        delta: Makes $\delta$ of the node, ``(*batch, *out)``, from ``mu`` (detached,
             without gradients), such as ``lambda mu: h - mu + lam``.
         params: The parameters to get the gradients of, usually those of
             ``module`` that require gradients.
 
     Returns:
-        ``(mu, g_in, g_theta)``: ``mu`` (``(B, *out)``, detached), ``g_in``
-        (``(B, *in)``) and ``g_theta`` (one tensor per parameter, in the order of
+        ``(mu, g_in, g_theta)``: ``mu`` (``(*batch, *out)``, detached), ``g_in``
+        (``(*batch, *in)``) and ``g_theta`` (one tensor per parameter, in the order of
         ``params``; a parameter that ``module`` does not use gets zeros).
 
     Raises:
@@ -107,20 +111,21 @@ def loss_vjp(
     detached first.
 
     Args:
-        module: The function ``f`` of the node, ``(B, *in) -> (B, *out)``.
-        h_in: The activity of the previous node, ``(B, *in)``.
-        y: The target, ``(B, *target)``.
-        mask: Whether each sample has a target, ``(B,)`` bool.
-        loss: The loss of each sample, ``(y_hat, y) -> (B,)``, such as
-            ``mse`` or ``cross_entropy``.
+        module: The function ``f`` of the node, ``(*batch, *in) ->
+            (*batch, *out)``.
+        h_in: The activity of the previous node, ``(*batch, *in)``.
+        y: The target, ``(*batch, *target)``.
+        mask: Whether each sample has a target, ``batch`` bool.
+        loss: The loss of each sample, ``(y_hat, y) -> batch``, such as
+            ``MSELoss(batch)`` or ``CrossEntropyLoss(batch)``.
         params: The parameters to get the gradients of.
 
     Returns:
         ``(y_hat, g_in, g_theta)`` as ``vjp`` returns ``(mu, g_in, g_theta)``.
 
     Raises:
-        ValueError: ``loss`` does not return ``(B,)``, as a loss that averages
-            (``nn.MSELoss()``) does.
+        ValueError: ``loss`` does not return the shape of ``mask``, as a loss
+            that averages over the batch (``nn.MSELoss()``) does.
     """
     # A masked-out y may be anything; a NaN in it would reach the gradients
     # through 0 * NaN, so it never reaches the loss. Its mask is False, so the
@@ -133,8 +138,8 @@ def loss_vjp(
             raise ValueError(
                 f"loss must return the loss of each sample, of shape "
                 f"{tuple(mask.shape)}, got {tuple(ell_b.shape)}; a loss that "
-                "averages, such as nn.MSELoss(), does not (use pc.mse or "
-                "pc.cross_entropy)"
+                "averages, such as nn.MSELoss(), does not (use pc.MSELoss or "
+                "pc.CrossEntropyLoss with the batch)"
             )
         return torch.where(mask, ell_b, 0.0).sum()
 
@@ -184,10 +189,10 @@ def relax_(
     exactly as it is.
 
     Args:
-        h: The activity of the node, ``(B, *out)``.
-        lam: The dual of the node's activity, ``(B, *out)``.
-        mu: The prediction ``f(h_in)`` of the node, ``(B, *out)``.
-        g: The sum of the gradients the next nodes sent, ``(B, *out)``.
+        h: The activity of the node, ``(*batch, *out)``.
+        lam: The dual of the node's activity, ``(*batch, *out)``.
+        mu: The prediction ``f(h_in)`` of the node, ``(*batch, *out)``.
+        g: The sum of the gradients the next nodes sent, ``(*batch, *out)``.
         dt: The time to move by, in seconds.
         tau: The time constants; ``tau.h`` and ``tau.lam`` are used.
     """
@@ -202,13 +207,14 @@ def learn_(
     g_theta: Sequence[torch.Tensor],
     elapsed: float,
     tau: TimeConstants,
-    batch: int,
+    batch: Size,
 ) -> None:
     """Move ``params`` in place by ``elapsed`` seconds of
     ``tau_theta * dtheta/dt = -g_theta / B``.
 
     That is one gradient step on the mean loss of the batch with the learning
-    rate ``elapsed / tau.theta``: ``p -= (elapsed / tau.theta) * g / batch``.
+    rate ``elapsed / tau.theta``: ``p -= (elapsed / tau.theta) * g / B``, where
+    ``B`` is the number of samples in ``batch`` (1 for ``()``).
     ``tau.theta = inf`` makes the rate 0, which leaves ``params`` as they are
     while the gradients are finite; the nodes of ``mujou.pc`` do not call it
     then (``LearnClock.of`` never learns).
@@ -219,9 +225,95 @@ def learn_(
             ``vjp`` or ``loss_vjp`` returns them.
         elapsed: The time since the last update of ``params``, in seconds.
         tau: The time constants; ``tau.theta`` is used.
-        batch: The batch size ``B``.
+        batch: The batch, the shape the activities start with.
     """
-    rate = elapsed / tau.theta / batch
+    rate = elapsed / tau.theta / math.prod(batch_shape(batch))
     with torch.no_grad():
         for p, g in zip(params, g_theta, strict=True):
             p.sub_(g, alpha=rate)  # tau_theta dtheta/dt = -g_theta / B
+
+
+def mse(y_hat: torch.Tensor, y: torch.Tensor, batch: Size = ()) -> torch.Tensor:
+    """Return the mean squared error of each sample of ``batch``.
+
+    The squared error is averaged over the dimensions of a sample, as
+    ``nn.MSELoss`` averages it, but not over the batch: the mean of the result
+    is ``nn.MSELoss()(y_hat, y)``, and with the ``1 / B`` of ``learn_``,
+    ``theta`` follows its gradient.
+
+    With ``d`` values in a sample, its gradient with respect to ``y_hat`` is
+    ``(2 / d) * (y_hat - y)``: that of ``0.5 * ||y - y_hat||^2`` for ``d = 2``,
+    twice it for ``d = 1``. The larger it is, the more strongly the output
+    pulls on the activities, and the shorter the period that keeps their
+    explicit steps stable; for a scalar target, a loss of your own such as
+    ``0.5 * mse(y_hat, y, batch)`` keeps the pull of the half.
+
+    Args:
+        y_hat: The prediction, ``(*batch, *out)``.
+        y: The target, of the same shape as ``y_hat``.
+        batch: The batch that the shapes start with; ``()`` for one sample.
+
+    Returns:
+        The loss of each sample, ``batch``.
+
+    Raises:
+        ValueError: The shapes differ (a broadcast would silently give
+            another shape), or they do not start with ``batch``.
+    """
+    if y_hat.shape != y.shape:
+        raise ValueError(
+            f"mse needs y_hat and y of the same shape, got {tuple(y_hat.shape)} "
+            f"and {tuple(y.shape)}"
+        )
+    batch = _starting(batch, y_hat, y)
+    return (y - y_hat).square().reshape(*batch, -1).mean(dim=-1)
+
+
+def cross_entropy(
+    y_hat: torch.Tensor, y: torch.Tensor, batch: Size = ()
+) -> torch.Tensor:
+    """Return the cross entropy of each sample of ``batch``.
+
+    The classes are the dimension right after the batch, as in
+    ``F.cross_entropy`` (``(N, C)`` and ``(C,)`` alike). A sample with more
+    dimensions, such as one class for each pixel (``(*batch, C, H, W)``), has
+    its cross entropy averaged over them, as ``nn.CrossEntropyLoss`` does, but
+    not over the batch: the mean of the result is
+    ``nn.CrossEntropyLoss()(y_hat, y)``. A class of ``-100`` (the
+    ``ignore_index`` of torch) adds zero but still counts in that mean; leave a
+    sample out with ``mask`` instead.
+
+    Args:
+        y_hat: The logits, ``(*batch, C, *rest)``.
+        y: The class of each sample, ``(*batch, *rest)`` int64, or the
+            probability of each class, of the shape of ``y_hat``.
+        batch: The batch that the shapes start with; ``()`` for one sample.
+
+    Returns:
+        The loss of each sample, ``batch``.
+
+    Raises:
+        ValueError: ``y_hat`` or ``y`` does not start with ``batch``.
+    """
+    batch = _starting(batch, y_hat, y)
+    n, k = math.prod(batch), len(batch)
+    # F.cross_entropy takes the batch as one dimension, before the classes.
+    ell = F.cross_entropy(
+        y_hat.reshape(n, *y_hat.shape[k:]),
+        y.reshape(n, *y.shape[k:]),
+        reduction="none",
+    )
+    return ell.reshape(*batch, -1).mean(dim=-1)
+
+
+def _starting(batch: Size, *tensors: torch.Tensor) -> tuple[int, ...]:
+    """``batch`` as a shape, which each of ``tensors`` must start with: a
+    reshape would otherwise mix the samples whenever the sizes divide."""
+    batch = batch_shape(batch)
+    for t in tensors:
+        if t.shape[: len(batch)] != batch:
+            raise ValueError(
+                f"the tensors must start with the batch {batch}, got the shape "
+                f"{tuple(t.shape)}"
+            )
+    return batch

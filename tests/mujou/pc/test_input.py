@@ -20,7 +20,7 @@ X, Y = TensorSpec((B, 4)), TensorSpec((B,), torch.int64)
 
 class TestInput:
     def _run(self, start_manual: StartManual) -> tuple[pc.Input, ManualRun]:
-        inp = pc.Input(x=X, y=Y, period=1e-3)
+        inp = pc.Input(x=X, y=Y, period=1e-3, batch=B)
         return inp, start_manual(inp)
 
     def test_sends_x_with_the_target_and_the_time_of_the_write(
@@ -45,7 +45,7 @@ class TestInput:
         self, start_manual: StartManual
     ):
         # At time 0 whatever the time of the run's timer.
-        inp = pc.Input(x=X, y=Y, period=1e-3)
+        inp = pc.Input(x=X, y=Y, period=1e-3, batch=B)
         run = start_manual(inp, timer=VirtualTimer(start=Timestamp(ns=5_000_000)))
         run.step(H, inp)
         sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
@@ -80,7 +80,7 @@ class TestInput:
         assert run.state_dict()["nodes"][""]["state"]["seen_write"] == 3_000_000
 
     def test_connects_to_a_layer(self):
-        inp = pc.Input(x=X, y=Y, period=1e-3)
+        inp = pc.Input(x=X, y=Y, period=1e-3, batch=B)
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
         layer = pc.Layer(
             nn.Linear(4, 5), act_spec=inp.act_spec, tau=tau, learn_interval=None
@@ -89,6 +89,19 @@ class TestInput:
         assert inp.next.channels == layer.prev.channels == (channel,)
         assert channel.other(inp.next) is layer.prev
 
-    def test_x_and_y_must_have_the_same_batch(self):
-        with pytest.raises(ValueError, match="same batch"):
-            pc.Input(x=TensorSpec((B + 1, 4)), y=Y, period=1e-3)
+    def test_x_and_y_must_start_with_the_batch(self):
+        with pytest.raises(ValueError, match="start with the batch"):
+            pc.Input(x=TensorSpec((B + 1, 4)), y=Y, period=1e-3, batch=B)
+
+    def test_without_a_batch_takes_one_sample(self, start_manual: StartManual):
+        inp = pc.Input(x=TensorSpec((4,)), y=TensorSpec((), torch.int64), period=1e-3)
+        assert inp.act_spec.specs["mask"] == TensorSpec((), torch.bool)
+        run = start_manual(inp)
+        x = torch.arange(4.0)
+        y, mask = torch.tensor(7), torch.tensor(True)
+        run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
+        run.step(H, inp)
+        sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
+        assert torch.equal(sent["h"], x)
+        assert torch.equal(sent["y"], y)
+        assert torch.equal(sent["mask"], mask)

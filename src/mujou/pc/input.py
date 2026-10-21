@@ -5,7 +5,7 @@ from typing import override
 import torch
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
-from mujou.pc.messages import Sample, activity_spec
+from mujou.pc.messages import Sample, Size, activity_spec
 
 
 class Input(Node):
@@ -32,7 +32,10 @@ class Input(Node):
 
         B = 64
         inp = pc.Input(
-            x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=1e-3
+            x=TensorSpec((B, 784)),
+            y=TensorSpec((B,), torch.int64),
+            period=1e-3,
+            batch=B,
         )
         ...
         mask = torch.ones(B, dtype=torch.bool)
@@ -40,14 +43,16 @@ class Input(Node):
             run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
 
     Args:
-        x: The spec of the inputs ``x``, ``(B, *in)``.
-        y: The spec of the targets ``y``, ``(B, *target)``.
+        x: The spec of the inputs ``x``, ``(*batch, *in)``.
+        y: The spec of the targets ``y``, ``(*batch, *target)``.
         period: The period of the node in seconds, usually that of the next
             node.
+        batch: The batch that ``x`` and ``y`` start with, as in
+            ``activity_spec``: ``()`` for one sample, ``B`` for ``B`` samples.
         device: Where the node computes.
 
     Raises:
-        ValueError: The first dimensions of ``x`` and ``y`` differ.
+        ValueError: ``x`` or ``y`` does not start with ``batch``.
     """
 
     def __init__(
@@ -56,10 +61,11 @@ class Input(Node):
         x: TensorSpec,
         y: TensorSpec,
         period: float,
+        batch: Size = (),
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(device=device, period=period)
-        self.act_spec = activity_spec(x, y)
+        self.act_spec = activity_spec(x, y, batch)
         mask = self.act_spec.specs["mask"]
         self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
         self.next = MultiPort(send=self.act_spec, recv=x)

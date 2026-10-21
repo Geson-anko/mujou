@@ -79,8 +79,9 @@ def sample(widths: Sequence[int], seed: int) -> tuple[torch.Tensor, torch.Tensor
 def masked_mse(
     y_hat: torch.Tensor, y: torch.Tensor, mask: torch.Tensor
 ) -> torch.Tensor:
-    """The loss of the output node, written out: sum_b mask_b 0.5 ||y_b - y_hat_b||^2."""
-    return (0.5 * (y - y_hat) ** 2).sum(dim=1)[mask].sum()
+    """The loss of the output node, written out:
+    sum_b mask_b mean_j (y_bj - y_hat_bj)^2."""
+    return ((y - y_hat) ** 2).mean(dim=1)[mask].sum()
 
 
 def forward(

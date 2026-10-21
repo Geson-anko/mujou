@@ -54,9 +54,13 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 ## 符号・バッチ・損失の規約
 
 - 前のノードへ送る値は、自分のエネルギーの $h_{\mathrm{in}}$ に対する勾配。複数の相手からの値は足すだけ
+- バッチは shape `batch`（型は `pc.Size`、`type Size = int | tuple[int, ...]`。既定は `()`）で、メッセージのテンソルはどれもこれで始まる。`()` はバッチの無い 1 サンプル、int の `B` は `(B,)`、`(E, A)` のような多次元も取る。$B$ はサンプルの数 `math.prod(batch)`（`()` なら 1）。既定を `()` にしたのは、mujou が狙うストリームの学習ではサンプルを 1 つずつ受け取るのが普通で、ダミーの次元 `(1, d)` を書かせないため（2026-10-21、ユーザーの決定）。多次元のバッチは平坦化した `(E*A,)` と同じ更新になる
+- バッチは `activity_spec(h, y, batch)`、`Input(batch=)`、`Chain(batch=)` で宣言する。`Layer` と `Output` は受け取る `act_spec` の `mask` の shape から読み、引数を持たない。どの次元がバッチかは shape からは決まらないので、推論しない
 - VJP はバッチの和で取り、$1/B$ は $\theta$ の勾配にだけ掛ける。局所のエネルギーを `.mean()` で作ると $h$ の勾配まで $1/B$ 倍になるので使わない。この規約で $\lambda$ はサンプルごとの credit $-\partial\ell_b/\partial h_b$、$\theta$ の更新は平均の損失の勾配降下になる
-- 出力ノードの損失は**サンプルごとの値** $\ell_b$（shape `(B,)`）を返す関数とし、和はノードが取る。平均を取る損失（`nn.MSELoss()` の既定など）を渡すと $g_{\mathrm{in}}$ が $1/B$ 倍、$\theta$ には $1/B$ が二重に掛かるので断る（K27）。`pc.mse` は $\tfrac12\|y-\hat y\|^2$ を特徴の次元で和にしたもの、`pc.cross_entropy` は `reduction="none"` の交差エントロピー
-- `f` はサンプルごとに独立であること。学習モードの BatchNorm のようにバッチの中で混ざる演算は使えない
+- 出力ノードの損失は**サンプルごとの値** $\ell_b$（shape `batch`）を返す関数とし、和はノードが取る。平均を取る損失（`nn.MSELoss()` の既定など）を渡すと $g_{\mathrm{in}}$ が $1/B$ 倍、$\theta$ には $1/B$ が二重に掛かるので断る（K27）。バッチが `()` のときは損失も `()` なので見分けられないが、平均を取るバッチが無いので $1/B$ の問題は起きない
+- 損失は `pc.MSELoss(batch)` と `pc.CrossEntropyLoss(batch)`。中身は `pc.functional.mse(y_hat, y, batch)` と `pc.functional.cross_entropy(y_hat, y, batch)` で、クラスは `batch` を持つだけ。torch の `F.mse_loss` と `nn.MSELoss` の関係に倣う。どちらもバッチでない次元（1 サンプルの中）で平均を取り、$\tfrac12$ は付けない。$1/B$ と合わせると、$\theta$ の更新は `nn.MSELoss()`・`nn.CrossEntropyLoss()` の既定（全要素の平均）の勾配降下と一致する。交差エントロピーのクラスの次元はバッチの直後（`len(batch)` 番目）。torch の「クラスは dim 1、バッチが無ければ dim 0」を一般化したもの。1 サンプルの目標が構造を持つ（画素ごとのクラス、`(*batch, C, H, W)`）ときに畳む次元もバッチから決まるので、交差エントロピーもバッチを受け取る
+- 以前の `pc.mse` は $\tfrac12\|y-\hat y\|^2$ を特徴で和にしていた。出力の次元が $d$ なら、今の勾配はその $2/d$ 倍（$d = 2$ で同じ、$d = 1$ で 2 倍）。出力側の結合が強くなる分、陽的 Euler の安定の余裕は減る
+- `f` はサンプルごとに独立であること。学習モードの BatchNorm のようにバッチの中で混ざる演算は使えない。これはバッチのすべての次元にかかる。系列の時間のように module が混ぜる次元はバッチではなく、`h` の次元に置く
 - `f` は決定的で、自分の状態を持たないこと（Dropout や学習モードの BatchNorm は使えない）。学習した更新で $\theta$ の跳びを求めるため、同じ $h_{\mathrm{in}}$ で `f` をもう 1 回計算する
 
 ## メッセージ
@@ -70,8 +74,8 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 - `time` は、その入力をホストが書いた時刻（`write` が返した時刻の ns、shape `()` の int64）。書き込みの前は 0
 - 目標 `y` と `mask` は入力に付随させ、活動と同じメッセージで運ぶ。各ノードは受け取った `y`、`mask`、`time` をそのまま次のメッセージに写す。読み手は 1 回の読み出しで同じサンプルの組を得るので、`Output` は常に、受け取った活動と同じメッセージの `y` と予測を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、ホストが伝播より速く次のサンプルを書いても組み違えない。別のポートで運ぶと、読み手は 2 つのスロットを別々の瞬間に読むので、別のサンプルの組になりうる
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい。学習モードと推論モードの区別は持ち込まない
-- 1 ホップごとに `y`、`mask`、`time` をコピーするコストは、分類（`y` が `(B,)`）では h より小さく、回帰（`y` が `(B, d)`）では h と同じ大きさになる（[性能の基準値](research/benchmarks.md)）
-- `act_spec` は、ノードが送る `Activity` の spec。`Input` と `Layer` が公開し、次のノードが `act_spec=` で受け取る。名前を `act` にしないのは、研究者が `act` をまず活性化関数と読むから。B（バッチの大きさ）は `act_spec` の `y` から読む。自作のノードは `activity_spec(h, y)` か前のノードの `act_spec` で繋ぐ。h と y の先頭の次元の照合は `activity_spec` の 1 か所だけで行う（K28）。`Layer` は自分の出力の `act_spec` を `activity_spec` で作るので、module の出力の先頭の次元の検査も同じ 1 か所を通る
+- 1 ホップごとに `y`、`mask`、`time` をコピーするコストは、分類（`y` が `batch`）では h より小さく、回帰（`y` が `(*batch, d)`）では h と同じ大きさになる（[性能の基準値](research/benchmarks.md)）
+- `act_spec` は、ノードが送る `Activity` の spec。`Input` と `Layer` が公開し、次のノードが `act_spec=` で受け取る。名前を `act` にしないのは、研究者が `act` をまず活性化関数と読むから。バッチは `act_spec` の `mask` の shape から読む。自作のノードは `activity_spec(h, y, batch)` か前のノードの `act_spec` で繋ぐ。h と y がバッチで始まることの照合は `activity_spec` の 1 か所だけで行う（K28）。`Layer` は自分の出力の `act_spec` を `activity_spec` で作るので、module の出力がバッチで始まることの検査も同じ 1 か所を通る
 
 | ノード | ポート | 受け取る | 送る |
 | --- | --- | --- | --- |
@@ -185,12 +189,13 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 `functional` は状態を持たない数式で、`Layer` と `Output` もこれで書く。
 
 - `vjp(f, h_in, delta, params) -> (mu, g_in, g_theta)`: δ は $\mu$ から作る callable（`Layer` は付け替えの更新で $\mu$ に依存しない δ を、ほかの更新で $r + \lambda$ を作る）。δ と μ の shape が違えば断る（K29）
-- `loss_vjp(f, h_in, y, mask, loss, params) -> (y_hat, g_in, g_theta)`: 損失の shape が `(B,)` でなければ断る（K27）。`Output` の構築時の probe も同じ関数を通る
+- `loss_vjp(f, h_in, y, mask, loss, params) -> (y_hat, g_in, g_theta)`: 損失の shape が `mask` の shape（`batch`）でなければ断る（K27）。`Output` の構築時の probe も同じ関数を通る
 - `relax_(h, lam, mu, g, dt, tau)`: 1 歩の陽的 Euler
-- `learn_(params, g_theta, elapsed, tau, batch)`: $\theta$ の 1 歩
+- `learn_(params, g_theta, elapsed, tau, batch)`: $\theta$ の 1 歩。`batch` は shape で、そのサンプルの数で割る
+- `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -206,7 +211,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 | 重みの勾配の $\lambda$ | 最後の dual 更新の前 | VJP を取ったときの更新前の値 |
 | ステップの大きさ | 離散の $\eta_h, \alpha$ | 時定数と実経過の `dt`（`max_dt` で打ち切る） |
 | 重みの最適化 | Adam | 勾配流（SGD） |
-| 出力の損失 | バッチ平均の $\tfrac12\|y-\hat y\|^2$ | サンプルごとの任意の損失の和 |
+| 出力の損失 | バッチ平均の $\tfrac12\|y-\hat y\|^2$ | サンプルごとの任意の損失の和（`MSELoss` は特徴の平均で $\tfrac12$ なし） |
 
 ## テスト
 

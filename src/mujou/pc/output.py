@@ -26,7 +26,8 @@ class Output(Node):
     \tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta},
     $$
 
-    it sends $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
+    where $B$ is the number of samples in the batch (1 without one), it sends
+    $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
     previous node (``functional.loss_vjp``): zero for a sample without a target
     while its ``y_hat`` is finite. Each ``on_update(dt)`` caps ``dt`` at
     ``max_dt`` as ``Layer`` does, reads the ``Activity``, sends ``g_in``, sends a
@@ -41,11 +42,12 @@ class Output(Node):
     target, it does not learn and drops the time since the last update; so too
     before the first sample arrives, while the activity is zeros (``mask`` all
     False), and when the input changes before it has learned from it. ``B`` is
-    the batch, not the number of samples with a target: a sample without one
-    adds zero.
+    the number of samples in the batch, not the number of samples with a
+    target: a sample without one adds zero.
 
-    ``loss`` returns the loss of each sample, ``(B,)``, such as ``mse`` or
-    ``cross_entropy``, and the node sums them. A loss that averages (such as
+    ``loss`` returns the loss of each sample, of the shape of the batch (that
+    of ``mask``), such as ``MSELoss(batch)`` or ``CrossEntropyLoss(batch)``,
+    and the node sums them. A loss that averages over the batch (such as
     ``nn.MSELoss()``) would scale the gradient that flows back by ``1 / B``, so
     the node refuses it when it is made: it calls ``module`` and ``loss`` once
     on zeros then (``functional.loss_vjp``), which also finds the shape of
@@ -60,7 +62,7 @@ class Output(Node):
         out = pc.Output(
             nn.Linear(256, 10),
             act_spec=hidden.act_spec,  # hidden: a pc.Layer
-            loss=pc.cross_entropy,
+            loss=pc.CrossEntropyLoss(B),
             tau=tau,
             learn_interval=24e-3,
         )
@@ -68,10 +70,11 @@ class Output(Node):
         # The host: prediction = run.read(out.next); prediction["y_hat"], ...
 
     Args:
-        module: The function ``f``, ``(B, *in) -> (B, *out)``, on ``device``.
+        module: The function ``f``, ``(*batch, *in) -> (*batch, *out)``, on
+            ``device``.
         act_spec: The spec of the activity ``h_in`` it receives: the
-            ``act_spec`` of the node before.
-        loss: The loss of each sample, ``(y_hat, y) -> (B,)``.
+            ``act_spec`` of the node before, which also gives the batch.
+        loss: The loss of each sample, ``(y_hat, y) -> batch``.
         tau: The time constants; ``tau.theta`` is used, and the defaults of
             ``period`` and ``max_dt``.
         learn_interval: As in ``Layer``.
@@ -85,7 +88,8 @@ class Output(Node):
 
     Raises:
         ValueError: ``LearnClock`` raises, as in ``Layer``, or ``loss`` does
-            not return ``(B,)`` for the output of ``module`` and the target.
+            not return the shape of the batch for the output of ``module`` and
+            the target.
     """
 
     def __init__(
@@ -103,7 +107,7 @@ class Output(Node):
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
         self._loss = loss
-        self._batch = act_spec.specs["y"].shape[0]
+        self._batch = act_spec.specs["mask"].shape
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )

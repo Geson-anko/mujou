@@ -27,7 +27,8 @@ class Layer(Node):
     \tau_\theta \dot\theta = -g_\theta / B,
     $$
 
-    where $g_\theta = -J_\theta^\top \delta$ and the node sends
+    where $B$ is the number of samples in the batch (1 without one),
+    $g_\theta = -J_\theta^\top \delta$ and the node sends
     $g_{\mathrm{in}} = -J_h^\top \delta$ to the previous node (both from one
     vector-Jacobian product of ``module``, ``functional.vjp``). At a fixed point,
     $r = 0$ (``h`` is the forward pass) and ``lam`` is the credit
@@ -119,7 +120,7 @@ class Layer(Node):
 
     The state (``Run.state_dict()["nodes"][path]["state"]``) holds
     ``"generator"`` (the state of the node's ``generator``), ``"module"`` (its
-    ``state_dict``), ``"h"`` and ``"lam"`` (``(B, *out)``), the prediction of
+    ``state_dict``), ``"h"`` and ``"lam"`` (``(*batch, *out)``), the prediction of
     the last update (``"mu"``), the jump of ``theta`` still to add to ``h``
     (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it sends
     and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
@@ -134,7 +135,10 @@ class Layer(Node):
         B = 64
         tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
         inp = pc.Input(
-            x=TensorSpec((B, 784)), y=TensorSpec((B,), torch.int64), period=tau.period
+            x=TensorSpec((B, 784)),
+            y=TensorSpec((B,), torch.int64),
+            period=tau.period,
+            batch=B,
         )
         hidden = pc.Layer(
             nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
@@ -146,9 +150,10 @@ class Layer(Node):
         hidden.next.connect(out.prev)  # out: a pc.Output, or another pc.Layer
 
     Args:
-        module: The function ``f``, ``(B, *in) -> (B, *out)``, on ``device``.
+        module: The function ``f``, ``(*batch, *in) -> (*batch, *out)``, on
+            ``device``.
         act_spec: The spec of the activity ``h_in`` it receives: the
-            ``act_spec`` of the node before.
+            ``act_spec`` of the node before, which also gives the batch.
         tau: The time constants.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
@@ -163,8 +168,8 @@ class Layer(Node):
         device: Where the node computes.
 
     Raises:
-        ValueError: The first dimension of the output of ``module`` is not the
-            batch of ``act_spec``, or ``LearnClock`` raises: ``learn_interval``
+        ValueError: The output of ``module`` does not start with the batch of
+            ``act_spec``, or ``LearnClock`` raises: ``learn_interval``
             is neither ``None`` nor > 0, ``max_dt`` is not > 0, or ``period``
             is longer than ``max_dt``. ``module`` raises as PyTorch does when it
             does not take the ``h`` of ``act_spec`` on ``device``.
@@ -183,7 +188,7 @@ class Layer(Node):
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
-        self._batch = act_spec.specs["y"].shape[0]
+        self._batch = act_spec.specs["mask"].shape
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
@@ -207,7 +212,7 @@ class Layer(Node):
         for name in ("jumped", "jumps", "seen_jumps"):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
-        self.act_spec = activity_spec(out, act_spec.specs["y"])
+        self.act_spec = activity_spec(out, act_spec.specs["y"], self._batch)
         self.prev = Port(send=h_in, recv=act_spec)
         self.next = MultiPort(send=self.act_spec, recv=out)
 

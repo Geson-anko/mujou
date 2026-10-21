@@ -10,7 +10,7 @@ from torch import nn
 from mujou import Network, Port, Run, TensorSpec
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
-from mujou.pc.messages import Prediction, Sample
+from mujou.pc.messages import Prediction, Sample, Size
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
 
@@ -39,7 +39,8 @@ class Chain(Network):
             nn.Linear(256, 10),
             x=TensorSpec((B, 784)),
             y=TensorSpec((B,), torch.int64),
-            loss=pc.cross_entropy,
+            batch=B,
+            loss=pc.CrossEntropyLoss(B),
             tau=pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28),
             learn_interval=0.15,
         )
@@ -48,12 +49,14 @@ class Chain(Network):
 
     Args:
         modules: The functions of the nodes, in order, on ``device``.
-        x: The spec of the inputs, ``(B, *in)``.
-        y: The spec of the targets, ``(B, *target)``.
+        x: The spec of the inputs, ``(*batch, *in)``.
+        y: The spec of the targets, ``(*batch, *target)``.
         loss: The loss of each sample, as in ``Output``.
         tau: The time constants of every node.
         learn_interval: As in ``Layer``. Longer than the round trip of the
             credit, ``2 * len(modules) * tau.period``, is recommended.
+        batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
+            ``B`` samples.
         max_dt: As in ``Layer``.
         device: Where the nodes compute.
 
@@ -69,11 +72,12 @@ class Chain(Network):
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
         learn_interval: float | None,
+        batch: Size = (),
         max_dt: float | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__()
-        self.input = Input(x=x, y=y, period=tau.period, device=device)
+        self.input = Input(x=x, y=y, period=tau.period, batch=batch, device=device)
         last: Input | Layer = self.input
         for i, module in enumerate(modules[:-1]):
             layer = Layer(
