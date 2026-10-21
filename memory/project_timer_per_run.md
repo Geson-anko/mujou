@@ -8,7 +8,7 @@ metadata:
 2026-10-16 ユーザーの決定（時間軸は実行ごとに 1 本）。詳細は `specs/execution-model.md` の「タイマー」「実行ごとのタイマー」「RunClock」。
 
 - **時間軸は実行ごとに 1 本。** 1 つの実行の全ノード・全スロット・ホストの入力は、その実行のタイマーを使う。既定は全実行が共有する `mujou.time.global_timer`。独立に回したい実行は `mujou.run(..., timer=Timer())` で別のタイマーにする。ホストは `run.timer` で待ち、止める
-- **復元した実行は専用のタイマーで走る。** `mujou.run(..., state=tree)` は、木の時刻と time scale から始まる新しい `Timer`（testing では `VirtualTimer`）で走る。`timer=` との同時指定は断る（K23）。復元した実行は `global_timer.pause()` では止まらない。R8 の推奨案で進めた。ユーザーの確認待ち（[[project-restructure-2026-10-20]]）
+- **復元した実行は専用のタイマーで走る。** `mujou.run(..., state=tree)` は、木の時刻と time scale から始まる新しい `Timer`（testing では `VirtualTimer`）で走る。`timer=` との同時指定は断る（K23）。復元した実行は `global_timer.pause()` では止まらない。R8 として 2026-10-21 にユーザーが承認した（[[project-restructure-2026-10-20]]）
 - **ランタイムの時刻源は `RunClock` の 1 本。** `now = min(timer, end)`。end は停止を求めた時刻か、失敗を検出した時刻。dt、最後の更新、スロットの時刻はすべてこれから取る。公開名は `ReadOnlyTimer`（ノードの `self.timer`）
 - **API:** `Timer(*, start=Timestamp(ns=0), time_scale=1.0)`、`time_scale()` / `set_time_scale()`、`VirtualTimer(*, start=)`（`advance` でだけ進む）、`ReadOnlyTimer(timer)`、`Timestamp(*, ns)`。`Timestamp` 同士の差は秒の float
 

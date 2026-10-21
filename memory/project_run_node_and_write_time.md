@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-- **`mujou.run(root, *, timer=, inputs=, state=, workers=)`:** ルートはノードかネットワーク 1 つ。並べるときは `Group(**named)` に入れる（[[project-group-and-typing]]）。root を 1 つにしたのは R4 の推奨案で、ユーザーの確認待ち（[[project-restructure-2026-10-20]]）。`mujou.testing.run` も同じ形
+- **`mujou.run(root, *, timer=, inputs=, state=, workers=)`:** ルートはノードかネットワーク 1 つ。並べるときは `Group(**named)` に入れる（[[project-group-and-typing]]）。root を 1 つにしたのは R4 で、2026-10-21 にユーザーが承認した（[[project-restructure-2026-10-20]]）。`mujou.testing.run` も同じ形
 - **ノード単体もルートにできる。** ノードのパスは `""`、ポートの label は `"Leaky.prev"`（2026-10-17、ユーザーの決定「その方がシンプル」）。エラーとログでは根のノードをクラス名で呼ぶ（`tree.name`）
 - **`Run.write(values) -> Timestamp`:** 書いた値に付いた時刻（その実行のタイマー）。1 回の write の全ポートに同じ時刻が付き、ノードの `recv_with_time` と状態の木の `"in"` の時刻と一致する。`read_with_time` の時刻は送った時刻で別物
 

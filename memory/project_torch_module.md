@@ -8,7 +8,7 @@ metadata:
 2026-10-15 決定（PyTorch の全面採用）。モジュールの構成は `specs/architecture.md`、ノードの仕様は `specs/nodes.md`。
 
 - **PyTorch は必須の依存。** 実装は private な `mujou._core` に置き、利用者の名前は `mujou.*` に公開する。torch に依存させないと決めているのは Rust の拡張モジュール `mujou._core._native` と `mujou/time.py` だけで、ほかのモジュールは要るなら torch を使ってよい。バックエンドで分けた `mujou.torch` / `mujou.jax` は持たない（必要なら正式版で検討する）
-- **`mujou.Node` は純 Python。** Rust は Python の `Driver`（`_core/driver.py`、ノードに 1 つ）のメソッドを hook 1 回につき 1 回だけ呼ぶ。Driver が、CUDA の device と stream の設定、ノードごとの `contextvars.Context`、`on_update` と `load_state_dict` の後の stream の同期、`state_dict` の複製を、hook の外で行う。R3 の推奨案で進めた（以前は `mujou.Node` がコアの `Node` を継承し、private hook で設定していた）。ユーザーの確認待ち（[[project-restructure-2026-10-20]]）
+- **`mujou.Node` は純 Python。** Rust は Python の `Driver`（`_core/driver.py`、ノードに 1 つ）のメソッドを hook 1 回につき 1 回だけ呼ぶ。Driver が、CUDA の device と stream の設定、ノードごとの `contextvars.Context`、`on_update` と `load_state_dict` の後の stream の同期、`state_dict` の複製を、hook の外で行う。R3 として 2026-10-21 にユーザーが承認した（以前は `mujou.Node` がコアの `Node` を継承し、private hook で設定していた。[[project-restructure-2026-10-20]]）
 - **乱数生成器は `super().__init__` で作る（2026-10-18、ユーザーの決定）。** `__init__` の中から使え、module の初期化にも `generator=self.generator` を渡す。既定の `state_dict` が生成器の状態を含める
 - **状態は `__init__` で作り、その場で更新する。** 毎ステップ大きなテンソルを確保すると、多数のスレッドでメモリ確保が律速になる（7950X、n=1024、16 スレッドで 1.1k → 36.9k ステップ/秒）
 - **CUDA のテンソルやモジュールは `on_start` 以降で作るよう docs で勧める（2026-10-19、ユーザーの決定）。** キャッシュアロケータがメモリを確保した時点の stream に結び付けるため。GPU の実機では未確認

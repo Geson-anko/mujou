@@ -7,7 +7,7 @@ metadata:
 
 2026-10-17 ユーザーの決定。
 
-- `Timer.pause()` / `resume()` / `is_paused()` を公開する。グローバルタイマーなら `mujou.time.global_timer.pause()`、実行のタイマーなら `run.timer.pause()`（モジュール関数の `mujou.time.pause()` などは R6 の推奨案で廃止した。ユーザーの確認待ち: [[project-restructure-2026-10-20]]）。hook の中から呼ぶと `RuntimeError`（K16）。ランタイムの保持とは独立のスイッチで、回数を数えない
+- `Timer.pause()` / `resume()` / `is_paused()` を公開する。グローバルタイマーなら `mujou.time.global_timer.pause()`、実行のタイマーなら `run.timer.pause()`（モジュール関数の `mujou.time.pause()` などは R6 で廃止した。2026-10-21 に承認: [[project-restructure-2026-10-20]]）。hook の中から呼ぶと `RuntimeError`（K16）。ランタイムの保持とは独立のスイッチで、回数を数えない
 - 時刻の読み方は `now() -> Timestamp` だけ。秒は `float(ts)`、ナノ秒は `ts.ns`
 - `Timestamp - Timestamp` は符号付きの秒（`float`）
 

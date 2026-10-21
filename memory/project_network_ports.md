@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-詳細は `specs/network.md`。Port / MultiPort は R2 の推奨案で進めた（ユーザーの確認待ち、[[project-restructure-2026-10-20]]）。
+詳細は `specs/network.md`。Port / MultiPort は R2 として 2026-10-21 にユーザーが承認した（[[project-restructure-2026-10-20]]）。
 
 - **構成要素は ノード・ネットワーク・Port / MultiPort・Channel。** ノードは非同期処理の単位で、ポートを宣言する。ネットワークは組み立て専用の入れ物で hook を持たず、実行時の単位はノードだけ
 - **ポートは向きを持たない。** send の spec と recv の spec の組（キーワード専用、片方だけでもよい）。`connect` は互いに逆向きに一致するときだけ繋ぐ（K10）。上流・下流はフレームワークで決めない
