@@ -57,7 +57,7 @@ def make_modules(
     """The modules of the layers and the head, float64: ``Linear`` then the
     activation, or a residual block (of constant width)."""
     layers: list[nn.Module] = []
-    with torch.random.fork_rng():
+    with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed)
         for n_in, n_out in zip(widths[:-1], widths[1:], strict=True):
             if block == "linear":

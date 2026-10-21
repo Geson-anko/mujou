@@ -45,7 +45,7 @@ def _modules() -> dict[str, Callable[[], nn.Module]]:
 
 
 def _make(name: str) -> nn.Module:
-    with torch.random.fork_rng():
+    with torch.random.fork_rng(devices=[]):
         torch.manual_seed(0)
         return _modules()[name]().double()
 
@@ -108,7 +108,7 @@ class TestVjp:
         assert g_theta == []
 
     def test_unused_parameters_get_zeros(self):
-        with torch.random.fork_rng():
+        with torch.random.fork_rng(devices=[]):
             torch.manual_seed(0)
             module = WithUnused().double()
         delta = _randn(B, 4, seed=2)

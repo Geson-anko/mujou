@@ -22,7 +22,7 @@ ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)))
 
 
 def head(seed: int = 0) -> nn.Linear:
-    with torch.random.fork_rng():
+    with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed)
         return nn.Linear(N_IN, N_OUT).double()
 
