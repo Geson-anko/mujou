@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import mujou
 
 
@@ -8,52 +11,55 @@ class TestPublicNames:
         assert sorted(mujou.__all__) == [
             "Channel",
             "DictSpec",
-            "Graph",
             "Group",
+            "MessageSpec",
+            "MultiPort",
             "Network",
             "NetworkError",
-            "NextPort",
             "Node",
-            "PauseTimeoutError",
             "Port",
-            "PrevPort",
             "Run",
-            "StateDict",
             "TensorSpec",
             "__version__",
             "run",
         ]
 
-    def test_time_is_a_submodule_outside_all(self):
-        # A star import must not shadow the standard `time`.
-        assert "time" not in mujou.__all__
-        assert mujou.time.__name__ == "mujou.time"
-
-    def test_typing_is_a_submodule_outside_all(self):
-        # A star import must not shadow the standard `typing`.
-        assert "typing" not in mujou.__all__
-        assert mujou.typing.__name__ == "mujou.typing"
+    def test_imports_no_submodule(self):
+        # Each is imported by name (import mujou.time), in a new interpreter: this
+        # one has imported them all.
+        script = (
+            "import sys, mujou; "
+            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc') "
+            "if m in sys.modules])"
+        )
+        done = subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+        )
+        assert done.stdout.strip() == "[]"
 
 
 class TestPcPublicNames:
     def test_exports(self):
-        # The names of specs/pc-module.md; a change here is a change of the
+        # The names of mujou.pc; a change here is a change of the
         # public API.
         import mujou.pc
 
         assert sorted(mujou.pc.__all__) == [
             "Activity",
-            "Carried",
+            "Chain",
             "Input",
             "Layer",
+            "LearnClock",
             "Output",
             "Prediction",
             "Sample",
+            "Tick",
             "TimeConstants",
-            "carry_spec",
+            "activity_spec",
             "cross_entropy",
             "functional",
             "mse",
+            "show",
         ]
         assert sorted(mujou.pc.functional.__all__) == [
             "learn_",

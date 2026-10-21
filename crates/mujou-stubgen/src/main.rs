@@ -9,44 +9,8 @@ use std::path::Path;
 use std::{env, fs};
 
 use anyhow::{Context, Result, anyhow, ensure};
-use pyo3_introspection::model::{Argument, Arguments, Class, Expr, Function, Module};
+use pyo3_introspection::model::{Argument, Arguments, Expr, Function, Module};
 use pyo3_introspection::{introspect_cdylib, module_stub_files};
-
-/// The exceptions made with `create_exception!`, which pyo3 does not
-/// introspect: `(name, base, docstring)`. Keep them as in
-/// `crates/mujou-python/src/runtime.rs`; `tests/mujou/_core/test_native_stub.py` checks
-/// that the stub matches the module.
-const EXCEPTIONS: &[(&str, &str, &str)] = &[
-    (
-        "NetworkError",
-        "RuntimeError",
-        "The network stopped because a node raised. `__cause__` is the first exception.",
-    ),
-    (
-        "PauseTimeoutError",
-        "TimeoutError",
-        "Some nodes did not pause in time, so the state was not taken. The network keeps running.",
-    ),
-];
-
-fn add_exceptions(module: &mut Module) {
-    for (name, base, doc) in EXCEPTIONS {
-        module.classes.push(Class {
-            name: (*name).to_owned(),
-            bases: vec![Expr::Name {
-                id: (*base).to_owned(),
-            }],
-            methods: Vec::new(),
-            attributes: Vec::new(),
-            decorators: Vec::new(),
-            inner_classes: Vec::new(),
-            docstring: Some((*doc).to_owned()),
-        });
-    }
-    module.classes.sort_by(|a, b| a.name.cmp(&b.name));
-    // The exceptions were the members it could not find.
-    module.incomplete = false;
-}
 
 fn typing(name: &str) -> Expr {
     Expr::Attribute {
@@ -161,9 +125,7 @@ fn main() -> Result<()> {
         introspected.modules.is_empty(),
         "{module} has submodules; write one stub per module"
     );
-    // Before adding the exceptions, which take the constructor of their base.
     fix_methods(&mut introspected);
-    add_exceptions(&mut introspected);
     let stubs = module_stub_files(&introspected);
     let stub = stubs
         .get(Path::new("__init__.pyi"))

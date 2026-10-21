@@ -17,8 +17,8 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
     2. レイヤー（1 レイヤーを 1 ノード）。わかりやすさのため既定
     3. スタック（複数のレイヤーを 1 ノード。モデル全体を 1 ノードにしてもよい）
 - 非同期の境界（ノードのクラスで決まる）と実行の配置（どのワーカーでどの順に回すか）を混同しない。複数ノードを同じワーカーで決まった順に回しても、非同期の境界は変わらない
-- ノードはライフサイクル hook（`on_start` / `on_update(dt)` / `on_pause` / `on_resume` / `on_exception` / `on_stop` / `state_dict` / `load_state_dict`）を override して書く。ループはフレームワークが持つ。エポック・モード切替・受信ごとに呼ぶ hook は持たない（`specs/nodes.md`）
-- ネットワークは構築時だけの構造で、hook を持たない。実行時の単位はノードだけ
+- ノードはライフサイクル hook（`on_start` / `on_update(dt)` / `on_pause` / `on_resume` / `on_exception` / `on_stop`）と状態の 2 メソッド（`state_dict` / `load_state_dict`）を override して書く。ループはフレームワークが持つ。エポック・モード切替・受信ごとに呼ぶ hook は持たない（`specs/nodes.md`）
+- ネットワークは組み立てだけの構造で、hook を持たない。実行時の単位はノードだけ
 - ノードの内側の計算方法は自由に選べる。ニューロンノードの合成、行列演算、BP など
 - ノード間のメッセージは「結合ごとの値の束」として定義する。ノードの大きさを変えても、ノード間の契約（何を送り何を受け取るか）が変わらないようにする
 - GPU での計算効率は設計目標にしない。ニューロンノードの分割が非効率になることを理由に設計を制限しない
@@ -30,25 +30,21 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 - 読み手は最新値だけを見る。一度も読まれずに上書きされる値も、何度も読まれる値もある。これを正常な動作として扱う
 - 複数のスロットをまとめて読んでも、全体として一貫したスナップショットにはならない。各値が個別に一貫していればよい
 - **システムはその実行のタイマーの上の連続時間系として定義する。** 更新則は時間 $t$ に対する微分方程式として書き、各ノードは前回の更新からその実行のタイマーで測った経過時間 $\Delta t$ で離散化する。更新量をステップ数で決めない
-- $\Delta t$ が大きすぎると陽的な離散化は不安定になる。上限で打ち切るか、内部で刻みを分割する
-- **時間軸は実行ごとに 1 本。** 1 つの実行の全ノード・全スロット・ホストの入力は、その実行のタイマーを使う。既定は全実行が共有するグローバルタイマーで、互いの停止で時間を止め合いたくない実行は別のタイマーで動かす（2026-10-16 ユーザー決定、`memory/project_timer_per_run.md`）。タイマーは時間のスケール（加速・減速）、一時停止・再開、スレッドセーフ、状態の保存・復元を持つ（参考: pamiq-core の `TimeController`）
+- $\Delta t$ が大きすぎると陽的な離散化は不安定になる。コアは $\Delta t$ の上限を持たない。刻みの分割と打ち切りの扱いは `specs/nodes.md` の「実行の周期」、`mujou.pc` の打ち切り（`max_dt`）は `specs/pc.md` の「dt の打ち切り」
+- **時間軸は実行ごとに 1 本。** 1 つの実行の全ノード・全スロット・ホストの入力は、その実行のタイマーを使う。既定は全実行が共有する `global_timer`、渡せば実行ごとの `Timer`、復元した実行は保存した時刻から始まる専用の `Timer`（`specs/execution-model.md` の「実行ごとのタイマー」）。ランタイムの唯一の時刻源は `RunClock`（`min(timer, end)`）で、dt・最後の更新・スロットの時刻はすべてそこから取る
 - 既定の PC-ALM の連続時間形は skill `pc-alm` 7.1 節
 
-### 実行クラス（M:N スケジューリング）
+### 実行クラスとスレッド
 
-コアは Rust で実装し、M 個のノードを N 本のワーカースレッドに載せる。ノードは「状態 + ライフサイクル hook」であり、他のノードを待たないので async/await は使わない。1 ステップが協調スケジューリングの区切りになる。
+コアは Rust で実装し、M 個のノードを N 本のワーカースレッドに載せる（M:N）。実行クラス、ワーカー数の既定、スケジューラの実装は `specs/native-core.md` の「M:N スケジューリング」にある。ノードを書く・レビューするときに守ることは次のとおり。
 
-| 実行クラス | 載る場所 | 向いているノード |
-| --- | --- | --- |
-| ワーカー（既定） | 実行ごとのワーカープール（`mujou.run(workers=None)`、既定は min(ワーカーに載るノード数, 論理 CPU 数)、GIL ありなら論理 CPU 数の半分） | Python/PyTorch のノードを含むほとんどのノード |
-| 専用スレッド（opt-in） | 自分の OS スレッド（`Node(dedicated_thread=True)`） | ブロッキングする I/O、スレッドごとの状態に頼るノード（その設定は自分のスレッドで呼ばれる `on_start` に書く） |
-
-- ワーカーは期限の早い更新から 1 hook ずつ実行し、ノードはワーカーの間を移る。1 つのノードの hook は重ならず、前の hook の書き込みは次の hook から見える（2026-10-18 ユーザー決定、`memory/project_mn_scheduler.md`）
-- hook の間で保たれるのは `contextvars`（ノードごとの空の `Context`）と、フレームワークが戻す CUDA の device と stream（CUDA のノードに切り替わるたび、内部の hook `_on_enter`）だけ。勾配の記録はフレームワークが切り替えない（通常の PyTorch と同じく記録する。2026-10-19）。`threading.local`・`threading.current_thread()` に頼らない。フレームワーク側で毎回要る設定を足すときは、これらの内部の hook に書く（利用者は override しない）
-- ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは専用スレッドにする
-- Port の所有は「スレッドが今走らせているノード」で判定する。同じワーカーでも、ほかのノードの Port は読み書きできない
-- スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。相手の更新の進み具合は待たない。待つのは、スロットごとの lock の下で `Arc` を複製・差し替える短い区間だけ。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない
-- 利用者が扱う値は `torch.Tensor` だけ。コアの値は `mujou._core._native` の内部のホストバッファで、`mujou.Node` が DLPack を介して読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
+- ノードはワーカーの間を移る。1 つのノードの hook は重ならず、前の hook の書き込みは次の hook から見える
+- hook の間で保たれるのは、ノードごとの `contextvars.Context` と、Driver が hook のたびに設定する CUDA の device と stream だけ。`threading.local`・`threading.current_thread()` に頼らない。勾配の記録はフレームワークが切り替えない（通常の PyTorch と同じく記録する）
+- フレームワーク側で hook の前後に毎回要る処理は、`src/mujou/_core/driver.py` の `Driver` に書く（利用者の `Node` に private な hook を足さない）
+- ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは `dedicated_thread=True` にする
+- **所有者の検査の正本は K12（Driver の `wires` の lookup）。** ポートのメソッドは、いま hook を走らせている Driver（bindings の thread-local、`_native.current()`）の `wires` から自分の Wire を引き、引けなければ `RuntimeError`。同じワーカーでも、ほかのノードのポートは読み書きできない。`state_dict` の間は `wires` が空なので、状態の取得はほかのノードから見えない（`specs/scenarios.md`）
+- スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない
+- 利用者が扱う値は `torch.Tensor` だけ。torch とコアの変換は `codec.py` だけが行い、読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
 
 ## 更新手法の差し替え
 
@@ -113,7 +109,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 
 非同期性を持ち込んでもテストは再現可能に保つ。
 
-- テストでは手動で進める仮想時計のタイマーを使う（ネットワークのテストは実行ごとに渡す `mujou.testing.VirtualTimer`、コアのテストは独立に作ったタイマー。グローバルタイマーを仮想時計に切り替えるのは、グローバルタイマー自体のテストだけ）。実時間の `sleep` や経過時間にテストの結果を依存させない
+- テストでは手動で進める仮想時計を使う（`mujou.testing.run` が実行ごとに新しい `mujou.time.VirtualTimer` を作り、`ManualRun.step(dt, *nodes)` でタイマーを `dt` 進めてから更新する。コアのテストは独立に作ったタイマー）。`global_timer` は同一性と実時間の smoke だけで確かめる。実時間の `sleep` や経過時間にテストの結果を依存させない
 - スケジューラは「どのノードをどの順で、どの $\Delta t$ で何回動かすか」を外から与えられる形にし、テストでは固定のスケジュールを渡す
 - 全ノードを固定の $\Delta t$ で同期的に回したとき、更新手法の元の離散アルゴリズムに一致することを確かめる
 - 乱数はノードごとに独立した generator を持たせ、seed を外から与えられるようにする
@@ -126,4 +122,5 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 - 既定の更新手法の数理: skill `pc-alm`
 - テスト方針: skill `testing-strategy`
 - 監査: agent `algorithm-reviewer`
-- 決定の経緯: `memory/project_compute_granularity.md`、`memory/project_pluggable_update_rule.md`、`memory/project_async_node_execution.md`、`memory/project_native_core_rust.md`
+- 設計とその理由: `specs/execution-model.md`、`specs/nodes.md`、`specs/native-core.md`
+- 決定: `memory/project_compute_granularity.md`、`memory/project_pluggable_update_rule.md`、`memory/project_async_node_execution.md`、`memory/project_native_core_rust.md`

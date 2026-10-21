@@ -1,4 +1,7 @@
-"""MNIST: download the idx files once, read them with numpy, and cut batches."""
+"""MNIST: download the idx files once, read them with numpy, and cut batches.
+
+Nothing here depends on mujou: the batches are plain tensors.
+"""
 
 import gzip
 import urllib.request
@@ -8,8 +11,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-
-import mujou.pc as pc
 
 URL = "https://ossci-datasets.s3.amazonaws.com/mnist/"
 FILES = {
@@ -82,10 +83,10 @@ def batches(
     labels: torch.Tensor,
     batch: int,
     generator: torch.Generator | None = None,
-) -> Iterator[pc.Sample]:
-    """Cut the samples into batches of ``batch``, shuffled by ``generator`` (in
-    order without one). The last batch is padded with zeros whose ``mask`` is
-    False."""
+) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Cut the samples into batches ``(x, y, mask)`` of ``batch``, shuffled by
+    ``generator`` (in order without one). The last batch is padded with zeros
+    whose ``mask`` is False."""
     n = len(labels)
     order = (
         torch.arange(n) if generator is None else torch.randperm(n, generator=generator)
@@ -99,4 +100,4 @@ def batches(
             x = torch.cat([x, x.new_zeros(pad, x.shape[1])])
             y = torch.cat([y, y.new_zeros(pad)])
             mask[-pad:] = False
-        yield {"x": x, "y": y, "mask": mask}
+        yield x, y, mask

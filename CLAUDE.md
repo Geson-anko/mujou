@@ -49,7 +49,7 @@
 
 ### ノード間の局所性・非同期性を壊さない
 
-mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、その実行のタイマーごと止める。時間軸は実行ごとに 1 本で、1 つの実行の全ノード・全スロット・ホストの入力はその実行のタイマーを使う。既定はグローバルタイマー（`specs/execution-model.md`）。
+mujou の存在理由。ノードは自分の状態と隣接ノードからのメッセージだけで更新する。ノードをまたいで計算グラフを繋げない（`src/mujou/` でノードをまたぐ `.backward()` を書かない）。グローバルなバリア・学習/推論モードの固定・エポック前提の API を持ち込まない。例外は状態の取得・復元や観測のための停止だけで、その実行のタイマーごと止める。時間軸は実行ごとに 1 本で、1 つの実行の全ノード・全スロット・ホストの入力はその実行のタイマーを使う。既定はグローバルタイマー（復元した実行は、保存した時刻から始まる専用のタイマー）（`specs/execution-model.md`）。
 
 - ノードの内側は同期的に計算してよく、更新手法も自由に選べる（BP を含む）
 - 更新手法は差し替え可能にする。ノード・メッセージ・スケジューラに特定の学習則を焼き付けない
@@ -83,7 +83,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock、cargo fmt、cargo clippy ほか
 - コアは Rust で実装し、Python はインターフェース（PyO3 + maturin で拡張モジュール `mujou._core._native` にする。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡す（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
-- 実装は private な `mujou._core` パッケージに置き、利用者が使う名前は `mujou.*` に公開する。PyTorch は必須の依存で（`import mujou` で読み込まれる）、ノード内の計算に全面的に採用する。torch を使わないのは Rust の拡張モジュール `mujou._core._native` と時刻まわり（`mujou.time` など）だけ。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは `mujou.Node`（コアの `Node` を継承）（[memory/project_torch_module.md](memory/project_torch_module.md)）
+- 実装は private な `mujou._core` パッケージに置き、利用者が使う名前は `mujou.*` に公開する。PyTorch は必須の依存で（`import mujou` で読み込まれる）、ノード内の計算に全面的に採用する。torch を使わないのは Rust の拡張モジュール `mujou._core._native` と時刻まわり（`mujou.time` など）だけ。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは純 Python の `mujou.Node`。Rust は `Driver` を介して hook を呼ぶ（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
 
@@ -95,7 +95,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 | `just test-rs`         | Rust の workspace 全体に cargo test                                                                           |
 | `just test-py`         | pytest（slow を含む全テスト、coverage 付き）                                                                  |
 | `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                              |
-| `just type`            | pyright strict                                                                                                |
+| `just type`            | pyright（`src/` は strict、examples も含むほかは standard）                                                   |
 | `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |
 | `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                   |
 | `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                  |

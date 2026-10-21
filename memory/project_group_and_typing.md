@@ -1,13 +1,13 @@
 ---
 name: project-group-and-typing
-description: 2026-10-17 のユーザーの決定。Compose を Group に改名し、注釈に使う型は専用の名前空間 mujou.typing に置く（Single / Multi / MessageSpec）
+description: ノードやネットワークを並べるだけの入れ物は Group(**named)（位置引数は持たない、R4）。mujou.typing は廃止し、MessageSpec はトップレベルの mujou.MessageSpec
 metadata:
   type: project
 ---
 
-2026-10-17 のユーザーの決定。
+- **`Group(**named)`:** 名前を付けて並べるだけで、互いに繋がない `Network`。名前を `Compose` にしなかったのは、torchvision の `Compose` のような直列の合成に読めるから（2026-10-17、ユーザーの決定）。位置引数は持たない（R4、2026-10-21 に承認: [[project-restructure-2026-10-20]]）
+- **`mujou.typing` は廃止した。** 相手の数の型（`Single` / `Multi`）は `Port` / `MultiPort` のクラスになり（[[project-network-ports]]）、残った `MessageSpec` は `mujou.MessageSpec` にした。サブモジュールは中身が 1 名だけになる
 
-- **`Compose` → `Group`:** ノードやネットワークを並べるだけでつながないのに、`Compose` は torchvision の `Compose` のような直列の合成に読めるため。振る舞いとパスの付け方は変えない。内部の `RunCompose` も `RunGroup`、サンプルは `examples/group.py`、User Guide のページは `user-guide/group.md`（"Grouping Networks"）
-- **型は `mujou.typing`:** 注釈に使う名前は値を作る名前と分けて `mujou.typing` に置く。今は `Single` / `Multi`（Port の相手の数、`Port[S, R, M, CS, CR]` の `M`。CS / CR は 2026-10-20 に carry で足した）と `MessageSpec[T]`。`mujou.time` と同じく `import mujou` で読み込み、`__all__` には入れない（標準の `typing` を隠さないため）
+**Why:** 位置引数で並べると、同じノードのパスが組み方によって変わり、保存した木が合わなくなる。
 
-**How to apply:** 利用者が注釈に要る型を新しく公開するときは `mujou.typing` に足す。仕様は `specs/network.md` の「複数のネットワーク」と公開名の一覧。
+**How to apply:** 並べて走らせるときは `mujou.run(Group(enc=..., dec=...))`。注釈に要る型を新しく公開するときは、トップレベルに置く。

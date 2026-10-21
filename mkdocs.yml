@@ -115,29 +115,33 @@ plugins:
           site_description: 連続的継続学習のための非同期分散型深層学習フレームワーク
           nav_translations:
             Home: ホーム
-            Getting Started: はじめに
             Installation: インストール
-            Quickstart: クイックスタート
             How Mujou Works: Mujou の仕組み
-            Nodes: ノード
+            Tutorial: チュートリアル
+            1. Run a Network: 1. ネットワークを走らせる
+            2. Write a Node: 2. ノードを書く
+            3. Test a Node: 3. ノードをテストする
+            4. Learn in a Node: 4. ノードの中で学習する
+            5. Learn with PC-ALM: 5. PC-ALM で学習する
+            6. Save and Resume: 6. 保存と再開
+            Topics: トピック
             Ports and Channels: Port と Channel
-            Networks: ネットワーク
-            Global Time: グローバル時間
-            Types: 型
-            User Guide: ユーザーガイド
-            Writing a Node: ノードを書く
-            Building a Network: ネットワークを組む
-            Running a Network: ネットワークを走らせる
-            Grouping Networks: ネットワークを束ねる
-            Saving and Restoring State: 状態の保存と復元
-            Controlling Time: 時間の制御
-            PyTorch in Nodes: ノードの中の PyTorch
+            Groups: Group
+            Host I/O: ホストの入出力
+            Time: 時間
+            Threads and Devices: スレッドとデバイス
             Errors and Shutdown: 例外と終了
-            Testing: テスト
-            Learning with PC-ALM: PC-ALM で学習する
-            Errors: 例外
+            Update Rules: 更新則
             Examples: サンプル
             API Reference: API リファレンス
+            Nodes and Ports: ノードと Port
+            Networks: ネットワーク
+            Runs: 実行
+            Testing: テスト
+  # The API pages are built once per language, so mujou.Node has a page in each:
+  # a reference goes to the one of its own language.
+  - autorefs:
+      resolve_closest: true
   - mkdocstrings:
       handlers:
         python:
@@ -157,8 +161,7 @@ plugins:
             docstring_section_style: spacy
             members_order: source
             inherited_members: true
-            # The hooks of Node come from the stub of the native core, which has no
-            # docstrings; list every public member anyway.
+            # List every public member, also one without a docstring of its own.
             show_if_no_docstring: true
             # Hide private names and the dunders that exceptions inherit.
             filters: ["!^_"]
@@ -173,32 +176,30 @@ validation:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - Installation: getting-started/installation.md
-      - Quickstart: getting-started/quickstart.md
+  - Installation: install.md
   - How Mujou Works: concepts.md
-  - User Guide:
-      - user-guide/index.md
-      - Writing a Node: user-guide/writing-a-node.md
-      - Building a Network: user-guide/building-a-network.md
-      - Running a Network: user-guide/running.md
-      - Grouping Networks: user-guide/group.md
-      - Saving and Restoring State: user-guide/state.md
-      - Controlling Time: user-guide/time.md
-      - PyTorch in Nodes: user-guide/torch.md
-      - Errors and Shutdown: user-guide/errors.md
-      - Testing: user-guide/testing.md
-      - Learning with PC-ALM: user-guide/pc.md
-  - Examples:
-      - examples/index.md
+  - Tutorial:
+      - 1. Run a Network: tutorial/1-run.md
+      - 2. Write a Node: tutorial/2-node.md
+      - 3. Test a Node: tutorial/3-test.md
+      - 4. Learn in a Node: tutorial/4-learn-in-a-node.md
+      - 5. Learn with PC-ALM: tutorial/5-learn-with-pc.md
+      - 6. Save and Resume: tutorial/6-save-and-resume.md
+  - Topics:
+      - Ports and Channels: topics/ports.md
+      - Groups: topics/groups.md
+      - Host I/O: topics/host-io.md
+      - Time: topics/time.md
+      - Threads and Devices: topics/threads-and-devices.md
+      - Errors and Shutdown: topics/errors.md
+      - Update Rules: topics/update-rules.md
+      - PC-ALM: topics/pc.md
+  - Examples: examples.md
   - API Reference:
-      - api/index.md
-      - Nodes: api/node.md
-      - Ports and Channels: api/port.md
+      - Nodes and Ports: api/node-and-ports.md
       - Networks: api/network.md
-      - Global Time: api/time.md
-      - Types: api/typing.md
-      - Errors: api/errors.md
+      - Runs: api/run.md
+      - Time: api/time.md
       - Testing: api/testing.md
       - PC-ALM: api/pc.md
 

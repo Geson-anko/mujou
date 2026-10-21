@@ -117,29 +117,29 @@ $\nabla_{h_i}$ は $h_{i-1}, h_i, h_{i+1}$（と $W_i, W_{i+1}, \lambda_i, \lamb
 
 ### 7.1 連続時間形（mujou の定式化）
 
-mujou のノードは、それぞれ独自の周期で非同期に動く（`memory/project_async_node_execution.md`）。そのため 3 節の離散更新を、グローバルな時間 $t$ に対する微分方程式として扱い直す。時定数 $\tau_h, \tau_\lambda, \tau_\theta$ を導入する。
+mujou のノードは、それぞれ独自の周期で非同期に動く（`memory/project_async_node_execution.md`）。そのため 3 節の離散更新を、その実行のタイマーの時間 $t$ に対する微分方程式として扱い直す。時定数 $\tau_h, \tau_\lambda, \tau_\theta$ を導入する。
 
 $$\tau_h \frac{dh_i}{dt} = -\nabla_{h_i}\mathcal{L}, \qquad \tau_\lambda \frac{d\lambda_i}{dt} = r_i, \qquad \tau_\theta \frac{dW_i}{dt} = \varepsilon_i\, h_{i-1}^\top \ \ (\text{出力層は } e_L h_{L-1}^\top)$$
 
 - 活動は拡張ラグランジアンの勾配流、双対はその上昇流、重みは勾配流。入力 $x(t)$ と教師 $y(t)$ は時間とともに変わるストリームとして与える
-- 各ノードは、前回の更新からグローバルタイマーで測った経過時間 $\Delta t$ で離散化する。陽的 Euler なら $h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}$
+- 各ノードは、前回の更新からその実行のタイマーで測った経過時間 $\Delta t$ で離散化する。陽的 Euler なら $h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}$
 - 3 節の離散パラメータとの対応: $\eta_h = \Delta t/\tau_h$、$\alpha = \Delta t/\tau_\lambda$、$\eta_\theta = \Delta t/\tau_\theta$。全ノードを固定の $\Delta t$ で同期的に回すと、3 節の更新に一致する（テストのオラクル）
 - 記事の「推論 $T$ ステップ → 学習 1 ステップ」は、$\tau_\theta \gg T\,\tau_h$ という時間スケールの分離として近似される。フェーズの切替は持たず、推論と学習は同時に進む
-- 安定性: 陽的 Euler は $\Delta t/\tau$ が大きいと発散する。5 節の $\alpha$ の上限は $\Delta t/\tau_\lambda$ の上限として読み替える。ノードが遅れて $\Delta t$ が大きくなった場合に備え、$\Delta t$ の上限か刻みの分割を持つ
+- 安定性: 陽的 Euler は $\Delta t/\tau$ が大きいと発散する。5 節の $\alpha$ の上限は $\Delta t/\tau_\lambda$ の上限として読み替える。ノードが遅れて $\Delta t$ が大きくなった場合の扱いは `specs/nodes.md` の「実行の周期」と `specs/pc.md` の「dt の打ち切り」
 - 時定数どうしの比、$\Delta t$ の揺らぎや読み取る値の古さに対する収束性は未検証。下の「非同期更新」の問いに含まれる
 
-### 7.2 mujou.pc の定式化（2026-10-20 に実装。詳細は `specs/pc-module.md`）
+### 7.2 mujou.pc の定式化（設計は `specs/pc.md`）
 
 仮説として実装し、同期シミュレーションと MNIST で確かめたもの。確立した理論ではない。
 
-- **任意の module への一般化**: 層 $\sigma(W_i h_{i-1})$ を任意の微分可能な $f_i(\cdot;\theta_i)$ に置き換える。ノードの内側で VJP を 1 回取り、cotangent $-\delta_i$ から $g_{\mathrm{in}} = -J_h^\top\delta_i$（前のノードへ送る値）と $g_\theta = -J_\theta^\top\delta_i$ を得る。$f = \sigma(Wh)$ で 3 節の式に戻り、不動点で BP と一致する（ResBlock でも相対誤差 $4\times10^{-15}$）
+- **任意の module への一般化**: 層 $\sigma(W_i h_{i-1})$ を任意の微分可能な $f_i(\cdot;\theta_i)$ に置き換える。ノードの内側で VJP を 1 回取り、cotangent $-\delta_i$ から $g_{\mathrm{in}} = -J_h^\top\delta_i$（前のノードへ送る値）と $g_\theta = -J_\theta^\top\delta_i$ を得る。$f = \sigma(Wh)$ で 3 節の式に戻り、不動点で BP と一致する
 - **バッチの規約**: VJP はバッチの和、$1/B$ は $\theta$ の勾配にだけ掛ける。出力の損失はサンプルごとの値を mask 付きで足す
-- **状態は h で持ち、離散的な跳びだけ付け替える**: 新しいサンプルと、自分の $\theta$ の更新による $\mu$ の跳び（1 更新遅らせて足す）のときだけ $h \leftarrow \mu + r$ とし、通し番号（epoch）で次のノードへ連鎖させる。ずれ $u = h - \mu$ を状態にする形は、$u_i$ を動かすと次以降の $h$ が全部動いて損失のヘッセ行列が順伝播のヤコビアンの積を通じて戻るため、ResBlock 6 ノード以上の鎖で連続時間の系として発散した。学習が毎更新に近いと付け替えが毎回起きて同じ形に戻るので、`learn_interval` $\gtrsim 2 \times$ 深さ $\times$ 周期 は安定性の条件
-- **ターゲットは入力に付随させる**: 入力とラベルの到着時刻のずれ（伝播の段数）が持ち越しの崩れの主因だったので、ラベルを活動と同じメッセージで運ぶ（コアの carry）
+- **状態は h で持ち、離散的な跳びだけ付け替える**: 新しいサンプル、前のノードの $h$ の跳び、自分の $\theta$ の更新による $\mu$ の跳び（1 更新遅らせて足す）のときだけ $h \leftarrow \mu + r$ とし、跳びの回数 `jumps` で次のノードへ連鎖させる。ずれ $u = h - \mu$ を状態にする形は、$u_i$ を動かすと次以降の $h$ が全部動いて損失のヘッセ行列が順伝播のヤコビアンの積を通じて戻るため、深い鎖で連続時間の系として発散した。学習が毎更新に近いと付け替えが毎回起きて同じ形に戻るので、`learn_interval` は 2 × ホップ数 × 周期より長くすることを勧める（安定の境界ではない）
+- **目標は入力に付随させる**: 入力とラベルの到着時刻のずれ（伝播の段数）が持ち越しの崩れの主因だったので、目標 `y`・`mask`・書き込みの時刻 `time` を活動と同じメッセージ（`pc.Activity` のフィールド）で運び、各ノードが次へ写す
 - **λ は持ち越す**: i.i.d. のバッチでも、上の付け替えがあればリセットは要らない（$h$ をそのまま持ち越すと $h_{\mathrm{old}} - \mu_{\mathrm{new}}$ が活動と同じ大きさになり崩れる）
-- **学習の時刻**: ホストが書いた時刻から `learn_interval` ごと。ノードが入力を見た時刻から数えると、非同期の更新順で前のノードの $\theta$ の跳びが $\delta$ に入ったまま学習して発散した
+- **学習の時刻**: ホストが書いた時刻から `learn_interval` ごと（`pc.LearnClock`）。ノードが入力を見た時刻から数えると、非同期の更新順で前のノードの $\theta$ の跳びが $\delta$ に入ったまま学習して発散した
 - **dt の打ち切り**: 1 回の更新の $\Delta t$ を `max_dt`（既定 $\min(\tau_h/2, 3\tau_\lambda)$）で打ち切る。刻みの分割はノード間の陽的な結合を安定化しない
-- **実測**: $\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$（$c \approx 1 + \|J\|^2$）。MNIST（784-256-256-10、非同期、3 epoch）で test 97.82% / 97.59%、BP 97.54% / 97.45%。32 コアに busy loop 32 本の過負荷では発散する（未解決）
+- **実測**: 安定な時定数の範囲、MNIST での BP との比較、過負荷での振る舞いは `specs/research/pc-experiments.md`
 
 - **フェーズの撤廃**: 推論 $T$ ステップ → 学習 1 ステップの同期的な区切りを、ストリーム上で連続的に回すダイナミクスに置き換えられるか。7.1 の連続時間形がその定式化で、時定数の選び方が問いとして残る
 - **非同期更新**: 各層が隣接層の古い（stale）メッセージで更新しても収束・安定するか。遅延と $\alpha$ の関係

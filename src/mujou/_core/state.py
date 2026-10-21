@@ -1,268 +1,193 @@
 """The state tree of a run: what ``Run.state_dict`` returns and
 ``mujou.run(..., state=...)`` restores (``specs/execution-model.md``).
 
-This module is the one place that defines the tree::
-
-    {
-        "nodes": {path: the node's state_dict(), ...},
-        "slots": {slot name: (value, time_ns, sent), ...},
-        "carries": {port path: carried, ...},
-        "last_update_ns": {path: int, ...},
-        "timer": {"time_ns": int, "scale": float},
-    }
-
-The entry of a slot whose messages carry data is ``(value, time_ns, sent,
-carried)``. ``"carries"`` holds, for each port with a ``recv_carry``, the data
-carried with the message it last received, which a port with it as its
-``send_carry`` passes on.
-
-Values are copies: the tree shares no memory with the run, in either direction.
-The tree is a ``StateDict``, a ``dict`` that also moves all its tensors to a device.
+The tree is a plain ``dict`` of copies on the CPU, which share no memory with
+the run; ``Run.state_dict`` documents its shape, which this module alone makes.
+Its ports mirror the slots that ``wiring.wire`` lays out (``_slots``):
+``capture`` reads them and ``restore`` writes them.
 """
 
-import copy
-from collections.abc import Mapping, Sequence
-from typing import Any, Final, Self, cast, override
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Final, cast, final
 
 import torch
 
-from mujou._core import _native
-from mujou._core.binding import AnySlot, message_value, views_value
-from mujou._core.spec import Spec, host_tensors
+from mujou._core.codec import from_core, to_core
+from mujou._core.node import map_tensors
+from mujou._core.port import AnyPort, AnySlot
+from mujou._core.spec import MessageSpec
+from mujou._core.wiring import Wiring
 
-# Where the tree holds the values of the slots.
+# Where the tree holds its tensors.
 _CPU: Final = torch.device("cpu")
 
 
-class StateDict(dict[str, Any]):
-    """The state tree of a run, as ``Run.state_dict`` returns it.
+@final
+@dataclass(frozen=True, slots=True)
+class _Held:
+    """A slot of the run and the spec of the messages it holds."""
 
-    A ``dict``: index it, pickle it, save it with ``torch.save`` and pass it to
-    ``mujou.run(..., state=tree)`` as the dict it is. It adds ``to`` and ``cpu``,
-    which move every tensor of the tree to one device, for example to save the
-    state of nodes on a GPU as CPU tensors::
-
-        torch.save(run.state_dict().cpu(), "state.pt")
-
-    It pickles as ``mujou.StateDict``, and ``import mujou`` allows it in
-    ``torch.load`` with the default ``weights_only=True``: a tree saved with
-    ``torch.save`` loads back as a ``StateDict``.
-    """
-
-    def to(self, device: torch.device | str | int) -> Self:
-        """Return a new tree with every tensor of this one on ``device``.
-
-        Tensors are found in the dicts (``OrderedDict`` and other subclasses
-        too, such as the ``state_dict`` of an ``nn.Module``), lists and tuples of
-        the tree, at any depth. Those containers are new, of the same type; any
-        other value is shared with this tree. As with ``torch.Tensor.to``, a
-        tensor already on ``device`` is shared, not copied. A tensor that
-        appears twice in this tree appears as one tensor in the new tree.
-
-        This tree is not changed.
-
-        Args:
-            device: The device to move the tensors to, as ``torch.device``
-                takes it (``"cpu"``, ``"cuda:0"``, ...).
-        """
-        return _moved(self, torch.device(device), {})
-
-    def cpu(self) -> Self:
-        """Return a new tree with every tensor of this one on the CPU (``to``)."""
-        return self.to(_CPU)
-
-    @override
-    def __reduce__(self) -> tuple[type[Self], tuple[dict[str, Any]]]:
-        # A dict subclass pickles its items with SETITEMS, which the
-        # weights_only unpickler of torch.load allows only on a plain dict. Pickle
-        # the items as a plain dict and rebuild from it instead.
-        return (type(self), (dict(self),))
+    slot: AnySlot
+    spec: MessageSpec[Any]
 
 
-# Pickled by its public name, so that saved trees keep loading when the module of
-# the implementation moves.
-StateDict.__module__ = "mujou"
-torch.serialization.add_safe_globals([StateDict])  # pyright: ignore[reportUnknownMemberType]
+# The slots of one port, as the tree keys them: "out" (the outbox of a port that
+# sends), "to" (its slot for each peer, by the path of the peer's port) and "in"
+# (the slot the host writes).
+type _PortSlots = dict[str, _Held | dict[str, _Held]]
 
 
-def _moved[T](value: T, device: torch.device, memo: dict[int, object]) -> T:
-    """``value`` with every tensor in it moved to ``device`` (``StateDict.to``).
-
-    ``memo`` maps the id of each tensor or container already moved to its result.
-    """
-    found = id(value)  # before the checks below narrow the type of value
-    if found in memo:
-        return cast(T, memo[found])
-    result: object
-    if isinstance(value, torch.Tensor):
-        result = value.to(device)
-    elif isinstance(value, dict):
-        items = cast(dict[object, object], value)
-        moved = copy.copy(items)  # the same type, with its attributes
-        for key, item in items.items():
-            moved[key] = _moved(item, device, memo)
-        result = moved
-    elif type(value) is list:
-        result = [_moved(item, device, memo) for item in cast(list[object], value)]
-    elif type(value) is tuple:
-        items = cast(tuple[object, ...], value)
-        result = tuple(_moved(item, device, memo) for item in items)
-    else:
-        return value
-    memo[found] = result
-    return cast(T, result)
-
-
-# A slot of the run: the slot, the spec of its value and of the data its
-# messages carry (or None).
-type SlotSpecs = tuple[AnySlot, Spec, Spec | None]
-
-
-def make_tree(
-    paths: Sequence[str],
+def capture(
+    wiring: Wiring,
     states: Sequence[object],
-    slots: Mapping[str, SlotSpecs],
-    carries: Mapping[str, tuple[_native.Carry, Spec]],
     last_update_ns: Sequence[int],
-    timer: Mapping[str, int | float],
-) -> StateDict:
-    """Copy the state of a paused or ended run into a tree.
-
-    ``states`` and ``last_update_ns`` are per node, in the order of ``paths``.
-    ``carries`` holds the carry each port with a ``recv_carry`` last received, by
-    the port's path. The copies queue on the calling thread's current streams;
-    synchronize them before the nodes update in place again.
-    """
-    values: dict[str, tuple[object, ...]] = {}
-    for name, (slot, spec, carry) in slots.items():
-        message = slot.read()
-        entry = (message_value(spec, message, _CPU), message.timestamp.ns, message.sent)
-        if carry is not None:
-            entry += (views_value(carry, message.carry.buffers, _CPU),)
-        values[name] = entry
-    return StateDict(
-        {
-            "nodes": {
-                path: copy.deepcopy(state)
-                for path, state in zip(paths, states, strict=True)
-            },
-            "slots": values,
-            "carries": {
-                path: views_value(spec, carried.buffers, _CPU)
-                for path, (carried, spec) in carries.items()
-            },
-            "last_update_ns": dict(zip(paths, last_update_ns, strict=True)),
-            "timer": dict(timer),
-        }
-    )
-
-
-def read_tree(
-    state: Mapping[str, Any],
-    paths: Sequence[str],
-    slots: Mapping[str, SlotSpecs],
-    carries: Mapping[str, Spec],
-) -> tuple[
-    list[tuple[AnySlot, list[torch.Tensor], int, bool]],
-    dict[str, list[torch.Tensor]],
-    dict[str, Any],
-]:
-    """Check ``state`` against a run of the nodes at ``paths`` with ``slots`` and
-    the ports at the paths of ``carries`` (with the spec of their
-    ``recv_carry``), and copy it, changing nothing.
-
-    Returns ``(slot, tensors in host memory, time_ns, sent)`` for each slot to
-    restore (the value's tensors, then the carried data's); the tensors of the
-    carry of each port in ``carries``, by its path; and what ``Runtime.start``
-    restores: the nodes' states (copies, so that the nodes' updates in place
-    never reach ``state``), their last update times and the timer. The copies
-    queue on the calling thread's current streams.
-
-    Raises:
-        ValueError: The tree does not match the run.
-    """
-    for key in ("nodes", "slots", "carries", "last_update_ns", "timer"):
-        if key not in state:
-            raise ValueError(f"the state tree has no {key!r}")
-    nodes = cast(Mapping[str, object], state["nodes"])
-    entries = cast(Mapping[str, object], state["slots"])
-    carried = cast(Mapping[str, object], state["carries"])
-    last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
-    timer = cast(Mapping[str, object], state["timer"])
-    _same_keys("nodes", nodes, paths)
-    _same_keys("slots", entries, slots)
-    _same_keys("carries", carried, carries)
-    _same_keys("last_update_ns", last_update_ns, paths)
-    _same_keys("timer", timer, ("time_ns", "scale"))
-    for path in paths:
-        if not _is_int(last_update_ns[path]):
-            raise ValueError(f"the state tree's last_update_ns[{path!r}] is not an int")
-    if not _is_int(timer["time_ns"]) or not isinstance(timer["scale"], int | float):
-        raise ValueError("the state tree's timer must have an int time_ns and a scale")
-    restores = _slot_restores(entries, slots)
-    carry_restores = {
-        path: host_tensors(spec, carried[path], where=f"the carry of {path}")
-        for path, spec in carries.items()
-    }
-    restored = {
-        "states": [copy.deepcopy(nodes[path]) for path in paths],
-        "last_update_ns": [cast(int, last_update_ns[path]) for path in paths],
-        "timer_state": {
-            "time_ns": cast(int, timer["time_ns"]),
-            "scale": cast(float, timer["scale"]),
+    time_ns: int,
+    time_scale: float,
+) -> dict[str, Any]:
+    """The tree of a paused or ended run at ``time_ns`` on its timer, from the
+    copies of the nodes' states (``Driver.capture``) and their last update
+    times, in the order of the tree's members. ``cpu`` moves the states to the
+    CPU afterwards."""
+    return {
+        "timer": {"time_ns": time_ns, "time_scale": time_scale},
+        "nodes": {
+            member.path: {
+                "state": state,
+                "last_update_ns": updated_ns,
+                "ports": {
+                    attribute: _read(_slots(wiring, port))
+                    for attribute, port in member.ports.items()
+                },
+            }
+            for member, state, updated_ns in zip(
+                wiring.tree.members, states, last_update_ns, strict=True
+            )
         },
     }
-    return restores, carry_restores, restored
 
 
-def _slot_restores(
-    entries: Mapping[str, object], slots: Mapping[str, SlotSpecs]
-) -> list[tuple[AnySlot, list[torch.Tensor], int, bool]]:
-    """Check each slot's ``(value, time_ns, sent)`` (or ``(value, time_ns, sent,
-    carried)``) in the tree and copy the values to the host, without restoring
-    anything yet."""
-    restores: list[tuple[AnySlot, list[torch.Tensor], int, bool]] = []
-    for name, (slot, spec, carry) in slots.items():
-        entry = entries[name]
-        shape = (
-            "(value, time_ns, sent)"
-            if carry is None
-            else "(value, time_ns, sent, carried)"
-        )
-        length = 3 if carry is None else 4
-        if (
-            not isinstance(entry, tuple)
-            or len(cast(tuple[object, ...], entry)) != length
-        ):
-            raise ValueError(f"the state tree's slot {name!r} is not {shape}")
-        value, time_ns, sent = cast(tuple[object, ...], entry)[:3]
-        if not _is_int(time_ns):
-            raise ValueError(
-                f"the state tree's slot {name!r} has a time that is not an int"
-            )
-        if not isinstance(sent, bool):
-            raise ValueError(
-                f"the state tree's slot {name!r} has a sent flag that is not a bool"
-            )
-        tensors = host_tensors(spec, value, where=name)
-        if carry is not None:
-            carried = cast(tuple[object, ...], entry)[3]
-            tensors += host_tensors(carry, carried, where=f"{name} carried")
-        restores.append((slot, tensors, cast(int, time_ns), sent))
-    return restores
+def cpu(tree: dict[str, Any]) -> dict[str, Any]:
+    """``tree`` with the tensors of every node's state on the CPU (the rest of
+    the tree is on the CPU already)."""
+    for node in tree["nodes"].values():
+        node["state"] = map_tensors(node["state"], torch.Tensor.cpu)
+    return tree
 
 
-def _is_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
+def saved_time(tree: Mapping[str, Any]) -> tuple[int, float]:
+    """The time on the timer and the time scale at which ``tree`` was taken,
+    after checking the top of the tree (``restore`` checks its nodes).
+
+    Raises:
+        ValueError: The tree does not have the entries of its timer, or has
+            other entries than ``timer`` and ``nodes``.
+    """
+    expected = {"timer": {"time_ns": None, "time_scale": None}, "nodes": None}
+    _match(_mismatches(expected, tree, ""))
+    saved = tree["timer"]
+    return saved["time_ns"], saved["time_scale"]
 
 
-def _same_keys(
-    what: str, given: Mapping[str, object], expected: Sequence[str] | Mapping[str, Any]
-) -> None:
-    missing = [k for k in expected if k not in given]
-    unknown = [k for k in given if k not in expected]
-    if missing or unknown:
-        raise ValueError(
-            f"the state tree's {what} do not match this network: missing {missing}, "
-            f"unknown {unknown}"
-        )
+def restore(wiring: Wiring, tree: Mapping[str, Any]) -> list[tuple[object, int]]:
+    """Check the nodes of ``tree`` against ``wiring`` and restore its slots;
+    return the state and the last update time of each node, in the order of the
+    tree's members. ``saved_time`` has checked the top of the tree.
+
+    Raises:
+        ValueError: The tree does not have the nodes, the ports or the slots of
+            this run, or a value restored to a slot does not match its spec.
+        TypeError: A value restored to a slot is not of its structure.
+    """
+    nodes: Mapping[str, Any] = tree["nodes"]
+    slots = {
+        member.path: {
+            attribute: _slots(wiring, port) for attribute, port in member.ports.items()
+        }
+        for member in wiring.tree.members
+    }
+    expected = {
+        path: {"state": None, "last_update_ns": None, "ports": ports}
+        for path, ports in slots.items()
+    }
+    _match(_mismatches(expected, nodes, "nodes"))
+    for path, ports in slots.items():
+        for attribute, port_slots in ports.items():
+            _write(port_slots, nodes[path]["ports"][attribute])
+    return [
+        (nodes[member.path]["state"], nodes[member.path]["last_update_ns"])
+        for member in wiring.tree.members
+    ]
+
+
+def _slots(wiring: Wiring, port: AnyPort) -> _PortSlots:
+    """The slots of ``port``, as the tree keys them."""
+    slots: _PortSlots = {}
+    outlet = wiring.outlets.get(port)
+    if outlet is not None:
+        spec = cast("MessageSpec[Any]", port.send_spec)
+        slots["out"] = _Held(outlet.outbox, spec)
+        slots["to"] = {
+            wiring.tree.path(channel.other(port)): _Held(slot, spec)
+            for channel, slot in zip(port.channels, wiring.channels(port), strict=True)
+        }
+    slot = wiring.inputs.get(port)
+    if slot is not None:
+        slots["in"] = _Held(slot, cast("MessageSpec[Any]", port.recv_spec))
+    return slots
+
+
+def _read(slots: _PortSlots | dict[str, _Held]) -> dict[str, Any]:
+    return {
+        key: _entry(held) if isinstance(held, _Held) else _read(held)
+        for key, held in slots.items()
+    }
+
+
+def _entry(held: _Held) -> dict[str, Any]:
+    message = held.slot.read()
+    time = message.timestamp
+    return {
+        "value": from_core(held.spec, message.values, _CPU),
+        "time_ns": None if time is None else time.ns,
+    }
+
+
+def _write(slots: _PortSlots | dict[str, _Held], entries: Mapping[str, Any]) -> None:
+    for key, held in slots.items():
+        if isinstance(held, _Held):
+            entry = entries[key]
+            values = to_core(held.spec, entry["value"], held.slot.name)
+            held.slot.restore(values, entry["time_ns"])
+        else:
+            _write(held, entries[key])
+
+
+def _match(mismatches: Iterator[str]) -> None:
+    """Raise the ``ValueError`` of a tree that does not match, if ``mismatches``
+    lists anything."""
+    found = list(mismatches)
+    if found:
+        raise ValueError("the state tree does not match this run: " + ", ".join(found))
+
+
+def _mismatches(
+    expected: Mapping[str, object], given: Mapping[str, object], at: str
+) -> Iterator[str]:
+    """The keys missing from ``given`` and those it has in excess, at any depth
+    where ``expected`` holds a mapping; ``at`` is where ``given`` is in the tree
+    (``""`` for its top)."""
+    for key, value in expected.items():
+        if key not in given:
+            yield f"missing {_where(at, key)}"
+        elif isinstance(value, Mapping):
+            inner = cast(Mapping[str, object], value)
+            given_inner = cast(Mapping[str, object], given[key])
+            yield from _mismatches(inner, given_inner, _where(at, key))
+    for key in given:
+        if key not in expected:
+            yield f"unexpected {_where(at, key)}"
+
+
+def _where(at: str, key: str) -> str:
+    return f"{at}[{key!r}]" if at else key

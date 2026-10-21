@@ -1,22 +1,14 @@
 ---
 name: project-port-registry
-description: 2026-10-17 のユーザーの決定。接続は Port 同士（a.next.connect(b.prev)）だけにし、Component.connect と「PrevPort / NextPort は直接の属性に 1 つずつまで」の制約を廃止。Port と子のノード・ネットワークは nn.Module と同じく __setattr__ で代入時に登録し、build は vars() を探索しない
+description: インスタンスの __dict__ を子とポートの唯一のレジストリにし、run の段 1 で tree.walk が代入の順に読む。Component は __setattr__ もレジストリも持たない（R7、2026-10-21 にユーザーが承認）
 metadata:
   type: project
 ---
 
-2026-10-17 のユーザーの決定。詳細は `specs/network.md` の「接続」と「属性の登録」。
+ノードとネットワークは、子（Node / Network）とポートをインスタンスの属性に代入するだけで宣言する。`mujou.run` の段 1 で `tree.walk` が `vars()` を代入の順に読み、ノードではポートを、ネットワークでは子を拾う（ネットワークの Port はただの参照として読み飛ばす）。`Component` は `__setattr__` / `__delattr__` もレジストリも持たず、クラス定義の時点の検査（K1: クラス属性のポート・ノード・ネットワーク、`__slots__`）だけを持つ。詳細は `specs/network.md` の「木の読み方」。
 
-- **接続は `Port.connect` だけ。** `Component.connect`（`a.connect(b)` で a の NextPort と b の PrevPort をつなぐ省略形）と、それを支える「PrevPort / NextPort は直接の属性として 1 つずつまで」の制約・build の検査を消した。`PrevPort` / `NextPort` のクラスと相手の数の既定（PrevPort は 1、NextPort は複数）は残す。`prev` / `next` は property にせず、慣習の属性名として docs で説明する。`Port.__call__` は足さない
-- **Port と子は代入時に登録する（nn.Module の `_modules` と同じ形）。** `Component.__init__` が `_ports`（属性名 → Port、代入順）と `_children`（属性名 → Node / Network）を用意し、`__setattr__` / `__delattr__` が登録・解除する。build はこの登録だけをたどる
-- `super().__init__()` の前に Port や子を代入すると `AttributeError`。ノードにノード・ネットワークを代入すると代入時に `ValueError`（以前は build 時）。構築済みの木に Port・子を代入・削除すると `RuntimeError`
+R7 として 2026-10-21 にユーザーが承認した（以前の決定は代入時に `__setattr__` で登録する形。[[project-restructure-2026-10-20]]）。
 
-**Why:** ノードの入出力は複数ありうるので、コンポーネント同士をつなぐ経路は曖昧になる。接続をポート同士だけにすれば、どの経路かがいつも書いた行から読める。ポートは代入時に登録すれば、属性の探索（`vars()`）が要らなくなる（nn.Module と同じ）。
+**Why:** 代入時に登録すると、属性の順序と所属を `__dict__` とレジストリの 2 か所で持ち、代入と `del` のたびに照らし合わせることになる。1 か所にすると、番兵、解除、`copy.copy` 対策、property の除外、`super().__init__()` の前の代入を拒む規則、構築後の変更を拒む状態が消え、`on_update` の `self.y = ...` も `__setattr__` を通らない。dataclass の Network もそのまま動く。失うのは誤りを代入の行で知らせられることだけで、代わりに段 1 で `パス.属性名` を名指しし（K2、K3、K6）、その run は同じインスタンスで直せる。
 
-**How to apply:**
-
-- 例・docs・テストでは `a.next.connect(b.prev)` と書く。ネットワークは子の Port を `self.prev = self.l1.prev` のように公開する
-- `Component.__setattr__` は `on_update` の `self.x = tensor` でも通るので、普通の値の分岐を増やさない。`isinstance` は union（`X | Y`、呼ぶたびに作られて数倍遅い）ではなく型のタプルに対して行う
-- dataclass のネットワークは、生成された `__init__` が `super().__init__()` を呼ばないので、子を代入すると `AttributeError` になる（nn.Module と同じ）
-
-関連: [[project-network-ports]]
+**How to apply:** 接続は `a.next.connect(b.prev)` と書く。ポートを list や dict に入れない（K6）。走った後に代入しても何も起きない。

@@ -1,19 +1,19 @@
 //! The DLPack capsules of the bindings: borrowing a producer's tensor from
 //! its `__dlpack__`, and lending a buffer of a message to a consumer. The
-//! structs and the copy are in `mujou_core::dlpack`.
+//! structs, the copy and the export are in `mujou_core::dlpack`.
 
-use std::ffi::{CStr, c_void};
+use std::ffi::CStr;
 use std::sync::Arc;
 
-use mujou_core::dlpack::{self, DLManagedTensor, DLManagedTensorVersioned, DLTensor};
-use mujou_core::slot::Buffer;
+use mujou_core::buffer::Buffer;
+use mujou_core::dlpack::export::export;
+use mujou_core::dlpack::ffi::{DLManagedTensorVersioned, DLTensor, VERSION};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::{ffi, intern};
 
 const VERSIONED: &CStr = c"dltensor_versioned";
-const LEGACY: &CStr = c"dltensor";
 
 /// A pointer to a producer's tensor, handed to the copy that runs without the GIL.
 #[derive(Clone, Copy)]
@@ -28,8 +28,8 @@ unsafe impl Send for TensorPtr {}
 // SAFETY: as above; shared references only read the pointer.
 unsafe impl Sync for TensorPtr {}
 
-/// Asks `value` for its DLPack capsule, preferring the 1.x protocol and falling
-/// back to the unversioned one for producers that do not take `max_version`.
+/// Asks `value` for its DLPack capsule of the 1.x protocol (`torch.Tensor`
+/// gives one).
 pub(crate) fn borrow_tensor<'py>(
     value: &Bound<'py, PyAny>,
     at: &str,
@@ -41,17 +41,10 @@ pub(crate) fn borrow_tensor<'py>(
             value.get_type().name()?
         )));
     };
-    let borrow = || {
+    let borrow = || -> PyResult<_> {
         let kwargs = PyDict::new(py);
-        kwargs.set_item(
-            "max_version",
-            (dlpack::VERSION.major, dlpack::VERSION.minor),
-        )?;
-        let capsule = match method.call((), Some(&kwargs)) {
-            Ok(capsule) => capsule,
-            Err(e) if e.is_instance_of::<PyTypeError>(py) => method.call0()?,
-            Err(e) => return Err(e),
-        };
+        kwargs.set_item("max_version", (VERSION.major, VERSION.minor))?;
+        let capsule = method.call((), Some(&kwargs))?;
         let tensor = capsule_tensor(&capsule)?;
         Ok((capsule, TensorPtr(tensor)))
     };
@@ -93,20 +86,11 @@ fn capsule_tensor(capsule: &Bound<'_, PyAny>) -> PyResult<*const DLTensor> {
             if managed.is_null() {
                 return Err(PyErr::fetch(capsule.py()));
             }
-            if (*managed).version.major != dlpack::VERSION.major {
+            if (*managed).version.major != VERSION.major {
                 return Err(invalid(&format!(
                     "unsupported DLPack version {:?}",
                     (*managed).version
                 )));
-            }
-            Ok(&raw const (*managed).dl_tensor)
-        }
-    } else if name == LEGACY {
-        // SAFETY: as above, for the unversioned `DLManagedTensor`.
-        unsafe {
-            let managed = ffi::PyCapsule_GetPointer(obj, LEGACY.as_ptr()).cast::<DLManagedTensor>();
-            if managed.is_null() {
-                return Err(PyErr::fetch(capsule.py()));
             }
             Ok(&raw const (*managed).dl_tensor)
         }
@@ -117,34 +101,16 @@ fn capsule_tensor(capsule: &Bound<'_, PyAny>) -> PyResult<*const DLTensor> {
     }
 }
 
-/// Lends `buffer` as a new DLPack capsule, of the 1.x protocol if `versioned`,
-/// and of the unversioned one otherwise.
-pub(crate) fn export_capsule(
-    py: Python<'_>,
-    buffer: Arc<Buffer>,
-    versioned: bool,
-) -> PyResult<Bound<'_, PyAny>> {
-    let (ptr, name, destructor): (*mut c_void, &CStr, ffi::PyCapsule_Destructor) = if versioned {
-        let ptr = dlpack::export_versioned(buffer);
-        (ptr.cast(), VERSIONED, destroy_versioned)
-    } else {
-        let ptr = dlpack::export_legacy(buffer);
-        (ptr.cast(), LEGACY, destroy_legacy)
-    };
-    // SAFETY: `ptr` is a fresh DLPack tensor and `name` a static string.
-    let capsule = unsafe { ffi::PyCapsule_New(ptr, name.as_ptr(), Some(destructor)) };
+/// Lends `buffer` as a new DLPack capsule of the 1.x protocol.
+pub(crate) fn export_capsule(py: Python<'_>, buffer: Arc<Buffer>) -> PyResult<Bound<'_, PyAny>> {
+    let ptr = export(buffer);
+    // SAFETY: `ptr` is a fresh DLPack tensor and the name a static string.
+    let capsule =
+        unsafe { ffi::PyCapsule_New(ptr.cast(), VERSIONED.as_ptr(), Some(destroy_capsule)) };
     if capsule.is_null() {
         // SAFETY: the capsule was not made, so nobody else will delete the
-        // tensor; `destroy_*` is not usable without a capsule.
-        unsafe {
-            if name == VERSIONED {
-                let t = ptr.cast::<DLManagedTensorVersioned>();
-                (*t).deleter.expect("set by export")(t);
-            } else {
-                let t = ptr.cast::<DLManagedTensor>();
-                (*t).deleter.expect("set by export")(t);
-            }
-        }
+        // tensor.
+        unsafe { (*ptr).deleter.expect("set by export")(ptr) };
     }
     // SAFETY: `capsule` is a new reference or null with an exception set.
     unsafe { Bound::from_owned_ptr_or_err(py, capsule) }
@@ -152,23 +118,13 @@ pub(crate) fn export_capsule(
 
 /// Deletes the tensor of a capsule that no consumer took. A consumer that takes it
 /// renames the capsule to `used_dltensor_versioned` and owns the deleter.
-unsafe extern "C" fn destroy_versioned(capsule: *mut ffi::PyObject) {
+unsafe extern "C" fn destroy_capsule(capsule: *mut ffi::PyObject) {
     // SAFETY: called by Python with a live capsule; with the name unchanged the
-    // pointer is the tensor `export_versioned` made, deleted exactly once here.
+    // pointer is the tensor `export` made, deleted exactly once here.
     unsafe {
         if ffi::PyCapsule_IsValid(capsule, VERSIONED.as_ptr()) == 1 {
             let t = ffi::PyCapsule_GetPointer(capsule, VERSIONED.as_ptr())
                 .cast::<DLManagedTensorVersioned>();
-            (*t).deleter.expect("set by export")(t);
-        }
-    }
-}
-
-unsafe extern "C" fn destroy_legacy(capsule: *mut ffi::PyObject) {
-    // SAFETY: as in `destroy_versioned`, for `export_legacy`.
-    unsafe {
-        if ffi::PyCapsule_IsValid(capsule, LEGACY.as_ptr()) == 1 {
-            let t = ffi::PyCapsule_GetPointer(capsule, LEGACY.as_ptr()).cast::<DLManagedTensor>();
             (*t).deleter.expect("set by export")(t);
         }
     }

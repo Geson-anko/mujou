@@ -7,7 +7,6 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
-    "numpy>=2.5.4",
     "torch>=2.14.1",
 ]
 classifiers = [
@@ -44,6 +43,8 @@ cache-keys = [
     { file = "crates/**/Cargo.toml" },
     { file = "crates/**/*.rs" },
 ]
+# `uv sync` installs the examples too: `just type` checks them.
+default-groups = ["dev", "examples"]
 
 [dependency-groups]
 dev = [
@@ -58,15 +59,20 @@ dev = [
     "pytest-cov>=6.1.1",
     "ruff>=0.8.4",
 ]
+# What the programs of examples/ need beyond mujou (examples/mnist reads MNIST).
+examples = [
+    "numpy>=2.5.4",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = "tests/"
+# The tests import their shared nodes from `tests.mujou.nodes`.
+pythonpath = ["."]
 addopts = [
     "--color=yes",
     "--durations=10",
     "--strict-markers",
-    "--doctest-modules",
 ]
 markers = [
     "slow: long-running convergence / training checks (deselect with -m 'not slow')",
@@ -87,6 +93,8 @@ exclude_lines = [
 
 [tool.pyright]
 pythonVersion = "3.14"
+# src/ in the strict mode, the rest of the repository in the standard mode: the
+# programs of examples/ are checked too, so that a change of the API that breaks one fails `just type`.
 strict = ["./src/"]
 exclude = [
     "**/__pycache__",

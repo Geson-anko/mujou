@@ -2,128 +2,125 @@
 
 ## コアの役割
 
-mujou のコアには 2 つの責務がある。1 つは、各ノードを非同期・分散的に回すことである。もう 1 つは、非同期・分散的に学習するためのフレームワーク自体を提供することである。ノード同士が非同期に値を交換し、推論と学習を同時に進める仕組みそのものが、フレームワークの本体になる。
+mujou のコアには 2 つの責務がある。1 つは各ノードを非同期・分散的に回すこと、もう 1 つは非同期・分散的に学習するためのフレームワーク自体（PC-ALM）を提供すること。ノードの内側は自由にし、ノードの間のやり取りに不変条件を課す、という分担にしている。mujou 固有の価値は、ノード同士を非同期につなぎ、その上で学習させる部分にある。
 
-ノードの内側は自由にし、ノードの間のやり取りには不変条件を課す、という分担にしている。mujou 固有の価値はノードの内側の計算ではなく、ノード同士を非同期につなぎ、その上で学習させる部分にある。
+ここでいうコアは mujou の中核の機能のことで、Rust の拡張モジュールのことではない。ノードを回す基盤は Rust で書き、PC-ALM は PyTorch で書いて `mujou.pc` から公開する（[更新手法](update-rules.md)）。
 
-### ノードを非同期・分散的に回す
-
-この責務の中身は、ノード間で値をやり取りするプロトコルと、その実行フレームである。設計と実装は次の順に優先する。
+ノードを回す基盤の設計と実装は、次の順に優先する。
 
 1. プロトコル: 何を、どの形式で、いつ読み書きするか
 2. 実行フレーム: スケジューラ・通信・状態の所有
 
-ノード内部の実装（PyTorch による PC-ALM ノードや BP ノードなど）は、プロトコルの上に載る差し替え可能な部品として扱う。ノードの内側では PyTorch などの既存ライブラリを使ってよく、テンソル演算や autograd（ノード内 BP を含む）をそれらに任せられる。
-
-ホストからの制御（停止・手動のステップ・終了）は、実行ごとに 1 本の制御スレッドが 1 件ずつ処理する。例外を捕まえたノードも制御スレッドに知らせる。制御を 1 本のスレッドに集めるので、ホストの要求と例外による終了が入り混じらない。タイマーもコアの側にあり（`crates/mujou-core/src/time.rs`）、止めておきたい側がそれぞれ `PauseHold` という保持を持つ。保持が 1 つでも残っていればタイマーは止まったままなので、その実行・ホスト・別の実行の停止が互いを解いてしまうことはない。詳細は [実行モデル](execution-model.md#実装-1)。
-
-### 非同期・分散的に学習するためのフレームワーク
-
-mujou は、ノードを回す基盤だけでなく、その上で非同期・分散的に学習するためのフレームワークも、コアの責務として提供する。学習フレームワークとして提供するのは PC-ALM である（未実装）。ここでいうコアは mujou の中核の機能のことで、`mujou._core` パッケージ（とその中の Rust の拡張モジュール `_native`）のことではない。PC-ALM は PyTorch で実装し、`mujou.pc` から公開する予定である。`mujou.pc` もまだ無い（[更新手法](update-rules.md#実装と公開元)）。
-
-PC-ALM を mujou が提供しても、ノード・スロット・スケジューラは特定の学習則を前提にしない。更新手法を差し替えられるという要件（[更新手法](update-rules.md)）はそのまま保ち、PC-ALM 固有の状態や値は PC-ALM の更新手法の側に閉じ込める。局所性・非同期性の不変条件も、実行の基盤と同じように守る。
+ノードの内側の実装（PC-ALM のノードや BP のノードなど）は、プロトコルの上に載る差し替え可能な部品として扱う。
 
 ## 実装言語
 
-コアは Rust で実装し、Python はインターフェースにする。Python からは private な拡張モジュール `mujou._core._native` として使う。Python の実装も private なパッケージ `mujou._core` に集め、利用者が使う名前は `mujou.*` のトップレベルに公開する。`mujou._core._native` は torch に依存しない（[PyTorch の利用](torch.md#モジュールの構成)）。Python からは PyO3 + maturin で呼ぶ。スロットへの書き込みと待機は GIL を外して行う。`Slot.read` と `InputSlot.read` だけは GIL を持ったままスロットの lock を取り、`Arc` を複製する（短い区間）。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。
+コアは Rust で実装し、Python はインターフェースにする。Python からは PyO3 + maturin で作る private な拡張モジュール `mujou._core._native` として使う。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。コアは torch を import しない。フレームワークの基礎を自分たちで制御するため（[構成](architecture.md#rust-と-python-の境界)）。
+
+## ABI
+
+`_native` の名前は 15 個で、それぞれ 1 つのことをする。
+
+| 名前 | 役割 |
+| --- | --- |
+| `Timer`、`VirtualTimer`、`ReadOnlyTimer`、`Timestamp`、`global_timer` | 時間（`mujou.time` がそのまま再エクスポートする。pyclass の module は `"mujou.time"`） |
+| `Schema`、`Outlet`、`Slot`、`InputSlot`、`InputGroup`、`Message`、`BufferView` | スロットとメッセージ |
+| `start`、`Runtime` | 実行 |
+| `current` | いま hook を走らせている Driver |
+
+- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`run.py`）の列で、並べたリストの長さを照合する引数を表せなくした
+- `Runtime` は `step(order)`、`capture(build, timeout)`、`shutdown(timeout) -> bool`（止める要求を出して待つ。timeout の変換は要求の前に行い、断られた呼び出しは何も変えない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
+- 正常に終わった後の取得も `Runtime.capture` の同じ口で行う
+- bindings は `Runtime` の hook を、`Hook` から Driver のメソッド名への対応表で呼ぶ。Python を呼ぶ直前に thread-local の `CURRENT` に Driver を付け、戻ったら外す（`current.rs`）。core の `RUNTIME_OF_THREAD`（このスレッドがどのランタイムのものか）は、内部の `Reentrant` の検査のためにあり、「hook の中か」とは別の事実
+- 例外は Python の `mujou._core.errors.NetworkError` を `import_exception!` で参照する。停止の timeout は組み込みの `TimeoutError`
+- 内部の契約（値の個数、DLPack で読めない値、無いチャネルの番号など）の検査は FFI の健全性のためだけに残す内部エラーで、利用者に届いたら mujou のバグ（[提供シナリオとガード](scenarios.md#ガードではない意味論)）
+- コアの `Slot` は 1 つの型で、書き手を `Source`（`Outlet` か `InputGroup`）で区別する。bindings は書き手の違いを型で見せるため `Slot` と `InputSlot` に分ける
 
 ## M:N スケジューリング
 
-M 個のノードを N 本のワーカースレッド（既定は論理 CPU 数まで、GIL ありならその半分まで）に載せる。各ノードは次のどちらかの実行クラスを持つ。
+M 個のノードを N 本のワーカースレッドに載せる。各ノードは次のどちらかの実行クラスを持つ。
 
-| 実行クラス   | 実行のされ方                                       | 向いているノード                                       |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------ |
-| ワーカー     | 実行ごとのワーカープールで協調的に実行する（既定） | Python/PyTorch のノード、ネイティブのノードなど大半    |
-| 専用スレッド | 自分の OS スレッドを持つ（opt-in）                 | hook がブロッキングするノード（I/O など）、スレッドごとの状態に頼るノード |
-
-Python のノードも既定でワーカーに載り、`Node(dedicated_thread=True)` を渡したノードだけが専用スレッドで動く（[ノード](nodes.md#非同期の境界と実行の配置)）。以前は GIL を理由に Python のノードをプールへ載せず、全部専用スレッドで動かしていた。2026-10-18 にユーザーから「大量のスレッドを立てると OS のコンテキストスイッチを取り合うので M:N でなければならない」と要求があり、既定をワーカーに切り替えた。
+| 実行クラス | 実行のされ方 | 向いているノード |
+| --- | --- | --- |
+| ワーカー（既定） | 実行ごとのワーカープールで協調的に実行する | Python/PyTorch のノードを含むほとんどのノード |
+| 専用スレッド（opt-in） | 自分の OS スレッドを持つ（`Node(dedicated_thread=True)`） | hook がブロッキングするノード（I/O など）、スレッドごとの状態に頼るノード |
 
 ### M:N にした理由
 
-asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、タスクの多くが I/O 待ちだからである。mujou のノードは CPU を使い続けるので、1 スレッドでは 1 コアしか使えない。かといってノードごとに OS スレッドを立てると、スレッド数の上限とコンテキストスイッチのコストに縛られる。M:N なら、ノードの数によらずスレッドは N 本で済み、ブロッキングするノードだけを専用スレッドに逃がせる。
+asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、タスクの多くが I/O 待ちだからである。mujou のノードは CPU を使い続けるので、1 スレッドでは 1 コアしか使えない。かといってノードごとに OS スレッドを立てると、スレッド数の上限とコンテキストスイッチのコストに縛られ、ノードの間の不公平も大きい。M:N なら、ノードの数によらずスレッドは N 本で済み、ブロッキングするノードだけを専用スレッドに逃がせる。GIL ありのビルドでも、取り合うスレッドが N 本に減る。プロセスで共有するプールやノードの pinning は、実行ごとの停止・終了の分離が複雑になり、負荷の偏りを直せないので採らなかった（比較の数値は [性能の基準値](research/benchmarks.md#mn-スケジューラの比較)）。
 
 ### ノードの形
 
-ノードは「状態 + ライフサイクル hook」である（[ノード](nodes.md#ライフサイクル-hook)）。ノードは他のノードを待たないので（[実行モデル](execution-model.md)）、async/await のコルーチンにする必要はない。スロットを読み、$\Delta t$ ぶん更新し、書き込むという 1 ステップ（`on_update`）が、協調スケジューリングの区切りになる。ノードに目標周期を持たせる場合、スケジューラは期限の早い順に実行する。Rust のネイティブなノードは hook を trait として実装し、Python のノードはワーカーか専用スレッドから同じ hook を呼ばれる。
+ノードは「状態 + ライフサイクル hook」で、ほかのノードを待たないので async/await のコルーチンにする必要は無い。`on_update` の 1 回が協調スケジューリングの区切りになる。ランタイムが知っているのは `NodeHooks`（hook の呼び出し）だけで、ノードが何を計算し何をやり取りするかは知らない。
 
-### ワーカープールの実装
+### ワーカーの実装
 
-コアの `Runtime` はノードごとに実行クラスを受け取る（`RuntimeConfig::dedicated`。省略するとすべてプール）。専用スレッドのノードは自分のスレッドでループし、プールのノードは実行ごとに立てるワーカーが回す。ワーカーの数は `RuntimeConfig::workers` で、既定は `std::thread::available_parallelism()`。プールのノードの数より多くは立てず、プールのノードが無ければ 1 本も立てない。プールは実行をまたいで共有しない。
+ノードはレーンに分かれる。プール（M 個のノードが N 本のワーカーを共有する）と、専用スレッドのノードごとのレーン（自分専属のワーカー 1 本）。どのワーカーも同じループを回す。
 
-- ノードはほかのノードの更新を待たない。待つのは空いたワーカーだけで、過負荷では各ノードの $\Delta t$ が伸びる。ブロッキングする hook はその間ワーカーを占有する
-- プールのノードは専用スレッドのループと同じ位置（起動・起動の完了待ち・ループ・一時停止・終了処理）を状態として持ち、制御の lock の下に置く。ワーカーはこの lock の下で仕事を 1 つ取り、lock を解放して hook を 1 つ呼んだ後、ノードを戻す
-- 専用スレッドなら待つ箇所（全ノードの起動、一時停止の終わり、手動ステップの許可、終了の許可）で、ワーカーはノードを保留にして次の仕事に移る。条件を変えた側（制御語の変更・例外・起動の完了・ステップの許可・終了の許可）がノードを評価し直す。ワーカーが 1 つのノードを待つと、ワーカーがノードより少ない場合にデッドロックする
-- hook を呼ぶ仕事（起動・一時停止・再開・`on_exception`・`on_stop`、手動モードのステップの更新）は、積まれた順に更新より先に取る。ただし hook が失敗したノードの `on_exception` は先頭に積む。自由実行の更新は期限の早い順（同じなら添字の小さい順）。期限は専用スレッドと同じ関数 `next_target_ns` で求める
-- タイマーで待つワーカー（timekeeper）は 1 本だけで、先頭の期限まで `Timer::wait_until_ns_or` で待つ。ほかのワーカーは仕事を待つ。より早い期限やほかの仕事が入ったとき、制御語が変わったときに timekeeper を起こす。仕事を取ったワーカーは、残りの仕事と timekeeper の役を別のワーカー 1 本に渡す
-- timekeeper を起こすと、同じタイマーで待つすべてのスレッド（ほかの実行の timekeeper、専用スレッド、ホストの `sleep`）が起きる。そこで起こす場面を絞る。ノードを戻したワーカーは自分ですぐキューを見るので、戻したときには起こさない。仕事を待つ前に、まだ来ない先頭の期限が timekeeper の期限より早いと見たときだけ起こす。戻したワーカーが ready の hook を先に回すこともあるが、ready に仕事があるなら timekeeper はもう起こされている。制御の側が積んだ仕事では制御の側が起こし、ワーカーが自分で積んだ仕事は同じ lock のまま自分で取り、timekeeper になるのは ready が空のときだけだからである。制御の側（停止・再開・終了・例外などでプールを評価し直すとき）は、`wake_pool` の中では評価し直し 1 回につき 1 度だけ起こす（制御語を変えるときは、`set_command` がこれとは別にタイマーの waiter を 1 度起こす）。以前は戻すたびに起こしていたので、周期 0 のノードが 1 回更新するごとにタイマーの全 waiter が起きていた（[ベンチマーク](#ベンチマーク)）
+- ワーカーは制御の lock の下で 1 つのノードの仕事を 1 つ取り、lock の外で hook を 1 つ呼び、ノードを戻す。次に何をするかは状態機械（`lifecycle.rs`）が決める（[実行モデル](execution-model.md#ライフサイクルの遷移)）
+- ライフサイクルの仕事（起動・一時停止・再開・`on_exception`・`on_stop`）は、積まれた順に更新より先に取る。ただし hook が失敗したノードの `on_exception` は先頭に積む。自由実行の更新は期限の早い順（同じなら添字の小さい順）。期限は [ノード](nodes.md#実行の周期) の規則（`next_target_ns`）で求める
 - ノードを取るのは lock の下でキューから取るときだけで、戻すのは取ったワーカーだけ。そのため 1 つのノードを 2 つのスレッドで同時に回すことはない。連続する 2 つの hook の間で lock を通るので、前の hook の書き込みは次の hook から見える
-- 更新を始めるかは、制御の lock の下で制御語と時刻を読んで決める。停止は同じ lock の下でフラグを立ててタイマーを凍結するので、凍結より後に始まる `on_update` は無い（専用スレッドの区切りと同じ保証）
-- スレッドが別のノードに切り替わるとき（そのスレッドで初めてそのノードを回すときを含む）、コアは次の hook の直前に同じ呼び出しの中で `NodeHooks::enter` を呼ぶ。専用スレッドでは `enter` が成功すれば `on_start` の前の 1 回だけ。制御スレッドの `state_dict` の前には呼ばない
-- `enter` の失敗（エラーでも panic でも）は次の hook の失敗として扱い、コアが次の hook の名前で報告する。次の hook は呼ばず、次の hook の前にもう一度 `enter` を呼ぶ。ただし `on_exception` と `on_stop` は `enter` が失敗しても呼び、資源を解放させる（[例外による終了](execution-model.md#例外による終了)の手順 5）。専用スレッドで `on_start` の前の `enter` が失敗したときも、`on_start` の失敗と同じく `on_exception` → `on_stop` と進む。失敗のログはノードの側で出す
+- ワーカーは 1 つのノードを待たない（ワーカーがノードより少ないとデッドロックする）。仕事を待ち、レーンに 1 本だけの timekeeper が先頭の期限まで Timer の上で待つ
+- timekeeper を起こすと、同じタイマーで待つすべてのスレッド（ほかの実行の timekeeper、専用スレッド、ホストの `sleep`）が起きる。そこで起こす場面を絞る。ノードを戻したワーカーは自分ですぐキューを見るので、戻したときにはほかのワーカーを起こさない。起こすのは、仕事を取った後に残りがあるときと、まだ来ない先頭の期限が timekeeper の期限より早いときだけ
+- 更新を始めるかは、制御の lock の下で制御語と時刻を読んで決める。停止は同じ lock の下でフラグを立ててタイマーを凍結するので、凍結より後に始まる `on_update` は無い
+- ノードが 1 つのレーン（専用スレッドと、ノードが 1 つのプール）は、自由実行の間はキューが要らないので、制御語が変わるまで lock を取らずに更新する
+
+### ワーカー数の既定
+
+プールのワーカー数は `mujou.run(..., workers=None)` で選ぶ。
+
+- 既定は bindings だけが決め、コアの `RunConfig.workers` は常に数（`NonZeroUsize`）を受け取る。free-threaded では `available_parallelism`（cgroup の CPU quota と affinity を数える）、GIL が有効なとき（`sys._is_gil_enabled()`）はその半分（少なくとも 1）。Python の `os.process_cpu_count()` は quota を数えないので、コンテナの中で quota を超える
+- 実効の数は `min(要求か既定, プールに載るノードの数)` で、プールに載るノードが無ければ 0 本。全ノードが専用スレッドの実行も正しい使い方なので、0 を許す。明示した値が 1 未満なら K20
+- GIL ありの既定を半分にしたのは、GIL の取り合いで論理コア数のワーカーが約半分の速さになったためである。物理コア数は使わない。SMT の無い機械でしか測れておらず、free-threaded では論理コア数が最速だった（[性能の基準値](research/benchmarks.md#mn-スケジューラの比較)）
 
 ### Python のノードの載せ方
 
-bindings はノードごとの `dedicated_thread` を `RuntimeConfig::dedicated` に、`mujou.run(..., workers=None)` の `workers` を `RuntimeConfig::workers` に渡す。`None` なら `min(ワーカーに載るノード数, available_parallelism)`。GIL が有効なとき（bindings が `sys._is_gil_enabled()` で判定する）は `min(ワーカーに載るノード数, max(1, available_parallelism / 2))`（2026-10-19、[ベンチマーク](#ベンチマーク)）。`workers` が `int` でなければ（`bool` も）`TypeError`、1 未満なら `ValueError`。`mujou.testing.run` に `workers` は無い。
+- hook はすべて Driver のメソッドを通り、Driver がノードごとの `contextvars.Context` の中で hook を呼ぶ（[ノード](nodes.md#driver)）
+- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、Driver が設定する CUDA の device と stream だけ
+- GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すので、ワーカーが複数あれば並列に進む
+- ホストの待ち（`join`、`capture`、`sleep` など）は Python から detach し、シグナル（Ctrl-C）を一定の間隔で確かめる。ノードと制御のスレッドが hook を呼ぶために attach するので、GIL ありのビルドでホストが GIL を持ったまま待つとデッドロックする
 
-- 公開の hook `on_thread_start` は 2026-10-19 にユーザーの決定で廃止した（正式公開前なので、移行の案内も検出もせずに消した）。専用スレッドのノードは `on_start` も自分のスレッドで呼ばれるので、スレッドごとの設定はそこに書く。ワーカーではスレッドごとの設定が hook の間で残らないので、そういう hook を持つこと自体が罠になっていた
-- `NodeHooks::enter` は内部の hook `_on_enter` を呼ぶ。`mujou.Node` はここでまず今走らせているノードとして自分を記録し、CUDA なら `set_device` と、最初の `_on_enter` で作ったノード専用のストリームの `set_stream` を行う。どれもスレッドごとの設定なので、切り替わるたびに設定し直す。勾配の記録には触れない（[PyTorch の利用](torch.md#切り替えごとの設定)）
-- hook はすべてノードごとの `contextvars.Context()`（空で作る）の中で `Context.run` で呼ぶ。専用スレッドのノードも同じ。例外は文脈の外で呼ぶ `state_dict`（`_capture_state`）
-- ノードはワーカーの間を移ってよく、ワーカーに固定しない。hook の間で保つのは `contextvars` と、フレームワークが戻す CUDA の device と stream（切り替えのたび）だけ。`threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる（専用スレッドでは保たれる）
-- GIL ありのビルドでは、ワーカーは寿命の間 Python に attach したまま、待つ間は detach する（`NodeHooks::on_thread`）。GIL を取るのは hook を呼ぶ間だけ。Python のコードは 1 本ずつしか走らないが、torch の演算は GIL を外すのでワーカーが複数あれば並列に進む。GIL を取り合うスレッドはノードの数でなく N 本に減る。`workers` の既定は、実行時に GIL が有効なら（`sys._is_gil_enabled()`）、無効なときの半分にする。計画では両方のビルドで同じにしていたが、ベンチマークで GIL ありは論理コア数の半分ほどが最速で、論理コア数では約半分の速さだった（2026-10-19、ユーザーへの確認待ち）
+## スロットの実装
 
-### ベンチマーク
+スロットの読み書きでワーカーを止めない。書き手はバッファプール（[メッセージ](messages.md#メモリ管理-バッファプール)）から取ったバッファを lock の外で埋め、スロットごとの mutex の下では `Arc` の複製と差し替えだけを行う。読み手も書き手も、相手の更新の進み具合は待たない。待つのはこの短い区間だけで、lock を持つスレッドが OS に横取りされると、その間は待つ。
 
-`benchmarks/mn_scheduler.py` で測った（2026-10-19、Apple M4 Pro、14 コア = 性能コア 10 + 効率コア 4、SMT なし、macOS 26.5、torch 2.14.1）。数値の全体は `memory/agents/plan-implementer/mn-benchmark.md`。ノードの負荷は `on_update` 1 回あたり、軽い Python のカウンタ（約 0.6 µs）、`addmm_`（384×384、約 65 µs）、`tanh`（32768 要素、約 78 µs）の 3 通り。torch の内部スレッドは 1 本。
+lock-free の `arc-swap` は使わない。arc-swap の読み手は、読んだポインタを「借り」として、プロセスに 1 つの一覧に記録する。書き手は値を外すと、外したポインタと**値が同じ**借りを、どの `ArcSwap` のものかを区別せずに払う。読み手がスロット A からポインタ P を読んだあと、借りを記録する前に、P が解放されて同じアドレスにスロット B の値が置かれることがある。そのあと B の書き手がその値を外すと、読み手の借りを払ってしまい、読み手は B の値を A の値として返す。型が違えば型の取り違えになり、SIGSEGV を起こした。`readers_never_see_a_message_of_another_slot`（`crates/mujou-core/src/slot.rs`）はこれを確率的に捉える smoke test。
 
-| 項目 | 専用スレッド（1:1） | ワーカー（既定、N = 14） |
-| --- | --- | --- |
-| スレッド数（M = 1024） | 1027 | 17 |
-| 周期 0.01 s の達成率の最小（`tanh`、M = 256 / 1024、3.14t） | 43% / 0% | 97% / 86% |
-| $\Delta t$ の最大（`tanh`、周期 0.01 s、M = 1024、3.14t） | 81 s | 0.10 s |
-| 周期 0.01 s の達成率の中央値（軽い負荷、M = 1024、GIL あり） | 1% | 81% |
+複数のマシンにまたがる実行は想定しない。
 
-- M が論理コア数以下なら、両者の更新頻度は同程度。M が大きいと、専用スレッドではノードの間の不公平が大きく、届かないノードが出る。ワーカーは期限の早い順に回すので、全ノードの頻度がそろう
-- コンテキストスイッチの数は、ワーカーにしても桁では減らない。周期のあるノードでは更新ごとにワーカーが眠って起きるため。減るのは、ワーカーの数を減らしたとき（軽い負荷・M = 256・周期 0.01 s で、14 本なら約 1.6 万回/s、1 本なら約 100 回/s）
-- 切り替えの費用は 1 回あたり約 0.4 µs（そのうち `_on_enter` の中の Python の処理が約 0.13 µs。ワーカー 1 本で 2 ノードを交互に回した場合と 1 ノードの場合の差）。計画の見込み（1〜2 µs）より小さく、絞る必要は無い
-- 制御の lock は、軽い負荷の周期 0 では律速になる。ワーカーを 7 本以上にすると全体で約 36 万回/s に頭打ちし、ワーカー 1 本（約 80 万回/s）より遅い。ワーカーが 14 本と 28 本のとき、lock の取得の約 2 割が待ち、待ちは取得 1 回あたり平均 3.4 µs と 10.3 µs で、更新そのもの（約 0.6 µs）より長い。`tanh` の負荷では待つ取得は 4〜6%、取得 1 回あたり平均 0.2 µs（7 本）、0.9 µs（14 本）、5.7 µs（28 本）。更新 1 回で lock を 2 回取るので、約 78 µs の更新に対してワーカーがコア数以下なら 3% 以下、コア数の 2 倍で約 15% になる。今は直さない。小さなネイティブのノードを載せるときに、ワーカーごとのキューと work stealing を検討する
-- timekeeper の起こしすぎ（上の箇条）を直す前は、周期 0.01 s のノード 64 個に周期 0 のノード 2 個を混ぜると、`Timer::interrupt_waiters` が毎秒 18〜21 万回呼ばれ、スイッチは毎秒 40〜43 万回だった。直した後は呼び出しが 0 回、スイッチが毎秒約 7 万回、周期 0 のノードの更新頻度が 7〜8 倍（毎秒 18〜21 万回 → 140〜146 万回）
-- 既定のワーカー数: free-threaded では、`tanh` の更新頻度がワーカー 14 本（= 論理コア数）で最大（7 本の約 1.45 倍、28 本より約 8% 速い）。GIL ありでは 7〜8 本で最大になり、10 本以上で約半分に落ちる（GIL の取り合い）。そこで GIL ありの既定を論理コア数の半分にした。物理コア数には変えない（下記）。`addmm_` は Apple silicon の行列演算器をコアのクラスタで共有するため、2 本を超えるとほとんど伸びない。この機械は SMT が無く、論理コア数と物理コア数が同じなので、両者の差はここでは測れない。free-threaded では論理コア数までは伸び、超えると遅くなるので、上限としての論理コア数は妥当と判断した。物理コア数を取るには依存 crate（`num_cpus`）を足すか OS ごとに読む必要があり、SMT のある機械で差を測るまで見送る
+## 性能の予算
 
-### スロットの実装
+基準値と測り方は [性能の基準値](research/benchmarks.md) にある。設計の判断に使う予算は次のとおり。
 
-スロットの読み書きでワーカーを止めないようにする。書き手はバッファプール（[メッセージ](messages.md#メモリ管理-バッファプール)）から取ったバッファを lock の外で埋め、スロットごとの mutex の下では `Arc` の複製と差し替えだけを行う。
-
-`Message` はバッファを `Vec<Arc<Buffer>>` で持つ（値のフィールド、続いて付随データのフィールド）。付随データの中継でバッファを複数のメッセージが共有するためで（[メッセージ](messages.md#付随データ)）、DLPack で貸すときもメッセージでなくバッファ 1 つの `Arc` を持たせる。代わりに、送るたびにフィールドの数だけ `Arc<Buffer>` の箱の小さな確保が増える（それまでも `Arc<Message>` と `Vec` は毎回確保していた）。大きな記憶域はプールのままである。問題になれば `Arc<Buffer>` 自体をプールする。中継する付随データのフィールドがスキーマと違えば、何も publish せずに `SlotError::CarryMismatch` になる。
-
-読み手も書き手も、相手の更新の進み具合は待たない。待つのは、この短い区間だけである。ただし lock を持つスレッドが OS に横取りされると、その間は待つ（2026-10-17 にユーザーが承認。競合が問題になったときの扱いは [未決定事項](open-decisions.md#グローバルタイマーとスケジューラの境界)）。
-
-以前は `arc-swap`（1.9.2）で lock-free に差し替えていたが、別のスロットの値を読み手に渡す不具合があったのでやめた。arc-swap の読み手は、読んだポインタを「借り」として、プロセスに 1 つの一覧に記録する。書き手は値を外すと、外したポインタと**値が同じ**借りを、どの `ArcSwap` のものかを区別せずに参照数を増やして払う。読み手がスロット A からポインタ P を読んだあと、借りを記録する前に、P が解放されて同じアドレスにスロット B の値が置かれることがある。そのあと B の書き手がその値を外すと、読み手の借りを払ってしまう。読み手は A を読み直して P でないことを見ても、借りが払われているので P を自分の値として返す。これは B の値である。型が違えば（`InputSlot` の中身と `Message` など）型の取り違えになり、SIGSEGV を起こした。`readers_never_see_a_message_of_another_slot`（`crates/mujou-core/src/slot.rs`）はこれを確率的に捉える smoke test で、arc-swap に対しては約半分の実行で落ちた。
-
-複数マシンにまたがる実行は、現状は想定しない。
-
-## メッセージの値の型
-
-コアは、スロットの値を不変なバッファとしてホストのメモリに持つ。このバッファは `mujou._core._native` の内部の型で、利用者には見せない。利用者がやり取りする値は `torch.Tensor` だけである。コアは特定のテンソルライブラリに依存せず、torch も import しない。フレームワークの基礎を自分たちで制御するためである。
-
-`torch.Tensor` とコアの間は DLPack で受け渡し、読み書きとも必ずコピーする。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。コアは GPU をサポートせず、GPU 上の値は受け取らない。pinned memory（DLPack のデバイス種別 `kDLCUDAHost`）はホストから読めるので受け付ける。値の型とメッセージの型、スロットのメモリ管理は [メッセージ](messages.md) で、ノードの内側で GPU を使う場合の方針は [PyTorch の利用](torch.md) で定める。
+- ポートの `recv` / `send` の 1 回は数 µs（`from_dlpack` とコピーが大半）。境界を細くする変更（`current()` の FFI、Driver）は、悪化が 5% 未満であることを確かめてから入れる
+- 1 回の update で FFI をまたぐのは 1 回だけ（Driver の `update`）
+- ノードの内側の torch の状態は、その場で更新する。新しいテンソルを確保する書き方は、多数のスレッドでメモリの確保が律速になる
+- torch のノードを動かすスレッドの数（ワーカーと専用スレッド）× torch の内部スレッド数は、物理コア数を超えないようにする
 
 ## ツールチェーン
 
-リポジトリのルートを Cargo workspace にし、crate を本体と bindings の 2 つに分ける。ほかに、型スタブの生成器を別の crate として持つ。
+- 開発は free-threaded 版の Python 3.14t で行う（`.python-version` は `3.14t`、`requires-python` は `>=3.14`）。GIL ありの通常ビルドもサポートし、CI のテストは 3.14t と 3.14 の両方で回す。free-threaded を使うのは、Python のノードをワーカーと専用スレッドで並列に動かしたいからである。3.13t は実験的な扱いで 1 スレッドの性能低下も大きく、3.14 から公式サポートになった（PEP 779）。free-threaded のビルドで守る規則は [構成](architecture.md#free-threaded-の規則)
+- pre-commit のフックも Python 3.14 で動かす（ソースを parse するので、型パラメータの既定値などの構文を読める版が要る）。CI の pre-commit ジョブは、`python3.14` という名前の実行ファイルを確実に用意するために GIL ありの 3.14 を使う
+- リポジトリのルートを Cargo workspace にし、crate を 3 つ置く
 
-| crate                  | 中身                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| `crates/mujou-core`    | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る           |
-| `crates/mujou-python`  | PyO3 の bindings。拡張モジュール `mujou._core._native` になる。free-threaded 対応を明示する（`gil_used = false`） |
-| `crates/mujou-stubgen` | `mujou._core._native` の型スタブの生成器（`just stub` が使う）                                    |
+| crate | 中身 |
+| --- | --- |
+| `crates/mujou-core` | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る |
+| `crates/mujou-python` | PyO3 の bindings。拡張モジュール `mujou._core._native` になる。free-threaded 対応を明示する（`gil_used = false`）。`test = false` で、bindings は pytest で確かめる |
+| `crates/mujou-stubgen` | `_native` の型スタブの生成器（`just stub` が使う） |
 
-- Python のパッケージのビルドバックエンドは maturin にする。`uv sync` が拡張モジュールをビルドし、`src/mujou/_core/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
-- 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `mujou._core._native.__version__` を再 export する
-- Rust の版は `rust-toolchain.toml` で固定する。最低限サポートする版は `Cargo.toml` の `rust-version` で、CI の MSRV ジョブがその版で `cargo check --workspace --all-targets` を通す
-- `just test` は `cargo test --workspace` と pytest を回す。`crates/mujou-python` は `test = false` で、テストバイナリは作らない。bindings は pytest で確かめる。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で回す。CI は `RUSTDOCFLAGS="-D warnings"` で `cargo doc --workspace --no-deps` を回し、doc comment の壊れたリンクで失敗させる
-- 型スタブ `src/mujou/_core/_native.pyi` は `just stub` で生成し、生成物をコミットする。pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring は Rust の doc comment から出るので、説明はそこに書く。pre-commit の `mujou-stub` が毎回生成し直し、コミットしたスタブが古ければ「ファイルを変更した」として失敗する（`just run` の `format` でも走る）。CI の pre-commit ジョブは拡張モジュールをビルドしないので `mujou-stub` を SKIP し、代わりに test ワークフローが `just stub && git diff --exit-code` でスタブが最新かを確かめる
-  - `pyo3-stub-gen` は pyo3 0.30 に対応していない（0.23.1 時点で `<0.30`）ので使わない
-  - introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou._core", name = "_native")]` で決まり、各クラスの `module = "mujou._core._native"` と `pyproject.toml` の `module-name` もそろえる（pyo3 はクラスの `module` に文字列リテラルしか取らない）。`just stub` は `module-name` から拡張モジュールとスタブの置き場所を決める
-  - 生成器は pyo3 の足りない所を補う。`create_exception!` の例外（`NetworkError` / `PauseTimeoutError`）は introspection に出ないので、生成器が同じ docstring で足す。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける。`tests/mujou/_core/test_native_stub.py` がスタブと実行時のモジュールの名前・docstring・基底クラスのずれを検出する
-  - `PauseTimeoutError` をクラスにできないのは、pyo3 0.30 が `PyTimeoutError` を `BaseException` のレイアウトで宣言しており、継承するとクラスの初期化に失敗するからである
-  - `#[pyo3(signature = ...)]` の文字列の注釈は import を伴わないので、組み込みとモジュール内の名前だけを書く。`collections.abc.Callable` などが要る型は、`IntoPyObject::OUTPUT_TYPE` / `FromPyObject::INPUT_TYPE` を持つ小さな型で表す（`crates/mujou-python/src/hint.rs`）
+- Python のパッケージのビルドバックエンドは maturin。`uv sync` が拡張モジュールをビルドして `src/mujou/_core/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
+- 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `importlib.metadata` から取る
+- Rust の版は `rust-toolchain.toml` で固定する。最低限サポートする版は `Cargo.toml` の `rust-version` で、CI の MSRV ジョブがその版で `cargo check --workspace --all-targets` を通す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で、`cargo doc`（警告で失敗）は CI で回す
+- 実行時の依存は `torch` だけ。examples が使う numpy は dependency group `examples` に置き、`default-groups` で `uv sync` が入れる
+
+### 型スタブ
+
+`src/mujou/_core/_native.pyi` は `just stub` で生成し、生成物をコミットする。手で編集しない。
+
+- pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring の正本は Rust の doc comment で、前提条件・例外・スレッドの約束はそこに書く
+- pre-commit のフックが毎回生成し直し、コミットしたスタブが古ければ失敗する。CI の pre-commit ジョブは拡張モジュールをビルドしないのでこのフックを飛ばし、代わりに Test のワークフローが `just stub && git diff --exit-code` で確かめる
+- introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou._core", name = "_native")]` で決まり、`pyproject.toml` の `module-name` もそろえる
+- 生成器は pyo3 の足りない所を補う。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける
+- `#[pyo3(signature = ...)]` の文字列の注釈は import を伴わないので、組み込みとモジュール内の名前だけを書く。`collections.abc.Callable` などが要る型は、小さな型で表す（`crates/mujou-python/src/hint.rs`）
+- `pyo3-stub-gen` は pyo3 0.30 に対応していないので使わない

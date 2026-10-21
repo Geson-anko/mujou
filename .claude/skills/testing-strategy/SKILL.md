@@ -30,22 +30,27 @@ mujou の既定の更新手法 PC-ALM は「BP を使わずに BP 並みに学�
 
 ## テストレイアウト
 
-`tests/mujou/` は `src/mujou/` を 1 対 1 でミラーリングする（1 source 1 test ファイル）。
+`tests/mujou/` は `src/mujou/` を 1 対 1 でミラーリングする（1 source 1 test ファイル）。中身は、できるだけ公開名を通して書く。
 
 ```
 src/mujou/<module>.py        ↔ tests/mujou/test_<module>.py
 src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
+src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 ```
 
-例外:
+ミラーの外に置くのは次のものだけ。
 
-- 拡張モジュール `mujou._core._native` は bindings の Rust ソースをミラーする。`crates/mujou-python/src/<mod>.rs ↔ tests/mujou/_core/test_native_<mod>.py`、`lib.rs` ↔ `test_native.py`、生成した stub ↔ `test_native_stub.py`。ただし `dlpack.rs` は対になるファイルを持たず、`test_native_slot.py` が検証する
-- 公開 API の裏方として単独のテストファイルを持たない `src/mujou/_core/` のモジュールは、使う側のテストで検証する。`session.py`・`state.py`・`lifetime.py`・`hooks.py` は `Run` 経由で `test_run.py` が、`graph.py`・`component.py` は `test_network.py` が、`binding.py` は `test_port.py` が検証する
-- `test_node_typing.py` は pyright にかけて型を検証するファイルで、ミラー元を持たない
+- `tests/test_layers.py`: `src/mujou` の import の層（DAG）と、`_native` を import してよいモジュールを AST で検査する。層の規則の正本（`specs/architecture.md`）
+- `tests/test_claude_hooks.py`: `.claude/hooks/` を検証する（coverage の対象は `src/mujou` だけなので、同じ pytest で回す）
+- `tests/mujou/nodes.py`: 複数のテストモジュールが使うテスト用のノードと比較の helper（`Leaky`、`Probe` など）。共通のノードはここに 1 回だけ定義する
+- `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.testing` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）
+- `tests/mujou/test_pyright.py`: 利用者のコードを pyright strict にかけて型を検証する横断テスト（`MultiPort.recv()` の dict 型、`Port[Never, T].send` の禁止など）
+- `tests/mujou/_core/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、GIL を有効にしないこと、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
+- `tests/mujou/pc/_reference.py`: 純 PyTorch で仕様から書いた Jacobi の参照実装（`test_layer.py` などのオラクル）
 
-ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`test_native_*` は bindings 固有のこと（dtype・DLPack の変換、例外の型とメッセージ、GIL とスレッド状態、pickle、Python の hook、ログ）、公開 API の振る舞いは `test_run.py` / `test_port.py` などが持つ。
+ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`_core/native/` は bindings 固有のこと（dtype・DLPack の変換、例外の型、GIL とスレッドの状態、pickle、ログ）、公開 API の振る舞いは `test_run.py` / `test_port.py` などが持つ。
 
-`tests/` 直下に置けるのは共通資産（`conftest.py`）と、`src/` 側にミラー元が無いリポジトリ資産のテストだけ（例: `test_claude_hooks.py` は `.claude/hooks/` を検証する）。
+ガードの台帳（`specs/scenarios.md`）の各 K には、それを固定するテストが 1 本ある。台帳の「テスト」の列が対応を持つ。
 
 ## マーカー
 
@@ -55,8 +60,9 @@ src/mujou/<pkg>/<module>.py  ↔ tests/mujou/<pkg>/test_<module>.py
 
 ## 共通の fixture（`tests/mujou/conftest.py`）
 
-- `virtual`: テストごとの新しい `VirtualTimer`。`start_manual` / `start` は実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
-- `step`: `step(run, *order)` で `run.timer`（`VirtualTimer`）を `H`（1 ms）進め、`run.step(*order)` を呼ぶ
+- `virtual`: テストごとの新しい `VirtualTimer`
+- `start_manual` / `start`: `mujou.testing.run` / `mujou.run` で実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
+- 手で回すときは `run.step(dt, *nodes)`（タイマーを `dt` 進めてから、渡した順に 1 回ずつ更新する）
 - ノードを入れるだけのネットワークは公開の `Group(node=...)` で作る。専用のクラスを書かない
 
 ## 何をテストするか / しないか

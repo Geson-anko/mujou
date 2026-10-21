@@ -22,13 +22,22 @@ There is no mode to switch between training and inference, and there are no epoc
 
 The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou is a framework for machines that keep learning from a stream and keep changing. It targets uses that learn while they act, such as real-time processing and robotics.
 
+The program below is such a network: a chain of PC-ALM nodes, three of them learning, that learns a regression from a stream of batches. Each batch is predicted before the nodes learn from it, while the nodes keep running.
+
+```python
+--8<-- "examples/pc_regression.py:chain"
+
+--8<-- "examples/pc_regression.py:run"
+```
+
 ## ✨ Features
 
 - 🔄 **Inference and learning at once**: no training mode, no inference mode, no epochs
 - 🧩 **Nodes in PyTorch**: write each node in ordinary PyTorch code, run synchronously inside the node
 - ⚡ **Asynchronous nodes**: each node updates on its own schedule and never waits for another
 - ⏱️ **Continuous time**: nodes update in proportion to `dt`, the time that really passed
-- 💾 **State without stopping**: take the state of a running network and run again from it later
+- 🧠 **Any update rule**: backpropagation inside a node, PC-ALM across nodes, or a rule of your own
+- 💾 **State without stopping**: take the state of a running network and resume from it later
 - 🧪 **Deterministic tests**: a virtual timer and manual updates for testing nodes
 
 ## ⚙️ How it runs
@@ -44,19 +53,9 @@ Each node repeats its update on its own schedule and never waits for another nod
 
 The host (the program that runs the network) writes inputs to the running network and reads its outputs.
 
-## 🚀 The smallest program
-
-The program below runs a network of two nodes that computes $y = 2x + 1$ and reads the output. The [Quickstart](getting-started/quickstart.md) explains what it does.
-
-??? example "examples/quickstart.py"
-
-    ```python
-    --8<-- "examples/quickstart.py"
-    ```
-
 ## 🧭 Where to go next
 
-New to Mujou? Read Installation, Quickstart and How Mujou works, in that order. To write your own nodes and networks, go on to the User Guide, the Examples and the API Reference.
+New to Mujou? Install it, read How Mujou Works, then follow the Tutorial from the first page. The Topics go deeper into each part, the Examples list every program, and the API Reference has every public name.
 
 <div class="grid cards" markdown>
 
@@ -66,39 +65,39 @@ New to Mujou? Read Installation, Quickstart and How Mujou works, in that order. 
 
     Build Mujou from source and check that it works.
 
-    [:octicons-arrow-right-24: Installation](getting-started/installation.md)
+    [:octicons-arrow-right-24: Installation](install.md)
 
-- **🚀 Quickstart**
-
-    ______________________________________________________________________
-
-    Run the smallest program and read its output.
-
-    [:octicons-arrow-right-24: Quickstart](getting-started/quickstart.md)
-
-- **🧠 How Mujou works**
+- **🧠 How Mujou Works**
 
     ______________________________________________________________________
 
-    Nodes, ports and channels, networks, global time, and state.
+    Nodes, ports, networks, runs, time, state, testing and learning, and the rules a node keeps.
 
-    [:octicons-arrow-right-24: How Mujou works](concepts.md)
+    [:octicons-arrow-right-24: How Mujou Works](concepts.md)
 
-- **🧭 User Guide**
+- **🚀 Tutorial**
 
     ______________________________________________________________________
 
-    Write your own nodes, build networks, and run them.
+    Run a network, write and test a node, learn in a node and with PC-ALM, save and resume.
 
-    [:octicons-arrow-right-24: User Guide](user-guide/index.md)
+    [:octicons-arrow-right-24: Tutorial](tutorial/1-run.md)
+
+- **🗺️ Topics**
+
+    ______________________________________________________________________
+
+    Ports, groups, host I/O, time, threads and devices, errors, update rules, PC-ALM.
+
+    [:octicons-arrow-right-24: Topics](topics/ports.md)
 
 - **💡 Examples**
 
     ______________________________________________________________________
 
-    Working programs, each run by the tests.
+    Every example program, by what you want to do.
 
-    [:octicons-arrow-right-24: Examples](examples/index.md)
+    [:octicons-arrow-right-24: Examples](examples.md)
 
 - **📚 API Reference**
 
@@ -106,6 +105,6 @@ New to Mujou? Read Installation, Quickstart and How Mujou works, in that order. 
 
     Every public class and function, generated from the docstrings.
 
-    [:octicons-arrow-right-24: API Reference](api/index.md)
+    [:octicons-arrow-right-24: API Reference](api/node-and-ports.md)
 
 </div>

@@ -2,6 +2,6 @@
 
 ::: mujou.testing
     options:
-      members: [run, ManualRun, VirtualTimer]
-      # ManualRun and VirtualTimer would repeat every member of Run and Timer.
+      members: [run, ManualRun]
+      # ManualRun would repeat every member of Run.
       inherited_members: false

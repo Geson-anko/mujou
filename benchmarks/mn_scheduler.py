@@ -26,8 +26,8 @@ Scenarios (each run of a configuration warms up, then measures a window):
 - ``workers``: the same measures for M nodes over a range of worker counts, to
   judge the default number of workers.
 - ``switch``: the cost of switching a worker between nodes, with one worker:
-  one node against two that alternate, and the two with ``_on_enter``
-  replaced by the least it must do.
+  one node against two that alternate. One node alone updates without the
+  control lock, so the difference also counts the queue that two nodes share.
 - ``mixed``: nodes of period 0 among nodes of period 0.01 s, with a dedicated
   node of period 1 s and the host sleeping on the same timer, against the same
   nodes all at 0.01 s. Shows the wake-ups of other waiters on the timer that the
@@ -50,7 +50,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou._core.hooks import enter_node
+import mujou.time
 
 
 class Light(mujou.Node):
@@ -93,14 +93,6 @@ class Tanh(Light):
     def on_update(self, dt: float) -> None:
         torch.tanh(self.x, out=self.out)
         self.dts.append(dt)
-
-
-class BareEnter(Light):
-    """Its switches do only what a node without ports or CUDA needs."""
-
-    @override
-    def _on_enter(self) -> None:
-        enter_node(self)
 
 
 @dataclass
@@ -149,7 +141,10 @@ def measure(
     The rates and Δt are of the first ``observed`` nodes (all by default);
     ``others`` is the updates per second of the rest.
     """
-    with mujou.run(*nodes, workers=workers):
+    with mujou.run(
+        mujou.Group(**{f"n{k}": node for k, node in enumerate(nodes)}),
+        workers=workers,
+    ):
         time.sleep(warmup)
         start = [len(n.dts) for n in nodes]
         before = resource.getrusage(resource.RUSAGE_SELF)
@@ -254,10 +249,6 @@ def switch(args: argparse.Namespace) -> None:
             "2 nodes alternating",
             lambda: [Light(period=0.0, dedicated=False) for _ in range(2)],
         ),
-        (
-            "2 nodes alternating, _on_enter only binds",
-            lambda: [BareEnter(period=0.0, dedicated=False) for _ in range(2)],
-        ),
     ]
     base = None
     for name, build in cases:
@@ -283,7 +274,12 @@ def mixed(args: argparse.Namespace) -> None:
             nodes.append(Light(period=1.0, dedicated=True))
             # The host sleeping is one more waiter on the global timer.
             r = measure(
-                nodes, w, args.warmup, args.seconds, mujou.time.sleep, observed=m
+                nodes,
+                w,
+                args.warmup,
+                args.seconds,
+                mujou.time.global_timer.sleep,
+                observed=m,
             )
             mode = f"w={w}, {zero} at 0 ({r.others:,.0f}/s with the 1 s node)"
             print(row("light", 0.01, m, mode, r), flush=True)

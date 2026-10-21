@@ -1,72 +1,38 @@
 # 未決定事項
 
-2026-10-17 時点で、次の設計判断はまだ決まっていない。これらに関わる実装は、決定を待ってから進める。
+まだ決めていない設計判断だけを置く。決まったらここから消し、決定と理由を該当する文書と `memory/` に書く。
 
-## ネットワークスキーマの API
+## ネットワーク
 
-ノードの組み合わせと双方向の接続を定義するネットワークオブジェクトを提供し、define-and-run で記述してスキーマオブジェクトを作ることは決定済み。Port・Channel による双方向接続の仕組み、Node と Network の Composite、PrevPort・NextPort も決定済み。接続は Port 同士だけ（`a.next.connect(b.prev)`）で、Port と子は代入時に登録する（2026-10-17、[属性の登録](network.md#属性の登録)）。
+- **shape の決め方**: 今は spec に固定の shape を書き、バッチ次元も shape の一部として扱う。可変の shape や、バッチの大きさを構築の後で決める方法は持たない
+- **`DictSpec` のキーの二重宣言**: `DictSpec(TD, **specs)` は TypedDict のキーをもう一度キーワード引数で書く（K8 が定義の行で過不足を知らせる）。`Annotated` で TypedDict の注釈に spec を書く案がある
 
-`mujou.run` が実行のハンドル `Run` を返し、`Run` が `write`・`read`・`subscribe`・`state_dict`・`shutdown`・`join` を持つこと、初期値と復元を `mujou.run(..., inputs=..., state=...)` で渡すことは決定済み（2026-10-16、ユーザーの決定）。`mujou.run(component, *components, ...)` の形（2026-10-17、ユーザーの決定）と、下の「2026-10-17 の推奨案」の節に書いた `Run` の API の整理も決定済み。版番号による一斉切り替えと例外の伝え方は、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](network.md#実装)）。
+## 実行
 
-仕様書（specs/）の当初の案から次の 3 点を変えた。`run()` は全ノードの起動が終わってから戻る（当初は「すぐに戻る」。起動中の例外を `run()` 自身が送出する形は 2026-10-16 にユーザーが承認した）。`state_dict()` は実行中と正常に終了した後に呼べる（当初は「いつでも」。2026-10-16 にユーザーの決定で終了後も呼べるようにした）。相手 1 つの Port への 2 本目の接続は `connect` の時点でエラーにする（当初は「構築時」。ユーザー確認待ち）。また、`send_to` だけを使う Port を外から読むと初期値が返る（ユーザー確認待ち）。
+- **実行の配置の指定**: 複数のノードを同じワーカーで決まった順に回すことを、利用者がどう指定するか
+- **スロットと時刻の lock**: スロットの読み書きと時刻の読み取りは mutex を取る。lock を持つスレッドが横取りされるとその間は待つ。問題になったら RwLock や seqlock などを検討する
+- **時刻の分解能**: 時刻は ns の整数で持ち、Δt も ns の差から作るので、長い実行でも分解能は落ちない。f64 を通るのは、タイマーが anchor からの実経過にスケールを掛ける所（`time.rs` の `ns_at`）だけで、anchor を張り替えずに約 104 日（$2^{53}$ ns）進むと 1 ns より粗くなる。手当てが要るかは決めていない
+- **pinned memory**: GPU のノードの転送と状態の取得に pinned memory を使うかどうか。今は使っていない。268 MB を GPU から CPU へ移すと、通常のメモリで約 100 ms、pinned memory で約 10 ms だった（`research/benchmarks.md` の R10）
 
-shape の決め方は未決定。すべての値を記録する読み出しは future work。関連: [ネットワーク](network.md)
+## ユーザーの確認待ち
 
-## 実行の配置
+作り直しの前に推奨案で実装し、まだユーザーの確認を取っていないもの。確認が取れたらここから消す。
 
-複数のノードを同じワーカーで決まった順に回すこと（[ノード](nodes.md#非同期の境界と実行の配置)）を、利用者がどう指定するか。既定のワーカー数（`min(ワーカーに載るノード数, 論理 CPU 数)`）は、free-threaded のビルドでは妥当だった。GIL ありのビルドでは論理コア数の半分ほどが速かったので、GIL ありの既定を `max(1, 論理 CPU 数 // 2)` にした（ユーザー確認待ち）。論理コア数と物理コア数の差は、SMT の無い機械でしか測れておらず未確認（2026-10-19、[ベンチマーク](native-core.md#ベンチマーク)）。関連: [ネイティブコア](native-core.md#mn-スケジューリング)
+- **GIL ありのワーカー数の既定**: GIL が有効なときに既定を半分にすること（[ワーカー数の既定](native-core.md#ワーカー数の既定)）
+- **周期のシグネチャ**: `Node(*, period=0.01)` のキーワードと、読み取り専用の `Node.period`（[実行の周期](nodes.md#実行の周期)）。既定の 0.01 と数え方はユーザーが決めた
+- **復元した後の周期の目標**: 状態の木は目標を持たないので、復元すると目標は「保存した最後の更新 + period」に置き直される。止めずに続けた場合と次の更新の時刻が変わりうる（Δt は実経過のまま）。代案は、次の目標を状態の木に入れること
+- **`send_to` だけを使うポートの読み出し**: ホストが読むと `initial` か zeros が返ること（[読み出し](network.md#読み出し)）
 
-目標周期は、ノードの `period`（`Node.__init__` のキーワード、その実行のタイマーの秒、既定は 0.01、`0.0` はできるかぎり速く。既定は 2026-10-17 のユーザーの決定）として推奨案で実装した（2026-10-17、ユーザー確認待ち。[実行の周期](nodes.md#実行の周期)）。待つのはランタイムで、目標は前回の目標 + `period`、`period` 以上遅れたときだけ数え直す（2026-10-17、ユーザーの決定。pamiq-core の「起きた時刻から数え直す」から変えた）。クラス属性で既定の周期を置く書き方は認めず、`period` を予約名にした（同日、ユーザーの決定）。ワーカーは同じ規則で求めた目標を期限とし、期限の早い順に回す（[ワーカープールの実装](native-core.md#ワーカープールの実装)）
+## 検証が残っているもの
 
-## ライフサイクルの細部
+- **mujou.pc の判断の確認**: `theta=inf` を `learn_interval=inf` で表すこと、学習した時刻を `tick` の `now_ns` で記録すること（実時間では 1 区間ずれうる）、教師なしの `Output` の `g_in` を `loss_vjp` の mask の処理で $J^\top 0$ にすること、`learn_interval` の推奨の文言
 
-hook の構成（`on_start`・`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop`・`state_dict`・`load_state_dict`）と、停止・状態の取得・復元の流れは決定済み。hook が例外を投げたらシステム全体を終了し、全ノードの引数なしの `on_exception()` を呼ぶことも決定済み。例外のときの状態は取得しない（2026-10-16、ユーザーの決定。当初は設定で取得できた）。状態の保存はユーザーが行う。
+## mujou.pc
 
-停止のタイムアウトの既定値は実時間 30 秒、`shutdown()` / `join()` の `timeout` は既定で `math.inf` とした（2026-10-16、ユーザーの決定）。スロットを識別する名前（`"body.l1.next/out"` など）と、例外で終了した後にタイマーを再開することは、推奨案で実装した（2026-10-16、ユーザー確認待ち。[実装](execution-model.md#実装-1)）。関連: [ノード](nodes.md#ライフサイクル-hook)、[実行モデル](execution-model.md#停止と状態の取得復元)
-
-## 時定数
-
-連続時間形の $\tau_h, \tau_\lambda, \tau_\theta$ の比と、$\Delta t$ の上限の扱い。周期を入れても $\Delta t$ は実際の経過時間のままで、コアは上限（`max_dt`）を持たない（2026-10-17）。`mujou.pc` のノードは自分の選択として `max_dt`（既定 $\min(\tau_h/2, 3\tau_\lambda)$）で打ち切る（2026-10-20、[mujou.pc の実装計画](pc-module.md#dt-が伸びたとき)）。`mujou.pc` のノードの周期の既定は $\tau_h/4$ とし、$\tau_\lambda = 2\tau_h$ を example の既定にする（2026-10-20、[mujou.pc の実装計画](pc-module.md#時定数)）。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
-
-## 双対変数の扱い
-
-ストリームのステップ間で $\lambda$ をリセットするか持ち越すか、dual leak を入れるか。状態を活動 $h$ と $\lambda$ で持ち（予測が離散的に跳ぶ更新で $h$ を付け替える）、リセットせず持ち越すと決めた（2026-10-20、ユーザーの決定。状態の形は orchestrator の決定。[mujou.pc の実装計画](pc-module.md#入力の切り替えと状態)）。dual leak は未決定。関連: [PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)
-
-## mujou.Node の細部
-
-GPU をサポートしないこと、private な拡張モジュール `mujou._core._native` だけを torch 非依存にして残りは PyTorch を全面的に採用すること、利用者が継承する `mujou.Node` がコアの `Node` を継承し、ノードごとのストリーム・乱数生成器を設定することは決定済み。勾配の記録は切り替えない（2026-10-19、ユーザーの決定。[PyTorch の利用](torch.md#切り替えごとの設定)）。
-
-次は推奨案で実装した（2026-10-16、ユーザー確認待ち）。設定は内部の hook `_on_enter()` で行い、`on_start` の override で漏れないようにした。`_on_enter()` はスレッドがそのノードに切り替わるたびに次の hook の直前で呼ぶ（2026-10-18 に、起動時に 1 回だけ呼ぶ `_on_thread_start()` から置き換えた）。トップレベルの公開名は `Node, Network, Group, Graph, Run, Port, PrevPort, NextPort, Channel, TensorSpec, DictSpec, NetworkError, PauseTimeoutError, StateDict, run, __version__`（と `mujou.time` と `mujou.typing`。テスト用の口は `mujou.testing`）。torch の内部スレッド数は mujou が設定せず、ホストが実行前に決める（目安は [PyTorch の利用](torch.md#プロセス全体に効くもの)）。PC-ALM のクラスは `mujou.pc` からだけ公開すると決定済み（[更新手法](update-rules.md#実装と公開元)。`mujou.pc` は未実装）。
-
-Port の受け渡しに pinned memory を使うかどうかは未決定。今の実装は使っておらず、測定もしていない（[境界の変換](torch.md#境界の変換)）。関連: [PyTorch の利用](torch.md)
-
-## グローバルタイマーとスケジューラの境界
-
-ノードの実行と制御は実装した（[実行モデル](execution-model.md#実装-1)）。pamiq-core の `thread_control.py` に倣い、制御は 1 本のスレッドに直列化した。$\Delta t = 0$ で待つノードは、目標の時刻か制御の要求で起きる。
-
-残りは次の 3 点である。時刻の読み取りが Mutex を取ることによる競合（性能が問題になったら seqlock などを検討する）。スロットの読み書きがスロットごとの mutex を取ることによる競合（[スロットの実装](native-core.md#スロットの実装)。lock を持つスレッドが横取りされるとその間は待つ。問題になったら RwLock や parking_lot などを検討する）。実経過を f64 で扱うことによる、長時間の実行での分解能の低下。
-
-同じタイマーで動くネットワーク同士が停止で時間を止め合う点は、2026-10-16 にユーザーが決めた。時間軸は実行ごとに 1 本で、既定はグローバルタイマーである。止め合いたくないネットワークは別のタイマーで動かす（[複数のネットワーク](execution-model.md#複数のネットワーク)）。コアと `mujou._core._native` は実装済みで、`mujou.run(..., timer=...)` で実行ごとに渡す（実装済み）。
-
-## 2026-10-17 の推奨案（ユーザー確認待ち）
-
-PC-ALM を実装する前に、ライブラリを使いやすく整えた（PR #30 から始まるスタック）。次は推奨案で実装し、ユーザーの確認を待っている。
-
-- ホストの待ち方: `Run.wait_for(port, condition, timeout=)` と `Run.subscribe(port, timeout=)`（[ネットワーク](network.md)）
-- テスト: `mujou.testing.run` の既定のタイマーを新しい `VirtualTimer` にし、`ManualRun.timer` で返す。`mujou.time.now()`
-- Port: エラーと repr に `Owner.attr` の名前を出す。`Channel` は `connect` だけが作る。型付きの overload は `None` の spec を受け付けない
-- 相手が送ったかを調べる `Port.has_received()`（[Port の読み書き](network.md#port-の読み書き)）
-
-次はまだ決めていない。
-
-- 手動の実行（`ManualRun`）で `period` を守る選択肢（2026-10-17 にユーザーから用途を問われた。今は守らず、テストでは `step` と `advance` で更新の順と `dt` を決める）
-
-LICENSE は MIT に決めた（2026-10-17、ユーザーの決定）。
-
-`Run` の API は次のように整理した（2026-10-17、ユーザーの決定。[ネットワーク](network.md#実装)）。停止のタイムアウトは `mujou.run(..., pause_timeout=)` から `Run.state_dict(timeout=30.0)` に移した。`subscribe` と `wait_for` の `timeout` は位置でも渡せる。`Run.timer` はすべての実行が持ち、既定はグローバルタイマーである。`Run.read(port)` は値だけを返し、時刻との組は `Run.read_with_time(port)` が返す。
-
-`Run.state_dict()` は木を `mujou.StateDict` で返し、木の中のノードの状態のテンソルは各ノードのデバイスに置いたままにする（スロットの値は CPU のテンソル）。CPU へ移したいときは利用者が `tree.cpu()` か `tree.to(device)` を呼ぶ（2026-10-17、ユーザーの決定。[`StateDict`](execution-model.md#statedict)）。
-
-ノードのデバイスは CPU と CUDA だけにし、MPS など CUDA 以外のアクセラレータのサポートを取りやめた（2026-10-17、ユーザーの決定）。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、複数のスレッドが並行してノードを計算する実行モデルと合わないためである。これに伴い、MPS のノードを 1 つに限る規則と、MPS のノードの hook をロックで直列にする案は不要になった（[PyTorch の利用](torch.md#cuda-以外のアクセラレータ)）。
-
-GPU（CUDA）のテストは、自前の GPU runner（ラベル `gpu`）でワークフロー `.github/workflows/gpu.yml` を使って走らせる（2026-10-17、ユーザーの決定）。runner は 2026-10-19 に登録した（`mini-00-gpu`）。同じ日のユーザーの指示で、main への push と PR でも既定で走らせる。fork からの PR のコードを自前のマシンで走らせないよう、fork からの PR では job を skip する。手動の起動もできる。
+- **dual leak**: ストリームのステップ間で $\lambda$ を持ち越す（決定済み）うえで、dual leak で忘却させるか
+- **時定数の比**: $\tau_h, \tau_\lambda, \tau_\theta$ の比をどう選べば安定に学べるか（[PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)）
+- **ストリーム**: 入力がフレームごとに変わり続けるストリーム（時間的に相関したデータ）での振る舞い
+- **振動**: ResBlock 8 ノードの鎖で、目標を forward と無関係な乱数にしたサンプル（credit が 2.7 程度）では、一部が不動点に収束せず有界な振動を続けた。`dt` を小さくしても止まないので、連続時間の性質（罰則の重みが 1 に固定で、$\lambda^\top \nabla^2 f$ の項に対して局所の凸性が足りない可能性）。credit が 1 程度なら収束する
+- **learn_interval に依らない付け替え**: `Activity` に跳び $\Delta$（または跳ぶ前の $h$）を載せ、次のノードは付け替えで $\mu(h_{\mathrm{in}}) - \mu(h_{\mathrm{in}} - \Delta)$ だけ動く案。$h_{\mathrm{in}}$ のドリフトが付け替えに入らないので、学習の間隔に依らなくなる。forward が 1 回増える。未検証
+- **過負荷**: あるノードが長く走れない間に、隣のノードがその最後のメッセージで `learn_interval` ごとに学習を続け、$\theta$ が同じ向きに走る（32 コアに busy loop 32 本で発散）。学習の時刻を打ち切った `dt` の和で数える、`g` の時刻と自分の `time` の一致を学習の条件にする、などの案がある。過負荷で発散するのは許容している
+- **多入力の Layer**（ノードをまたぐスキップ接続、合流）、**監視用のポート**（ノードごとの $\tfrac12\|\delta\|^2$）、**`torch.optim` を差し込む口**（学習率は $\Sigma\Delta t/\tau_\theta$ から作る）、**`torch.compile`**（3.14t の多数のスレッドで使えるかを確かめてから）

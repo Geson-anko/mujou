@@ -1,3 +1,0 @@
-# Nodes
-
-::: mujou.Node
