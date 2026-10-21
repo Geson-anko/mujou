@@ -39,9 +39,9 @@ def bits(t: torch.Tensor) -> torch.Tensor:
 def through_the_core(spec: Spec, msg: object, label: str = "a.next") -> object:
     """Send ``msg`` through an outlet of ``spec`` and read it back, as a port
     and the host do."""
-    outlet = Outlet(schema(spec, None), 0, label, clock=ReadOnlyTimer(VirtualTimer()))
+    outlet = Outlet(schema(spec), 0, label, clock=ReadOnlyTimer(VirtualTimer()))
     outlet.send(to_core(spec, msg, label))
-    return from_core(spec, outlet.outbox.read().buffers, CPU)
+    return from_core(spec, outlet.outbox.read().values, CPU)
 
 
 class TestFields:
@@ -81,10 +81,10 @@ class TestRoundTrip:
         spec = TensorSpec((2,))
         x = torch.zeros(2)
         tensors = to_core(spec, x, "a.next")
-        outlet = Outlet(schema(spec, None), 0, "a", clock=ReadOnlyTimer(VirtualTimer()))
+        outlet = Outlet(schema(spec), 0, "a", clock=ReadOnlyTimer(VirtualTimer()))
         outlet.send(tensors)
         x.add_(1.0)  # after the send: must not reach the message
-        views = outlet.outbox.read().buffers
+        views = outlet.outbox.read().values
         first, second = from_core(spec, views, CPU), from_core(spec, views, CPU)
         assert isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor)
         assert torch.equal(first, torch.zeros(2))

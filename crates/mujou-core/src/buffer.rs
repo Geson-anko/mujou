@@ -6,13 +6,6 @@
 //! new message. A buffer goes back to its pool when the last message (or lent
 //! tensor) that holds it is dropped, so in a steady state writing does not
 //! allocate.
-//!
-//! A message may carry data along with its values: the carry fields of its
-//! [`Schema`], which a node passes on from the message it received to the one
-//! it sends without reading them (`specs/messages.md`). Each buffer of a message
-//! is an `Arc<Buffer>`, so passing the carry on clones the pointers and copies
-//! no bytes. A carried buffer still belongs to the pool of the writer that
-//! filled it, and goes back there when the last message holding it is dropped.
 
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -75,8 +68,7 @@ impl BufferPool {
 
 /// The bytes of one field of a message, borrowed from a pool and returned to it
 /// on drop. Immutable once its message is built, after which it is shared as
-/// `Arc<Buffer>`: by the messages that carry it on, and by the tensors lent over
-/// DLPack.
+/// `Arc<Buffer>`: by the message, and by the tensors lent over DLPack.
 pub struct Buffer {
     /// `None` only while dropping.
     storage: Option<Box<[Line]>>,
@@ -128,29 +120,17 @@ impl fmt::Debug for Buffer {
 
 /// An immutable value of a slot: one buffer per field, in schema order, the
 /// time it was written at on the writer's timer, and whether its writer sent it.
-///
-/// The carry buffers may be shared with the message they were passed on from
-/// (and so belong to another writer's pools).
 #[derive(Debug)]
 pub struct Message {
-    /// The value buffers, then the carry buffers.
-    buffers: Vec<Arc<Buffer>>,
-    /// Where the carry buffers start in `buffers`.
-    carry_from: usize,
+    values: Vec<Arc<Buffer>>,
     time_ns: u64,
     sent: bool,
 }
 
 impl Message {
-    /// The buffers of the value fields, in schema order.
+    /// The buffers of the fields, in schema order.
     pub fn values(&self) -> &[Arc<Buffer>] {
-        &self.buffers[..self.carry_from]
-    }
-
-    /// The buffers of the carry fields, in schema order (none if the schema
-    /// carries nothing).
-    pub fn carry(&self) -> &[Arc<Buffer>] {
-        &self.buffers[self.carry_from..]
+        &self.values
     }
 
     pub fn time_ns(&self) -> u64 {
@@ -165,9 +145,7 @@ impl Message {
 }
 
 /// How a writer fills the buffers of a new message: one compact row-major byte
-/// slice per field it writes, in schema order. That is every field (the value
-/// fields, then the carry fields), or only the value fields when the carry is
-/// passed on from another message. The buffers come from the pool with old
+/// slice per field, in schema order. The buffers come from the pool with old
 /// contents, so `fill` must overwrite every byte.
 pub trait Fill<E>: FnOnce(&mut [&mut [u8]]) -> Result<(), E> {}
 impl<E, F: FnOnce(&mut [&mut [u8]]) -> Result<(), E>> Fill<E> for F {}
@@ -194,40 +172,24 @@ impl Messages {
         &self.schema
     }
 
-    /// Fills fresh buffers of every field, or of the value fields followed by
-    /// the `relay`ed carry buffers. Nothing is published if `fill` fails, and the
-    /// buffers go back to the pool.
-    ///
-    /// The caller has checked that `relay` has the carry fields of the schema.
-    pub(crate) fn fill<E>(
-        &self,
-        relay: Option<&[Arc<Buffer>]>,
-        fill: impl Fill<E>,
-    ) -> Result<Vec<Arc<Buffer>>, E> {
-        let Some(relay) = relay else {
-            return filled(&self.pools, fill);
-        };
-        let mut buffers = filled(&self.pools[..self.schema.values().len()], fill)?;
-        buffers.extend(relay.iter().map(Arc::clone));
-        Ok(buffers)
-    }
-
-    /// Fills fresh buffers of the carry fields only, for a carry that a restore
-    /// puts back.
-    pub(crate) fn carry<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
-        filled(&self.pools[self.schema.values().len()..], fill)
+    /// Fills fresh buffers of every field. Nothing is published if `fill`
+    /// fails, and the buffers go back to the pool.
+    pub(crate) fn fill<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
+        let mut buffers: Vec<Buffer> = self.pools.iter().map(BufferPool::take).collect();
+        let mut bytes: Vec<&mut [u8]> = buffers.iter_mut().map(Buffer::bytes_mut).collect();
+        fill(&mut bytes)?;
+        Ok(buffers.into_iter().map(Arc::new).collect())
     }
 
     pub(crate) fn message(
         &self,
-        buffers: Vec<Arc<Buffer>>,
+        values: Vec<Arc<Buffer>>,
         time_ns: u64,
         sent: bool,
     ) -> Arc<Message> {
-        debug_assert_eq!(buffers.len(), self.schema.fields().len());
+        debug_assert_eq!(values.len(), self.schema.fields().len());
         Arc::new(Message {
-            buffers,
-            carry_from: self.schema.values().len(),
+            values,
             time_ns,
             sent,
         })
@@ -240,8 +202,8 @@ impl Messages {
         sent: bool,
         fill: impl Fill<E>,
     ) -> Result<Arc<Message>, E> {
-        let buffers = self.fill(None, fill)?;
-        Ok(self.message(buffers, time_ns, sent))
+        let values = self.fill(fill)?;
+        Ok(self.message(values, time_ns, sent))
     }
 
     pub(crate) fn zeros(&self, time_ns: u64) -> Arc<Message> {
@@ -259,14 +221,6 @@ impl Messages {
     pub(crate) fn pools(&self) -> &[Arc<BufferPool>] {
         &self.pools
     }
-}
-
-/// Takes one buffer from each of `pools`, fills them and shares them.
-fn filled<E>(pools: &[Arc<BufferPool>], fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
-    let mut buffers: Vec<Buffer> = pools.iter().map(BufferPool::take).collect();
-    let mut bytes: Vec<&mut [u8]> = buffers.iter_mut().map(Buffer::bytes_mut).collect();
-    fill(&mut bytes)?;
-    Ok(buffers.into_iter().map(Arc::new).collect())
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {

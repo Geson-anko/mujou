@@ -113,7 +113,7 @@ fn late_by_less_than_a_period_the_next_target_stays_one_period_after_the_last() 
         timer.advance_ns(3 * P_NS / 2).unwrap();
         assert_eq!(dts.recv_timeout(LONG), Ok(3 * P_NS / 2));
         assert_quiet(&dts);
-        // The next target is 2 P, not 2.5 P: the lateness is not carried on.
+        // The next target is 2 P, not 2.5 P: the lateness is not kept.
         timer.advance_ns(P_NS / 2 - 1).unwrap();
         assert_quiet(&dts);
         timer.advance_ns(1).unwrap();

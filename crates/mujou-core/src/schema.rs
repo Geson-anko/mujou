@@ -34,77 +34,50 @@ impl FieldSpec {
     }
 }
 
-/// The fields of a message, fixed when the network is built: the fields of its
-/// value, then the fields of the data it carries.
+/// The fields of a message, fixed when the network is built.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Schema {
-    /// The value fields, then the carry fields.
-    fields: Vec<FieldSpec>,
-    /// Where the carry fields start in `fields`.
-    carry_from: usize,
-}
+pub struct Schema(Vec<FieldSpec>);
 
 impl Schema {
-    /// Checks that there is at least one value field (and any number of carry
-    /// fields), the names are distinct among the value fields and among the
-    /// carry fields, every extent is at least 1 (a 0-dimensional shape is fine),
-    /// every dtype is a scalar of whole bytes, and every field fits in one
-    /// allocation.
-    pub fn new(values: Vec<FieldSpec>, carry: Vec<FieldSpec>) -> Result<Self, SchemaError> {
-        if values.is_empty() {
+    /// Checks that there is at least one field, the names are distinct, every
+    /// extent is at least 1 (a 0-dimensional shape is fine), every dtype is a
+    /// scalar of whole bytes, and every field fits in one allocation.
+    pub fn new(fields: Vec<FieldSpec>) -> Result<Self, SchemaError> {
+        if fields.is_empty() {
             return Err(SchemaError("a schema needs at least one field".to_owned()));
         }
-        check_fields(&values, "field")?;
-        check_fields(&carry, "carry field")?;
-        let carry_from = values.len();
-        let mut fields = values;
-        fields.extend(carry);
-        Ok(Self { fields, carry_from })
+        let mut names = HashSet::new();
+        for f in &fields {
+            let invalid =
+                |reason: String| Err(SchemaError(format!("field '{}': {reason}", f.name)));
+            if !names.insert(f.name.as_str()) {
+                return Err(SchemaError(format!("duplicate field '{}'", f.name)));
+            }
+            if f.shape.iter().any(|&n| n < 1) {
+                return invalid(format!(
+                    "every extent must be >= 1, got shape {}",
+                    format_shape(&f.shape)
+                ));
+            }
+            let DLDataType { bits, lanes, .. } = f.dtype;
+            if lanes != 1 || bits == 0 || bits % 8 != 0 {
+                return invalid(format!("unsupported dtype {}", format_dtype(f.dtype)));
+            }
+            if f.checked_nbytes().is_none() {
+                return invalid(format!(
+                    "shape {} of {} takes more than isize::MAX bytes",
+                    format_shape(&f.shape),
+                    format_dtype(f.dtype)
+                ));
+            }
+        }
+        Ok(Self(fields))
     }
 
-    /// Every field: the value fields, then the carry fields.
+    /// The fields, in message order.
     pub fn fields(&self) -> &[FieldSpec] {
-        &self.fields
+        &self.0
     }
-
-    /// The fields of the value.
-    pub fn values(&self) -> &[FieldSpec] {
-        &self.fields[..self.carry_from]
-    }
-
-    /// The fields of the carried data, possibly none.
-    pub fn carry(&self) -> &[FieldSpec] {
-        &self.fields[self.carry_from..]
-    }
-}
-
-/// The checks of [`Schema::new`] on one list of fields, which `what` names.
-fn check_fields(fields: &[FieldSpec], what: &str) -> Result<(), SchemaError> {
-    let mut names = HashSet::new();
-    for f in fields {
-        let invalid = |reason: String| Err(SchemaError(format!("{what} '{}': {reason}", f.name)));
-        if !names.insert(f.name.as_str()) {
-            return Err(SchemaError(format!("duplicate {what} '{}'", f.name)));
-        }
-        if f.shape.iter().any(|&n| n < 1) {
-            return invalid(format!(
-                "every extent must be >= 1, got shape {}",
-                format_shape(&f.shape)
-            ));
-        }
-        let DLDataType { bits, lanes, .. } = f.dtype;
-        if lanes != 1 || bits == 0 || bits % 8 != 0 {
-            return invalid(format!("unsupported dtype {}", format_dtype(f.dtype)));
-        }
-        if f.checked_nbytes().is_none() {
-            return invalid(format!(
-                "shape {} of {} takes more than isize::MAX bytes",
-                format_shape(&f.shape),
-                format_dtype(f.dtype)
-            ));
-        }
-    }
-    Ok(())
 }
 
 /// Why [`Schema::new`] refused its fields.
@@ -205,30 +178,20 @@ mod tests {
             bits: 8,
             lanes: 1,
         };
-        let values = |fields: Vec<FieldSpec>| Schema::new(fields, vec![]);
-        assert!(values(vec![]).is_err());
-        assert!(values(vec![field("a", &[]), field("a", &[2])]).is_err());
-        assert!(values(vec![field("a", &[2, 0])]).is_err());
+        assert!(Schema::new(vec![]).is_err());
+        assert!(Schema::new(vec![field("a", &[]), field("a", &[2])]).is_err());
+        assert!(Schema::new(vec![field("a", &[2, 0])]).is_err());
         // 2^61 int64 elements are 2^64 bytes, and 2^32 x 2^32 overflows usize.
-        assert!(values(vec![field("a", &[1 << 61])]).is_err());
-        assert!(values(vec![field("a", &[1 << 32, 1 << 32])]).is_err());
+        assert!(Schema::new(vec![field("a", &[1 << 61])]).is_err());
+        assert!(Schema::new(vec![field("a", &[1 << 32, 1 << 32])]).is_err());
         let mut f = field("a", &[2]);
         f.dtype.lanes = 4;
-        assert!(values(vec![f.clone()]).is_err());
-        let ok = values(vec![FieldSpec {
+        assert!(Schema::new(vec![f]).is_err());
+        let ok = Schema::new(vec![FieldSpec {
             name: "m".to_owned(),
             shape: vec![3],
             dtype: bool8,
         }]);
         assert_eq!(ok.unwrap().fields()[0].nbytes(), 3);
-
-        // The carry fields are checked alike, and named apart from the values.
-        let carry = |fields: Vec<FieldSpec>| Schema::new(vec![field("x", &[])], fields);
-        assert!(carry(vec![field("y", &[]), field("y", &[2])]).is_err());
-        assert!(carry(vec![field("y", &[0])]).is_err());
-        assert!(carry(vec![f]).is_err());
-        let both = Schema::new(vec![field("", &[])], vec![field("", &[2])]).unwrap();
-        assert_eq!((both.values().len(), both.carry().len()), (1, 1));
-        assert!(Schema::new(vec![], vec![field("y", &[])]).is_err());
     }
 }

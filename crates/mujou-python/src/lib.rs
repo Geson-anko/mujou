@@ -35,7 +35,7 @@ mod core_module {
 
     #[pymodule_export]
     use super::slot::{
-        BufferView, PyCarry, PyInputGroup, PyInputSlot, PyMessage, PyOutlet, PySchema, PySlot,
+        BufferView, PyInputGroup, PyInputSlot, PyMessage, PyOutlet, PySchema, PySlot,
     };
 
     #[pymodule_export]

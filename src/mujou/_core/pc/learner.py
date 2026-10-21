@@ -2,15 +2,14 @@
 update its parameters."""
 
 import math
-from collections.abc import Sequence
 
 import torch
 from torch import nn
 
 from mujou._core.node import Node
-from mujou._core.pc.carry import Carried, batch_of, check_batch
+from mujou._core.pc.messages import Activity
 from mujou._core.pc.time_constants import TimeConstants
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou._core.spec import DictSpec
 
 
 class Learner(Node):
@@ -18,8 +17,7 @@ class Learner(Node):
     updates its parameters ``theta`` once ``learn_interval`` has passed since the
     host wrote the input.
 
-    The input changes when the ``time`` carried with the activity it receives
-    changes (the host wrote a new input at that time). The node learns in its
+    The input changes when the ``time`` of the activity it receives changes (the host wrote a new input at that time). The node learns in its
     first update at or after ``time + k * learn_interval`` (``k = 1, 2, ...``)
     on the run's time, but not in the update that first sees the input, so the
     nodes on a path learn at about the same time, however deep they are. An
@@ -31,27 +29,22 @@ class Learner(Node):
     since the input changed (``"_learned_input"``).
 
     Raises:
-        TypeError: ``tau`` is not a ``TimeConstants``, ``carry`` is not a spec
-            of ``carry_spec``, ``module`` does not return a tensor, or
-            ``learn_interval`` or ``max_dt`` is a ``bool``.
+        TypeError: ``tau`` is not a ``TimeConstants``, ``module`` does not
+            return a tensor, or ``learn_interval`` or ``max_dt`` is a ``bool``.
         ValueError: ``learn_interval`` or ``max_dt`` is neither ``None`` nor
-            finite and positive; ``period`` is longer than ``max_dt``;
-            ``input_shape[0]`` or the first dimension of the output of
-            ``module`` is not the batch of ``carry``; or a parameter or buffer
-            of ``module`` is not on ``device``.
+            finite and positive; ``period`` is longer than ``max_dt``; or a
+            parameter or buffer of ``module`` is not on ``device``.
     """
 
     def __init__(
         self,
         module: nn.Module,
         *,
-        input_shape: Sequence[int],
-        carry: DictSpec[Carried],
+        act: DictSpec[Activity],
         tau: TimeConstants,
         learn_interval: float | None,
         period: float | None,
         max_dt: float | None,
-        dtype: torch.dtype | None,
         device: torch.device | str,
     ) -> None:
         # User input: check the types at runtime.
@@ -65,15 +58,14 @@ class Learner(Node):
                     f"{name} must be None or finite and > 0, got {value!r}"
                 )
         super().__init__(device=device, period=tau.h / 4 if period is None else period)
-        self._batch = batch_of(carry)
-        check_batch(input_shape, self._batch, "input_shape")
+        self._batch = act.specs["y"].shape[0]
         for name, tensor in [*module.named_parameters(), *module.named_buffers()]:
             if tensor.device != self.device:
                 raise ValueError(
                     f"module's {name!r} is on {tensor.device}, but the node computes "
                     f"on {self.device}"
                 )
-        self._input = TensorSpec(input_shape, dtype)
+        self._input = act.specs["h"]
         self._tau = tau
         self._interval_ns = (
             None if learn_interval is None else max(1, round(learn_interval * 1e9))
@@ -88,10 +80,10 @@ class Learner(Node):
                 "max_dt; give a shorter period or a longer max_dt"
             )
         # No time a host writes at (>= 0), so the first update sees a new input.
-        # The carried data before the first send is zeros, whose time 0 is also
-        # that of a first write at time 0, so a new input is not told by its
-        # time alone there; whether to learn rests on the carried mask, all
-        # False until a real sample arrives.
+        # The activity before the first send is zeros, whose time 0 is also that
+        # of a first write at time 0, so a new input is not told by its time
+        # alone there; whether to learn rests on its mask, all False until a real
+        # sample arrives.
         self._seen_time = -1
         self._learn_at = 0
         self._elapsed = 0.0
@@ -108,7 +100,6 @@ class Learner(Node):
 
         Raises:
             TypeError: ``module`` does not return a tensor.
-            ValueError: Its first dimension is not the batch.
         """
         with torch.no_grad():
             out: object = self.module(self._input.zeros(device=self.device))
@@ -117,7 +108,6 @@ class Learner(Node):
                 f"module must return a tensor, got {type(out).__name__} for the "
                 f"input {self._input!r}"
             )
-        check_batch(out.shape, self._batch, "the output of module")
         return out
 
     def _cap(self, dt: float) -> float:

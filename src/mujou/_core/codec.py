@@ -22,14 +22,11 @@ def fields(spec: Spec) -> Mapping[str, TensorSpec]:
     return {"": spec} if isinstance(spec, TensorSpec) else spec.specs
 
 
-def schema(spec: Spec, carry: Spec | None) -> _native.Schema:
-    """The core's schema of messages of ``spec`` carrying ``carry`` (or
-    nothing)."""
-    return _native.Schema(_layout(spec), [] if carry is None else _layout(carry))
-
-
-def _layout(spec: Spec) -> list[tuple[str, tuple[int, ...], tuple[int, int, int]]]:
-    return [(name, f.shape, DLPACK[f.dtype]) for name, f in fields(spec).items()]
+def schema(spec: Spec) -> _native.Schema:
+    """The core's schema of messages of ``spec``."""
+    return _native.Schema(
+        [(name, f.shape, DLPACK[f.dtype]) for name, f in fields(spec).items()]
+    )
 
 
 def to_core(spec: Spec, msg: object, label: str) -> list[torch.Tensor]:

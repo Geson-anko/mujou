@@ -17,7 +17,9 @@ H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
 F64 = torch.float64
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
-CARRY = pc.carry_spec(TensorSpec((B, N_OUT), F64), batch=B)
+X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
+# The activity of float32 h_in, for the nodes that are only made.
+ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)))
 
 
 def head(seed: int = 0) -> nn.Linear:
@@ -33,16 +35,8 @@ class Direct:
     def __init__(
         self, start_manual: StartManual, module: nn.Module, **kwargs: Any
     ) -> None:
-        self.inp = pc.Input((B, N_IN), carry=CARRY, period=H, dtype=F64)
-        self.out = pc.Output(
-            module,
-            loss=pc.mse,
-            input_shape=(B, N_IN),
-            carry=CARRY,
-            tau=TAU,
-            dtype=F64,
-            **kwargs,
-        )
+        self.inp = pc.Input(x=X, y=Y, period=H)
+        self.out = pc.Output(module, act=self.inp.act, loss=pc.mse, tau=TAU, **kwargs)
         self.inp.next.connect(self.out.prev)
         self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
 
@@ -99,20 +93,13 @@ class TestConstruction:
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=nn.MSELoss(),
-                input_shape=(B, N_IN),
-                carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+                act=ACT,
                 tau=TAU,
             )
 
-    def test_the_prediction_carries_the_target(self):
-        carry = pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
-        out = pc.Output(
-            nn.Linear(N_IN, 10),
-            loss=pc.cross_entropy,
-            input_shape=(B, N_IN),
-            carry=carry,
-            tau=TAU,
-        )
+    def test_the_prediction_has_the_target(self):
+        act = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64))
+        out = pc.Output(nn.Linear(N_IN, 10), act=act, loss=pc.cross_entropy, tau=TAU)
         assert out.next.send_spec == DictSpec(
             pc.Prediction,
             y_hat=TensorSpec((B, 10)),
@@ -125,8 +112,7 @@ class TestConstruction:
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
             loss=pc.mse,
-            input_shape=(B, N_IN),
-            carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+            act=ACT,
             tau=TAU,
         )
         assert out.period == pytest.approx(TAU.h / 4)
@@ -138,8 +124,7 @@ class TestConstruction:
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=pc.mse,
-                input_shape=(B, N_IN),
-                carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+                act=ACT,
                 tau=TAU,
                 **kwargs,
             )
@@ -149,8 +134,7 @@ class TestConstruction:
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=pc.mse,
-                input_shape=(B, N_IN),
-                carry=pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
+                act=ACT,
                 tau=TAU,
                 period=TAU.h,  # max_dt is tau.h / 2
             )

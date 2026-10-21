@@ -1,14 +1,14 @@
 """The output node of ``mujou.pc``."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import override
 
 import torch
 from torch import nn
 
-from mujou._core.pc.carry import Carried, Prediction, activity_spec
 from mujou._core.pc.functional import learn_, loss_vjp
 from mujou._core.pc.learner import Learner
+from mujou._core.pc.messages import Activity, Prediction
 from mujou._core.pc.time_constants import TimeConstants
 from mujou._core.port import NextPort, PrevPort
 from mujou._core.spec import DictSpec, TensorSpec
@@ -18,9 +18,9 @@ class Output(Learner):
     r"""A node that predicts ``y_hat = module(h_in)`` and whose energy is the loss
     of the samples that have a target.
 
-    It pairs ``h_in`` with the target ``y`` and ``mask`` carried in the same
-    message, so the prediction always meets the target of the very input it was
-    computed from, however fast the host writes. With
+    It pairs ``h_in`` with the target ``y`` and ``mask`` of the same
+    ``Activity``, so the prediction always meets the target of the very input it
+    was computed from, however fast the host writes. With
 
     $$
     \ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
@@ -30,17 +30,17 @@ class Output(Learner):
     it sends $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
     previous node (``functional.loss_vjp``), zeros when no sample has a target.
     Each ``on_update(dt)`` caps ``dt`` at ``max_dt`` as ``Layer`` does, reads
-    ``h_in`` with its carried data, sends ``g_in``, sends a ``Prediction``
+    the ``Activity``, sends ``g_in``, sends a ``Prediction``
     (``y_hat`` with the ``y``, ``mask`` and ``time`` it was paired with) for
-    the host to read, and updates ``theta`` when it learns. It reads the
-    ``h`` of the ``Activity`` only: a jump of ``h_in`` needs no move here, as
-    the node holds no activity of its own.
+    the host to read, and updates ``theta`` when it learns. It does not read the
+    ``epoch``: a jump of ``h_in`` needs no move here, as the node holds no
+    activity of its own.
 
     It learns as ``Layer`` does: once ``learn_interval`` seconds have passed
     since the host wrote the input, but not in the update that first sees it,
     or in every update with ``None``. When no sample has a target, it does not
     learn and drops the time since the last update; so too before the first
-    sample arrives, while the carried data is zeros (``mask`` all False), and
+    sample arrives, while the activity is zeros (``mask`` all False), and
     when the input changes before it has learned from it. ``B`` is the batch,
     not the number of samples with a target: a sample without one adds zero.
 
@@ -58,9 +58,8 @@ class Output(Learner):
 
         out = pc.Output(
             nn.Linear(256, 10),
+            act=hidden.act,  # hidden: a pc.Layer
             loss=pc.cross_entropy,
-            input_shape=(B, 256),
-            carry=carry,  # pc.carry_spec(TensorSpec((B,), torch.int64), batch=B)
             tau=tau,
             learn_interval=24e-3,
         )
@@ -69,9 +68,9 @@ class Output(Learner):
 
     Args:
         module: The function ``f``, ``(B, *in) -> (B, *out)``, on ``device``.
+        act: The spec of the activity ``h_in`` it receives: the ``act`` of the
+            node before.
         loss: The loss of each sample, ``(y_hat, y) -> (B,)``.
-        input_shape: The shape ``(B, *in)`` of ``h_in``.
-        carry: The spec of the carried data, from ``carry_spec``.
         tau: The time constants; ``tau.theta`` is used, and ``tau.h`` gives the
             default period.
         learn_interval: As in ``Layer``.
@@ -79,7 +78,6 @@ class Output(Learner):
             It must not be longer than ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
             towards the weight of the update of ``theta``.
-        dtype: The dtype of ``h_in``; ``None`` is ``torch.get_default_dtype()``.
         device: Where the node computes.
 
     Raises:
@@ -92,29 +90,25 @@ class Output(Learner):
         self,
         module: nn.Module,
         *,
+        act: DictSpec[Activity],
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        input_shape: Sequence[int],
-        carry: DictSpec[Carried],
         tau: TimeConstants,
         learn_interval: float | None = None,
         period: float | None = None,
         max_dt: float | None = None,
-        dtype: torch.dtype | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(
             module,
-            input_shape=input_shape,
-            carry=carry,
+            act=act,
             tau=tau,
             learn_interval=learn_interval,
             period=period,
             max_dt=max_dt,
-            dtype=dtype,
             device=device,
         )
         y_hat = self._probe()
-        target = carry.specs["y"]
+        target = act.specs["y"]
         with torch.no_grad():
             ell = loss(y_hat, target.zeros(device=self.device))
         if ell.shape != (self._batch,):
@@ -124,16 +118,14 @@ class Output(Learner):
                 "nn.MSELoss(), does not (use pc.mse or pc.cross_entropy)"
             )
         self._loss = loss
-        self.prev = PrevPort(
-            send=self._input, recv=activity_spec(self._input), recv_carry=carry
-        )
+        self.prev = PrevPort(send=self._input, recv=act)
         self.next = NextPort(
             send=DictSpec(
                 Prediction,
                 y_hat=TensorSpec(y_hat.shape, y_hat.dtype),
                 y=target,
-                mask=carry.specs["mask"],
-                time=carry.specs["time"],
+                mask=act.specs["mask"],
+                time=act.specs["time"],
             )
         )
 
@@ -141,17 +133,17 @@ class Output(Learner):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         dt = self._cap(dt)
-        h_in = self.prev.recv()["h"]  # (B, *in)
-        carried = self.prev.carried()  # y, mask and time of h_in
-        _, learn = self._tick(dt, int(carried["time"]))
-        labeled = bool(carried["mask"].any())
+        activity = self.prev.recv()
+        h_in = activity["h"]  # (B, *in)
+        _, learn = self._tick(dt, int(activity["time"]))
+        labeled = bool(activity["mask"].any())
         g_theta: list[torch.Tensor] = []
         if labeled:
             y_hat, g_in, g_theta = loss_vjp(
                 self.module,
                 h_in,
-                carried["y"],
-                carried["mask"],
+                activity["y"],
+                activity["mask"],
                 self._loss,
                 self._params if learn else (),
             )
@@ -161,7 +153,14 @@ class Output(Learner):
                 y_hat = self.module(h_in)
             g_in = torch.zeros_like(h_in)  # no target, no loss
         self.prev.send(g_in)
-        self.next.send({"y_hat": y_hat, **carried})
+        self.next.send(
+            {
+                "y_hat": y_hat,
+                "y": activity["y"],
+                "mask": activity["mask"],
+                "time": activity["time"],
+            }
+        )
         if learn:
             if labeled:
                 learn_(self._params, g_theta, self._elapsed, self._tau, self._batch)

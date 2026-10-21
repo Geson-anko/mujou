@@ -58,7 +58,7 @@ __all__ = ["ManualRun", "run"]
 
 
 # P: as in Run.write.
-def run[P: Port[Any, Any, Any, Any, Any]](
+def run[P: Port[Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: VirtualTimer | None = None,

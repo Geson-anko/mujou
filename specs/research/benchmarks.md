@@ -15,6 +15,7 @@
 | `Port.send` / `recv` の 1 回の時間 | `uv run python benchmarks/ports.py` | ステップ 5（R9: 悪化が 5% 未満） |
 | M:N スケジューラの更新回数 / 秒と Δt の p99 | `uv run python benchmarks/mn_scheduler.py` | ステップ 3（R11: 専用スレッドの fast path） |
 | MNIST の 1 epoch | `uv run python examples/mnist/main.py --epochs 1`（`--time-scale 1` と `2`） | ステップ 6（R12: 悪化が 5% 未満） |
+| 密な y（回帰）の PC の鎖の 1 ステップの時間と更新回数 / 秒 | `uv run python benchmarks/pc_dense.py` | ステップ 6（R12: 記録だけ） |
 | 状態の取得（capture）の時間 | `uv run python benchmarks/capture.py [--device cuda]` | ステップ 9（R10: 素の dict の木と GPU のノード） |
 
 ## Port.send / recv
@@ -271,3 +272,36 @@ GPU のノードの値: 未計測（GPU なし）。GPU のあるマシンで `-
 - dedicated の light で一時 27〜30%（M=64、1024）落ちたのは、bindings が hook の戻り値（`None`）を `Python::attach` の外で落とし、pyo3 がその解放を全体で 1 つの保留プール（mutex）に回していたため。戻り値を attach の中で始末する形にして解消した（ステップ 3 の報告の現象と同じ）。束縛メソッドを毎回作ること、クラスの関数を毎回引くことの影響は、この構成では測定の揺れの範囲だった。
 - switch は、`enter` と `_after_update` の 2 回目の FFI が無くなった分、速くなった。
 - R13（CUDA のノードで hook ごとに device と stream を設定するコスト）は未計測（GPU なし）。GPU のあるマシンで、`tests/mujou/_core/test_driver.py` の `TestCuda`（slow を含む）と合わせて測る。
+
+## ステップ 6 の前（carry のある実装。R12 の密な y の基準値）
+
+`benchmarks/pc_dense.py` を、carry を廃止する前の作業ツリー（ステップ 5 の後）で測った。B = 64 の `Input` → 784-256 tanh の `Layer` → 256-256 tanh の `Layer` → `Output` の鎖に、1 つのサンプルを書いて学習させる。y は 2 通り。
+
+- 密な y: `(B, 256)` の float32 で、隠れ層の h と同じ大きさ。出力は 256 次元、損失は `pc.mse`
+- ラベル: `(B,)` の int64 で、MNIST と同じ形。出力は 10 次元、損失は `pc.cross_entropy`
+
+manual は `mujou.testing.run` の 1 ステップ（4 ノードを 1 回ずつ、1 スレッドで更新する）の時間で、2000 ステップを 5 回測った中央値と最小値。free は、全ノードの period を 0 にして 4 ワーカーで 3 秒走らせたときの、ノードごとの更新回数 / 秒（5 回の中央値）。
+
+| target | manual µs/step (median) | manual µs/step (min) | free inp updates/s | free l1 updates/s | free l2 updates/s | free out updates/s |
+| --- | --- | --- | --- | --- | --- | --- |
+| dense y (B, 256) | 1521.7 | 1489.6 | 24,751 | 1,588 | 2,809 | 3,094 |
+| labels y (B,) | 1335.6 | 1300.2 | 27,155 | 1,589 | 2,812 | 5,937 |
+
+同じ作業ツリーで、MNIST の 1 epoch（time scale 2）は 15.4 s、l1 / l2 / out の更新回数は 30,690 / 35,554 / 35,850 だった（ステップ 1 の基準値の 15.3 s、30,567 と同じ範囲）。
+
+## ステップ 6 の後（carry を廃止した後。R12）
+
+PC の y、mask、time を `Activity` のフィールドとして運び、各ノードが受け取った値を次のメッセージに写すようにした後に測った。前の値は、ステップ 6 の前の作業ツリーを別の場所に写してビルドしたものと交互に 2 回ずつ測った範囲。
+
+| 測定 | 前 | 後 | 差 |
+| --- | --- | --- | --- |
+| 密な y の manual µs/step（中央値） | 1513.8〜1526.6 | 1537.3〜1556.3 | +1.5〜2.8% |
+| ラベルの manual µs/step（中央値） | 1345.3〜1364.9 | 1358.2〜1362.7 | ±1% |
+| 密な y の free l1 / l2 / out（updates/s） | 1,585〜1,587 / 2,798〜2,812 / 3,070〜3,086 | 1,556〜1,571 / 2,730〜2,764 / 3,075〜3,109 | −1〜2% / −1.5〜3% / ±1% |
+| ラベルの free l1 / l2 / out（updates/s） | 1,581〜1,589 / 2,803〜2,805 / 5,865〜5,887 | 1,570〜1,581 / 2,760〜2,768 / 5,884〜5,905 | −1% / −1.5% / ±0.5% |
+| MNIST の 1 epoch（time scale 2）の学習の時間 | 15.3 s / 15.3 s | 15.3 s / 15.4 s | 1% 未満 |
+| MNIST の l1 の更新回数（time scale 2） | 30,879 / 30,804 | 30,727 / 30,779 | −0.3% |
+
+- R12: MNIST の悪化は 5% 未満（epoch の時間で 1% 未満、l1 の更新回数で −0.3%）。
+- 密な y では、1 ステップが 25〜40 µs（1.5〜2.8%）長くなった。y（64 KB）を 3 ホップでそれぞれコピーして送り、受け取るときにもコピーする分で、1 ホップあたり 10 µs ほどになる。計算（784-256 の層の forward と VJP で約 600 µs）に比べて小さい。ラベルの y（512 B）では差が測定の揺れに埋もれる。
+- CUDA のノードでの値（各ホップで device との往復が増える）は未計測（GPU なし）。

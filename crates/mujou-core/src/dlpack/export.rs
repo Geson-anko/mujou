@@ -144,7 +144,7 @@ mod tests {
                 lanes: 1,
             },
         };
-        let messages = Messages::new(Arc::new(Schema::new(vec![field], vec![]).unwrap()));
+        let messages = Messages::new(Arc::new(Schema::new(vec![field]).unwrap()));
         let pool = Arc::clone(&messages.pools()[0]);
         for (k, versioned) in [(0, true), (100, false)] {
             let msg = messages.build(0, true, fill_range(k)).unwrap();

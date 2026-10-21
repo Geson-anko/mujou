@@ -1,7 +1,7 @@
 """Ports, the connection points of nodes and networks, and the channels between them.
 
 A port has no direction: it holds the spec of the message it sends and the spec of
-the message it receives, and of the data each carries. Two ports connect when their
+the message it receives. Two ports connect when their
 specs are mutually reversed, and each connection is one ``Channel`` registered at
 both ends (``specs/network.md``).
 """
@@ -53,10 +53,6 @@ def running() -> Running | None:
 # unsolved type variable would stay unknown. At runtime it is None.
 _NO_SPEC: Final = cast(MessageSpec[Never], None)
 
-# A port whose received carry another port passes on (``send_carry=port``): one
-# peer, carrying C with what it receives.
-type _CarrySource[C] = Port[Any, Any, Single, Any, C]
-
 
 @final
 class Single:
@@ -69,12 +65,9 @@ class Multi:
 
 
 # S: the messages a port sends. R: the messages it receives. M: the peer count,
-# Single unless declared otherwise (Multi for NextPort). CS: the data carried with
-# what it sends. CR: the data carried with what it receives.
-class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = Never]:
-    """A connection point that sends messages of type ``S`` and receives ``R``,
-    carrying data of type ``CS`` with what it sends and ``CR`` with what it
-    receives.
+# Single unless declared otherwise (Multi for NextPort).
+class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
+    """A connection point that sends messages of type ``S`` and receives ``R``.
 
     Declare ports as attributes of a node (or expose a port of a child as an
     attribute of a network). ``send`` is the spec of what this port sends and
@@ -93,22 +86,6 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     peers receive and the host reads until then. It must match ``send`` exactly,
     and is copied when the port is made. Without it, that is the ``zeros()`` of
     ``send``. A restored run takes the values from the state instead.
-
-    A message may carry data along a path, such as the target of a sample or
-    its ID, in the same message as the value, so that a reader never pairs a
-    value with the data of another sample. ``recv_carry`` is the spec of the
-    data carried with what this port receives; ``carried`` reads it. A single
-    peer only: a port with ``multi=True`` takes no ``recv_carry``.
-    ``send_carry`` says what this port carries with what it sends: a spec, and
-    ``send`` takes the data as ``carry``; or another port of the same node with
-    a ``recv_carry``, and ``send`` passes on, without copying, the data of the
-    message that port last received (``recv``). Until the first ``send``, and
-    before the first ``recv`` of the port it passes on from, the carried data is
-    the ``zeros()`` of its spec (in a restored run, the values under
-    ``"carries"`` in the state). These zeros cannot be told from zeros that were
-    sent: to tell them apart, carry a field that says whether the data is valid.
-    The host reads only the value of a port with a ``send_carry``
-    (``Run.read``), and cannot write to a port with a ``recv_carry``.
 
     Once assigned as an attribute of a node, the port is named
     ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
@@ -139,53 +116,32 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         sensor, monitor = Sensor(), Monitor()
         sensor.out.connect(monitor.inp)
 
-    A node that passes the data its input carries on to its output::
-
-        class Scale(Node):
-            def __init__(self) -> None:
-                super().__init__()
-                self.prev = PrevPort(recv=TensorSpec((3,)), recv_carry=TensorSpec(()))
-                self.next = NextPort(send=TensorSpec((3,)), send_carry=self.prev)
-
-            @override
-            def on_update(self, dt: float) -> None:
-                super().on_update(dt)
-                x = self.prev.recv()
-                self.next.send(2 * x)  # carries what came with x
-                sample_id = self.prev.carried()  # a copy, when the node needs it
-
     Raises:
         TypeError: ``send`` or ``recv`` is not a ``TensorSpec``, a ``DictSpec`` or
             ``None``; ``initial`` is given to a port without ``send``; or
             ``initial`` is not a tensor, or a dict of tensors with the keys of
-            ``send`` (as ``send`` raises). ``send_carry`` is not a spec, a port or
-            ``None``, or is given to a port without ``send``; ``recv_carry`` is not
-            a spec or ``None``, or is given to a port without ``recv`` or with
-            ``multi=True``; or the port given as ``send_carry`` has no
-            ``recv_carry``. The shapes and dtypes of ``initial`` are checked when
-            a run starts: ``mujou.run`` raises ``ValueError`` if they differ.
+            ``send`` (as ``send`` raises). The shapes and dtypes of ``initial``
+            are checked when a run starts: ``mujou.run`` raises ``ValueError`` if
+            they differ.
     """
 
     @overload
-    def __init__[S2, R2, CS2, CR2](
-        self: Port[S2, R2, Single, CS2, CR2],
+    def __init__[S2, R2](
+        self: Port[S2, R2, Single],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
-        recv_carry: MessageSpec[CR2] = _NO_SPEC,
     ) -> None: ...
     @overload
-    def __init__[S2, R2, CS2](
-        self: Port[S2, R2, Multi, CS2, Never],
+    def __init__[S2, R2](
+        self: Port[S2, R2, Multi],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
     ) -> None: ...
     def __init__(
         self,
@@ -194,10 +150,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         *,
         multi: bool = False,
         initial: S | None = None,
-        send_carry: MessageSpec[CS] | _CarrySource[CS] | None = None,
-        recv_carry: MessageSpec[CR] | None = None,
     ) -> None:
-        self._init(send, recv, multi, initial, send_carry, recv_carry)
+        self._init(send, recv, multi, initial)
 
     def _init(
         self,
@@ -205,49 +159,14 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         recv: MessageSpec[R] | None,
         multi: bool,
         initial: S | None,
-        send_carry: MessageSpec[CS] | Port[Any, Any, Any, Any, CS] | None,
-        recv_carry: MessageSpec[CR] | None,
     ) -> None:
         name = type(self).__name__
-        for direction, spec in (
-            ("send", send),
-            ("recv", recv),
-            ("recv_carry", recv_carry),
-        ):
+        for direction, spec in (("send", send), ("recv", recv)):
             if spec is not None and not isinstance(spec, TensorSpec | DictSpec):
                 raise TypeError(
                     f"{name} {direction} must be a TensorSpec, a DictSpec or None, "
                     f"got {type(spec).__name__}"
                 )
-        if send_carry is not None and not isinstance(
-            send_carry, TensorSpec | DictSpec | Port
-        ):
-            raise TypeError(
-                f"{name} send_carry must be a TensorSpec, a DictSpec, a Port or "
-                f"None, got {type(send_carry).__name__}"
-            )
-        if send_carry is not None and send is None:
-            raise TypeError(f"{name} sends no messages, so it takes no send_carry")
-        if recv_carry is not None and recv is None:
-            raise TypeError(f"{name} receives no messages, so it takes no recv_carry")
-        if recv_carry is not None and multi:
-            raise TypeError(
-                f"{name} takes many peers, so it takes no recv_carry (carried data "
-                "comes from one peer)"
-            )
-        # The port whose last received carry this one passes on, or None.
-        self._carry_source: Port[Any, Any, Any, Any, CS] | None = None
-        self._send_carry_spec: MessageSpec[CS] | None = None
-        if isinstance(send_carry, Port):
-            if send_carry._recv_carry_spec is None:
-                raise TypeError(
-                    f"{name} send_carry: {send_carry._label()} has no recv_carry, so "
-                    "there is nothing to pass on"
-                )
-            self._carry_source = send_carry
-        else:
-            self._send_carry_spec = cast(MessageSpec[CS] | None, send_carry)
-        self._recv_carry_spec = recv_carry
         # The tensors of the initial value in field order, copied to the host now
         # so that changing the value later changes nothing.
         self._initial: list[torch.Tensor] | None = None
@@ -279,27 +198,6 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         return self._recv_spec
 
     @property
-    def send_carry_spec(self) -> MessageSpec[CS] | None:
-        """The spec of the data carried with what this port sends, or ``None``
-        (for a port that passes it on, the ``recv_carry_spec`` of
-        ``carry_source``)."""
-        if self._carry_source is not None:
-            return self._carry_source._recv_carry_spec
-        return self._send_carry_spec
-
-    @property
-    def recv_carry_spec(self) -> MessageSpec[CR] | None:
-        """The spec of the data carried with what this port receives, or
-        ``None``."""
-        return self._recv_carry_spec
-
-    @property
-    def carry_source(self) -> Port[Any, Any, Any, Any, CS] | None:
-        """The port whose received carry this port passes on (its
-        ``send_carry``), or ``None``."""
-        return self._carry_source
-
-    @property
     def multi(self) -> bool:
         """Whether this port takes any number of peers (else at most one)."""
         return self._multi
@@ -309,8 +207,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         """The channels connected to this port, in the order they were connected."""
         return tuple(self._channels)
 
-    # Any: the peer may carry any message types as long as they match at runtime.
-    def connect(self, other: Port[Any, Any, Any, Any, Any]) -> Channel:
+    # Any: the peer may take any message types as long as they match at runtime.
+    def connect(self, other: Port[Any, Any, Any]) -> Channel:
         """Connect this port to ``other`` and return the new channel.
 
         The channel is registered at both ports, so each can send to and receive
@@ -319,9 +217,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
 
         Raises:
             TypeError: The specs are not mutually reversed (``self.send_spec !=
-                other.recv_spec`` or ``self.recv_spec != other.send_spec``, and
-                likewise for ``send_carry_spec`` and ``recv_carry_spec``), or
-                neither direction carries a message.
+                other.recv_spec`` or ``self.recv_spec != other.send_spec``), or
+                neither direction has a message.
             ValueError: ``other`` is this port, or a single-peer port is already
                 connected.
             RuntimeError: Either port belongs to a tree that is already built (by
@@ -336,18 +233,10 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
             raise ValueError(f"cannot connect a port to itself: {self._label()}")
         # dict.fromkeys: ports of two instances of one class can read the same.
         mismatches = dict.fromkeys(
-            [
-                f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
-                f"receives {_or_nothing(b._recv_spec)}"
-                for a, b in ((self, other), (other, self))
-                if a._send_spec != b._recv_spec
-            ]
-            + [
-                f"{a._label()} carries {_or_nothing(a.send_carry_spec)} with what it "
-                f"sends, but {b._label()} expects {_or_nothing(b._recv_carry_spec)}"
-                for a, b in ((self, other), (other, self))
-                if a.send_carry_spec != b._recv_carry_spec
-            ]
+            f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
+            f"receives {_or_nothing(b._recv_spec)}"
+            for a, b in ((self, other), (other, self))
+            if a._send_spec != b._recv_spec
         )
         if mismatches:
             raise TypeError("port specs do not match: " + "; ".join(mismatches))
@@ -370,9 +259,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     # The self-typed overloads make the return type depend on the peer count: one
     # peer gives the message, many give a dict keyed by channel in connection order.
     @overload
-    def recv[R2](self: Port[Any, R2, Single, Any, Any]) -> R2: ...
+    def recv[R2](self: Port[Any, R2, Single]) -> R2: ...
     @overload
-    def recv[R2](self: Port[Any, R2, Multi, Any, Any]) -> dict[Channel, R2]: ...
+    def recv[R2](self: Port[Any, R2, Multi]) -> dict[Channel, R2]: ...
     def recv(self) -> Any:  # Any: the overloads above give the precise types
         """Return the latest message received, without waiting for a new one.
 
@@ -389,9 +278,7 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         ``state``. ``has_received`` tells whether the writer has written yet.
 
         Every call copies into new tensors on the owning node's device, without
-        gradients, so changing them in place changes nothing else. The data the
-        message carries is not copied: ``carried`` reads it, and a port with this
-        one as its ``send_carry`` passes it on.
+        gradients, so changing them in place changes nothing else.
 
         Call it only from the owning node's hooks while the network runs.
 
@@ -405,11 +292,11 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
 
     @overload
     def recv_with_time[R2](
-        self: Port[Any, R2, Single, Any, Any],
+        self: Port[Any, R2, Single],
     ) -> tuple[R2, _native.Timestamp]: ...
     @overload
     def recv_with_time[R2](
-        self: Port[Any, R2, Multi, Any, Any],
+        self: Port[Any, R2, Multi],
     ) -> dict[Channel, tuple[R2, _native.Timestamp]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
         """Like ``recv``, but each message comes as ``(message, time)``.
@@ -420,9 +307,9 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         return self._bound().recv(with_time=True)
 
     @overload
-    def has_received(self: Port[Any, Any, Single, Any, Any]) -> bool: ...
+    def has_received(self: Port[Any, Any, Single]) -> bool: ...
     @overload
-    def has_received(self: Port[Any, Any, Multi, Any, Any]) -> dict[Channel, bool]: ...
+    def has_received(self: Port[Any, Any, Multi]) -> dict[Channel, bool]: ...
     def has_received(self) -> Any:  # Any: as recv
         """Whether ``recv`` returns a message that its writer sent, rather than the
         initial value.
@@ -441,20 +328,13 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         """
         return self._bound().has_received()
 
-    def send(self, msg: S, carry: CS | None = None) -> None:
+    def send(self, msg: S) -> None:
         """Send ``msg`` to every peer and to what the host reads (``Run.read``).
 
         ``msg`` must match the send spec exactly; dtypes are never converted. The
         values are detached and copied, so changing ``msg`` afterwards changes
         nothing that was sent. A CUDA tensor is copied to the host on the node's
         stream. It never waits for the peers to read.
-
-        A port whose ``send_carry`` is a spec takes the carried data as ``carry``,
-        checked and copied as ``msg`` is. A port whose ``send_carry`` is another
-        port takes no ``carry``: the message carries the data of the message
-        that port last received, shared and not copied. Type checkers accept
-        both mistakes (``carry`` given to a port that passes data on, or left
-        out on a port that carries a spec); only the call rejects them.
 
         Call it only from the owning node's hooks while the network runs.
 
@@ -464,49 +344,23 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
                 its ``state_dict``).
             TypeError: The port sends no messages, a value is not a
                 ``torch.Tensor``, or a ``DictSpec`` message is not a dict with the
-                spec's keys; ``carry`` is missing for a port that carries a spec,
-                or given to a port that carries nothing or passes data on.
+                spec's keys.
             ValueError: A shape or a dtype differs from the spec.
             BufferError: A tensor is not dense (``torch.strided``).
         """
-        self._bound().send(msg, carry)
+        self._bound().send(msg)
 
-    def send_to(self, channel: Channel, msg: S, carry: CS | None = None) -> None:
+    def send_to(self, channel: Channel, msg: S) -> None:
         """Send ``msg`` only to the peer across ``channel``.
 
         ``channel`` is one of ``channels`` (or a key of a multi-peer ``recv``).
         Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
         before the first ``send``, that is this port's ``initial`` (or the
         ``zeros()`` of its send spec).
-        Carries, copies and raises as ``send`` does, and raises ``ValueError``
+        Copies and raises as ``send`` does, and raises ``ValueError``
         when ``channel`` is not one of this port's.
         """
-        self._bound().send_to(channel, msg, carry)
-
-    @overload
-    def carried[CR2](self: Port[Any, Any, Any, Any, CR2]) -> CR2: ...
-    @overload
-    def carried(self, key: str) -> torch.Tensor: ...
-    def carried(self, key: str | None = None) -> Any:  # Any: as recv
-        """Return the data carried with the message last received by ``recv`` or
-        ``recv_with_time``.
-
-        Before the first ``recv`` it is the data of the message the port would
-        have received then, the ``zeros()`` of the ``recv_carry`` spec until its
-        writer first writes. With ``key``, only that field of a ``DictSpec`` is
-        returned, and only it is copied.
-
-        Every call copies into new tensors on the owning node's device, as
-        ``recv`` does. Call it only from the owning node's hooks while the network
-        runs.
-
-        Raises:
-            RuntimeError: As ``recv`` does.
-            TypeError: The port has no ``recv_carry``, or ``key`` is given for a
-                ``TensorSpec``.
-            KeyError: ``key`` is not a key of the ``DictSpec``.
-        """
-        return self._bound().carried(key)
+        self._bound().send_to(channel, msg)
 
     def _bound(self) -> Binding:
         if self._binding is None:
@@ -524,26 +378,13 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     @override
     def __repr__(self) -> str:
         name = "" if self._name is None else f"{self._name}, "
-        carry = ""
-        if self._carry_source is not None:
-            carry += f", send_carry={self._carry_source._label()}"
-        elif self._send_carry_spec is not None:
-            carry += f", send_carry={self._send_carry_spec!r}"
-        if self._recv_carry_spec is not None:
-            carry += f", recv_carry={self._recv_carry_spec!r}"
         return (
             f"{type(self).__name__}({name}send={self._send_spec!r}, "
-            f"recv={self._recv_spec!r}, multi={self._multi}{carry})"
+            f"recv={self._recv_spec!r}, multi={self._multi})"
         )
 
 
-class PrevPort[
-    S = Never,
-    R = Never,
-    M: (Single, Multi) = Single,
-    CS = Never,
-    CR = Never,
-](Port[S, R, M, CS, CR]):
+class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M]):
     """A port for the previous side of a node or network: ``b.prev`` in
     ``a.next.connect(b.prev)``.
 
@@ -557,25 +398,22 @@ class PrevPort[
     """
 
     @overload
-    def __init__[S2, R2, CS2, CR2](
-        self: PrevPort[S2, R2, Single, CS2, CR2],
+    def __init__[S2, R2](
+        self: PrevPort[S2, R2, Single],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False] = False,
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
-        recv_carry: MessageSpec[CR2] = _NO_SPEC,
     ) -> None: ...
     @overload
-    def __init__[S2, R2, CS2](
-        self: PrevPort[S2, R2, Multi, CS2, Never],
+    def __init__[S2, R2](
+        self: PrevPort[S2, R2, Multi],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True],
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
     ) -> None: ...
     def __init__(
         self,
@@ -584,19 +422,11 @@ class PrevPort[
         *,
         multi: bool = False,
         initial: S | None = None,
-        send_carry: MessageSpec[CS] | _CarrySource[CS] | None = None,
-        recv_carry: MessageSpec[CR] | None = None,
     ) -> None:
-        self._init(send, recv, multi, initial, send_carry, recv_carry)
+        self._init(send, recv, multi, initial)
 
 
-class NextPort[
-    S = Never,
-    R = Never,
-    M: (Single, Multi) = Multi,
-    CS = Never,
-    CR = Never,
-](Port[S, R, M, CS, CR]):
+class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
     """A port for the next side of a node or network: ``a.next`` in
     ``a.next.connect(b.prev)``.
 
@@ -612,25 +442,22 @@ class NextPort[
     """
 
     @overload
-    def __init__[S2, R2, CS2](
-        self: NextPort[S2, R2, Multi, CS2, Never],
+    def __init__[S2, R2](
+        self: NextPort[S2, R2, Multi],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[True] = True,
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
     ) -> None: ...
     @overload
-    def __init__[S2, R2, CS2, CR2](
-        self: NextPort[S2, R2, Single, CS2, CR2],
+    def __init__[S2, R2](
+        self: NextPort[S2, R2, Single],
         send: MessageSpec[S2] = _NO_SPEC,
         recv: MessageSpec[R2] = _NO_SPEC,
         *,
         multi: Literal[False],
         initial: S2 | None = None,
-        send_carry: MessageSpec[CS2] | _CarrySource[CS2] = _NO_SPEC,
-        recv_carry: MessageSpec[CR2] = _NO_SPEC,
     ) -> None: ...
     def __init__(
         self,
@@ -639,10 +466,8 @@ class NextPort[
         *,
         multi: bool = True,
         initial: S | None = None,
-        send_carry: MessageSpec[CS] | _CarrySource[CS] | None = None,
-        recv_carry: MessageSpec[CR] | None = None,
     ) -> None:
-        self._init(send, recv, multi, initial, send_carry, recv_carry)
+        self._init(send, recv, multi, initial)
 
 
 @final
@@ -654,7 +479,7 @@ class Channel:
     connections between the same ports are two different keys.
 
     It cannot be created directly: a channel that its ports do not know would
-    carry nothing.
+    connect nothing.
 
     Example::
 
@@ -663,7 +488,7 @@ class Channel:
     """
 
     # Any: a channel joins ports of any message types (connect checks they match).
-    _ends: tuple[Port[Any, Any, Any, Any, Any], Port[Any, Any, Any, Any, Any]]
+    _ends: tuple[Port[Any, Any, Any], Port[Any, Any, Any]]
 
     def __init__(self) -> Never:
         raise TypeError("a Channel is made by Port.connect()")
@@ -671,13 +496,11 @@ class Channel:
     @property
     def ends(
         self,
-    ) -> tuple[Port[Any, Any, Any, Any, Any], Port[Any, Any, Any, Any, Any]]:
+    ) -> tuple[Port[Any, Any, Any], Port[Any, Any, Any]]:
         """The two ports: the one ``connect`` was called on, then its argument."""
         return self._ends
 
-    def other(
-        self, port: Port[Any, Any, Any, Any, Any]
-    ) -> Port[Any, Any, Any, Any, Any]:
+    def other(self, port: Port[Any, Any, Any]) -> Port[Any, Any, Any]:
         """Return the end of this channel that is not ``port``.
 
         Raises:
@@ -696,17 +519,13 @@ class Channel:
         return f"Channel({a!r} <-> {b!r})"
 
 
-def _make_channel(
-    a: Port[Any, Any, Any, Any, Any], b: Port[Any, Any, Any, Any, Any]
-) -> Channel:
+def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
     channel = object.__new__(Channel)
     channel._ends = (a, b)  # pyright: ignore[reportPrivateUsage]  # Channel's own module
     return channel
 
 
-def assign_owner(
-    port: Port[Any, Any, Any, Any, Any], owner: str, attribute: str
-) -> None:
+def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
     """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
     (a node calls this as the port is assigned; the first assignment wins, so a
     second name does not rename the port, and networks never do)."""
@@ -719,34 +538,34 @@ def _or_nothing(spec: object) -> str:
     return "nothing" if spec is None else repr(spec)
 
 
-def label(port: Port[Any, Any, Any, Any, Any]) -> str:
+def label(port: Port[Any, Any, Any]) -> str:
     """Name ``port`` in an error by its owner and attribute (``"Shift.next"``)."""
     return port._label()  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
-def initial(port: Port[Any, Any, Any, Any, Any]) -> list[torch.Tensor] | None:
+def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:
     """The tensors of ``port``'s initial value in field order, or ``None`` (the
     run's ``Session`` writes them in place of the zeros)."""
     return port._initial  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
-def bind(port: Port[Any, Any, Any, Any, Any], binding: Binding) -> None:
+def bind(port: Port[Any, Any, Any], binding: Binding) -> None:
     """Bind ``port`` to its slots (the run's ``Session`` calls this)."""
     port._binding = binding  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
 # Any (here and below): freezing does not depend on the message types.
-def freeze(port: Port[Any, Any, Any, Any, Any]) -> None:
+def freeze(port: Port[Any, Any, Any]) -> None:
     """Make ``port`` reject further connections (``Network.build`` calls this)."""
     port._frozen = True  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
-def thaw(port: Port[Any, Any, Any, Any, Any]) -> None:
+def thaw(port: Port[Any, Any, Any]) -> None:
     """Let ``port`` take connections again (``mujou.run`` undoing a build whose run
     was refused)."""
     port._frozen = False  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
-def is_frozen(port: Port[Any, Any, Any, Any, Any]) -> bool:
+def is_frozen(port: Port[Any, Any, Any]) -> bool:
     """Whether ``port`` belongs to a built network."""
     return port._frozen  # pyright: ignore[reportPrivateUsage]  # Port's own module

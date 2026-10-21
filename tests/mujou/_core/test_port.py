@@ -1,5 +1,4 @@
 import queue
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Never, TypedDict, assert_type, cast, override
 
@@ -35,22 +34,6 @@ def fb(typed_dict: type[Feedback] = Feedback) -> DictSpec[Feedback]:
     return DictSpec(typed_dict, error=TensorSpec((2, 3)))
 
 
-class Tag(TypedDict):
-    id: torch.Tensor
-    mask: torch.Tensor
-
-
-def tag() -> DictSpec[Tag]:
-    """What the carry tests carry: a sample ID and a mask."""
-    return DictSpec(
-        Tag, id=TensorSpec((), torch.int64), mask=TensorSpec((2,), torch.bool)
-    )
-
-
-def tagged(k: int) -> Tag:
-    return {"id": torch.tensor(k), "mask": torch.tensor([k % 2 == 0, True])}
-
-
 class TestPortTypes:
     def test_peer_count_fixes_the_recv_type_statically(self):
         # Checked by pyright (assert_type); at runtime only the defaults are seen.
@@ -84,79 +67,6 @@ class TestPortTypes:
         # the ignore pyright reports the call; at runtime None is still accepted.
         port = Port(send=None)  # pyright: ignore[reportArgumentType]
         assert port.send_spec is None
-
-
-class TestCarryTypes:
-    def test_the_carry_types_follow_the_specs_statically(self):
-        # Checked by pyright (assert_type); at runtime only the specs are seen.
-        made = NextPort(send=h(), send_carry=tag())
-        received = PrevPort(recv=h(), recv_carry=tag())
-        passed = NextPort(send=h(), send_carry=received)
-        both = Port(send=h(), recv=h(), send_carry=tag(), recv_carry=fb())
-        assert_type(made, NextPort[torch.Tensor, Never, Multi, Tag, Never])
-        assert_type(received, PrevPort[Never, torch.Tensor, Single, Never, Tag])
-        assert_type(passed, NextPort[torch.Tensor, Never, Multi, Tag, Never])
-        assert_type(both, Port[torch.Tensor, torch.Tensor, Single, Tag, Feedback])
-
-        def carry_types() -> None:
-            # Only for the type checker: these raise before a run.
-            assert_type(received.carried(), Tag)
-            assert_type(received.carried("id"), torch.Tensor)
-            made.send(torch.zeros(2, 3), carry=tagged(0))
-            passed.send(torch.zeros(2, 3))
-            # Passing carry= to a port that passes data on, or leaving it out on
-            # a port that makes its own, type-checks: only a run rejects them.
-            passed.send(torch.zeros(2, 3), carry=tagged(0))
-            made.send(torch.zeros(2, 3))
-
-        assert made.send_carry_spec == tag() and made.recv_carry_spec is None
-        assert passed.send_carry_spec is received.recv_carry_spec
-        assert passed.carry_source is received and made.carry_source is None
-
-    def test_a_port_of_many_peers_receives_no_carry_statically(self):
-        with pytest.raises(
-            TypeError, match="takes many peers, so it takes no recv_carry"
-        ):
-            Port(recv=h(), multi=True, recv_carry=tag())  # pyright: ignore[reportArgumentType]
-        with pytest.raises(TypeError, match="NextPort takes many peers"):
-            NextPort(recv=h(), recv_carry=tag())  # pyright: ignore[reportCallIssue]
-
-
-class TestCarrySpecs:
-    @pytest.mark.parametrize("spec", [(2, 3), torch.zeros(3), TensorSpec])
-    def test_rejects_what_is_not_a_spec(self, spec: object):
-        with pytest.raises(
-            TypeError, match="send_carry must be a TensorSpec, a DictSpec, a Port"
-        ):
-            Port(send=h(), send_carry=spec)  # pyright: ignore[reportArgumentType]
-        with pytest.raises(TypeError, match="PrevPort recv_carry must be"):
-            PrevPort(recv=h(), recv_carry=spec)  # pyright: ignore[reportArgumentType]
-
-    def test_rejects_a_carry_without_its_direction(self):
-        with pytest.raises(
-            TypeError, match="sends no messages, so it takes no send_carry"
-        ):
-            Port(recv=h(), send_carry=tag())
-        with pytest.raises(
-            TypeError, match="receives no messages, so it takes no recv_carry"
-        ):
-            Port(send=h(), recv_carry=tag())
-
-    def test_passes_on_only_from_a_port_that_receives_a_carry(self):
-        received = PrevPort(recv=h())
-        # Type-checks (the carry spec is solved as Never): only building rejects it.
-        with pytest.raises(TypeError, match="has no recv_carry, so there is nothing"):
-            NextPort(send=h(), send_carry=received)
-
-    def test_repr_shows_the_carry(self):
-        received = PrevPort(recv=h(), recv_carry=tag())
-        assert repr(received) == (
-            f"PrevPort(send=None, recv={h()!r}, multi=False, recv_carry={tag()!r})"
-        )
-        made = Port(send=h(), send_carry=tag())
-        assert repr(made).endswith(f"multi=False, send_carry={tag()!r})")
-        passed = NextPort(send=h(), send_carry=received)
-        assert repr(passed).endswith(f"multi=True, send_carry={received!r})")
 
 
 class TestPortSpecs:
@@ -215,52 +125,11 @@ class TestConnect:
         ],
     )
     def test_rejects_specs_that_are_not_reversed(
-        self, a: Port[Any, Any, Any, Any, Any], b: Port[Any, Any, Any, Any, Any]
+        self, a: Port[Any, Any, Any], b: Port[Any, Any, Any]
     ):
         with pytest.raises(TypeError, match="do not match"):
             a.connect(b)
         assert a.channels == () and b.channels == ()
-
-    def test_matches_the_carried_data_in_each_direction(self):
-        received = PrevPort(recv=h(), send=h(), recv_carry=tag())
-        NextPort(send=h(), recv=h(), send_carry=tag()).connect(received)
-        passed = NextPort(send=h(), send_carry=received)
-        passed.connect(PrevPort(recv=h(), recv_carry=tag()))
-        PrevPort(recv=h(), recv_carry=tag()).connect(passed)
-
-    @pytest.mark.parametrize(
-        ("send_carry", "recv_carry", "message"),
-        [
-            (
-                tag(),
-                fb(),
-                r"carries DictSpec\(Tag.* with what it sends, but .* expects "
-                r"DictSpec\(Feedback",
-            ),
-            (
-                tag(),
-                None,
-                r"carries DictSpec\(Tag.* with what it sends, but .* expects nothing$",
-            ),
-            (
-                None,
-                tag(),
-                r"carries nothing with what it sends, but .* expects DictSpec\(Tag",
-            ),
-        ],
-        ids=["other", "unexpected", "missing"],
-    )
-    def test_rejects_carried_data_that_does_not_match(
-        self,
-        send_carry: DictSpec[Any] | None,
-        recv_carry: DictSpec[Any] | None,
-        message: str,
-    ):
-        sender = Port(send=h(), send_carry=send_carry)  # pyright: ignore[reportArgumentType]
-        receiver = Port(recv=h(), recv_carry=recv_carry)  # pyright: ignore[reportArgumentType]
-        with pytest.raises(TypeError, match="^port specs do not match: .*" + message):
-            sender.connect(receiver)
-        assert not sender.channels and not receiver.channels
 
     def test_rejects_ports_without_specs(self):
         with pytest.raises(TypeError, match="nothing would flow"):
@@ -613,7 +482,7 @@ class Signalling(Probe):
     def __init__(
         self,
         update: Callable[[], object] = lambda: None,
-        **ports: Port[Any, Any, Any, Any, Any],
+        **ports: Port[Any, Any, Any],
     ) -> None:
         super().__init__(update, **ports)
         self.updated: queue.Queue[None] = queue.Queue()
@@ -762,169 +631,6 @@ class TestInitial:
             start_manual(Group(node=node))
 
 
-def scalar() -> TensorSpec:
-    return TensorSpec(())
-
-
-class Path:
-    """Source -> Relay -> Sink: the source sends ``k`` carrying ``tagged(k)`` at
-    its k-th update, the relay sends what it received plus 100 and passes the
-    carry on, and the sink records ``(value, carried id)``.
-
-    The ports are made here so that a test can reach them, and a test replaces
-    what a node does by setting its ``update``. ``sink_ports`` are more ports of
-    the sink.
-    """
-
-    def __init__(
-        self, sink: type[Probe] = Probe, **sink_ports: Port[Any, Any, Any, Any, Any]
-    ) -> None:
-        self.out = NextPort(send=scalar(), send_carry=tag())
-        self.prev = PrevPort(recv=scalar(), recv_carry=tag())
-        self.next = NextPort(send=scalar(), send_carry=self.prev)
-        self.end = PrevPort(recv=scalar(), recv_carry=tag())
-        self.out.connect(self.prev)
-        self.next.connect(self.end)
-        self.k = 0
-        self.source = Probe(self.send, out=self.out)
-        self.relay = Probe(self.pass_on, prev=self.prev, next=self.next)
-        self.sink = sink(self.receive, end=self.end, **sink_ports)
-
-    def send(self) -> None:
-        self.k += 1
-        self.out.send(torch.tensor(float(self.k)), carry=tagged(self.k))
-
-    def pass_on(self) -> None:
-        self.next.send(self.prev.recv() + 100)
-
-    def receive(self) -> tuple[float, int]:
-        return self.end.recv().item(), int(self.end.carried("id").item())
-
-    def group(self) -> Group:
-        return Group(source=self.source, relay=self.relay, sink=self.sink)
-
-
-class TestCarried:
-    def test_is_the_carry_of_the_value_received_in_any_order(
-        self, start_manual: StartManual
-    ):
-        path = Path()
-        run = start_manual(path.group())
-        nodes = [path.source, path.relay, path.sink]
-        order = torch.Generator().manual_seed(0)
-        for _ in range(60):
-            perm = torch.randperm(3, generator=order).tolist()
-            run.step(H, *(nodes[i] for i in perm))
-        received = cast(list[tuple[float, int]], path.sink.results)
-        # Before the relay first sends, the initial value and the zeros it carries.
-        pairs = {(value, k) for value, k in received if (value, k) != (0.0, 0)}
-        assert len(pairs) > 20
-        for value, k in pairs:
-            assert value == k + 100, f"{value} came with the carry of sample {k}"
-
-    def test_is_the_initial_carry_until_the_first_recv(self, start_manual: StartManual):
-        path = Path()
-        results: list[tuple[Tag, Tag]] = []
-
-        def update() -> None:
-            before = path.end.carried()
-            path.end.recv()
-            results.append((before, path.end.carried()))
-
-        path.sink.update = update
-        run = start_manual(path.group())
-        run.step(H, path.source, path.relay, path.sink)
-        ((before, after),) = results
-        assert torch.equal(before["id"], torch.tensor(0))
-        assert torch.equal(before["mask"], torch.zeros(2, dtype=torch.bool))
-        assert torch.equal(after["id"], torch.tensor(1))
-        assert torch.equal(after["mask"], tagged(1)["mask"])
-
-    def test_an_initial_value_carries_zeros(self, start_manual: StartManual):
-        out = NextPort(send=scalar(), send_carry=tag(), initial=torch.tensor(5.0))
-        end = PrevPort(recv=scalar(), recv_carry=tag())
-        out.connect(end)
-        sink = Probe(lambda: (end.recv(), end.carried()), end=end)
-        run = start_manual(Group(source=Probe(out=out), sink=sink))
-        run.step(H, sink)
-        value, carried = cast(tuple[torch.Tensor, Tag], sink.results[0])
-        assert value.item() == 5.0
-        assert carried["id"].item() == 0 and not carried["mask"].any()
-
-    def test_copies_one_field(self, start_manual: StartManual):
-        path = Path()
-        run = start_manual(path.group())
-        run.step(H, path.source, path.relay, path.sink)
-        path.sink.update = lambda: (path.end.carried("mask"), path.end.carried("mask"))
-        run.step(H, path.sink)
-        a, b = cast(tuple[torch.Tensor, torch.Tensor], path.sink.results[-1])
-        assert torch.equal(a, tagged(1)["mask"])
-        assert a.data_ptr() != b.data_ptr()
-        assert a.device == path.sink.device
-
-    def test_passes_on_what_was_last_received(self, start_manual: StartManual):
-        path = Path()
-        path.relay.update = lambda: path.next.send(torch.tensor(-1.0))
-        run = start_manual(path.group())
-        # Nothing received yet: the relay carries the zeros of its source.
-        run.step(H, path.source, path.relay, path.sink)
-        assert path.sink.results[-1] == (-1.0, 0)
-        path.relay.update = path.prev.recv
-        run.step(H, path.relay)  # receives sample 1
-        run.step(H, path.source)  # sample 2 waits unreceived
-        path.relay.update = lambda: path.next.send(torch.tensor(-1.0))
-        run.step(H, path.relay, path.sink)
-        assert path.sink.results[-1] == (-1.0, 1)
-
-    def test_rejects_a_missing_or_unexpected_carry(self, start_manual: StartManual):
-        plain = Port(send=scalar())
-        path = Path(plain=plain)
-        x = torch.tensor(1.0)
-        path.source.update = lambda: path.out.send(x)
-        # The relay's carry= type-checks: only the run rejects it.
-        path.relay.update = lambda: path.next.send(x, carry=tagged(1))
-        path.sink.update = lambda: plain.send(x, carry=tagged(1))  # pyright: ignore[reportArgumentType]
-        run = start_manual(path.group())
-        run.step(H)
-        errors = [n.results[0] for n in (path.source, path.relay, path.sink)]
-        messages = [
-            r"'source\.out' carries DictSpec\(Tag.*\); pass it as carry=",
-            r"'relay\.next' passes on the data its send_carry port received, so it "
-            "takes no carry",
-            r"'sink\.plain' carries no data",
-        ]
-        for error, message in zip(errors, messages, strict=True):
-            assert isinstance(error, TypeError)
-            assert re.search(message, str(error)), error
-
-    def test_rejects_what_has_no_carry_or_key(self, start_manual: StartManual):
-        plain = PrevPort(recv=scalar())
-        tensor = PrevPort(recv=scalar(), recv_carry=scalar())
-        path = Path(plain=plain, tensor=tensor)
-        attempts: list[Callable[[], object]] = [
-            plain.carried,
-            lambda: tensor.carried("id"),
-            lambda: path.end.carried("label"),
-        ]
-        path.sink.update = lambda: [_raised(a) for a in attempts]
-        run = start_manual(path.group())
-        run.step(H, path.sink)
-        (errors,) = cast(list[list[Exception]], path.sink.results)
-        assert isinstance(errors[0], TypeError) and "no recv_carry" in str(errors[0])
-        assert isinstance(errors[1], TypeError) and "carries a tensor" in str(errors[1])
-        assert isinstance(errors[2], KeyError) and "'label'" in str(errors[2])
-        with pytest.raises(RuntimeError, match="only the node that owns the port"):
-            path.end.carried()
-
-
-def _raised(attempt: Callable[[], object]) -> Exception | None:
-    try:
-        attempt()
-    except Exception as e:  # noqa: BLE001 - returned for the test to inspect
-        return e
-    return None
-
-
 @pytest.mark.cuda
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
@@ -953,18 +659,6 @@ class TestCuda:
         sent = run.read(back)
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
-
-    def test_copies_the_carried_data_to_the_device(self, start_manual: StartManual):
-        class OnCuda(Probe):
-            on_device = "cuda"
-
-        path = Path(sink=OnCuda)
-        path.sink.update = lambda: (path.end.recv(), path.end.carried("id"))
-        run = start_manual(path.group())
-        run.step(H, path.source, path.relay, path.sink)
-        _, carried = cast(tuple[torch.Tensor, torch.Tensor], path.sink.results[0])
-        assert carried.device == torch.device("cuda", 0)
-        assert carried.item() == 1
 
     def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))

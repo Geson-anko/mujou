@@ -103,16 +103,16 @@ class Run:
         return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any, Any, Any] would reject (Mapping keys are invariant). A
+    # Port[Any, Any, Any] would reject (Mapping keys are invariant). A
     # dict message is a Mapping[str, object]: a TypedDict is not a
     # Mapping[str, torch.Tensor].
-    def write[P: Port[Any, Any, Any, Any, Any]](
+    def write[P: Port[Any, Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
     ) -> Timestamp:
         """Write messages to unconnected single-peer ports that receive, and
-        return the time they carry.
+        return the time they are stamped with.
 
-        The values are detached and copied. All of them switch together and carry
+        The values are detached and copied. All of them switch together and bear
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Any port of the tree can be
@@ -126,17 +126,16 @@ class Run:
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
                 written then).
-            ValueError: A port is outside the run, connected, takes many peers,
-                receives nothing, or receives carried data (``recv_carry``):
-                a write gives only the value, and has no data to carry; or a
-                shape or a dtype differs from the spec.
+            ValueError: A port is outside the run, connected, takes many peers
+                or receives nothing; or a shape or a dtype differs from the
+                spec.
             TypeError: A message is not a tensor, or a dict of tensors with the
                 spec's keys.
             NetworkError: The run stopped because a node raised.
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any, Any, Any]) -> S:
+    def read[S](self, port: Port[S, Any, Any]) -> S:
         """Return the latest message ``port`` sent.
 
         Any port that sends can be read, so a connected port shows an inner
@@ -145,18 +144,13 @@ class Run:
         value restored from ``state``. The tensors are new copies on the CPU.
         ``read_with_time`` also returns the time it was sent at.
 
-        A port that sends carried data (``send_carry``) is read as any other:
-        only the value is returned, and the carried data is dropped.
-
         Raises:
             ValueError: ``port`` is outside the run or sends nothing.
             NetworkError: The run stopped because a node raised.
         """
         return cast(S, _host(self).read(port)[0])
 
-    def read_with_time[S](
-        self, port: Port[S, Any, Any, Any, Any]
-    ) -> tuple[S, Timestamp]:
+    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp]:
         """Return the latest message ``port`` sent, as ``read`` does, and the time
         it was sent at.
 
@@ -170,7 +164,7 @@ class Run:
         return cast(tuple[S, Timestamp], _host(self).read(port))
 
     def subscribe[S](
-        self, port: Port[S, Any, Any, Any, Any], timeout: float = math.inf
+        self, port: Port[S, Any, Any], timeout: float = math.inf
     ) -> Iterator[tuple[S, Timestamp]]:
         """Iterate over the messages ``port`` sends, with their times.
 
@@ -206,7 +200,7 @@ class Run:
 
     def wait_for[S](
         self,
-        port: Port[S, Any, Any, Any, Any],
+        port: Port[S, Any, Any],
         condition: Callable[[S], bool],
         timeout: float = math.inf,
     ) -> tuple[S, Timestamp]:
@@ -418,7 +412,7 @@ class ManualRun(Run):
 
 
 # P: as in Run.write.
-def run[P: Port[Any, Any, Any, Any, Any]](
+def run[P: Port[Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,
@@ -456,7 +450,7 @@ def run[P: Port[Any, Any, Any, Any, Any]](
             own shares, or for a restored run a new ``Timer``.
         inputs: The initial values of unconnected single-peer ports that
             receive, as ``Run.write`` takes them. Written after ``state``, they
-            replace its values and carry its time.
+            replace its values and bear its time.
         state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
             or any mapping of the same items (such as a plain ``dict``). The
             slots, the nodes' states (through each node's ``load_state_dict``,

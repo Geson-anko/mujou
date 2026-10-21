@@ -33,7 +33,7 @@ LAYERS: list[set[str]] = [
     {"mujou", "mujou.time", "mujou.testing", "mujou.typing"},
     {
         "mujou._core.pc",
-        "mujou._core.pc.carry",
+        "mujou._core.pc.messages",
         "mujou._core.pc.losses",
         "mujou._core.pc.time_constants",
     },
@@ -66,7 +66,6 @@ ALLOWED = {
     ("mujou._core.network", "mujou._core.graph"),
     ("mujou._core.port", "mujou._core.binding"),
     ("mujou._core.session", EXTENSION),
-    ("mujou._core.state", EXTENSION),
 }
 
 

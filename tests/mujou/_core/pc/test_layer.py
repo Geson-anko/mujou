@@ -88,30 +88,19 @@ class Chain:
         learn_interval: float | None = None,
         max_dt: float | None = None,
     ) -> None:
-        carry = pc.carry_spec(TensorSpec((B, N_OUT), F64), batch=B)
-        self.inp = pc.Input((B, widths[0]), carry=carry, period=H, dtype=F64)
-        self.layers = [
-            pc.Layer(
-                module,
-                input_shape=(B, n_in),
-                carry=carry,
-                tau=tau,
-                learn_interval=learn_interval,
-                max_dt=max_dt,
-                dtype=F64,
-            )
-            for module, n_in in zip(layers, widths[:-1], strict=True)
-        ]
-        self.out = pc.Output(
-            head,
-            loss=pc.mse,
-            input_shape=(B, widths[-1]),
-            carry=carry,
-            tau=tau,
-            learn_interval=learn_interval,
-            max_dt=max_dt,
-            dtype=F64,
-        )
+        x, y = TensorSpec((B, widths[0]), F64), TensorSpec((B, N_OUT), F64)
+        self.inp = pc.Input(x=x, y=y, period=H)
+        learning: dict[str, Any] = {
+            "tau": tau,
+            "learn_interval": learn_interval,
+            "max_dt": max_dt,
+        }
+        self.layers: list[pc.Layer] = []
+        act = self.inp.act
+        for module in layers:
+            self.layers.append(pc.Layer(module, act=act, **learning))
+            act = self.layers[-1].act
+        self.out = pc.Output(head, act=act, loss=pc.mse, **learning)
         senders = [self.inp, *self.layers]
         for sender, receiver in zip(senders, [*self.layers, self.out], strict=True):
             sender.next.connect(receiver.prev)
@@ -133,7 +122,7 @@ class Chain:
 
 
 def activity(h: TensorSpec) -> DictSpec[pc.Activity]:
-    return DictSpec(pc.Activity, h=h, epoch=TensorSpec((), torch.int64))
+    return pc.activity_spec(h, TensorSpec((B, N_OUT)))
 
 
 def sample(widths: Sequence[int], seed: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -335,11 +324,7 @@ def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:
 
 class TestConstruction:
     def _layer(self, **kwargs: Any) -> pc.Layer:
-        args: dict[str, Any] = {
-            "input_shape": (B, 4),
-            "carry": pc.carry_spec(TensorSpec((B, N_OUT)), batch=B),
-            "tau": TAU,
-        }
+        args: dict[str, Any] = {"act": activity(TensorSpec((B, 4))), "tau": TAU}
         module = kwargs.pop("module", nn.Linear(4, 5))
         return pc.Layer(module, **(args | kwargs))
 
@@ -350,7 +335,9 @@ class TestConstruction:
         assert layer.h.shape == layer.lam.shape == (B, 6)
 
     def test_the_dtype_comes_from_the_module(self):
-        layer = self._layer(module=nn.Linear(4, 5).double(), dtype=F64)
+        layer = self._layer(
+            module=nn.Linear(4, 5).double(), act=activity(TensorSpec((B, 4), F64))
+        )
         assert layer.next.send_spec == activity(TensorSpec((B, 5), F64))
 
     def test_the_period_defaults_to_a_quarter_of_tau_h(self):
@@ -360,8 +347,7 @@ class TestConstruction:
     @pytest.mark.parametrize(
         ("kwargs", "match"),
         [
-            ({"input_shape": (B + 1, 4)}, "input_shape"),
-            ({"module": nn.Flatten(0)}, "output of module"),
+            ({"module": nn.Flatten(0)}, "same batch"),
             ({"module": nn.Linear(4, 5, device="meta")}, "meta"),
             ({"max_dt": 0.0}, "max_dt"),
             ({"max_dt": math.inf}, "max_dt"),
@@ -378,8 +364,6 @@ class TestConstruction:
     def test_type_errors(self):
         with pytest.raises(TypeError, match="TimeConstants"):
             self._layer(tau=(4e-3, 8e-3, 1.0))
-        with pytest.raises(TypeError, match="carry"):
-            self._layer(carry=TensorSpec((B,)))
 
     @pytest.mark.parametrize("name", ["learn_interval", "max_dt"])
     def test_a_bool_is_not_a_time(self, name: str):
@@ -431,11 +415,11 @@ class TestJacobi:
                 close(state["lam"], reference.lam[i], 1e-12)
                 for key, value in layer.state_dict().items():
                     close(state["module"][key], value, 1e-12)
-                activity, _, _, carried = tree["slots"][f"l{i}.next/out"]
-                close(activity["h"], reference.h[i + 1], 1e-12)
-                assert int(activity["epoch"]) == reference.epoch[i + 1]
-                assert torch.equal(carried["y"], reference.carried[i + 1][0])
-                assert torch.equal(carried["mask"], reference.carried[i + 1][1])
+                sent, _, _ = tree["slots"][f"l{i}.next/out"]
+                close(sent["h"], reference.h[i + 1], 1e-12)
+                assert int(sent["epoch"]) == reference.epoch[i + 1]
+                assert torch.equal(sent["y"], reference.carried[i + 1][0])
+                assert torch.equal(sent["mask"], reference.carried[i + 1][1])
                 close(tree["slots"][f"l{i}.prev/out"][0], reference.g_in[i], 1e-12)
             assert int(tree["slots"]["inp.next/out"][0]["epoch"]) == reference.epoch[0]
             for key, value in reference.head.state_dict().items():
@@ -673,19 +657,10 @@ class TestScalar:
         with torch.no_grad():
             first.weight.fill_(w1)
             head.weight.fill_(w2)
-        carry = pc.carry_spec(TensorSpec((1, 1), F64), batch=1)
-        inp = pc.Input((1, 1), carry=carry, period=H, dtype=F64)
-        layer = pc.Layer(
-            first.double(), input_shape=(1, 1), carry=carry, tau=NO_LEARNING, dtype=F64
-        )
-        out = pc.Output(
-            head.double(),
-            loss=pc.mse,
-            input_shape=(1, 1),
-            carry=carry,
-            tau=NO_LEARNING,
-            dtype=F64,
-        )
+        one = TensorSpec((1, 1), F64)
+        inp = pc.Input(x=one, y=one, period=H)
+        layer = pc.Layer(first.double(), act=inp.act, tau=NO_LEARNING)
+        out = pc.Output(head.double(), act=layer.act, loss=pc.mse, tau=NO_LEARNING)
         inp.next.connect(layer.prev)
         layer.next.connect(out.prev)
         run = start_manual(Group(inp=inp, layer=layer, out=out))
@@ -701,7 +676,7 @@ class TestScalar:
         run_steps(run, [out, layer, inp], 1500)
         lam = run.state_dict()["nodes"]["layer"]["lam"]
         close(lam, torch.full((1, 1), w2 * (y - w2 * w1 * x), dtype=F64), 1e-10)
-        # The host reads h without the data carried with it: the forward value.
+        # The host reads the h the layer sent: the forward value.
         close(run.read(layer.next)["h"], torch.full((1, 1), w1 * x, dtype=F64), 1e-10)
 
 
@@ -886,15 +861,15 @@ def layer_update(
     module.load_state_dict(tree["nodes"]["l0"]["module"])
     params = list(module.parameters())
     state = tree["nodes"]["l0"]
-    activity, _, _, carried = tree["slots"]["inp.next/out"]
-    labeled = carried["mask"][:, None]
+    sent, _, _ = tree["slots"]["inp.next/out"]
+    labeled = sent["mask"][:, None]
     h = h_before_mu(state)
 
     def delta(mu: torch.Tensor) -> torch.Tensor:
         r = h - (state["_mu"] if reanchor else mu)
         return torch.where(labeled, r + state["lam"], 0.0)
 
-    _, _, g_theta = pc.functional.vjp(module, activity["h"], delta, params)
+    _, _, g_theta = pc.functional.vjp(module, sent["h"], delta, params)
     pc.functional.learn_(params, g_theta, elapsed, TAU, B)
     return module.state_dict()
 
@@ -1120,14 +1095,12 @@ class TestMaxDt:
 
     def test_the_default_keeps_the_step_of_lam_stable(self):
         # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2.
-        carry = pc.carry_spec(TensorSpec((B, N_OUT)), batch=B)
+        act = activity(TensorSpec((B, 4)))
         fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0)
-        layer = pc.Layer(
-            nn.Linear(4, 5), input_shape=(B, 4), carry=carry, tau=fast_dual
-        )
+        layer = pc.Layer(nn.Linear(4, 5), act=act, tau=fast_dual)
         assert layer._max_dt == pytest.approx(1.5e-3)  # pyright: ignore[reportPrivateUsage]
         no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, theta=1.0)
-        layer = pc.Layer(nn.Linear(4, 5), input_shape=(B, 4), carry=carry, tau=no_dual)
+        layer = pc.Layer(nn.Linear(4, 5), act=act, tau=no_dual)
         assert layer._max_dt == pytest.approx(2e-3)  # pyright: ignore[reportPrivateUsage]
 
 

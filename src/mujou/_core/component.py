@@ -36,7 +36,7 @@ class Component:
     # Any: ports of every message type are handled alike. Each registry is
     # replaced, never changed, so that a shallow copy (copy.copy) does not share
     # changes with the original.
-    _ports: Mapping[str, Port[Any, Any, Any, Any, Any]] = _NOT_INITIALIZED
+    _ports: Mapping[str, Port[Any, Any, Any]] = _NOT_INITIALIZED
     _children: Mapping[str, Node | Network] = _NOT_INITIALIZED
 
     def __init__(self) -> None:
@@ -67,7 +67,7 @@ class Component:
 _REGISTERED: Final = (Port, Component)
 
 
-def ports_of(component: Component) -> Mapping[str, Port[Any, Any, Any, Any, Any]]:
+def ports_of(component: Component) -> Mapping[str, Port[Any, Any, Any]]:
     """The ports registered on ``component``: attribute name to port, in the order
     of assignment."""
     return component._ports  # pyright: ignore[reportPrivateUsage]  # Component's own module
@@ -92,7 +92,7 @@ def is_data_descriptor(klass: type, name: str) -> bool:
 
 
 def _register(
-    component: Component, name: str, value: Port[Any, Any, Any, Any, Any] | Component
+    component: Component, name: str, value: Port[Any, Any, Any] | Component
 ) -> None:
     """Register ``value`` under ``name`` (or nothing for a property, whose setter
     assigns again).

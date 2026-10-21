@@ -42,14 +42,13 @@ class TestPcPublicNames:
 
         assert sorted(mujou.pc.__all__) == [
             "Activity",
-            "Carried",
             "Input",
             "Layer",
             "Output",
             "Prediction",
             "Sample",
             "TimeConstants",
-            "carry_spec",
+            "activity_spec",
             "cross_entropy",
             "functional",
             "mse",

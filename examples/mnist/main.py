@@ -144,21 +144,12 @@ def build(
     modules: Sequence[nn.Module], batch: int, tau: pc.TimeConstants, learn: float
 ) -> tuple[pc.Input, WatchedOutput, mujou.Group]:
     """Wrap the three modules in nodes and connect them."""
-    carry = pc.carry_spec(TensorSpec((batch,), torch.int64), batch=batch)
-    inp = pc.Input((batch, 784), carry=carry, period=tau.h / 4)
-    l1 = WatchedLayer(
-        modules[0], input_shape=(batch, 784), carry=carry, tau=tau, learn_interval=learn
-    )
-    l2 = WatchedLayer(
-        modules[1], input_shape=(batch, 256), carry=carry, tau=tau, learn_interval=learn
-    )
+    x, y = TensorSpec((batch, 784)), TensorSpec((batch,), torch.int64)
+    inp = pc.Input(x=x, y=y, period=tau.h / 4)
+    l1 = WatchedLayer(modules[0], act=inp.act, tau=tau, learn_interval=learn)
+    l2 = WatchedLayer(modules[1], act=l1.act, tau=tau, learn_interval=learn)
     out = WatchedOutput(
-        modules[2],
-        loss=pc.cross_entropy,
-        input_shape=(batch, 256),
-        carry=carry,
-        tau=tau,
-        learn_interval=learn,
+        modules[2], act=l2.act, loss=pc.cross_entropy, tau=tau, learn_interval=learn
     )
     inp.next.connect(l1.prev)
     l1.next.connect(l2.prev)

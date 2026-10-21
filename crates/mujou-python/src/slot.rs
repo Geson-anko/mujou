@@ -4,14 +4,13 @@
 //! are copied into pooled buffers; they go out as `BufferView`s, which torch reads
 //! with `torch.from_dlpack(view)` and then copies. Copying on both sides keeps every
 //! message immutable however the caller later changes its tensors
-//! (`specs/messages.md`). The carried data of a message goes out as an opaque
-//! `Carry`, which an outlet passes on without copying.
+//! (`specs/messages.md`).
 
 use std::sync::Arc;
 use std::time::Instant;
 
 use crate::dlpack::{TensorPtr, borrow_tensor, export_capsule};
-use crate::hint::{Values, Views};
+use crate::hint::Values;
 use crate::time::{PyReadOnlyTimer, PyTimestamp};
 use crate::wait::{to_duration, wait_interruptibly};
 use mujou_core::buffer::{Buffer, Message};
@@ -23,16 +22,11 @@ use mujou_core::time::Timestamp;
 use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
 
 fn to_py_err(err: SlotError) -> PyErr {
-    match err {
-        SlotError::Field {
-            error: FieldError::Mismatch { .. },
-            ..
-        }
-        | SlotError::CarryMismatch { .. } => PyValueError::new_err(err.to_string()),
-        SlotError::Field { .. } => PyTypeError::new_err(err.to_string()),
+    match err.error {
+        FieldError::Mismatch { .. } => PyValueError::new_err(err.to_string()),
+        _ => PyTypeError::new_err(err.to_string()),
     }
 }
 
@@ -99,7 +93,7 @@ fn copy_into(
         // alive, and the producer guarantees it describes readable memory
         // (checked to be on the host by `copy_from`). `dst` is a pool buffer,
         // distinct from it.
-        unsafe { copy_from(&*t.0, field, dst) }.map_err(|error| SlotError::Field {
+        unsafe { copy_from(&*t.0, field, dst) }.map_err(|error| SlotError {
             slot: slot.to_owned(),
             field: field.name.clone(),
             error,
@@ -157,25 +151,22 @@ fn field_specs(fields: Vec<FieldTuple>) -> Vec<FieldSpec> {
 
 /// The fields of a message, fixed when the network is built.
 ///
-/// `Schema(fields, carry)` takes `(name, shape, (code, bits, lanes))` per
-/// field, the dtype as a DLPack `DLDataType`: `fields` for the value and
-/// `carry` for the data the message carries (none by default). A tensor
-/// message has one field named `""`; a TypedDict message has one field per
-/// key, in key order. Every extent must be at least 1.
+/// `Schema(fields)` takes `(name, shape, (code, bits, lanes))` per field, the
+/// dtype as a DLPack `DLDataType`. A tensor message has one field named `""`;
+/// a TypedDict message has one field per key, in key order. Every extent must
+/// be at least 1.
 ///
 /// Raises:
-///     ValueError: No value fields, duplicate names among the value fields or
-///         among the carry fields, an extent below 1, a dtype that is not a
-///         scalar of whole bytes, or a field too large to allocate.
+///     ValueError: No fields, duplicate names, an extent below 1, a dtype that
+///         is not a scalar of whole bytes, or a field too large to allocate.
 #[pyclass(frozen, module = "mujou._core._native", name = "Schema")]
 pub struct PySchema(Arc<Schema>);
 
 #[pymethods]
 impl PySchema {
     #[new]
-    #[pyo3(signature = (fields, carry = Vec::new()))]
-    fn new(fields: Vec<FieldTuple>, carry: Vec<FieldTuple>) -> PyResult<Self> {
-        let schema = Schema::new(field_specs(fields), field_specs(carry))
+    fn new(fields: Vec<FieldTuple>) -> PyResult<Self> {
+        let schema = Schema::new(field_specs(fields))
             .map_err(|e: SchemaError| PyValueError::new_err(e.to_string()))?;
         Ok(Self(Arc::new(schema)))
     }
@@ -221,42 +212,18 @@ impl BufferView {
     }
 }
 
-fn views<'py>(py: Python<'py>, buffers: &[Arc<Buffer>]) -> PyResult<Views<'py>> {
-    let views = buffers.iter().map(|b| BufferView(Arc::clone(b)));
-    PyTuple::new(py, views).map(Views)
-}
-
-/// The data one message carries, to read or to pass on with
-/// `Outlet.send(values, relay=carry)` without copying it.
-#[pyclass(frozen, module = "mujou._core._native", name = "Carry")]
-pub struct PyCarry(Box<[Arc<Buffer>]>);
-
-#[pymethods]
-impl PyCarry {
-    /// One view per carry field, in key order (none if nothing is carried).
-    #[getter]
-    fn buffers<'py>(&self, py: Python<'py>) -> PyResult<Views<'py>> {
-        views(py, &self.0)
-    }
-}
-
-/// An immutable value of a slot, the data it carries, the time it was written
-/// at on the writer's timer, and whether the writer sent it.
+/// An immutable value of a slot, the time it was written at on the writer's
+/// timer, and whether the writer sent it.
 #[pyclass(frozen, module = "mujou._core._native", name = "Message")]
 pub struct PyMessage(Arc<Message>);
 
 #[pymethods]
 impl PyMessage {
-    /// One view per value field, in key order.
+    /// One view per field, in key order.
     #[getter]
-    fn buffers<'py>(&self, py: Python<'py>) -> PyResult<Views<'py>> {
-        views(py, self.0.values())
-    }
-
-    /// The data it carries, shared with the message and not copied.
-    #[getter]
-    fn carry(&self) -> PyCarry {
-        PyCarry(self.0.carry().into())
+    fn values(&self) -> Vec<BufferView> {
+        let values = self.0.values().iter();
+        values.map(|b| BufferView(Arc::clone(b))).collect()
     }
 
     /// The time it was written at.
@@ -315,25 +282,14 @@ impl PySlot {
     /// Sets the value, its time and whether it was sent as they were when the
     /// state was taken (`sent` is false for an initial value).
     ///
-    /// `values` are the value fields, then the carry fields. Call it only while
-    /// no node runs (before the start, or while every node is paused): it
-    /// writes beside the slot's own writer. Raises as `Outlet.send` does.
+    /// Call it only while no node runs (before the start, or while every node
+    /// is paused): it writes beside the slot's own writer. Raises as
+    /// `Outlet.send` does.
     fn restore(&self, values: Values<'_>, time_ns: u64, sent: bool) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema().fields(), slot.name(), |fill| {
             slot.restore(time_ns, sent, fill)
         })
-    }
-
-    /// A new carry of `values` (one per carry field), from the pools of this
-    /// slot's writer: what a restore gives back to the port that reads this
-    /// slot. Raises as `Outlet.send` does.
-    fn new_carry(&self, values: Values<'_>) -> PyResult<PyCarry> {
-        let slot = &self.0;
-        write_values(&values.0, slot.schema().carry(), slot.name(), |fill| {
-            slot.new_carry(fill)
-        })
-        .map(|buffers| PyCarry(buffers.into()))
     }
 }
 
@@ -348,15 +304,9 @@ impl PySlot {
 /// change what readers see. Resizing or freeing a value from another thread
 /// while it is being sent is a data race in the caller's code.
 ///
-/// `values` are the value fields, then the carry fields. With `relay`, they
-/// are the value fields only, and the message carries `relay` (the carry of a
-/// message this outlet's node received), shared and not copied.
-///
 /// Raises (`send`, `send_to`):
 ///     ValueError: The number of values, a shape or a dtype differs from the
-///         schema (the message names the slot and the field), or `relay`
-///         differs from the carry fields of the schema or the schema carries
-///         nothing.
+///         schema (the message names the slot and the field).
 ///     TypeError: A value does not support DLPack or is not in host memory.
 ///         Pinned memory is read without synchronizing any CUDA stream, so
 ///         synchronize the copy that filled it before sending.
@@ -365,29 +315,14 @@ impl PySlot {
 pub struct PyOutlet(core::Outlet);
 
 impl PyOutlet {
-    fn send_with(
-        &self,
-        target: Target,
-        values: &Bound<'_, PyAny>,
-        relay: Option<PyRef<'_, PyCarry>>,
-    ) -> PyResult<()> {
+    fn send_with(&self, target: Target, values: &Bound<'_, PyAny>) -> PyResult<()> {
         let outlet = &self.0;
         let name = match target {
             Target::All => outlet.outbox().name(),
             Target::Channel(k) => outlet.channel(k).name(),
         };
-        // Cloned while attached, since a `PyRef` cannot cross `detach`; the
-        // carry is immutable and cloning an `Arc` is atomic, so this holds with
-        // and without the GIL.
-        let relay: Option<Vec<Arc<Buffer>>> = relay.map(|carry| carry.0.to_vec());
-        let schema = outlet.schema();
-        let fields = if relay.is_some() {
-            schema.values()
-        } else {
-            schema.fields()
-        };
-        write_values(values, fields, name, |fill| {
-            outlet.send_with(target, relay.as_deref(), fill)
+        write_values(values, outlet.schema().fields(), name, |fill| {
+            outlet.send(target, fill)
         })
     }
 }
@@ -430,21 +365,14 @@ impl PyOutlet {
     }
 
     /// Writes one message to the outward slot and every channel.
-    #[pyo3(signature = (values, relay = None))]
-    fn send(&self, values: Values<'_>, relay: Option<PyRef<'_, PyCarry>>) -> PyResult<()> {
-        self.send_with(Target::All, &values.0, relay)
+    fn send(&self, values: Values<'_>) -> PyResult<()> {
+        self.send_with(Target::All, &values.0)
     }
 
     /// Writes one message to channel `index` only.
-    #[pyo3(signature = (index, values, relay = None))]
-    fn send_to(
-        &self,
-        index: isize,
-        values: Values<'_>,
-        relay: Option<PyRef<'_, PyCarry>>,
-    ) -> PyResult<()> {
+    fn send_to(&self, index: isize, values: Values<'_>) -> PyResult<()> {
         let k = check_index(index, self.0.channels().len())?;
-        self.send_with(Target::Channel(k), &values.0, relay)
+        self.send_with(Target::Channel(k), &values.0)
     }
 }
 
@@ -471,8 +399,7 @@ impl PyInputGroup {
     ///
     /// No reader sees some of the slots new and others old at any one moment;
     /// a reader that reads two slots one after the other may still see a write
-    /// complete in between. Each slot's values are its value fields, then its
-    /// carry fields. If any value is invalid, no slot changes. Raises as
+    /// complete in between. If any value is invalid, no slot changes. Raises as
     /// `Outlet.send` does, and `ValueError` for a slot of another group or a
     /// slot given twice.
     fn write(
@@ -537,23 +464,12 @@ impl PyInputSlot {
     /// Sets the value, its time and whether it was sent, dropping any pending
     /// write.
     ///
-    /// `values` are the value fields, then the carry fields. Call it only while
-    /// no node runs (before the start, or while every node is paused). Raises
-    /// as `Outlet.send` does.
+    /// Call it only while no node runs (before the start, or while every node
+    /// is paused). Raises as `Outlet.send` does.
     fn restore(&self, values: Values<'_>, time_ns: u64, sent: bool) -> PyResult<()> {
         let slot = &self.0;
         write_values(&values.0, slot.schema().fields(), slot.name(), |fill| {
             slot.restore(time_ns, sent, fill)
         })
-    }
-
-    /// A new carry of `values` (one per carry field), from the pools of this
-    /// slot, as `Slot.new_carry`.
-    fn new_carry(&self, values: Values<'_>) -> PyResult<PyCarry> {
-        let slot = &self.0;
-        write_values(&values.0, slot.schema().carry(), slot.name(), |fill| {
-            slot.new_carry(fill)
-        })
-        .map(|buffers| PyCarry(buffers.into()))
     }
 }

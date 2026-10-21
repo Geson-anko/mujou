@@ -137,7 +137,7 @@ class Probe(Node):
     def __init__(
         self,
         update: Callable[[], object] = lambda: None,
-        **ports: Port[Any, Any, Any, Any, Any],
+        **ports: Port[Any, Any, Any],
     ) -> None:
         super().__init__(device=self.on_device)
         for name, port in ports.items():

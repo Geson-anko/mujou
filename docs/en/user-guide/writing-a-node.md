@@ -84,7 +84,7 @@ Type checkers infer the type of a port from its specs, so you seldom write it. T
 - `R` the type it receives
 - `M` its number of peers, `Single` or `Multi` from `mujou.typing`
 
-Two more type arguments, `Port[S, R, M, CS, CR]`, are the types of the data it carries with what it sends and receives ([Carrying data along a path](building-a-network.md#carrying-data-along-a-path)); `Port[S, R, M]` carries nothing. Annotate a port of any kind as `Port[Any, Any, Any, Any, Any]`.
+Annotate a port of any kind as `Port[Any, Any, Any]`.
 
 An omitted direction is `Never`. A function that takes any spec takes a `MessageSpec[T]` from `mujou.typing`.
 

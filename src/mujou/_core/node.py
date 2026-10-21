@@ -87,7 +87,7 @@ class Node(Component):
     such as ``torch.set_grad_enabled`` or ``torch.autocast``) depends on the
     schedule, and the next node on the same worker may see it too: set such
     settings back before the hook returns (inside a ``with``, say).
-    ``contextvars`` do carry over: each node runs its hooks in a
+    ``contextvars`` do persist: each node runs its hooks in a
     ``contextvars.Context`` of its own, which starts empty (it does not inherit
     the host's). A hook that blocks
     (``time.sleep``, waiting for I/O or a lock) holds its worker meanwhile,

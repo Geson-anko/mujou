@@ -2,7 +2,7 @@
 
 A message is either one ``torch.Tensor`` (``TensorSpec``) or a ``TypedDict`` whose
 values are ``torch.Tensor`` (``DictSpec``). A spec fixes the shape and the dtype of
-every value, so the slots that carry the message can be laid out when the network
+every value, so the slots that hold the message can be laid out when the network
 is built (``specs/messages.md``).
 """
 
@@ -252,11 +252,6 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         )
 
     @property
-    def typed_dict(self) -> type[TD]:
-        """The ``TypedDict`` class of the message."""
-        return self._typed_dict
-
-    @property
     def specs(self) -> Mapping[str, TensorSpec]:
         """The ``TensorSpec`` of each key, in the order the ``TypedDict`` defines."""
         return self._specs
@@ -282,7 +277,7 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         other_spec = cast(DictSpec[Any], other)
         # The same TypedDict fixes the key order, so comparing as mappings suffices.
         return (
-            self._typed_dict is other_spec.typed_dict
+            self._typed_dict is other_spec._typed_dict
             and self._specs == other_spec.specs
         )
 

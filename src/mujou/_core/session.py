@@ -67,13 +67,8 @@ class Session:
         self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
         # Every slot by name, in the order of the graph's ports, for the state tree.
         self._slots: dict[str, SlotSpecs] = {}
-        # Every port with a recv_carry by its path: its binding, which holds the
-        # carry it last received, the spec of that carry and the slot it reads
-        # (whose writer's pools a restored carry is made from).
-        self._carries: dict[str, tuple[Binding, Spec, AnySlot]] = {}
         # Every port of the run by how its errors name it.
         self._labels: dict[AnyPort, str] = {}
-        self._bindings: dict[AnyPort, Binding] = {}
 
         owners = ports(graph)
         for port, (index, _) in owners.items():
@@ -88,19 +83,7 @@ class Session:
             name = self._labels[port]
             sources = self._sources(port, name)
             owner = graph.nodes[index][1]
-            binding = Binding(owner, name, port, self._outlets.get(port), sources)
-            self._bindings[port] = binding
-            bind(port, binding)
-            carry = as_spec(port.recv_carry_spec)
-            if carry is not None:
-                # A port with a recv_carry reads exactly one slot.
-                ((_, source),) = sources
-                self._carries[graph.port_path(port)] = (binding, carry, source)
-        # Once every port is bound: a port may pass on the carry of one bound
-        # after it (build_tree checked it is a port of the same node).
-        for port, binding in self._bindings.items():
-            if port.carry_source is not None:
-                binding.relay_from(self._bindings[port.carry_source])
+            bind(port, Binding(owner, name, port, self._outlets.get(port), sources))
 
         self._runtime: _native.Runtime | None = None
 
@@ -108,9 +91,8 @@ class Session:
         spec = as_spec(port.send_spec)
         if spec is None:
             return
-        carry = as_spec(port.send_carry_spec)
         outlet = _native.Outlet(
-            schema(spec, carry),
+            schema(spec),
             len(port.channels),
             self._labels[port],
             clock=self._clock,
@@ -118,13 +100,9 @@ class Session:
         self._outlets[port] = outlet
         slots = [outlet.outbox, *(outlet.channel(k) for k in range(len(port.channels)))]
         for slot in slots:
-            self._slots[slot.name] = (slot, spec, carry)
+            self._slots[slot.name] = (slot, spec)
         values = initial(port)
         if values is not None:
-            if carry is not None:
-                # The initial value carries zeros, as the slots do from the start.
-                zeros = carry.zeros()
-                values = values + to_core(carry, zeros, self._labels[port])
             # In place of the zeros, with their time (the clock's when the run was
             # laid out). A restore later replaces them, as it does the zeros.
             time_ns = outlet.outbox.read().timestamp.ns
@@ -148,12 +126,10 @@ class Session:
             return sources
         if port.multi:
             return []
-        # An unconnected single-peer port reads what the host writes (its carry
-        # stays zeros: the host cannot write one).
-        carry = as_spec(port.recv_carry_spec)
-        slot = self._group.input(schema(spec, carry), name)
+        # An unconnected single-peer port reads what the host writes.
+        slot = self._group.input(schema(spec), name)
         self._inputs[port] = (slot, spec)
-        self._slots[slot.name] = (slot, spec, carry)
+        self._slots[slot.name] = (slot, spec)
         return [(None, slot)]
 
     # --- run and control
@@ -323,7 +299,7 @@ class Session:
         self.check()
         outbox, spec = self._outbox(port)
         message = outbox.read()
-        return from_core(spec, message.buffers, _CPU), message.timestamp
+        return from_core(spec, message.values, _CPU), message.timestamp
 
     def subscribe(
         self, port: AnyPort, timeout: float
@@ -347,7 +323,7 @@ class Session:
         deadline: float,
     ) -> Iterator[tuple[object, _native.Timestamp]]:
         self.check()
-        yield from_core(spec, last.buffers, _CPU), last.timestamp
+        yield from_core(spec, last.values, _CPU), last.timestamp
         while True:
             self.check()
             finished = runtime.finished
@@ -369,15 +345,10 @@ class Session:
                     return
                 continue
             last = message
-            yield from_core(spec, message.buffers, _CPU), message.timestamp
+            yield from_core(spec, message.values, _CPU), message.timestamp
 
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         name = self.label(port)
-        if port.recv_carry_spec is not None:
-            raise ValueError(
-                f"cannot write the port {name!r}: it receives carried data, which "
-                "the host cannot write"
-            )
         if port in self._inputs:
             return self._inputs[port]
         if port.recv_spec is None:
@@ -393,7 +364,6 @@ class Session:
         outlet = self._outlets.get(port)
         if outlet is None:
             raise ValueError(f"cannot read the port {name!r}: it sends no messages")
-        # A message's buffers are its value only: the data it carries is dropped.
         return outlet.outbox, cast(Spec, port.send_spec)
 
     def label(self, port: AnyPort) -> str:
@@ -432,17 +402,12 @@ class Session:
             ValueError: The tree does not match the network. Only the slots of
                 this run, which is refused, may have changed.
         """
-        specs = {path: spec for path, (_, spec, _) in self._carries.items()}
-        restores, carries, restored = read_tree(state, self._paths, self._slots, specs)
+        restores, restored = read_tree(state, self._paths, self._slots)
         # The copies were made on this thread's streams; the nodes use them on
         # their own streams, which do not wait for these.
         self._synchronize_current_streams()
         for slot, tensors, time_ns, sent in restores:
             slot.restore(tensors, time_ns, sent)
-        for path, tensors in carries.items():
-            binding, _, source = self._carries[path]
-            # Made from the source's pools, as if received from it.
-            binding.carry = source.new_carry(tensors)
         return restored
 
     def _synchronize_current_streams(self) -> None:
@@ -463,13 +428,7 @@ class Session:
 
         The nodes' streams are idle here (``Driver.capture`` waited for them).
         """
-        carries = {
-            path: (cast(_native.Carry, binding.carry), spec)
-            for path, (binding, spec, _) in self._carries.items()
-        }
-        tree = make_tree(
-            self._paths, states, self._slots, carries, last_update_ns, timer
-        )
+        tree = make_tree(self._paths, states, self._slots, last_update_ns, timer)
         # The copies queue on this thread's current streams. Finish them before
         # the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()

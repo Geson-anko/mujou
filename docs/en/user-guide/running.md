@@ -49,7 +49,7 @@ The host can write to a port that:
 - takes one peer
 - has a receive type
 
-Nodes write to connected ports, so the host cannot write to them. Nor can it write to a port that receives carried data (`recv_carry`, see [Carrying data along a path](building-a-network.md#carrying-data-along-a-path)).
+Nodes write to connected ports, so the host cannot write to them.
 
 | Way                                    | When to use it                                               |
 | -------------------------------------- | ------------------------------------------------------------ |
@@ -99,7 +99,7 @@ There are four ways to read output.
 | `run.subscribe(port)`           | An iterator that yields `(value, Timestamp)` in turn                           | Handling the output each time it is renewed |
 | `run.wait_for(port, condition)` | The first `(value, Timestamp)` whose value meets `condition`                   | Waiting until an expected output arrives    |
 
-All of them read from any port that has a send type. From a port that sends carried data (`send_carry`), they return the value only and drop the carried data. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)).
+All of them read from any port that has a send type. All but `read` return the time as a `mujou.time.Timestamp` (see [Controlling time](time.md)).
 
 Reading an unconnected port gives the network's output; reading a connected port observes the value of a node in the middle. The behavior of the nodes does not change.
 
