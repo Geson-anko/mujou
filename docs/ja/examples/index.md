@@ -33,7 +33,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 - `branching.py`: 1 つの `NextPort` から複数のノードへ送り、`PrevPort(multi=True)` で合流して受け取る。`send_to` を使うと、`connect` が返した Channel の相手にだけ送れる
 - `group.py`: `Group(enc=..., dec=...)` と `mujou.run(a, b)`。ノードのパス（`"enc.scale"`、`"0.scale"`）の付き方
 - `save_and_restore.py`: `run.state_dict()` で状態を取得し、テンソルを CPU に移して `torch.save` で保存し、`mujou.run(..., state=...)` で復元して続ける
-- `pause.py`: `mujou.time.pause()` でグローバルタイマーを止め、そのタイマーで走る 2 つの実行の状態を同じ時刻で取得してから `mujou.time.resume()` で再開する。一方の状態から復元した実行は、その時刻から続く
+- `pause.py`: `mujou.time.global_timer.pause()` でグローバルタイマーを止め、そのタイマーで走る 2 つの実行の状態を同じ時刻で取得してから `mujou.time.global_timer.resume()` で再開する。一方の状態から復元した実行は、その時刻から専用のタイマーで続く
 - `subscribe.py`: `run.subscribe` でまずその時点の最新の出力を受け取り、その後はより新しい出力が送られるたびに最新の 1 つを受け取る。受け取る前に次の値が送られると途中の値は飛ばされる。20 個受け取ったら `break` でループを抜ける
 - `online_learning.py`: 教師のノードが、ホストの書く `a` を使って y = a x + b のバッチを 10 ms ごとに送る。ホストは実行の途中で `a` を変える。学習するノードは新しいバッチごとに 1 回学び、学習と推論の段階を分けない。ホストは学習するノードの損失を `run.wait_for` で追う。損失は下がり、目標が変わると跳ね上がり、学習するノードが追いつくとまた下がる
 - `torch_node.py`: ノードの中の `nn.Module` を、ノードの内側に閉じた BP で学習させる。シードの指定と、`dt` を刻みに分けて進める更新

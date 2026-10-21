@@ -71,7 +71,7 @@ Without `inputs`, the initial value of the input is zeros.
 
 ### Showing an input for a set time
 
-Decide how long to show an input by waiting on the run's timer. If the run is on the global timer, use `mujou.time.sleep(seconds)`.
+Decide how long to show an input by waiting on the run's timer with `run.timer.sleep(seconds)`.
 
 !!! warning "Do not use `time.sleep`"
 
@@ -80,7 +80,7 @@ Decide how long to show an input by waiting on the run's timer. If the run is on
 ```python
 for x in stream:
     run.write({net.prev: x})
-    mujou.time.sleep(0.1)          # show x for 0.1 seconds
+    run.timer.sleep(0.1)           # show x for 0.1 seconds
     y = run.read(net.next)         # take the output at the end of showing as the response to x
 ```
 

@@ -13,10 +13,10 @@ from typing import Any, cast, final
 import torch
 
 from mujou._core import _native
-from mujou._core.hooks import current_node
+from mujou._core.codec import from_core, to_core
 from mujou._core.node import Node
-from mujou._core.port import Channel, Port
-from mujou._core.spec import Spec, TensorSpec, host_tensors, join
+from mujou._core.port import Channel, Port, running
+from mujou._core.spec import Spec, TensorSpec
 
 # Any (here and below): ports and messages of every type are handled alike.
 type AnyPort = Port[Any, Any, Any, Any, Any]
@@ -27,19 +27,6 @@ def as_spec(spec: object) -> Spec | None:
     """Type the ``send_spec`` or ``recv_spec`` of a port as a ``Spec``."""
     # Port accepts only TensorSpec, DictSpec or None (checked when it is made).
     return cast(Spec | None, spec)
-
-
-def views_value(
-    spec: Spec, views: Sequence[_native.BufferView], device: torch.device
-) -> object:
-    """Copy ``views`` into new tensors on ``device`` and build the message."""
-    return join(spec, [torch.from_dlpack(v).to(device, copy=True) for v in views])
-
-
-def message_value(spec: Spec, message: _native.Message, device: torch.device) -> object:
-    """Copy the value of ``message`` into new tensors on ``device`` and build the
-    message."""
-    return views_value(spec, message.buffers, device)
 
 
 @final
@@ -104,7 +91,7 @@ class Binding:
         received: dict[Channel | None, object] = {}
         for channel, slot in self._sources:
             message = slot.read()
-            value = message_value(spec, message, device)
+            value = from_core(spec, message.buffers, device)
             received[channel] = (value, message.timestamp) if with_time else value
             if self._carry is not None:
                 # The very message of the value: a port with a recv_carry has one
@@ -131,7 +118,7 @@ class Binding:
             raise TypeError(f"the port {self._name!r} has no recv_carry")
         device = self._owner.device
         if key is None:
-            return views_value(spec, carry.buffers, device)
+            return from_core(spec, carry.buffers, device)
         if isinstance(spec, TensorSpec):
             raise TypeError(
                 f"the port {self._name!r} carries a tensor, which has no key {key!r}"
@@ -142,7 +129,7 @@ class Binding:
                 f"the port {self._name!r} carries no key {key!r}; its keys are {keys}"
             )
         view = carry.buffers[keys.index(key)]
-        return torch.from_dlpack(view).to(device, copy=True)
+        return from_core(spec.specs[key], [view], device)
 
     def send(self, msg: object, carry: object) -> None:
         outlet = self._sending()
@@ -161,10 +148,11 @@ class Binding:
         # A port is read and written only by its owner: this keeps each slot to
         # one writer, and a node to the slots of its own ports (locality). The
         # node, not the thread: a worker runs other nodes too.
-        if current_node() is not self._owner:
+        current = running()
+        if current is None or current.port_owner is not self._owner:
             raise RuntimeError(
                 f"only the node that owns the port {self._name!r} {verb} it, from its "
-                "own hooks while the network runs (state_dict runs on another thread)"
+                "own hooks (not state_dict) while the network runs"
             )
 
     def _receiving(self) -> Spec:
@@ -186,7 +174,7 @@ class Binding:
         memory (the value's, then the carried data's unless it is passed on) and
         the carry to pass on, if any."""
         spec = cast(Spec, self._send_spec)  # an outlet exists only with a send spec
-        tensors = host_tensors(spec, msg, where=self._name)
+        tensors = to_core(spec, msg, self._name)
         if self._relay is not None:
             if carry is not None:
                 raise TypeError(
@@ -204,5 +192,5 @@ class Binding:
                 f"the port {self._name!r} carries {self._send_carry_spec!r}; pass "
                 "it as carry="
             )
-        where = f"{self._name} carry"
-        return tensors + host_tensors(self._send_carry_spec, carry, where=where), None
+        label = f"{self._name} carry"
+        return tensors + to_core(self._send_carry_spec, carry, label), None

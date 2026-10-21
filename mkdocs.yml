@@ -122,7 +122,7 @@ plugins:
             Nodes: ノード
             Ports and Channels: Port と Channel
             Networks: ネットワーク
-            Global Time: グローバル時間
+            Timers: タイマー
             Types: 型
             User Guide: ユーザーガイド
             Writing a Node: ノードを書く
@@ -196,7 +196,7 @@ nav:
       - Nodes: api/node.md
       - Ports and Channels: api/port.md
       - Networks: api/network.md
-      - Global Time: api/time.md
+      - Timers: api/time.md
       - Types: api/typing.md
       - Errors: api/errors.md
       - Testing: api/testing.md

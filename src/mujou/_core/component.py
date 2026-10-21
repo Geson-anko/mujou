@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
-from mujou._core import _native
 from mujou._core.port import Port, assign_owner
 
 if TYPE_CHECKING:
@@ -103,9 +102,11 @@ def _register(
         ValueError: ``component`` is a node and ``value`` a node or network.
         RuntimeError: ``component`` is built.
     """
+    # Imported here: node.py imports this module.
+    from mujou._core.node import Node
+
     is_port = isinstance(value, Port)
-    # A node: every component but a network is one (Node cannot be imported here).
-    is_node = isinstance(component, _native.Node)
+    is_node = isinstance(component, Node)
     if ports_of(component) is _NOT_INITIALIZED:
         what = "port" if is_port else type(value).__name__
         base = "Node" if is_node else "Network"

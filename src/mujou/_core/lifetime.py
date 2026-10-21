@@ -12,7 +12,7 @@ import math
 import threading
 from typing import Final, Protocol
 
-from mujou._core import _native
+from mujou._core.errors import NetworkError
 
 
 class Stoppable(Protocol):
@@ -40,11 +40,6 @@ def discard(run: Stoppable) -> None:
     _RUNNING.discard(run)
 
 
-def running[T](kind: type[T]) -> list[T]:
-    """Return the runs kept now that are ``kind``s."""
-    return [run for run in list(_RUNNING) if isinstance(run, kind)]
-
-
 def _shutdown_all() -> None:
     # Stop every run even if one fails (e.g. Ctrl-C while waiting for its
     # on_stop), then raise the first failure.
@@ -52,7 +47,7 @@ def _shutdown_all() -> None:
     for run in list(_RUNNING):
         try:
             run.shutdown(math.inf)
-        except _native.NetworkError:
+        except NetworkError:
             pass  # already logged, and the host has gone
         except BaseException as e:  # noqa: BLE001 - re-raised below
             failure = failure or e

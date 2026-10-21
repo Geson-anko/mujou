@@ -33,10 +33,8 @@ class TestCoreModule:
         "name",
         [n for n in _native.__all__ if isinstance(getattr(_native, n), type)],
     )
-    def test_every_class_belongs_to_this_module(self, name: str):
-        assert getattr(_native, name).__module__ == _native.__name__
-
-    def test_exceptions_keep_their_builtin_bases(self):
-        assert issubclass(_native.NetworkError, RuntimeError)
-        assert issubclass(_native.PauseTimeoutError, TimeoutError)
-        assert str(_native.NetworkError("message")) == "message"
+    def test_every_class_belongs_to_this_module_or_to_mujou_time(self, name: str):
+        # The timers are shown as they are, by mujou.time.
+        public = {"Timer", "VirtualTimer", "ReadOnlyTimer", "Timestamp"}
+        module = "mujou.time" if name in public else _native.__name__
+        assert getattr(_native, name).__module__ == module

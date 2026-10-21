@@ -27,8 +27,9 @@ from typing import Any, Final, Self, cast, override
 import torch
 
 from mujou._core import _native
-from mujou._core.binding import AnySlot, message_value, views_value
-from mujou._core.spec import Spec, host_tensors
+from mujou._core.binding import AnySlot
+from mujou._core.codec import from_core, to_core
+from mujou._core.spec import Spec
 
 # Where the tree holds the values of the slots.
 _CPU: Final = torch.device("cpu")
@@ -136,9 +137,13 @@ def make_tree(
     values: dict[str, tuple[object, ...]] = {}
     for name, (slot, spec, carry) in slots.items():
         message = slot.read()
-        entry = (message_value(spec, message, _CPU), message.timestamp.ns, message.sent)
+        entry = (
+            from_core(spec, message.buffers, _CPU),
+            message.timestamp.ns,
+            message.sent,
+        )
         if carry is not None:
-            entry += (views_value(carry, message.carry.buffers, _CPU),)
+            entry += (from_core(carry, message.carry.buffers, _CPU),)
         values[name] = entry
     return StateDict(
         {
@@ -148,7 +153,7 @@ def make_tree(
             },
             "slots": values,
             "carries": {
-                path: views_value(spec, carried.buffers, _CPU)
+                path: from_core(spec, carried.buffers, _CPU)
                 for path, (carried, spec) in carries.items()
             },
             "last_update_ns": dict(zip(paths, last_update_ns, strict=True)),
@@ -175,44 +180,53 @@ def read_tree(
     restore (the value's tensors, then the carried data's); the tensors of the
     carry of each port in ``carries``, by its path; and what ``Runtime.start``
     restores: the nodes' states (copies, so that the nodes' updates in place
-    never reach ``state``), their last update times and the timer. The copies
-    queue on the calling thread's current streams.
+    never reach ``state``) and their last update times. The timer is
+    ``saved_time``'s. The copies queue on the calling thread's current streams.
 
     Raises:
         ValueError: The tree does not match the run.
     """
-    for key in ("nodes", "slots", "carries", "last_update_ns", "timer"):
+    for key in ("nodes", "slots", "carries", "last_update_ns"):
         if key not in state:
             raise ValueError(f"the state tree has no {key!r}")
     nodes = cast(Mapping[str, object], state["nodes"])
     entries = cast(Mapping[str, object], state["slots"])
     carried = cast(Mapping[str, object], state["carries"])
     last_update_ns = cast(Mapping[str, object], state["last_update_ns"])
-    timer = cast(Mapping[str, object], state["timer"])
     _same_keys("nodes", nodes, paths)
     _same_keys("slots", entries, slots)
     _same_keys("carries", carried, carries)
     _same_keys("last_update_ns", last_update_ns, paths)
-    _same_keys("timer", timer, ("time_ns", "scale"))
     for path in paths:
         if not _is_int(last_update_ns[path]):
             raise ValueError(f"the state tree's last_update_ns[{path!r}] is not an int")
-    if not _is_int(timer["time_ns"]) or not isinstance(timer["scale"], int | float):
-        raise ValueError("the state tree's timer must have an int time_ns and a scale")
     restores = _slot_restores(entries, slots)
     carry_restores = {
-        path: host_tensors(spec, carried[path], where=f"the carry of {path}")
+        path: to_core(spec, carried[path], f"the carry of {path}")
         for path, spec in carries.items()
     }
     restored = {
         "states": [copy.deepcopy(nodes[path]) for path in paths],
         "last_update_ns": [cast(int, last_update_ns[path]) for path in paths],
-        "timer_state": {
-            "time_ns": cast(int, timer["time_ns"]),
-            "scale": cast(float, timer["scale"]),
-        },
     }
     return restores, carry_restores, restored
+
+
+def saved_time(state: Mapping[str, Any]) -> tuple[int, float]:
+    """Return the time in ns and the time scale of the timer when ``state`` was
+    taken, where a run restored from it starts.
+
+    Raises:
+        ValueError: The tree has no such timer.
+    """
+    if "timer" not in state:
+        raise ValueError("the state tree has no 'timer'")
+    timer = cast(Mapping[str, object], state["timer"])
+    _same_keys("timer", timer, ("time_ns", "scale"))
+    time_ns, scale = timer["time_ns"], timer["scale"]
+    if not _is_int(time_ns) or not isinstance(scale, int | float):
+        raise ValueError("the state tree's timer must have an int time_ns and a scale")
+    return cast(int, time_ns), float(scale)
 
 
 def _slot_restores(
@@ -244,10 +258,10 @@ def _slot_restores(
             raise ValueError(
                 f"the state tree's slot {name!r} has a sent flag that is not a bool"
             )
-        tensors = host_tensors(spec, value, where=name)
+        tensors = to_core(spec, value, name)
         if carry is not None:
             carried = cast(tuple[object, ...], entry)[3]
-            tensors += host_tensors(carry, carried, where=f"{name} carried")
+            tensors += to_core(carry, carried, f"{name} carried")
         restores.append((slot, tensors, cast(int, time_ns), sent))
     return restores
 

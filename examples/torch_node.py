@@ -83,6 +83,6 @@ with mujou.run(regressor, inputs={regressor.prev: x, regressor.target: y}) as ru
         print(f"t = {float(t):.2f} s: loss = {losses[-1]:.5f}")
         if losses[-1] < 1e-2 * losses[0]:
             break
-        mujou.time.sleep(0.1)
+        run.timer.sleep(0.1)
 
 assert losses[-1] < 1e-2 * losses[0]

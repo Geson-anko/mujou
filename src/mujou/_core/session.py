@@ -2,38 +2,46 @@
 host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
 ``mujou.run`` creates one ``Session`` per run, on the run's timer. It lays out the
-slots of every port on that timer, binds each port to them (``binding.py``), and
-starts the runtime on the same timer. The state tree is ``state.py``'s, and the
-registry of running runs ``lifetime.py``'s.
+slots of every port on the run's clock (the reading side of that timer), binds
+each port to them (``binding.py``), and starts the runtime on the same clock. The
+state tree is ``state.py``'s, and the registry of running runs ``lifetime.py``'s.
 """
 
 import math
-import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Final, cast, final
+from typing import Any, Final, NamedTuple, cast, final
 
 import torch
 
 from mujou._core import _native, lifetime
-from mujou._core.binding import AnyPort, AnySlot, Binding, as_spec, message_value
+from mujou._core.binding import AnyPort, AnySlot, Binding, as_spec
+from mujou._core.codec import from_core, schema, to_core
+from mujou._core.driver import Driver
 from mujou._core.graph import Graph, ports
-from mujou._core.node import (
-    Node,
-    capture_state,
-    checked_dedicated,
-    checked_period,
-    set_timer,
-)
+from mujou._core.node import Node, checked_dedicated, checked_period
 from mujou._core.port import Channel, bind, initial, label
-from mujou._core.spec import Spec, fields, host_tensors
+from mujou._core.spec import Spec
 from mujou._core.state import SlotSpecs, StateDict, make_tree, read_tree
-from mujou._core.timer import ReadOnlyTimer, Timer, native, stopped
 
 # Real seconds between the checks of `subscribe` for the end of the run.
 _POLL: Final = 0.05
 # Where the host receives values.
 _CPU: Final = torch.device("cpu")
+
+
+class NodeSpec(NamedTuple):
+    """A node as ``_native.start`` takes it."""
+
+    driver: Driver
+    # How the runtime's errors and logs name the node.
+    name: str
+    period: float
+    dedicated_thread: bool
+    # Where the first dt starts (the time at the start if None).
+    last_update_ns: int | None
+    # What load_state_dict restores after on_start (nothing if None).
+    state: object
 
 
 @final
@@ -44,18 +52,17 @@ class Session:
     once.
     """
 
-    def __init__(self, graph: Graph, timer: Timer) -> None:
+    def __init__(self, graph: Graph, timer: _native.Timer) -> None:
         self._graph = graph
         self._paths = [path for path, _ in graph.nodes]
         self._nodes = [node for _, node in graph.nodes]
-        # The one timer of the run: every slot, the host's inputs and the runtime
-        # use it, so that every time in the run is on the axis dt is measured on.
-        self._clock = native(timer)
-        # What the nodes see of it: they read the time and change nothing.
-        self._view = ReadOnlyTimer(timer)
+        # The one clock of the run, on its timer: every slot, the host's inputs
+        # and the runtime use it, so that every time in the run is on the axis dt
+        # is measured on, and none is later than the end. The nodes see it too.
+        self._clock = _native.ReadOnlyTimer(timer)
         # One group for the whole network: a write switches together only within a
         # group.
-        self._group = _native.InputGroup(timer=self._clock)
+        self._group = _native.InputGroup(clock=self._clock)
         self._outlets: dict[AnyPort, _native.Outlet] = {}
         self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
         # Every slot by name, in the order of the graph's ports, for the state tree.
@@ -69,16 +76,18 @@ class Session:
         self._bindings: dict[AnyPort, Binding] = {}
 
         owners = ports(graph)
+        for port, (index, _) in owners.items():
+            # The path alone ("next") would not say which node a root's port is
+            # of. The slots take the name too, so that the core's errors use it.
+            root = not graph.nodes[index][0]
+            self._labels[port] = label(port) if root else graph.port_path(port)
         # Every outlet first: a port reads the channel slots of its peers' outlets.
         for port in owners:
             self._add_outlet(port)
         for port, (index, _) in owners.items():
-            path = graph.port_path(port)
-            sources = self._sources(port, path)
-            owner_path, owner = graph.nodes[index]
-            # The path alone ("next") would not say which node a root's port is of.
-            name = path if owner_path else label(port)
-            self._labels[port] = name
+            name = self._labels[port]
+            sources = self._sources(port, name)
+            owner = graph.nodes[index][1]
             binding = Binding(owner, name, port, self._outlets.get(port), sources)
             self._bindings[port] = binding
             bind(port, binding)
@@ -86,7 +95,7 @@ class Session:
             if carry is not None:
                 # A port with a recv_carry reads exactly one slot.
                 ((_, source),) = sources
-                self._carries[path] = (binding, carry, source)
+                self._carries[graph.port_path(port)] = (binding, carry, source)
         # Once every port is bound: a port may pass on the carry of one bound
         # after it (build_tree checked it is a port of the same node).
         for port, binding in self._bindings.items():
@@ -94,13 +103,6 @@ class Session:
                 binding.relay_from(self._bindings[port.carry_source])
 
         self._runtime: _native.Runtime | None = None
-        # The timer when shutdown first asked the run to stop.
-        self._stop_lock = threading.Lock()
-        self._stop_timer: dict[str, int | float] | None = None
-        # Set once by _settle: the nodes' timer after the end (None after an
-        # exception).
-        self._settle_lock = threading.Lock()
-        self._ended: tuple[ReadOnlyTimer | None] | None = None
 
     def _add_outlet(self, port: AnyPort) -> None:
         spec = as_spec(port.send_spec)
@@ -108,10 +110,10 @@ class Session:
             return
         carry = as_spec(port.send_carry_spec)
         outlet = _native.Outlet(
-            _schema(spec, carry),
+            schema(spec, carry),
             len(port.channels),
-            self._graph.port_path(port),
-            timer=self._clock,
+            self._labels[port],
+            clock=self._clock,
         )
         self._outlets[port] = outlet
         slots = [outlet.outbox, *(outlet.channel(k) for k in range(len(port.channels)))]
@@ -122,15 +124,15 @@ class Session:
             if carry is not None:
                 # The initial value carries zeros, as the slots do from the start.
                 zeros = carry.zeros()
-                values = values + host_tensors(carry, zeros, where=label(port))
-            # In place of the zeros, with their time (the timer's when the run was
+                values = values + to_core(carry, zeros, self._labels[port])
+            # In place of the zeros, with their time (the clock's when the run was
             # laid out). A restore later replaces them, as it does the zeros.
             time_ns = outlet.outbox.read().timestamp.ns
             for slot in slots:
                 slot.restore(values, time_ns, sent=False)
 
     def _sources(
-        self, port: AnyPort, path: str
+        self, port: AnyPort, name: str
     ) -> list[tuple[Channel | None, AnySlot]]:
         """The slots ``port`` reads, as ``Binding`` takes them."""
         spec = as_spec(port.recv_spec)
@@ -149,7 +151,7 @@ class Session:
         # An unconnected single-peer port reads what the host writes (its carry
         # stays zeros: the host cannot write one).
         carry = as_spec(port.recv_carry_spec)
-        slot = self._group.input(_schema(spec, carry), path)
+        slot = self._group.input(schema(spec, carry), name)
         self._inputs[port] = (slot, spec)
         self._slots[slot.name] = (slot, spec, carry)
         return [(None, slot)]
@@ -171,51 +173,48 @@ class Session:
         Raises as ``mujou.run`` does. Anything but ``NetworkError`` comes before any
         node started.
         """
-        # Forget the runs that have ended, and keep this one (a refused start
-        # discards it below).
-        for session in lifetime.running(Session):
-            session._settle()
+        # Kept until it ends (a refused start discards it below).
         lifetime.add(self)
         try:
-            periods = [checked_period(node) for node in self._nodes]
-            dedicated = [checked_dedicated(node) for node in self._nodes]
             restored = None if state is None else self._restore(state)
             if inputs:
-                items = self._items(inputs)
-                if restored is None:
-                    self._group.write(items)
-                else:
-                    # The values belong to the restored time T, not to the timer's
-                    # time now. Nobody reads yet, so restoring each slot (after
-                    # checking them all above) switches them together.
-                    time_ns = int(restored["timer_state"]["time_ns"])
-                    for slot, tensors in items:
-                        slot.restore(tensors, time_ns, sent=True)
-            runtime = _native.Runtime(self._nodes, self._names(), timer=self._clock)
-            self._runtime = runtime
-            for node in self._nodes:
-                set_timer(node, self._view)
+                # On the run's clock, which a restored run starts at the time of
+                # the state.
+                self._group.write(self._items(inputs))
+            nodes = self._specs(restored)
             # What this thread queued for the nodes (tensors made in __init__ or by
             # the restore) is done before their streams use it.
             self._synchronize_current_streams()
-            runtime.start(
-                manual=manual,
-                periods=periods,
-                workers=workers,
-                dedicated=dedicated,
-                **(restored or {}),
+            self._runtime = _native.start(
+                nodes, self._clock, manual=manual, workers=workers
             )
-        except _native.NetworkError:
-            self._settle()  # a node raised while starting: this run is over
-            raise
-        except Exception:
-            # Refused before any node started (e.g. the timer cannot be set back):
-            # the network may run once the cause is gone.
-            self._runtime = None
+        except BaseException:
+            # Refused before any node started, or a node raised while starting, or
+            # Ctrl-C (``_native.start`` raises once the nodes have stopped): this
+            # run is over.
             lifetime.discard(self)
-            for node in self._nodes:
-                set_timer(node, None)
             raise
+
+    def _specs(self, restored: Mapping[str, Any] | None) -> list[NodeSpec]:
+        """The nodes as ``_native.start`` takes them, restoring ``restored``."""
+        n = len(self._nodes)
+        states: Sequence[object] = [None] * n
+        last_update_ns: Sequence[int | None] = [None] * n
+        if restored is not None:
+            states, last_update_ns = restored["states"], restored["last_update_ns"]
+        return [
+            NodeSpec(
+                Driver(node, self._clock),
+                name,
+                checked_period(node),
+                checked_dedicated(node),
+                ns,
+                s,
+            )
+            for node, name, ns, s in zip(
+                self._nodes, self._names(), last_update_ns, states, strict=True
+            )
+        ]
 
     def _names(self) -> list[str]:
         """The names of the nodes in the runtime's errors and logs: a node that is
@@ -225,101 +224,74 @@ class Session:
             for path, node in zip(self._paths, self._nodes, strict=True)
         ]
 
-    def step(self, order: Sequence[Node]) -> None:
+    def indices(self, nodes: Sequence[Node]) -> list[int] | None:
+        """The indices of ``nodes`` for ``step`` (``None``: every node).
+
+        Raises:
+            ValueError: A node is not in this run.
+        """
+        return [self._index(node) for node in nodes] if nodes else None
+
+    def step(self, indices: list[int] | None) -> None:
         runtime = self._started()
-        indices = [self._index(node) for node in order] if order else None
         try:
             runtime.step(indices)
         finally:
-            self._settle()  # a node may have raised: the host sees the end here
+            self._forget_if_ended(runtime)
+
+    def ensure_running(self) -> None:
+        """Return if the run has not stopped.
+
+        Raises:
+            NetworkError: A node raised; the run has stopped.
+            RuntimeError: The run has stopped normally.
+        """
+        finished = self._started().finished
+        self.check()  # after finished: an end by an exception raises here
+        if finished:
+            raise RuntimeError("the run has stopped")
 
     def check(self) -> None:
-        if self._runtime is not None:
-            self._settle()
-            self._runtime.check()
+        runtime = self._runtime
+        if runtime is None:
+            return
+        try:
+            runtime.check()
+        finally:
+            self._forget_if_ended(runtime)
 
     def shutdown(self, timeout: float) -> None:
         wait = _wait(timeout)
         runtime = self._runtime
         if runtime is None:
             return
-        try:
-            with self._stop_lock:
-                if not runtime.is_finished:
-                    # A normal end is a pause at this time that never resumes:
-                    # the state after the end is taken at it.
-                    if self._stop_timer is None:
-                        self._stop_timer = self._clock.state_dict()
-                    # The runtime's shutdown waits without a limit, so a finite
-                    # timeout asks to stop and waits here with the limit. On a
-                    # timeout the request stands and the network goes on
-                    # stopping.
-                    if wait is not None:
-                        runtime.request_stop()
-            if wait is None:
-                runtime.shutdown()
-                return
-            if not runtime.join(wait):
-                raise TimeoutError(
-                    f"the run did not stop within {timeout} s; it goes on "
-                    "stopping, and join() waits for it"
-                )
-        finally:
-            self._settle()
+        # Does nothing once the run has ended.
+        runtime.stop()
+        # On a timeout the request stands and the network goes on stopping.
+        if not self._join(runtime, wait):
+            raise TimeoutError(
+                f"the run did not stop within {timeout} s; it goes on "
+                "stopping, and join() waits for it"
+            )
 
     def join(self, timeout: float) -> None:
-        wait = _wait(timeout)
-        runtime = self._started()
+        if not self._join(self._started(), _wait(timeout)):
+            raise TimeoutError(
+                f"the run did not stop within {timeout} s; it keeps running"
+            )
+
+    def _join(self, runtime: _native.Runtime, wait: float | None) -> bool:
         try:
-            if not runtime.join(wait):
-                raise TimeoutError(
-                    f"the run did not stop within {timeout} s; it keeps running"
-                )
+            return runtime.join(wait)
         finally:
-            self._settle()
+            self._forget_if_ended(runtime)
 
-    def _settle(self) -> None:
-        """Once the run has ended, stop keeping the session and stop the nodes'
-        ``timer``, once.
-
-        After a normal end each node's ``timer`` stays at the time of the state
-        from then on (``state_dict`` after the end is taken at it); after an end
-        by an exception the nodes have no timer.
-        """
-        runtime = self._runtime
-        if runtime is None or not runtime.is_finished:
-            return
-        with self._settle_lock:
-            if self._ended is not None:
-                return
+    def _forget_if_ended(self, runtime: _native.Runtime) -> None:
+        """Stop keeping the session once the host has seen its run end: every
+        call that can see the end (a step, a check, a join) comes here, so a
+        run that ended, by an exception or not, is not kept until the exit."""
+        if runtime.finished:
             lifetime.discard(self)
-            ended = self._ended_timer(runtime)
-            for node in self._nodes:
-                set_timer(node, ended)
-            self._ended = (ended,)
-
-    def _ended_timer(self, runtime: _native.Runtime) -> ReadOnlyTimer | None:
-        """The timer stopped at the end of a normal end, or ``None`` after an
-        exception.
-
-        The time is the one ``shutdown`` read when it asked the run to stop, as a
-        pause would have frozen it, and not earlier than any update or slot (an
-        ``on_stop`` may still send after the request).
-        """
-        try:
-            runtime.check()
-        except _native.NetworkError:
-            return None
-        # Only shutdown ends a run normally, and it reads the timer first.
-        stop_timer = cast(dict[str, int | float], self._stop_timer)
-        latest = max(
-            [
-                int(stop_timer["time_ns"]),
-                *runtime.last_update_ns(),
-                *(slot.read().timestamp.ns for slot, _, _ in self._slots.values()),
-            ]
-        )
-        return stopped(_native.Timestamp(ns=latest), float(stop_timer["scale"]))
 
     def _started(self) -> _native.Runtime:
         # Only a started session reaches the host (through its Run).
@@ -334,11 +306,7 @@ class Session:
     # --- host input and output
 
     def write[P: AnyPort](self, values: Mapping[P, object]) -> _native.Timestamp:
-        runtime = self._started()
-        finished = runtime.is_finished
-        self.check()  # after is_finished: an end by an exception raises here
-        if finished:
-            raise RuntimeError("the run has stopped; no node reads what is written now")
+        self.ensure_running()
         return self._group.write(self._items(values))
 
     def _items(
@@ -348,14 +316,14 @@ class Session:
         items: list[tuple[_native.InputSlot, list[torch.Tensor]]] = []
         for port, value in values.items():
             slot, spec = self._writable(port)
-            items.append((slot, host_tensors(spec, value, where=self._labels[port])))
+            items.append((slot, to_core(spec, value, self._labels[port])))
         return items
 
     def read(self, port: AnyPort) -> tuple[object, _native.Timestamp]:
         self.check()
         outbox, spec = self._outbox(port)
         message = outbox.read()
-        return message_value(spec, message, _CPU), message.timestamp
+        return from_core(spec, message.buffers, _CPU), message.timestamp
 
     def subscribe(
         self, port: AnyPort, timeout: float
@@ -379,10 +347,10 @@ class Session:
         deadline: float,
     ) -> Iterator[tuple[object, _native.Timestamp]]:
         self.check()
-        yield message_value(spec, last, _CPU), last.timestamp
+        yield from_core(spec, last.buffers, _CPU), last.timestamp
         while True:
             self.check()
-            finished = runtime.is_finished
+            finished = runtime.finished
             if finished:
                 # After the end nothing is written, so one last look without
                 # waiting.
@@ -401,7 +369,7 @@ class Session:
                     return
                 continue
             last = message
-            yield message_value(spec, message, _CPU), message.timestamp
+            yield from_core(spec, message.buffers, _CPU), message.timestamp
 
     def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
         name = self.label(port)
@@ -444,49 +412,26 @@ class Session:
 
     def state_dict(self, timeout: float) -> StateDict:
         runtime = self._started()
-        finished = runtime.is_finished
-        self.check()  # after is_finished: an end by an exception raises here
-        if not finished:
-            try:
-                return runtime.capture(
-                    lambda states: self._tree(
-                        states, runtime.last_update_ns(), self._clock.state_dict()
-                    ),
-                    timeout,
-                )
-            except _native.NetworkError:
-                raise
-            except RuntimeError:
-                # The run ended while the request waited: take the state at the
-                # end below. Anything else is a real error.
-                if not runtime.is_finished:
-                    raise
-                self.check()
-        self._settle()
-        return self._ended_tree(runtime)
-
-    def _ended_tree(self, runtime: _native.Runtime) -> StateDict:
-        """Take the state of a run that has ended normally, on this thread.
-
-        The nodes' threads are gone, so this thread calls their ``state_dict``
-        (through ``_capture_state``, which waits for a CUDA node's stream). The
-        tree's timer is the stopped one ``_settle`` gave the nodes.
-        """
-        ended = cast(tuple[ReadOnlyTimer], self._ended)[0]
-        stop_timer = cast(dict[str, int | float], self._stop_timer)
-        states = [capture_state(node) for node in self._nodes]
-        timer = {**stop_timer, "time_ns": ended.now().ns}
-        return self._tree(states, runtime.last_update_ns(), timer)
+        self.check()
+        # While the run is paused for it, or after its end: the clock stands
+        # still either way.
+        return runtime.capture(
+            lambda states: self._tree(
+                states,
+                runtime.last_update_ns(),
+                {"time_ns": self._clock.now().ns, "scale": self._clock.time_scale()},
+            ),
+            timeout,
+        )
 
     def _restore(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """Check ``state``, restore the slots and return what ``Runtime.start``
-        restores (the nodes' states, their last update times and the timer).
+        restores (the nodes' states and their last update times).
 
         Raises:
-            ValueError: The tree does not match the network; nothing changed.
+            ValueError: The tree does not match the network. Only the slots of
+                this run, which is refused, may have changed.
         """
-        # Check and copy everything before changing anything, so that an error
-        # changes nothing.
         specs = {path: spec for path, (_, spec, _) in self._carries.items()}
         restores, carries, restored = read_tree(state, self._paths, self._slots, specs)
         # The copies were made on this thread's streams; the nodes use them on
@@ -516,7 +461,7 @@ class Session:
         """Copy the state of the paused or ended network into a tree
         (``state_dict``).
 
-        The nodes' streams are idle here (``Node._capture_state`` waited for them).
+        The nodes' streams are idle here (``Driver.capture`` waited for them).
         """
         carries = {
             path: (cast(_native.Carry, binding.carry), spec)
@@ -529,11 +474,6 @@ class Session:
         # the runtime resumes the nodes, which update in place.
         self._synchronize_current_streams()
         return tree
-
-
-def _schema(spec: Spec, carry: Spec | None) -> _native.Schema:
-    """The schema of messages of ``spec`` carrying ``carry`` (or nothing)."""
-    return _native.Schema(fields(spec), [] if carry is None else fields(carry))
 
 
 def _wait(timeout: float) -> float | None:

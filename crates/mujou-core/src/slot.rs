@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 
 use crate::buffer::{Buffer, Fill, Message, Messages, lock};
 use crate::schema::{FieldError, FieldSpec, Schema, format_dtype, format_shape};
-use crate::time::{Timer, Timestamp, remaining};
+use crate::time::{RunClock, Timestamp, remaining};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SlotError {
@@ -303,21 +303,22 @@ pub struct Outlet {
     messages: Arc<Messages>,
     outbox: Arc<Slot>,
     channels: Vec<Arc<Slot>>,
-    timer: Arc<Timer>,
+    clock: Arc<RunClock>,
 }
 
 impl Outlet {
     /// Creates the outward slot `"{name}/out"` and the channel slots
     /// `"{name}/ch{k}"`, all holding zeros stamped with the current time.
-    /// Every message is stamped with the time on `timer`.
+    /// Every message is stamped with the time on `clock`.
     ///
-    /// The slots and the host's inputs of one run must use the timer of its
-    /// runtime: on another timer, the times of the messages would not be on
-    /// the axis the nodes' Δt is measured on, and a pause of the run would not
-    /// stop them, so a state taken at T could hold later messages.
-    pub fn new(schema: Arc<Schema>, channels: usize, name: &str, timer: Arc<Timer>) -> Self {
+    /// The slots and the host's inputs of one run must use the clock of its
+    /// runtime: on another clock, the times of the messages would not be on
+    /// the axis the nodes' Δt is measured on, a pause of the run would not stop
+    /// them, and its end would not bound them, so a state taken at T could hold
+    /// later messages.
+    pub fn new(schema: Arc<Schema>, channels: usize, name: &str, clock: Arc<RunClock>) -> Self {
         let messages = Messages::new(schema);
-        let zeros = messages.zeros(timer.time_ns());
+        let zeros = messages.zeros(clock.now_ns());
         let slot = |name: String| {
             let (messages, zeros) = (Arc::clone(&messages), Arc::clone(&zeros));
             Arc::new(Slot::new(name, messages, Source::Own, zeros))
@@ -328,7 +329,7 @@ impl Outlet {
                 .map(|k| slot(format!("{name}/ch{k}")))
                 .collect(),
             messages,
-            timer,
+            clock,
         }
     }
 
@@ -372,7 +373,7 @@ impl Outlet {
             check_relay(self.schema(), relay, name)?;
         }
         let buffers = self.messages.fill(relay, fill)?;
-        let msg = self.messages.message(buffers, self.timer.time_ns(), true);
+        let msg = self.messages.message(buffers, self.clock.now_ns(), true);
         match target {
             Target::All => {
                 for slot in &self.channels {
@@ -399,28 +400,24 @@ pub struct InputGroup {
     /// Serializes writers (the host may write from several threads). Readers never
     /// take it.
     write_lock: Mutex<()>,
-    timer: Arc<Timer>,
+    clock: Arc<RunClock>,
 }
 
 impl InputGroup {
-    /// Every write is stamped with the time on `timer`.
-    ///
-    /// The slots and the host's inputs of one run must use the timer of its
-    /// runtime: on another timer, the times of the messages would not be on
-    /// the axis the nodes' Δt is measured on, and a pause of the run would not
-    /// stop them, so a state taken at T could hold later messages.
-    pub fn new(timer: Arc<Timer>) -> Arc<Self> {
+    /// Every write is stamped with the time on `clock`, as
+    /// [`Outlet::new`] says.
+    pub fn new(clock: Arc<RunClock>) -> Arc<Self> {
         Arc::new(Self {
             version: AtomicU64::new(0),
             write_lock: Mutex::new(()),
-            timer,
+            clock,
         })
     }
 
     /// Creates the slot `"{name}/in"`, holding zeros stamped with the current time.
     pub fn input(self: &Arc<Self>, schema: Arc<Schema>, name: &str) -> Arc<Slot> {
         let messages = Messages::new(schema);
-        let zeros = messages.zeros(self.timer.time_ns());
+        let zeros = messages.zeros(self.clock.now_ns());
         let source = Source::Group(Arc::clone(self));
         Arc::new(Slot::new(format!("{name}/in"), messages, source, zeros))
     }
@@ -457,7 +454,7 @@ impl InputGroup {
                     .fill(None, |bytes: &mut [&mut [u8]]| fill(i, bytes))
             })
             .collect::<Result<Vec<_>, E>>()?;
-        let time_ns = self.timer.time_ns();
+        let time_ns = self.clock.now_ns();
         // Under the lock no write is in flight, so every next value is already
         // published (its version is at most `version`) and becomes current.
         let version = self.version.load(Ordering::Relaxed);
@@ -485,7 +482,7 @@ mod tests {
 
     use super::*;
     use crate::dlpack::ffi::DLDataType;
-    use crate::time::TimerState;
+    use crate::time::{Source, Timer};
 
     const I64: DLDataType = DLDataType {
         code: 0,
@@ -494,15 +491,17 @@ mod tests {
     };
 
     fn timer() -> Arc<Timer> {
-        let timer = Arc::new(Timer::new());
-        timer.use_virtual_clock(true);
-        timer
-            .load_state(TimerState {
-                time_ns: 0,
-                scale: 1.0,
-            })
-            .unwrap();
-        timer
+        Arc::new(Timer::new(Source::Virtual, Timestamp::from_ns(0)))
+    }
+
+    /// The clock of a run on `timer`.
+    fn clock_of(timer: &Arc<Timer>) -> Arc<RunClock> {
+        Arc::new(RunClock::new(Arc::clone(timer)))
+    }
+
+    /// The clock of a run on a timer of its own.
+    fn clock() -> Arc<RunClock> {
+        clock_of(&timer())
     }
 
     fn field(name: &str, shape: &[i64]) -> FieldSpec {
@@ -558,7 +557,7 @@ mod tests {
     fn starts_with_zeros_at_creation_time() {
         let timer = timer();
         timer.advance_ns(5).unwrap();
-        let outlet = Outlet::new(pair_schema(), 1, "n.p", Arc::clone(&timer));
+        let outlet = Outlet::new(pair_schema(), 1, "n.p", clock_of(&timer));
         let msg = outlet.channel(0).load();
         assert_eq!(values(&msg), [0, 0]);
         assert_eq!(msg.time_ns(), 5);
@@ -569,7 +568,7 @@ mod tests {
     #[test]
     fn send_to_all_shares_one_message() {
         let timer = timer();
-        let outlet = Outlet::new(scalar_schema(), 3, "p", Arc::clone(&timer));
+        let outlet = Outlet::new(scalar_schema(), 3, "p", clock_of(&timer));
         timer.advance_ns(42).unwrap();
         outlet.send_with(Target::All, None, fill_k(7)).unwrap();
         let out = outlet.outbox().load();
@@ -582,7 +581,7 @@ mod tests {
 
     #[test]
     fn only_written_messages_are_sent() {
-        let outlet = Outlet::new(scalar_schema(), 2, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 2, "p", clock());
         assert!(!outlet.outbox().load().sent());
         outlet
             .send_with(Target::Channel(1), None, fill_k(1))
@@ -592,7 +591,7 @@ mod tests {
         outlet.send_with(Target::All, None, fill_k(2)).unwrap();
         assert!(outlet.outbox().load().sent() && outlet.channel(0).load().sent());
 
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let input = group.input(scalar_schema(), "i");
         assert!(!input.load().sent());
         group.write(&[&input], |_, bytes| fill_k(3)(bytes)).unwrap();
@@ -601,7 +600,7 @@ mod tests {
 
     #[test]
     fn send_to_one_channel_changes_only_it() {
-        let outlet = Outlet::new(scalar_schema(), 3, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 3, "p", clock());
         outlet
             .send_with(Target::Channel(1), None, fill_k(9))
             .unwrap();
@@ -613,7 +612,7 @@ mod tests {
 
     #[test]
     fn failed_fill_publishes_nothing() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
         let before = outlet.outbox().load();
         let bad = bad();
         let failed = outlet.send_with(Target::All, None, |_| Err(bad.clone()));
@@ -623,7 +622,7 @@ mod tests {
 
     #[test]
     fn held_message_survives_later_writes() {
-        let outlet = Outlet::new(scalar_schema(), 0, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 0, "p", clock());
         outlet.send_with(Target::All, None, fill_k(1)).unwrap();
         let held = outlet.outbox().load();
         for k in 2..=100 {
@@ -635,7 +634,7 @@ mod tests {
 
     #[test]
     fn pool_reuses_buffers_in_steady_state() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
         let slot = outlet.outbox();
         for k in 0..1000 {
             outlet.send_with(Target::All, None, fill_k(k)).unwrap();
@@ -649,7 +648,7 @@ mod tests {
     #[test]
     fn readers_see_whole_messages_in_order() {
         const WRITES: i64 = 20_000;
-        let outlet = Outlet::new(pair_schema(), 1, "p", timer());
+        let outlet = Outlet::new(pair_schema(), 1, "p", clock());
         let slot = Arc::clone(outlet.channel(0));
         let readers: Vec<_> = (0..4)
             .map(|_| {
@@ -687,12 +686,12 @@ mod tests {
     #[test]
     fn readers_never_see_a_message_of_another_slot() {
         const WRITES: i64 = 100_000;
-        let pairs = Outlet::new(pair_schema(), 0, "pairs", timer());
-        let scalars = Outlet::new(scalar_schema(), 0, "scalars", timer());
-        let group = InputGroup::new(timer());
+        let pairs = Outlet::new(pair_schema(), 0, "pairs", clock());
+        let scalars = Outlet::new(scalar_schema(), 0, "scalars", clock());
+        let group = InputGroup::new(clock());
         let input = group.input(pair_schema(), "input");
-        let carrying = Outlet::new(carry_schema(), 1, "carrying", timer());
-        let relayed = Outlet::new(carry_schema(), 0, "relayed", timer());
+        let carrying = Outlet::new(carry_schema(), 1, "carrying", clock());
+        let relayed = Outlet::new(carry_schema(), 0, "relayed", clock());
         let done = Arc::new(AtomicBool::new(false));
         let reader = |load: Box<dyn Fn() -> Arc<Message> + Send>, expected: [&'static str; 2]| {
             let done = Arc::clone(&done);
@@ -735,7 +734,7 @@ mod tests {
 
     #[test]
     fn wait_newer_returns_on_write_or_timeout() {
-        let outlet = Outlet::new(scalar_schema(), 0, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 0, "p", clock());
         let slot = Arc::clone(outlet.outbox());
         let first = slot.load();
         assert!(slot.wait_newer(&first, Duration::from_millis(20)).is_none());
@@ -752,7 +751,7 @@ mod tests {
 
     #[test]
     fn wait_newer_returns_on_a_write_of_the_host() {
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let input = group.input(scalar_schema(), "i");
         let first = input.load();
         let waiter = {
@@ -767,7 +766,7 @@ mod tests {
 
     #[test]
     fn restore_sets_value_time_and_whether_sent() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", timer());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
         let slot = outlet.channel(0);
         slot.restore(123, true, fill_k(4)).unwrap();
         let msg = slot.load();
@@ -783,7 +782,7 @@ mod tests {
     #[test]
     fn input_group_write_stamps_one_time() {
         let timer = timer();
-        let group = InputGroup::new(Arc::clone(&timer));
+        let group = InputGroup::new(clock_of(&timer));
         let (a, b) = (
             group.input(scalar_schema(), "a"),
             group.input(scalar_schema(), "b"),
@@ -801,7 +800,7 @@ mod tests {
 
     #[test]
     fn input_group_write_is_all_or_nothing() {
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let (a, b) = (
             group.input(scalar_schema(), "a"),
             group.input(scalar_schema(), "b"),
@@ -819,7 +818,7 @@ mod tests {
 
     #[test]
     fn input_restore_drops_pending_next_value() {
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let a = group.input(scalar_schema(), "a");
         group.write(&[&a], |_, bytes| fill_k(1)(bytes)).unwrap();
         a.restore(9, true, fill_k(2)).unwrap();
@@ -838,7 +837,7 @@ mod tests {
     #[test]
     fn input_group_switches_all_slots_at_once() {
         const WRITES: i64 = 100_000;
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let (a, b) = (
             group.input(scalar_schema(), "a"),
             group.input(scalar_schema(), "b"),
@@ -909,8 +908,8 @@ mod tests {
 
     #[test]
     fn relay_shares_the_carried_buffers() {
-        let source = Outlet::new(carry_schema(), 1, "a", timer());
-        let relayer = Outlet::new(carry_schema(), 1, "b", timer());
+        let source = Outlet::new(carry_schema(), 1, "a", clock());
+        let relayer = Outlet::new(carry_schema(), 1, "b", clock());
         source.send_with(Target::All, None, fill_k(7)).unwrap();
         relay(&relayer, source.channel(0), 8).unwrap();
         let (got, from) = (relayer.channel(0).load(), source.channel(0).load());
@@ -925,9 +924,9 @@ mod tests {
 
     #[test]
     fn relays_along_a_path_allocate_no_carry() {
-        let a = Outlet::new(carry_schema(), 1, "a", timer());
-        let b = Outlet::new(carry_schema(), 1, "b", timer());
-        let c = Outlet::new(carry_schema(), 1, "c", timer());
+        let a = Outlet::new(carry_schema(), 1, "a", clock());
+        let b = Outlet::new(carry_schema(), 1, "b", clock());
+        let c = Outlet::new(carry_schema(), 1, "c", clock());
         for k in 0..1000 {
             a.send_with(Target::All, None, fill_k(k)).unwrap();
             relay(&b, a.channel(0), k + 1).unwrap();
@@ -946,8 +945,8 @@ mod tests {
 
     #[test]
     fn relayed_buffers_return_to_the_pool_that_filled_them() {
-        let source = Outlet::new(carry_schema(), 1, "a", timer());
-        let relayer = Outlet::new(carry_schema(), 0, "b", timer());
+        let source = Outlet::new(carry_schema(), 1, "a", clock());
+        let relayer = Outlet::new(carry_schema(), 0, "b", clock());
         source.send_with(Target::All, None, fill_k(1)).unwrap();
         relay(&relayer, source.channel(0), 0).unwrap();
         // The source moves on, but the relayer still holds the carry of 1.
@@ -964,7 +963,7 @@ mod tests {
 
     #[test]
     fn writers_fill_and_restore_the_carry() {
-        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
+        let outlet = Outlet::new(carry_schema(), 1, "p", clock());
         let zeros = outlet.channel(0).load();
         assert_eq!((values(&zeros), carried(&zeros)), (vec![0], vec![0]));
         outlet.send_with(Target::All, None, fill_k(3)).unwrap();
@@ -972,7 +971,7 @@ mod tests {
         outlet.channel(0).restore(5, true, fill_k(4)).unwrap();
         assert_eq!(carried(&outlet.channel(0).load()), [4]);
 
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let input = group.input(carry_schema(), "i");
         assert_eq!(carried(&input.load()), [0]);
         group.write(&[&input], |_, bytes| fill_k(6)(bytes)).unwrap();
@@ -983,7 +982,7 @@ mod tests {
 
     #[test]
     fn new_carry_comes_from_the_slots_pool() {
-        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
+        let outlet = Outlet::new(carry_schema(), 1, "p", clock());
         let slot = outlet.channel(0);
         let carry = slot.new_carry(fill_k(5)).unwrap();
         assert_eq!(carry.len(), 1);
@@ -993,7 +992,7 @@ mod tests {
         drop(carry);
         assert_eq!(free_carry(slot), 1);
 
-        let group = InputGroup::new(timer());
+        let group = InputGroup::new(clock());
         let input = group.input(carry_schema(), "i");
         let carry = input.new_carry(fill_k(6)).unwrap();
         assert_eq!(carry[0].bytes(), 6i64.to_ne_bytes());
@@ -1001,18 +1000,18 @@ mod tests {
 
     #[test]
     fn mismatched_relay_publishes_nothing() {
-        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let source = Outlet::new(carry_schema(), 1, "a", clock());
         let other = Outlet::new(
             Arc::new(Schema::new(vec![field("a", &[])], vec![field("d", &[])]).unwrap()),
             1,
             "x",
-            timer(),
+            clock(),
         );
         let shaped = Outlet::new(
             Arc::new(Schema::new(vec![field("a", &[])], vec![field("c", &[2])]).unwrap()),
             1,
             "y",
-            timer(),
+            clock(),
         );
         let mut int32 = field("c", &[]);
         int32.dtype.bits = 32;
@@ -1020,9 +1019,9 @@ mod tests {
             Arc::new(Schema::new(vec![field("a", &[])], vec![int32]).unwrap()),
             1,
             "z",
-            timer(),
+            clock(),
         );
-        let plain = Outlet::new(pair_schema(), 1, "w", timer());
+        let plain = Outlet::new(pair_schema(), 1, "w", clock());
         for target in [&other, &shaped, &typed, &plain] {
             let before = target.outbox().load();
             let (values_before, _) = split_allocations(target.outbox());
@@ -1048,8 +1047,8 @@ mod tests {
 
     #[test]
     fn failed_fill_with_carry_publishes_nothing() {
-        let outlet = Outlet::new(carry_schema(), 1, "p", timer());
-        let source = Outlet::new(carry_schema(), 1, "a", timer());
+        let outlet = Outlet::new(carry_schema(), 1, "p", clock());
+        let source = Outlet::new(carry_schema(), 1, "a", clock());
         let before = outlet.outbox().load();
         let bad = bad();
         let failed = outlet.send_with(Target::All, None, |_| Err(bad.clone()));
@@ -1066,8 +1065,8 @@ mod tests {
     #[test]
     fn relayed_carry_stays_with_its_value() {
         const WRITES: i64 = 20_000;
-        let source = Outlet::new(carry_schema(), 1, "a", timer());
-        let relayer = Arc::new(Outlet::new(carry_schema(), 1, "b", timer()));
+        let source = Outlet::new(carry_schema(), 1, "a", clock());
+        let relayer = Arc::new(Outlet::new(carry_schema(), 1, "b", clock()));
         let from = Arc::clone(source.channel(0));
         let done = Arc::new(AtomicBool::new(false));
         let relaying = {

@@ -12,19 +12,41 @@ from typing import (
     Final,
     Literal,
     Never,
+    Protocol,
     cast,
     final,
     overload,
     override,
 )
 
-from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec, host_tensors
+from mujou._core import _native
+from mujou._core.codec import to_core
+from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec
 
 if TYPE_CHECKING:
     import torch
 
-    from mujou._core._native import Timestamp
     from mujou._core.binding import Binding
+
+
+class Running(Protocol):
+    """What a hook sees of the node it runs as: the node's driver
+    (``driver.py``)."""
+
+    @property
+    def port_owner(self) -> object:
+        """The node whose ports the hook may use: none in ``state_dict``."""
+        ...
+
+    @property
+    def clock(self) -> _native.ReadOnlyTimer: ...
+
+
+def running() -> Running | None:
+    """The driver of the node whose hook the calling thread runs, or ``None``
+    outside the hooks."""
+    return cast("Running | None", _native.current())
+
 
 # The default of an omitted spec in the overloads below. Typed as a spec of Never so
 # that pyright solves the message type of an omitted direction to Never, where an
@@ -135,13 +157,13 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     Raises:
         TypeError: ``send`` or ``recv`` is not a ``TensorSpec``, a ``DictSpec`` or
             ``None``; ``initial`` is given to a port without ``send``; or
-            ``initial`` does not match ``send`` (as ``send`` raises).
-            ``send_carry`` is not a spec, a port or ``None``, or is given to a port
-            without ``send``; ``recv_carry`` is not a spec or ``None``, or is given
-            to a port without ``recv`` or with ``multi=True``; or the port given
-            as ``send_carry`` has no ``recv_carry``.
-        ValueError: A shape, or the keys of a dict, in ``initial`` differ from
-            ``send``.
+            ``initial`` is not a tensor, or a dict of tensors with the keys of
+            ``send`` (as ``send`` raises). ``send_carry`` is not a spec, a port or
+            ``None``, or is given to a port without ``send``; ``recv_carry`` is not
+            a spec or ``None``, or is given to a port without ``recv`` or with
+            ``multi=True``; or the port given as ``send_carry`` has no
+            ``recv_carry``. The shapes and dtypes of ``initial`` are checked when
+            a run starts: ``mujou.run`` raises ``ValueError`` if they differ.
     """
 
     @overload
@@ -232,9 +254,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
         if initial is not None:
             if send is None:
                 raise TypeError(f"{name} sends no messages, so it takes no initial")
-            self._initial = host_tensors(
-                cast(Spec, send), initial, where=f"{name} initial", copy=True
-            )
+            tensors = to_core(cast(Spec, send), initial, f"{name} initial")
+            self._initial = [t.clone() for t in tensors]
         self._send_spec = send
         self._recv_spec = recv
         self._multi = multi
@@ -376,8 +397,8 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
 
         Raises:
             RuntimeError: The network is not running, or the caller is not a hook
-                of the owning node (only the owner reads its port; ``state_dict``
-                runs on another thread).
+                of the owning node (only the owner reads its port, and not in
+                its ``state_dict``).
             TypeError: The port receives no messages.
         """
         return self._bound().recv(with_time=False)
@@ -385,11 +406,11 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
     @overload
     def recv_with_time[R2](
         self: Port[Any, R2, Single, Any, Any],
-    ) -> tuple[R2, Timestamp]: ...
+    ) -> tuple[R2, _native.Timestamp]: ...
     @overload
     def recv_with_time[R2](
         self: Port[Any, R2, Multi, Any, Any],
-    ) -> dict[Channel, tuple[R2, Timestamp]]: ...
+    ) -> dict[Channel, tuple[R2, _native.Timestamp]]: ...
     def recv_with_time(self) -> Any:  # Any: as recv
         """Like ``recv``, but each message comes as ``(message, time)``.
 
@@ -439,12 +460,14 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single, CS = Never, CR = N
 
         Raises:
             RuntimeError: The network is not running, or the caller is not a hook
-                of the owning node (only the owner writes its port).
-            TypeError: The port sends no messages, a value is not a dense
-                ``torch.Tensor`` of the spec's dtype, or a ``DictSpec`` message is
-                not a dict; ``carry`` is missing for a port that carries a spec,
+                of the owning node (only the owner writes its port, and not in
+                its ``state_dict``).
+            TypeError: The port sends no messages, a value is not a
+                ``torch.Tensor``, or a ``DictSpec`` message is not a dict with the
+                spec's keys; ``carry`` is missing for a port that carries a spec,
                 or given to a port that carries nothing or passes data on.
-            ValueError: A shape, or the keys of a dict message, differ from the spec.
+            ValueError: A shape or a dtype differs from the spec.
+            BufferError: A tensor is not dense (``torch.strided``).
         """
         self._bound().send(msg, carry)
 

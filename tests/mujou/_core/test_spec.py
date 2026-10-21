@@ -3,7 +3,7 @@ from typing import NotRequired, TypedDict, cast
 import pytest
 import torch
 
-from mujou._core.spec import DLPACK_DTYPES, DictSpec, TensorSpec, fields, join, split
+from mujou._core.spec import DLPACK, DictSpec, TensorSpec
 
 
 class Feedback(TypedDict):
@@ -38,7 +38,7 @@ class Empty(TypedDict):
     pass
 
 
-ALL_DTYPES = list(DLPACK_DTYPES)
+ALL_DTYPES = list(DLPACK)
 FLOAT_DTYPES = [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 
 
@@ -127,7 +127,7 @@ class TestTensorSpec:
         "dtype", [torch.complex64, torch.uint16, torch.float8_e4m3fn]
     )
     def test_rejects_unsupported_dtypes(self, dtype: torch.dtype):
-        with pytest.raises(TypeError, match="not supported"):
+        with pytest.raises(TypeError, match=r"TensorSpec\.dtypes"):
             TensorSpec((2,), dtype)
 
     @pytest.mark.parametrize("shape", [(0,), (2, -1)])
@@ -228,76 +228,3 @@ class TestDictSpec:
             Reversed, error=TensorSpec((2, 3)), target=TensorSpec((2,))
         )
         assert spec != TensorSpec((2, 3))
-
-
-class TestFields:
-    def test_tensor_is_one_unnamed_field(self):
-        assert fields(TensorSpec((2, 3), torch.bfloat16)) == [("", (2, 3), (4, 16, 1))]
-
-    def test_dict_has_one_field_per_key_in_order(self):
-        spec = DictSpec(
-            Feedback,
-            error=TensorSpec((2, 3), torch.float64),
-            target=TensorSpec((), torch.bool),
-        )
-        assert fields(spec) == [
-            ("error", (2, 3), (2, 64, 1)),
-            ("target", (), (6, 8, 1)),
-        ]
-
-
-class TestSplitJoin:
-    def test_tensor_round_trip(self):
-        spec = TensorSpec((2, 3))
-        x = spec.rand(seed=0)
-        (y,) = split(spec, x, where="a.next")
-        assert y is x
-        assert join(spec, [x]) is x
-
-    def test_dict_round_trip_in_key_order(self):
-        spec = feedback_spec()
-        msg = {"target": torch.ones(2), "error": torch.ones(2, 3)}
-        tensors = split(spec, msg, where="a.next")
-        assert tensors[0] is msg["error"] and tensors[1] is msg["target"]
-        back = join(spec, tensors)
-        assert isinstance(back, dict)
-        assert list(back) == ["error", "target"]
-        assert back["error"] is msg["error"] and back["target"] is msg["target"]
-
-    def test_shape_mismatch_names_the_place(self):
-        with pytest.raises(ValueError, match="a.next") as exc:
-            split(TensorSpec((2, 3)), torch.zeros(3, 2), where="a.next")
-        assert "(2, 3)" in str(exc.value) and "(3, 2)" in str(exc.value)
-
-    def test_dtype_mismatch_names_the_place_and_key(self):
-        msg = {"error": torch.zeros(2, 3), "target": torch.zeros(2, dtype=torch.int64)}
-        with pytest.raises(TypeError, match="int64") as exc:
-            split(feedback_spec(), msg, where="a.next")
-        assert "a.next['target']" in str(exc.value)
-
-    def test_dict_shape_mismatch_names_the_key(self):
-        msg = {"error": torch.zeros(3, 2), "target": torch.zeros(2)}
-        with pytest.raises(ValueError, match="'error'"):
-            split(feedback_spec(), msg, where="a.next")
-
-    def test_rejects_sparse_tensors(self):
-        sparse = torch.zeros(2, 3).to_sparse()
-        with pytest.raises(TypeError, match="strided"):
-            split(TensorSpec((2, 3)), sparse, where="a.next")
-
-    def test_dict_keys_must_match(self):
-        with pytest.raises(ValueError, match="missing \\['target'\\]"):
-            split(feedback_spec(), {"error": torch.zeros(2, 3)}, where="a.next")
-
-    @pytest.mark.parametrize(
-        ("spec", "msg"),
-        [
-            (TensorSpec((2,)), [0.0, 0.0]),
-            (feedback_spec(), torch.zeros(2)),
-        ],
-    )
-    def test_wrong_message_type(
-        self, spec: TensorSpec | DictSpec[Feedback], msg: object
-    ):
-        with pytest.raises(TypeError, match="a.next"):
-            split(spec, msg, where="a.next")

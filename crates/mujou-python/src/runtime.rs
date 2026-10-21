@@ -1,4 +1,5 @@
-//! Bindings of `mujou_core::runtime`: Python nodes on native threads.
+//! Bindings of `mujou_core::runtime`: Python nodes on native threads, each run
+//! through its driver.
 //!
 //! Every wait on the host releases the GIL (detaches) and checks for signals
 //! every `SIGNAL_CHECK_INTERVAL`, like `sleep`: the node and control threads
@@ -7,135 +8,24 @@
 
 use std::error::Error;
 use std::fmt;
-use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::num::{NonZeroU64, NonZeroUsize};
+use std::sync::Arc;
+use std::time::Instant;
 
 use mujou_core::runtime::{
-    self as core, HookError, NodeFailure, NodeHooks, Reply, RuntimeConfig, RuntimeError,
+    self as core, Hook, HookError, NodeFailure, NodeHooks, NodeSpec, Reply, RunConfig, RuntimeError,
 };
-use mujou_core::time::Timer;
-use pyo3::create_exception;
+use pyo3::call::PyCallArgs;
 use pyo3::exceptions::{PyRuntimeError, PyTimeoutError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyFloat, PyList, PyTuple};
+use pyo3::types::{PyDict, PyList, PyString};
 
+use crate::current;
+use crate::errors::NetworkError;
 use crate::hint::Build;
-use crate::time::{PyTimer, extract_state, to_ns};
-use crate::wait_interruptibly;
-
-// pyo3 does not introspect these, so `crates/mujou-stubgen` adds them to the
-// stub with the same docstrings. They cannot be classes: pyo3 0.30 declares
-// `PyTimeoutError` with the layout of `BaseException`, smaller than that of
-// `TimeoutError`, so a class extending it fails to initialize.
-create_exception!(
-    mujou._core._native,
-    NetworkError,
-    PyRuntimeError,
-    "The network stopped because a node raised. `__cause__` is the first exception."
-);
-create_exception!(
-    mujou._core._native,
-    PauseTimeoutError,
-    PyTimeoutError,
-    "Some nodes did not pause in time, so the state was not taken. The network keeps running."
-);
-
-/// The base of every node.
-///
-/// The runtime calls the hooks on the thread that runs the node: a worker of
-/// the run's pool, which may differ from one hook to the next, or the node's
-/// own thread if it was started as dedicated (`state_dict`, through
-/// `_capture_state`, on the control thread while the node is paused). The hooks
-/// of a node never overlap, and each runs in the node's own
-/// `contextvars.Context` (but `_capture_state`). They do nothing by default.
-///
-/// The hooks are looked up by name until `on_start` (and `load_state_dict`)
-/// has returned, and once after that, so replacing one in those hooks takes
-/// effect. `state_dict` itself is looked up by the default `_capture_state` at
-/// each capture, so replacing it later takes effect too.
-#[pyclass(subclass, frozen, module = "mujou._core._native")]
-pub struct Node;
-
-#[pymethods]
-impl Node {
-    /// Accepts and ignores any arguments, so that subclasses define `__init__`
-    /// freely.
-    #[new]
-    #[pyo3(signature = (*_args, **_kwargs))]
-    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
-        Self
-    }
-
-    /// Called right before a hook whenever a thread switches to this node (the
-    /// first time a thread runs it, and on a worker whenever it ran another
-    /// node in between), for the framework's per-thread settings, so that no
-    /// override of a public hook can skip them. An error here is reported as
-    /// the error of the hook that was to follow.
-    fn _on_enter(&self) {}
-
-    /// Called once when the run starts (also when it is restored), before any
-    /// other public hook. Allocate and initialize the state here.
-    fn on_start(&self) {}
-
-    /// Called repeatedly with `dt`, the seconds on the run's timer since the
-    /// node's last update (always > 0). Read the ports, update in proportion to
-    /// `dt` and send.
-    #[pyo3(signature = (dt: "float"))]
-    fn on_update(&self, dt: f64) {
-        let _ = dt;
-    }
-
-    /// Called right after each `on_update`, for the framework's per-step work
-    /// (so that overriding `on_update` cannot skip it).
-    fn _after_update(&self) {}
-
-    /// Called when the node has stopped for a pause of the run (to take the
-    /// state), at the end of its current `on_update`.
-    fn on_pause(&self) {}
-
-    /// Called when the pause ends, before the next `on_update`.
-    fn on_resume(&self) {}
-
-    /// Called once on every node when a hook of any node has raised, before
-    /// `on_stop`. What it raises is logged and ignored.
-    fn on_exception(&self) {}
-
-    /// Called once when the run stops, also after an exception. It must not
-    /// change what `state_dict` returns. What it raises is logged and ignored.
-    fn on_stop(&self) {}
-
-    /// Returns the node's own state as a picklable object, when the run's state
-    /// is taken (the node is paused or the run has ended). `None` by default.
-    #[pyo3(signature = () -> "object")]
-    fn state_dict(&self, py: Python<'_>) -> Py<PyAny> {
-        py.None()
-    }
-
-    /// Restores `state`, a copy of what `state_dict` returned, after `on_start`
-    /// when the run is restored. Does nothing by default.
-    #[pyo3(signature = (state: "object"))]
-    fn load_state_dict(&self, state: &Bound<'_, PyAny>) {
-        let _ = state;
-    }
-
-    /// Called instead of `load_state_dict` when the runtime restores the state
-    /// (after `on_start`), for the framework's work around it. Calls
-    /// `self.load_state_dict(state)` by default.
-    #[pyo3(signature = (state: "object"))]
-    fn _restore_state(slf: &Bound<'_, Self>, state: &Bound<'_, PyAny>) -> PyResult<()> {
-        slf.call_method1("load_state_dict", (state,)).map(drop)
-    }
-
-    /// Called instead of `state_dict` when the runtime takes the state (on the
-    /// control thread, while the node is paused), for the framework's work
-    /// around it. Returns `self.state_dict()` by default.
-    #[pyo3(signature = () -> "object")]
-    fn _capture_state(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
-        slf.call_method0("state_dict").map(Bound::unbind)
-    }
-}
+use crate::time::PyReadOnlyTimer;
+use crate::wait::{to_duration, to_ns, wait_interruptibly};
 
 /// A Python exception raised by a hook, kept to become `__cause__`.
 #[derive(Debug)]
@@ -168,48 +58,34 @@ fn log_error(py: Python<'_>, message: &str, err: &PyErr) {
     }
 }
 
-/// The hooks called more than once, looked up once at the end of `start`
-/// instead of by name at every call. `PyNode::methods` holds them in this order.
-const CACHED_HOOKS: [&str; 8] = [
-    "_on_enter",
-    "on_update",
-    "_after_update",
-    "on_pause",
-    "on_resume",
-    "on_exception",
-    "on_stop",
-    "state_dict",
-];
-
-/// The attribute the runtime calls for `hook`. Taking the state goes through
-/// `_capture_state`, which calls `state_dict`, and restoring it through
-/// `_restore_state`, which calls `load_state_dict`; errors still name the
-/// public hook.
-fn attribute(hook: &str) -> &str {
+/// The method of the driver that runs `hook`.
+fn method(py: Python<'_>, hook: Hook) -> &Bound<'_, PyString> {
     match hook {
-        "state_dict" => "_capture_state",
-        "load_state_dict" => "_restore_state",
-        _ => hook,
+        Hook::Start => intern!(py, "start"),
+        Hook::Restore => intern!(py, "restore"),
+        Hook::Update => intern!(py, "update"),
+        Hook::Pause => intern!(py, "pause"),
+        Hook::Resume => intern!(py, "resume"),
+        Hook::Exception => intern!(py, "exception"),
+        Hook::Stop => intern!(py, "stop"),
+        Hook::Capture => intern!(py, "capture"),
     }
 }
 
-/// A Python node seen by the runtime.
-struct PyNode {
-    node: Py<PyAny>,
+/// A node's driver (`mujou._core.driver.Driver`) as the runtime sees it: each
+/// hook is one call of the driver's method for it, which `current()` returns
+/// the driver during.
+struct PyDriver {
+    driver: Py<PyAny>,
     name: String,
-    /// The node's own `contextvars.Context`, which every hook runs in, so that
-    /// context variables stay with the node whichever worker runs it.
-    context: Py<PyAny>,
-    /// The state to restore in `start`.
+    /// The state to restore in `restore`.
     state: Option<Py<PyAny>>,
-    /// The methods of `CACHED_HOOKS`, once `start` has looked them up.
-    methods: Option<Vec<Py<PyAny>>>,
 }
 
-impl PyNode {
+impl PyDriver {
     /// Every hook error is logged where it is caught, including the ones that
     /// do not end the system (a second exception, `on_exception`, `on_stop`).
-    fn error(&self, py: Python<'_>, hook: &'static str, err: PyErr) -> HookError {
+    fn error(&self, py: Python<'_>, hook: Hook, err: PyErr) -> HookError {
         let message = format!("node '{}' raised in {hook}", self.name);
         log_error(py, &message, &err);
         HookError {
@@ -218,56 +94,37 @@ impl PyNode {
         }
     }
 
-    /// The method the runtime calls for `hook`.
-    fn method<'py>(&self, py: Python<'py>, hook: &str) -> PyResult<Bound<'py, PyAny>> {
-        let cached = (self.methods.as_ref())
-            .zip(CACHED_HOOKS.iter().position(|&h| h == hook))
-            .map(|(methods, i)| &methods[i]);
-        match cached {
-            Some(method) => Ok(method.bind(py).clone()),
-            // Before the lookup, or if it failed: by name.
-            None => self.node.bind(py).getattr(attribute(hook)),
-        }
-    }
-
-    /// Calls `hook` in the node's context.
-    fn call(
+    /// Calls the driver's method for `hook` with `args`, as the hook of the
+    /// node, and returns what `keep` keeps of what it returned.
+    ///
+    /// `keep` runs attached, so that dropping the result there releases it at
+    /// once: dropped detached, pyo3 would queue the release in its one global
+    /// pool, which every thread that runs a node then contends for.
+    fn call<A, T>(
         &self,
-        hook: &'static str,
-        args: impl for<'py> FnOnce(Python<'py>) -> Vec<Bound<'py, PyAny>>,
-    ) -> Result<Py<PyAny>, HookError> {
-        self.call_as(hook, hook, args)
-    }
-
-    /// Calls `hook` in the node's context, reporting an error as `reported`.
-    fn call_as(
-        &self,
-        hook: &'static str,
-        reported: &'static str,
-        args: impl for<'py> FnOnce(Python<'py>) -> Vec<Bound<'py, PyAny>>,
-    ) -> Result<Py<PyAny>, HookError> {
+        hook: Hook,
+        args: A,
+        keep: impl for<'py> FnOnce(Bound<'py, PyAny>) -> T,
+    ) -> Result<T, HookError>
+    where
+        A: for<'py> PyCallArgs<'py>,
+    {
         // Every runtime thread keeps its Python thread state for its whole life
         // (`on_thread`), so this attach only takes the GIL (on a GIL build).
         Python::attach(|py| {
-            let result = (|| {
-                // `Context.run(method, *args)`.
-                let mut call = vec![self.method(py, hook)?];
-                call.extend(args(py));
-                let call = PyTuple::new(py, call)?;
-                self.context.bind(py).call_method1(intern!(py, "run"), call)
-            })();
-            result
-                .map(Bound::unbind)
-                .map_err(|e| self.error(py, reported, e))
+            current::running(&self.driver, py, || {
+                self.driver.bind(py).call_method1(method(py, hook), args)
+            })
+            .map(keep)
+            .map_err(|e| self.error(py, hook, e))
         })
-    }
-
-    fn call0(&self, hook: &'static str) -> Result<(), HookError> {
-        self.call(hook, |_| Vec::new()).map(drop)
     }
 }
 
-impl NodeHooks for PyNode {
+/// What a hook returns but the capture: nothing to keep.
+fn ignore(_: Bound<'_, PyAny>) {}
+
+impl NodeHooks for PyDriver {
     type State = Py<PyAny>;
 
     /// Attaches the thread to Python once for its whole life and detaches it
@@ -278,12 +135,6 @@ impl NodeHooks for PyNode {
     /// runs. The body waits without the GIL.
     fn on_thread<R: Send>(body: impl FnOnce() -> R + Send) -> R {
         Python::attach(|py| py.detach(body))
-    }
-
-    /// Calls `_on_enter`, whose error is reported as the error of `next_hook`.
-    fn enter(&mut self, next_hook: &'static str) -> Result<(), HookError> {
-        self.call_as("_on_enter", next_hook, |_| Vec::new())
-            .map(drop)
     }
 
     fn panicked(&mut self, error: &HookError) {
@@ -300,57 +151,39 @@ impl NodeHooks for PyNode {
     }
 
     fn start(&mut self) -> Result<(), HookError> {
-        let state = self.state.take();
-        self.call0("on_start")?;
-        if let Some(state) = state {
-            self.call("load_state_dict", |py| vec![state.into_bound(py)])?;
-        }
-        // Look the hooks up last, so that the hooks above may still replace them
-        // (by instance attributes).
-        let methods = Python::attach(|py| {
-            let node = self.node.bind(py);
-            CACHED_HOOKS
-                .iter()
-                .map(|hook| node.getattr(attribute(hook)).map(Bound::unbind))
-                .collect::<PyResult<_>>()
-                .map_err(|e| self.error(py, "on_start", e))
-        })?;
-        self.methods = Some(methods);
-        Ok(())
+        self.call(Hook::Start, (), ignore)
     }
+
+    /// Restores the state, if any: no call without one.
+    fn restore(&mut self) -> Result<(), HookError> {
+        match self.state.take() {
+            Some(state) => self.call(Hook::Restore, (state,), ignore),
+            None => Ok(()),
+        }
+    }
+
     fn update(&mut self, dt: f64) -> Result<(), HookError> {
-        self.call("on_update", |py| vec![PyFloat::new(py, dt).into_any()])?;
-        // The framework's per-step work: an error there is reported as
-        // `on_update`'s.
-        self.call_as("_after_update", "on_update", |_| Vec::new())
-            .map(drop)
+        self.call(Hook::Update, (dt,), ignore)
     }
 
     fn pause(&mut self) -> Result<(), HookError> {
-        self.call0("on_pause")
+        self.call(Hook::Pause, (), ignore)
     }
 
     fn resume(&mut self) -> Result<(), HookError> {
-        self.call0("on_resume")
+        self.call(Hook::Resume, (), ignore)
     }
 
     fn exception(&mut self) -> Result<(), HookError> {
-        self.call0("on_exception")
+        self.call(Hook::Exception, (), ignore)
     }
 
     fn stop(&mut self) -> Result<(), HookError> {
-        self.call0("on_stop")
+        self.call(Hook::Stop, (), ignore)
     }
 
-    /// Outside the node's context: the host takes the state the same way after
-    /// a normal end.
-    fn state_dict(&mut self) -> Result<Py<PyAny>, HookError> {
-        Python::attach(|py| {
-            self.method(py, "state_dict")
-                .and_then(|m| m.call0())
-                .map(Bound::unbind)
-                .map_err(|e| self.error(py, "state_dict", e))
-        })
+    fn capture(&mut self) -> Result<Py<PyAny>, HookError> {
+        self.call(Hook::Capture, (), |state| state.unbind())
     }
 }
 
@@ -363,42 +196,41 @@ fn cause(py: Python<'_>, failure: &NodeFailure) -> PyErr {
     }
 }
 
-fn runtime_error(py: Python<'_>, names: &[String], err: RuntimeError) -> PyErr {
+fn runtime_error(py: Python<'_>, err: RuntimeError) -> PyErr {
     match err {
         RuntimeError::Failed(failure) => {
             let message = format!(
                 "the network stopped because node '{}' raised in {}",
-                names[failure.node], failure.hook
+                failure.name, failure.hook
             );
             let err = NetworkError::new_err(message);
             err.set_cause(py, Some(cause(py, &failure)));
             err
         }
-        RuntimeError::PauseTimeout { .. } => PauseTimeoutError::new_err(err.to_string()),
+        // The run had ended normally: the host's call raises what the node's
+        // `state_dict` raised, as any call on its thread would.
+        RuntimeError::CaptureFailed(failure) => cause(py, &failure),
+        RuntimeError::PauseTimeout { .. } => PyTimeoutError::new_err(err.to_string()),
         RuntimeError::InvalidArgument(_) => PyValueError::new_err(err.to_string()),
-        RuntimeError::NotManual
-        | RuntimeError::Finished
-        | RuntimeError::Reentrant
-        | RuntimeError::Internal(_) => PyRuntimeError::new_err(err.to_string()),
+        RuntimeError::Finished | RuntimeError::Reentrant | RuntimeError::Internal(_) => {
+            PyRuntimeError::new_err(err.to_string())
+        }
     }
 }
 
-fn duration(seconds: f64) -> PyResult<Duration> {
-    Ok(Duration::from_nanos(to_ns(seconds)?))
-}
-
-/// A period in seconds as the runtime's ns: rounded as `to_ns` rounds,
-/// and at least 1 ns, since a period of 0 ns is invalid (0.0 s becomes 1 ns,
-/// which updates as soon as any time has passed).
-fn period_to_ns(seconds: f64) -> PyResult<u64> {
-    Ok(to_ns(seconds)?.max(1))
+/// A period in seconds as the runtime's ns: rounded as `to_ns` rounds, and at
+/// least 1 ns (0.0 s becomes 1 ns, which updates as soon as any time has
+/// passed).
+fn period_to_ns(seconds: f64) -> PyResult<NonZeroU64> {
+    Ok(NonZeroU64::new(to_ns(seconds)?).unwrap_or(NonZeroU64::MIN))
 }
 
 /// The number of workers when `start` is given none, if not the core's
-/// default (the available parallelism): half of it, at least 1, while the GIL
-/// is enabled. With the GIL, more workers than that only contend for it: in the
-/// benchmark (`benchmarks/mn_scheduler.py`, 14 cores), torch nodes updated
-/// about twice as fast on 7 or 8 workers as on 14.
+/// default (the available parallelism, which on Linux also counts a CPU
+/// quota): half of it, at least 1, while the GIL is enabled. With the GIL,
+/// more workers than that only contend for it: in the benchmark
+/// (`benchmarks/mn_scheduler.py`, 14 cores), torch nodes updated about twice
+/// as fast on 7 or 8 workers as on 14.
 fn default_workers(py: Python<'_>) -> PyResult<Option<NonZeroUsize>> {
     let gil = py
         .import(intern!(py, "sys"))?
@@ -407,251 +239,171 @@ fn default_workers(py: Python<'_>) -> PyResult<Option<NonZeroUsize>> {
     if !gil {
         return Ok(None);
     }
-    Ok(NonZeroUsize::new((available_parallelism() / 2).max(1)))
+    let cpus = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    Ok(NonZeroUsize::new((cpus / 2).max(1)))
 }
 
-/// The available parallelism as the core reads it (on Linux it also counts a
-/// CPU quota): the default number of workers for at least as many pool nodes
-/// without the GIL. Private, for the tests.
-#[pyfunction(name = "_available_parallelism")]
-pub fn available_parallelism() -> usize {
-    std::thread::available_parallelism().map_or(1, NonZeroUsize::get)
+/// A node of `start`: `(driver, name, period, dedicated_thread,
+/// last_update_ns, state)`.
+type Record<'py> = (
+    Bound<'py, PyAny>,
+    String,
+    f64,
+    bool,
+    Option<u64>,
+    Option<Py<PyAny>>,
+);
+
+/// Starts `nodes` on `clock` and returns once all of them have started (and
+/// restored their states) and the time runs again. If a node raised
+/// meanwhile, raises `NetworkError` after the network has stopped.
+///
+/// Each node is a record `(driver, name, period, dedicated_thread,
+/// last_update_ns, state)`. The runtime runs each hook of the node as one call
+/// of a method of `driver` (`mujou._core.driver.Driver`): `start()`,
+/// `restore(state)`, `update(dt)`, `pause()`, `resume()`, `exception()`,
+/// `stop()` and `capture()`, which returns the node's state. `name` names the
+/// node in the errors and the logs, which name the hooks as the node's author
+/// knows them (`on_update`, `load_state_dict`, `state_dict`, ...). `period` is
+/// its period on the timer in seconds (>= 0), rounded to the nearest ns and at
+/// least 1 ns, so that 0.0 updates as soon as any time has passed; the manual
+/// mode ignores it. `dedicated_thread` runs the node on a thread of its own
+/// instead of the pool. `last_update_ns` is where its first Δt starts (the
+/// time at the start if `None`), and `state` what `restore` restores after
+/// `start` (no call if `None`).
+///
+/// The nodes run on `clock`, the reading side of the run's timer: it measures
+/// their Δt, and the runtime freezes its timer to start (so the time does not
+/// run while the nodes start) and to take the state. Create the `Outlet`s and
+/// the `InputGroup` of this run with the same clock. The runtime stops the
+/// clock when it is asked to stop or a node raises, so that no time of the run
+/// is later than its end.
+///
+/// `current()` returns the driver while one of its methods runs.
+///
+/// The nodes not on a thread of their own share a pool of `workers` threads,
+/// by default as many as the available parallelism (half of it, at least 1,
+/// while the GIL is enabled), never more than the nodes in the pool.
+///
+/// If the wait is interrupted (Ctrl-C), stops the network and raises once it
+/// has stopped; interrupting that wait too leaves it stopping in the background.
+#[pyfunction]
+#[pyo3(signature = (nodes, clock, *, manual = false, workers = None))]
+pub fn start(
+    py: Python<'_>,
+    nodes: Vec<Record<'_>>,
+    clock: Bound<'_, PyReadOnlyTimer>,
+    manual: bool,
+    workers: Option<NonZeroUsize>,
+) -> PyResult<Runtime> {
+    let workers = match workers {
+        Some(workers) => Some(workers),
+        None => default_workers(py)?,
+    };
+    let nodes = (nodes.into_iter())
+        .map(
+            |(driver, name, period, dedicated_thread, last_update_ns, state)| {
+                Ok(NodeSpec {
+                    hooks: PyDriver {
+                        driver: driver.unbind(),
+                        name: name.clone(),
+                        state,
+                    },
+                    name,
+                    period_ns: period_to_ns(period)?,
+                    dedicated_thread,
+                    last_update_ns,
+                })
+            },
+        )
+        .collect::<PyResult<_>>()?;
+    let config = RunConfig {
+        nodes,
+        manual,
+        workers,
+    };
+    let (runtime, started) = core::Runtime::start(config, Arc::clone(&clock.get().0))
+        .map_err(|e| runtime_error(py, e))?;
+    if let Err(e) = wait(py, started) {
+        // A node raised, and the network has stopped, or the wait was
+        // interrupted: stop and wait for the end, so that no node runs once
+        // this has raised (nor into the interpreter's exit).
+        runtime.stop();
+        wait_interruptibly(py, None, |step| {
+            runtime
+                .join(Some(step))
+                .map_or(Some(()), |ended| ended.then_some(()))
+        })?;
+        return Err(e);
+    }
+    Ok(Runtime(runtime))
 }
 
-/// Runs nodes on a pool of worker threads, or each dedicated node on a thread
-/// of its own, under one control thread.
+/// Waits for a reply without the GIL, checking for signals in between.
+fn wait<T: Send>(py: Python<'_>, reply: Reply<T>) -> PyResult<T> {
+    // `Reply` is not `Sync`, so the closure owns it instead of borrowing it
+    // across the detach.
+    let result = wait_interruptibly(py, None, move |step| reply.wait_timeout(step))?;
+    let result = result.expect("a wait without a deadline ends only with the reply");
+    result.map_err(|e| runtime_error(py, e))
+}
+
+/// The running nodes of one run, from `start`: on a pool of worker threads,
+/// or each dedicated node on a thread of its own, under one control thread.
 #[pyclass(frozen, module = "mujou._core._native")]
-pub struct Runtime {
-    /// The nodes before `start`.
-    pending: Mutex<Option<Vec<Py<PyAny>>>>,
-    names: Vec<String>,
-    timer: Arc<Timer>,
-    inner: OnceLock<core::Runtime<PyNode>>,
-}
-
-impl Runtime {
-    fn core(&self) -> PyResult<&core::Runtime<PyNode>> {
-        self.inner
-            .get()
-            .ok_or_else(|| PyRuntimeError::new_err("the runtime has not started"))
-    }
-
-    /// Waits for a reply without the GIL, checking for signals in between.
-    fn wait<T: Send>(&self, py: Python<'_>, reply: Reply<T>) -> PyResult<T> {
-        // `Reply` is not `Sync`, so the closure owns it instead of borrowing it
-        // across the detach.
-        let result = wait_interruptibly(py, None, move |step| reply.wait_timeout(step))?;
-        let result = result.expect("a wait without a deadline ends only with the reply");
-        result.map_err(|e| runtime_error(py, &self.names, e))
-    }
-}
+pub struct Runtime(core::Runtime<PyDriver>);
 
 #[pymethods]
 impl Runtime {
-    /// The nodes run on `timer`: it measures their Δt, and the runtime freezes
-    /// it to start and to take the state. Create the `Outlet`s and the
-    /// `InputGroup` of this run with the same timer.
-    #[new]
-    #[pyo3(signature = (nodes, names, *, timer))]
-    fn new(
-        nodes: Vec<Bound<'_, Node>>,
-        names: Vec<String>,
-        timer: PyRef<'_, PyTimer>,
-    ) -> PyResult<Self> {
-        if nodes.len() != names.len() {
-            return Err(PyValueError::new_err(format!(
-                "got {} nodes but {} names",
-                nodes.len(),
-                names.len()
-            )));
-        }
-        let nodes = nodes.into_iter().map(|n| n.into_any().unbind()).collect();
-        Ok(Self {
-            pending: Mutex::new(Some(nodes)),
-            names,
-            timer: Arc::clone(&timer.0),
-            inner: OnceLock::new(),
-        })
-    }
-
-    /// Starts every node and returns once all of them have started (and
-    /// restored `states`) and the timer runs again. If a node raised meanwhile,
-    /// raises `NetworkError` after the network has stopped. If an argument is
-    /// invalid, raises `ValueError` and nothing starts, so `start` can be
-    /// called again.
-    ///
-    /// The timer is frozen first and loaded from `timer_state`
-    /// (`Timer.state_dict()`), so the time does not run while the nodes start.
-    /// Loading it raises `ValueError` while another runtime runs on the same
-    /// timer, whose time would jump. `last_update_ns` is where each node's
-    /// first Δt starts (the time at the start by default). `periods` is each
-    /// node's period on the timer in seconds (>= 0), rounded to the nearest ns
-    /// and at least 1 ns, so that 0.0 updates as soon as any time has passed,
-    /// as every node does without `periods`; the manual mode ignores it.
-    ///
-    /// `dedicated` tells which nodes run on a thread of their own; the others,
-    /// all of them by default, share a pool of `workers` threads (>= 1), by
-    /// default as many as the available parallelism (half of it, at least 1,
-    /// while the GIL is enabled), never more than the nodes in the pool.
-    ///
-    /// If the wait is interrupted (Ctrl-C), the start goes on in the
-    /// background; `shutdown` stops it.
-    #[pyo3(signature = (
-        *,
-        manual = false,
-        states = None,
-        last_update_ns = None,
-        periods = None,
-        timer_state: "dict[str, int | float] | None" = None,
-        workers = None,
-        dedicated = None,
-    ))]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the keyword arguments of the Python method"
-    )]
-    fn start(
-        &self,
-        py: Python<'_>,
-        manual: bool,
-        states: Option<Vec<Py<PyAny>>>,
-        last_update_ns: Option<Vec<u64>>,
-        periods: Option<Vec<f64>>,
-        timer_state: Option<Bound<'_, PyAny>>,
-        workers: Option<usize>,
-        dedicated: Option<Vec<bool>>,
-    ) -> PyResult<()> {
-        let n = self.names.len();
-        let workers = match workers {
-            Some(w) => Some(
-                NonZeroUsize::new(w)
-                    .ok_or_else(|| PyValueError::new_err("workers must be at least 1, got 0"))?,
-            ),
-            None => default_workers(py)?,
-        };
-        if let Some(states) = &states {
-            if states.len() != n {
-                return Err(PyValueError::new_err(format!(
-                    "got {n} nodes but {} states",
-                    states.len()
-                )));
-            }
-        }
-        let timer_state = timer_state.as_ref().map(extract_state).transpose()?;
-        let period_ns = periods
-            .map(|periods| {
-                periods
-                    .into_iter()
-                    .map(period_to_ns)
-                    .collect::<PyResult<Vec<_>>>()
-            })
-            .transpose()?;
-        let config = RuntimeConfig {
-            manual,
-            last_update_ns,
-            period_ns,
-            timer_state,
-            workers,
-            dedicated,
-        };
-        // An empty context for each node, as a new thread has.
-        let context = py.import("contextvars")?.getattr("Context")?;
-        let contexts = (0..n)
-            .map(|_| context.call0().map(Bound::unbind))
-            .collect::<PyResult<Vec<_>>>()?;
-        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
-        let nodes = pending
-            .take()
-            .ok_or_else(|| PyRuntimeError::new_err("the runtime has already started"))?;
-        // Kept to undo the take if the core rejects the arguments.
-        let kept = nodes.iter().map(|n| n.clone_ref(py)).collect();
-        let mut states = states.into_iter().flatten();
-        let hooks = (nodes.into_iter().zip(self.names.iter().cloned()))
-            .zip(contexts)
-            .map(|((node, name), context)| PyNode {
-                node,
-                name,
-                context,
-                state: states.next(),
-                methods: None,
-            })
-            .collect();
-        let (runtime, started) = match core::Runtime::start(
-            hooks,
-            self.names.clone(),
-            Arc::clone(&self.timer),
-            config,
-        ) {
-            Ok(started) => started,
-            Err(e) => {
-                if matches!(e, RuntimeError::InvalidArgument(_)) {
-                    *pending = Some(kept);
-                }
-                return Err(runtime_error(py, &self.names, e));
-            }
-        };
-        drop(pending);
-        let _ = self.inner.set(runtime);
-        self.wait(py, started)
-    }
-
     /// Manual mode: lets the nodes in `order` (all, in index order, if `None`)
     /// update once each, one after another.
     #[pyo3(signature = (order = None))]
     fn step(&self, py: Python<'_>, order: Option<Vec<usize>>) -> PyResult<()> {
-        let reply = self.core()?.step(order.as_deref());
-        self.wait(py, reply)
+        wait(py, self.0.step(order.as_deref()))
     }
 
-    /// Pauses every node, calls `build` with their `state_dict()` in node
-    /// order while paused, resumes, and returns what `build` returned.
+    /// Pauses every node, calls `build` with the states their drivers'
+    /// `capture()` return, in node order, while paused, resumes, and returns
+    /// what `build` returned. After a normal end, calls their `capture()` and
+    /// `build` on this thread instead, at once.
     ///
     /// `build` runs on the control thread and must not call this runtime's
     /// waiting methods. It may capture another runtime, but two builds must
     /// not wait for each other's runtime: that cycle deadlocks, and the control
     /// threads cannot see Ctrl-C. If `build` raises, the exception propagates
-    /// and the network keeps running. Gives up with `PauseTimeoutError` after
-    /// `timeout` real seconds if some node has not paused.
+    /// and the network keeps running. Gives up with `TimeoutError` after
+    /// `timeout` real seconds if some node has not paused; the network keeps
+    /// running.
     fn capture(&self, py: Python<'_>, build: Build, timeout: f64) -> PyResult<Py<PyAny>> {
         let Build(build) = build;
-        let timeout = duration(timeout)?;
-        let reply = self.core()?.capture(
-            move |states| {
-                Python::attach(|py| {
-                    let states = PyList::new(py, states)?;
-                    build.call1(py, (states,))
-                })
-            },
-            timeout,
-        );
-        self.wait(py, reply)?
-    }
-
-    /// Stops every node and waits until the network has stopped. Does nothing
-    /// before `start` or after a normal stop.
-    fn shutdown(&self, py: Python<'_>) -> PyResult<()> {
-        let Some(runtime) = self.inner.get() else {
-            return Ok(());
+        let timeout = to_duration(timeout)?;
+        let build = move |states| {
+            Python::attach(|py| {
+                let states = PyList::new(py, states)?;
+                build.call1(py, (states,))
+            })
         };
-        let reply = runtime.shutdown();
-        self.wait(py, reply)
+        // Detached: after the end, this thread takes the states itself and may
+        // wait for a node that another thread captures meanwhile, which holds
+        // the GIL to run `capture`.
+        let reply = py.detach(|| self.0.capture(build, timeout));
+        wait(py, reply)?
     }
 
     /// Asks every node to stop and returns without waiting; `join` waits for
-    /// the end. Does nothing before `start` or once the network has stopped.
-    fn request_stop(&self) {
-        if let Some(runtime) = self.inner.get() {
-            runtime.request_stop();
-        }
+    /// the end. Does nothing once the network has stopped.
+    fn stop(&self) {
+        self.0.stop();
     }
 
-    /// Waits until the network has stopped, for at most `timeout` seconds, and
-    /// returns whether it has.
+    /// Waits until the network has stopped, for at most `timeout` seconds (no
+    /// limit if `None`), and returns whether it has. Raises `NetworkError` if
+    /// it stopped because a node raised.
     #[pyo3(signature = (timeout = None))]
     fn join(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<bool> {
-        let runtime = self.core()?;
-        let timeout = timeout.map(duration).transpose()?;
+        let timeout = timeout.map(to_duration).transpose()?;
         let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
+        let runtime = &self.0;
         let ended = wait_interruptibly(py, deadline, |step| match runtime.join(Some(step)) {
             Ok(true) => Some(Ok(())),
             Ok(false) => None,
@@ -660,30 +412,32 @@ impl Runtime {
         match ended {
             Some(Ok(())) => Ok(true),
             None => Ok(false),
-            Some(Err(e)) => Err(runtime_error(py, &self.names, e)),
+            Some(Err(e)) => Err(runtime_error(py, e)),
         }
     }
 
     /// Raises `NetworkError` if a node has raised.
     fn check(&self, py: Python<'_>) -> PyResult<()> {
-        match self.inner.get().and_then(core::Runtime::failure) {
-            Some(failure) => Err(runtime_error(
-                py,
-                &self.names,
-                RuntimeError::Failed(failure.clone()),
-            )),
-            None => Ok(()),
-        }
+        self.0.check().map_err(|e| runtime_error(py, e))
     }
 
+    /// The network has stopped.
     #[getter]
-    fn is_finished(&self) -> bool {
-        self.inner.get().is_some_and(core::Runtime::is_finished)
+    fn finished(&self) -> bool {
+        self.0.finished()
+    }
+
+    /// The number of worker threads of the pool: the default or the given
+    /// number, but not more than the nodes in the pool (0 if every node has a
+    /// thread of its own).
+    #[getter]
+    fn workers(&self) -> usize {
+        self.0.workers()
     }
 
     /// The time of each node's last update on the runtime's timer, in
     /// nanoseconds.
-    fn last_update_ns(&self) -> PyResult<Vec<u64>> {
-        Ok(self.core()?.last_update_ns())
+    fn last_update_ns(&self) -> Vec<u64> {
+        self.0.last_update_ns()
     }
 }

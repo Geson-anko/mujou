@@ -9,15 +9,19 @@ from typing import Any, Never, Self, cast, override
 import torch
 
 from mujou._core import _native
-from mujou._core._native import Timestamp  # by name: the API reference shows it
+from mujou._core._native import (  # by name: the API reference shows them
+    Timer,
+    Timestamp,
+    VirtualTimer,
+    global_timer,
+)
+from mujou._core.errors import NetworkError
 from mujou._core.graph import build_node, start_once
-from mujou._core.hooks import in_hook
 from mujou._core.network import Network, RunGroup, unbuild
 from mujou._core.node import Node
 from mujou._core.port import Port
 from mujou._core.session import Session
-from mujou._core.state import StateDict
-from mujou._core.timer import GLOBAL, Timer, VirtualTimer
+from mujou._core.state import StateDict, saved_time
 
 
 class Run:
@@ -77,7 +81,7 @@ class Run:
         x, y = torch.ones(2), torch.zeros(2)
         with mujou.run(node, inputs={node.prev: x, node.teacher: y}) as run:
             run.write({node.prev: 2 * x, node.teacher: x})  # switch together
-            mujou.time.sleep(0.1)  # present the input for 0.1 s of global time
+            run.timer.sleep(0.1)  # present the input for 0.1 s of the run's time
             error, t = run.read_with_time(node.next)
         state = run.state_dict()  # the state at the end, to save
     """
@@ -90,10 +94,12 @@ class Run:
 
     @property
     def timer(self) -> Timer:
-        """The run's timer: the ``timer`` given to ``mujou.run``, or the global
-        timer (the one ``mujou.time`` reads) when none was given.
+        """The run's timer: the ``timer`` given to ``mujou.run``,
+        ``mujou.time.global_timer`` when none was given, or, for a run restored
+        from a state, a new ``Timer`` that started at the time of the state.
 
-        Every node's ``dt`` and every time of the run is on it."""
+        Every node's ``dt`` and every time of the run is on it. The host waits,
+        pauses and scales the time of the run with it."""
         return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
@@ -123,8 +129,9 @@ class Run:
             ValueError: A port is outside the run, connected, takes many peers,
                 receives nothing, or receives carried data (``recv_carry``):
                 a write gives only the value, and has no data to carry; or a
-                shape or the keys differ.
-            TypeError: A message or dtype differs from the spec.
+                shape or a dtype differs from the spec.
+            TypeError: A message is not a tensor, or a dict of tensors with the
+                spec's keys.
             NetworkError: The run stopped because a node raised.
         """
         return _host(self).write(values)
@@ -154,8 +161,7 @@ class Run:
         it was sent at.
 
         The time is on the run's timer. A ``Timestamp`` does not say which timer
-        it is on: compare it only with times of the same timer (with
-        ``mujou.time`` only when the run is on the global timer).
+        it is on: compare it only with times of the same timer (``run.timer``).
 
         Raises:
             ValueError: As ``read`` raises.
@@ -264,11 +270,11 @@ class Run:
         and resumes, and returns once the run has resumed. It waits at most
         ``timeout`` for every node to pause. After a normal end,
         this copies the state as the nodes left it, calling each node's
-        ``state_dict`` on this thread (an exception it raises reaches the caller
-        as it is). The tree's timer holds the time at which ``shutdown`` asked
-        the run to stop, as if the run had paused then (or a later update or send
-        of an ``on_stop``), so that a restored run goes on from there without the
-        time that passed after the end.
+        ``state_dict`` on this thread. The tree's timer holds the time at which
+        the run was asked to stop, as if the run had paused then: no update or
+        message of the run is later, though its time scale is the timer's when
+        the state is taken. A run restored from it goes on from there, without
+        the time that passed after the end.
 
         The tree is a copy (later updates of the nodes do not change it), a
         ``StateDict`` (a ``dict``) that pickles; saving it is up to the host.
@@ -299,10 +305,12 @@ class Run:
         Raises:
             RuntimeError: This is called from a node's hook.
             ValueError: ``timeout`` is not finite and > 0.
-            PauseTimeoutError: A node did not pause within ``timeout``; no state
+            TimeoutError: A node did not pause within ``timeout``; no state
                 is taken and the run keeps running.
-            NetworkError: The run stopped because a node raised; its state is
-                not kept.
+            NetworkError: The run stopped because a node raised (its state is
+                not kept).
+            Exception: After a normal end, what a node's ``state_dict``
+                raised; the run stays ended normally.
         """
         host = _host(self)
         if not (math.isfinite(timeout) and timeout > 0):
@@ -361,43 +369,52 @@ class Run:
         the log)."""
         try:
             self.shutdown()
-        except _native.NetworkError:
+        except NetworkError:
             if exc is None:
                 raise
 
 
-class ManualRun[T: Timer = VirtualTimer](Run):
+class ManualRun(Run):
     """A run whose nodes update only when ``step`` lets them, for tests.
 
     ``mujou.testing.run`` returns it. The nodes start and stop as in any run, but
-    between updates each waits for ``step``. On a ``VirtualTimer`` (the default),
-    every ``dt`` is then exactly the time the test advanced with ``timer.advance``,
+    between updates each waits for ``step``, which advances the run's
+    ``VirtualTimer`` first: every ``dt`` is exactly the time the test stepped,
     and the result follows the discrete algorithm of the chosen order.
     """
 
     @property
     @override
-    def timer(self) -> T:
+    def timer(self) -> VirtualTimer:
         """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
-        or the timer given to it."""
-        # The T that mujou.testing.run gave start_run.
-        return cast(T, self._timer)
+        or the one given to it."""
+        # The VirtualTimer that mujou.testing.run gave start_run.
+        return cast(VirtualTimer, self._timer)
 
-    def step(self, *nodes: Node) -> None:
-        """Update each of ``nodes`` once, one after another in the given order (by
-        default every node, in the order of the tree), and return when done.
+    def step(self, dt: float, *nodes: Node) -> None:
+        """Advance the timer by ``dt`` seconds, then update each of ``nodes``
+        once, one after another in the given order, and return when done.
 
-        ``step`` does not move the time: advance the timer first. A node whose
-        time on the run's timer has not moved since its last update is skipped
-        (it would see ``dt = 0``): a ``step`` without an ``advance`` before it
-        updates nothing, and a node given twice in one ``step`` updates once.
+        Without ``nodes``, every node updates in the order of the tree (each
+        sees what the earlier ones sent in the same step, as Gauss-Seidel does;
+        give them from the output side back for the order of Jacobi). The
+        period of the nodes does not apply. Each ``dt`` a node sees is the time
+        since its last update, the first one from the start of the run (or the
+        last update restored). A node given twice in one ``step`` updates once:
+        the second time, its time has not moved. A timer shared with other runs
+        moves for them too.
 
         Raises:
-            ValueError: A node is not in this run.
-            RuntimeError: The run has stopped normally.
+            ValueError: A node is not in this run, or ``dt`` is negative or not
+                finite.
+            RuntimeError: The run has stopped normally, or the timer is paused.
             NetworkError: A node raised; the run has stopped.
         """
-        _host(self).step(nodes)
+        host = _host(self)
+        indices = host.indices(nodes)
+        host.ensure_running()
+        self.timer.advance(dt)
+        host.step(indices)
 
 
 # P: as in Run.write.
@@ -434,18 +451,20 @@ def run[P: Port[Any, Any, Any, Any, Any]](
         component: The node or network to run.
         components: More nodes and networks to run with it.
         timer: The time axis of the run: every node's ``dt``, every message's
-            time and every pause of the run is on it. ``None`` is the global
-            timer, which ``mujou.time`` reads and every run without a timer of
-            its own shares.
+            time and every pause of the run is on it. ``None`` is
+            ``mujou.time.global_timer``, which every run without a timer of its
+            own shares, or for a restored run a new ``Timer``.
         inputs: The initial values of unconnected single-peer ports that
             receive, as ``Run.write`` takes them. Written after ``state``, they
             replace its values and carry its time.
         state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
             or any mapping of the same items (such as a plain ``dict``). The
             slots, the nodes' states (through each node's ``load_state_dict``,
-            after its ``on_start``), their last update times and the timer
-            continue from the time the tree was taken. Build the networks as the
-            ones the tree came from: the same node paths and slots.
+            after its ``on_start``) and their last update times continue from
+            the time the tree was taken, on a new ``Timer`` of the run's own
+            at that time and time scale, which runs once every node has started
+            (so ``global_timer`` and the other runs do not move). Build the networks as the ones the tree
+            came from: the same node paths and slots.
         workers: The number of worker threads of the run (>= 1). ``None`` is
             as many as the CPUs the process may use (the logical cores, or
             fewer when the CPU affinity or a quota limits them), or half of
@@ -458,7 +477,7 @@ def run[P: Port[Any, Any, Any, Any, Any]](
 
         node = Error()
         with mujou.run(node, inputs={node.prev: torch.ones(2)}) as run:
-            mujou.time.sleep(0.1)
+            run.timer.sleep(0.1)
             error = run.read(node.next)
 
     Raises:
@@ -469,11 +488,12 @@ def run[P: Port[Any, Any, Any, Any, Any]](
         TypeError: A value is neither a ``Node`` nor a ``Network``, or
             ``workers`` is not an ``int`` (a ``bool`` included).
         ValueError: ``workers`` is less than 1 (or more than ``sys.maxsize``).
+        ValueError: ``timer`` and ``state`` are both given: a restored run
+            runs on a timer of its own.
         ValueError, TypeError: As ``Network.build``, ``Group`` and
             ``Run.write`` (for ``inputs``) raise; ``state`` does not match the
-            networks, or the timer it would set back has another run on it.
-            Nothing has started: the same networks, given the same way, may run
-            once the cause is gone.
+            networks. Nothing has started: the same networks, given the same
+            way, may run once the cause is gone.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return start_run(
@@ -497,8 +517,9 @@ def start_run[R: Run](
     manual: bool,
     workers: int | None,
 ) -> R:
-    """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it."""
-    if in_hook():
+    """Run ``components`` as ``mujou.run`` does and return a ``kind`` for it, on a
+    ``VirtualTimer`` by default if ``manual``."""
+    if _native.current() is not None:
         raise _from_hook()
     if workers is not None:
         # The annotation is not checked at runtime.
@@ -517,7 +538,12 @@ def start_run[R: Run](
             raise TypeError(
                 f"mujou.run() takes nodes and networks, got {type(given).__name__}"
             )
-    run_timer = GLOBAL if timer is None else timer
+    run_timer = _timer(timer, state, manual)
+    if state is not None:
+        # The new timer stands still while the run gets ready (the restore copies
+        # the tree), so that the run goes on from the time of the tree once every
+        # node has started.
+        run_timer.pause()
     # ours: a tree mujou.run built only for this run, undone if the run is refused.
     match components:
         case [Network() as network]:
@@ -538,17 +564,45 @@ def start_run[R: Run](
     except Exception as e:
         # Refused before any node started: the tree is ours and is dropped, so its
         # build must not keep what was given from being built again.
-        if ours and not isinstance(e, _native.NetworkError):
+        if ours and not isinstance(e, NetworkError):
             unbuild(graph)
         raise
+    if state is not None:
+        run_timer.resume()
     handle = object.__new__(kind)
     handle._session = session  # pyright: ignore[reportPrivateUsage]  # Run's own module
     handle._timer = run_timer  # pyright: ignore[reportPrivateUsage]  # Run's own module
     return handle
 
 
+def _timer(timer: Timer | None, state: Mapping[str, Any] | None, manual: bool) -> Timer:
+    """The timer of a run given ``timer`` and ``state``: for a restored run, a new
+    one at the time and time scale of the state.
+
+    Raises:
+        ValueError: Both are given, or ``state`` has no timer.
+    """
+    if state is None:
+        if timer is not None:
+            return timer
+        return VirtualTimer() if manual else global_timer
+    if timer is not None:
+        raise ValueError(
+            "a restored run runs on a timer of its own, which starts at the time "
+            "of the state; leave out timer"
+        )
+    time_ns, scale = saved_time(state)
+    start = Timestamp(ns=time_ns)
+    if not manual:
+        return Timer(start=start, time_scale=scale)
+    restored = VirtualTimer(start=start)
+    # Kept for the next state, though it does not apply to a virtual timer.
+    restored.set_time_scale(scale)
+    return restored
+
+
 def _host(run: Run) -> Session:
-    if in_hook():
+    if _native.current() is not None:
         raise _from_hook()
     return run._session  # pyright: ignore[reportPrivateUsage]  # Run's own module
 

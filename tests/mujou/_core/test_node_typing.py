@@ -11,8 +11,7 @@ import torch
 import mujou
 import mujou.testing
 from mujou import DictSpec, Network, NextPort, Node, Port, PrevPort, TensorSpec
-from mujou.testing import VirtualTimer
-from mujou.time import Timer
+from mujou.time import VirtualTimer
 from mujou.typing import Multi, Single
 
 
@@ -111,15 +110,13 @@ class TestStrictTyping:
         with mujou.testing.run(Layer(2)) as run:
             assert_type(run.timer, VirtualTimer)
             run.timer.advance(0.001)  # no cast needed
-        with mujou.testing.run(Layer(2), timer=Timer()) as run:
-            assert_type(run.timer, Timer)
 
     def test_ports_annotated_with_mujou_typing(self) -> None:
         a, b, fan = Layer(2), Layer(2), Fan()
         a.out.connect(fan.prev)
         b.out.connect(fan.prev)
         with mujou.testing.run(a, b, fan) as run:
-            run.step()
+            run.step(0.0)
             value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)
 
@@ -127,8 +124,7 @@ class TestStrictTyping:
         relay, other = Relay(), Relay()
         relay.made.connect(other.prev)
         with mujou.testing.run(relay, other) as run:
-            run.timer.advance(0.001)
-            run.step()
+            run.step(0.001)
             assert len(relay.seen) == len(other.seen) == 1
             # The host reads only the value of a port that carries data, and
             # cannot write a port that receives carried data.

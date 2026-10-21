@@ -8,33 +8,15 @@ import torch
 import mujou
 import mujou.testing
 from mujou import Network, NetworkError, Node, Port, Run
-from mujou._core._native import GlobalTimer, timer
-from mujou.testing import ManualRun, VirtualTimer
-from mujou.time import Timer
+from mujou.testing import ManualRun
+from mujou.time import Timer, VirtualTimer
 
 # P: a dict built in a test has a precise key type, which a Mapping keyed by
 # Port[Any, Any, Any, Any, Any] would reject (Mapping keys are invariant).
 type Inputs[P] = Mapping[P, torch.Tensor | Mapping[str, torch.Tensor]]
 
 H_NS = 1_000_000
-H = H_NS / 1e9  # The step of the virtual clock the `step` fixture advances, in seconds.
-
-
-@pytest.fixture
-def virtual_timer() -> Iterator[GlobalTimer]:
-    """Switch the global timer to the virtual clock at time 0 for one test.
-
-    Only for the tests of the global timer itself (``mujou.time`` and the native
-    controls): nothing public switches it. Runs take a ``virtual`` timer instead.
-    """
-    timer.use_virtual_clock(True)
-    timer.load_state_dict({"time_ns": 0, "scale": 1.0})
-    try:
-        yield timer
-    finally:
-        timer.resume()
-        timer.set_time_scale(1.0)
-        timer.use_virtual_clock(False)
+H = H_NS / 1e9  # The step the tests advance a virtual clock by, in seconds.
 
 
 @pytest.fixture
@@ -48,10 +30,10 @@ class StartManual(Protocol):
         self,
         component: Node | Network,
         *components: Node | Network,
-        timer: Timer | None = None,
+        timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
-    ) -> ManualRun[Any]: ...
+    ) -> ManualRun: ...
 
 
 class Start(Protocol):
@@ -84,22 +66,20 @@ def started() -> Iterator[list[Run]]:
 
 @pytest.fixture
 def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
-    """``mujou.testing.run`` on the test's ``virtual`` timer unless given another,
-    shut down at the end of the test."""
+    """``mujou.testing.run`` on the test's ``virtual`` timer unless given another
+    (or a state, whose run makes its own), shut down at the end of the test."""
 
     def start[P: Port[Any, Any, Any, Any, Any]](
         component: Node | Network,
         *components: Node | Network,
-        timer: Timer | None = None,
+        timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
-    ) -> ManualRun[Any]:
+    ) -> ManualRun:
+        if timer is None and state is None:
+            timer = virtual
         run = mujou.testing.run(
-            component,
-            *components,
-            timer=virtual if timer is None else timer,
-            inputs=inputs,
-            state=state,
+            component, *components, timer=timer, inputs=inputs, state=state
         )
         started.append(run)
         return run
@@ -132,24 +112,6 @@ def start(started: list[Run]) -> Start:
         return run
 
     return start
-
-
-class Step(Protocol):
-    def __call__(self, run: ManualRun[Any], *order: Node) -> None: ...
-
-
-@pytest.fixture
-def step() -> Step:
-    """Advance the run's ``VirtualTimer`` by ``H`` and update the nodes once, in
-    ``order`` (every node, in the order of the tree, if none is given)."""
-
-    def step(run: ManualRun[Any], *order: Node) -> None:
-        timer = run.timer
-        assert isinstance(timer, VirtualTimer)
-        timer.advance(H)
-        run.step(*order)
-
-    return step
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:

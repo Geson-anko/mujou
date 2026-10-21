@@ -9,8 +9,8 @@ from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
 from typing import Any, Final, Never, final
 
-from mujou._core import _native
 from mujou._core.component import Component, children_of, ports_of
+from mujou._core.errors import NetworkError
 from mujou._core.node import Node
 from mujou._core.port import Port, freeze, is_frozen, label, thaw
 
@@ -264,7 +264,7 @@ def start_once[T](graph: Graph, start: Callable[[], T]) -> T:
         try:
             started = start()
         except Exception as e:
-            if isinstance(e, _native.NetworkError):
+            if isinstance(e, NetworkError):
                 tree.ran = True
             raise
         except BaseException:

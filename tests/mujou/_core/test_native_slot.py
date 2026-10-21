@@ -7,37 +7,27 @@ import torch
 
 from mujou._core._native import (
     Carry,
-    GlobalTimer,
     InputGroup,
     Message,
     Outlet,
+    ReadOnlyTimer,
     Schema,
-    Timer,
     Timestamp,
-    timer as global_timer,
+    VirtualTimer,
+    global_timer,
 )
+from mujou._core.spec import DLPACK
+
+# The clock of a run on the global timer, for the slots of the tests that do not
+# look at the time.
+CLOCK = ReadOnlyTimer(global_timer)
 
 # The DLPack dtype `(code, bits, lanes)` that `Schema` takes.
 type DLDataType = tuple[int, int, int]
 
-# The DLPack dtypes of the supported torch dtypes. `mujou._spec` owns this table;
-# it is repeated here so that the core is tested on its own.
-DTYPES: dict[torch.dtype, DLDataType] = {
-    torch.float16: (2, 16, 1),
-    torch.bfloat16: (4, 16, 1),
-    torch.float32: (2, 32, 1),
-    torch.float64: (2, 64, 1),
-    torch.int8: (0, 8, 1),
-    torch.int16: (0, 16, 1),
-    torch.int32: (0, 32, 1),
-    torch.int64: (0, 64, 1),
-    torch.uint8: (1, 8, 1),
-    torch.bool: (6, 8, 1),
-}
-
 
 def schema(*fields: tuple[str, Sequence[int], torch.dtype]) -> Schema:
-    return Schema([(name, shape, DTYPES[dtype]) for name, shape, dtype in fields])
+    return Schema([(name, shape, DLPACK[dtype]) for name, shape, dtype in fields])
 
 
 def tensor_schema(shape: Sequence[int], dtype: torch.dtype = torch.float32) -> Schema:
@@ -55,8 +45,8 @@ def carried(carry: Carry) -> list[torch.Tensor]:
 def carry_schema() -> Schema:
     """A (2,) float32 value carrying an int64 ``y`` and a bool ``mask``."""
     return Schema(
-        [("", (2,), DTYPES[torch.float32])],
-        [("y", (3,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
+        [("", (2,), DLPACK[torch.float32])],
+        [("y", (3,), DLPACK[torch.int64]), ("mask", (3,), DLPACK[torch.bool])],
     )
 
 
@@ -128,10 +118,10 @@ class TestSchema:
 
 
 class TestOutlet:
-    @pytest.mark.parametrize("dtype", list(DTYPES), ids=str)
+    @pytest.mark.parametrize("dtype", list(DLPACK), ids=str)
     def test_round_trips_every_dtype_bit_for_bit(self, dtype: torch.dtype):
         x = sample((3, 5), dtype)
-        outlet = Outlet(tensor_schema((3, 5), dtype), 1, "n.p", timer=global_timer)
+        outlet = Outlet(tensor_schema((3, 5), dtype), 1, "n.p", clock=CLOCK)
         outlet.send([x])
         (y,) = values(outlet.outbox.read())
         assert y.dtype == dtype
@@ -139,7 +129,7 @@ class TestOutlet:
         assert torch.equal(bits(y), bits(x))
 
     def test_round_trips_zero_dimensional(self):
-        outlet = Outlet(tensor_schema(()), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema(()), 0, "p", clock=CLOCK)
         outlet.send([torch.tensor(2.5)])
         (y,) = values(outlet.outbox.read())
         assert y.shape == ()
@@ -147,7 +137,7 @@ class TestOutlet:
 
     def test_round_trips_fields_in_key_order(self):
         s = schema(("error", (2,), torch.float64), ("mask", (3,), torch.bool))
-        outlet = Outlet(s, 0, "p", timer=global_timer)
+        outlet = Outlet(s, 0, "p", clock=CLOCK)
         error = torch.tensor([1.5, -2.0], dtype=torch.float64)
         mask = torch.tensor([True, False, True])
         outlet.send([error, mask])
@@ -176,13 +166,13 @@ class TestOutlet:
         self, make: Callable[[torch.Tensor], torch.Tensor]
     ):
         x = make(torch.arange(24, dtype=torch.float32).reshape(4, 6))
-        outlet = Outlet(tensor_schema(x.shape), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema(x.shape), 0, "p", clock=CLOCK)
         outlet.send([x])
         (y,) = values(outlet.outbox.read())
         assert torch.equal(y, x.contiguous())
 
     def test_held_message_is_immutable(self):
-        outlet = Outlet(tensor_schema((8,), torch.int64), 1, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((8,), torch.int64), 1, "p", clock=CLOCK)
         outlet.send([torch.full((8,), 0)])
         held = outlet.channel(0).read()
         view = torch.from_dlpack(held.buffers[0])
@@ -193,7 +183,7 @@ class TestOutlet:
         assert torch.equal(values(outlet.channel(0).read())[0], torch.full((8,), 100))
 
     def test_without_channels_writes_only_the_outbox(self):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((1,)), 0, "p", clock=CLOCK)
         outlet.send([torch.tensor([3.0])])
         assert torch.equal(values(outlet.outbox.read())[0], torch.tensor([3.0]))
         with pytest.raises(IndexError):
@@ -207,14 +197,14 @@ class TestOutlet:
             def __dlpack__(self) -> CapsuleType:
                 return self._t.__dlpack__()
 
-        outlet = Outlet(tensor_schema((3,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((3,)), 0, "p", clock=CLOCK)
         outlet.send([OldProducer(torch.tensor([1.0, 2.0, 3.0]))])
         assert torch.equal(
             values(outlet.outbox.read())[0], torch.tensor([1.0, 2.0, 3.0])
         )
 
     def test_lends_unversioned_capsules_to_old_consumers(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         outlet.send([torch.tensor([1.0, 2.0])])
         (view,) = outlet.outbox.read().buffers
         y = torch.from_dlpack(view.__dlpack__()).clone()
@@ -227,11 +217,7 @@ class TestOutlet:
         ids=["copy", "cuda-device"],
     )
     def test_view_refuses_what_it_cannot_lend(self, kwargs: dict[str, object]):
-        (view,) = (
-            Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
-            .outbox.read()
-            .buffers
-        )
+        (view,) = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK).outbox.read().buffers
         with pytest.raises(BufferError):
             view.__dlpack__(**kwargs)  # pyright: ignore[reportArgumentType]
 
@@ -247,7 +233,7 @@ class TestOutlet:
         self, value: torch.Tensor, expected: str
     ):
         s = schema(("x", (2, 3), torch.float32), ("y", (), torch.int64))
-        outlet = Outlet(s, 1, "n.p", timer=global_timer)
+        outlet = Outlet(s, 1, "n.p", clock=CLOCK)
         with pytest.raises(ValueError, match="field") as exc:
             outlet.send([value, torch.tensor(0)])
         assert "slot 'n.p/out'" in str(exc.value)
@@ -260,7 +246,7 @@ class TestOutlet:
             schema(("x", (2,), torch.float32), ("y", (2,), torch.float32)),
             0,
             "p",
-            timer=global_timer,
+            clock=CLOCK,
         )
         with pytest.raises(ValueError, match="expected 2 tensors") as exc:
             outlet.send([torch.zeros(2)])
@@ -268,25 +254,25 @@ class TestOutlet:
         assert "'x', 'y'" in str(exc.value)
 
     def test_rejects_values_without_dlpack_naming_slot_and_field(self):
-        outlet = Outlet(schema(("x", (2,), torch.float32)), 0, "p", timer=global_timer)
+        outlet = Outlet(schema(("x", (2,), torch.float32)), 0, "p", clock=CLOCK)
         with pytest.raises(TypeError, match="DLPack") as exc:
             outlet.send([[1.0, 2.0]])  # pyright: ignore[reportArgumentType]
         assert "slot 'p/out', field 'x'" in str(exc.value)
 
     def test_producer_errors_name_the_slot(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         with pytest.raises(BufferError) as exc:
             outlet.send([torch.zeros(2, requires_grad=True)])
         assert any("slot 'p/out'" in note for note in exc.value.__notes__)
 
     def test_rejects_a_bare_tensor_for_the_sequence(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         with pytest.raises(TypeError, match="sequence"):
             outlet.send(torch.zeros(2))  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.parametrize("index", [3, -1])
     def test_rejects_unknown_channel(self, index: int):
-        outlet = Outlet(tensor_schema((2,)), 3, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 3, "p", clock=CLOCK)
         with pytest.raises(IndexError):
             outlet.send_to(index, [torch.zeros(2)])
         with pytest.raises(IndexError):
@@ -294,13 +280,13 @@ class TestOutlet:
 
 
 class TestCarry:
-    @pytest.mark.parametrize("dtype", list(DTYPES), ids=str)
+    @pytest.mark.parametrize("dtype", list(DLPACK), ids=str)
     def test_round_trips_every_dtype_apart_from_the_value(self, dtype: torch.dtype):
         s = Schema(
-            [("", (2,), DTYPES[torch.float32])],
-            [("c", (3, 5), DTYPES[dtype]), ("d", (), DTYPES[torch.int64])],
+            [("", (2,), DLPACK[torch.float32])],
+            [("c", (3, 5), DLPACK[dtype]), ("d", (), DLPACK[torch.int64])],
         )
-        outlet = Outlet(s, 1, "p", timer=global_timer)
+        outlet = Outlet(s, 1, "p", clock=CLOCK)
         x, c, d = torch.ones(2), sample((3, 5), dtype), torch.tensor(7)
         outlet.send([x, c, d])
         msg = outlet.channel(0).read()
@@ -311,12 +297,12 @@ class TestCarry:
         assert got_d.shape == () and got_d.item() == 7
 
     def test_a_message_without_carry_carries_nothing(self):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         assert outlet.outbox.read().carry.buffers == ()
 
     def test_relay_shares_the_buffers(self):
-        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
-        relayer = Outlet(carry_schema(), 1, "b", timer=global_timer)
+        source = Outlet(carry_schema(), 1, "a", clock=CLOCK)
+        relayer = Outlet(carry_schema(), 1, "b", clock=CLOCK)
         y, mask = torch.tensor([1, 2, 3]), torch.tensor([True, False, True])
         source.send([torch.zeros(2), y, mask])
         received = source.channel(0).read()
@@ -332,8 +318,8 @@ class TestCarry:
         assert set(data_ptrs(copied)).isdisjoint(data_ptrs(received.carry))
 
     def test_relay_to_one_channel(self):
-        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
-        relayer = Outlet(carry_schema(), 2, "b", timer=global_timer)
+        source = Outlet(carry_schema(), 1, "a", clock=CLOCK)
+        relayer = Outlet(carry_schema(), 2, "b", clock=CLOCK)
         source.send([torch.zeros(2), torch.tensor([4, 5, 6]), torch.ones(3).bool()])
         carry = source.channel(0).read().carry
         relayer.send_to(1, [torch.ones(2)], relay=carry)
@@ -341,8 +327,8 @@ class TestCarry:
         assert data_ptrs(relayer.channel(0).read().carry) != data_ptrs(carry)
 
     def test_relay_takes_only_the_value_fields(self):
-        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
-        relayer = Outlet(carry_schema(), 0, "b", timer=global_timer)
+        source = Outlet(carry_schema(), 1, "a", clock=CLOCK)
+        relayer = Outlet(carry_schema(), 0, "b", clock=CLOCK)
         carry = source.channel(0).read().carry
         y, mask = torch.zeros(3, dtype=torch.int64), torch.zeros(3, dtype=torch.bool)
         with pytest.raises(ValueError, match="expected 1 tensor, got 3"):
@@ -355,10 +341,10 @@ class TestCarry:
     @pytest.mark.parametrize(
         "carry",
         [
-            [("y", (3,), DTYPES[torch.int64])],
-            [("y", (3,), DTYPES[torch.int32]), ("mask", (3,), DTYPES[torch.bool])],
-            [("y", (2,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
-            [("z", (3,), DTYPES[torch.int64]), ("mask", (3,), DTYPES[torch.bool])],
+            [("y", (3,), DLPACK[torch.int64])],
+            [("y", (3,), DLPACK[torch.int32]), ("mask", (3,), DLPACK[torch.bool])],
+            [("y", (2,), DLPACK[torch.int64]), ("mask", (3,), DLPACK[torch.bool])],
+            [("z", (3,), DLPACK[torch.int64]), ("mask", (3,), DLPACK[torch.bool])],
             [],
         ],
         ids=["fewer", "dtype", "shape", "name", "none"],
@@ -366,12 +352,12 @@ class TestCarry:
     def test_rejects_a_relay_of_other_fields(
         self, carry: list[tuple[str, tuple[int, ...], DLDataType]]
     ):
-        source = Outlet(carry_schema(), 1, "a", timer=global_timer)
+        source = Outlet(carry_schema(), 1, "a", clock=CLOCK)
         target = Outlet(
-            Schema([("", (2,), DTYPES[torch.float32])], carry),
+            Schema([("", (2,), DLPACK[torch.float32])], carry),
             0,
             "b",
-            timer=global_timer,
+            clock=CLOCK,
         )
         before = target.outbox.read()
         with pytest.raises(ValueError, match="slot 'b/out': expected to carry"):
@@ -381,11 +367,11 @@ class TestCarry:
 
     def test_restore_and_input_write_fill_the_carry(self):
         y, mask = torch.tensor([7, 8, 9]), torch.tensor([False, True, False])
-        outlet = Outlet(carry_schema(), 1, "p", timer=global_timer)
+        outlet = Outlet(carry_schema(), 1, "p", clock=CLOCK)
         outlet.channel(0).restore([torch.ones(2), y, mask], 3, sent=True)
         got = carried(outlet.channel(0).read().carry)
         assert torch.equal(got[0], y) and torch.equal(got[1], mask)
-        group = InputGroup(timer=global_timer)
+        group = InputGroup(clock=CLOCK)
         x = group.input(carry_schema(), "x")
         assert torch.equal(
             carried(x.read().carry)[0], torch.zeros(3, dtype=torch.int64)
@@ -397,8 +383,8 @@ class TestCarry:
 
     def test_new_carry_holds_the_values(self):
         y, mask = torch.tensor([1, 0, 1]), torch.tensor([True, True, False])
-        outlet = Outlet(carry_schema(), 1, "p", timer=global_timer)
-        x = InputGroup(timer=global_timer).input(carry_schema(), "x")
+        outlet = Outlet(carry_schema(), 1, "p", clock=CLOCK)
+        x = InputGroup(clock=CLOCK).input(carry_schema(), "x")
         for slot in (outlet.channel(0), x):
             got = carried(slot.new_carry([y, mask]))
             assert torch.equal(got[0], y) and torch.equal(got[1], mask)
@@ -411,7 +397,7 @@ class TestCarry:
 
 class TestSlotWaitNewer:
     def test_returns_once_another_thread_writes(self):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
+        outlet = Outlet(tensor_schema((1,)), 0, "p", clock=CLOCK)
         last = outlet.outbox.read()
         started = threading.Event()
 
@@ -431,14 +417,14 @@ class TestSlotWaitNewer:
         assert torch.equal(values(msg)[0], torch.tensor([7.0]))
 
     def test_rejects_negative_timeout(self):
-        outlet = Outlet(tensor_schema((1,)), 0, "p", timer=global_timer)
-        with pytest.raises(ValueError, match="timeout"):
+        outlet = Outlet(tensor_schema((1,)), 0, "p", clock=CLOCK)
+        with pytest.raises(ValueError, match="duration"):
             outlet.outbox.wait_newer(outlet.outbox.read(), -1.0)
 
 
 class TestInputGroup:
     def test_invalid_item_changes_no_slot(self):
-        group = InputGroup(timer=global_timer)
+        group = InputGroup(clock=CLOCK)
         x = group.input(tensor_schema((2,)), "x")
         y = group.input(tensor_schema((2,)), "y")
         with pytest.raises(ValueError, match="slot 'y/in'"):
@@ -447,22 +433,22 @@ class TestInputGroup:
         assert torch.equal(values(y.read())[0], torch.zeros(2))
 
     def test_rejects_slot_given_twice(self):
-        group = InputGroup(timer=global_timer)
+        group = InputGroup(clock=CLOCK)
         x = group.input(tensor_schema((2,)), "x")
         with pytest.raises(ValueError, match="more than once"):
             group.write([(x, [torch.ones(2)]), (x, [torch.zeros(2)])])
         assert torch.equal(values(x.read())[0], torch.zeros(2))
 
     def test_rejects_slot_of_another_group(self):
-        other = InputGroup(timer=global_timer).input(tensor_schema((2,)), "x")
+        other = InputGroup(clock=CLOCK).input(tensor_schema((2,)), "x")
         with pytest.raises(ValueError, match="another input group"):
-            InputGroup(timer=global_timer).write([(other, [torch.ones(2)])])
+            InputGroup(clock=CLOCK).write([(other, [torch.ones(2)])])
 
 
 class TestSent:
     def test_marks_what_the_writers_wrote(self):
-        outlet = Outlet(tensor_schema((2,)), 1, "p", timer=global_timer)
-        group = InputGroup(timer=global_timer)
+        outlet = Outlet(tensor_schema((2,)), 1, "p", clock=CLOCK)
+        group = InputGroup(clock=CLOCK)
         x = group.input(tensor_schema((2,)), "x")
         assert not outlet.outbox.read().sent and not outlet.channel(0).read().sent
         assert not x.read().sent
@@ -473,27 +459,22 @@ class TestSent:
 
     @pytest.mark.parametrize("sent", [False, True])
     def test_restore_sets_it(self, sent: bool):
-        outlet = Outlet(tensor_schema((2,)), 0, "p", timer=global_timer)
-        x = InputGroup(timer=global_timer).input(tensor_schema((2,)), "x")
+        outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
+        x = InputGroup(clock=CLOCK).input(tensor_schema((2,)), "x")
         outlet.outbox.restore([torch.ones(2)], 5, sent=sent)
         x.restore([torch.ones(2)], 5, sent=sent)
         assert outlet.outbox.read().sent is sent
         assert x.read().sent is sent
 
 
-class TestTimers:
-    @pytest.mark.parametrize("own", [False, True], ids=["global", "own"])
-    def test_slots_stamp_with_the_timer_they_are_given(
-        self, virtual_timer: GlobalTimer, own: bool
-    ):
-        other = Timer()
-        other.use_virtual_clock(True)
-        other.load_state_dict({"time_ns": 0, "scale": 1.0})
-        given, other = (other, virtual_timer) if own else (virtual_timer, other)
+class TestClocks:
+    def test_slots_stamp_with_the_clock_they_are_given(self):
+        given, other = VirtualTimer(), VirtualTimer()
         other.advance(5.0)  # in no message
         given.advance(1.5)
-        outlet = Outlet(tensor_schema((1,)), 1, "p", timer=given)
-        group = InputGroup(timer=given)
+        clock = ReadOnlyTimer(given)
+        outlet = Outlet(tensor_schema((1,)), 1, "p", clock=clock)
+        group = InputGroup(clock=clock)
         x = group.input(tensor_schema((1,)), "x")
         at_start = Timestamp(ns=1_500_000_000)
         assert outlet.channel(0).read().timestamp == x.read().timestamp == at_start

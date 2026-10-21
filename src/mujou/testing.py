@@ -1,9 +1,9 @@
 """Deterministic tests of nodes and networks.
 
-Run the networks with ``run``, which puts them on a new ``VirtualTimer``, advance
-the timer by a fixed ``dt`` and ``step`` the nodes by hand in a fixed order: every
-update then sees exactly that ``dt``, and the result can be compared with the
-discrete algorithm. Mujou tests its own nodes with the same API.
+Run the networks with ``run``, which puts them on a new ``VirtualTimer``, and
+``step`` the nodes by hand by a fixed ``dt`` in a fixed order: every update then
+sees exactly that ``dt``, and the result can be compared with the discrete
+algorithm. Mujou tests its own nodes with the same API.
 
 Example::
 
@@ -39,51 +39,46 @@ Example::
     net = Chain()
     x = torch.ones(2)
     with mujou.testing.run(net, inputs={net.prev: x}) as run:
-        run.timer.advance(0.001)  # the run's VirtualTimer
-        run.step(net.a, net.b)  # a, then b reads a's new value
+        run.step(0.001, net.a, net.b)  # 1 ms later, a, then b reads a's new value
         y, t = run.read_with_time(net.next)
     assert torch.equal(y, 4 * x) and t.ns == 1_000_000
 """
 
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any
 
 import torch
 
 from mujou._core.network import Network
 from mujou._core.node import Node
 from mujou._core.port import Port
-from mujou._core.run import ManualRun, start_run
-from mujou._core.timer import Timer, VirtualTimer
+from mujou._core.run import ManualRun, VirtualTimer, start_run
 
-__all__ = ["ManualRun", "VirtualTimer", "run"]
+__all__ = ["ManualRun", "run"]
 
 
-# P: as in Run.write. T: the timer's type, which ManualRun.timer gives back.
-def run[P: Port[Any, Any, Any, Any, Any], T: Timer = VirtualTimer](
+# P: as in Run.write.
+def run[P: Port[Any, Any, Any, Any, Any]](
     component: Node | Network,
     *components: Node | Network,
-    timer: T | None = None,
+    timer: VirtualTimer | None = None,
     inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
     state: Mapping[str, Any] | None = None,
-) -> ManualRun[T]:
+) -> ManualRun:
     """Run the given nodes and networks as ``mujou.run`` does, with the updates
     left to ``ManualRun.step``.
 
-    The default ``timer`` is a new ``VirtualTimer`` at time 0, which
-    ``ManualRun.timer`` returns: advance it before each ``step``, and every
-    ``dt`` is exactly what the test advanced. Pass a ``VirtualTimer`` of your own
-    to share it between runs (e.g. to restore a state on it). On any other timer
-    the clock runs by itself, and each ``dt`` is whatever real time passed between
-    the steps.
+    The default ``timer`` is a new ``mujou.time.VirtualTimer`` at time 0 (with
+    ``state``, at the time of the state), which ``ManualRun.timer`` returns and
+    ``ManualRun.step`` advances. Pass a ``VirtualTimer`` of your own to share it
+    between runs: a ``step`` of one then moves the time of the others too.
 
     The other arguments and the errors are those of ``mujou.run``.
     """
-    # The class itself: a subscripted generic is not a class to instantiate.
     return start_run(
-        cast(type[ManualRun[T]], ManualRun),
+        ManualRun,
         (component, *components),
-        timer=cast(T, VirtualTimer()) if timer is None else timer,
+        timer=timer,
         inputs=inputs,
         state=state,
         manual=True,

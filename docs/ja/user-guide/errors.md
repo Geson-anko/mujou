@@ -26,7 +26,7 @@
 
 !!! warning "sleep ではなく run.join で待つ"
 
-    ホストが何も呼ばずに待つと例外に気づかない。実行の停止を待つときは `mujou.time.sleep` ではなく `run.join(timeout)` で待つ。
+    ホストが何も呼ばずに待つと例外に気づかない。実行の停止を待つときは `run.timer.sleep` ではなく `run.join(timeout)` で待つ。
 
 ```python
 --8<-- "examples/errors.py"
@@ -51,6 +51,7 @@ with 文は抜けるときに `run.shutdown()` を呼ぶ。
 - `on_exception` は引数を取らないので、ノードはどのノードのどの例外で止まったかを知ることができない。原因に応じた対処はホストが `__cause__` を見て行う
 - 自分の hook の中の例外に対処したいだけなら、その hook の中で `try`/`except` する。捕まえた例外は全体を止めない
 - `on_exception` と `on_stop` が例外を投げてもログに出るだけで、終了処理は続く
+- 実行の時刻は終了の時点で止まるので、`on_exception` と `on_stop` の中では `self.timer` で経過時間を測れない。ロボットを 1 秒かけて減速させるような処理は、実時間で測る
 
 ## ログ
 
@@ -81,7 +82,7 @@ with 文は抜けるときに `run.shutdown()` を呼ぶ。
 
 実行中の `run.state_dict(timeout)` は、全ノードが止まるのを最長 `timeout` 秒（実時間、既定は 30 秒）待つ。この `timeout` は有限の正の数でなければならない。終了した実行では待つものが無いので、`timeout` は値の検査にだけ使う。
 
-時間内に止まらないノードがあると、`run.state_dict()` は `PauseTimeoutError`（`TimeoutError` の派生）を送出し、メッセージには止まらなかったノードの名前が入る。状態は取得できず、止まっていたノードも再開して実行は走り続ける。
+時間内に止まらないノードがあると、`run.state_dict()` は `TimeoutError` を送出し、メッセージには止まらなかったノードの名前が入る。状態は取得できず、止まっていたノードも再開して実行は走り続ける。
 
 !!! note "長い更新は停止を遅らせる"
 

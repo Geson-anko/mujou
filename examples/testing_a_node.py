@@ -61,11 +61,11 @@ def test_chain_follows_the_discrete_algorithm() -> None:
         b += (1 - math.exp(-h / tau)) * (a - b)  # b reads the new a
 
     net = Chain(tau)
-    # On a new VirtualTimer at time 0 (run.timer), which moves only by advance.
+    # On a new VirtualTimer at time 0 (run.timer), which moves only by step.
     with mujou.testing.run(net, inputs={net.prev: u}) as run:
         for _ in range(steps):
-            run.timer.advance(h)  # every node's next dt is exactly h
-            run.step(net.a, net.b)  # a, then b, which reads a's new value
+            # Every node's next dt is exactly h: a, then b, which reads a's new value.
+            run.step(h, net.a, net.b)
         y, t = run.read_with_time(net.next)
 
     assert torch.equal(y, b)  # the same operations: equal to the last bit
@@ -78,27 +78,22 @@ def test_chain_follows_the_discrete_algorithm() -> None:
 
 # --8<-- [start:restore]
 def run_steps(
-    net: Chain,
-    timer: mujou.testing.VirtualTimer,
-    n: int,
-    state: dict[str, Any] | None = None,
+    net: Chain, n: int, state: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Run ``net`` for ``n`` steps of 1 ms on ``timer`` and return its state."""
+    """Run ``net`` for ``n`` steps of 1 ms and return its state."""
     u = torch.tensor([1.0, -2.0], dtype=torch.float64)
-    with mujou.testing.run(net, timer=timer, inputs={net.prev: u}, state=state) as run:
+    with mujou.testing.run(net, inputs={net.prev: u}, state=state) as run:
         for _ in range(n):
-            timer.advance(0.001)
-            run.step()
+            run.step(0.001)
     return run.state_dict()
 
 
 def test_restored_run_matches_a_straight_run() -> None:
-    straight = run_steps(Chain(0.01), mujou.testing.VirtualTimer(), 20)
-    # Ten steps, then ten more in a new instance restored from the first half. The
-    # second half runs on the timer of the first, which has ended.
-    timer = mujou.testing.VirtualTimer()
-    half = run_steps(Chain(0.01), timer, 10)
-    resumed = run_steps(Chain(0.01), timer, 10, state=half)
+    straight = run_steps(Chain(0.01), 20)
+    # Ten steps, then ten more in a new instance restored from the first half, on
+    # a VirtualTimer of its own that starts at the time of the state.
+    half = run_steps(Chain(0.01), 10)
+    resumed = run_steps(Chain(0.01), 10, state=half)
 
     assert torch.equal(resumed["nodes"]["b"]["x"], straight["nodes"]["b"]["x"])
     print("save and restore: equal to the run that did not stop")

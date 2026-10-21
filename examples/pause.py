@@ -12,6 +12,7 @@ from typing import override
 import torch
 
 import mujou
+import mujou.time
 from mujou import NextPort, Node, TensorSpec
 
 SCALAR = TensorSpec((), torch.float64)
@@ -40,14 +41,14 @@ class Clock(Node):
 # Two runs on the global timer, such as two agents that should be saved together.
 a, b = Clock(), Clock()
 with mujou.run(a) as run_a, mujou.run(b) as run_b:
-    mujou.time.sleep(0.1)
-    mujou.time.pause()  # the global time stops at one time T
+    mujou.time.global_timer.sleep(0.1)
+    mujou.time.global_timer.pause()  # the global time stops at one time T
     try:
         tree_a = run_a.state_dict()  # still works while paused
         tree_b = run_b.state_dict()
     finally:
-        mujou.time.resume()  # the time goes on from T
-    mujou.time.sleep(0.05)
+        mujou.time.global_timer.resume()  # the time goes on from T
+    mujou.time.global_timer.sleep(0.05)
 
 # Both trees are of T, and no update in them is later than T.
 t_ns = tree_a["timer"]["time_ns"]
@@ -57,9 +58,8 @@ data = pickle.dumps({"a": tree_a, "b": tree_b})  # save them together
 # --8<-- [end:pause]
 print(f"both states are of t = {t_ns / 1e9:.3f} s")
 
-# Restore one of them in a new run, which goes on from T. (A run cannot restore
-# while another run is running on its timer: restore b after a has ended, or on
-# a timer of its own.)
+# Restore one of them in a new run, which goes on from T on a timer of its own
+# (the global timer does not go back to T).
 saved = pickle.loads(data)
 at_save = saved["a"]["nodes"][""]["elapsed"].item()
 restored = Clock()

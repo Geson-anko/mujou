@@ -10,12 +10,13 @@ from mujou._core.network import Group, Network
 from mujou._core.node import Node
 from mujou._core.port import Channel, Multi, NextPort, Port, PrevPort, Single
 from mujou._core.spec import DictSpec, TensorSpec
-from mujou.testing import VirtualTimer
-from mujou.time import Timestamp
+from mujou.time import Timestamp, VirtualTimer
 from tests.mujou.nodes import Probe
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import Start, StartManual, Step
+    from tests.mujou.conftest import Start, StartManual
+
+H = 1e-3  # seconds per step
 
 
 class Feedback(TypedDict):
@@ -370,19 +371,17 @@ class TestRecvSendBeforeRun:
 
 
 class TestRecv:
-    def test_unconnected_ports_give_zeros_or_nothing(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_unconnected_ports_give_zeros_or_nothing(self, start_manual: StartManual):
         single, multi = Port(recv=h()), Port(recv=h(), multi=True)
         node = Probe(lambda: (single.recv(), multi.recv()), single=single, multi=multi)
         run = start_manual(Group(node=node))
-        step(run)
+        run.step(H)
         ((value, peers),) = cast(list[tuple[torch.Tensor, object]], node.results)
         assert torch.equal(value, torch.zeros(2, 3))
         assert peers == {}
 
     def test_many_peers_are_keyed_by_channel_in_connection_order(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         merge = PrevPort(recv=h(), multi=True)
         senders = [NextPort(send=h()) for _ in range(3)]
@@ -393,16 +392,14 @@ class TestRecv:
         }
         sink = Probe(merge.recv, prev=merge)
         run = start_manual(Group(**nodes, sink=sink))
-        step(run, *nodes.values(), sink)
+        run.step(H, *nodes.values(), sink)
         (received,) = sink.results
         received = cast(dict[Channel, torch.Tensor], received)
         assert list(received) == channels == list(merge.channels)
         for channel, k in zip(channels, (2, 1, 0), strict=True):
             assert torch.equal(received[channel], torch.full((2, 3), float(k)))
 
-    def test_gives_new_tensors_without_gradients(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_gives_new_tensors_without_gradients(self, start_manual: StartManual):
         out, inp, other = NextPort(send=h()), PrevPort(recv=h()), PrevPort(recv=h())
         out.connect(inp)
         out.connect(other)
@@ -417,7 +414,7 @@ class TestRecv:
         sink = Probe(change_what_was_received, prev=inp)
         neighbour = Probe(other.recv, prev=other)
         run = start_manual(Group(source=source, sink=sink, nb=neighbour))
-        step(run, source, sink, neighbour)
+        run.step(H, source, sink, neighbour)
         ((first, again),) = cast(list[tuple[torch.Tensor, torch.Tensor]], sink.results)
         assert not first.requires_grad and not again.requires_grad
         assert first.device == torch.device("cpu")
@@ -426,43 +423,41 @@ class TestRecv:
         assert torch.equal(run.read(out), torch.ones(2, 3))
 
     def test_with_time_gives_the_time_of_the_write(
-        self, step: Step, virtual: VirtualTimer, start_manual: StartManual
+        self, virtual: VirtualTimer, start_manual: StartManual
     ):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         out.connect(inp)
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
         sink = Probe(inp.recv_with_time, prev=inp)
         run = start_manual(Group(source=source, sink=sink))
-        step(run, source, sink)
+        run.step(H, source, sink)
         ((value, written_at),) = cast(
             list[tuple[torch.Tensor, Timestamp]], sink.results
         )
         assert torch.equal(value, torch.ones(2, 3))
         assert written_at == virtual.now()
 
-    def test_only_the_owning_node_receives(self, step: Step, start_manual: StartManual):
+    def test_only_the_owning_node_receives(self, start_manual: StartManual):
         mine, theirs = Port(recv=h()), Port(recv=h())
         owner = Probe(mine=mine)
         other = Probe(theirs.recv, theirs=Port(recv=h()))  # reads another's port
         run = start_manual(Group(owner=Probe(mine=theirs), node=owner, other=other))
-        step(run)
+        run.step(H)
         assert isinstance(other.results[0], RuntimeError)
         with pytest.raises(RuntimeError, match="only the node that owns"):
             mine.recv()  # from the host
 
-    def test_rejects_a_port_that_receives_nothing(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_rejects_a_port_that_receives_nothing(self, start_manual: StartManual):
         out = Port(send=h())
         node = Probe(out.recv, out=out)
         run = start_manual(Group(node=node))
-        step(run)
+        run.step(H)
         assert isinstance(node.results[0], TypeError)
 
 
 class TestHasReceived:
     def test_is_false_for_the_initial_value_and_true_once_sent(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         out = NextPort(send=h(), initial=torch.ones(2, 3))
         inp = PrevPort(recv=h())
@@ -470,12 +465,12 @@ class TestHasReceived:
         source = Probe(lambda: out.send(torch.zeros(2, 3)), next=out)
         sink = Probe(inp.has_received, prev=inp)
         run = start_manual(Group(source=source, sink=sink))
-        step(run, sink)
-        step(run, source, sink)  # sends the zeros: a value equal to the initial one
+        run.step(H, sink)
+        run.step(H, source, sink)  # sends the zeros: a value equal to the initial one
         assert sink.results == [False, True]
 
     def test_many_peers_are_keyed_by_channel_as_recv_is(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         merge = PrevPort(recv=h(), multi=True)
         quiet, talker = NextPort(send=h()), NextPort(send=h())
@@ -489,13 +484,11 @@ class TestHasReceived:
         unconnected = Port(recv=h(), multi=True)
         lonely = Probe(unconnected.has_received, prev=unconnected)
         run = start_manual(Group(**nodes, sink=sink, lonely=lonely))
-        step(run, *nodes.values(), sink, lonely)
+        run.step(H, *nodes.values(), sink, lonely)
         assert sink.results == [{to_quiet: False, to_talker: True}]
         assert lonely.results == [{}]
 
-    def test_send_to_counts_only_for_that_peer(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_send_to_counts_only_for_that_peer(self, start_manual: StartManual):
         out = NextPort(send=h())
         a, b = PrevPort(recv=h()), PrevPort(recv=h())
         to_a = out.connect(a)
@@ -503,10 +496,10 @@ class TestHasReceived:
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.has_received, prev=a), Probe(b.has_received, prev=b)
         run = start_manual(Group(source=source, a=sink_a, b=sink_b))
-        step(run, source, sink_a, sink_b)
+        run.step(H, source, sink_a, sink_b)
         assert (sink_a.results, sink_b.results) == ([True], [False])
 
-    def test_counts_what_the_host_writes(self, step: Step, start_manual: StartManual):
+    def test_counts_what_the_host_writes(self, start_manual: StartManual):
         given, written = Port(recv=h()), Port(recv=h())
         node = Probe(
             lambda: (given.has_received(), written.has_received()),
@@ -514,14 +507,14 @@ class TestHasReceived:
             written=written,
         )
         run = start_manual(Group(node=node), inputs={given: torch.ones(2, 3)})
-        step(run)
+        run.step(H)
         run.write({written: torch.ones(2, 3)})
-        step(run)
+        run.step(H)
         assert node.results == [(True, False), (True, True)]
 
     @pytest.mark.parametrize("with_inputs", [False, True])
     def test_a_restored_run_keeps_what_was_sent(
-        self, step: Step, start_manual: StartManual, with_inputs: bool
+        self, start_manual: StartManual, with_inputs: bool
     ):
         def build() -> tuple[Group, Probe, Probe, Port[Never, torch.Tensor]]:
             out = NextPort(send=h(), initial=torch.ones(2, 3))
@@ -540,23 +533,21 @@ class TestHasReceived:
 
         net, source, _, _ = build()
         run = start_manual(net)
-        step(run, source)  # sends to a only; nothing is written to host
+        run.step(H, source)  # sends to a only; nothing is written to host
         tree = run.state_dict()
         run.shutdown()
 
         restored, _, sink, host = build()
         inputs = {host: torch.ones(2, 3)} if with_inputs else None
-        run = start_manual(restored, timer=VirtualTimer(), state=tree, inputs=inputs)
-        step(run, sink)
+        run = start_manual(restored, state=tree, inputs=inputs)
+        run.step(H, sink)
         assert sink.results == [(True, False, with_inputs)]
 
-    def test_rejects_a_port_that_receives_nothing(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_rejects_a_port_that_receives_nothing(self, start_manual: StartManual):
         out = Port(send=h())
         node = Probe(out.has_received, out=out)
         run = start_manual(Group(node=node))
-        step(run)
+        run.step(H)
         assert isinstance(node.results[0], TypeError)
 
     def test_only_the_owning_node_asks(self, start_manual: StartManual):
@@ -567,7 +558,7 @@ class TestHasReceived:
 
 
 class TestSend:
-    def test_copies_the_values(self, step: Step, start_manual: StartManual):
+    def test_copies_the_values(self, start_manual: StartManual):
         out = Port(send=h())
         value = torch.zeros(2, 3)
 
@@ -576,41 +567,37 @@ class TestSend:
             value.add_(1.0)
 
         run = start_manual(Group(node=Probe(send_then_change, out=out)))
-        step(run)
+        run.step(H)
         assert torch.equal(run.read(out), torch.zeros(2, 3))
 
-    def test_to_one_channel_changes_only_that_peer(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_to_one_channel_changes_only_that_peer(self, start_manual: StartManual):
         out, a, b = NextPort(send=h()), PrevPort(recv=h()), PrevPort(recv=h())
         to_a = out.connect(a)
         out.connect(b)
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
         run = start_manual(Group(source=source, a=sink_a, b=sink_b))
-        step(run, source, sink_a, sink_b)
+        run.step(H, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), torch.zeros(2, 3))
         # The output the host reads changes only with send to every peer.
         assert torch.equal(run.read(out), torch.zeros(2, 3))
 
-    def test_to_a_channel_of_another_port(self, step: Step, start_manual: StartManual):
+    def test_to_a_channel_of_another_port(self, start_manual: StartManual):
         out, inp = NextPort(send=h()), PrevPort(recv=h())
         foreign = Port(send=h()).connect(Port(recv=h()))
         out.connect(inp)
         node = Probe(lambda: out.send_to(foreign, torch.ones(2, 3)), next=out)
         run = start_manual(Group(node=node, sink=Probe(prev=inp)))
-        step(run)
+        run.step(H)
         assert isinstance(node.results[0], ValueError)
 
-    def test_rejects_a_port_that_sends_nothing(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_rejects_a_port_that_sends_nothing(self, start_manual: StartManual):
         inp = Port(recv=h())
         # The type checker rejects it too: the port's message type is Never.
         node = Probe(lambda: inp.send(torch.ones(2, 3)), inp=inp)  # pyright: ignore[reportArgumentType]
         run = start_manual(Group(node=node))
-        step(run)
+        run.step(H)
         assert isinstance(node.results[0], TypeError)
 
     def test_only_the_owning_node_sends(self, start_manual: StartManual):
@@ -669,7 +656,7 @@ class TestOwnerOnAWorker:
 
 class TestInitial:
     def test_every_peer_and_the_host_read_it_until_the_first_send(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         twos = torch.full((2, 3), 2.0)
         out = NextPort(send=h(), initial=twos)
@@ -678,7 +665,7 @@ class TestInitial:
         out.connect(b)
         sink_a, sink_b = Probe(a.recv_with_time, prev=a), Probe(b.recv, prev=b)
         run = start_manual(Group(source=Probe(next=out), a=sink_a, b=sink_b))
-        step(run, sink_a, sink_b)  # the source does not send
+        run.step(H, sink_a, sink_b)  # the source does not send
         ((value, written_at),) = cast(
             list[tuple[torch.Tensor, Timestamp]], sink_a.results
         )
@@ -688,9 +675,7 @@ class TestInitial:
         assert written_at.ns == 0
         assert torch.equal(run.read(out), twos)
 
-    def test_send_to_replaces_it_for_that_peer_only(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_send_to_replaces_it_for_that_peer_only(self, start_manual: StartManual):
         twos = torch.full((2, 3), 2.0)
         out = NextPort(send=h(), initial=twos)
         a, b = PrevPort(recv=h()), PrevPort(recv=h())
@@ -699,18 +684,18 @@ class TestInitial:
         source = Probe(lambda: out.send_to(to_a, torch.ones(2, 3)), next=out)
         sink_a, sink_b = Probe(a.recv, prev=a), Probe(b.recv, prev=b)
         run = start_manual(Group(source=source, a=sink_a, b=sink_b))
-        step(run, source, sink_a, sink_b)
+        run.step(H, source, sink_a, sink_b)
         assert torch.equal(cast(torch.Tensor, sink_a.results[0]), torch.ones(2, 3))
         assert torch.equal(cast(torch.Tensor, sink_b.results[0]), twos)
         assert torch.equal(run.read(out), twos)
 
-    def test_of_a_dict_message(self, step: Step, start_manual: StartManual):
+    def test_of_a_dict_message(self, start_manual: StartManual):
         out = Port(send=fb(), initial={"error": torch.ones(2, 3)})
         inp = Port(recv=fb())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)
         run = start_manual(Group(source=Probe(out=out), sink=sink))
-        step(run, sink)
+        run.step(H, sink)
         received = cast(Feedback, sink.results[0])
         assert torch.equal(received["error"], torch.ones(2, 3))
 
@@ -725,7 +710,7 @@ class TestInitial:
         assert not received.requires_grad
 
     def test_a_restored_run_takes_the_value_from_the_state(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         def build(initial: float) -> tuple[Group, Probe, Probe]:
             out = NextPort(send=h(), initial=torch.full((2, 3), initial))
@@ -737,36 +722,44 @@ class TestInitial:
 
         net, source, _ = build(2.0)
         run = start_manual(net)
-        step(run, source)  # the source sends 5
+        run.step(H, source)  # the source sends 5
         tree = run.state_dict()
         run.shutdown()
 
         restored, _, sink = build(7.0)
-        run = start_manual(restored, timer=VirtualTimer(), state=tree)
-        step(run, sink)
+        run = start_manual(restored, state=tree)
+        run.step(H, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.full((2, 3), 5.0))
 
     def test_rejects_a_port_that_sends_nothing(self):
         with pytest.raises(TypeError, match="sends no messages"):
             Port(recv=h(), initial=torch.zeros(2, 3))  # pyright: ignore[reportArgumentType]
 
-    @pytest.mark.parametrize(
-        ("value", "error"),
-        [
-            (torch.zeros(3, 2), ValueError),
-            (torch.zeros(2, 3, dtype=torch.float64), TypeError),
-            ([[0.0] * 3] * 2, TypeError),
-        ],
-    )
-    def test_rejects_a_value_that_does_not_match_the_send_spec(
-        self, value: object, error: type[Exception]
-    ):
-        with pytest.raises(error, match="initial"):
-            NextPort(send=h(), initial=value)  # pyright: ignore[reportArgumentType]
+    def test_rejects_a_value_that_is_not_a_message(self):
+        with pytest.raises(TypeError, match="initial: expected a torch.Tensor"):
+            NextPort(send=h(), initial=[[0.0] * 3] * 2)  # pyright: ignore[reportArgumentType]
 
     def test_rejects_a_dict_with_other_keys(self):
-        with pytest.raises(ValueError, match="keys do not match"):
+        with pytest.raises(TypeError, match="initial: expected a dict with the keys"):
             Port(send=fb(), initial={"loss": torch.zeros(2, 3)})  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize(
+        ("value", "what"),
+        [
+            (torch.zeros(3, 2), "shape"),
+            (torch.zeros(2, 3, dtype=torch.float64), "dtype"),
+        ],
+    )
+    def test_a_run_rejects_a_value_of_another_shape_or_dtype_by_its_path(
+        self, start_manual: StartManual, value: torch.Tensor, what: str
+    ):
+        # The core checks the shape and the dtype when the run writes the value
+        # to the port's slots, before any node starts.
+        node = Probe(next=NextPort(send=h(), initial=value))
+        with pytest.raises(
+            ValueError, match=rf"^slot 'node\.next/out': expected {what}"
+        ):
+            start_manual(Group(node=node))
 
 
 def scalar() -> TensorSpec:
@@ -813,7 +806,7 @@ class Path:
 
 class TestCarried:
     def test_is_the_carry_of_the_value_received_in_any_order(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         path = Path()
         run = start_manual(path.group())
@@ -821,7 +814,7 @@ class TestCarried:
         order = torch.Generator().manual_seed(0)
         for _ in range(60):
             perm = torch.randperm(3, generator=order).tolist()
-            step(run, *(nodes[i] for i in perm))
+            run.step(H, *(nodes[i] for i in perm))
         received = cast(list[tuple[float, int]], path.sink.results)
         # Before the relay first sends, the initial value and the zeros it carries.
         pairs = {(value, k) for value, k in received if (value, k) != (0.0, 0)}
@@ -829,9 +822,7 @@ class TestCarried:
         for value, k in pairs:
             assert value == k + 100, f"{value} came with the carry of sample {k}"
 
-    def test_is_the_initial_carry_until_the_first_recv(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_is_the_initial_carry_until_the_first_recv(self, start_manual: StartManual):
         path = Path()
         results: list[tuple[Tag, Tag]] = []
 
@@ -842,56 +833,50 @@ class TestCarried:
 
         path.sink.update = update
         run = start_manual(path.group())
-        step(run, path.source, path.relay, path.sink)
+        run.step(H, path.source, path.relay, path.sink)
         ((before, after),) = results
         assert torch.equal(before["id"], torch.tensor(0))
         assert torch.equal(before["mask"], torch.zeros(2, dtype=torch.bool))
         assert torch.equal(after["id"], torch.tensor(1))
         assert torch.equal(after["mask"], tagged(1)["mask"])
 
-    def test_an_initial_value_carries_zeros(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_an_initial_value_carries_zeros(self, start_manual: StartManual):
         out = NextPort(send=scalar(), send_carry=tag(), initial=torch.tensor(5.0))
         end = PrevPort(recv=scalar(), recv_carry=tag())
         out.connect(end)
         sink = Probe(lambda: (end.recv(), end.carried()), end=end)
         run = start_manual(Group(source=Probe(out=out), sink=sink))
-        step(run, sink)
+        run.step(H, sink)
         value, carried = cast(tuple[torch.Tensor, Tag], sink.results[0])
         assert value.item() == 5.0
         assert carried["id"].item() == 0 and not carried["mask"].any()
 
-    def test_copies_one_field(self, step: Step, start_manual: StartManual):
+    def test_copies_one_field(self, start_manual: StartManual):
         path = Path()
         run = start_manual(path.group())
-        step(run, path.source, path.relay, path.sink)
+        run.step(H, path.source, path.relay, path.sink)
         path.sink.update = lambda: (path.end.carried("mask"), path.end.carried("mask"))
-        step(run, path.sink)
+        run.step(H, path.sink)
         a, b = cast(tuple[torch.Tensor, torch.Tensor], path.sink.results[-1])
         assert torch.equal(a, tagged(1)["mask"])
         assert a.data_ptr() != b.data_ptr()
         assert a.device == path.sink.device
 
-    def test_passes_on_what_was_last_received(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_passes_on_what_was_last_received(self, start_manual: StartManual):
         path = Path()
         path.relay.update = lambda: path.next.send(torch.tensor(-1.0))
         run = start_manual(path.group())
         # Nothing received yet: the relay carries the zeros of its source.
-        step(run, path.source, path.relay, path.sink)
+        run.step(H, path.source, path.relay, path.sink)
         assert path.sink.results[-1] == (-1.0, 0)
         path.relay.update = path.prev.recv
-        step(run, path.relay)  # receives sample 1
-        step(run, path.source)  # sample 2 waits unreceived
+        run.step(H, path.relay)  # receives sample 1
+        run.step(H, path.source)  # sample 2 waits unreceived
         path.relay.update = lambda: path.next.send(torch.tensor(-1.0))
-        step(run, path.relay, path.sink)
+        run.step(H, path.relay, path.sink)
         assert path.sink.results[-1] == (-1.0, 1)
 
-    def test_rejects_a_missing_or_unexpected_carry(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_rejects_a_missing_or_unexpected_carry(self, start_manual: StartManual):
         plain = Port(send=scalar())
         path = Path(plain=plain)
         x = torch.tensor(1.0)
@@ -900,7 +885,7 @@ class TestCarried:
         path.relay.update = lambda: path.next.send(x, carry=tagged(1))
         path.sink.update = lambda: plain.send(x, carry=tagged(1))  # pyright: ignore[reportArgumentType]
         run = start_manual(path.group())
-        step(run)
+        run.step(H)
         errors = [n.results[0] for n in (path.source, path.relay, path.sink)]
         messages = [
             r"'source\.out' carries DictSpec\(Tag.*\); pass it as carry=",
@@ -912,9 +897,7 @@ class TestCarried:
             assert isinstance(error, TypeError)
             assert re.search(message, str(error)), error
 
-    def test_rejects_what_has_no_carry_or_key(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_rejects_what_has_no_carry_or_key(self, start_manual: StartManual):
         plain = PrevPort(recv=scalar())
         tensor = PrevPort(recv=scalar(), recv_carry=scalar())
         path = Path(plain=plain, tensor=tensor)
@@ -925,7 +908,7 @@ class TestCarried:
         ]
         path.sink.update = lambda: [_raised(a) for a in attempts]
         run = start_manual(path.group())
-        step(run, path.sink)
+        run.step(H, path.sink)
         (errors,) = cast(list[list[Exception]], path.sink.results)
         assert isinstance(errors[0], TypeError) and "no recv_carry" in str(errors[0])
         assert isinstance(errors[1], TypeError) and "carries a tensor" in str(errors[1])
@@ -945,7 +928,7 @@ def _raised(attempt: Callable[[], object]) -> Exception | None:
 @pytest.mark.cuda
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         out, inp, back = NextPort(send=h()), PrevPort(recv=h()), Port(send=h())
         out.connect(inp)
@@ -962,7 +945,7 @@ class TestCuda:
 
         sink = OnCuda(update, prev=inp, back=back)
         run = start_manual(Group(source=source, sink=sink))
-        step(run, source, sink)
+        run.step(H, source, sink)
         received = cast(torch.Tensor, sink.results[0])
         # The index-less device is fixed, so the message compares equal to it.
         assert received.device == sink.device == torch.device("cuda", 0)
@@ -971,27 +954,23 @@ class TestCuda:
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
 
-    def test_copies_the_carried_data_to_the_device(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_copies_the_carried_data_to_the_device(self, start_manual: StartManual):
         class OnCuda(Probe):
             on_device = "cuda"
 
         path = Path(sink=OnCuda)
         path.sink.update = lambda: (path.end.recv(), path.end.carried("id"))
         run = start_manual(path.group())
-        step(run, path.source, path.relay, path.sink)
+        run.step(H, path.source, path.relay, path.sink)
         _, carried = cast(tuple[torch.Tensor, torch.Tensor], path.sink.results[0])
         assert carried.device == torch.device("cuda", 0)
         assert carried.item() == 1
 
-    def test_takes_an_initial_value_on_the_device(
-        self, step: Step, start_manual: StartManual
-    ):
+    def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))
         inp = Port(recv=h())
         out.connect(inp)
         sink = Probe(inp.recv, inp=inp)
         run = start_manual(Group(source=Probe(out=out), sink=sink))
-        step(run, sink)
+        run.step(H, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]), torch.ones(2, 3))

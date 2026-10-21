@@ -12,7 +12,7 @@ import torch
 
 import mujou
 from mujou import NextPort, Node, TensorSpec
-from mujou.time import Timer, Timestamp
+from mujou.time import Timer, Timestamp, global_timer
 
 SCALAR = TensorSpec((), torch.float64)
 
@@ -30,10 +30,10 @@ class Clock(Node):
         self.next.send(torch.tensor(float(self.timer.now()), dtype=torch.float64))
 
 
-# A Timestamp: .float() is seconds, .ns the exact nanoseconds; the difference of
+# A Timestamp: float(t) is seconds, .ns the exact nanoseconds; the difference of
 # two is the seconds between them, a float (negative if the first is earlier).
 t0, t1 = Timestamp(ns=1_500_000_000), Timestamp(ns=2_000_000_000)
-assert t0.float() == 1.5 and t0.ns == 1_500_000_000
+assert float(t0) == 1.5 and t0.ns == 1_500_000_000
 assert t1 - t0 == 0.5 and t0 - t1 == -0.5
 
 # --8<-- [start:own-timer]
@@ -42,7 +42,7 @@ assert t1 - t0 == 0.5 and t0 - t1 == -0.5
 timer = Timer()  # starts at 0
 timer.set_time_scale(10.0)
 clock = Clock()
-start_real, start_global = time.perf_counter(), mujou.time.now()
+start_real, start_global = time.perf_counter(), global_timer.now()
 with mujou.run(clock, timer=timer) as run:
     timer.sleep(2.0)  # 2 s of the run's time: about 0.2 s of real time
     # The clock sends once per update, and when it updates depends on how the
@@ -50,7 +50,7 @@ with mujou.run(clock, timer=timer) as run:
     # is in real seconds, whatever the timer's scale.
     seen, t = run.wait_for(clock.next, lambda now: now.item() >= 2.0, timeout=5.0)
 elapsed_real = time.perf_counter() - start_real
-elapsed_global = mujou.time.now() - start_global
+elapsed_global = global_timer.now() - start_global
 print(
     f"run's time {float(t):.2f} s, real {elapsed_real:.2f} s, "
     f"global {elapsed_global:.2f} s"
@@ -64,9 +64,9 @@ assert seen.item() <= float(t)
 
 # --8<-- [start:global-scale]
 # The global timer can be scaled too; it then applies to every run on it.
-mujou.time.set_time_scale(5.0)
+global_timer.set_time_scale(5.0)
 start_real = time.perf_counter()
-mujou.time.sleep(0.5)  # 0.5 s of the global time: about 0.1 s of real time
+global_timer.sleep(0.5)  # 0.5 s of the global time: about 0.1 s of real time
 print(f"slept 0.5 s of global time in {time.perf_counter() - start_real:.2f} s real")
-mujou.time.set_time_scale(1.0)
+global_timer.set_time_scale(1.0)
 # --8<-- [end:global-scale]

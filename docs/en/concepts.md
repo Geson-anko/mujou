@@ -113,9 +113,9 @@ Every node has a period, 0.01 s by default. The interval between two updates var
 
 Each run has one timer, and every node of the run and the host use it. By default, it is the global timer, one per process. The host can make the time run faster or slower than real time. Nodes only read the time.
 
-!!! tip "The host waits with `mujou.time.sleep`"
+!!! tip "The host waits with `run.timer.sleep`"
 
-    To wait on that time, for example to show an input for two seconds, the host uses `mujou.time.sleep`, not the standard `time.sleep`, which waits in real time.
+    To wait on that time, for example to show an input for two seconds, the host uses `run.timer.sleep`, not the standard `time.sleep`, which waits in real time.
 
 To take the state of a running network, Mujou pauses the run and stops its timer. The paused time does not enter any `dt` after the run resumes, so to the nodes it is as if the pause never happened.
 
@@ -143,7 +143,7 @@ Taking the state causes the pause described in the previous section. Each node p
 | After a normal end      | The values as the nodes left them after `on_stop`                                         |
 | After an exception      | Nothing: it raises `NetworkError`. Take the state you want to keep while the network runs |
 
-In the tree taken after a normal end, the timer's time is the later of two: when `shutdown()` asked the run to stop, and when a node last updated or sent. A run restored from this tree does not count the time that passed after the end.
+In the tree taken after a normal end, the timer's time is when `shutdown()` asked the run to stop: the time of the run stands still from then on, so no update or message of the run is later. A run restored from this tree does not count the time that passed after the end.
 
 !!! warning "Do not change the state in `on_stop`"
 

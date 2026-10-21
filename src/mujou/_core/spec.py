@@ -10,12 +10,13 @@ import typing
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final, Generic, TypeVar, cast, final, override
+from typing import Any, ClassVar, Final, Generic, TypeVar, cast, final, override
 
 import torch
 
-# The supported dtypes and their DLPack ``DLDataType`` (code, bits, lanes).
-DLPACK_DTYPES: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyType(
+# The supported dtypes and their DLPack ``DLDataType`` (code, bits, lanes): the
+# one table, which the codec reads to lay out the core's schemas.
+DLPACK: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyType(
     {
         # (DLDataTypeCode, bits, lanes). Codes: 0 int, 1 uint, 2 float, 4 bfloat,
         # 6 bool.
@@ -84,9 +85,13 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         ones = spec.empty(device="cuda").fill_(1.0)
 
     Raises:
-        TypeError: A dimension is not an ``int``, or ``dtype`` is not supported.
+        TypeError: A dimension is not an ``int``, or ``dtype`` is not in
+            ``dtypes``.
         ValueError: A dimension is less than 1.
     """
+
+    dtypes: ClassVar[frozenset[torch.dtype]] = frozenset(DLPACK)
+    """The dtypes a spec takes."""
 
     def __init__(self, shape: Sequence[int], dtype: torch.dtype | None = None) -> None:
         # User input: copy first (an iterator would be consumed by the checks), then
@@ -103,10 +108,11 @@ class TensorSpec(MessageSpec[torch.Tensor]):
                 )
         if dtype is None:
             dtype = torch.get_default_dtype()
-        if dtype not in DLPACK_DTYPES:
-            supported = ", ".join(str(t) for t in DLPACK_DTYPES)
+        if dtype not in TensorSpec.dtypes:
+            supported = ", ".join(str(t) for t in DLPACK)
             raise TypeError(
-                f"TensorSpec dtype {dtype} is not supported; use one of {supported}"
+                f"TensorSpec dtype {dtype} is not supported; use one of "
+                f"TensorSpec.dtypes ({supported})"
             )
         self._shape = cast(tuple[int, ...], dims)
         self._dtype = dtype
@@ -292,91 +298,3 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
 
 # Any: the TypedDict of a DictSpec is not known where a spec is handled generically.
 type Spec = TensorSpec | DictSpec[Any]
-
-
-def fields(spec: Spec) -> list[tuple[str, tuple[int, ...], tuple[int, int, int]]]:
-    """Return the fields of ``spec`` as ``_native.Schema`` takes them.
-
-    A tensor message is one field named ``""``; a dict message has one field per
-    key, in key order.
-    """
-    if isinstance(spec, TensorSpec):
-        return [("", spec.shape, DLPACK_DTYPES[spec.dtype])]
-    return [(k, s.shape, DLPACK_DTYPES[s.dtype]) for k, s in spec.specs.items()]
-
-
-def _check_tensor(spec: TensorSpec, value: object, where: str) -> torch.Tensor:
-    if not isinstance(value, torch.Tensor):
-        raise TypeError(f"{where}: expected a torch.Tensor, got {type(value).__name__}")
-    if tuple(value.shape) != spec.shape:
-        raise ValueError(
-            f"{where}: expected shape {spec.shape}, got {tuple(value.shape)}"
-        )
-    if value.layout != torch.strided:
-        raise TypeError(
-            f"{where}: expected a dense (strided) tensor, got {value.layout}"
-        )
-    if value.dtype != spec.dtype:
-        raise TypeError(
-            f"{where}: expected dtype {spec.dtype}, got {value.dtype}; dtypes are "
-            f"not converted, use .to({spec.dtype})"
-        )
-    return value
-
-
-def split(spec: Spec, msg: object, *, where: str) -> list[torch.Tensor]:
-    """Check ``msg`` against ``spec`` and return its tensors in field order.
-
-    ``where`` names the place of the message (e.g. a port path) in error messages.
-    The tensors are returned as they are: no copy, ``detach`` or device move.
-
-    Raises:
-        TypeError: ``msg`` is not of the message type, a tensor is not dense
-            (strided), or a dtype differs.
-        ValueError: The keys of a dict message differ, or a shape differs.
-    """
-    if isinstance(spec, TensorSpec):
-        return [_check_tensor(spec, msg, where)]
-    if not isinstance(msg, Mapping):
-        raise TypeError(
-            f"{where}: expected a {spec.typed_dict.__qualname__} dict, "
-            f"got {type(msg).__name__}"
-        )
-    values = cast(Mapping[object, object], msg)
-    missing = [k for k in spec.specs if k not in values]
-    unknown = [k for k in values if k not in spec.specs]
-    if missing or unknown:
-        raise ValueError(
-            f"{where}: keys do not match {spec.typed_dict.__qualname__}: "
-            f"missing {missing}, unknown {unknown}"
-        )
-    return [
-        _check_tensor(s, values[k], f"{where}[{k!r}]") for k, s in spec.specs.items()
-    ]
-
-
-def host_tensors(
-    spec: Spec, msg: object, *, where: str, copy: bool = False
-) -> list[torch.Tensor]:
-    """Check ``msg`` against ``spec`` (as ``split``), cut the gradients and return
-    its tensors in host memory, for the core to copy.
-
-    ``copy`` makes new tensors even of those already in host memory, for a value
-    kept beyond the call. A CUDA tensor is copied on the calling thread's current
-    stream (a node's own, in its hooks), and only that stream is synchronized.
-
-    Raises:
-        TypeError, ValueError: As ``split``.
-    """
-    return [t.detach().to("cpu", copy=copy) for t in split(spec, msg, where=where)]
-
-
-def join(
-    spec: Spec, tensors: Sequence[torch.Tensor]
-) -> torch.Tensor | dict[str, torch.Tensor]:
-    """Build a message of ``spec`` from its tensors in field order (``split``'s
-    inverse)."""
-    if isinstance(spec, TensorSpec):
-        (tensor,) = tensors
-        return tensor
-    return dict(zip(spec.specs, tensors, strict=True))

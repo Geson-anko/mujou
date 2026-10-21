@@ -4,62 +4,34 @@
 //! it: `just stub` writes `src/mujou/_core/_native.pyi` from the signatures and doc
 //! comments here. Its full name is set once, in the `#[pymodule]` attribute
 //! below; the classes repeat it in their `module = "..."` (pyo3 takes only a
-//! literal there), and `pyproject.toml` (`module-name`) must match.
+//! literal there), and `pyproject.toml` (`module-name`) must match. The timers
+//! name `mujou.time` instead, where they are public.
 
+mod current;
 mod dlpack;
+mod errors;
 mod hint;
 mod runtime;
 mod slot;
 mod time;
-
-use std::time::{Duration, Instant};
+mod wait;
 
 use pyo3::prelude::*;
-
-/// How long a wait without the GIL lasts before checking for signals (Ctrl-C).
-const SIGNAL_CHECK_INTERVAL: Duration = Duration::from_millis(50);
-
-/// Waits without the GIL until `attempt` returns `Some` or `deadline` passes
-/// (never if `None`), checking for signals in between: `attempt` is given
-/// how long it may block, at most `SIGNAL_CHECK_INTERVAL`, and returns `None`
-/// if what it waits for did not come in that time.
-fn wait_interruptibly<T: Send>(
-    py: Python<'_>,
-    deadline: Option<Instant>,
-    mut attempt: impl FnMut(Duration) -> Option<T> + Send,
-) -> PyResult<Option<T>> {
-    loop {
-        let remaining = deadline.map_or(Duration::MAX, |d| {
-            d.saturating_duration_since(Instant::now())
-        });
-        let step = remaining.min(SIGNAL_CHECK_INTERVAL);
-        if let Some(result) = py.detach(|| attempt(step)) {
-            return Ok(Some(result));
-        }
-        if remaining <= SIGNAL_CHECK_INTERVAL {
-            return Ok(None);
-        }
-        py.check_signals()?;
-    }
-}
 
 /// The native core of mujou: timers, slots and the runtime that runs the nodes.
 ///
 /// Private: the framework wraps it. Values go in and out as tensors over DLPack,
 /// always copied.
 #[pymodule(module = "mujou._core", name = "_native", gil_used = false)]
-// The constants take their Python names, `__version__` and `timer`.
+// The constant takes its Python name, `global_timer`.
 #[allow(non_upper_case_globals)]
 mod core_module {
+    /// The global timer, which every run not given a timer of its own uses.
     #[pymodule_export]
-    const __version__: &str = env!("CARGO_PKG_VERSION");
-
-    /// The global timer.
-    #[pymodule_export]
-    const timer: super::time::GlobalTimer = super::time::GlobalTimer;
+    const global_timer: super::time::GlobalTimer = super::time::GlobalTimer;
 
     #[pymodule_export]
-    use super::time::{GlobalTimer, PyTimer, PyTimerReader, PyTimestamp};
+    use super::time::{PyReadOnlyTimer, PyTimer, PyTimestamp, PyVirtualTimer};
 
     #[pymodule_export]
     use super::slot::{
@@ -67,5 +39,8 @@ mod core_module {
     };
 
     #[pymodule_export]
-    use super::runtime::{NetworkError, Node, PauseTimeoutError, Runtime, available_parallelism};
+    use super::current::current;
+
+    #[pymodule_export]
+    use super::runtime::{Runtime, start};
 }

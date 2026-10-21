@@ -17,12 +17,14 @@ EXTENSION = "mujou._core._native"
 
 # From the bottom up.
 LAYERS: list[set[str]] = [
-    {"mujou._core", EXTENSION, "mujou._core.hooks"},
-    {"mujou._core.spec", "mujou._core.timer"},
+    {"mujou._core", EXTENSION, "mujou._core.errors"},
+    {"mujou._core.spec"},
+    {"mujou._core.codec"},
     {"mujou._core.port"},
     {"mujou._core.binding"},
     {"mujou._core.component"},
     {"mujou._core.node"},
+    {"mujou._core.driver"},
     {"mujou._core.network"},
     {"mujou._core.graph"},
     {"mujou._core.state", "mujou._core.lifetime"},
@@ -54,22 +56,17 @@ NATIVE = {
 
 # (importer, imported)
 ALLOWED = {
-    ("mujou", EXTENSION),
     ("mujou", "mujou.time"),
     ("mujou", "mujou.typing"),
     ("mujou._core.binding", EXTENSION),
     ("mujou._core.binding", "mujou._core.node"),
-    ("mujou._core.component", EXTENSION),
     ("mujou._core.component", "mujou._core.graph"),
     ("mujou._core.component", "mujou._core.network"),
     ("mujou._core.component", "mujou._core.node"),
-    ("mujou._core.graph", EXTENSION),
-    ("mujou._core.lifetime", EXTENSION),
     ("mujou._core.network", "mujou._core.graph"),
     ("mujou._core.port", "mujou._core.binding"),
     ("mujou._core.session", EXTENSION),
     ("mujou._core.state", EXTENSION),
-    ("mujou._core.timer", EXTENSION),
 }
 
 

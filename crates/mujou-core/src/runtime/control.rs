@@ -1,15 +1,13 @@
 //! The control thread, which serves the host's requests one at a time.
 
-use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::error::{finished_error, panic_message, stopped};
-use super::freeze::FreezeReason;
-use super::node::Command;
-use super::{Control, NodeHooks, RuntimeError, Shared};
+use super::error::finished_error;
+use super::lifecycle::Command;
+use super::{Control, NodeHooks, RuntimeError, Shared, build_states};
 use crate::time::remaining;
 
 /// A request from the host, run on the control thread.
@@ -44,32 +42,37 @@ impl<N: NodeHooks> Controller<N> {
                 Err(_) => break,
             }
         }
-        // Dropping `messages` makes the pending and later requests fail fast.
+        // Serve what was sent before the end, then drop `messages`, which makes
+        // the later requests fail fast.
+        for message in messages.try_iter() {
+            if let Message::Job(job) = message {
+                job(&mut self);
+            }
+        }
     }
 
     fn startup(&mut self) -> Result<(), RuntimeError> {
         let s = Arc::clone(&self.shared);
         let mut c = s.lock();
-        while !c.failed && !c.nodes.iter().all(|r| r.started) {
+        while !c.life.failed() && !c.life.all_started() {
             c = s.wait(c);
         }
-        if c.failed {
+        if c.life.failed() {
             drop(c);
             return Err(self.end());
         }
         // The timer was frozen at T before the nodes started, so `start` (and
         // restoring) took no time on it. Resume the time before letting the
         // nodes go, as after a pause, so that the first Δt is not 0.
-        c.freeze.release(FreezeReason::Startup);
-        c.go = true;
-        s.changed.notify_all();
-        s.wake_pool(&mut c);
+        c.startup = None;
+        c.life.go();
+        s.wake_all(&mut c);
         Ok(())
     }
 
     /// Ends the system if a failure was recorded, and fails if it has ended.
     fn ensure_running(&mut self) -> Result<(), RuntimeError> {
-        if self.done || self.shared.lock().failed {
+        if self.done || self.shared.lock().life.failed() {
             return Err(self.end());
         }
         Ok(())
@@ -80,15 +83,14 @@ impl<N: NodeHooks> Controller<N> {
         let s = Arc::clone(&self.shared);
         for i in order {
             let mut c = s.lock();
-            if !c.failed {
-                c.grant = Some(i);
-                s.changed.notify_all();
-                s.wake_node(&mut c, i);
+            if !c.life.failed() {
+                c.life.grant(i);
+                s.wake(&mut c, i);
             }
-            while c.grant.is_some() && !c.failed {
+            while c.life.granted() && !c.life.failed() {
                 c = s.wait(c);
             }
-            if c.failed {
+            if c.life.failed() {
                 drop(c);
                 return Err(self.end());
             }
@@ -101,6 +103,9 @@ impl<N: NodeHooks> Controller<N> {
         build: impl FnOnce(Vec<N::State>) -> R,
         timeout: Duration,
     ) -> Result<R, RuntimeError> {
+        if self.done {
+            return self.shared.capture_ended(build);
+        }
         self.ensure_running()?;
         let s = Arc::clone(&self.shared);
         let mut c = s.lock();
@@ -108,15 +113,16 @@ impl<N: NodeHooks> Controller<N> {
         // nodes stop: otherwise the wait between a node's last update and the
         // freeze would enter that node's next Δt.
         s.set_command(&mut c, Command::Pause);
-        let epoch = c.epoch;
-        c.freeze.hold(FreezeReason::Capture, &s.timer);
+        let epoch = c.life.epoch();
+        c.capture = Some(s.clock.hold());
         let deadline = Instant::now().checked_add(timeout);
-        while !c.failed && !c.nodes.iter().all(|r| r.paused_at == Some(epoch)) {
+        let n = s.nodes.len();
+        while !c.life.failed() && !(0..n).all(|i| c.life.paused(i, epoch)) {
             let remaining = remaining(deadline);
             if remaining.is_zero() {
-                let nodes = (c.nodes.iter().zip(&s.names))
-                    .filter(|(r, _)| r.paused_at != Some(epoch))
-                    .map(|(_, name)| name.clone())
+                let nodes = (0..n)
+                    .filter(|&i| !c.life.paused(i, epoch))
+                    .map(|i| s.nodes[i].name.clone())
                     .collect();
                 // The nodes that did pause get `resume`.
                 resume_after_pause(&s, &mut c);
@@ -124,25 +130,21 @@ impl<N: NodeHooks> Controller<N> {
             }
             c = s.wait_timeout(c, remaining);
         }
-        let failed = c.failed;
+        let failed = c.life.failed();
         drop(c);
         if failed {
             return Err(self.end());
         }
-        // Every node waits at its loop boundary (or parked in the pool) without
-        // holding its lock, and the time stands at T: the states are
-        // consistent at T.
-        let states = (0..s.hooks.len()).map(|i| s.state_dict(i));
+        // Every node is parked without holding its lock, and the time stands
+        // at T: the states are consistent at T.
+        let states = (0..n).map(|i| s.capture(i));
         let Ok(states) = states.collect::<Result<Vec<_>, ()>>() else {
             return Err(self.end());
         };
-        let result = panic::catch_unwind(AssertUnwindSafe(|| build(states)));
+        let result = build_states(states, build);
         // Resume even if `build` panicked, so the system is not left paused.
         resume_after_pause(&s, &mut s.lock());
-        result.map_err(|payload| {
-            let message = panic_message(payload);
-            RuntimeError::Internal(format!("the build of a capture panicked: {message}"))
-        })
+        result
     }
 
     /// Stops every node and ends the system. Does nothing once ended.
@@ -155,18 +157,17 @@ impl<N: NodeHooks> Controller<N> {
         s.set_command(&mut c, Command::Stop);
         // No timeout: a node in a long update is waited for (Ctrl-C on the host
         // still works, since the host waits in steps).
-        while !c.nodes.iter().all(|r| r.ready_to_stop(c.failed)) {
+        while !c.life.ready_to_stop() {
             c = s.wait(c);
         }
-        c.stop_allowed = true;
-        s.changed.notify_all();
-        s.wake_pool(&mut c);
+        c.life.allow_stop();
+        s.wake_all(&mut c);
         drop(c);
         for thread in self.threads.drain(..) {
             // A runtime thread does not panic: hook panics are caught.
             let _ = thread.join();
         }
-        s.mark_finished(s.lock());
+        s.mark_finished(&mut s.lock());
         self.done = true;
     }
 
@@ -175,17 +176,12 @@ impl<N: NodeHooks> Controller<N> {
         self.finish();
         finished_error(&self.shared.failure)
     }
-
-    pub(super) fn shutdown(&mut self) -> Result<(), RuntimeError> {
-        self.finish();
-        stopped(&self.shared.failure)
-    }
 }
 
 /// Ends a pause: resume the time first, then lower the flag, so that the first
 /// Δt after the pause is not 0 and no wait enters it.
 fn resume_after_pause<N: NodeHooks>(s: &Shared<N>, c: &mut Control) {
-    c.freeze.release(FreezeReason::Capture);
+    c.capture = None;
     // A no-op if an exception already turned the command to `Stop`.
     s.set_command(c, Command::Run);
 }

@@ -68,7 +68,7 @@ For a node given a CUDA `device`, Mujou sets up the following.
 - It waits for the work queued on the node's stream after each `on_update` and after restoring the state. The worker waits meanwhile, as in a hook that blocks (see [Running a network](running.md#threads-of-a-run))
 - When the state is taken, it waits for the work queued on the node's stream before and after `state_dict`. This happens on a thread of Mujou's other than the workers (on the host's thread once the run has ended), so no worker waits for it
 
-Mujou sets the device and the stream whenever a worker switches to a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.
+Mujou sets the device and the stream before each hook of a CUDA node. A node on the CPU does not set them, so on a worker that ran a CUDA node just before, the CUDA stream of that node is still current. A node on the CPU does not use CUDA.
 
 So the node's author does not have to write any synchronization. If you synchronize yourself, wait only for the work you queued on your own stream (`torch.cuda.current_stream().record_event().synchronize()`). A device has a pool of 32 streams, so past 32 CUDA nodes on one device several nodes share a stream, and synchronizing the whole stream can also wait for work that the other nodes queue on it.
 
@@ -96,7 +96,7 @@ The following settings are shared by the whole process. Do not change them in a 
 - `torch.set_num_threads`, `torch.use_deterministic_algorithms`, and the flags in `torch.backends.*`
 - Operations on a whole device, such as `torch.cuda.synchronize()` and `torch.cuda.empty_cache()`
 
-A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Set such a setting back before the hook returns, by keeping it inside a `with` in the hook (`with torch.autocast(...):`); a setting left behind leaks into the next node on the same worker. Gradient recording is such a setting too. Mujou itself sets back only the current CUDA device and stream, whenever a worker switches to a CUDA node. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_start`.
+A node may change only per-thread settings, and only inside a hook: the next hook of the node may run on another thread, and the thread runs other nodes in between (see [Run on a thread of its own](writing-a-node.md#run-on-a-thread-of-its-own)). Set such a setting back before the hook returns, by keeping it inside a `with` in the hook (`with torch.autocast(...):`); a setting left behind leaks into the next node on the same worker. Gradient recording is such a setting too. Mujou itself sets back only the current CUDA device and stream, before each hook of a CUDA node. A node with `dedicated_thread=True` runs every hook on one thread, and can make its per-thread settings once, in `on_start`.
 
 ### Internal threads
 

@@ -71,7 +71,7 @@ GIL が有効なとき（GIL ありのビルド、または free-threaded のビ
 
 ### 入力を一定の時間だけ見せる
 
-入力を見せる長さは実行のタイマーで待って決める。グローバルタイマーで走らせているなら `mujou.time.sleep(seconds)` を使う。
+入力を見せる長さは、実行のタイマーで `run.timer.sleep(seconds)` で待って決める。
 
 !!! warning "`time.sleep` を使わない"
 
@@ -80,7 +80,7 @@ GIL が有効なとき（GIL ありのビルド、または free-threaded のビ
 ```python
 for x in stream:
     run.write({net.prev: x})
-    mujou.time.sleep(0.1)          # x を 0.1 秒見せる
+    run.timer.sleep(0.1)           # x を 0.1 秒見せる
     y = run.read(net.next)         # 見せ終わる時点の出力を、x への応答とみなす
 ```
 

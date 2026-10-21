@@ -26,8 +26,7 @@ Step 5 needs a new instance because a network can run only once. Passing the net
 
 ## When you restore
 
-- **The timer goes back to the time of the tree.** On the default global timer, restoring sets the global time (`mujou.time.now()`) back to the time the tree was taken. When `mujou.run(..., state=tree)` returns, the time has already gone back. Do not compare a `mujou.time.now()` read before the restore with a time read after it. Measure elapsed time as the difference between two times read after the restore
-- **You cannot restore while another run is running on the same timer.** In that case `mujou.run` raises `ValueError` and starts nothing. End the other run first, or give the restored run a timer of its own, `mujou.time.Timer()` (see [Controlling time](time.md))
+- **The restored run has a timer of its own.** It runs on a new `Timer` (`run.timer`) that starts at the time and the time scale of the tree, so the global timer and the other runs do not go back. Passing `timer=` with `state=` raises `ValueError`. `mujou.time.global_timer.pause()` does not stop a restored run: pause its `run.timer` (see [Controlling time](time.md))
 - The restored network must have the same node paths and connections as the network the tree was taken from. Otherwise `mujou.run` raises `ValueError`
 - If you pass both `state=` and `inputs=`, the values in `inputs` override the input values in the tree
 - Data carried along a path ([Carrying data along a path](building-a-network.md#carrying-data-along-a-path)) is in the tree too: with the messages that carry it, and, for each port with a `recv_carry`, the data of the message it last received. A restored node passes on the same data as one that never stopped
@@ -48,7 +47,7 @@ To take them all at one time, pause the timer first, take the states, and resume
 
     Put the `resume` in `finally`, so that an exception does not leave the time stopped.
 
-To restore the trees, note that a run cannot restore while another run is running on the same timer. Restore them one after another once the previous run has ended, or give each restored run a timer of its own; each timer then starts from the same time of the trees.
+Each restored run goes on from the time of its tree on a timer of its own, so the trees can be restored together. The restored runs no longer share a time axis, though: their timers drift apart, and pausing one does not pause the others. Runs that must stay on one time axis after a restore run as one run of several components (`mujou.run(a, b)`), whose single tree restores onto one timer.
 
 ## The state is not saved after an exception
 
@@ -102,10 +101,10 @@ class Noisy(Node):
 
 When you override them, follow these rules.
 
-| Hook                     | Rules                                                                                                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it (that raises `RuntimeError`). You may put the live tensors in it; Mujou copies the tree |
-| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called after `on_start` and before the first `on_update`                                                   |
+| Hook                     | Rules                                                                                                                                                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state_dict()`           | Return an object that pickles. Do not call `recv` or `send` on a port in it: the tree holds the slots apart, and a send would change the run while its state is taken. You may put the live tensors in it; Mujou copies the tree |
+| `load_state_dict(state)` | `state` is a copy of what `state_dict()` returned. It is called after `on_start` and before the first `on_update`                                                                                                                |
 
 !!! warning "Do not change the state in on_stop"
 

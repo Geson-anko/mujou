@@ -1,70 +1,65 @@
-use mujou_core::time::TimerState;
-
 use super::*;
 
-fn restoring() -> RuntimeConfig {
-    RuntimeConfig {
-        timer_state: Some(TimerState {
-            time_ns: 7 * H_NS,
-            scale: 1.0,
-        }),
-        ..manual()
-    }
-}
-
 #[test]
-fn the_time_is_not_restored_under_a_running_runtime() {
+fn a_node_restores_its_state_right_after_start() {
     each_mode(|mode| {
         let timer = virtual_timer();
-        let Probes { nodes, names, .. } = probes(1);
-        let (running, started) = mode
-            .start(nodes, names, Arc::clone(&timer), manual())
-            .unwrap();
+        let Probes { log, mut nodes } = probes(2);
+        nodes[0].state = Some(5);
+        let (rt, started) = mode.start(manual(nodes), Arc::clone(&timer)).unwrap();
         started.wait().unwrap();
-        let before = timer.time_ns();
-
-        let Probes { log, nodes, names } = probes(1);
-        let result = mode.start(nodes, names, Arc::clone(&timer), restoring());
-        assert!(matches!(result, Err(RuntimeError::InvalidArgument(_))));
-        // Nothing started, and the running runtime's time did not move.
-        assert!(log.lock().unwrap().is_empty());
-        assert_eq!(timer.time_ns(), before);
-        assert!(!timer.is_paused());
-
-        // Once it has finished, the time can be restored.
-        running.shutdown().wait().unwrap();
-        let Probes { nodes, names, .. } = probes(1);
-        let (restored, started) = mode
-            .start(nodes, names, Arc::clone(&timer), restoring())
-            .unwrap();
-        started.wait().unwrap();
-        assert_eq!(timer.time_ns(), 7 * H_NS);
-        restored.shutdown().wait().unwrap();
+        let states = rt.capture(|states| states, PAUSE).wait().unwrap();
+        assert_eq!(states, [5, 0]);
+        shut_down(&rt).unwrap();
+        let after_start = [Event::Pause, Event::Capture, Event::Resume, Event::Stop];
+        assert_eq!(events(&log, 0)[..2], [Event::Start, Event::Restore(5)]);
+        assert_eq!(events(&log, 0)[2..], after_start);
+        // Nothing to restore: no call.
+        assert_eq!(events(&log, 1)[..1], [Event::Start]);
+        assert_eq!(events(&log, 1)[1..], after_start);
     });
 }
 
 #[test]
-fn a_runtime_on_another_timer_does_not_block_a_restore() {
+fn a_failed_start_does_not_restore() {
     each_mode(|mode| {
-        let (ta, tb) = (virtual_timer(), virtual_timer());
-        let Probes { nodes, names, .. } = probes(1);
-        let (running, started) = mode.start(nodes, names, Arc::clone(&ta), manual()).unwrap();
-        started.wait().unwrap();
-        let before = ta.time_ns();
-
-        let config = RuntimeConfig {
-            timer_state: Some(TimerState {
-                time_ns: 7 * H_NS,
-                scale: 1.0,
-            }),
-            ..manual()
+        let Probes { log, mut nodes } = probes(1);
+        nodes[0].state = Some(5);
+        nodes[0].fail_on_start = true;
+        let (_rt, started) = mode.start(manual(nodes), virtual_timer()).unwrap();
+        let result = started.wait();
+        let Err(RuntimeError::Failed(failure)) = result else {
+            panic!("expected a failure, got {result:?}");
         };
-        let Probes { nodes, names, .. } = probes(1);
-        let (restored, started) = mode.start(nodes, names, Arc::clone(&tb), config).unwrap();
-        started.wait().unwrap();
-        assert_eq!(tb.time_ns(), 7 * H_NS);
-        assert_eq!(ta.time_ns(), before);
-        running.shutdown().wait().unwrap();
-        restored.shutdown().wait().unwrap();
+        assert_eq!(failure.hook, Hook::Start);
+        assert_eq!(
+            events(&log, 0),
+            [Event::Start, Event::Exception, Event::Stop]
+        );
+    });
+}
+
+#[test]
+fn a_failed_restore_is_reported_as_restore() {
+    each_mode(|mode| {
+        let Probes { log, mut nodes } = probes(1);
+        nodes[0].state = Some(5);
+        nodes[0].fail_on_restore = true;
+        let (_rt, started) = mode.start(manual(nodes), virtual_timer()).unwrap();
+        let result = started.wait();
+        let Err(RuntimeError::Failed(failure)) = result else {
+            panic!("expected a failure, got {result:?}");
+        };
+        assert_eq!((failure.name.as_str(), failure.hook), ("p0", Hook::Restore));
+        let events = events(&log, 0);
+        assert_eq!(
+            events,
+            [
+                Event::Start,
+                Event::Restore(5),
+                Event::Exception,
+                Event::Stop
+            ]
+        );
     });
 }

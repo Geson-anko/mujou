@@ -107,9 +107,8 @@ def measure(spec: Any, calls: int, repeats: int) -> dict[str, list[float]]:
     source, sink = Source(spec, calls, repeats), Sink(spec, calls, repeats)
     source.next.connect(sink.prev)
     with mujou.testing.run(mujou.Group(source=source, sink=sink)) as run:
-        run.timer.advance(1e-3)
-        run.step(source)
-        run.step(sink)
+        run.step(1e-3, source)
+        run.step(0.0, sink)
     return source.times | sink.times
 
 

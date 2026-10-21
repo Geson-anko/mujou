@@ -67,14 +67,14 @@ mujou のノードは実行の単位であり、分散処理でいう「マシ�
 | `on_resume()`            | 停止から再開し、次の `on_update` の前              | I/O の再開、停止中に溜まった外界の値の破棄など               |
 | `on_exception()`         | どれかのノードの例外で終了するとき、全ノードに 1 回。`on_stop` の前 | アクチュエータの安全停止など、異常終了に固有の I/O の処理 |
 | `on_stop()`              | 実行終了時に 1 回。例外による終了でも呼ぶ          | I/O などの資源の解放。`state_dict()` が返す状態は変えない     |
-| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードの hook を走らせるスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶので、Port は使えない | 状態を pickle できるオブジェクトの木として返す。`mujou.Node` の既定は自動で集めた状態（[状態の自動収集](#状態の自動収集)） |
+| `state_dict()`           | 状態の取得時。全ノードが止まっている間、または正常に終了した後。ノードの hook を走らせるスレッドではなく制御スレッド（終了した後はホストのスレッド）で呼ぶ。Port は使えない（取得をほかのノードから見えなくするため） | 状態を pickle できるオブジェクトの木として返す。`mujou.Node` の既定は自動で集めた状態（[状態の自動収集](#状態の自動収集)） |
 | `load_state_dict(state)` | 状態の復元時。`on_start` の後、最初の `on_update` の前 | `state_dict()` が返した木から状態を戻す。`mujou.Node` の既定はその場でコピーする |
 
-表の hook のほかに、フレームワークが自分のために使う内部の hook がある。`_on_enter()`（スレッドがそのノードに切り替わるたび、次の hook の直前に同じスレッドで）、`_after_update()`（各 `on_update` の直後に同じスレッドで）、`_restore_state(state)`（状態の復元で `load_state_dict(state)` の代わりに呼び、既定は `load_state_dict(state)` を呼ぶ）、`_capture_state()`（状態の取得で `state_dict()` の代わりに呼び、既定は `state_dict()` を返す）である。`mujou.Node` はこれらでスレッドごとの設定と CUDA の同期を行う（[PyTorch の利用](torch.md#切り替えごとの設定)）。利用者は override しない。公開の hook とは別なので、どの公開の hook を override しても、`super()` を呼ばなくても、設定と同期は漏れない。内部の hook の中の例外は、それが属する公開の hook の名前で出る。`_on_enter` は次に呼ぶはずだった公開の hook、`_after_update` は `on_update`、`_restore_state` は `load_state_dict`、`_capture_state` は `state_dict` と出る。CUDA の非同期のエラー（`on_update` のカーネルの device-side assert など）は `_after_update` の同期で表に出るが、原因は `on_update` で積んだ仕事にあるので、`on_update` と出るのが正しい。
+ランタイムは、ノード 1 つにつき 1 つの `Driver`（`src/mujou/_core/driver.py`）のメソッドを、hook 1 回につき 1 回だけ呼ぶ。Driver は、どの hook でも同じ順で、ノード専用の `contextvars.Context` に入り、CUDA のノードなら device と stream を設定し、hook を呼び、`on_update` と `load_state_dict` の後は stream を同期する（[PyTorch の利用](torch.md)）。この仕事は hook の外にあるので、どの hook を override しても、`super()` を呼ばなくても漏れない。CPU のノードでは CUDA に触れない。`state_dict` の間は、そのノードの Port も送受信を断る（`RuntimeError`）。状態の取得は、ほかのノードからもホストからも見えないようにするためである。
 
 サブクラスは、継承の慣習どおり `__init__` の最初で `super().__init__()` を、override した hook の最初で `super()` の同じ hook を呼ぶ。ドキュメント・サンプル・docstring の例は常にそう書く（2026-10-17、ユーザーの決定）。呼ばなくても動くように、`mujou.Node` は `__init__` で設定する値の既定をクラスに置く。
 
-フレームワークは起動の hook（`on_start`・`load_state_dict` と、その前に呼ぶ内部の `_on_enter`）を呼んだ後、残りの hook（`on_update`・`on_pause`・`on_resume`・`on_exception`・`on_stop` と内部の `_on_enter`・`_after_update`・`_capture_state`）の関数を 1 回だけ探して持っておく。起動の hook の中でインスタンス属性に差し替えれば反映されるが、起動の後に差し替えても反映されない。`state_dict` だけは既定の `_capture_state` が取得のたびに探すので、後で差し替えても反映される。
+Driver は hook を呼ぶたびにノードの属性から引く。いつインスタンス属性に差し替えても、次の呼び出しから反映される。
 
 ノードは、自分の実行のタイマーの読み取り側を、属性 `timer` として持つ（`mujou.time.ReadOnlyTimer`。時刻は `self.timer.now()` で `Timestamp` として読み、スケールは `get_time_scale()` で読む）。元のタイマーは `mujou.run(..., timer=...)` に渡したもので、省略すればグローバルタイマーである。`on_update(dt)` の $\Delta t$ もこのタイマーで測る。`ReadOnlyTimer` は pamiq-core の `ReadOnlyController` と同じ作りで、元のタイマーの読み取りのメソッドだけを属性として写し、タイマーそのものは持たない。そのため、ノードはそこからスケールを変えたり時計を進めたり、タイマーで待ったりできない。タイマーを動かすのはホストだけで、hook の中から `Timer.sleep`・`set_time_scale`・`pause`・`resume`・`VirtualTimer.advance`・`mujou.time.sleep`・`mujou.time.set_time_scale`・`mujou.time.pause`・`mujou.time.resume` を呼ぶと `RuntimeError` になる（[グローバルタイマーの実装](execution-model.md#実装)）。hook の中から `mujou.run`・`mujou.testing.run` や、`Run` のホスト向けのメソッド（`write`・`read`・`state_dict`・`shutdown`・`join`・`step` など）を呼んでも `RuntimeError` になる。ノードは自分の Port だけでやり取りする。
 

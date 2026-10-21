@@ -229,8 +229,8 @@ class Sensor(mujou.Node):
 ノードは既定でほかのノードと共有する実行のワーカースレッドの上で動く（[ネットワークを走らせる](running.md#%E5%AE%9F%E8%A1%8C%E3%81%AE%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89)）。hook ごとに別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす。hook がスレッドに設定したものを次の hook が見るかどうかはスケジュール次第で、同じワーカーで次に走る別のノードにも見える。
 
 - `threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる
-- `torch.autocast` や勾配の記録などスレッドごとの torch の設定は hook の中の `with` に閉じ（`with torch.no_grad():`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは CUDA の現在のデバイス・ストリーム（ワーカーが CUDA のノードに切り替わるたび）だけ（[ノードの中の PyTorch](torch.md)）
-- `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する。この文脈は空から始まりホストの文脈の変数を引き継がない。`state_dict` はこの文脈の外で呼ばれる
+- `torch.autocast` や勾配の記録などスレッドごとの torch の設定は hook の中の `with` に閉じ（`with torch.no_grad():`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる。mujou が戻すのは CUDA の現在のデバイス・ストリーム（CUDA のノードの hook の前ごと）だけ（[ノードの中の PyTorch](torch.md)）
+- `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する。この文脈は空から始まりホストの文脈の変数を引き継がない
 
 次のノードには `super().__init__` に `dedicated_thread=True` を渡す。
 
@@ -260,7 +260,7 @@ mujou はノードの hook を次の順に呼ぶ。override するのは必要�
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | ほかのノードの値が新しくなるのを待つ（ループで `recv()` を繰り返すなど）    | ノードは互いを待たない。値が変わらなければ同じ値を使って進む                                                   |
 | `mujou.run` や `Run` のメソッド（`write`・`read`・`state_dict` など）を呼ぶ | `RuntimeError` になる。ノードは自分の Port だけでやり取りする                                                  |
-| `mujou.time.sleep`・`set_time_scale` など、時間を動かす操作                 | `RuntimeError` になる。時間を動かせるのはホストだけ                                                            |
+| `Timer.sleep`・`set_time_scale` など、時間を動かす操作                      | `RuntimeError` になる。時間を動かせるのはホストだけ                                                            |
 | ノードをまたいで `backward()` する                                          | 送った値は計算グラフから切り離されるので、勾配は Port を通らない                                               |
 | `on_update` から戻らないループを書く                                        | 一時停止・終了・状態の取得ができなくなる。ループは mujou が持つ。刻みを分割する有限の `for` ループは使ってよい |
 

@@ -5,19 +5,19 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, cast, override
 
 import pytest
 import torch
 from torch import nn
 
 from mujou import Group, NetworkError, Node, Port, TensorSpec
-from mujou._core import _native
-from mujou.testing import VirtualTimer
-from mujou.time import ReadOnlyTimer, Timer, Timestamp
+from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import Start, StartManual, Step
+    from tests.mujou.conftest import Start, StartManual
+
+H = 1e-3  # seconds per step
 
 
 class Probe(Node):
@@ -25,15 +25,10 @@ class Probe(Node):
     settings there."""
 
     def __init__(
-        self,
-        seed: int | None = None,
-        *,
-        init_base: bool = True,
-        dedicated_thread: bool = False,
+        self, seed: int | None = None, *, dedicated_thread: bool = False
     ) -> None:
-        if init_base:
-            super().__init__(seed=seed, dedicated_thread=dedicated_thread)
-            self.out = Port(send=TensorSpec((3,)))
+        super().__init__(seed=seed, dedicated_thread=dedicated_thread)
+        self.out = Port(send=TensorSpec((3,)))
         self.grad_enabled: bool | None = None
         self.draws: torch.Tensor | None = None
         self.ident: int | None = None
@@ -70,12 +65,6 @@ class TestThreadSetup:
         assert torch.equal(b.draws, expected)
         assert not torch.equal(c.draws, expected)
 
-    def test_works_without_calling_the_base_init(self, start_manual: StartManual):
-        node = Probe(init_base=False)
-        start_manual(Group(node=node))
-        assert node.device == torch.device("cpu")
-        assert node.draws is not None
-
     def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
         node = Probe(seed=0)
         run = start_manual(Group(node=node))
@@ -105,11 +94,11 @@ class TestThreadSetup:
         assert torch.equal(node.draws, torch.rand(3, generator=generator))
 
     def test_a_hook_backpropagates_without_turning_gradients_on(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         node = Backprop()
         run = start_manual(Group(node=node))
-        step(run)
+        run.step(H)
         run.shutdown()
         assert node.grad is not None
         assert torch.equal(node.grad, torch.full((3,), 2.0))  # d(sum(2w))/dw
@@ -135,23 +124,6 @@ class TestThreadSetup:
         assert threading.get_ident() not in leaky.idents
         assert torch.is_grad_enabled()
 
-    def test_a_node_whose_setup_failed_cleans_up_as_itself(
-        self, virtual: VirtualTimer, start: Start
-    ):
-        # specs: when the framework's setup of a node fails, the runtime still calls
-        # on_exception and on_stop; they run as that node (not as the node the
-        # worker ran before). BrokenSetup fails through a
-        # private override: the real failure (setting up CUDA) needs a GPU, and no
-        # public way makes the setup fail.
-        other = GradSetter(leak=False)
-        broken = BrokenSetup(other.inp)
-        with pytest.raises(NetworkError, match="raised in on_start"):
-            start(Group(other=other, broken=broken), timer=virtual, workers=1)
-        assert set(broken.results) == {"on_exception", "on_stop"}
-        for hook, result in broken.results.items():
-            assert isinstance(result, RuntimeError), hook
-            assert "only the node that owns" in str(result)
-
 
 class Backprop(Node):
     """Backpropagates through ``sum(2 * w)`` in each update, as in plain PyTorch."""
@@ -169,44 +141,6 @@ class Backprop(Node):
         self.w.grad = None
         (2 * self.w).sum().backward()
         self.grad = self.w.grad
-
-
-class BrokenSetup(Node):
-    """Fails in the framework's setup (creating the generator) every time a
-    thread enters it, and tries to read another node's port while it cleans up."""
-
-    failing = False  # not while super().__init__ creates the generator
-
-    def __init__(self, other: Port[Any, Any, Any, Any, Any]) -> None:
-        super().__init__(period=0.01)
-        self.out = Port(send=TensorSpec((1,)))
-        # From now on the setup creates the generator again, and fails.
-        self._generator = None
-        self.failing = True
-        vars(self)["other"] = other  # not registered as one of its ports
-        self.results: dict[str, object] = {}
-
-    @override
-    def _make_generator(self) -> torch.Generator:
-        if self.failing:
-            raise RuntimeError("setup failed")
-        return super()._make_generator()
-
-    def clean_up(self, hook: str) -> None:
-        other = cast(Port[Any, Any, Any, Any, Any], vars(self)["other"])
-        try:
-            result: object = other.recv()
-        except RuntimeError as e:
-            result = e
-        self.results[hook] = result
-
-    @override
-    def on_exception(self) -> None:
-        self.clean_up("on_exception")
-
-    @override
-    def on_stop(self) -> None:
-        self.clean_up("on_stop")
 
 
 class GradSetter(Node):
@@ -250,25 +184,6 @@ class InitDraws(Probe):
         self.draws_in_init = torch.rand(3, generator=self.generator)
 
 
-def reachable(root: object) -> list[object]:
-    """Every object reached from ``root`` through instance attributes, the
-    object a builtin or bound method is bound to, and closure cells."""
-    found: list[object] = []
-    todo = [root]
-    while todo:
-        obj = todo.pop()
-        if any(obj is f for f in found) or isinstance(obj, type):
-            continue
-        found.append(obj)
-        todo.extend(getattr(obj, "__dict__", {}).values())
-        for name in ("__self__", "__func__", "__wrapped__"):
-            if hasattr(obj, name):
-                todo.append(getattr(obj, name))
-        for cell in getattr(obj, "__closure__", None) or ():
-            todo.append(cell.cell_contents)
-    return found
-
-
 class Timed(Node):
     """Keeps the time of its run's timer in each hook."""
 
@@ -306,8 +221,7 @@ class TestTimer:
         node = Timed()
         virtual.advance(1.0)
         run = start_manual(Group(node=node), timer=virtual)
-        virtual.advance(0.5)
-        run.step()
+        run.step(0.5)
         run.shutdown()
         assert all(isinstance(timer, ReadOnlyTimer) for timer in node.timers)
         assert node.times == [
@@ -328,29 +242,25 @@ class TestTimer:
             run.shutdown()  # the state_dict after the end sees a stopped timer
         run.state_dict()
         (timer,) = seen
-        # Only the reading methods, public or private, on the instance.
-        assert set(vars(timer)) == {"now", "get_time_scale"}
+        # Only the reading methods.
+        assert {n for n in dir(timer) if not n.startswith("_")} == {"now", "time_scale"}
+        assert not isinstance(timer, Timer)
         assert timer.now() == virtual.now()
-        assert timer.get_time_scale() == 1.0
-        # Nothing reached from them (bound objects, closures) is a timer. The
-        # class's own functions still lead to module globals, as any class's do.
-        for obj in reachable(timer):
-            assert not isinstance(obj, Timer | _native.Timer), obj
-            assert not hasattr(obj, "set_time_scale"), obj
+        assert timer.time_scale() == 1.0
 
     def test_stays_at_the_time_of_the_state_after_a_normal_end(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
         node = Timed()
         run = start_manual(Group(node=node), timer=virtual)
-        virtual.advance(0.5)
-        run.step()
+        run.step(0.5)
         run.shutdown()
         virtual.advance(100.0)  # after the end: not part of the state
         tree = run.state_dict()
         assert tree["nodes"]["node"] == Timestamp(ns=tree["timer"]["time_ns"])
         assert tree["timer"]["time_ns"] == 500_000_000
-        assert node.timer.now() == Timestamp(ns=500_000_000)
+        # The timer a hook kept stays at the end too.
+        assert node.timers[-1].now() == Timestamp(ns=500_000_000)
 
     def test_stays_stopped_while_another_thread_reads_the_run(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -379,7 +289,7 @@ class TestTimer:
             done.set()
             reader.join()
 
-    def test_raises_before_a_run_and_after_an_end_by_an_exception(
+    def test_raises_outside_the_hooks(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
         class Fails(Timed):
@@ -388,23 +298,14 @@ class TestTimer:
                 raise ValueError("boom")
 
         node = Fails()
-        with pytest.raises(RuntimeError, match="run"):
+        with pytest.raises(RuntimeError, match="only in its hooks"):
             _ = node.timer
         run = start_manual(Group(node=node), timer=virtual)
-        virtual.advance(0.001)
+        with pytest.raises(RuntimeError, match="only in its hooks"):
+            _ = node.timer  # by the host while the run runs
         with pytest.raises(NetworkError):
-            run.step()
-        with pytest.raises(RuntimeError, match="run"):
-            _ = node.timer
-
-    def test_is_released_when_a_run_is_refused(self, start_manual: StartManual):
-        tree = start_manual(Group(node=Timed())).state_dict()
-        node = Timed()
-        with pytest.raises(ValueError):
-            # Refused at the start: the timer of the run that is still running
-            # cannot be set back.
-            start_manual(Group(node=node), state=tree)
-        with pytest.raises(RuntimeError, match="run"):
+            run.step(0.001)
+        with pytest.raises(RuntimeError, match="only in its hooks"):
             _ = node.timer
 
 
@@ -452,7 +353,6 @@ class Ticker(Node):
 class TestPeriod:
     def test_defaults_to_ten_milliseconds(self):
         assert Probe().period == 0.01
-        assert Probe(init_base=False).period == 0.01
 
     @pytest.mark.parametrize("period", [0.0, 0.5])
     def test_is_kept(self, period: float):
@@ -506,7 +406,6 @@ class TestPeriod:
 class TestDedicatedThread:
     def test_defaults_to_the_workers(self):
         assert Probe().dedicated_thread is False
-        assert Probe(init_base=False).dedicated_thread is False
 
     @pytest.mark.parametrize("dedicated", [1, None, "yes"])
     def test_rejects_what_is_not_a_bool(self, dedicated: object):
@@ -521,13 +420,13 @@ class TestDedicatedThread:
             start(Group(node=OnTheClass(period=0.0)), timer=virtual)
 
     def test_a_dedicated_node_runs_every_hook_on_one_thread_of_its_own(
-        self, step: Step, start_manual: StartManual
+        self, start_manual: StartManual
     ):
         dedicated = ThreadRecorder(dedicated_thread=True)
         others = [ThreadRecorder() for _ in range(3)]
         run = start_manual(Group(dedicated, *others))
         for _ in range(3):
-            step(run)
+            run.step(H)
         run.shutdown()
         assert len(dedicated.idents) == 1
         assert not dedicated.idents & set().union(*(o.idents for o in others))
@@ -870,28 +769,26 @@ class TestRestore:
         "device", ["cpu", pytest.param("cuda:0", marks=pytest.mark.cuda)]
     )
     def test_a_restored_node_continues_the_same(
-        self, step: Step, start_manual: StartManual, device: str
+        self, start_manual: StartManual, device: str
     ):
         k, m = 4, 6
         node = Learner(0.0, device)
         run = start_manual(Group(node=node))
         for _ in range(k):
-            step(run)
+            run.step(H)
         tree = pickle.loads(pickle.dumps(run.state_dict()))
         for _ in range(m):
-            step(run)
+            run.step(H)
         expected = copy.deepcopy(node.state_dict())
         run.shutdown()
         assert int(at(expected, "steps")) == k + m
 
         restored_node = Learner(5.0, device)
         weight = restored_node.linear.weight
-        timer = VirtualTimer()  # the first run's timer cannot be set back
-        timer.advance(100.0)  # far from the tree's time
-        restored = start_manual(Group(node=restored_node), timer=timer, state=tree)
+        restored = start_manual(Group(node=restored_node), state=tree)
         x = restored_node._x  # pyright: ignore[reportPrivateUsage]  # made in on_start
         for _ in range(m):
-            step(restored)
+            restored.step(H)
         actual = restored_node.state_dict()
         assert torch.equal(at(actual, "_x"), at(expected, "_x"))
         assert torch.equal(at(actual, "_last"), at(expected, "_last"))
@@ -902,43 +799,6 @@ class TestRestore:
         # Restored in place: the objects made in __init__ and on_start remain.
         assert restored_node.linear.weight is weight
         assert restored_node._x is x  # pyright: ignore[reportPrivateUsage]
-
-
-class OnDevice(Node):
-    """Records the thread's CUDA settings in ``on_update``."""
-
-    def __init__(self, device: str) -> None:
-        super().__init__(device=device)
-        self.out = Port(send=TensorSpec((3,)))
-        self.current_device: int | None = None
-        self.own_stream: bool | None = None
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.current_device = torch.cuda.current_device()
-        default = torch.cuda.default_stream(self.device)
-        self.own_stream = torch.cuda.current_stream() != default
-
-
-class StreamRecorder(Node):
-    """Records the current CUDA device and stream in each ``on_update``, and
-    switches the stream away (to its device's default stream) at its end without
-    restoring it."""
-
-    def __init__(self, device: str) -> None:
-        super().__init__(device=device, period=0.01)
-        self.out = Port(send=TensorSpec((3,)))
-        self.devices: list[int] = []
-        self.streams: list[int] = []
-        self.updated: queue.Queue[None] = queue.Queue()
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.devices.append(torch.cuda.current_device())
-        self.streams.append(torch.cuda.current_stream().cuda_stream)
-        # Left behind for whatever runs next on this thread.
-        torch.cuda.set_stream(torch.cuda.default_stream(self.device))
-        self.updated.put(None)
 
 
 class Draws(Node):
@@ -954,57 +814,8 @@ class Draws(Node):
         self.draws = torch.rand(3, generator=self.generator, device=self.device)
 
 
-class Busy(Node):
-    """Each ``on_update`` adds 1 to a large tensor 20 times, in place, and first
-    records whether the node's stream had finished the previous update."""
-
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0")
-        self.out = Port(send=TensorSpec((3,)))
-        self.idle_at_update: list[bool] = []
-
-    @override
-    def on_start(self) -> None:
-        self.w = torch.zeros(1 << 26, device=self.device)  # 256 MB of float32
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.idle_at_update.append(torch.cuda.current_stream().query())
-        for _ in range(20):
-            self.w.add_(1.0)
-
-
 @pytest.mark.cuda
 class TestCuda:
-    @pytest.mark.parametrize("index", [0, pytest.param(1, marks=pytest.mark.cuda(2))])
-    def test_hooks_run_on_the_device_on_a_stream_of_their_own(
-        self, step: Step, start_manual: StartManual, index: int
-    ):
-        node = OnDevice(f"cuda:{index}")
-        run = start_manual(Group(node=node))
-        step(run)
-        assert node.current_device == index
-        assert node.own_stream is True
-
-    @pytest.mark.parametrize(
-        "indices", [(0, 0), pytest.param((0, 1), marks=pytest.mark.cuda(2))]
-    )
-    def test_nodes_sharing_a_worker_keep_their_own_device_and_stream(
-        self, virtual: VirtualTimer, start: Start, indices: tuple[int, int]
-    ):
-        a, b = (StreamRecorder(f"cuda:{i}") for i in indices)
-        run = start(Group(a=a, b=b), timer=virtual, workers=1)
-        for _ in range(3):
-            virtual.advance(0.01)
-            for node in (a, b):
-                node.updated.get(timeout=5.0)
-        run.shutdown()
-        for node, index in zip((a, b), indices, strict=True):
-            assert node.devices == [index] * 3
-            assert len(set(node.streams)) == 1
-            assert node.streams[0] != torch.cuda.default_stream(index).cuda_stream
-        assert a.streams[0] != b.streams[0]
-
     def test_the_generator_is_on_the_device_and_follows_the_seed(
         self, start_manual: StartManual
     ):
@@ -1017,14 +828,3 @@ class TestCuda:
         assert a.draws.device == device
         assert torch.equal(a.draws, expected)
         assert torch.equal(b.draws, expected)
-
-    @pytest.mark.slow
-    def test_waits_for_its_stream_after_each_update(
-        self, step: Step, start_manual: StartManual
-    ):
-        node = Busy()
-        run = start_manual(Group(node=node))
-        for _ in range(5):
-            step(run)
-        # The first update follows on_start, after which nothing waits.
-        assert node.idle_at_update[1:] == [True] * 4

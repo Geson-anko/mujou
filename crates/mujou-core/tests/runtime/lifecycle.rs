@@ -24,23 +24,7 @@ impl NodeHooks for Starter {
         Ok(())
     }
 
-    fn pause(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    fn resume(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    fn exception(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<(), HookError> {
-        Ok(())
-    }
-
-    fn state_dict(&mut self) -> Result<(), HookError> {
+    fn capture(&mut self) -> Result<(), HookError> {
         Ok(())
     }
 }
@@ -57,14 +41,7 @@ fn the_time_is_held_while_the_nodes_start() {
             dts: Arc::clone(&dts),
         };
         let t0 = timer.time_ns();
-        let (rt, started) = mode
-            .start(
-                vec![node],
-                vec!["n".to_owned()],
-                Arc::clone(&timer),
-                manual(),
-            )
-            .unwrap();
+        let (rt, started) = mode.start(manual(vec![node]), Arc::clone(&timer)).unwrap();
         started.wait().unwrap();
         // Held while starting, so the start took no time; running afterwards.
         assert_eq!(*seen.lock().unwrap(), Some((true, false)));
@@ -72,7 +49,7 @@ fn the_time_is_held_while_the_nodes_start() {
         assert_eq!(timer.time_ns(), t0);
         timer.advance_ns(H_NS).unwrap();
         rt.step(None).wait().unwrap();
-        rt.shutdown().wait().unwrap();
+        shut_down(&rt).unwrap();
         // The first Δt is only the time after the start.
         assert_eq!(*dts.lock().unwrap(), [H_NS as f64 / 1e9]);
     });
@@ -82,31 +59,24 @@ fn the_time_is_held_while_the_nodes_start() {
 fn returns_while_a_node_is_still_updating_and_join_sees_the_end() {
     each_mode(|mode| {
         let timer = virtual_timer();
-        let Probes {
-            log,
-            mut nodes,
-            names,
-        } = probes(1);
+        let Probes { log, mut nodes } = probes(1);
         let (entered_tx, entered) = mpsc::channel();
         let (release, release_rx) = mpsc::channel();
         nodes[0].gate = Some((entered_tx, release_rx));
-        let config = RuntimeConfig::default();
-        let (rt, started) = mode
-            .start(nodes, names, Arc::clone(&timer), config)
-            .unwrap();
+        let (rt, started) = mode.start(config(nodes), Arc::clone(&timer)).unwrap();
         started.wait().unwrap();
         timer.advance_ns(H_NS).unwrap();
         entered.recv_timeout(LONG).unwrap();
 
         // The node is blocked in its update, so a waiting stop would not return.
-        rt.request_stop();
+        rt.stop();
         assert!(!rt.join(Some(QUIET)).unwrap());
         assert!(!events(&log, 0).contains(&Event::Stop));
 
         release.send(()).unwrap();
         assert!(rt.join(Some(LONG)).unwrap());
         assert!(events(&log, 0).contains(&Event::Stop));
-        assert!(rt.is_finished());
+        assert!(rt.finished());
     });
 }
 
@@ -114,15 +84,13 @@ fn returns_while_a_node_is_still_updating_and_join_sees_the_end() {
 fn does_nothing_once_the_system_has_ended() {
     each_mode(|mode| {
         let timer = virtual_timer();
-        let Probes { log, nodes, names } = probes(2);
-        let (rt, started) = mode
-            .start(nodes, names, Arc::clone(&timer), manual())
-            .unwrap();
+        let Probes { log, nodes } = probes(2);
+        let (rt, started) = mode.start(manual(nodes), Arc::clone(&timer)).unwrap();
         started.wait().unwrap();
-        rt.request_stop();
+        rt.stop();
         assert!(rt.join(Some(Duration::from_secs(5))).unwrap());
-        rt.request_stop();
-        rt.shutdown().wait().unwrap();
+        rt.stop();
+        shut_down(&rt).unwrap();
         for id in 0..2 {
             assert_eq!(events(&log, id), [Event::Start, Event::Stop]);
         }
@@ -133,27 +101,19 @@ fn does_nothing_once_the_system_has_ended() {
 fn each_runtime_measures_dt_on_its_own_timer() {
     each_mode(|mode| {
         let (ta, tb) = (virtual_timer(), virtual_timer());
-        let Probes {
-            log: la,
-            nodes,
-            names,
-        } = probes(1);
-        let (a, started) = mode.start(nodes, names, Arc::clone(&ta), manual()).unwrap();
+        let Probes { log: la, nodes } = probes(1);
+        let (a, started) = mode.start(manual(nodes), Arc::clone(&ta)).unwrap();
         started.wait().unwrap();
-        let Probes {
-            log: lb,
-            nodes,
-            names,
-        } = probes(1);
-        let (b, started) = mode.start(nodes, names, Arc::clone(&tb), manual()).unwrap();
+        let Probes { log: lb, nodes } = probes(1);
+        let (b, started) = mode.start(manual(nodes), Arc::clone(&tb)).unwrap();
         started.wait().unwrap();
 
         ta.advance_ns(2 * H_NS).unwrap();
         tb.advance_ns(5 * H_NS).unwrap();
         a.step(None).wait().unwrap();
         b.step(None).wait().unwrap();
-        a.shutdown().wait().unwrap();
-        b.shutdown().wait().unwrap();
+        shut_down(&a).unwrap();
+        shut_down(&b).unwrap();
         assert_eq!(events(&la, 0)[1], Event::Update(2.0 * H_NS as f64 / 1e9));
         assert_eq!(events(&lb, 0)[1], Event::Update(5.0 * H_NS as f64 / 1e9));
     });
@@ -162,14 +122,10 @@ fn each_runtime_measures_dt_on_its_own_timer() {
 #[test]
 fn dedicated_and_pool_nodes_go_through_the_same_lifecycle() {
     let timer = virtual_timer();
-    let Probes {
-        log, nodes, names, ..
-    } = probes(2);
-    let config = RuntimeConfig {
-        dedicated: Some(vec![true, false]),
-        ..manual()
-    };
-    let (rt, started) = Runtime::start(nodes, names, Arc::clone(&timer), config).unwrap();
+    let Probes { log, nodes, .. } = probes(2);
+    let mut config = manual(nodes);
+    config.nodes[0].dedicated_thread = true;
+    let (rt, started) = Runtime::start(config, clock(&timer)).unwrap();
     started.wait().unwrap();
     timer.advance_ns(H_NS).unwrap();
     rt.step(None).wait().unwrap();
@@ -177,18 +133,58 @@ fn dedicated_and_pool_nodes_go_through_the_same_lifecycle() {
     assert_eq!(states, [1, 1]);
     timer.advance_ns(H_NS).unwrap();
     rt.step(None).wait().unwrap();
-    rt.shutdown().wait().unwrap();
+    shut_down(&rt).unwrap();
     let dt = Event::Update(H_NS as f64 / 1e9);
     for id in 0..2 {
         let expected = [
             Event::Start,
             dt.clone(),
             Event::Pause,
-            Event::StateDict,
+            Event::Capture,
             Event::Resume,
             dt.clone(),
             Event::Stop,
         ];
         assert_eq!(events(&log, id), expected);
     }
+}
+
+#[test]
+fn the_clock_stops_at_the_stop_request() {
+    each_mode(|mode| {
+        let timer = virtual_timer();
+        let run_clock = clock(&timer);
+        let Probes { nodes, .. } = probes(2);
+        let (rt, started) =
+            Runtime::start(mode_config(mode, manual(nodes)), Arc::clone(&run_clock)).unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        rt.step(None).wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        let stop_ns = timer.time_ns();
+        shut_down(&rt).unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        // The time of the run stays at the request, after every update.
+        assert_eq!(run_clock.now_ns(), stop_ns);
+        assert!(rt.last_update_ns().iter().all(|&ns| ns <= stop_ns));
+    });
+}
+
+#[test]
+fn the_clock_stops_when_a_failure_is_caught() {
+    each_mode(|mode| {
+        let timer = virtual_timer();
+        let run_clock = clock(&timer);
+        let Probes { mut nodes, .. } = probes(1);
+        // The update moves the time by H_NS and then fails.
+        nodes[0].advance = Some((Arc::clone(&timer), 1));
+        nodes[0].fail_on_update = Some((1, Failure::Error));
+        let (rt, started) =
+            Runtime::start(mode_config(mode, manual(nodes)), Arc::clone(&run_clock)).unwrap();
+        started.wait().unwrap();
+        timer.advance_ns(H_NS).unwrap();
+        assert!(matches!(rt.step(None).wait(), Err(RuntimeError::Failed(_))));
+        timer.advance_ns(H_NS).unwrap();
+        assert_eq!(run_clock.now_ns(), 2 * H_NS);
+    });
 }

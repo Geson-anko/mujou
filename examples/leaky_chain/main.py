@@ -1,7 +1,7 @@
 """Two leaky integrators in a row approach their input, in global time.
 
 The input is a signal on the global time: the host holds each value for a while
-with ``mujou.time.sleep``. However often the nodes update, the outputs follow the
+with ``run.timer.sleep``. However often the nodes update, the outputs follow the
 continuous-time solution, because every update advances the state by its ``dt``.
 """
 
@@ -40,7 +40,7 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
     # both integrators rise.
     start = run.write({net.prev: torch.tensor(1.0, dtype=torch.float64)})
     for _ in range(4):
-        mujou.time.sleep(TAU / 2)
+        run.timer.sleep(TAU / 2)
         a, t_a = run.read_with_time(net.a.next)
         b, t_b = run.read_with_time(net.b.next)
         # Each output against the exact one at the time it was sent. On a busy
@@ -55,7 +55,7 @@ with mujou.run(net, inputs={net.prev: SCALAR.zeros()}) as run:
         assert abs(a.item() - exact_a) < 0.05 and abs(b.item() - exact_b) < 0.05
 
     # Hold the input for 10 time constants: both reach the equilibrium x = u.
-    mujou.time.sleep(10 * TAU)
+    run.timer.sleep(10 * TAU)
     b = run.read(net.next)
     print(f"after {10 * TAU:.1f} s more: b = {b.item():.4f}")
     assert abs(b.item() - 1.0) < 1e-3

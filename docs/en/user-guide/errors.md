@@ -26,7 +26,7 @@ An exception after the start does not reach the host until it next calls a metho
 
 !!! warning "Wait with run.join, not sleep"
 
-    If the host waits without calling anything, it does not notice the exception. To wait until the run stops, use `run.join(timeout)`, not `mujou.time.sleep`.
+    If the host waits without calling anything, it does not notice the exception. To wait until the run stops, use `run.join(timeout)`, not `run.timer.sleep`.
 
 ```python
 --8<-- "examples/errors.py"
@@ -51,6 +51,7 @@ The `with` statement calls `run.shutdown()` when it exits.
 - `on_exception` takes no arguments. A node cannot know which exception of which node stopped the run. The host handles the cause, by looking at `__cause__`
 - If you only want to handle an exception in your own hook, use `try`/`except` in that hook. An exception you catch does not stop the run
 - If `on_exception` or `on_stop` raises, the exception is only logged, and the ending goes on
+- The time of the run stands still once the run ends, so `self.timer` does not measure elapsed time in `on_exception` and `on_stop`. Measure real time there, for example to slow a robot down over a second
 
 ## Logging
 
@@ -81,7 +82,7 @@ To run again, create new instances, nodes included. A network can run only once.
 
 `run.state_dict(timeout)` on a running network waits until every node has paused, at most `timeout` seconds of real time (30 by default). This `timeout` must be finite and greater than 0. After the run has ended there is nothing to wait for, and `timeout` is only checked.
 
-If some node does not pause in time, `run.state_dict()` raises `PauseTimeoutError` (a subclass of `TimeoutError`). The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
+If some node does not pause in time, `run.state_dict()` raises `TimeoutError`. The message names the nodes that did not pause. No state is taken, the nodes that had paused resume too, and the run keeps running.
 
 !!! note "Long updates delay the pause"
 

@@ -44,7 +44,7 @@ class Direct:
             **kwargs,
         )
         self.inp.next.connect(self.out.prev)
-        self.run: ManualRun[Any] = start_manual(Group(inp=self.inp, out=self.out))
+        self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
 
     def weights(self) -> dict[str, torch.Tensor]:
         return self.run.state_dict()["nodes"]["out"]["module"]
@@ -60,7 +60,7 @@ class Direct:
         if sample is not None:
             x, y, mask = sample
             t = self.run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
-        self.run.step(self.out, self.inp)
+        self.run.step(0.0, self.out, self.inp)
         return t
 
 

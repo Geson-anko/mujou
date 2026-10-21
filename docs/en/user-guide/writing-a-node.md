@@ -229,8 +229,8 @@ Draw random numbers from `self.generator` (`torch.randn(..., generator=self.gene
 By default the node runs on the run's worker threads, which it shares with the other nodes (see [Running a network](running.md#threads-of-a-run)). Each hook may then run on a different thread, and the thread runs other nodes in between. So whether the next hook sees what a hook set per thread depends on the schedule, and the next node on the same worker may see it too:
 
 - `threading.local`, `threading.current_thread()` and `threading.get_ident()` may differ from hook to hook
-- Set a per-thread setting of torch, such as `torch.autocast` or gradient recording, back before the hook returns, by keeping it inside a `with` in the hook (`with torch.no_grad():`). A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only the current CUDA device and stream (whenever a worker switches to a CUDA node; see [PyTorch in nodes](torch.md))
-- `contextvars` do carry over: each node runs its hooks in a `contextvars.Context` of its own. It starts empty, without the variables of the host's context, and `state_dict` runs outside it
+- Set a per-thread setting of torch, such as `torch.autocast` or gradient recording, back before the hook returns, by keeping it inside a `with` in the hook (`with torch.no_grad():`). A setting left behind leaks into the next node that runs on the same worker. Mujou sets back only the current CUDA device and stream (before each hook of a CUDA node; see [PyTorch in nodes](torch.md))
+- `contextvars` do carry over: each node runs its hooks in a `contextvars.Context` of its own. It starts empty, without the variables of the host's context
 
 Pass `dedicated_thread=True` to `super().__init__` when the node needs a thread of its own:
 
@@ -256,13 +256,13 @@ Mujou calls the hooks of a node in this order. Override only the ones you need.
 
 ## What not to do in a hook
 
-| Do not                                                                                | Why, and what happens                                                                                                    |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Wait for another node's value to change (repeat `recv()` in a loop, ...)              | Nodes do not wait for each other. If a value has not changed, the node goes on with the same value                       |
-| Call `mujou.run` or a method of `Run` (`write`, `read`, `state_dict`, ...)            | It raises `RuntimeError`. A node talks only through its own ports                                                        |
-| Call an operation that moves the time, such as `mujou.time.sleep` or `set_time_scale` | It raises `RuntimeError`. Only the host moves the time                                                                   |
-| Call `backward()` across nodes                                                        | A sent value is detached from the computation graph, so gradients do not pass through a port                             |
-| Write a loop that never returns from `on_update`                                      | Pausing, ending and taking the state stop working. Mujou owns the loop. A finite `for` loop that splits the step is fine |
+| Do not                                                                           | Why, and what happens                                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Wait for another node's value to change (repeat `recv()` in a loop, ...)         | Nodes do not wait for each other. If a value has not changed, the node goes on with the same value                       |
+| Call `mujou.run` or a method of `Run` (`write`, `read`, `state_dict`, ...)       | It raises `RuntimeError`. A node talks only through its own ports                                                        |
+| Call an operation that moves the time, such as `Timer.sleep` or `set_time_scale` | It raises `RuntimeError`. Only the host moves the time                                                                   |
+| Call `backward()` across nodes                                                   | A sent value is detached from the computation graph, so gradients do not pass through a port                             |
+| Write a loop that never returns from `on_update`                                 | Pausing, ending and taking the state stop working. Mujou owns the loop. A finite `for` loop that splits the step is fine |
 
 To know the time, read the time of the run's timer with `self.timer.now()`. Reading it is allowed in a hook.
 

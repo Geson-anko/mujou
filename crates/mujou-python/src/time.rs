@@ -1,72 +1,88 @@
-//! Bindings of `mujou_core::time`: timers and timestamps.
+//! Bindings of `mujou_core::time`: timers and timestamps, which `mujou.time`
+//! shows as they are.
 
 use std::sync::Arc;
 
-use mujou_core::time::{self as core, Timer, TimerError, TimerState, Timestamp, seconds_to_ns};
+use mujou_core::time::{self as core, RunClock, Source, Timer, TimerError, Timestamp};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::inspect::PyStaticExpr;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{PyClassInitializer, PyTypeInfo};
 
-use crate::wait_interruptibly;
+use crate::current::in_hook;
+use crate::wait::{to_ns, wait_interruptibly};
 
-/// A time axis that nodes discretize their dynamics on.
+/// A time axis that a run's nodes measure their `dt` on.
 ///
-/// `Timer()` is a new timer at time 0 on the real clock at scale 1. Systems
-/// whose pauses should not stop each other's time run on separate timers;
-/// a run not given a timer runs on the global one, `timer`.
+/// `Timer()` starts at `start` and runs with the real clock, `time_scale`
+/// seconds of the timer per real second. Give it to
+/// `mujou.run(..., timer=...)` to run a network on a time of its own: a pause
+/// of that run (as `Run.state_dict` takes) then stops only this timer, not
+/// `global_timer`, which every other run uses by default. Every time of the
+/// run is a `Timestamp` on it.
+///
+/// Only the host controls a timer: `sleep`, `pause`, `resume`,
+/// `set_time_scale` (and `VirtualTimer.advance`) raise `RuntimeError` in a
+/// node's hook, where a node would wait for, or change the `dt` of, the other
+/// nodes. A node reads the time of its run with `self.timer`.
+///
+/// `pause` stops the time of every run on the timer at one time T until
+/// `resume`. Take the states of several runs on one timer while it is paused,
+/// so that all of them are of the same time T.
 ///
 /// The time is held in nanoseconds and saturates at about 584 years.
-#[pyclass(subclass, frozen, module = "mujou._core._native", name = "Timer")]
+///
+/// Raises:
+///     ValueError: `time_scale` is not finite and > 0.
+#[pyclass(subclass, frozen, module = "mujou.time", name = "Timer")]
 pub struct PyTimer(pub(crate) Arc<Timer>);
+
+/// Raises `RuntimeError` in a node's hook, where `what` must not run.
+fn host_only(what: &str) -> PyResult<()> {
+    if in_hook() {
+        return Err(PyRuntimeError::new_err(format!(
+            "a node's hook cannot call {what}: only the host controls the time; a \
+             node reads it with self.timer.now()"
+        )));
+    }
+    Ok(())
+}
 
 #[pymethods]
 impl PyTimer {
     #[new]
-    fn new() -> Self {
-        Self(Arc::new(Timer::new()))
+    #[pyo3(signature = (*, start = PyTimestamp(Timestamp::from_ns(0)), time_scale = 1.0))]
+    fn new(start: PyTimestamp, time_scale: f64) -> PyResult<Self> {
+        let timer = Timer::new(Source::Real, start.0);
+        timer.set_time_scale(time_scale).map_err(timer_error)?;
+        Ok(Self(Arc::new(timer)))
     }
 
-    /// The time in seconds.
-    fn time(&self) -> f64 {
-        self.0.time()
-    }
-
-    /// The time in nanoseconds.
-    fn time_ns(&self) -> u64 {
-        self.0.time_ns()
-    }
-
-    /// The time as a `Timestamp`.
+    /// The time now.
     fn now(&self) -> PyTimestamp {
         PyTimestamp(self.0.now())
     }
 
-    /// Blocks for `seconds` of this timer's time, following the scale and
+    /// Blocks for `seconds` of this timer's time, following the scale and the
     /// pauses: while paused, it does not return until resumed. Waits without
-    /// the GIL and checks for signals (Ctrl-C) every 50 ms.
+    /// the GIL and checks for signals (Ctrl-C) in between.
     ///
     /// Raises:
     ///     ValueError: `seconds` is negative or not finite.
+    ///     RuntimeError: This is called from a node's hook.
     fn sleep(&self, py: Python<'_>, seconds: f64) -> PyResult<()> {
-        let dt_ns = to_ns(seconds)?;
-        let target_ns = self.0.time_ns().saturating_add(dt_ns);
+        host_only("Timer.sleep")?;
+        let target_ns = self.0.time_ns().saturating_add(to_ns(seconds)?);
         wait_interruptibly(py, None, |step| {
             self.0.wait_until_ns(target_ns, step).then_some(())
         })?;
         Ok(())
     }
 
-    /// Seconds of this timer per real second.
+    /// How many seconds of this timer pass per real second.
     fn time_scale(&self) -> f64 {
-        self.0.scale()
-    }
-
-    /// A `TimerReader` of this timer: it reads the time and the scale and has
-    /// no way to change them.
-    fn reader(&self) -> PyTimerReader {
-        PyTimerReader(Arc::clone(&self.0))
+        self.0.time_scale()
     }
 
     /// Sets how many seconds of this timer pass per real second.
@@ -74,72 +90,54 @@ impl PyTimer {
     /// Raises:
     ///     ValueError: `scale` is not finite and > 0. Use `pause` to stop the
     ///         time.
+    ///     RuntimeError: This is called from a node's hook.
     fn set_time_scale(&self, scale: f64) -> PyResult<()> {
-        self.0.set_scale(scale).map_err(timer_error)
+        host_only("Timer.set_time_scale")?;
+        self.0.set_time_scale(scale).map_err(timer_error)
     }
 
-    /// Freezes the time until `resume`. For hosts and tests: the runtime
-    /// freezes the time with its own holds, which this switch neither ends nor
-    /// is ended by. Pausing twice needs one resume.
-    fn pause(&self) {
+    /// Stops the time until `resume`.
+    ///
+    /// While paused, the nodes of the runs on this timer do not update (the
+    /// first `dt` after `resume` does not count the pause), and `sleep` does
+    /// not return until resumed. `Run.state_dict` still works. This is a
+    /// switch, not a count: pausing twice needs one `resume`. A run that takes
+    /// its state holds the time paused on its own, apart from this switch, so
+    /// `resume` does not end that, and its end does not end this pause.
+    ///
+    /// Raises:
+    ///     RuntimeError: This is called from a node's hook.
+    fn pause(&self) -> PyResult<()> {
+        host_only("Timer.pause")?;
         self.0.pause();
+        Ok(())
     }
 
-    /// Turns off the switch set by `pause`. The time runs again only when no
-    /// runtime holds it frozen either.
-    fn resume(&self) {
+    /// Turns off the switch of `pause`: the time moves again from where it
+    /// stopped, unless a run on this timer is taking its state.
+    ///
+    /// Raises:
+    ///     RuntimeError: This is called from a node's hook.
+    fn resume(&self) -> PyResult<()> {
+        host_only("Timer.resume")?;
         self.0.resume();
+        Ok(())
     }
 
-    /// Whether the time is frozen by `pause` or by a runtime. The virtual clock
-    /// alone does not count as paused.
+    /// Whether the time is stopped, by `pause` or by a run on this timer that
+    /// is starting or taking its state. The clock of a `VirtualTimer` standing
+    /// still does not count as paused.
     fn is_paused(&self) -> bool {
         self.0.is_paused()
     }
 
-    /// `{"time_ns": int, "scale": float}`: what is needed to continue the time
-    /// from where it was taken. Take it while paused.
-    #[pyo3(signature = () -> "dict[str, int | float]")]
-    fn state_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let state = self.0.state();
-        let dict = PyDict::new(py);
-        dict.set_item("time_ns", state.time_ns)?;
-        dict.set_item("scale", state.scale)?;
-        Ok(dict)
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        let name = slf.get_type().qualname()?;
+        Ok(format!(
+            "{name}(now={})",
+            PyTimestamp(slf.get().0.now()).__repr__()
+        ))
     }
-
-    /// Continues the time from a `state_dict`.
-    ///
-    /// Raises:
-    ///     ValueError: The scale is not finite and > 0.
-    #[pyo3(signature = (state: "dict[str, int | float]"))]
-    fn load_state_dict(&self, state: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.0
-            .load_state(extract_state(state)?)
-            .map_err(timer_error)
-    }
-
-    /// Switches to the virtual clock, which moves only by `advance`, or back to
-    /// the real clock. The time stays continuous. For tests.
-    fn use_virtual_clock(&self, enabled: bool) {
-        self.0.use_virtual_clock(enabled);
-    }
-
-    /// Moves the virtual clock forward by `seconds`. The scale does not apply.
-    ///
-    /// Raises:
-    ///     ValueError: `seconds` is negative or not finite.
-    ///     RuntimeError: The real clock is in use, or the time is paused.
-    fn advance(&self, seconds: f64) -> PyResult<()> {
-        let dt_ns = to_ns(seconds)?;
-        self.0.advance_ns(dt_ns).map_err(timer_error)
-    }
-}
-
-/// `seconds` in nanoseconds, rounded as `mujou_core::time::seconds_to_ns` rounds.
-/// Raises `ValueError` if `seconds` is negative or not finite.
-pub(crate) fn to_ns(seconds: f64) -> PyResult<u64> {
-    seconds_to_ns(seconds).map_err(timer_error)
 }
 
 fn timer_error(err: TimerError) -> PyErr {
@@ -147,68 +145,105 @@ fn timer_error(err: TimerError) -> PyErr {
         TimerError::InvalidScale(_) | TimerError::InvalidDuration(_) => {
             PyValueError::new_err(err.to_string())
         }
-        TimerError::NotVirtual | TimerError::Paused => PyRuntimeError::new_err(err.to_string()),
+        TimerError::Paused => PyRuntimeError::new_err(err.to_string()),
     }
 }
 
-/// Reads `{"time_ns": int, "scale": float}`.
-pub fn extract_state(state: &Bound<'_, PyAny>) -> PyResult<TimerState> {
-    Ok(TimerState {
-        time_ns: state.get_item("time_ns")?.extract()?,
-        scale: state.get_item("scale")?.extract()?,
-    })
-}
-
-/// The global timer, which every run not given a timer of its own uses. The
-/// only instance is `timer`.
-#[pyclass(extends = PyTimer, frozen, module = "mujou._core._native")]
-pub struct GlobalTimer;
-
-// `#[pyclass]` does not implement this for a subclass of another pyclass,
-// whose instance needs the base's value too. It lets `timer` be a module const.
-impl<'py> IntoPyObject<'py> for GlobalTimer {
-    type Target = GlobalTimer;
-    type Output = Bound<'py, GlobalTimer>;
-    type Error = PyErr;
-    const OUTPUT_TYPE: PyStaticExpr = <GlobalTimer as PyTypeInfo>::TYPE_HINT;
-
-    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
-        let base = PyTimer(Arc::clone(core::global()));
-        Bound::new(py, PyClassInitializer::from(base).add_subclass(self))
-    }
-}
-
-/// The reading side of a `Timer`: the time and the scale, and nothing that
-/// changes them. Made by `Timer.reader()`.
-#[pyclass(frozen, module = "mujou._core._native", name = "TimerReader")]
-pub struct PyTimerReader(Arc<Timer>);
+/// A timer for tests: its time moves only when `advance` moves it.
+///
+/// It starts at `start`. Its time scale does not apply to `advance`.
+/// `mujou.testing.run` runs a network on a new one unless given one, and
+/// `ManualRun.step(dt)` advances it.
+#[pyclass(extends = PyTimer, frozen, module = "mujou.time", name = "VirtualTimer")]
+pub struct PyVirtualTimer;
 
 #[pymethods]
-impl PyTimerReader {
-    /// The time as a `Timestamp`.
+impl PyVirtualTimer {
+    #[new]
+    #[pyo3(signature = (*, start = PyTimestamp(Timestamp::from_ns(0))))]
+    fn new(start: PyTimestamp) -> PyClassInitializer<Self> {
+        let timer = PyTimer(Arc::new(Timer::new(Source::Virtual, start.0)));
+        PyClassInitializer::from(timer).add_subclass(Self)
+    }
+
+    /// Moves the time forward by `seconds`, at once.
+    ///
+    /// Raises:
+    ///     ValueError: `seconds` is negative or not finite.
+    ///     RuntimeError: The timer is paused (by `pause`, or by a run on it
+    ///         that is starting or taking its state), or this is called from a
+    ///         node's hook.
+    fn advance(slf: PyRef<'_, Self>, seconds: f64) -> PyResult<()> {
+        host_only("VirtualTimer.advance")?;
+        let dt_ns = to_ns(seconds)?;
+        slf.as_super().0.advance_ns(dt_ns).map_err(timer_error)
+    }
+}
+
+/// The global timer, a `Timer` at 0 when the process first uses it: every
+/// run not given a timer of its own runs on it.
+pub struct GlobalTimer;
+
+// The module constant `global_timer`: a `Timer` built once, when the module is
+// made.
+impl<'py> IntoPyObject<'py> for GlobalTimer {
+    type Target = PyTimer;
+    type Output = Bound<'py, PyTimer>;
+    type Error = PyErr;
+    const OUTPUT_TYPE: PyStaticExpr = <PyTimer as PyTypeInfo>::TYPE_HINT;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        Bound::new(py, PyTimer(Arc::clone(core::global())))
+    }
+}
+
+/// The reading side of a timer: its time and its scale, and nothing that
+/// changes them. What a node sees of its run's timer as `Node.timer`.
+///
+/// `ReadOnlyTimer(timer)` reads `timer`. The one a run gives its nodes stops
+/// at the time the run ends: every time of the run is at most that time.
+#[pyclass(frozen, module = "mujou.time", name = "ReadOnlyTimer")]
+pub struct PyReadOnlyTimer(pub(crate) Arc<RunClock>);
+
+#[pymethods]
+impl PyReadOnlyTimer {
+    #[new]
+    fn new(timer: PyRef<'_, PyTimer>) -> Self {
+        Self(Arc::new(RunClock::new(Arc::clone(&timer.0))))
+    }
+
+    /// The time now.
     fn now(&self) -> PyTimestamp {
         PyTimestamp(self.0.now())
     }
 
-    /// Seconds of the timer per real second.
+    /// How many seconds of the timer pass per real second.
     fn time_scale(&self) -> f64 {
-        self.0.scale()
+        self.0.time_scale()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ReadOnlyTimer(now={})",
+            PyTimestamp(self.0.now()).__repr__()
+        )
     }
 }
 
 /// A time on a timer.
 ///
-/// `ts.float()` (or `float(ts)`) is the time in seconds and `int(ts)` its whole
-/// seconds; `ts.ns` is the exact time in nanoseconds. Timestamps compare and
-/// hash by time, so compare only those of one timer. `a - b` is the time from
-/// `b` to `a` in seconds, a `float` that is negative when `b` is later.
-/// Timestamps pickle and copy.
+/// `float(ts)` is the time in seconds and `int(ts)` its whole seconds; `ts.ns`
+/// is the exact time in nanoseconds. Timestamps compare and hash by time, so
+/// compare only those of one timer: a timestamp does not say which timer it is
+/// on. `a - b` is the time from `b` to `a` in seconds, a `float` that is
+/// negative when `b` is later. Timestamps pickle and copy.
 #[pyclass(
     frozen,
     eq,
     ord,
     hash,
-    module = "mujou._core._native",
+    from_py_object,
+    module = "mujou.time",
     name = "Timestamp"
 )]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -236,11 +271,6 @@ impl PyTimestamp {
     #[getter]
     fn ns(&self) -> u64 {
         self.0.as_ns()
-    }
-
-    /// The time in seconds.
-    fn float(&self) -> f64 {
-        self.0.as_secs_f64()
     }
 
     fn __float__(&self) -> f64 {

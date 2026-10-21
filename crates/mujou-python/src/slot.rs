@@ -8,12 +8,12 @@
 //! `Carry`, which an outlet passes on without copying.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::dlpack::{TensorPtr, borrow_tensor, export_capsule};
 use crate::hint::{Values, Views};
-use crate::time::{PyTimer, PyTimestamp};
-use crate::wait_interruptibly;
+use crate::time::{PyReadOnlyTimer, PyTimestamp};
+use crate::wait::{to_duration, wait_interruptibly};
 use mujou_core::buffer::{Buffer, Message};
 use mujou_core::dlpack::ffi::{DEVICE_CPU, DLDataType, VERSION};
 use mujou_core::dlpack::import::copy_from;
@@ -304,11 +304,7 @@ impl PySlot {
         last: PyRef<'_, PyMessage>,
         timeout: f64,
     ) -> PyResult<Option<PyMessage>> {
-        let timeout = Duration::try_from_secs_f64(timeout).map_err(|_| {
-            PyValueError::new_err(format!(
-                "timeout must be finite and >= 0 seconds, got {timeout}"
-            ))
-        })?;
+        let timeout = to_duration(timeout)?;
         let last = Arc::clone(&last.0);
         // A timeout too long to represent never expires.
         let deadline = Instant::now().checked_add(timeout);
@@ -399,25 +395,26 @@ impl PyOutlet {
 #[pymethods]
 impl PyOutlet {
     /// Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros.
-    /// Every message is stamped with the time on `timer`.
+    /// Every message is stamped with the time on `clock`.
     ///
-    /// The slots and the host's inputs of one run must use the timer of its
-    /// runtime: on another timer, the times of the messages would not be on
-    /// the axis the nodes' Δt is measured on, and a pause of the run would not
-    /// stop them, so a state taken at T could hold later messages.
+    /// The slots and the host's inputs of one run must use the clock its
+    /// runtime runs on: on another clock, the times of the messages would not
+    /// be on the axis the nodes' Δt is measured on, a pause of the run would
+    /// not stop them, and its end would not bound them, so a state taken at T
+    /// could hold later messages.
     #[new]
-    #[pyo3(signature = (schema, channels, name, *, timer))]
+    #[pyo3(signature = (schema, channels, name, *, clock))]
     fn new(
         schema: PyRef<'_, PySchema>,
         channels: usize,
         name: &str,
-        timer: PyRef<'_, PyTimer>,
+        clock: PyRef<'_, PyReadOnlyTimer>,
     ) -> Self {
         Self(core::Outlet::new(
             Arc::clone(&schema.0),
             channels,
             name,
-            Arc::clone(&timer.0),
+            Arc::clone(&clock.0),
         ))
     }
 
@@ -457,16 +454,11 @@ pub struct PyInputGroup(Arc<core::InputGroup>);
 
 #[pymethods]
 impl PyInputGroup {
-    /// Every write is stamped with the time on `timer`.
-    ///
-    /// The slots and the host's inputs of one run must use the timer of its
-    /// runtime: on another timer, the times of the messages would not be on
-    /// the axis the nodes' Δt is measured on, and a pause of the run would not
-    /// stop them, so a state taken at T could hold later messages.
+    /// Every write is stamped with the time on `clock`, as `Outlet` says.
     #[new]
-    #[pyo3(signature = (*, timer))]
-    fn new(timer: PyRef<'_, PyTimer>) -> Self {
-        Self(core::InputGroup::new(Arc::clone(&timer.0)))
+    #[pyo3(signature = (*, clock))]
+    fn new(clock: PyRef<'_, PyReadOnlyTimer>) -> Self {
+        Self(core::InputGroup::new(Arc::clone(&clock.0)))
     }
 
     /// Creates the slot `"{name}/in"` holding zeros.

@@ -1,7 +1,7 @@
 """The generated stub of ``mujou._core._native`` (``just stub``) against the module itself.
 
-pyo3 cannot introspect everything, and ``crates/mujou-stubgen`` adds what it
-misses (the exceptions); these tests catch the two drifting apart.
+pyo3 cannot introspect everything, and ``crates/mujou-stubgen`` fixes the types
+it writes too loosely; these tests catch the two drifting apart.
 """
 
 import ast

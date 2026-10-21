@@ -1,9 +1,8 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use mujou_core::time::{Timer, TimerError, TimerState, Timestamp, Wait, global, seconds_to_ns};
+use mujou_core::time::{RunClock, Source, Timer, TimerError, Timestamp, global, seconds_to_ns};
 
 const SECOND: u64 = 1_000_000_000;
 
@@ -13,16 +12,14 @@ fn sleep_ns(timer: &Timer, dt_ns: u64) {
     while !timer.wait_until_ns(target_ns, Duration::MAX) {}
 }
 
-/// A virtual clock at exactly 0 (the real clock ran until it was switched).
+/// A virtual clock at 0.
 fn virtual_timer() -> Timer {
-    let timer = Timer::new();
-    timer.use_virtual_clock(true);
-    let state = TimerState {
-        time_ns: 0,
-        scale: 1.0,
-    };
-    timer.load_state(state).unwrap();
-    timer
+    Timer::new(Source::Virtual, Timestamp::from_ns(0))
+}
+
+/// A real clock at 0.
+fn real_timer() -> Timer {
+    Timer::new(Source::Real, Timestamp::from_ns(0))
 }
 
 fn real_ns(d: Duration) -> f64 {
@@ -51,25 +48,25 @@ mod real_clock {
 
     #[test]
     fn advances_with_real_time_at_unit_scale() {
-        let timer = Timer::new();
+        let timer = real_timer();
         assert_scaled_elapsed(&timer, 1.0, Duration::from_millis(5));
     }
 
     #[test]
     fn advances_at_the_set_scale() {
-        let timer = Timer::new();
-        timer.set_scale(250.0).unwrap();
-        assert_eq!(timer.scale(), 250.0);
+        let timer = real_timer();
+        timer.set_time_scale(250.0).unwrap();
+        assert_eq!(timer.time_scale(), 250.0);
         assert_scaled_elapsed(&timer, 250.0, Duration::from_millis(5));
     }
 
     #[test]
     fn changing_the_scale_does_not_jump_the_time() {
-        let timer = Timer::new();
+        let timer = real_timer();
         thread::sleep(Duration::from_millis(2));
         let real_start = Instant::now();
         let before = timer.time_ns();
-        timer.set_scale(1000.0).unwrap();
+        timer.set_time_scale(1000.0).unwrap();
         let after = timer.time_ns();
         let real_elapsed = real_ns(real_start.elapsed());
         // At most the new scale applies since `before`; no jump on the change.
@@ -78,39 +75,31 @@ mod real_clock {
 
     #[test]
     fn rejects_non_positive_or_non_finite_scales() {
-        let timer = Timer::new();
+        let timer = real_timer();
         for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             assert!(matches!(
-                timer.set_scale(scale),
+                timer.set_time_scale(scale),
                 Err(TimerError::InvalidScale(_))
             ));
         }
-        assert_eq!(timer.scale(), 1.0);
-    }
-
-    #[test]
-    fn seconds_and_nanoseconds_agree() {
-        let timer = Timer::new();
-        timer.pause();
-        assert_eq!(timer.time(), timer.time_ns() as f64 / 1e9);
+        assert_eq!(timer.time_scale(), 1.0);
     }
 
     #[test]
     fn sleep_waits_at_least_the_global_duration() {
-        let timer = Timer::new();
-        timer.set_scale(100.0).unwrap();
+        let timer = real_timer();
+        timer.set_time_scale(100.0).unwrap();
         let start = timer.time_ns();
         sleep_ns(&timer, SECOND / 2);
         assert!(timer.time_ns() - start >= SECOND / 2);
     }
 
     #[test]
-    fn rejects_advance() {
-        let timer = Timer::new();
-        assert!(matches!(
-            timer.advance_ns(SECOND),
-            Err(TimerError::NotVirtual)
-        ));
+    fn advance_moves_the_real_clock_forward_at_once() {
+        let timer = real_timer();
+        let before = timer.time_ns();
+        timer.advance_ns(100 * SECOND).unwrap();
+        assert!(timer.time_ns() >= before + 100 * SECOND);
     }
 }
 
@@ -119,7 +108,7 @@ mod pause {
 
     #[test]
     fn freezes_the_time() {
-        let timer = Timer::new();
+        let timer = real_timer();
         timer.pause();
         assert!(timer.is_paused());
         let frozen = timer.time_ns();
@@ -129,8 +118,8 @@ mod pause {
 
     #[test]
     fn resume_continues_from_the_frozen_time() {
-        let timer = Timer::new();
-        timer.set_scale(1000.0).unwrap();
+        let timer = real_timer();
+        timer.set_time_scale(1000.0).unwrap();
         timer.pause();
         let frozen = timer.time_ns();
         thread::sleep(Duration::from_millis(5));
@@ -145,8 +134,8 @@ mod pause {
 
     #[test]
     fn sleep_does_not_return_until_resumed() {
-        let timer = Arc::new(Timer::new());
-        timer.set_scale(1000.0).unwrap();
+        let timer = Arc::new(real_timer());
+        timer.set_time_scale(1000.0).unwrap();
         timer.pause();
         let target = timer.time_ns() + 1;
         // Paused: a long real wait does not reach even 1 ns ahead.
@@ -160,54 +149,6 @@ mod pause {
         assert!(!sleeper.is_finished());
         timer.resume();
         sleeper.join().unwrap();
-    }
-}
-
-mod hold {
-    use super::*;
-
-    #[test]
-    fn the_time_runs_again_only_when_every_hold_is_dropped() {
-        let timer = Arc::new(Timer::new());
-        let first = timer.hold();
-        let second = timer.hold();
-        let frozen = timer.time_ns();
-        drop(first);
-        // Ending one freeze must not let the time run during the other one.
-        assert!(timer.is_paused());
-        thread::sleep(Duration::from_millis(2));
-        assert_eq!(timer.time_ns(), frozen);
-        drop(second);
-        assert!(!timer.is_paused());
-    }
-
-    #[test]
-    fn resume_does_not_undo_a_hold() {
-        let timer = Arc::new(Timer::new());
-        let hold = timer.hold();
-        timer.pause();
-        timer.resume();
-        assert!(timer.is_paused());
-        drop(hold);
-        assert!(!timer.is_paused());
-    }
-
-    #[test]
-    fn dropping_a_hold_does_not_undo_pause() {
-        let timer = Arc::new(Timer::new());
-        timer.pause();
-        drop(timer.hold());
-        assert!(timer.is_paused());
-        timer.resume();
-        assert!(!timer.is_paused());
-    }
-
-    #[test]
-    fn a_held_virtual_clock_cannot_advance() {
-        let timer = Arc::new(Timer::new());
-        timer.use_virtual_clock(true);
-        let _hold = timer.hold();
-        assert!(matches!(timer.advance_ns(1), Err(TimerError::Paused)));
     }
 }
 
@@ -225,30 +166,11 @@ mod virtual_clock {
     #[test]
     fn advances_by_exactly_the_given_amount_regardless_of_scale() {
         let timer = virtual_timer();
-        timer.set_scale(3.0).unwrap();
+        timer.set_time_scale(3.0).unwrap();
         let start = timer.time_ns();
         timer.advance_ns(SECOND / 3).unwrap();
         timer.advance_ns(7).unwrap();
         assert_eq!(timer.time_ns(), start + SECOND / 3 + 7);
-    }
-
-    #[test]
-    fn switching_clocks_keeps_the_time_continuous() {
-        let timer = Timer::new();
-        timer.set_scale(1000.0).unwrap();
-        thread::sleep(Duration::from_millis(2));
-        let before = timer.time_ns();
-        timer.use_virtual_clock(true);
-        let switched = timer.time_ns();
-        assert!(switched >= before);
-        thread::sleep(Duration::from_millis(5));
-        assert_eq!(timer.time_ns(), switched);
-
-        let real_start = Instant::now();
-        timer.use_virtual_clock(false);
-        let back = timer.time_ns();
-        assert!(back >= switched);
-        assert!((back - switched) as f64 <= 1000.0 * real_ns(real_start.elapsed()) + 2.0);
     }
 
     #[test]
@@ -281,39 +203,6 @@ mod virtual_clock {
     }
 
     #[test]
-    fn wait_until_or_wakes_on_interrupt() {
-        let timer = Arc::new(virtual_timer());
-        let flag = Arc::new(AtomicBool::new(false));
-        let waiter = {
-            let (timer, flag) = (Arc::clone(&timer), Arc::clone(&flag));
-            thread::spawn(move || {
-                let target = timer.time_ns() + 1;
-                timer.wait_until_ns_or(target, Duration::MAX, || flag.load(Ordering::SeqCst))
-            })
-        };
-        // Whether the waiter is already asleep or not, it must see the flag.
-        flag.store(true, Ordering::SeqCst);
-        timer.interrupt_waiters();
-        assert_eq!(waiter.join().unwrap(), Wait::Interrupted);
-    }
-
-    #[test]
-    fn wait_until_or_wakes_at_the_target() {
-        let timer = Arc::new(virtual_timer());
-        let target = timer.time_ns() + 5;
-        let waiter = {
-            let timer = Arc::clone(&timer);
-            thread::spawn(move || timer.wait_until_ns_or(target, Duration::MAX, || false))
-        };
-        timer.advance_ns(5).unwrap();
-        assert_eq!(waiter.join().unwrap(), Wait::Reached);
-        assert_eq!(
-            timer.wait_until_ns_or(target + 1, Duration::from_millis(5), || false),
-            Wait::TimedOut
-        );
-    }
-
-    #[test]
     fn saturates_instead_of_wrapping_around() {
         let timer = virtual_timer();
         timer.advance_ns(u64::MAX).unwrap();
@@ -343,56 +232,39 @@ mod virtual_clock {
     }
 }
 
-mod state {
+mod creation {
     use super::*;
 
     #[test]
-    fn restores_the_time_and_scale() {
-        let source = virtual_timer();
-        source.set_scale(4.0).unwrap();
-        let taken_ns = source.time_ns() + 12 * SECOND + 345;
-        source.advance_ns(12 * SECOND + 345).unwrap();
-        let state = source.state();
-        assert_eq!(
-            state,
-            TimerState {
-                time_ns: taken_ns,
-                scale: 4.0
-            }
-        );
-
-        let restored = virtual_timer();
-        restored.load_state(state).unwrap();
-        assert_eq!(restored.time_ns(), taken_ns);
-        assert_eq!(restored.scale(), 4.0);
-    }
-
-    #[test]
-    fn real_clock_continues_from_the_restored_time() {
-        let timer = Timer::new();
+    fn a_real_clock_runs_from_its_start() {
         let real_start = Instant::now();
-        timer
-            .load_state(TimerState {
-                time_ns: 100 * SECOND,
-                scale: 1.0,
-            })
-            .unwrap();
+        let timer = Timer::new(Source::Real, Timestamp::from_ns(100 * SECOND));
         let now = timer.time_ns();
         assert!(now >= 100 * SECOND);
         assert!((now - 100 * SECOND) as f64 <= real_ns(real_start.elapsed()) + 2.0);
+        assert_eq!(timer.time_scale(), 1.0);
     }
 
     #[test]
-    fn rejects_an_invalid_scale() {
-        let timer = Timer::new();
-        let state = TimerState {
-            time_ns: SECOND,
-            scale: 0.0,
-        };
-        assert!(matches!(
-            timer.load_state(state),
-            Err(TimerError::InvalidScale(_))
-        ));
+    fn a_virtual_clock_stands_at_its_start() {
+        let timer = Timer::new(Source::Virtual, Timestamp::from_ns(7));
+        thread::sleep(Duration::from_millis(2));
+        assert_eq!(timer.time_ns(), 7);
+    }
+}
+
+mod run_clock {
+    use super::*;
+
+    #[test]
+    fn reads_the_time_and_the_scale_of_its_timer() {
+        let timer = Arc::new(virtual_timer());
+        let clock = RunClock::new(Arc::clone(&timer));
+        timer.set_time_scale(3.0).unwrap();
+        timer.advance_ns(SECOND).unwrap();
+        assert_eq!(clock.now(), Timestamp::from_ns(SECOND));
+        assert_eq!(clock.now_ns(), SECOND);
+        assert_eq!(clock.time_scale(), 3.0);
     }
 }
 
@@ -423,7 +295,7 @@ mod independent_timers {
     #[test]
     fn a_new_timer_starts_at_zero() {
         let before = Instant::now();
-        let timer = Timer::new();
+        let timer = real_timer();
         let elapsed = timer.time_ns();
         assert!(elapsed as f64 <= real_ns(before.elapsed()));
     }
@@ -434,17 +306,6 @@ mod independent_timers {
         a.advance_ns(3 * SECOND).unwrap();
         b.advance_ns(SECOND).unwrap();
         assert_eq!((a.time_ns(), b.time_ns()), (3 * SECOND, SECOND));
-    }
-
-    #[test]
-    fn a_hold_freezes_only_its_own_timer() {
-        let (a, b) = (Arc::new(virtual_timer()), Arc::new(virtual_timer()));
-        let _hold = a.hold();
-        assert!(a.is_paused());
-        assert!(!b.is_paused());
-        b.advance_ns(SECOND).unwrap();
-        assert!(matches!(a.advance_ns(1), Err(TimerError::Paused)));
-        assert_eq!((a.time_ns(), b.time_ns()), (0, SECOND));
     }
 
     #[test]

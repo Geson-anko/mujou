@@ -53,7 +53,7 @@ one = torch.ones(1)
 # Run for a while, then stop and take the state at the end.
 net = Model()
 with mujou.run(net, inputs={net.prev: one}) as run:
-    mujou.time.sleep(0.2)
+    run.timer.sleep(0.2)
 tree = run.state_dict()  # after a normal end: the state at the stop
 saved = tree["nodes"]["integrator"]  # this node's state_dict()
 print("state of the node:", {k: type(v).__name__ for k, v in saved.items()})
@@ -61,12 +61,13 @@ file = io.BytesIO()  # or a path, such as "state.pt"
 # .cpu(): every tensor on the CPU, so that a machine without the GPU reads it too.
 torch.save(tree.cpu(), file)
 
-# A new instance of the same network goes on from the saved state and time.
+# A new instance of the same network goes on from the saved state and time, on a
+# timer of its own that starts at the time of the state.
 restored = Model()
 file.seek(0)
 loaded = torch.load(file)  # the default weights_only=True reads a StateDict
 with mujou.run(restored, inputs={restored.prev: one}, state=loaded) as run:
-    mujou.time.sleep(0.1)
+    run.timer.sleep(0.1)
 after = run.state_dict()["nodes"]["integrator"]
 
 x0, x1 = saved["x"].item(), after["x"].item()

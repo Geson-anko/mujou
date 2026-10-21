@@ -14,7 +14,6 @@ class TestPublicNames:
             "NetworkError",
             "NextPort",
             "Node",
-            "PauseTimeoutError",
             "Port",
             "PrevPort",
             "Run",
