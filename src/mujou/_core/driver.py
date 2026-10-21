@@ -14,25 +14,31 @@ order, so that no override of a hook can skip it:
 """
 
 import contextvars
-from collections.abc import Callable
-from typing import final
+from collections.abc import Callable, Mapping
+from typing import Final, final
 
 import torch
 
 from mujou._core.node import Node, ReadOnlyTimer
+from mujou._core.port import AnyPort, Wire
+
+# The wires of a node in its state_dict: none, so that taking the state is not
+# seen by the other nodes.
+_NO_WIRES: Final[Mapping[AnyPort, Wire]] = {}
 
 
 @final
 class Driver:
     """What the runtime calls for the hooks of ``node``, which runs on
-    ``clock``."""
+    ``clock`` and whose ports read and write through ``wires``."""
 
-    def __init__(self, node: Node, clock: ReadOnlyTimer) -> None:
-        self._node = node
+    def __init__(
+        self, node: Node, clock: ReadOnlyTimer, wires: Mapping[AnyPort, Wire]
+    ) -> None:
+        self.node = node
         self.clock = clock
-        # The node whose ports the running hook may use: the node, but none in
-        # state_dict, so that taking the state is not seen by the other nodes.
-        self.port_owner: Node | None = node
+        # What the ports of the running hook find (port.py).
+        self.wires = wires
         # Empty, as a new thread's: the hooks do not see the host's variables,
         # and keep their own whichever worker runs them.
         self._context = contextvars.Context()
@@ -44,12 +50,12 @@ class Driver:
         self._stream = torch.cuda.Stream(device) if device.type == "cuda" else None
 
     def start(self) -> None:
-        self._run(self._node.on_start)
+        self._run(self.node.on_start)
 
     def restore(self, state: object) -> None:
         # The copies queue on the node's stream; wait for them, so that the host
         # may drop the tree it passed (whose memory they read) once run returns.
-        self._run(self._node.load_state_dict, state)
+        self._run(self.node.load_state_dict, state)
         if self._stream is not None:
             self._stream.record_event().synchronize()
 
@@ -58,22 +64,22 @@ class Driver:
         stream = self._stream
         if stream is not None:
             _use(stream)
-        self._context.run(self._node.on_update, dt)
+        self._context.run(self.node.on_update, dt)
         if stream is not None:
             # The CPU never runs ahead of the GPU.
             stream.record_event().synchronize()
 
     def pause(self) -> None:
-        self._run(self._node.on_pause)
+        self._run(self.node.on_pause)
 
     def resume(self) -> None:
-        self._run(self._node.on_resume)
+        self._run(self.node.on_resume)
 
     def exception(self) -> None:
-        self._run(self._node.on_exception)
+        self._run(self.node.on_exception)
 
     def stop(self) -> None:
-        self._run(self._node.on_stop)
+        self._run(self.node.on_stop)
 
     def capture(self) -> object:
         stream = self._stream
@@ -98,11 +104,11 @@ class Driver:
         return self._context.run(hook, *args)
 
     def _state(self) -> object:
-        self.port_owner = None
+        wires, self.wires = self.wires, _NO_WIRES
         try:
-            return self._context.run(self._node.state_dict)
+            return self._context.run(self.node.state_dict)
         finally:
-            self.port_owner = self._node
+            self.wires = wires
 
 
 def _use(stream: torch.cuda.Stream) -> None:

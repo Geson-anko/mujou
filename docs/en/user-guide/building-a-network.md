@@ -33,17 +33,15 @@ Call `super().__init__()` first: the network registers each node, network and po
 
 Connect two ports with `Port.connect`, as in `a.next.connect(b.prev)`. Nodes and networks have no `connect` of their own: a node can have several inputs and outputs, so naming the two ports always says which path you mean.
 
-By convention, the port on the side of the previous node is a `PrevPort` named `prev`, and the port on the side of the next node is a `NextPort` named `next`, so a chain reads `a.next.connect(b.prev)`.
+By convention, the port on the side of the previous node is named `prev`, and the port on the side of the next node `next`, so a chain reads `a.next.connect(b.prev)`. The names only make the direction readable: a node can have any number of ports.
 
-The names and the kinds only make the direction readable. `PrevPort` and `NextPort` differ from `Port` only in how many peers they take by default (one for `PrevPort`, many for `NextPort`), and a node can have any number of each.
-
-Two ports connect only when the `send` spec of one matches the `recv` spec of the other, in both directions. If they do not match, the call to `connect` raises `TypeError`. Connecting a second channel to a port that takes one peer raises `ValueError`.
+Two ports connect only when the `send` spec of one matches the `recv` spec of the other, in both directions. If they do not match, the call to `connect` raises `TypeError`. A `Port` that receives takes one peer: connecting a second one raises `ValueError` (receive from several with a `MultiPort`). Connecting the same two ports again returns the channel they already have.
 
 `connect` returns the connection it made (a `Channel`). Use it to send a different value to each peer when branching (see [Branching and merging](#branching-and-merging) below).
 
 ## Exposing ports
 
-Assigning a child's port to an attribute of the network exposes that port. The kind of the port decides what the exposed port does.
+Assigning a child's port to an attribute of the network exposes that port.
 
 The outside then names the port by a short name. By convention, a network exposes the port of its first node as `prev` and that of its last node as `next` (`self.prev = self.l1.prev`), so that it connects like a node: `x.next.connect(net.prev)` and `net.next.connect(y.prev)`. Expose other ports under names of their own, such as `net.teacher`.
 
@@ -76,7 +74,7 @@ class Classifier(mujou.Network):
         self.teacher = self.head.teacher
 ```
 
-`Hidden` and `Head` are nodes that each have a `PrevPort` and a `NextPort`. `Head` also has a `Port` (`teacher`) that receives a teacher signal.
+`Hidden` and `Head` are nodes that each have a `prev` and a `next` port. `Head` also has a port `teacher` that receives a teacher signal.
 
 Nodes are told apart by their path: the attribute names from the root, joined with `.`. The paths of the nodes in this example are `"body.l1"`, `"body.l2"` and `"head"`.
 
@@ -96,12 +94,14 @@ Connecting several channels to one port makes a branch or a merge. The following
 
 ### Branching: the sending side
 
-A `NextPort` takes many peers by default, so writing `a.next.connect(b.prev)` and then `a.next.connect(c.prev)` makes a branch. There are two ways to send.
+A `Port` that only sends takes any number of peers, so writing `a.next.connect(b.prev)` and then `a.next.connect(c.prev)` makes a branch. A `MultiPort` takes any number of peers too, and has two ways to send.
 
 | How to send               | Where it goes                            | Value read by `Run.read` |
 | ------------------------- | ---------------------------------------- | ------------------------ |
 | `send(value)`             | The same value to every peer             | Updated                  |
 | `send_to(channel, value)` | Only to the peer at the end of `channel` | Not updated              |
+
+A `Port` has only `send`.
 
 If the host reads with `Run.read` a port that only uses `send_to`, it gets the port's initial value (`initial`, or zeros). The host has no way to read the values sent with `send_to` themselves.
 
@@ -117,13 +117,13 @@ Attributes that hold a `Channel` are not collected into the state.
 
 ### Merging: the receiving side
 
-`PrevPort(multi=True)` receives from many peers. On a port with many peers, `recv()` returns a dict keyed by `Channel`, in the order of connection. The value for the channel of a peer that has never sent is the initial value of the peer's port (zeros unless it declares `initial`).
+A `MultiPort` receives from many peers: its `recv()` returns a dict keyed by `Channel`, in the order of connection. The value for the channel of a peer that has never sent is the initial value of the peer's port (zeros unless it declares `initial`).
 
 The receiving node decides how to combine the values (sum them, average them, weight each peer, ...). Mujou does not combine them. `Sum` in the example above sums them.
 
-To treat the peers differently, keep the `Channel` of each on the receiving node, as for `send_to`: `self.sum.from_double = self.double.next.connect(self.sum.prev)`, then `self.prev.recv()[self.from_double]` in the node.
+To treat the peers differently, keep the `Channel` of each on the receiving node, as for `send_to`: `self.sum.from_double = self.double.next.connect(self.sum.prev)`, then `self.prev.recv()[self.from_double]` in the node. For inputs of different roles (a prediction and an error, say), declare one `Port` each instead.
 
-A `NextPort` also takes many peers by default, so its `recv()` returns a dict. If the node is sure to have only one next node, declare `NextPort(send=..., multi=False)`, and `recv()` returns the value itself.
+A node that sends forward and receives feedback from several next nodes declares its `next` as a `MultiPort` too, and its `recv()` returns a dict.
 
 ## Carrying data along a path
 
@@ -131,7 +131,7 @@ To pass data along a path with each value, such as the ID or the target of a sam
 
 ## Checking the built structure
 
-`net.build()` checks the structure and the types, freezes them, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you need not call it just to run. Call it to check the structure before running.
+`net.build()` checks the structure and the types, and returns the built structure (a `Graph`). `mujou.run` calls `build()` itself, so you need not call it just to run. Call it to check the structure before running.
 
 ```python
 --8<-- "examples/branching.py:build"
@@ -141,8 +141,7 @@ To pass data along a path with each value, such as the ID or the target of a sam
 
     After `build()`:
 
-    - no port in the tree can `connect` any more
-    - no node, network or port can be assigned to or removed from the nodes and networks of the tree (both `RuntimeError`)
+    - no node, network or port can be assigned to or removed from the nodes and networks of the tree (`RuntimeError`)
     - the network cannot become part of a bigger network
 
     So call it only on the network you will run.

@@ -13,7 +13,7 @@ import torch
 
 import mujou
 import mujou.time
-from mujou import NextPort, Node, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 SCALAR = TensorSpec((), torch.float64)
 
@@ -23,7 +23,7 @@ class Clock(Node):
 
     def __init__(self) -> None:
         super().__init__(period=0.01)
-        self.next = NextPort(send=SCALAR)
+        self.next = Port(send=SCALAR)
 
     @override
     def on_start(self) -> None:

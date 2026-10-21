@@ -8,28 +8,30 @@ names the slot and the field.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import cast
+from typing import Any, cast
 
 import torch
 
 from mujou._core import _native
-from mujou._core.spec import DLPACK, Spec, TensorSpec
+from mujou._core.spec import DLPACK, DictSpec, MessageSpec, TensorSpec
 
 
-def fields(spec: Spec) -> Mapping[str, TensorSpec]:
+def fields(spec: MessageSpec[Any]) -> Mapping[str, TensorSpec]:
     """The fields of a message of ``spec`` by name, in field order: a tensor
     message is the one field named ``""``."""
-    return {"": spec} if isinstance(spec, TensorSpec) else spec.specs
+    if isinstance(spec, TensorSpec):
+        return {"": spec}
+    return cast("DictSpec[Any]", spec).specs  # the other kind (quoted: hot path)
 
 
-def schema(spec: Spec) -> _native.Schema:
+def schema(spec: MessageSpec[Any]) -> _native.Schema:
     """The core's schema of messages of ``spec``."""
     return _native.Schema(
         [(name, f.shape, DLPACK[f.dtype]) for name, f in fields(spec).items()]
     )
 
 
-def to_core(spec: Spec, msg: object, label: str) -> list[torch.Tensor]:
+def to_core(spec: MessageSpec[Any], msg: object, label: str) -> list[torch.Tensor]:
     """The tensors of ``msg`` in field order, detached and in host memory, for
     the core to copy. ``label`` names the message in the errors.
 
@@ -67,11 +69,11 @@ def _tensor(value: object, label: str, name: str) -> torch.Tensor:
 
 
 def from_core(
-    spec: Spec, views: Sequence[_native.BufferView], device: torch.device
+    spec: MessageSpec[Any], views: Sequence[_native.BufferView], device: torch.device
 ) -> object:
     """A message of ``spec`` made of copies of ``views`` on ``device``."""
     tensors = [torch.from_dlpack(view).to(device, copy=True) for view in views]
     if isinstance(spec, TensorSpec):
         (tensor,) = tensors
         return tensor
-    return dict(zip(spec.specs, tensors, strict=True))
+    return dict(zip(fields(spec), tensors, strict=True))

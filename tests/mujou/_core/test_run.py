@@ -23,7 +23,7 @@ import mujou.testing
 from mujou import NetworkError, Run
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.port import Port
 from mujou._core.spec import TensorSpec
 from mujou.testing import ManualRun
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer, global_timer
@@ -46,8 +46,8 @@ class Echo(Node):
 
     def __init__(self) -> None:
         super().__init__()
-        self.prev = PrevPort(recv=vec())
-        self.next = NextPort(send=TensorSpec((), torch.int64))
+        self.prev = Port(recv=vec())
+        self.next = Port(send=TensorSpec((), torch.int64))
 
     @override
     def on_update(self, dt: float) -> None:
@@ -254,7 +254,7 @@ class TestRunANode:
             run.write({node.x: [0.0, 0.0]})  # pyright: ignore[reportArgumentType]
         with pytest.raises(ValueError, match=r"^cannot write the port 'Pair\.out'"):
             run.write({node.out: u(0)})
-        with pytest.raises(RuntimeError, match=r"owns the port 'Pair\.x'"):
+        with pytest.raises(RuntimeError, match=r"^Pair\.x is used only in the hooks"):
             node.x.recv()  # from the host, not from the node's hooks
 
     def test_a_node_in_a_network_names_its_ports_by_their_paths(
@@ -369,8 +369,8 @@ class Noisy(Node):
 
     def __init__(self, seed: int, *, dedicated_thread: bool = False) -> None:
         super().__init__(seed=seed, dedicated_thread=dedicated_thread)
-        self.prev = PrevPort(recv=vec())
-        self.next = NextPort(send=vec())
+        self.prev = Port(recv=vec())
+        self.next = Port(send=vec())
         self.x = torch.zeros(2, dtype=F64)
         self.idents: list[int] = []
         self.updated: queue.Queue[None] = queue.Queue()
@@ -701,7 +701,7 @@ class Ticks(Node):
 
     def __init__(self) -> None:
         super().__init__(period=0.001)
-        self.next = NextPort(send=TensorSpec((), torch.int64))
+        self.next = Port(send=TensorSpec((), torch.int64))
         self.dts: list[float] = []
 
     @override
@@ -889,7 +889,9 @@ class TestOnlyTheHostControlsTheTime:
         run = start_manual(node)
         run.step(H)
         assert node.errors == [] and seen == [Timestamp(ns=H_NS)]
-        with pytest.raises(RuntimeError, match="only in its hooks"):
+        with pytest.raises(
+            RuntimeError, match=r"^Calls\.timer is used only in the hooks"
+        ):
             _ = node.timer
 
 
@@ -1008,7 +1010,7 @@ class TestWrite:
         chain, solo = start_manual(net), start_manual(Group(node=pair))
         cases = [
             (chain, net.b.prev, "is connected"),
-            (solo, pair.many, "many peers"),
+            (solo, pair.many, "is a MultiPort"),
             (solo, pair.out, "receives no messages"),
             (chain, pair.x, "not a port of a node in this run"),
         ]
@@ -1356,7 +1358,7 @@ class TestStateDict:
         run.step(H)
         if ended:
             run.shutdown()
-        assert "not state_dict" in run.state_dict()["nodes"]["node"]
+        assert "a port not in state_dict" in run.state_dict()["nodes"]["node"]
         assert torch.equal(run.read(node.out), torch.zeros(2, dtype=F64))
 
     @pytest.mark.slow
@@ -1853,12 +1855,12 @@ class TestInterpreterExit:
 import pathlib, sys, threading, time
 import torch
 import mujou
-from mujou import Network, NextPort, Node, Port, TensorSpec
+from mujou import Network, Node, Port, TensorSpec
 
 class Slow(Node):
     def __init__(self) -> None:
         super().__init__()
-        self.out = NextPort(send=TensorSpec((2,)))
+        self.out = Port(send=TensorSpec((2,)))
 
     def on_update(self, dt: float) -> None:
         self.out.send(torch.ones(2))
@@ -1937,8 +1939,8 @@ class DeviceLeaky(Node):
 
     def __init__(self, device: torch.device) -> None:
         super().__init__(device=device)
-        self.prev = PrevPort(recv=vec())
-        self.next = NextPort(send=vec())
+        self.prev = Port(recv=vec())
+        self.next = Port(send=vec())
 
     @override
     def on_start(self) -> None:
@@ -1963,7 +1965,7 @@ class DeviceChain(Network):
 class CudaSource(Node):
     def __init__(self, device: str) -> None:
         super().__init__(device=device)
-        self.next = NextPort(send=vec())
+        self.next = Port(send=vec())
 
     @override
     def on_update(self, dt: float) -> None:
@@ -1973,7 +1975,7 @@ class CudaSource(Node):
 class CudaSink(Node):
     def __init__(self, device: str) -> None:
         super().__init__(device=device)
-        self.prev = PrevPort(recv=vec())
+        self.prev = Port(recv=vec())
         self.received: torch.Tensor | None = None
 
     @override

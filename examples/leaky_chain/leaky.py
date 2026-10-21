@@ -5,7 +5,7 @@ from typing import override
 
 import torch
 
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 SCALAR = TensorSpec((), torch.float64)
 
@@ -28,8 +28,8 @@ class Leaky(Node):
     def __init__(self, tau: float, period: float = 0.001) -> None:
         super().__init__(period=period)
         self.tau = tau
-        self.prev = PrevPort(recv=SCALAR)
-        self.next = NextPort(send=SCALAR)
+        self.prev = Port(recv=SCALAR)
+        self.next = Port(send=SCALAR)
 
     @override
     def on_start(self) -> None:

@@ -13,14 +13,14 @@ Example::
 
     import mujou
     import mujou.testing
-    from mujou import NextPort, Node, PrevPort, TensorSpec
+    from mujou import Node, Port, TensorSpec
 
 
     class Double(Node):
         def __init__(self) -> None:
             super().__init__()
-            self.prev = PrevPort(recv=TensorSpec((2,)))
-            self.next = NextPort(send=TensorSpec((2,)))
+            self.prev = Port(recv=TensorSpec((2,)))
+            self.next = Port(send=TensorSpec((2,)))
 
         @override
         def on_update(self, dt: float) -> None:
@@ -58,7 +58,7 @@ __all__ = ["ManualRun", "run"]
 
 
 # P: as in Run.write.
-def run[P: Port[Any, Any, Any]](
+def run[P: Port[Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: VirtualTimer | None = None,

@@ -31,26 +31,23 @@ Port は `__init__` の中で `super().__init__()` の後にインスタンス�
 - **`super().__init__()` より前**: ノードは代入された Port をその時点で登録するため `AttributeError` になる
 - **クラス属性**: ネットワークの構築（`build()`）で `ValueError` になる
 
-Port の種類はネットワークの中での役割で選ぶ。慣習では前のノード側の Port を `prev`、次のノード側の Port を `next` と名付ける。こうするとつないだ列が `a.next.connect(b.prev)` と読める。
+Port の種類は、いくつの相手から受け取るかで選ぶ。慣習では前のノード側の Port を `prev`、次のノード側の Port を `next` と名付ける。こうするとつないだ列が `a.next.connect(b.prev)` と読める。1 つのノードが Port をいくつ持ってもよい。
 
-| 役割                                         | 宣言       | 慣習の名前 |
-| -------------------------------------------- | ---------- | ---------- |
-| 前のノードから受け取る側                     | `PrevPort` | `prev`     |
-| 次のノードへ送る側                           | `NextPort` | `next`     |
-| それ以外（教師信号の入力、観測用の出力など） | `Port`     | 自由       |
+| 種類        | 相手                                                                                                            | `recv()` が返すもの         |
+| ----------- | --------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `Port`      | 受け取るなら 1 つまで。送るだけならいくつでも                                                                   | 値そのもの                  |
+| `MultiPort` | 同じ種類の相手をいくつでも（[分岐と合流](building-a-network.md#%E5%88%86%E5%B2%90%E3%81%A8%E5%90%88%E6%B5%81)） | `Channel` をキーにした dict |
 
-種類による違いは既定で取る相手の数（後述）だけ。1 つのノードがどの種類の Port もいくつ持ってもよい。
+役割の違う入力（入力と並ぶ教師信号など）は、入力ごとに `Port` を宣言する。
 
 各 Port には送る値の型を `send=`、受け取る値の型を `recv=` で渡す。型は `TensorSpec(shape, dtype)` で書く。
 
-dtype を省くと spec を作った時点の `torch.get_default_dtype()`（通常は `float32`）になる。片方向の Port では使わない方の引数を省く（`None` は渡さない）。
+dtype を省くと spec を作った時点の `torch.get_default_dtype()`（通常は `float32`）になる。片方向の Port では使わない方の引数を省く。どちらもキーワード引数で渡す。
 
 ```python
-self.prev = PrevPort(recv=TensorSpec((32, 784)))                       # 受け取るだけ
-self.next = NextPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # 両方向
+self.prev = Port(recv=TensorSpec((32, 784)))                       # 受け取るだけ
+self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # 両方向
 ```
-
-相手の数は `multi=` で決まる。既定では `PrevPort` と `Port` が 1 つ、`NextPort` が複数。相手が複数の Port の `recv()` は値ではなく dict を返す（[ネットワークを組む](building-a-network.md#%E5%88%86%E5%B2%90%E3%81%A8%E5%90%88%E6%B5%81)の「分岐と合流」）。
 
 送る値は shape と dtype の両方が spec と一致しなければならない。dtype は自動で変換されない。上の `Leaky` は `torch.float64` の spec を使っているので、送る値も `float64` で作っている。
 
@@ -59,7 +56,7 @@ Port が最初に送るまでは、相手が受け取る値もホストがその
 状態を復元した実行（[状態](state.md)）は初期値ではなく状態の中の値から始まる。
 
 ```python
-self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
+self.next = Port(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
 ```
 
 2 つの Port の値は別々に届くので、読む側は一方の Port の新しい値ともう一方の Port の古い値を同時に読むことがある。
@@ -74,32 +71,24 @@ class Sample(TypedDict):
 
 SAMPLE = DictSpec(Sample, x=TensorSpec((32, 4)), y=TensorSpec((32, 2)))
 
-self.next = NextPort(send=SAMPLE)  # 送る側: self.next.send({"x": x, "y": y})
-self.prev = PrevPort(recv=SAMPLE)  # 受け取る側: sample = self.prev.recv(); sample["x"]
+self.next = Port(send=SAMPLE)  # 送る側: self.next.send({"x": x, "y": y})
+self.prev = Port(recv=SAMPLE)  # 受け取る側: sample = self.prev.recv(); sample["x"]
 ```
 
-Port の型は型検査器が spec から推論するので、自分で書く場面は少ない。注釈が必要なとき（補助関数の引数など）は `Port[S, R, M]` と書く。
-
-- `S` は送る型
-- `R` は受け取る型
-- `M` は相手の数。`mujou.typing` の `Single` か `Multi` を使う
-
-どんな Port でも受け取る注釈は `Port[Any, Any, Any]` と書く。
-
-省いた向きは `Never` になる。任意の spec を受け取る関数は `mujou.typing` の `MessageSpec[T]` で注釈する。
+Port の型は型検査器が spec から推論するので、自分で書く場面は少ない。注釈が必要なとき（補助関数の引数など）は `Port[S, R]` か `MultiPort[S, R]` と書く。`S` は送る型、`R` は受け取る型。省いた向きは `Never` になり、何も送らない Port の `send` は型検査器が拒む。任意の spec を受け取る関数は `MessageSpec[T]` で注釈する。
 
 ```python
 from typing import Never
 
-from mujou.typing import MessageSpec, Multi
+from mujou import MessageSpec, MultiPort, Port
 
 
-def mean_of(port: PrevPort[Never, torch.Tensor, Multi]) -> torch.Tensor:
+def mean_of(port: MultiPort[Never, torch.Tensor]) -> torch.Tensor:
     return torch.stack(list(port.recv().values())).mean(0)
 
 
-def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
-    return NextPort(send=spec)
+def sender[T](spec: MessageSpec[T]) -> Port[T]:
+    return Port(send=spec)
 ```
 
 ## 2. `on_start` で状態を確保する
@@ -186,7 +175,7 @@ def on_update(self, dt: float) -> None:
 class Sensor(mujou.Node):
     def __init__(self) -> None:
         super().__init__(period=0.05)  # 平均 50 ms に 1 回更新する
-        self.next = mujou.NextPort(send=mujou.TensorSpec((3,)))
+        self.next = mujou.Port(send=mujou.TensorSpec((3,)))
 ```
 
 周期は更新と更新の間の平均の間隔で、`on_update` にかかった時間も含む。遅れたノードが取り戻そうと続けて何回も更新することはない。

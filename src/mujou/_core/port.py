@@ -1,191 +1,54 @@
-"""Ports, the connection points of nodes and networks, and the channels between them.
+"""Ports, the connection points of nodes, the channels between them, and the
+``Wire`` through which a port of a running node reads and writes
+(``specs/network.md``).
 
-A port has no direction: it holds the spec of the message it sends and the spec of
-the message it receives. Two ports connect when their
-specs are mutually reversed, and each connection is one ``Channel`` registered at
-both ends (``specs/network.md``).
+A port declares the spec of the message it sends and of the one it receives, and
+its connections: a dict from each peer to the ``Channel`` between them. A port
+holds nothing of a run: the driver of the running node (``driver.py``) holds the
+wire of each of its ports, and a port finds its own there.
 """
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Final,
-    Literal,
-    Never,
-    Protocol,
-    cast,
-    final,
-    overload,
-    override,
-)
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Final, Never, Protocol, cast, final, override
+
+import torch
 
 from mujou._core import _native
-from mujou._core.codec import to_core
-from mujou._core.spec import DictSpec, MessageSpec, Spec, TensorSpec
+from mujou._core.codec import from_core, to_core
+from mujou._core.spec import MessageSpec
 
-if TYPE_CHECKING:
-    import torch
-
-    from mujou._core.binding import Binding
-
-
-class Running(Protocol):
-    """What a hook sees of the node it runs as: the node's driver
-    (``driver.py``)."""
-
-    @property
-    def port_owner(self) -> object:
-        """The node whose ports the hook may use: none in ``state_dict``."""
-        ...
-
-    @property
-    def clock(self) -> _native.ReadOnlyTimer: ...
+# Any (here and below): ports and messages of every type are handled alike.
+type AnyPort = Port[Any, Any] | MultiPort[Any, Any]
+type AnySlot = _native.Slot | _native.InputSlot
 
 
-def running() -> Running | None:
-    """The driver of the node whose hook the calling thread runs, or ``None``
-    outside the hooks."""
-    return cast("Running | None", _native.current())
+class _Port[S, R]:
+    """What ``Port`` and ``MultiPort`` share: the specs, the initial value and
+    the connections."""
 
-
-# The default of an omitted spec in the overloads below. Typed as a spec of Never so
-# that pyright solves the message type of an omitted direction to Never, where an
-# unsolved type variable would stay unknown. At runtime it is None.
-_NO_SPEC: Final = cast(MessageSpec[Never], None)
-
-
-@final
-class Single:
-    """Type marker: the port connects to at most one peer."""
-
-
-@final
-class Multi:
-    """Type marker: the port connects to any number of peers."""
-
-
-# S: the messages a port sends. R: the messages it receives. M: the peer count,
-# Single unless declared otherwise (Multi for NextPort).
-class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
-    """A connection point that sends messages of type ``S`` and receives ``R``.
-
-    Declare ports as attributes of a node (or expose a port of a child as an
-    attribute of a network). ``send`` is the spec of what this port sends and
-    ``recv`` the spec of what it receives; either may be omitted for a one-way port
-    (omit it: type checkers reject ``None`` and infer ``Never`` for an omitted
-    spec).
-    ``multi=True`` lets the port take any number of peers (``Multi``) and
-    ``multi=False`` at most one (``Single``). The default is one peer for ``Port``
-    and ``PrevPort``, and many for ``NextPort``. ``multi`` fixes what ``recv``
-    returns: the message for one peer, a dict keyed by ``Channel`` for many.
-
-    Two ports connect when the ``send`` of each equals the ``recv`` of the other
-    (an omitted spec matches an omitted spec). A port may stay unconnected.
-
-    ``initial`` is what the port has sent before its first ``send``: what its
-    peers receive and the host reads until then. It must match ``send`` exactly,
-    and is copied when the port is made. Without it, that is the ``zeros()`` of
-    ``send``. A restored run takes the values from the state instead.
-
-    Once assigned as an attribute of a node, the port is named
-    ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
-    ``repr``; the first assignment names it.
-
-    ``PrevPort`` and ``NextPort`` are ports with other defaults for the number of
-    peers, for the previous and the next side of a node by convention.
-
-    Example::
-
-        class Sensor(Node):
-            def __init__(self) -> None:
-                super().__init__()
-                self.out = Port(send=TensorSpec((3,)), initial=torch.ones(3))
-
-
-        class Monitor(Node):
-            def __init__(self) -> None:
-                super().__init__()
-                self.inp = Port(recv=TensorSpec((3,)))
-
-            @override
-            def on_update(self, dt: float) -> None:
-                super().on_update(dt)
-                x = self.inp.recv()  # torch.Tensor (one peer); ones until out sends
-
-
-        sensor, monitor = Sensor(), Monitor()
-        sensor.out.connect(monitor.inp)
-
-    Raises:
-        TypeError: ``send`` or ``recv`` is not a ``TensorSpec``, a ``DictSpec`` or
-            ``None``; ``initial`` is given to a port without ``send``; or
-            ``initial`` is not a tensor, or a dict of tensors with the keys of
-            ``send`` (as ``send`` raises). The shapes and dtypes of ``initial``
-            are checked when a run starts: ``mujou.run`` raises ``ValueError`` if
-            they differ.
-    """
-
-    @overload
-    def __init__[S2, R2](
-        self: Port[S2, R2, Single],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[False] = False,
-        initial: S2 | None = None,
-    ) -> None: ...
-    @overload
-    def __init__[S2, R2](
-        self: Port[S2, R2, Multi],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[True],
-        initial: S2 | None = None,
-    ) -> None: ...
     def __init__(
         self,
+        *,
         send: MessageSpec[S] | None = None,
         recv: MessageSpec[R] | None = None,
-        *,
-        multi: bool = False,
         initial: S | None = None,
     ) -> None:
-        self._init(send, recv, multi, initial)
-
-    def _init(
-        self,
-        send: MessageSpec[S] | None,
-        recv: MessageSpec[R] | None,
-        multi: bool,
-        initial: S | None,
-    ) -> None:
-        name = type(self).__name__
-        for direction, spec in (("send", send), ("recv", recv)):
-            if spec is not None and not isinstance(spec, TensorSpec | DictSpec):
-                raise TypeError(
-                    f"{name} {direction} must be a TensorSpec, a DictSpec or None, "
-                    f"got {type(spec).__name__}"
-                )
+        self._send_spec = send
+        self._recv_spec = recv
         # The tensors of the initial value in field order, copied to the host now
         # so that changing the value later changes nothing.
         self._initial: list[torch.Tensor] | None = None
         if initial is not None:
-            if send is None:
-                raise TypeError(f"{name} sends no messages, so it takes no initial")
-            tensors = to_core(cast(Spec, send), initial, f"{name} initial")
+            # initial is of the type of what send sends: Never without it.
+            spec = cast(MessageSpec[S], send)
+            tensors = to_core(spec, initial, f"{type(self).__name__} initial")
             self._initial = [t.clone() for t in tensors]
-        self._send_spec = send
-        self._recv_spec = recv
-        self._multi = multi
-        self._channels: list[Channel] = []
+        # Each peer and the channel to it, in the order they were connected.
+        self._peers: dict[AnyPort, Channel] = {}
         # "<owner class>.<attribute>", set when the port is first assigned as an
         # attribute of a node; names the port in errors and its repr.
         self._name: str | None = None
-        # Set by Network.build; a frozen port takes no more connections.
-        self._frozen = False
-        # Set by mujou.run: the slots recv and send use.
-        self._binding: Binding | None = None
 
     @property
     def send_spec(self) -> MessageSpec[S] | None:
@@ -198,39 +61,26 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         return self._recv_spec
 
     @property
-    def multi(self) -> bool:
-        """Whether this port takes any number of peers (else at most one)."""
-        return self._multi
-
-    @property
     def channels(self) -> tuple[Channel, ...]:
-        """The channels connected to this port, in the order they were connected."""
-        return tuple(self._channels)
+        """The channels of this port, in the order they were connected."""
+        return tuple(self._peers.values())
 
-    # Any: the peer may take any message types as long as they match at runtime.
-    def connect(self, other: Port[Any, Any, Any]) -> Channel:
-        """Connect this port to ``other`` and return the new channel.
+    def connect(self, other: Port[R, S] | MultiPort[R, S]) -> Channel:
+        """Connect this port to ``other`` and return the channel between them.
 
-        The channel is registered at both ports, so each can send to and receive
-        from the other. Connecting ``a`` to ``b`` and ``b`` to ``a`` are two
-        different channels.
+        The channel is registered at both ports, so each sends to and receives
+        from the other. Connecting the same two ports again, in either order,
+        returns the same channel. A port may connect to itself.
 
         Raises:
-            TypeError: The specs are not mutually reversed (``self.send_spec !=
-                other.recv_spec`` or ``self.recv_spec != other.send_spec``), or
-                neither direction has a message.
-            ValueError: ``other`` is this port, or a single-peer port is already
-                connected.
-            RuntimeError: Either port belongs to a tree that is already built (by
-                ``Network.build`` or ``mujou.run``).
+            TypeError: The specs are not mutually reversed: ``self.send_spec !=
+                other.recv_spec`` or ``self.recv_spec != other.send_spec``.
+            ValueError: A ``Port`` that receives would get a second peer (use a
+                ``MultiPort`` to receive from several).
         """
-        if self._frozen or other._frozen:
-            raise RuntimeError(
-                "cannot connect a port of a tree that is already built (by "
-                "Network.build() or mujou.run())"
-            )
-        if other is self:
-            raise ValueError(f"cannot connect a port to itself: {self._label()}")
+        channel = self._peers.get(other)
+        if channel is not None:
+            return channel
         # dict.fromkeys: ports of two instances of one class can read the same.
         mismatches = dict.fromkeys(
             f"{a._label()} sends {_or_nothing(a._send_spec)}, but {b._label()} "
@@ -240,75 +90,19 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         )
         if mismatches:
             raise TypeError("port specs do not match: " + "; ".join(mismatches))
-        if self._send_spec is None and self._recv_spec is None:
-            raise TypeError(
-                f"neither {self._label()} nor {other._label()} has a spec, so nothing "
-                "would flow"
-            )
-        for port in (self, other):
-            if not port._multi and port._channels:
+        for port, peer in ((self, other), (other, self)):
+            if isinstance(port, Port) and port._recv_spec is not None and port._peers:
+                (connected,) = port._peers
                 raise ValueError(
-                    f"{port._label()} takes one peer and is already connected; "
-                    "declare it with multi=True to take more"
+                    f"{port._label()} receives from one peer and is connected to "
+                    f"{connected._label()}, so it cannot take {peer._label()}; use a "
+                    "MultiPort to receive from several"
                 )
-        channel = _make_channel(self, other)
-        self._channels.append(channel)
-        other._channels.append(channel)
+        me = cast(AnyPort, self)  # every port is a Port or a MultiPort
+        channel = Channel(me, other)
+        self._peers[other] = channel
+        other._peers[me] = channel
         return channel
-
-    # The self-typed overloads make the return type depend on the peer count: one
-    # peer gives the message, many give a dict keyed by channel in connection order.
-    @overload
-    def recv[R2](self: Port[Any, R2, Single]) -> R2: ...
-    @overload
-    def recv[R2](self: Port[Any, R2, Multi]) -> dict[Channel, R2]: ...
-    def recv(self) -> Any:  # Any: the overloads above give the precise types
-        """Return the latest message received, without waiting for a new one.
-
-        A single-peer port returns the message itself. A multi-peer port returns
-        ``{channel: message}``, one entry per channel in connection order (``{}``
-        while unconnected).
-
-        The message comes from the peer's ``send`` or ``send_to``; an unconnected
-        single-peer port reads what the host writes with ``Run.write`` instead.
-        Until that writer first writes, the message (or that channel's entry) is
-        the initial value: the peer port's ``initial``, or else the recv spec's
-        ``zeros()``. For a port the host writes, it is the value in ``inputs`` of
-        ``mujou.run``, or else the ``zeros()``. A restored run takes it from
-        ``state``. ``recv_with_time`` tells whether the writer has written yet.
-
-        Every call copies into new tensors on the owning node's device, without
-        gradients, so changing them in place changes nothing else.
-
-        Call it only from the owning node's hooks while the network runs.
-
-        Raises:
-            RuntimeError: The network is not running, or the caller is not a hook
-                of the owning node (only the owner reads its port, and not in
-                its ``state_dict``).
-            TypeError: The port receives no messages.
-        """
-        return self._bound().recv(with_time=False)
-
-    @overload
-    def recv_with_time[R2](
-        self: Port[Any, R2, Single],
-    ) -> tuple[R2, _native.Timestamp | None]: ...
-    @overload
-    def recv_with_time[R2](
-        self: Port[Any, R2, Multi],
-    ) -> dict[Channel, tuple[R2, _native.Timestamp | None]]: ...
-    def recv_with_time(self) -> Any:  # Any: as recv
-        """Like ``recv``, but each message comes as ``(message, time)``.
-
-        ``time`` is the ``Timestamp`` on the run's timer at which the writer wrote
-        the message, or ``None`` while the writer has not written yet (the
-        message is then the initial value). The writer is the peer (its ``send``
-        or ``send_to``), or the host for an unconnected single-peer port
-        (``inputs`` of ``mujou.run`` or ``Run.write``). A restored run keeps the
-        times of the state, ``None`` included. Raises as ``recv`` does.
-        """
-        return self._bound().recv(with_time=True)
 
     def send(self, msg: S) -> None:
         """Send ``msg`` to every peer and to what the host reads (``Run.read``).
@@ -318,39 +112,15 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         nothing that was sent. A CUDA tensor is copied to the host on the node's
         stream. It never waits for the peers to read.
 
-        Call it only from the owning node's hooks while the network runs.
-
         Raises:
-            RuntimeError: The network is not running, or the caller is not a hook
-                of the owning node (only the owner writes its port, and not in
-                its ``state_dict``).
-            TypeError: The port sends no messages, a value is not a
-                ``torch.Tensor``, or a ``DictSpec`` message is not a dict with the
-                spec's keys.
+            RuntimeError: The caller is not a hook of the node that owns the port,
+                while it runs (or is its ``state_dict``).
+            TypeError: A value is not a ``torch.Tensor``, or a ``DictSpec``
+                message is not a dict with the spec's keys.
             ValueError: A shape or a dtype differs from the spec.
             BufferError: A tensor is not dense (``torch.strided``).
         """
-        self._bound().send(msg)
-
-    def send_to(self, channel: Channel, msg: S) -> None:
-        """Send ``msg`` only to the peer across ``channel``.
-
-        ``channel`` is one of ``channels`` (or a key of a multi-peer ``recv``).
-        Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
-        before the first ``send``, that is this port's ``initial`` (or the
-        ``zeros()`` of its send spec).
-        Copies and raises as ``send`` does, and raises ``ValueError``
-        when ``channel`` is not one of this port's.
-        """
-        self._bound().send_to(channel, msg)
-
-    def _bound(self) -> Binding:
-        if self._binding is None:
-            raise RuntimeError(
-                f"{self._label()} can only send and receive in its owning node's "
-                "hooks while the network runs (not in __init__)"
-            )
-        return self._binding
+        _wire(cast(AnyPort, self)).send(msg)  # as in connect
 
     def _label(self) -> str:
         """Name this port in an error: by its owner and attribute (e.g.
@@ -362,106 +132,161 @@ class Port[S = Never, R = Never, M: (Single, Multi) = Single]:
         name = "" if self._name is None else f"{self._name}, "
         return (
             f"{type(self).__name__}({name}send={self._send_spec!r}, "
-            f"recv={self._recv_spec!r}, multi={self._multi})"
+            f"recv={self._recv_spec!r})"
         )
 
 
-class PrevPort[S = Never, R = Never, M: (Single, Multi) = Single](Port[S, R, M]):
-    """A port for the previous side of a node or network: ``b.prev`` in
-    ``a.next.connect(b.prev)``.
+class Port[S = Never, R = Never](_Port[S, R]):
+    """A connection point that sends messages of type ``S`` and receives at most
+    one peer's messages of type ``R``.
 
-    It differs from ``Port`` only in its default: one peer, as ``Port``; pass
-    ``multi=True`` to merge several. It is usually named ``prev``.
+    Declare ports as attributes of a node in ``__init__``. ``send`` is the spec of
+    what the port sends and ``recv`` the spec of what it receives; omit one for a
+    one-way port (its message type is then ``Never``). ``recv()`` returns one
+    message, so a port that receives takes one peer; a port that only sends takes
+    any number, and ``send`` reaches them all. To receive from several peers of
+    one kind, use a ``MultiPort``; for inputs of different roles, use one port
+    each.
 
-    Example::
+    Two ports connect when the ``send`` of each equals the ``recv`` of the other.
+    A port may stay unconnected: the host then writes what it receives
+    (``Run.write``).
 
-        self.prev = PrevPort(send=TensorSpec((32, 784)), recv=TensorSpec((32, 784)))
-        x = self.prev.recv()  # torch.Tensor
-    """
+    ``initial`` is what the port has sent before its first ``send``: what its
+    peers receive and the host reads until then. It is copied when the port is
+    made. Without it, that is the ``zeros()`` of ``send``. A restored run takes
+    the values from the state instead.
 
-    @overload
-    def __init__[S2, R2](
-        self: PrevPort[S2, R2, Single],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[False] = False,
-        initial: S2 | None = None,
-    ) -> None: ...
-    @overload
-    def __init__[S2, R2](
-        self: PrevPort[S2, R2, Multi],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[True],
-        initial: S2 | None = None,
-    ) -> None: ...
-    def __init__(
-        self,
-        send: MessageSpec[S] | None = None,
-        recv: MessageSpec[R] | None = None,
-        *,
-        multi: bool = False,
-        initial: S | None = None,
-    ) -> None:
-        self._init(send, recv, multi, initial)
-
-
-class NextPort[S = Never, R = Never, M: (Single, Multi) = Multi](Port[S, R, M]):
-    """A port for the next side of a node or network: ``a.next`` in
-    ``a.next.connect(b.prev)``.
-
-    It differs from ``Port`` only in its default: any number of peers, since
-    branches usually start here; pass ``multi=False`` for one. It is usually named
-    ``next``.
+    Once assigned as an attribute of a node, the port is named
+    ``"<node class>.<attribute>"`` (e.g. ``"Shift.next"``) in errors and its
+    ``repr``; the first assignment names it.
 
     Example::
 
-        self.next = NextPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))
-        feedback = self.next.recv()  # dict[Channel, torch.Tensor]
-        self.next.send(h)  # to every peer
+        class Sensor(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.next = Port(send=TensorSpec((3,)), initial=torch.ones(3))
+
+
+        class Monitor(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.prev = Port(recv=TensorSpec((3,)))
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                x = self.prev.recv()  # torch.Tensor; ones until the sensor sends
+
+
+        sensor, monitor = Sensor(), Monitor()
+        sensor.next.connect(monitor.prev)
+
+    Raises:
+        TypeError: ``initial`` is not a tensor, or a dict of tensors with the
+            keys of ``send`` (as ``send`` raises). The shapes and dtypes of
+            ``initial`` are checked when a run starts: ``mujou.run`` raises
+            ``ValueError`` if they differ.
     """
 
-    @overload
-    def __init__[S2, R2](
-        self: NextPort[S2, R2, Multi],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[True] = True,
-        initial: S2 | None = None,
-    ) -> None: ...
-    @overload
-    def __init__[S2, R2](
-        self: NextPort[S2, R2, Single],
-        send: MessageSpec[S2] = _NO_SPEC,
-        recv: MessageSpec[R2] = _NO_SPEC,
-        *,
-        multi: Literal[False],
-        initial: S2 | None = None,
-    ) -> None: ...
-    def __init__(
-        self,
-        send: MessageSpec[S] | None = None,
-        recv: MessageSpec[R] | None = None,
-        *,
-        multi: bool = True,
-        initial: S | None = None,
-    ) -> None:
-        self._init(send, recv, multi, initial)
+    def recv(self) -> R:
+        """Return the latest message received, without waiting for a new one.
+
+        The message comes from the peer's ``send``; an unconnected port reads
+        what the host writes with ``Run.write`` instead. Until that writer first
+        writes, it is the initial value: the peer port's ``initial``, or else the
+        recv spec's ``zeros()``. For a port the host writes, it is the value in
+        ``inputs`` of ``mujou.run``, or else the ``zeros()``. A restored run takes
+        it from ``state``. ``recv_with_time`` tells whether the writer has
+        written yet.
+
+        Every call copies into new tensors on the owning node's device, without
+        gradients, so changing them in place changes nothing else.
+
+        Raises:
+            RuntimeError: The caller is not a hook of the node that owns the port,
+                while it runs (or is its ``state_dict``).
+        """
+        return cast(R, _one(self, with_time=False))
+
+    def recv_with_time(self) -> tuple[R, _native.Timestamp | None]:
+        """Like ``recv``, but return ``(message, time)``.
+
+        ``time`` is the ``Timestamp`` on the run's timer at which the writer wrote
+        the message, or ``None`` while the writer has not written yet (the
+        message is then the initial value). The writer is the peer (its ``send``
+        or ``send_to``), or the host for an unconnected port (``inputs`` of
+        ``mujou.run`` or ``Run.write``). A restored run keeps the times of the
+        state, ``None`` included. Raises as ``recv`` does.
+        """
+        # Quoted, here and below: an expression would be built at every call.
+        return cast("tuple[R, _native.Timestamp | None]", _one(self, with_time=True))
+
+
+class MultiPort[S = Never, R = Never](_Port[S, R]):
+    """A connection point that sends messages of type ``S`` and receives
+    messages of type ``R`` from any number of peers of one kind.
+
+    It is declared and connected as a ``Port`` is, but ``recv()`` returns
+    ``{channel: message}``, one entry per peer in connection order, and
+    ``send_to`` sends to one peer. Use it to merge or to branch peers that play
+    the same role; for inputs of different roles (a prediction and an error,
+    say), use one ``Port`` each. The host does not write to a ``MultiPort``.
+
+    Example::
+
+        class Sum(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.prev = MultiPort(recv=TensorSpec((3,)))
+                self.next = Port(send=TensorSpec((3,)))
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                self.next.send(sum(self.prev.recv().values(), torch.zeros(3)))
+
+    Raises:
+        TypeError: As ``Port`` raises for ``initial``.
+    """
+
+    def recv(self) -> dict[Channel, R]:
+        """Return ``{channel: message}``, the latest message of each peer in
+        connection order (``{}`` while unconnected), as ``Port.recv`` returns the
+        one message of its peer.
+
+        Raises:
+            RuntimeError: As ``Port.recv`` raises.
+        """
+        return cast("dict[Channel, R]", _many(self, with_time=False))
+
+    def recv_with_time(self) -> dict[Channel, tuple[R, _native.Timestamp | None]]:
+        """Like ``recv``, but each message comes as ``(message, time)``, as
+        ``Port.recv_with_time`` gives it."""
+        return cast(
+            "dict[Channel, tuple[R, _native.Timestamp | None]]",
+            _many(self, with_time=True),
+        )
+
+    def send_to(self, channel: Channel, msg: S) -> None:
+        """Send ``msg`` only to the peer across ``channel``, one of ``channels``
+        (a key of ``recv``).
+
+        Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
+        before the first ``send``, that is this port's ``initial`` (or the
+        ``zeros()`` of its send spec). Copies and raises as ``send`` does.
+        """
+        _wire(self).send_to(channel, msg)
 
 
 @final
 class Channel:
-    """One connection between two ports, made by ``Port.connect``.
+    """One connection between two ports, which ``connect`` makes.
 
-    A channel is the handle of a peer: a multi-peer port's ``recv`` is keyed by
-    channel and ``send_to`` takes one. Channels compare by identity, so two
-    connections between the same ports are two different keys.
-
-    It cannot be created directly: a channel that its ports do not know would
-    connect nothing.
+    A channel is the handle of a peer: a ``MultiPort``'s ``recv`` is keyed by
+    channel, and ``send_to`` takes one. A channel made otherwise connects
+    nothing.
 
     Example::
 
@@ -469,31 +294,19 @@ class Channel:
         ch.other(a.next) is b.prev  # True
     """
 
-    # Any: a channel joins ports of any message types (connect checks they match).
-    _ends: tuple[Port[Any, Any, Any], Port[Any, Any, Any]]
-
-    def __init__(self) -> Never:
-        raise TypeError("a Channel is made by Port.connect()")
+    def __init__(self, a: AnyPort, b: AnyPort) -> None:
+        self._ends = (a, b)
 
     @property
-    def ends(
-        self,
-    ) -> tuple[Port[Any, Any, Any], Port[Any, Any, Any]]:
+    def ends(self) -> tuple[AnyPort, AnyPort]:
         """The two ports: the one ``connect`` was called on, then its argument."""
         return self._ends
 
-    def other(self, port: Port[Any, Any, Any]) -> Port[Any, Any, Any]:
-        """Return the end of this channel that is not ``port``.
-
-        Raises:
-            ValueError: ``port`` is not an end of this channel.
-        """
+    def other(self, port: AnyPort) -> AnyPort:
+        """Return the end of this channel that is not ``port`` (``port`` itself
+        for a port connected to itself)."""
         a, b = self._ends
-        if port is a:
-            return b
-        if port is b:
-            return a
-        raise ValueError(f"{port!r} is not an end of this channel")
+        return b if port is a else a
 
     @override
     def __repr__(self) -> str:
@@ -501,18 +314,98 @@ class Channel:
         return f"Channel({a!r} <-> {b!r})"
 
 
-def _make_channel(a: Port[Any, Any, Any], b: Port[Any, Any, Any]) -> Channel:
-    channel = object.__new__(Channel)
-    channel._ends = (a, b)  # pyright: ignore[reportPrivateUsage]  # Channel's own module
-    return channel
+@final
+@dataclass(frozen=True, slots=True)
+class Wire:
+    """What one port of a running node reads and writes: the slots that the run
+    laid out for it (``session.py``). The node's driver holds it."""
+
+    # How errors name the port.
+    label: str
+    # Where the received messages arrive: the owning node's device.
+    device: torch.device
+    send_spec: MessageSpec[Any] | None
+    recv_spec: MessageSpec[Any] | None
+    # Where send writes: None for a port that does not send.
+    outlet: _native.Outlet | None
+    # What the port reads, (channel, slot) in connection order: an unconnected
+    # Port that receives reads the slot the host writes, under None.
+    sources: tuple[tuple[Channel | None, AnySlot], ...]
+    # The index of each channel among the outlet's channel slots, for send_to.
+    targets: Mapping[Channel, int]
+
+    def read(self, slot: AnySlot, with_time: bool) -> object:
+        message = slot.read()
+        spec = cast("MessageSpec[Any]", self.recv_spec)  # a source has a recv spec
+        value = from_core(spec, message.values, self.device)
+        return (value, message.timestamp) if with_time else value
+
+    def send(self, msg: object) -> None:
+        self._outlet().send(self._tensors(msg))
+
+    def send_to(self, channel: Channel, msg: object) -> None:
+        self._outlet().send_to(self.targets[channel], self._tensors(msg))
+
+    def _outlet(self) -> _native.Outlet:
+        return cast(_native.Outlet, self.outlet)  # Never is the type of what it sends
+
+    def _tensors(self, msg: object) -> list[torch.Tensor]:
+        """The tensors of ``msg`` in host memory, for the outlet to copy."""
+        return to_core(cast("MessageSpec[Any]", self.send_spec), msg, self.label)
 
 
-def assign_owner(port: Port[Any, Any, Any], owner: str, attribute: str) -> None:
-    """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
-    (a node calls this as the port is assigned; the first assignment wins, so a
-    second name does not rename the port, and networks never do)."""
-    if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
-        port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
+class Running(Protocol):
+    """What a hook sees of the node it runs as: the node's driver
+    (``driver.py``)."""
+
+    @property
+    def node(self) -> object: ...
+
+    @property
+    def wires(self) -> Mapping[AnyPort, Wire]:
+        """The wires of the node's ports: none in its ``state_dict``."""
+        ...
+
+    @property
+    def clock(self) -> _native.ReadOnlyTimer: ...
+
+
+def running() -> Running | None:
+    """The driver of the node whose hook the calling thread runs, or ``None``
+    outside the hooks."""
+    return cast("Running | None", _native.current())
+
+
+_OUTSIDE: Final = (
+    "is used only in the hooks of the node that owns it, while it runs (a port not "
+    "in state_dict); declare ports in __init__, and use run.read, run.write and "
+    "run.timer from the host"
+)
+
+
+def outside(name: str) -> RuntimeError:
+    """The error for a port or a node's timer, which ``name`` names, used
+    outside the hooks of the node that owns it."""
+    return RuntimeError(f"{name} {_OUTSIDE}")
+
+
+def _wire(port: AnyPort) -> Wire:
+    current = running()
+    found = None if current is None else current.wires.get(port)
+    if found is None:
+        raise outside(label(port))
+    return found
+
+
+def _one(port: AnyPort, with_time: bool) -> object:
+    wire = _wire(port)
+    ((_, slot),) = wire.sources
+    return wire.read(slot, with_time)
+
+
+def _many(port: AnyPort, with_time: bool) -> dict[Channel | None, object]:
+    wire = _wire(port)
+    return {channel: wire.read(slot, with_time) for channel, slot in wire.sources}
 
 
 def _or_nothing(spec: object) -> str:
@@ -520,34 +413,20 @@ def _or_nothing(spec: object) -> str:
     return "nothing" if spec is None else repr(spec)
 
 
-def label(port: Port[Any, Any, Any]) -> str:
+def assign_owner(port: AnyPort, owner: str, attribute: str) -> None:
+    """Name ``port`` as ``"<owner>.<attribute>"`` unless it has a name already
+    (a node calls this as the port is assigned; the first assignment wins, so a
+    second name does not rename the port, and networks never do)."""
+    if port._name is None:  # pyright: ignore[reportPrivateUsage]  # Port's own module
+        port._name = f"{owner}.{attribute}"  # pyright: ignore[reportPrivateUsage]
+
+
+def label(port: AnyPort) -> str:
     """Name ``port`` in an error by its owner and attribute (``"Shift.next"``)."""
     return port._label()  # pyright: ignore[reportPrivateUsage]  # Port's own module
 
 
-def initial(port: Port[Any, Any, Any]) -> list[torch.Tensor] | None:
+def initial(port: AnyPort) -> list[torch.Tensor] | None:
     """The tensors of ``port``'s initial value in field order, or ``None`` (the
     run's ``Session`` writes them in place of the zeros)."""
     return port._initial  # pyright: ignore[reportPrivateUsage]  # Port's own module
-
-
-def bind(port: Port[Any, Any, Any], binding: Binding) -> None:
-    """Bind ``port`` to its slots (the run's ``Session`` calls this)."""
-    port._binding = binding  # pyright: ignore[reportPrivateUsage]  # Port's own module
-
-
-# Any (here and below): freezing does not depend on the message types.
-def freeze(port: Port[Any, Any, Any]) -> None:
-    """Make ``port`` reject further connections (``Network.build`` calls this)."""
-    port._frozen = True  # pyright: ignore[reportPrivateUsage]  # Port's own module
-
-
-def thaw(port: Port[Any, Any, Any]) -> None:
-    """Let ``port`` take connections again (``mujou.run`` undoing a build whose run
-    was refused)."""
-    port._frozen = False  # pyright: ignore[reportPrivateUsage]  # Port's own module
-
-
-def is_frozen(port: Port[Any, Any, Any]) -> bool:
-    """Whether ``port`` belongs to a built network."""
-    return port._frozen  # pyright: ignore[reportPrivateUsage]  # Port's own module

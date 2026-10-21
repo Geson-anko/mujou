@@ -14,7 +14,7 @@ import torch
 from torch import nn
 
 import mujou
-from mujou import DictSpec, NextPort, Node, Port, PrevPort, TensorSpec
+from mujou import DictSpec, Node, Port, TensorSpec
 from mujou.time import Timestamp
 
 BATCH = 8
@@ -37,7 +37,7 @@ class Teacher(Node):
     def __init__(self) -> None:
         super().__init__(seed=0, period=0.01)
         self.a = Port(recv=SCALAR)  # unconnected: the host writes it
-        self.next = NextPort(send=SAMPLE)
+        self.next = Port(send=SAMPLE)
 
     @override
     def on_update(self, dt: float) -> None:
@@ -53,7 +53,7 @@ class Learner(Node):
         # Updating more often than the teacher sends would only re-read its batch.
         super().__init__(seed=0, period=0.005)
         self.rate = rate
-        self.prev = PrevPort(recv=SAMPLE)
+        self.prev = Port(recv=SAMPLE)
         self.loss = Port(send=SCALAR, initial=torch.tensor(math.inf))  # no batch yet
 
     @override

@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
-from mujou._core.port import Port, assign_owner
+from mujou._core.port import AnyPort, MultiPort, Port, assign_owner
 
 if TYPE_CHECKING:
     from mujou._core.network import Network
@@ -22,9 +22,9 @@ class Component:
     """The common base of ``Node`` and ``Network``: something with ports.
 
     As ``nn.Module`` registers its parameters and submodules, a component
-    registers what is assigned to its attributes: every ``Port`` and, on a
-    network, every ``Node`` and ``Network``, by attribute name in the order of
-    assignment. Assigning any other value under that name, or ``del``, removes
+    registers what is assigned to its attributes: every ``Port`` and
+    ``MultiPort`` and, on a network, every ``Node`` and ``Network``, by
+    attribute name in the order of assignment. Assigning any other value under that name, or ``del``, removes
     it. ``Network.build`` walks only what is registered, so ports and components
     kept in lists or dicts are not part of the network.
 
@@ -36,7 +36,7 @@ class Component:
     # Any: ports of every message type are handled alike. Each registry is
     # replaced, never changed, so that a shallow copy (copy.copy) does not share
     # changes with the original.
-    _ports: Mapping[str, Port[Any, Any, Any]] = _NOT_INITIALIZED
+    _ports: Mapping[str, AnyPort] = _NOT_INITIALIZED
     _children: Mapping[str, Node | Network] = _NOT_INITIALIZED
 
     def __init__(self) -> None:
@@ -64,10 +64,10 @@ class Component:
 
 # A tuple, not a union: isinstance checks a tuple several times faster, and
 # Component.__setattr__ checks every assignment.
-_REGISTERED: Final = (Port, Component)
+_REGISTERED: Final = (Port, MultiPort, Component)
 
 
-def ports_of(component: Component) -> Mapping[str, Port[Any, Any, Any]]:
+def ports_of(component: Component) -> Mapping[str, AnyPort]:
     """The ports registered on ``component``: attribute name to port, in the order
     of assignment."""
     return component._ports  # pyright: ignore[reportPrivateUsage]  # Component's own module
@@ -91,9 +91,7 @@ def is_data_descriptor(klass: type, name: str) -> bool:
     return False
 
 
-def _register(
-    component: Component, name: str, value: Port[Any, Any, Any] | Component
-) -> None:
+def _register(component: Component, name: str, value: AnyPort | Component) -> None:
     """Register ``value`` under ``name`` (or nothing for a property, whose setter
     assigns again).
 
@@ -105,7 +103,7 @@ def _register(
     # Imported here: node.py imports this module.
     from mujou._core.node import Node
 
-    is_port = isinstance(value, Port)
+    is_port = isinstance(value, Port | MultiPort)
     is_node = isinstance(component, Node)
     if ports_of(component) is _NOT_INITIALIZED:
         what = "port" if is_port else type(value).__name__

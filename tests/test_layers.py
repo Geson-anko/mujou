@@ -21,7 +21,6 @@ LAYERS: list[set[str]] = [
     {"mujou._core.spec"},
     {"mujou._core.codec"},
     {"mujou._core.port"},
-    {"mujou._core.binding"},
     {"mujou._core.component"},
     {"mujou._core.node"},
     {"mujou._core.driver"},
@@ -30,7 +29,7 @@ LAYERS: list[set[str]] = [
     {"mujou._core.state", "mujou._core.lifetime"},
     {"mujou._core.session"},
     {"mujou._core.run"},
-    {"mujou", "mujou.time", "mujou.testing", "mujou.typing"},
+    {"mujou", "mujou.time", "mujou.testing"},
     {
         "mujou._core.pc",
         "mujou._core.pc.clock",
@@ -57,14 +56,10 @@ NATIVE = {
 # (importer, imported)
 ALLOWED = {
     ("mujou", "mujou.time"),
-    ("mujou", "mujou.typing"),
-    ("mujou._core.binding", EXTENSION),
-    ("mujou._core.binding", "mujou._core.node"),
     ("mujou._core.component", "mujou._core.graph"),
     ("mujou._core.component", "mujou._core.network"),
     ("mujou._core.component", "mujou._core.node"),
     ("mujou._core.network", "mujou._core.graph"),
-    ("mujou._core.port", "mujou._core.binding"),
     ("mujou._core.session", EXTENSION),
 }
 

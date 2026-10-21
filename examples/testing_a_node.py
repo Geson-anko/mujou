@@ -14,7 +14,7 @@ import torch
 
 import mujou
 import mujou.testing
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 VECTOR = TensorSpec((2,), torch.float64)
 
@@ -25,8 +25,8 @@ class Leaky(Node):
     def __init__(self, tau: float) -> None:
         super().__init__()
         self.tau = tau
-        self.prev = PrevPort(recv=VECTOR)
-        self.next = NextPort(send=VECTOR)
+        self.prev = Port(recv=VECTOR)
+        self.next = Port(send=VECTOR)
 
     @override
     def on_start(self) -> None:

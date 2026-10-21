@@ -2,8 +2,9 @@
 host's reads and writes (``specs/network.md``, ``specs/execution-model.md``).
 
 ``mujou.run`` creates one ``Session`` per run, on the run's timer. It lays out the
-slots of every port on the run's clock (the reading side of that timer), binds
-each port to them (``binding.py``), and starts the runtime on the same clock. The
+slots of every port on the run's clock (the reading side of that timer), gives the
+driver of each node the wires of its ports to them (``port.py``), and starts the
+runtime on the same clock. The
 state tree is ``state.py``'s, and the registry of running runs ``lifetime.py``'s.
 """
 
@@ -15,13 +16,20 @@ from typing import Any, Final, NamedTuple, cast, final
 import torch
 
 from mujou._core import _native, lifetime
-from mujou._core.binding import AnyPort, AnySlot, Binding, as_spec
 from mujou._core.codec import from_core, schema, to_core
 from mujou._core.driver import Driver
 from mujou._core.graph import Graph, ports
 from mujou._core.node import Node, checked_dedicated, checked_period
-from mujou._core.port import Channel, bind, initial, label
-from mujou._core.spec import Spec
+from mujou._core.port import (
+    AnyPort,
+    AnySlot,
+    Channel,
+    MultiPort,
+    Wire,
+    initial,
+    label,
+)
+from mujou._core.spec import MessageSpec
 from mujou._core.state import SlotSpecs, StateDict, make_tree, read_tree
 
 # Real seconds between the checks of `subscribe` for the end of the run.
@@ -64,7 +72,7 @@ class Session:
         # group.
         self._group = _native.InputGroup(clock=self._clock)
         self._outlets: dict[AnyPort, _native.Outlet] = {}
-        self._inputs: dict[AnyPort, tuple[_native.InputSlot, Spec]] = {}
+        self._inputs: dict[AnyPort, tuple[_native.InputSlot, MessageSpec[Any]]] = {}
         # Every slot by name, in the order of the graph's ports, for the state tree.
         self._slots: dict[str, SlotSpecs] = {}
         # Every port of the run by how its errors name it.
@@ -79,16 +87,15 @@ class Session:
         # Every outlet first: a port reads the channel slots of its peers' outlets.
         for port in owners:
             self._add_outlet(port)
+        # The wires of each node's ports, in the order of the nodes.
+        self._wires: list[dict[AnyPort, Wire]] = [{} for _ in self._nodes]
         for port, (index, _) in owners.items():
-            name = self._labels[port]
-            sources = self._sources(port, name)
-            owner = graph.nodes[index][1]
-            bind(port, Binding(owner, name, port, self._outlets.get(port), sources))
+            self._wires[index][port] = self._wire(port, self._nodes[index])
 
         self._runtime: _native.Runtime | None = None
 
     def _add_outlet(self, port: AnyPort) -> None:
-        spec = as_spec(port.send_spec)
+        spec = port.send_spec
         if spec is None:
             return
         outlet = _native.Outlet(
@@ -108,11 +115,21 @@ class Session:
             for slot in slots:
                 slot.restore(values, None)
 
-    def _sources(
-        self, port: AnyPort, name: str
-    ) -> list[tuple[Channel | None, AnySlot]]:
-        """The slots ``port`` reads, as ``Binding`` takes them."""
-        spec = as_spec(port.recv_spec)
+    def _wire(self, port: AnyPort, node: Node) -> Wire:
+        """The wire of ``port``, a port of ``node``, to its slots."""
+        return Wire(
+            label=self._labels[port],
+            device=node.device,
+            send_spec=port.send_spec,
+            recv_spec=port.recv_spec,
+            outlet=self._outlets.get(port),
+            sources=tuple(self._sources(port)),
+            targets={channel: k for k, channel in enumerate(port.channels)},
+        )
+
+    def _sources(self, port: AnyPort) -> list[tuple[Channel | None, AnySlot]]:
+        """The slots ``port`` reads, as ``Wire.sources`` holds them."""
+        spec = port.recv_spec
         if spec is None:
             return []
         if port.channels:
@@ -123,10 +140,10 @@ class Session:
                 k = peer.channels.index(channel)
                 sources.append((channel, self._outlets[peer].channel(k)))
             return sources
-        if port.multi:
+        if isinstance(port, MultiPort):
             return []
-        # An unconnected single-peer port reads what the host writes.
-        slot = self._group.input(schema(spec), name)
+        # An unconnected Port reads what the host writes.
+        slot = self._group.input(schema(spec), self._labels[port])
         self._inputs[port] = (slot, spec)
         self._slots[slot.name] = (slot, spec)
         return [(None, slot)]
@@ -179,15 +196,20 @@ class Session:
             states, last_update_ns = restored["states"], restored["last_update_ns"]
         return [
             NodeSpec(
-                Driver(node, self._clock),
+                Driver(node, self._clock, wires),
                 name,
                 checked_period(node),
                 checked_dedicated(node),
                 ns,
                 s,
             )
-            for node, name, ns, s in zip(
-                self._nodes, self._names(), last_update_ns, states, strict=True
+            for node, wires, name, ns, s in zip(
+                self._nodes,
+                self._wires,
+                self._names(),
+                last_update_ns,
+                states,
+                strict=True,
             )
         ]
 
@@ -316,7 +338,7 @@ class Session:
         self,
         runtime: _native.Runtime,
         outbox: _native.Slot,
-        spec: Spec,
+        spec: MessageSpec[Any],
         last: _native.Message,
         timeout: float,
         deadline: float,
@@ -346,7 +368,7 @@ class Session:
             last = message
             yield from_core(spec, message.values, _CPU), message.timestamp
 
-    def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, Spec]:
+    def _writable(self, port: AnyPort) -> tuple[_native.InputSlot, MessageSpec[Any]]:
         name = self.label(port)
         if port in self._inputs:
             return self._inputs[port]
@@ -355,15 +377,16 @@ class Session:
         elif port.channels:
             reason = "is connected (only unconnected ports can be written)"
         else:
-            reason = "takes many peers (only single-peer ports can be written)"
+            reason = "is a MultiPort (the host writes to a Port)"
         raise ValueError(f"cannot write the port {name!r}: it {reason}")
 
-    def _outbox(self, port: AnyPort) -> tuple[_native.Slot, Spec]:
+    def _outbox(self, port: AnyPort) -> tuple[_native.Slot, MessageSpec[Any]]:
         name = self.label(port)
         outlet = self._outlets.get(port)
         if outlet is None:
             raise ValueError(f"cannot read the port {name!r}: it sends no messages")
-        return outlet.outbox, cast(Spec, port.send_spec)
+        # An outlet exists only with a send spec.
+        return outlet.outbox, cast(MessageSpec[Any], port.send_spec)
 
     def label(self, port: AnyPort) -> str:
         """Name ``port`` in the host's errors: by its path, or as ``"Owner.attr"``

@@ -46,7 +46,7 @@ While the GIL is enabled (on a build of Python with it, or on the free-threaded 
 The host can write to a port that:
 
 - is unconnected
-- takes one peer
+- is a `Port` (not a `MultiPort`)
 - has a receive type
 
 Nodes write to connected ports, so the host cannot write to them.

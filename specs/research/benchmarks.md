@@ -305,3 +305,18 @@ PC の y、mask、time を `Activity` のフィールドとして運び、各ノ
 - R12: MNIST の悪化は 5% 未満（epoch の時間で 1% 未満、l1 の更新回数で −0.3%）。
 - 密な y では、1 ステップが 25〜40 µs（1.5〜2.8%）長くなった。y（64 KB）を 3 ホップでそれぞれコピーして送り、受け取るときにもコピーする分で、1 ホップあたり 10 µs ほどになる。計算（784-256 の層の forward と VJP で約 600 µs）に比べて小さい。ラベルの y（512 B）では差が測定の揺れに埋もれる。
 - CUDA のノードでの値（各ホップで device との往復が増える）は未計測（GPU なし）。
+
+## ステップ 8 の後（Port と MultiPort。Wire を Driver が持つ形にした後。R9）
+
+`Binding` を消し、Port のメソッドが、いま hook を走らせている Driver の `wires` から自分の `Wire` を引く形にした後に、同じマシンで 6 回測った（1 回目の 3 回は、下の修正の前）。
+
+| 測定 | ステップ 1 の基準値 | ステップ 8 の後（修正後の 5 回の範囲） |
+| --- | --- | --- |
+| `ports.py` scalar の send / recv / recv_with_time（µs） | 3.41 / 2.32 / 2.33 | 3.35〜3.42 / 2.15〜2.25 / 2.20〜2.27 |
+| `ports.py` (64,256) の send / recv / recv_with_time（µs） | 4.49 / 3.20 / 3.27 | 4.08〜4.13 / 3.07〜3.17 / 3.12〜3.18 |
+| `ports.py` (64,784) の send / recv / recv_with_time（µs） | 7.31 / 5.21 / 5.27 | 5.89〜6.41 / 4.88〜5.14 / 4.92〜5.24 |
+| `ports.py` activity の send / recv / recv_with_time（µs） | 9.78 / 7.06 / 7.14 | 8.32〜8.48 / 7.02〜7.22 / 7.09〜7.31 |
+| MNIST の 1 epoch（time scale 2）の学習の時間 | 15.3 s | 15.3 s（prequential 92.27%、test 96.43%） |
+
+- R9: 悪化は、activity の recv の +2.3% と recv_with_time の +2.4%（どちらも範囲の上端）が最大で、5% 未満。
+- 最初の測定では recv が 15%、recv_with_time が 30% 遅かった。原因は、hot path の `typing.cast` の型の式（`MessageSpec[Any]`、`tuple[R, Timestamp | None]`）が呼ぶたびに評価されていたこと。式を文字列にして解消した（`codec.fields` の `DictSpec[Any]` も同じ）。

@@ -2,17 +2,16 @@
 
 import importlib.metadata
 
-# The submodules, so that `import mujou` is enough for `mujou.time.Timer` and
-# `mujou.typing.Multi`. Not in __all__: a star import would shadow the standard
-# `time` and `typing`.
-from mujou import time as time, typing as typing
+# The submodule, so that `import mujou` is enough for `mujou.time.Timer`. Not in
+# __all__: a star import would shadow the standard `time`.
+from mujou import time as time
 from mujou._core.errors import NetworkError
 from mujou._core.graph import Graph
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
-from mujou._core.port import Channel, NextPort, Port, PrevPort
+from mujou._core.port import Channel, MultiPort, Port
 from mujou._core.run import Run, run
-from mujou._core.spec import DictSpec, TensorSpec
+from mujou._core.spec import DictSpec, MessageSpec, TensorSpec
 from mujou._core.state import StateDict
 
 __all__ = [
@@ -20,12 +19,12 @@ __all__ = [
     "DictSpec",
     "Graph",
     "Group",
+    "MessageSpec",
+    "MultiPort",
     "Network",
     "NetworkError",
-    "NextPort",
     "Node",
     "Port",
-    "PrevPort",
     "Run",
     "StateDict",
     "TensorSpec",

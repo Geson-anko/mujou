@@ -10,12 +10,12 @@ class TestPublicNames:
             "DictSpec",
             "Graph",
             "Group",
+            "MessageSpec",
+            "MultiPort",
             "Network",
             "NetworkError",
-            "NextPort",
             "Node",
             "Port",
-            "PrevPort",
             "Run",
             "StateDict",
             "TensorSpec",
@@ -27,11 +27,6 @@ class TestPublicNames:
         # A star import must not shadow the standard `time`.
         assert "time" not in mujou.__all__
         assert mujou.time.__name__ == "mujou.time"
-
-    def test_typing_is_a_submodule_outside_all(self):
-        # A star import must not shadow the standard `typing`.
-        assert "typing" not in mujou.__all__
-        assert mujou.typing.__name__ == "mujou.typing"
 
 
 class TestPcPublicNames:

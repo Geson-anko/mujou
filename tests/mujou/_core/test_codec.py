@@ -1,12 +1,12 @@
 from collections.abc import Sequence
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import pytest
 import torch
 
 from mujou._core._native import Outlet, ReadOnlyTimer, VirtualTimer
 from mujou._core.codec import fields, from_core, schema, to_core
-from mujou._core.spec import DLPACK, DictSpec, Spec, TensorSpec
+from mujou._core.spec import DLPACK, DictSpec, MessageSpec, TensorSpec
 
 CPU = torch.device("cpu")
 
@@ -36,7 +36,9 @@ def bits(t: torch.Tensor) -> torch.Tensor:
     return t.reshape(-1).view(torch.uint8)
 
 
-def through_the_core(spec: Spec, msg: object, label: str = "a.next") -> object:
+def through_the_core(
+    spec: MessageSpec[Any], msg: object, label: str = "a.next"
+) -> object:
     """Send ``msg`` through an outlet of ``spec`` and read it back, as a port
     and the host do."""
     outlet = Outlet(schema(spec), 0, label, clock=ReadOnlyTimer(VirtualTimer()))
@@ -128,7 +130,7 @@ class TestStructure:
         ],
     )
     def test_names_the_message_and_what_it_got(
-        self, spec: Spec, msg: object, message: str
+        self, spec: MessageSpec[Any], msg: object, message: str
     ):
         with pytest.raises(TypeError, match=f"^{message}$"):
             to_core(spec, msg, "a.next")

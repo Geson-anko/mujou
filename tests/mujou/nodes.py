@@ -8,7 +8,7 @@ import torch
 
 from mujou._core.network import Network
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.port import MultiPort, Port
 from mujou._core.spec import TensorSpec
 from mujou.time import Timestamp
 
@@ -28,8 +28,8 @@ class Leaky(Node):
 
     def __init__(self, tau: float = 1.0, raise_at: int | None = None) -> None:
         super().__init__()
-        self.prev = PrevPort(recv=vec())
-        self.next = NextPort(send=vec())
+        self.prev = Port(recv=vec())
+        self.next = Port(send=vec())
         self.tau = tau
         self.raise_at = raise_at
         # Set by a test to make the next on_update raise.
@@ -92,7 +92,7 @@ class Pair(Node):
         super().__init__()
         self.x = Port(recv=vec())
         self.y = Port(recv=vec())
-        self.many = Port(recv=vec(), multi=True)
+        self.many = MultiPort(recv=vec())
         self.out = Port(send=vec())
         self.seen: list[
             tuple[
@@ -140,7 +140,7 @@ class Probe(Node):
     def __init__(
         self,
         update: Callable[[], object] = lambda: None,
-        **ports: Port[Any, Any, Any],
+        **ports: Port[Any, Any] | MultiPort[Any, Any],
     ) -> None:
         super().__init__(device=self.on_device)
         for name, port in ports.items():
@@ -162,8 +162,8 @@ class Hidden(Node):
     def __init__(self) -> None:
         super().__init__()
         spec = TensorSpec((2, 3))
-        self.prev = PrevPort(send=spec, recv=spec)
-        self.next = NextPort(send=spec, recv=spec)
+        self.prev = Port(send=spec, recv=spec)
+        self.next = MultiPort(send=spec, recv=spec)
 
 
 def assert_same_tree(actual: Any, expected: Any) -> None:

@@ -33,11 +33,9 @@
 
 2 つの Port は `a.next.connect(b.prev)` のように `Port.connect` でつなぐ。ノードとネットワークは `connect` を持たない。ノードの入出力は複数ありうるので、Port を 2 つとも書くことでどの経路をつなぐかが常に読み取れる。
 
-慣習では前のノード側の Port を `PrevPort` にして `prev`、次のノード側の Port を `NextPort` にして `next` と名付ける。こうするとつないだ列が `a.next.connect(b.prev)` と読める。
+慣習では前のノード側の Port を `prev`、次のノード側の Port を `next` と名付ける。こうするとつないだ列が `a.next.connect(b.prev)` と読める。名前は向きを読みやすくするためだけのもので、1 つのノードが Port をいくつ持ってもよい。
 
-名前と種類は向きを読みやすくするためだけのもの。`PrevPort` と `NextPort` が `Port` と違うのは既定で取る相手の数（`PrevPort` は 1 つ、`NextPort` は複数）だけで、1 つのノードがそれぞれをいくつ持ってもよい。
-
-接続できるのは、片方の `send` の spec がもう片方の `recv` の spec と一致し、逆向きも一致するときだけ。一致しなければ `connect` を呼んだ時点で `TypeError` になる。相手を 1 つしか取らない Port に 2 本目の Channel をつなぐと `ValueError` になる。
+接続できるのは、片方の `send` の spec がもう片方の `recv` の spec と一致し、逆向きも一致するときだけ。一致しなければ `connect` を呼んだ時点で `TypeError` になる。受け取る `Port` の相手は 1 つだけで、2 つ目の相手をつなぐと `ValueError` になる（複数の相手から受け取るには `MultiPort` を使う）。同じ 2 つの Port をもう一度つなぐと、すでにある Channel が返る。
 
 `connect` は作った接続（`Channel`）を返す。これは分岐で相手ごとに違う値を送るときに使う（このページの[分岐と合流](#%E5%88%86%E5%B2%90%E3%81%A8%E5%90%88%E6%B5%81)）。
 
@@ -76,7 +74,7 @@ class Classifier(mujou.Network):
         self.teacher = self.head.teacher
 ```
 
-`Hidden` と `Head` はそれぞれ `PrevPort` と `NextPort` を持つノードとする。`Head` は教師信号を受け取る `Port`（`teacher`）も持つ。
+`Hidden` と `Head` はそれぞれ `prev` と `next` の Port を持つノードとする。`Head` は教師信号を受け取る Port `teacher` も持つ。
 
 ノードはルートからの属性名を `.` でつないだパスで区別される。この例のノードのパスは `"body.l1"`、`"body.l2"`、`"head"` になる。
 
@@ -96,12 +94,14 @@ class Classifier(mujou.Network):
 
 ### 分岐: 送る側
 
-`NextPort` は既定で複数の相手を取れるので、`a.next.connect(b.prev)` と `a.next.connect(c.prev)` を続けて書けば分岐する。送り方は 2 つある。
+送るだけの `Port` は相手をいくつでも取れるので、`a.next.connect(b.prev)` と `a.next.connect(c.prev)` を続けて書けば分岐する。`MultiPort` も相手をいくつでも取れ、送り方が 2 つある。
 
 | 送り方                    | 送り先                   | `Run.read` で読める値 |
 | ------------------------- | ------------------------ | --------------------- |
 | `send(value)`             | すべての相手に同じ値     | 更新される            |
 | `send_to(channel, value)` | `channel` の先の相手だけ | 更新されない          |
+
+`Port` の送り方は `send` だけ。
 
 `send_to` だけを使う Port をホストが `Run.read` で読むと、その Port の初期値（`initial`。無ければゼロ）が返る。`send_to` で送った値をホストが読む方法は無い。
 
@@ -117,13 +117,13 @@ class Classifier(mujou.Network):
 
 ### 合流: 受け取る側
 
-`PrevPort(multi=True)` は複数の相手から受け取る。相手が複数の Port の `recv()` は `Channel` をキーにした dict をつないだ順に返す。まだ一度も送っていない相手の Channel の値は、相手の Port の初期値になる（`initial` を宣言していなければゼロ）。
+`MultiPort` は複数の相手から受け取る。その `recv()` は `Channel` をキーにした dict をつないだ順に返す。まだ一度も送っていない相手の Channel の値は、相手の Port の初期値になる（`initial` を宣言していなければゼロ）。
 
 複数の値をどう束ねるか（足す、平均する、相手ごとに重みを掛ける）は受け取るノードが決め、mujou は束ねない。上の例の `Sum` は足している。
 
-相手ごとに扱いを変えるときは、`send_to` と同じく相手ごとの `Channel` を受け取るノードに持たせる。`self.sum.from_double = self.double.next.connect(self.sum.prev)` とし、ノードの中で `self.prev.recv()[self.from_double]` と読む。
+相手ごとに扱いを変えるときは、`send_to` と同じく相手ごとの `Channel` を受け取るノードに持たせる。`self.sum.from_double = self.double.next.connect(self.sum.prev)` とし、ノードの中で `self.prev.recv()[self.from_double]` と読む。役割の違う入力（予測と誤差など）は、代わりに入力ごとに `Port` を宣言して受け取る。
 
-`NextPort` も既定で複数の相手を取るので、その `recv()` は dict を返す。次のノードが 1 つだけと決まっているなら、`NextPort(send=..., multi=False)` にすると `recv()` が dict ではなく値を返す。
+前へ送りつつ複数の次のノードからフィードバックを受け取るノードは、`next` も `MultiPort` にする。その `recv()` は dict を返す。
 
 ## 経路に沿ってデータを運ぶ
 
@@ -131,7 +131,7 @@ class Classifier(mujou.Network):
 
 ## 構築した構造を確かめる
 
-`net.build()` は構造と型を検査して凍結し、構築した構造（`Graph`）を返す。`mujou.run` も内部で `build()` を呼ぶので、走らせるだけなら呼ぶ必要はない。走らせる前に構造を確かめたいときに呼ぶ。
+`net.build()` は構造と型を検査し、構築した構造（`Graph`）を返す。`mujou.run` も内部で `build()` を呼ぶので、走らせるだけなら呼ぶ必要はない。走らせる前に構造を確かめたいときに呼ぶ。
 
 ```python
 --8<-- "examples/branching.py:build"
@@ -141,8 +141,7 @@ class Classifier(mujou.Network):
 
     `build()` の後は次のことができない。
 
-    - 木の中のどの Port にも `connect` する
-    - 木のノードとネットワークに Port・ノード・ネットワークを代入する、または削除する（どちらも `RuntimeError`）
+    - 木のノードとネットワークに Port・ノード・ネットワークを代入する、または削除する（`RuntimeError`）
     - より大きなネットワークの一部にする
 
     そのため `build()` を呼ぶのは走らせるネットワークだけにする。

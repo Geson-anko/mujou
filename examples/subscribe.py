@@ -11,7 +11,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import NextPort, Node, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 SCALAR = TensorSpec((), torch.float64)
 
@@ -21,7 +21,7 @@ class Clock(Node):
 
     def __init__(self) -> None:
         super().__init__()
-        self.next = NextPort(send=SCALAR)
+        self.next = Port(send=SCALAR)
 
     @override
     def on_update(self, dt: float) -> None:

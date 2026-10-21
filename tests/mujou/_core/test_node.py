@@ -13,6 +13,7 @@ from torch import nn
 
 from mujou import Group, NetworkError, Node, Port, TensorSpec
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer
+from tests.mujou.nodes import Calls
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -298,15 +299,30 @@ class TestTimer:
                 raise ValueError("boom")
 
         node = Fails()
-        with pytest.raises(RuntimeError, match="only in its hooks"):
+        with pytest.raises(
+            RuntimeError, match=r"^Fails\.timer is used only in the hooks"
+        ):
             _ = node.timer
         run = start_manual(Group(node=node), timer=virtual)
-        with pytest.raises(RuntimeError, match="only in its hooks"):
+        with pytest.raises(
+            RuntimeError, match=r"^Fails\.timer is used only in the hooks"
+        ):
             _ = node.timer  # by the host while the run runs
         with pytest.raises(NetworkError):
             run.step(0.001)
-        with pytest.raises(RuntimeError, match="only in its hooks"):
+        with pytest.raises(
+            RuntimeError, match=r"^Fails\.timer is used only in the hooks"
+        ):
             _ = node.timer
+
+    def test_raises_in_the_hooks_of_another_node(self, start_manual: StartManual):
+        reader = Timed()
+        other = Calls(lambda: reader.timer)
+        run = start_manual(Group(reader=reader, other=other))
+        run.step(0.001)
+        (error,) = other.errors
+        assert isinstance(error, RuntimeError)
+        assert str(error).startswith("Timed.timer is used only in the hooks of")
 
 
 class TestDevice:

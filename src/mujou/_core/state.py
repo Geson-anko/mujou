@@ -22,9 +22,9 @@ from typing import Any, Final, Self, cast, override
 
 import torch
 
-from mujou._core.binding import AnySlot
 from mujou._core.codec import from_core, to_core
-from mujou._core.spec import Spec
+from mujou._core.port import AnySlot
+from mujou._core.spec import MessageSpec
 
 # Where the tree holds the values of the slots.
 _CPU: Final = torch.device("cpu")
@@ -110,7 +110,7 @@ def _moved[T](value: T, device: torch.device, memo: dict[int, object]) -> T:
 
 
 # A slot of the run: the slot and the spec of its value.
-type SlotSpecs = tuple[AnySlot, Spec]
+type SlotSpecs = tuple[AnySlot, MessageSpec[Any]]
 
 
 def make_tree(

@@ -13,7 +13,7 @@ import torch
 from torch import nn
 
 import mujou
-from mujou import NextPort, Node, Port, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 # --8<-- [start:node]
 BATCH, N_IN, N_OUT = 16, 4, 2
@@ -27,9 +27,9 @@ class Regressor(Node):
     def __init__(self, rate: float) -> None:
         super().__init__(seed=0)  # the seed of self.generator; computes on the CPU
         self.rate = rate
-        self.prev = PrevPort(recv=INPUT)
+        self.prev = Port(recv=INPUT)
         self.target = Port(recv=OUTPUT)
-        self.next = NextPort(send=OUTPUT)
+        self.next = Port(send=OUTPUT)
 
     @override
     def on_start(self) -> None:

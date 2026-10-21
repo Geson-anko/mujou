@@ -11,7 +11,7 @@ from mujou._core.pc.clock import LearnClock
 from mujou._core.pc.functional import learn_, relax_, rows, vjp
 from mujou._core.pc.messages import Activity, activity_spec
 from mujou._core.pc.time_constants import TimeConstants
-from mujou._core.port import NextPort, PrevPort
+from mujou._core.port import MultiPort, Port
 from mujou._core.spec import DictSpec, TensorSpec
 
 
@@ -213,8 +213,8 @@ class Layer(Node):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
         self.act = activity_spec(out, act.specs["y"])
-        self.prev = PrevPort(send=h_in, recv=act)
-        self.next = NextPort(send=self.act, recv=out)
+        self.prev = Port(send=h_in, recv=act)
+        self.next = MultiPort(send=self.act, recv=out)
 
     @override
     def on_update(self, dt: float) -> None:

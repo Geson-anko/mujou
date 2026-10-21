@@ -39,7 +39,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 VECTOR = TensorSpec((3,))  # every message is a float32 vector of 3
 
@@ -50,8 +50,8 @@ class Affine(Node):
     def __init__(self, a: float, b: float) -> None:
         super().__init__()
         self.a, self.b = a, b
-        self.prev = PrevPort(recv=VECTOR)  # receives from the previous node
-        self.next = NextPort(send=VECTOR)  # sends to the next node
+        self.prev = Port(recv=VECTOR)  # receives from the previous node
+        self.next = Port(send=VECTOR)  # sends to the next node
 
     @override
     def on_update(self, dt: float) -> None:

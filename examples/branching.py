@@ -1,8 +1,9 @@
 """A network that branches and merges.
 
-A ``NextPort`` takes many peers, so a node can feed several branches; a
-``PrevPort(multi=True)`` merges them, and its ``recv`` returns one message per
-channel. ``send_to`` sends on one channel only: one that ``connect`` returned.
+A ``Port`` that only sends takes any number of peers, so a node can feed several
+branches; a ``MultiPort`` merges them, and its ``recv`` returns one message per
+channel. A ``MultiPort``'s ``send_to`` sends on one channel only: one that
+``connect`` returned.
 """
 
 from collections.abc import Callable
@@ -11,7 +12,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import Channel, NextPort, Node, PrevPort, TensorSpec
+from mujou import Channel, MultiPort, Node, Port, TensorSpec
 
 VECTOR = TensorSpec((2,))
 
@@ -26,8 +27,8 @@ class Split(Node):
 
     def __init__(self) -> None:
         super().__init__()
-        self.prev = PrevPort(recv=VECTOR)
-        self.next = NextPort(send=VECTOR)  # many peers by default
+        self.prev = Port(recv=VECTOR)
+        self.next = MultiPort(send=VECTOR)  # sends to each peer on its own
 
     @override
     def on_update(self, dt: float) -> None:
@@ -43,8 +44,8 @@ class Apply(Node):
     def __init__(self, fn: Callable[[torch.Tensor], torch.Tensor]) -> None:
         super().__init__()
         self.fn = fn
-        self.prev = PrevPort(recv=VECTOR)
-        self.next = NextPort(send=VECTOR, multi=False)  # exactly one peer here
+        self.prev = Port(recv=VECTOR)
+        self.next = Port(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:
@@ -58,8 +59,8 @@ class Sum(Node):
 
     def __init__(self) -> None:
         super().__init__()
-        self.prev = PrevPort(recv=VECTOR, multi=True)  # merges any number of peers
-        self.next = NextPort(send=VECTOR)
+        self.prev = MultiPort(recv=VECTOR)  # merges any number of peers
+        self.next = Port(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:

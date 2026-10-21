@@ -30,7 +30,7 @@ Pick the row closest to what you want to do. The "Explained in" pages include th
 
 - `quickstart.py`: runs a two-node network with `with mujou.run(...)`, writes input with `write`, and waits with `run.wait_for(..., timeout=...)` until the expected output arrives
 - `leaky_chain/`: a node defined in continuous time (a leaky integrator). The update uses the coefficient of the exact solution, so it is stable for any `dt`. The output is compared with the exact solution at the time elapsed from the write (the time that `run.write` returns) to the output
-- `branching.py`: sends from one `NextPort` to several nodes and merges them with `PrevPort(multi=True)`. `send_to` sends only to the peer on a Channel that `connect` returned
+- `branching.py`: sends from one `MultiPort` to several nodes and merges them with another `MultiPort`. `send_to` sends only to the peer on a Channel that `connect` returned
 - `group.py`: `Group(enc=..., dec=...)` and `mujou.run(a, b)`, and how node paths (`"enc.scale"`, `"0.scale"`) are named
 - `save_and_restore.py`: takes the state with `run.state_dict()`, saves it with `torch.save` (its tensors moved to the CPU), and restores it with `mujou.run(..., state=...)` to continue
 - `pause.py`: pauses the global timer with `mujou.time.global_timer.pause()`, takes the states of two runs on it at that one time, and resumes it with `mujou.time.global_timer.resume()`. A run restored from one of the states goes on from that time, on a timer of its own

@@ -12,7 +12,7 @@ from mujou._core.pc.clock import LearnClock
 from mujou._core.pc.functional import learn_, loss_vjp
 from mujou._core.pc.messages import Activity, Prediction
 from mujou._core.pc.time_constants import TimeConstants
-from mujou._core.port import NextPort, PrevPort
+from mujou._core.port import Port
 from mujou._core.spec import DictSpec, TensorSpec
 
 
@@ -120,8 +120,8 @@ class Output(Node):
                 "nn.MSELoss(), does not (use pc.mse or pc.cross_entropy)"
             )
         self._loss = loss
-        self.prev = PrevPort(send=h_in, recv=act)
-        self.next = NextPort(
+        self.prev = Port(send=h_in, recv=act)
+        self.next = Port(
             send=DictSpec(
                 Prediction,
                 y_hat=TensorSpec(y_hat.shape, y_hat.dtype),

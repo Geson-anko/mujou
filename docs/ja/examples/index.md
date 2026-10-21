@@ -30,7 +30,7 @@ mujou の使い方を示すサンプルプログラムの一覧。どれもリ�
 
 - `quickstart.py`: 2 ノードのネットワークを `with mujou.run(...)` で走らせて `write` で入力を書き、期待した出力が届くまで `run.wait_for(..., timeout=...)` で待つ
 - `leaky_chain/`: 連続時間で定義したノード（リーク積分器）。厳密解の係数で更新するので、どんな `dt` でも安定する。`run.write` が返す書き込みの時刻から出力の時刻までの経過時間を使い、出力を厳密解と比べる
-- `branching.py`: 1 つの `NextPort` から複数のノードへ送り、`PrevPort(multi=True)` で合流して受け取る。`send_to` を使うと、`connect` が返した Channel の相手にだけ送れる
+- `branching.py`: 1 つの `MultiPort` から複数のノードへ送り、もう 1 つの `MultiPort` で合流して受け取る。`send_to` を使うと、`connect` が返した Channel の相手にだけ送れる
 - `group.py`: `Group(enc=..., dec=...)` と `mujou.run(a, b)`。ノードのパス（`"enc.scale"`、`"0.scale"`）の付き方
 - `save_and_restore.py`: `run.state_dict()` で状態を取得し、テンソルを CPU に移して `torch.save` で保存し、`mujou.run(..., state=...)` で復元して続ける
 - `pause.py`: `mujou.time.global_timer.pause()` でグローバルタイマーを止め、そのタイマーで走る 2 つの実行の状態を同じ時刻で取得してから `mujou.time.global_timer.resume()` で再開する。一方の状態から復元した実行は、その時刻から専用のタイマーで続く

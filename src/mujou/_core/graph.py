@@ -1,18 +1,17 @@
-"""How a network is built: the tree walked once, checked, frozen and marked as
-built, and the ``Graph`` it gives, which ``mujou.run`` runs once
-(``specs/network.md``).
+"""How a network is built: the tree walked once, checked and marked as built,
+and the ``Graph`` it gives, which ``mujou.run`` runs once (``specs/network.md``).
 """
 
 import threading
 import weakref
 from collections.abc import Callable, Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, Final, Never, final
+from typing import Final, Never, final
 
 from mujou._core.component import Component, children_of, ports_of
 from mujou._core.errors import NetworkError
 from mujou._core.node import Node
-from mujou._core.port import Port, freeze, is_frozen, thaw
+from mujou._core.port import AnyPort, MultiPort, Port
 
 
 @final
@@ -27,9 +26,8 @@ class Graph:
     once.
     """
 
-    # Any: ports of every message type are handled alike.
     _nodes: tuple[tuple[str, Node], ...]
-    _ports: Mapping[Port[Any, Any, Any], tuple[int, str]]
+    _ports: Mapping[AnyPort, tuple[int, str]]
     # Every node and network of the tree, marked as built with _tree.
     _members: tuple[Component, ...]
     _tree: _Tree
@@ -50,7 +48,7 @@ class Graph:
         """
         return self._nodes
 
-    def port_path(self, port: Port[Any, Any, Any]) -> str:
+    def port_path(self, port: AnyPort) -> str:
         """Return the path of ``port`` through its owner, e.g. ``"body.l1.next"``
         (``"next"`` when the owner is itself the root).
 
@@ -78,7 +76,7 @@ class _Tree:
 
 def _make_graph(
     nodes: tuple[tuple[str, Node], ...],
-    ports: Mapping[Port[Any, Any, Any], tuple[int, str]],
+    ports: Mapping[AnyPort, tuple[int, str]],
     members: tuple[Component, ...],
     tree: _Tree,
 ) -> Graph:
@@ -91,21 +89,21 @@ def _make_graph(
     return graph
 
 
-def ports(graph: Graph) -> Mapping[Port[Any, Any, Any], tuple[int, str]]:
+def ports(graph: Graph) -> Mapping[AnyPort, tuple[int, str]]:
     """For every port owned by a node of ``graph``, the index of the owner in
     ``graph.nodes`` and the attribute name of the port."""
     return graph._ports  # pyright: ignore[reportPrivateUsage]  # Graph's own module
 
 
 def build_tree(root: Component, by_run: bool) -> Graph:
-    """Check the tree of ``root``, freeze it and mark it as built, as
+    """Check the tree of ``root`` and mark it as built, as
     ``Network.build`` does; ``by_run`` when ``mujou.run`` builds it only to run.
     Call it under ``BUILD_LOCK``."""
     members: list[Component] = []
     nodes: list[tuple[str, Node]] = []
-    ports: dict[Port[Any, Any, Any], tuple[int, str]] = {}
+    ports: dict[AnyPort, tuple[int, str]] = {}
     # (attribute path, port, indices of the nodes in the exposing subtree)
-    exposed: list[tuple[str, Port[Any, Any, Any], range]] = []
+    exposed: list[tuple[str, AnyPort, range]] = []
     seen: dict[int, str] = {}  # id(component) -> path
 
     def visit(component: Component, path: str) -> None:
@@ -159,11 +157,6 @@ def build_tree(root: Component, by_run: bool) -> Graph:
                 "network that exposes it (only direct attributes are walked)"
             )
     for port, owner in ports.items():
-        if is_frozen(port):
-            raise RuntimeError(
-                f"the port {_path(nodes, owner)!r} belongs to a network that is "
-                "already built"
-            )
         for channel in port.channels:
             if channel.other(port) not in ports:
                 raise ValueError(
@@ -171,8 +164,6 @@ def build_tree(root: Component, by_run: bool) -> Graph:
                     "outside the tree being built (only direct attributes are "
                     "walked, not lists or dicts)"
                 )
-    for port in ports:
-        freeze(port)
     built = _Tree(by_run)
     for member in members:
         _mark_built(member, built)
@@ -187,19 +178,16 @@ def build_node(node: Node) -> Graph:
 
 
 def unbuild_tree(graph: Graph) -> Component:
-    """Thaw the ports of ``graph`` and drop the marks of its tree, and return its
-    root (``network.unbuild`` forgets the root's graph). Call it under
+    """Drop the marks of the tree of ``graph`` and return its root
+    (``network.unbuild`` forgets the root's graph). Call it under
     ``BUILD_LOCK``."""
-    for port in graph._ports:  # pyright: ignore[reportPrivateUsage]  # Graph's own module
-        thaw(port)
-    members = graph._members  # pyright: ignore[reportPrivateUsage]
+    members = graph._members  # pyright: ignore[reportPrivateUsage]  # Graph's own module
     for member in members:
         _BUILT.pop(id(member), None)
     return members[0]
 
 
 # The nodes and networks of every built tree: a part of one cannot join another.
-# Ports are marked too (frozen), but a node without ports has only this mark.
 # Keyed by id and checked by identity, so that a component's own __eq__ / __hash__
 # (e.g. a dataclass, which is unhashable) plays no part.
 _BUILT: Final[dict[int, tuple[weakref.ref[Component], _Tree]]] = {}
@@ -290,7 +278,7 @@ def _check_declarations(component: Component, path: str) -> None:
     """Reject ports declared on the class."""
     for klass in type(component).__mro__:
         for name, value in vars(klass).items():
-            if isinstance(value, Port):
+            if isinstance(value, Port | MultiPort):
                 raise ValueError(
                     f"{_named(component, path)} declares the port "
                     f"{name!r} on the class {klass.__name__}; declare ports as "

@@ -41,7 +41,15 @@ _M = TypeVar("_M")
 
 
 class MessageSpec(ABC, Generic[_M]):
-    """The spec of a message of type ``_M``: its shape, dtype and initial value."""
+    """The spec of a message of type ``_M``: its shape, dtype and initial value.
+
+    ``TensorSpec`` is a ``MessageSpec[torch.Tensor]`` and ``DictSpec(Sample,
+    ...)`` a ``MessageSpec[Sample]``. Annotate with it a function that takes
+    either::
+
+        def sender[T](spec: MessageSpec[T]) -> Port[T]:
+            return Port(send=spec)
+    """
 
     @abstractmethod
     def zeros(self, *, device: torch.device | str = "cpu") -> _M:
@@ -289,7 +297,3 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
     def __repr__(self) -> str:
         args = ", ".join(f"{k}={s!r}" for k, s in self._specs.items())
         return f"DictSpec({self._typed_dict.__qualname__}, {args})"
-
-
-# Any: the TypedDict of a DictSpec is not known where a spec is handled generically.
-type Spec = TensorSpec | DictSpec[Any]

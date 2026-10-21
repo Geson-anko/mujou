@@ -12,7 +12,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import NetworkError, NextPort, Node, PrevPort, TensorSpec
+from mujou import NetworkError, Node, Port, TensorSpec
 
 SCALAR = TensorSpec(())
 
@@ -29,8 +29,8 @@ class Checked(Node):
     def __init__(self, fail_on_start: bool = False) -> None:
         super().__init__()
         self.fail_on_start = fail_on_start
-        self.prev = PrevPort(recv=SCALAR)
-        self.next = NextPort(send=SCALAR)
+        self.prev = Port(recv=SCALAR)
+        self.next = Port(send=SCALAR)
 
     @override
     def on_start(self) -> None:

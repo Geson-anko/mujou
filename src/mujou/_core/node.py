@@ -11,7 +11,7 @@ from torch import nn
 
 from mujou._core._native import ReadOnlyTimer
 from mujou._core.component import Component, is_data_descriptor
-from mujou._core.port import running
+from mujou._core.port import outside, running
 
 
 class Node(Component):
@@ -133,9 +133,9 @@ class Node(Component):
                 super().__init__(seed=0)
                 x, h = TensorSpec((32, n_in)), TensorSpec((32, n_out))
                 # Send W^T eps back and receive x from the previous side (one peer).
-                self.prev = PrevPort(send=x, recv=x)
+                self.prev = Port(send=x, recv=x)
                 # Send h forward and receive W^T eps from each next peer (many).
-                self.next = NextPort(send=h, recv=h)
+                self.next = MultiPort(send=h, recv=h)
 
             @override
             def on_update(self, dt: float) -> None:
@@ -444,14 +444,12 @@ class Node(Component):
         assign an attribute of that name. The host reads ``Run.timer``.
 
         Raises:
-            RuntimeError: This is not read in a hook of a running node (in
-                ``__init__``, or by the host).
+            RuntimeError: This is not read in a hook of this node while it runs
+                (but in ``__init__``, by the host, or by another node).
         """
         current = running()
-        if current is None:
-            raise RuntimeError(
-                "a node reads its timer only in its hooks; the host reads run.timer"
-            )
+        if current is None or current.node is not self:
+            raise outside(f"{type(self).__name__}.timer")
         return current.clock
 
 

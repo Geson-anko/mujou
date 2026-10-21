@@ -19,7 +19,7 @@ from mujou._core.errors import NetworkError
 from mujou._core.graph import build_node, start_once
 from mujou._core.network import Network, RunGroup, unbuild
 from mujou._core.node import Node
-from mujou._core.port import Port
+from mujou._core.port import MultiPort, Port
 from mujou._core.session import Session
 from mujou._core.state import StateDict, saved_time
 
@@ -59,7 +59,7 @@ class Run:
         import torch
 
         import mujou
-        from mujou import NextPort, Node, Port, PrevPort, TensorSpec
+        from mujou import Node, Port, TensorSpec
 
         VECTOR = TensorSpec((2,))
 
@@ -67,9 +67,9 @@ class Run:
         class Error(Node):  # sends its input minus its teacher
             def __init__(self) -> None:
                 super().__init__()
-                self.prev = PrevPort(recv=VECTOR)
+                self.prev = Port(recv=VECTOR)
                 self.teacher = Port(recv=VECTOR)
-                self.next = NextPort(send=VECTOR)
+                self.next = Port(send=VECTOR)
 
             @override
             def on_update(self, dt: float) -> None:
@@ -103,14 +103,14 @@ class Run:
         return self._timer
 
     # P: a dict built beforehand has a precise key type, which a Mapping keyed by
-    # Port[Any, Any, Any] would reject (Mapping keys are invariant). A
+    # Port[Any, Any] would reject (Mapping keys are invariant). A
     # dict message is a Mapping[str, object]: a TypedDict is not a
     # Mapping[str, torch.Tensor].
-    def write[P: Port[Any, Any, Any]](
+    def write[P: Port[Any, Any]](
         self, values: Mapping[P, torch.Tensor | Mapping[str, object]]
     ) -> Timestamp:
-        """Write messages to unconnected single-peer ports that receive, and
-        return the time they are stamped with.
+        """Write messages to unconnected ports that receive, and return the time
+        they are stamped with.
 
         The values are detached and copied. All of them switch together and bear
         the same time: at any one moment, a node sees either all of them or none.
@@ -126,7 +126,7 @@ class Run:
         Raises:
             RuntimeError: The run has stopped normally (no node reads what is
                 written then).
-            ValueError: A port is outside the run, connected, takes many peers
+            ValueError: A port is outside the run, connected, a ``MultiPort``
                 or receives nothing; or a shape or a dtype differs from the
                 spec.
             TypeError: A message is not a tensor, or a dict of tensors with the
@@ -135,11 +135,12 @@ class Run:
         """
         return _host(self).write(values)
 
-    def read[S](self, port: Port[S, Any, Any]) -> S:
+    def read[S](self, port: Port[S, Any] | MultiPort[S, Any]) -> S:
         """Return the latest message ``port`` sent.
 
         Any port that sends can be read, so a connected port shows an inner
-        node. Only ``send`` (to every peer) updates the value read here; before
+        node. Only ``send`` (to every peer, not ``MultiPort.send_to``) updates
+        the value read here; before
         the first one it is the port's ``initial`` (zeros by default) or the
         value restored from ``state``. The tensors are new copies on the CPU.
         ``read_with_time`` also returns the time it was sent at.
@@ -150,7 +151,9 @@ class Run:
         """
         return cast(S, _host(self).read(port)[0])
 
-    def read_with_time[S](self, port: Port[S, Any, Any]) -> tuple[S, Timestamp | None]:
+    def read_with_time[S](
+        self, port: Port[S, Any] | MultiPort[S, Any]
+    ) -> tuple[S, Timestamp | None]:
         """Return the latest message ``port`` sent, as ``read`` does, and the time
         it was sent at: ``None`` before the first ``send`` (the port's
         ``initial``, or the restored value of a port that had not sent).
@@ -165,7 +168,7 @@ class Run:
         return cast(tuple[S, Timestamp | None], _host(self).read(port))
 
     def subscribe[S](
-        self, port: Port[S, Any, Any], timeout: float = math.inf
+        self, port: Port[S, Any] | MultiPort[S, Any], timeout: float = math.inf
     ) -> Iterator[tuple[S, Timestamp | None]]:
         """Iterate over the messages ``port`` sends, with their times.
 
@@ -203,7 +206,7 @@ class Run:
 
     def wait_for[S](
         self,
-        port: Port[S, Any, Any],
+        port: Port[S, Any] | MultiPort[S, Any],
         condition: Callable[[S], bool],
         timeout: float = math.inf,
     ) -> tuple[S, Timestamp | None]:
@@ -417,7 +420,7 @@ class ManualRun(Run):
 
 
 # P: as in Run.write.
-def run[P: Port[Any, Any, Any]](
+def run[P: Port[Any, Any]](
     component: Node | Network,
     *components: Node | Network,
     timer: Timer | None = None,
@@ -453,8 +456,8 @@ def run[P: Port[Any, Any, Any]](
             time and every pause of the run is on it. ``None`` is
             ``mujou.time.global_timer``, which every run without a timer of its
             own shares, or for a restored run a new ``Timer``.
-        inputs: The initial values of unconnected single-peer ports that
-            receive, as ``Run.write`` takes them. Written after ``state``, they
+        inputs: The initial values of unconnected ports that receive, as
+            ``Run.write`` takes them. Written after ``state``, they
             replace its values and bear its time.
         state: A tree from ``Run.state_dict`` to restore: the ``StateDict``,
             or any mapping of the same items (such as a plain ``dict``). The

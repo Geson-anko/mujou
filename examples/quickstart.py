@@ -8,7 +8,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 VECTOR = TensorSpec((3,))  # every message here is a float32 vector of 3
 
@@ -19,8 +19,8 @@ class Scale(Node):
     def __init__(self, factor: float) -> None:
         super().__init__()
         self.factor = factor
-        self.prev = PrevPort(recv=VECTOR)  # receives from the previous side
-        self.next = NextPort(send=VECTOR)  # sends to the next side
+        self.prev = Port(recv=VECTOR)  # receives from the previous side
+        self.next = Port(send=VECTOR)  # sends to the next side
 
     @override
     def on_update(self, dt: float) -> None:
@@ -35,8 +35,8 @@ class Shift(Node):
     def __init__(self, offset: float) -> None:
         super().__init__()
         self.offset = offset
-        self.prev = PrevPort(recv=VECTOR)
-        self.next = NextPort(send=VECTOR)
+        self.prev = Port(recv=VECTOR)
+        self.next = Port(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:

@@ -31,26 +31,23 @@ Assign ports as instance attributes inside `__init__`, after `super().__init__()
 - **Before `super().__init__()`**: the node registers each port as it is assigned, and assigning one before `super().__init__()` raises `AttributeError`
 - **As a class attribute**: a port declared as a class attribute makes building the network (`build()`) raise `ValueError`
 
-Choose the kind of port by its role in the network. By convention, name the port on the side of the previous node `prev` and the one on the side of the next node `next`, so that a chain reads `a.next.connect(b.prev)`.
+Choose the kind of port by the number of peers it receives from. By convention, name the port on the side of the previous node `prev` and the one on the side of the next node `next`, so that a chain reads `a.next.connect(b.prev)`. A node can have any number of ports.
 
-| Role                                                                   | Declaration | Name by convention |
-| ---------------------------------------------------------------------- | ----------- | ------------------ |
-| The side that receives from the previous node                          | `PrevPort`  | `prev`             |
-| The side that sends to the next node                                   | `NextPort`  | `next`             |
-| Anything else (a teacher signal input, an output for observation, ...) | `Port`      | any                |
+| Kind        | Peers                                                                                             | `recv()` returns          |
+| ----------- | ------------------------------------------------------------------------------------------------- | ------------------------- |
+| `Port`      | At most one if it receives; any number if it only sends                                           | The value itself          |
+| `MultiPort` | Any number of one kind (see [Branching and merging](building-a-network.md#branching-and-merging)) | A dict keyed by `Channel` |
 
-The kinds differ only in the number of peers they take by default (below). A node can have any number of ports of each kind.
+For inputs of different roles (a teacher signal next to the input, say), declare one `Port` each.
 
 Give each port the type of the values it sends as `send=`, and the type of the values it receives as `recv=`. Write a type as `TensorSpec(shape, dtype)`.
 
-If you leave out the dtype, it is `torch.get_default_dtype()` at the time the spec is created (usually `float32`). On a one-way port, leave out the argument you do not use (do not pass `None`).
+If you leave out the dtype, it is `torch.get_default_dtype()` at the time the spec is created (usually `float32`). On a one-way port, leave out the argument you do not use. Both are keyword arguments.
 
 ```python
-self.prev = PrevPort(recv=TensorSpec((32, 784)))                       # receive only
-self.next = NextPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # both ways
+self.prev = Port(recv=TensorSpec((32, 784)))                       # receive only
+self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # both ways
 ```
-
-`multi=` decides the number of peers. By default, `PrevPort` and `Port` take one peer and `NextPort` takes many. On a port with many peers, `recv()` returns a dict, not the value itself (see [Branching and merging](building-a-network.md#branching-and-merging) in Building a network).
 
 A value you send must match the spec in both shape and dtype. The dtype is not converted automatically. The `Leaky` above uses a `torch.float64` spec, so it also creates the values it sends as `float64`.
 
@@ -59,7 +56,7 @@ Until a port first sends, its peers receive zeros, and so does the host that rea
 A restored run (see [State](state.md)) starts from the values in the state instead.
 
 ```python
-self.next = NextPort(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
+self.next = Port(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
 ```
 
 Values on two ports travel independently: a reader may see a new value on one port with an old value on the other.
@@ -74,32 +71,24 @@ class Sample(TypedDict):
 
 SAMPLE = DictSpec(Sample, x=TensorSpec((32, 4)), y=TensorSpec((32, 2)))
 
-self.next = NextPort(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y": y})
-self.prev = PrevPort(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
+self.next = Port(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y": y})
+self.prev = Port(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
 ```
 
-Type checkers infer the type of a port from its specs, so you seldom write it. To annotate one (an argument of a helper, say), write `Port[S, R, M]`.
-
-- `S` is the type it sends
-- `R` the type it receives
-- `M` its number of peers, `Single` or `Multi` from `mujou.typing`
-
-Annotate a port of any kind as `Port[Any, Any, Any]`.
-
-An omitted direction is `Never`. A function that takes any spec takes a `MessageSpec[T]` from `mujou.typing`.
+Type checkers infer the type of a port from its specs, so you seldom write it. To annotate one (an argument of a helper, say), write `Port[S, R]` or `MultiPort[S, R]`: `S` is the type it sends and `R` the type it receives. An omitted direction is `Never`, and the type checker rejects a `send` on a port that sends nothing. A function that takes any spec takes a `MessageSpec[T]`.
 
 ```python
 from typing import Never
 
-from mujou.typing import MessageSpec, Multi
+from mujou import MessageSpec, MultiPort, Port
 
 
-def mean_of(port: PrevPort[Never, torch.Tensor, Multi]) -> torch.Tensor:
+def mean_of(port: MultiPort[Never, torch.Tensor]) -> torch.Tensor:
     return torch.stack(list(port.recv().values())).mean(0)
 
 
-def sender[T](spec: MessageSpec[T]) -> NextPort[T, Never, Multi]:
-    return NextPort(send=spec)
+def sender[T](spec: MessageSpec[T]) -> Port[T]:
+    return Port(send=spec)
 ```
 
 ## 2. Set up the state in `on_start`
@@ -186,7 +175,7 @@ A node updates once every `period` seconds on average, 0.01 s (100 times a secon
 class Sensor(mujou.Node):
     def __init__(self) -> None:
         super().__init__(period=0.05)  # update once every 50 ms on average
-        self.next = mujou.NextPort(send=mujou.TensorSpec((3,)))
+        self.next = mujou.Port(send=mujou.TensorSpec((3,)))
 ```
 
 The period is the average interval between updates. The time `on_update` takes counts as part of the period. A node that falls behind does not update several times in a row to catch up.

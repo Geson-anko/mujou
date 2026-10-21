@@ -6,7 +6,7 @@ import pytest
 from mujou._core.component import children_of, ports_of
 from mujou._core.network import Network
 from mujou._core.node import Node
-from mujou._core.port import Port, PrevPort
+from mujou._core.port import Port
 from mujou._core.spec import TensorSpec
 from tests.mujou.nodes import Hidden
 
@@ -51,7 +51,7 @@ class TestRegistration:
 
     def test_a_name_assigned_again_keeps_its_place(self):
         node = Hidden()
-        port = PrevPort(send=h(), recv=h())
+        port = Port(send=h(), recv=h())
         node.prev = port
         assert list(ports_of(node).items()) == [("prev", port), ("next", node.next)]
 
@@ -93,11 +93,11 @@ class TestRegistration:
                 self.out = Port(send=h())
 
             @property
-            def out(self) -> Port[Any, Any, Any]:
+            def out(self) -> Port[Any, Any]:
                 return self._out
 
             @out.setter
-            def out(self, port: Port[Any, Any, Any]) -> None:
+            def out(self, port: Port[Any, Any]) -> None:
                 self._out = port
 
         node = Wrapped()

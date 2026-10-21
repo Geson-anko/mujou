@@ -2,11 +2,11 @@
 
 ::: mujou.Port
 
-::: mujou.PrevPort
-
-::: mujou.NextPort
+::: mujou.MultiPort
 
 ::: mujou.Channel
+
+::: mujou.MessageSpec
 
 ::: mujou.TensorSpec
 

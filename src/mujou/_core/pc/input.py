@@ -6,7 +6,7 @@ import torch
 
 from mujou._core.node import Node
 from mujou._core.pc.messages import Sample, activity_spec
-from mujou._core.port import NextPort, PrevPort
+from mujou._core.port import MultiPort, Port
 from mujou._core.spec import DictSpec, TensorSpec
 
 
@@ -62,8 +62,8 @@ class Input(Node):
         super().__init__(device=device, period=period)
         self.act = activity_spec(x, y)
         mask = self.act.specs["mask"]
-        self.prev = PrevPort(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
-        self.next = NextPort(send=self.act, recv=x)
+        self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
+        self.next = MultiPort(send=self.act, recv=x)
         self._epoch = 0
         self._seen_write = -1
         for name in ("_epoch", "_seen_write"):

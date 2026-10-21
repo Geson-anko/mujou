@@ -123,7 +123,6 @@ plugins:
             Ports and Channels: Port と Channel
             Networks: ネットワーク
             Timers: タイマー
-            Types: 型
             User Guide: ユーザーガイド
             Writing a Node: ノードを書く
             Building a Network: ネットワークを組む
@@ -197,7 +196,6 @@ nav:
       - Ports and Channels: api/port.md
       - Networks: api/network.md
       - Timers: api/time.md
-      - Types: api/typing.md
       - Errors: api/errors.md
       - Testing: api/testing.md
       - PC-ALM: api/pc.md

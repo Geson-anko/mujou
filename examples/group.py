@@ -10,7 +10,7 @@ from typing import override
 import torch
 
 import mujou
-from mujou import Group, NextPort, Node, PrevPort, TensorSpec
+from mujou import Group, Node, Port, TensorSpec
 
 VECTOR = TensorSpec((2,))
 
@@ -19,8 +19,8 @@ class Scale(Node):
     def __init__(self, factor: float) -> None:
         super().__init__()
         self.factor = factor
-        self.prev = PrevPort(recv=VECTOR)
-        self.next = NextPort(send=VECTOR)
+        self.prev = Port(recv=VECTOR)
+        self.next = Port(send=VECTOR)
 
     @override
     def on_update(self, dt: float) -> None:

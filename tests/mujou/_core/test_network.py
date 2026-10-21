@@ -6,7 +6,7 @@ import pytest
 from mujou._core.graph import Graph
 from mujou._core.network import Group, Network
 from mujou._core.node import Node
-from mujou._core.port import NextPort, Port, PrevPort
+from mujou._core.port import MultiPort, Port
 from mujou._core.spec import TensorSpec
 from tests.mujou.nodes import Hidden
 
@@ -18,13 +18,13 @@ def h(n: int = 3) -> TensorSpec:
 class Source(Node):
     def __init__(self) -> None:
         super().__init__()
-        self.next = NextPort(send=h(), recv=h())
+        self.next = MultiPort(send=h(), recv=h())
 
 
 class Sink(Node):
     def __init__(self) -> None:
         super().__init__()
-        self.prev = PrevPort(send=h(), recv=h())
+        self.prev = Port(send=h(), recv=h())
         self.teacher = Port(recv=h(5))
 
 
@@ -84,15 +84,6 @@ class TestBuild:
 
         Single().build()
 
-    def test_rejects_connect_after_build(self):
-        net = Classifier()
-        net.build()
-        with pytest.raises(RuntimeError, match="already built"):
-            net.body.next.connect(Sink().prev)
-        with pytest.raises(RuntimeError, match="already built"):
-            Source().next.connect(net.prev)
-        assert len(net.body.next.channels) == 1
-
     def test_rejects_a_tree_that_contains_a_built_network(self):
         class Outer(Network):
             def __init__(self, inner: Network) -> None:
@@ -124,7 +115,7 @@ class TestBuild:
 
     def test_rejects_a_port_owned_by_two_nodes(self):
         class Borrower(Node):
-            def __init__(self, port: Port[Any, Any, Any]) -> None:
+            def __init__(self, port: Port[Any, Any] | MultiPort[Any, Any]) -> None:
                 super().__init__()
                 self.port = port
 

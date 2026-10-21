@@ -66,7 +66,7 @@ Reading and writing work like this.
 - **A copy**: every value is a copy of a `torch.Tensor`, detached from the computation graph. Changing a received tensor affects no other node
 - **With its time**: every value carries the time it was sent. To tell whether a value is new, read it with its time (`recv_with_time()`) and compare that time with the time of the value read last. If the time has moved on, the value is new
 
-A port may connect to several peers. It then receives one value per channel, and the node decides how to combine them (sum, average, ...).
+A `Port` receives from at most one peer, and a `Port` that only sends reaches any number. A `MultiPort` connects to several peers of one kind: it receives one value per channel, and the node decides how to combine them (sum, average, ...).
 
 A port may also stay unconnected. Unconnected ports are the inputs and outputs of the network.
 

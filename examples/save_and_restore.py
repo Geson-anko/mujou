@@ -13,7 +13,7 @@ import torch
 from torch import nn
 
 import mujou
-from mujou import NextPort, Node, PrevPort, TensorSpec
+from mujou import Node, Port, TensorSpec
 
 VECTOR1 = TensorSpec((1,))
 
@@ -23,8 +23,8 @@ class Integrator(Node):
 
     def __init__(self) -> None:
         super().__init__()
-        self.prev = PrevPort(recv=VECTOR1)
-        self.next = NextPort(send=VECTOR1)
+        self.prev = Port(recv=VECTOR1)
+        self.next = Port(send=VECTOR1)
 
     @override
     def on_start(self) -> None:
