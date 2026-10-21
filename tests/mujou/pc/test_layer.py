@@ -48,7 +48,7 @@ class HandChain:
         max_dt: float | None = None,
     ) -> None:
         x, y = TensorSpec((B, widths[0]), F64), TensorSpec((B, N_OUT), F64)
-        self.inp = pc.Input(x=x, y=y, period=H)
+        self.inp = pc.Input(x=x, y=y, period=H, batch=B)
         learning: dict[str, Any] = {
             "tau": tau,
             "learn_interval": learn_interval,
@@ -59,7 +59,7 @@ class HandChain:
         for module in layers:
             self.layers.append(pc.Layer(module, act_spec=act, **learning))
             act = self.layers[-1].act_spec
-        self.out = pc.Output(head, act_spec=act, loss=pc.mse, **learning)
+        self.out = pc.Output(head, act_spec=act, loss=pc.MSELoss(B), **learning)
         senders = [self.inp, *self.layers]
         for sender, receiver in zip(senders, [*self.layers, self.out], strict=True):
             sender.next.connect(receiver.prev)
@@ -81,7 +81,7 @@ class HandChain:
 
 
 def activity(h: TensorSpec) -> DictSpec[pc.Activity]:
-    return pc.activity_spec(h, TensorSpec((B, N_OUT)))
+    return pc.activity_spec(h, TensorSpec((B, N_OUT)), batch=B)
 
 
 def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:
@@ -118,7 +118,7 @@ class TestConstruction:
     @pytest.mark.parametrize(
         ("kwargs", "match"),
         [
-            ({"module": nn.Flatten(0)}, "same batch"),
+            ({"module": nn.Flatten(0)}, "start with the batch"),
             ({"period": 3e-3}, "max_dt"),  # longer than tau.h / 2
             ({"period": 2e-3, "max_dt": 1e-3}, "max_dt"),
         ],
@@ -221,10 +221,12 @@ class TestFixedPoint:
             close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
         if block == "linear":
             # skill pc-alm 4: lam_{L-1} = W_L^T e_L,
-            # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}).
+            # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}), where the mean
+            # squared error makes e_L = (2 / N_OUT) (y - y_hat).
             hs, y_hat = forward(layers, head, x)
             assert isinstance(head, nn.Linear)
-            lam_last = torch.where(MASK[:, None], y - y_hat, 0.0) @ head.weight
+            e = (2 / N_OUT) * (y - y_hat)
+            lam_last = torch.where(MASK[:, None], e, 0.0) @ head.weight
             linear = cast(nn.Linear, cast(nn.Sequential, layers[1])[0])
             a = linear(hs[0])
             slope = torch.ones_like(a) if act == "linear" else 1 - torch.tanh(a) ** 2
@@ -420,21 +422,24 @@ class TestPcLimit:
 
 class TestScalar:
     def test_lam_is_w2_times_the_error(self, start_manual: StartManual):
-        # y_hat = w2 h, h = w1 x: at the fixed point lam = w2 (y - y_hat).
+        # y_hat = w2 h, h = w1 x, loss 0.5 (y - y_hat)^2: at the fixed point
+        # lam = w2 (y - y_hat). With the half, h relaxes with the curvature
+        # 1 + w2^2 = 5; MSELoss would make it 1 + 2 w2^2 = 9, beyond about 8,
+        # where the explicit steps of dt / tau_h = 1/4 diverge.
         w1, w2, x, y = 0.5, 2.0, 1.5, 1.0
         first, head = nn.Linear(1, 1, bias=False), nn.Linear(1, 1, bias=False)
         with torch.no_grad():
             first.weight.fill_(w1)
             head.weight.fill_(w2)
         one = TensorSpec((1, 1), F64)
-        inp = pc.Input(x=one, y=one, period=H)
+        inp = pc.Input(x=one, y=one, period=H, batch=1)
         layer = pc.Layer(
             first.double(), act_spec=inp.act_spec, tau=NO_LEARNING, learn_interval=None
         )
         out = pc.Output(
             head.double(),
             act_spec=layer.act_spec,
-            loss=pc.mse,
+            loss=lambda y_hat, y: 0.5 * pc.functional.mse(y_hat, y, 1),
             tau=NO_LEARNING,
             learn_interval=None,
         )

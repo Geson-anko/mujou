@@ -4,10 +4,11 @@ from typing import override
 
 import pytest
 import torch
+import torch.nn.functional as F
 from torch import nn
 
-from mujou.pc import TimeConstants, cross_entropy, mse
-from mujou.pc.functional import learn_, loss_vjp, relax_, vjp
+from mujou.pc import CrossEntropyLoss, MSELoss, TimeConstants
+from mujou.pc.functional import cross_entropy, learn_, loss_vjp, mse, relax_, vjp
 
 B = 3
 EPS = 1e-6  # central differences: truncation ~EPS^2, rounding ~1e-16 / EPS
@@ -154,9 +155,9 @@ class TestLossVjp:
         h_in = _randn(B, 4, seed=1)
         mask = torch.tensor([True, False, True])
         if loss_name == "mse":
-            loss, y = mse, _randn(B, 5, seed=2)
+            loss, y = MSELoss(B), _randn(B, 5, seed=2)
         else:
-            loss, y = cross_entropy, torch.tensor([4, 0, 2])
+            loss, y = CrossEntropyLoss(B), torch.tensor([4, 0, 2])
 
         def ell() -> float:
             # sum over b of mask_b * loss_b
@@ -184,8 +185,9 @@ class TestLossVjp:
         y_nan = y.clone()
         y_nan[1] = math.nan
         params = list(module.parameters())
-        _, g_in, g_theta = loss_vjp(module, h_in, y, mask, mse, params)
-        _, g_in_nan, g_theta_nan = loss_vjp(module, h_in, y_nan, mask, mse, params)
+        loss = MSELoss(B)
+        _, g_in, g_theta = loss_vjp(module, h_in, y, mask, loss, params)
+        _, g_in_nan, g_theta_nan = loss_vjp(module, h_in, y_nan, mask, loss, params)
         assert torch.equal(g_in_nan, g_in)
         for g, g_nan in zip(g_theta, g_theta_nan, strict=True):
             assert torch.equal(g_nan, g)
@@ -195,7 +197,7 @@ class TestLossVjp:
         # Every mask False: the energy is zero, and g_in is J^T 0 (y_hat finite).
         module = _make("linear-tanh")
         y = _randn(B, 5, seed=2) if loss_name == "mse" else torch.tensor([4, 0, 2])
-        loss = mse if loss_name == "mse" else cross_entropy
+        loss = MSELoss(B) if loss_name == "mse" else CrossEntropyLoss(B)
         params = list(module.parameters())
         no_target = torch.zeros(B, dtype=torch.bool)
         _, g_in, g_theta = loss_vjp(
@@ -209,7 +211,7 @@ class TestLossVjp:
         module = _make("linear-tanh")
 
         def mean_loss(y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-            return mse(y_hat, y).mean()
+            return mse(y_hat, y, B).mean()
 
         with pytest.raises(ValueError, match="each sample"):
             loss_vjp(
@@ -219,6 +221,42 @@ class TestLossVjp:
                 torch.ones(B, dtype=torch.bool),
                 mean_loss,
             )
+
+    def test_a_batch_of_two_dimensions_is_the_flattened_batch(self):
+        # The samples of (2, 3) are those of (6,), and so are their gradients.
+        module = _make("linear-tanh")
+        h_in, y = _randn(6, 4, seed=1), _randn(6, 5, seed=2)
+        mask = torch.tensor([True, False, True, True, False, True])
+        params = list(module.parameters())
+        y_hat, g_in, g_theta = loss_vjp(module, h_in, y, mask, MSELoss(6), params)
+        y_hat2, g_in2, g_theta2 = loss_vjp(
+            module,
+            h_in.reshape(2, 3, 4),
+            y.reshape(2, 3, 5),
+            mask.reshape(2, 3),
+            MSELoss((2, 3)),
+            params,
+        )
+        assert torch.equal(y_hat2, y_hat.reshape(2, 3, 5))
+        torch.testing.assert_close(g_in2, g_in.reshape(2, 3, 4), rtol=1e-14, atol=0)
+        for g, g2 in zip(g_theta, g_theta2, strict=True):
+            torch.testing.assert_close(g2, g, rtol=1e-14, atol=1e-16)
+
+    def test_without_a_batch_the_mask_is_a_scalar(self):
+        module = _make("linear-tanh")
+        h_in, y = _randn(4, seed=1), _randn(5, seed=2)
+        params = list(module.parameters())
+        _, g_in, g_theta = loss_vjp(
+            module, h_in, y, torch.tensor(True), MSELoss(), params
+        )
+        _, g_in1, g_theta1 = loss_vjp(
+            module, h_in[None], y[None], torch.tensor([True]), MSELoss(1), params
+        )
+        assert torch.equal(g_in, g_in1[0])
+        for g, g1 in zip(g_theta, g_theta1, strict=True):
+            assert torch.equal(g, g1)
+        _, g_in, _ = loss_vjp(module, h_in, y, torch.tensor(False), MSELoss())
+        assert torch.equal(g_in, torch.zeros(4, dtype=torch.float64))
 
 
 class TestRelax:
@@ -276,3 +314,105 @@ class TestLearn:
         before = params[0].clone()
         learn_(params, [_randn(4, 5, seed=2)], 1.0, tau, batch=B)
         assert torch.equal(params[0], before)
+
+    @pytest.mark.parametrize(("batch", "n"), [((), 1), ((2, 3), 6)])
+    def test_divides_by_the_number_of_samples(self, batch: tuple[int, ...], n: int):
+        tau = TimeConstants(h=4e-3, lam=8e-3, theta=0.5)
+        params = [_randn(4, 5, seed=1)]
+        g = _randn(4, 5, seed=3)
+        before = params[0].clone()
+        learn_(params, [g], 1e-3, tau, batch=batch)
+        torch.testing.assert_close(
+            params[0], before - 1e-3 / tau.theta * g / n, rtol=1e-15, atol=1e-15
+        )
+
+
+def _pair(*shape: int) -> tuple[torch.Tensor, torch.Tensor]:
+    return _randn(*shape, seed=1), _randn(*shape, seed=2)
+
+
+class TestMse:
+    def test_mean_squared_error_of_each_sample(self):
+        y_hat, y = _pair(B, 2, 4)
+        ell = mse(y_hat, y, B)
+        assert ell.shape == (B,)
+        for b in range(B):
+            expected = F.mse_loss(y_hat[b], y[b])
+            torch.testing.assert_close(ell[b], expected, rtol=1e-14, atol=0)
+
+    def test_mean_is_the_mean_loss_of_torch(self):
+        # With the 1 / B of learn_, theta follows the gradient of nn.MSELoss().
+        y_hat, y = _pair(B, 5)
+        torch.testing.assert_close(
+            mse(y_hat, y, B).mean(), nn.MSELoss()(y_hat, y), rtol=1e-14, atol=0
+        )
+
+    def test_without_a_batch_is_one_sample(self):
+        y_hat, y = _pair(5)
+        ell = mse(y_hat, y)
+        assert ell.shape == ()
+        torch.testing.assert_close(ell, F.mse_loss(y_hat, y), rtol=1e-14, atol=0)
+
+    def test_a_batch_of_two_dimensions_is_the_flattened_batch(self):
+        y_hat, y = _pair(2, 3, 5)
+        expected = mse(y_hat.reshape(6, 5), y.reshape(6, 5), 6).reshape(2, 3)
+        assert torch.equal(mse(y_hat, y, (2, 3)), expected)
+
+    def test_an_int_is_a_batch_of_one_dimension(self):
+        y_hat, y = _pair(B, 5)
+        assert torch.equal(mse(y_hat, y, B), mse(y_hat, y, (B,)))
+
+    def test_shapes_must_match(self):
+        with pytest.raises(ValueError, match="same shape"):
+            mse(torch.zeros(3, 1), torch.zeros(3), 3)
+
+
+class TestCrossEntropy:
+    def test_of_each_sample(self):
+        y_hat = _randn(B, 4, seed=1)
+        y = torch.tensor([3, 0, 2])
+        assert torch.equal(
+            cross_entropy(y_hat, y, B), F.cross_entropy(y_hat, y, reduction="none")
+        )
+
+    def test_mean_is_the_mean_loss_of_torch(self):
+        # Classes right after the batch, as in torch; the rest of a sample is
+        # averaged over (each position of an image here).
+        y_hat = _randn(B, 4, 2, 3, seed=1)
+        y = torch.randint(0, 4, (B, 2, 3), generator=torch.Generator().manual_seed(0))
+        ell = cross_entropy(y_hat, y, B)
+        assert ell.shape == (B,)
+        torch.testing.assert_close(
+            ell.mean(), nn.CrossEntropyLoss()(y_hat, y), rtol=1e-14, atol=0
+        )
+
+    def test_probabilities_as_the_target(self):
+        y_hat = _randn(B, 4, seed=1)
+        y = torch.softmax(_randn(B, 4, seed=2), dim=1)
+        assert torch.equal(
+            cross_entropy(y_hat, y, B), F.cross_entropy(y_hat, y, reduction="none")
+        )
+
+    def test_without_a_batch_is_one_sample(self):
+        y_hat, y = _randn(4, seed=1), torch.tensor(2)
+        ell = cross_entropy(y_hat, y)
+        assert ell.shape == ()
+        torch.testing.assert_close(ell, F.cross_entropy(y_hat, y), rtol=1e-14, atol=0)
+
+    def test_a_batch_of_two_dimensions_is_the_flattened_batch(self):
+        # The classes are the dimension after the batch: the last one here.
+        y_hat = _randn(2, 3, 4, seed=1)
+        y = torch.randint(0, 4, (2, 3), generator=torch.Generator().manual_seed(0))
+        expected = cross_entropy(y_hat.reshape(6, 4), y.reshape(6), 6).reshape(2, 3)
+        assert torch.equal(cross_entropy(y_hat, y, (2, 3)), expected)
+
+
+class TestLossBatch:
+    @pytest.mark.parametrize("loss", [mse, cross_entropy])
+    def test_the_tensors_must_start_with_the_batch(
+        self, loss: Callable[..., torch.Tensor]
+    ):
+        # (2, 8) would reshape into 4 samples that mix the two.
+        y = torch.zeros(2, 8)
+        with pytest.raises(ValueError, match="start with the batch"):
+            loss(torch.zeros(2, 8), y, 4)

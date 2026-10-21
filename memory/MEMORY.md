@@ -23,6 +23,7 @@
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ、torch.Tensor / TypedDict、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
 - [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
+- [pc のバッチの shape](project_batch_shape.md) — `batch: pc.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → device の上で複製 → 再開 → CPU へ移して返す。木は素の dict（timer と nodes）。正常終了後も取得できる。保存はユーザー。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook の例外でも全体を終了。end は失敗を検出した時刻、全ノードの on_exception → on_stop、以後のホストの呼び出しが NetworkError。例外時の状態は取得しない

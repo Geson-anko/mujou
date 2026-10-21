@@ -45,8 +45,8 @@ PATHS = ("inp", "l1", "l2", "out")
 
 # The target: its spec, the width of the output and the loss.
 TARGETS: dict[str, tuple[TensorSpec, int, Callable[..., torch.Tensor]]] = {
-    "dense y (B, 256)": (TensorSpec((B, 256)), 256, pc.mse),
-    "labels y (B,)": (TensorSpec((B,), torch.int64), 10, pc.cross_entropy),
+    "dense y (B, 256)": (TensorSpec((B, 256)), 256, pc.MSELoss(B)),
+    "labels y (B,)": (TensorSpec((B,), torch.int64), 10, pc.CrossEntropyLoss(B)),
 }
 
 
@@ -84,7 +84,9 @@ def build(
         "period": period,
         "device": device,
     }
-    inp = CountedInput(x=TensorSpec((B, 784)), y=y, period=period, device=device)
+    inp = CountedInput(
+        x=TensorSpec((B, 784)), y=y, period=period, batch=B, device=device
+    )
     l1 = CountedLayer(
         nn.Sequential(nn.Linear(784, 256), nn.Tanh()).to(device),
         act_spec=inp.act_spec,

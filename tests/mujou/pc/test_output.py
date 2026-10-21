@@ -18,7 +18,7 @@ B, N_IN, N_OUT = 3, 4, 2
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
-ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)))
+ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
 
 
 def head(seed: int = 0) -> nn.Linear:
@@ -34,9 +34,9 @@ class Direct:
     def __init__(
         self, start_manual: StartManual, module: nn.Module, **kwargs: Any
     ) -> None:
-        self.inp = pc.Input(x=X, y=Y, period=H)
+        self.inp = pc.Input(x=X, y=Y, period=H, batch=B)
         self.out = pc.Output(
-            module, act_spec=self.inp.act_spec, loss=pc.mse, tau=TAU, **kwargs
+            module, act_spec=self.inp.act_spec, loss=pc.MSELoss(B), tau=TAU, **kwargs
         )
         self.inp.next.connect(self.out.prev)
         self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
@@ -80,17 +80,17 @@ def gradients(
     module: nn.Module, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
     """``y_hat``, ``d loss / d x`` and ``d loss / d theta`` of
-    ``sum_b mask_b 0.5 ||y_b - y_hat_b||^2``, written out."""
+    ``sum_b mask_b mean_j (y_bj - y_hat_bj)^2``, written out."""
     x = x.clone().requires_grad_()
     y_hat = module(x)
-    loss = (0.5 * (y - y_hat) ** 2).sum(dim=1)[mask].sum()
+    loss = ((y - y_hat) ** 2).mean(dim=1)[mask].sum()
     g_in, *g_theta = torch.autograd.grad(loss, [x, *module.parameters()])
     return y_hat.detach(), g_in, g_theta
 
 
 class TestConstruction:
     def test_a_loss_that_averages_is_refused(self):
-        with pytest.raises(ValueError, match="pc.mse"):
+        with pytest.raises(ValueError, match="pc.MSELoss"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=nn.MSELoss(),
@@ -100,11 +100,13 @@ class TestConstruction:
             )
 
     def test_the_prediction_has_the_target(self):
-        act = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64))
+        act = pc.activity_spec(
+            TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64), batch=B
+        )
         out = pc.Output(
             nn.Linear(N_IN, 10),
             act_spec=act,
-            loss=pc.cross_entropy,
+            loss=pc.CrossEntropyLoss(B),
             tau=TAU,
             learn_interval=None,
         )
@@ -119,7 +121,7 @@ class TestConstruction:
     def test_the_period_defaults_to_a_quarter_of_tau_h(self):
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
-            loss=pc.mse,
+            loss=pc.MSELoss(B),
             act_spec=ACT,
             tau=TAU,
             learn_interval=None,
@@ -130,7 +132,7 @@ class TestConstruction:
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
-                loss=pc.mse,
+                loss=pc.MSELoss(B),
                 act_spec=ACT,
                 tau=TAU,
                 learn_interval=None,

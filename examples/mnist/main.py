@@ -87,7 +87,8 @@ def train_pc(
         *modules,
         x=TensorSpec((args.batch, 784)),
         y=TensorSpec((args.batch,), torch.int64),
-        loss=pc.cross_entropy,
+        batch=args.batch,
+        loss=pc.CrossEntropyLoss(args.batch),
         tau=tau,
         learn_interval=0.75 * shown,  # learn once, 3/4 of the way through each batch
     )

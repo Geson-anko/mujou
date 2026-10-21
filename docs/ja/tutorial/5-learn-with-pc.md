@@ -9,10 +9,10 @@ uv run python examples/pc_regression.py
 ```
 
 ```text
-batch   1: loss 0.2079 (the mean of the last 1)
-batch  50: loss 0.0192 (the mean of the last 50)
+batch   1: loss 0.4157 (the mean of the last 1)
+batch  50: loss 0.0458 (the mean of the last 50)
 ...
-batch 300: loss 0.0067 (the mean of the last 50)
+batch 300: loss 0.0060 (the mean of the last 50)
 ```
 
 ## 鎖
@@ -23,8 +23,8 @@ batch 300: loss 0.0067 (the mean of the last 50)
 
 `pc.Chain` はモジュールごとにノードを 1 つ作り、`nn.Sequential` が計算する順につなぐ。サンプルを受け取る `pc.Input`、最後以外の各モジュールの `pc.Layer`（`layer0`、`layer1`）、損失を持つ最後の `pc.Output` である。鎖の子は `input`・`layer0`・`layer1`・`output` で、これがそのまま状態のパスになる。層は `net.layers` で順に取れる（`net.layers[0]` が `layer0`）。
 
-- `x` と `y` は入力と目標の spec で、バッチを先頭に置く。バッチの大きさ `B` を書くのはここだけ
-- `loss` はサンプルごとの損失を shape `(B,)` で返す。`pc.mse` か `pc.cross_entropy`、または同じ形の自作の関数
+- `x` と `y` は入力と目標の spec。`batch` はその先頭の shape で、ここでは `B` 個のサンプル。`batch` を省くと鎖はサンプルを 1 つずつ受け取り、`x` は `TensorSpec((2,))`、`y` は `TensorSpec((1,))` になる
+- `loss` はサンプルごとの損失をバッチの shape で返す。`pc.MSELoss(B)`（サンプルごとの平均二乗誤差。`nn.MSELoss` と同じくサンプルの次元で平均する）か `pc.CrossEntropyLoss(B)`、または同じ shape を返す自作の関数。損失には鎖と同じバッチを渡す（[バッチ](../topics/pc.md#%E3%83%90%E3%83%83%E3%83%81)）
 - `tau` は実行のタイマーの秒で表した時定数。`h` は活動（鎖のどのノードも `tau.period`、つまり `tau.h / 4` ごとに更新する）、`lam` は双対変数、`theta` は重みの時定数
 - `learn_interval` はノードが学ぶ時刻で、各書き込みから数える。ここではバッチごとに 1 回、見せる時間の 3/4 の時点。1 回の学習は前に学んでからの時間で重み付けされるので、バッチごとに 1 回学ぶなら、1 バッチあたりの学習率は見せる時間を `tau.theta` で割ったものになる。既定値は無い。`None` は毎回の更新で学ぶモードで、フレームごとに入力が変わるストリーム向け。このモードのよい値はまだ測っていない
 
