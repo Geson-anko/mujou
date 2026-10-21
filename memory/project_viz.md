@@ -13,4 +13,4 @@ metadata:
 
 **Why:** 出力は利用者が目で見るもので、JS のレイアウトは単体テストで担保できない。
 
-**How to apply:** viz.html を変えたら、ヘッドレス Chromium（playwright。足りない共有ライブラリは apt-get download で scratchpad に展開し LD_LIBRARY_PATH で渡す）でスクリーンショットを撮って目視する。docs/assets/viz/*.png は examples/visualize.py のページを撮ったもので、UI を変えたら撮り直す。関連: [[project-docs-site]]
+**How to apply:** viz.html を変えたら、ヘッドレス Chromium（playwright。足りない共有ライブラリは apt-get download で scratchpad に展開し LD_LIBRARY_PATH で渡す）でスクリーンショットを撮って目視する。docs/assets/viz/*.png は examples/visualize.py のページを撮ったもの、docs/assets/viz/{plant,chain}.html はそのページ自体（topics/visualize.md に iframe で埋め込む）。viz.html を変えたら両方作り直す。関連: [[project-docs-site]]

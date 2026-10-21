@@ -24,6 +24,16 @@
 
 The page is one file with nothing to download, so it opens offline, and you can send it to someone as it is. `mujou.viz` is not imported by `import mujou`: import it by name.
 
+## Try it
+
+!!! abstract "In short"
+
+    Below is the very page that the program above writes. Click the boxes to open them, and select a node.
+
+<iframe class="mujou-viz" src="../../assets/viz/plant.html" title="The page of Plant" loading="lazy"></iframe>
+
+[Open in a new tab](../../assets/viz/plant.html){ target="_blank" }
+
 ## Read the page
 
 !!! abstract "In short"
@@ -92,7 +102,7 @@ The page follows the light or dark theme of the browser.
 --8<-- "examples/visualize.py:chain"
 ```
 
-A `pc.Chain` shows `input`, `layer0`, ..., `output` in a row, each connected to the next by a channel that goes both ways: the activity goes forward and the feedback comes back.
+A `pc.Chain` shows `input`, `layer0`, ..., `output` in a row, each connected to the next by a channel that goes both ways: the activity goes forward and the feedback comes back. [The page it writes](../../assets/viz/chain.html){ target="_blank" }.
 
 ??? question "Why HTML, and not an image?"
 
