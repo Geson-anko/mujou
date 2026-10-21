@@ -10,6 +10,7 @@ import torch
 from mujou._native import ReadOnlyTimer
 from mujou.component import Component
 from mujou.current import outside, running
+from mujou.types import Device
 
 
 @final
@@ -175,7 +176,7 @@ class Node(Component):
         *,
         period: float = 0.01,
         seed: int | None = None,
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
         dedicated_thread: bool = False,
     ) -> None:
         super().__init__()

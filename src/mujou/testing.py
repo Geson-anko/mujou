@@ -47,13 +47,12 @@ Example::
 from collections.abc import Mapping
 from typing import Any
 
-import torch
-
 from mujou.execution import MANUAL_RUN, ManualRun, start
 from mujou.network import Network
 from mujou.node import Node
 from mujou.port import Port
 from mujou.time import VirtualTimer
+from mujou.types import Message
 
 __all__ = ["ManualRun", "run"]
 
@@ -63,7 +62,7 @@ def run[P: Port[Any, Any]](
     root: Node | Network,
     *,
     timer: VirtualTimer | None = None,
-    inputs: Mapping[P, torch.Tensor | Mapping[str, object]] | None = None,
+    inputs: Mapping[P, Message] | None = None,
     state: Mapping[str, Any] | None = None,
 ) -> ManualRun:
     """Run ``root`` as ``mujou.run`` does, with the updates left to

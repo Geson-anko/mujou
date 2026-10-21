@@ -10,6 +10,7 @@ from mujou.pc.clock import LearnClock
 from mujou.pc.functional import learn_, relax_, vjp
 from mujou.pc.messages import Activity, activity_spec, rows
 from mujou.pc.time_constants import TimeConstants
+from mujou.types import Device
 
 
 class Layer(Node):
@@ -184,7 +185,7 @@ class Layer(Node):
         learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau

@@ -13,7 +13,7 @@ from mujou.pc.layer import Layer
 from mujou.pc.messages import Prediction, Sample
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
-from mujou.types import Size
+from mujou.types import Device, Size
 
 
 class Chain(Network):
@@ -75,7 +75,7 @@ class Chain(Network):
         learn_interval: float | None,
         batch: Size = (),
         max_dt: float | None = None,
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
     ) -> None:
         super().__init__()
         self.input = Input(x=x, y=y, period=tau.period, batch=batch, device=device)

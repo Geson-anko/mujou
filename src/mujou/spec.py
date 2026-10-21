@@ -17,6 +17,8 @@ from typing import Any, ClassVar, Final, Generic, TypeVar, cast, final, override
 
 import torch
 
+from mujou.types import Device
+
 # The supported dtypes and their DLPack ``DLDataType`` (code, bits, lanes): the
 # one table, which the codec reads to lay out the core's schemas.
 DLPACK: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyType(
@@ -55,7 +57,7 @@ class MessageSpec(ABC, Generic[_M]):
     """
 
     @abstractmethod
-    def zeros(self, *, device: torch.device | str = "cpu") -> _M:
+    def zeros(self, *, device: Device = "cpu") -> _M:
         """Return a message filled with zeros on ``device``.
 
         On the CPU, this is the default initial value that a port receives before
@@ -63,7 +65,7 @@ class MessageSpec(ABC, Generic[_M]):
         """
 
     @abstractmethod
-    def empty(self, *, device: torch.device | str = "cpu") -> _M:
+    def empty(self, *, device: Device = "cpu") -> _M:
         """Return a message on ``device`` whose values are not set.
 
         Set them before use, in place (``fill_`` and the like).
@@ -123,12 +125,12 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         return self._dtype
 
     @override
-    def zeros(self, *, device: torch.device | str = "cpu") -> torch.Tensor:
+    def zeros(self, *, device: Device = "cpu") -> torch.Tensor:
         """Return a tensor of this spec filled with zeros on ``device``."""
         return torch.zeros(self._shape, dtype=self._dtype, device=device)
 
     @override
-    def empty(self, *, device: torch.device | str = "cpu") -> torch.Tensor:
+    def empty(self, *, device: Device = "cpu") -> torch.Tensor:
         """Return a tensor of this spec on ``device`` whose values are not set.
 
         Set them before use, in place: ``spec.empty().fill_(0.5)``.
@@ -139,7 +141,7 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         self,
         *,
         generator: torch.Generator | None = None,
-        device: torch.device | str = "cpu",
+        device: Device = "cpu",
     ) -> torch.Tensor:
         """Return a tensor of this spec drawn uniformly from [0, 1) on ``device``.
 
@@ -214,12 +216,12 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
         return self._specs
 
     @override
-    def zeros(self, *, device: torch.device | str = "cpu") -> TD:
+    def zeros(self, *, device: Device = "cpu") -> TD:
         """Return a message whose values are all zeros on ``device``."""
         return cast(TD, {k: s.zeros(device=device) for k, s in self._specs.items()})
 
     @override
-    def empty(self, *, device: torch.device | str = "cpu") -> TD:
+    def empty(self, *, device: Device = "cpu") -> TD:
         """Return a message on ``device`` whose values are not set.
 
         Set them before use, in place: ``msg["error"].fill_(0.5)``.
