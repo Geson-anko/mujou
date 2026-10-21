@@ -119,6 +119,16 @@ flowchart LR
 
 `Output` は `h` も `lam` も持たない。段 3 で `functional.loss_vjp` を使い、損失 $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ の勾配 $\partial\ell/\partial h_{\mathrm{in}}$ を `g_in` として送り、`Prediction` を送る。学ぶ条件と `learn_` は `Layer` と同じ。付け替える `h` が無いので `jumps` は読まない。
 
+??? question "g_in を前のノードへ送るのは BP と何が違うの？"
+
+    `g_in` の計算は BP の 1 層分と同じ VJP（$-J_h^\top\delta$）で、平衡点では `lam` が BP の credit と同じ漸化式を満たす。違うのは `g_in` の扱い方。
+
+    1. 送る側は自分の `delta` から `g_in` を作る。`delta = h - mu + lam` は自分の状態だけで決まる
+    2. 受け取る側は届いた `g_in` を足して `g` にし、段 4 の `relax_` で自分の `h` を動かす力に使う。`g` をそのまま前のノードへ流さない
+    3. `h` と `lam` が動くと自分の `delta` が変わり、次の更新で送る `g_in` も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる
+
+    forward と backward の段階も、全ノードの待ち合わせも無い。各ノードは手元にある最新の `g`（古いこともある）で更新する。`vjp` は `h_in` を detach するので、計算グラフはノードをまたがない。BP の勾配と一致するのは平衡点だけで、学ぶまで `learn_interval` だけ待つのはこのため。
+
 ## 4. LearnClock と jumps
 
 !!! abstract "要点"

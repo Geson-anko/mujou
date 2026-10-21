@@ -119,6 +119,16 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 `Output` holds neither `h` nor `lam`. In step 3 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`learn_`) are as in `Layer`. It has no `h` to re-anchor, so it does not read `jumps`.
 
+??? question "How does sending g_in back differ from backpropagation?"
+
+    `g_in` is computed with the same VJP as one layer of backpropagation ($-J_h^\top\delta$), and at equilibrium `lam` follows the same recursion as the credit of backpropagation. What differs is what is done with `g_in`:
+
+    1. The sender makes `g_in` from its own `delta`: `delta = h - mu + lam` depends on its own state only
+    2. The receiver sums the `g_in` it receives into `g`, and uses it in `relax_` (step 4) as a force that moves its own `h`. It does not pass `g` on
+    3. As `h` and `lam` move, its own `delta` changes, and so does the `g_in` it sends in its next update. The credit travels back through the relaxation of each node, over time, not in one backward sweep
+
+    There is no forward phase and backward phase, and no node waits for the others: each node updates with the latest `g` it has, which may be old. `vjp` detaches `h_in`, so no computation graph crosses nodes. The gradient equals that of backpropagation only at equilibrium, which is why a node waits `learn_interval` before it learns.
+
 ## 4. LearnClock and jumps
 
 !!! abstract "Key idea"
