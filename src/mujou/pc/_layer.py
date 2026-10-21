@@ -187,7 +187,7 @@ class Layer(Node):
             period=self.period,
             learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
             # The explicit Euler step of h then lam is stable for dt / tau.h <= 1/2
-            # and dt / tau.lam <= 3 (specs/pc-module.md, "dt が伸びたとき").
+            # and dt / tau.lam <= 3 (specs/pc.md, "dt の打ち切り").
             max_dt=min(tau.h / 2, 3 * tau.lam) if max_dt is None else max_dt,
         )
         self.module = module

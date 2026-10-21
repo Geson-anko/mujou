@@ -1,20 +1,18 @@
 ---
 name: project-mn-scheduler
-description: 2026-10-18 のユーザーの要求で、Python のノードも既定で実行ごとのワーカープール（M:N）に載せた。専用スレッドは Node(dedicated_thread=True) で opt-in、プールは実行ごと（mujou.run(workers=None)）、ノードはワーカー間を移ってよい
+description: Python のノードも既定で実行ごとのワーカープール（M:N）に載せる。専用スレッドは Node(dedicated_thread=True) で opt-in、mujou.run(workers=None)。既定は available_parallelism（quota を数える）、GIL ありならその半分（確認待ち）、実効の数はプールに載るノードの数で頭打ちし 0 もありうる。ノードはワーカー間を移ってよい
 metadata:
   type: project
 ---
 
-2026-10-18、ユーザーの要求「大量のスレッドを立てると OS のコンテキストスイッチを取り合うので、M:N でなければならない」。それまで Python のノードは全部専用スレッドだった（GIL を理由にプールへ載せない、[[project-native-core-rust]] の旧記述）。計画は `memory/agents/implementation-planner/mn-scheduler.md`、PR は 3 つ（① コアのワーカープール ② Python のノードを載せ既定を切り替え ③ ベンチマーク）。
+2026-10-18、ユーザーの要求「大量のスレッドを立てると OS のコンテキストスイッチを取り合うので、M:N でなければならない」。
 
-ユーザーの決定（同日、推奨案どおり）:
+- **専用スレッドは opt-in で残す（ユーザーの決定）。** `Node(dedicated_thread=False)` が既定で全ノードがワーカーに載る。`dedicated_thread=True` はブロッキングする I/O のノードのため。スレッドごとの設定は自分のスレッドで呼ばれる `on_start` に書く
+- **プールは実行ごと（ユーザーの決定）。** `mujou.run(..., workers=None)`。`mujou.testing.run` には無い
+- **ワーカー数の既定:** bindings が決める。free-threaded では Rust の `available_parallelism`（cgroup の quota と affinity を数える）、GIL が有効なとき（`sys._is_gil_enabled()`）はその半分（少なくとも 1。半分にしたのは推奨案で、ユーザーの確認待ち。`specs/open-decisions.md`）。実効の数は `min(要求か既定, プールに載るノードの数)` で、全ノードが専用スレッドなら 0。明示した値が 1 未満なら K20。テストは `Runtime.workers` で見る
+- **ノードはワーカーの間を移ってよい（pinning しない、ユーザーの決定）。** hook の間で保つのは `contextvars`（ノードごとの Context）と、Driver が設定する CUDA の device と stream だけ。`threading.local` は保たない
+- hook の中で変えたほかのスレッドごとの設定（`torch.autocast` など）は、利用者が hook を抜ける前に戻す。フレームワークで防ぐかは「文書だけ」（2026-10-18、ユーザーの決定。設定の種類は無数にある）
 
-- **Q1 専用スレッドは opt-in で残す。** `Node(dedicated_thread=False)` が既定で全ノードがワーカーに載る。~~`on_thread_start` は専用スレッドのノードだけに、そのスレッドで `on_start` の直前に呼ぶ。ワーカーに載るノードのクラスが override していたら `mujou.run` が何も起動しないうちに `TypeError`~~ → 2026-10-19 にユーザーの決定で `on_thread_start` を廃止した（「まだ PyPI 等に正式公開していないので、単に消して良い」。検出も移行の案内も入れない）。専用スレッドのノードのスレッドごとの設定は `on_start`（そのスレッドで呼ばれる）に書く。`dedicated_thread` はブロッキングする I/O のノードのために残す
-- **Q2 プールは実行ごと。** `mujou.run(..., workers=None)` で指定する。既定は `min(ワーカーに載るノードの数, 論理 CPU 数)`。`mujou.testing.run` には足さない。2026-10-19、ベンチマークの結果で GIL ありの既定を `min(ワーカーに載るノードの数, max(1, 論理 CPU 数 // 2))` に変えた（ユーザーへの確認待ち。bindings が `sys._is_gil_enabled()` で判定する。GIL ありでは 7〜8 本が最速で、14 本では約半分の速さだった。`memory/agents/plan-implementer/mn-benchmark.md`）。物理コア数にはしない（SMT の無い機械でしか測れておらず、free-threaded では論理コア数が最速）
-- **Q3 ノードはワーカーの間を移ってよい（pinning しない）。** hook の間で保つのは `contextvars`（ノードごとの `contextvars.Context`）と、フレームワークが戻す CUDA の device と stream だけ（勾配モードは 2026-10-19 から戻さない、[[project-grad-on-by-default]]）。`threading.local`・`threading.current_thread()` は保たない
+**Why:** ノードごとに OS スレッドを立てると、ノードが多いときにコンテキストスイッチとスレッド数に縛られ、ノード間の不公平も大きい。プロセス共有のプールや pinning は、実行ごとの停止・終了の分離が複雑になり、負荷の偏りを直せない。GIL ありの既定を半分にしたのは、論理コア数のワーカーで約半分の速さになったため（`specs/research/benchmarks.md`）。
 
-実装（PR 2）: 内部の hook `_on_thread_start` を `_on_enter` に置き換え、スレッドがノードに切り替わるたびに設定し直す（コアの `NodeHooks::enter`）。Port の所有はスレッド ID でなく「スレッドが今走らせているノード」（`hooks.current_node()`）で判定する。レビューを受けて、勾配の記録は切り替えのときだけでなく、`state_dict` 以外の公開の hook の前に毎回切るようにした（内部の hook `_before_hook`。決定性のため、2026-10-18 の orchestrator の裁定。2026-10-19 にユーザーの決定で廃止、[[project-grad-on-by-default]]）。CUDA の device と stream は切り替えのたび。hook の中で変えたほかのスレッドごとの設定（`torch.autocast` など）は、利用者が hook を抜ける前に戻す（戻さないと同じワーカーの次のノードに漏れる）。この漏れをフレームワークで防ぐか（autocast も切る、debug 時に検出する）は、2026-10-18 のユーザーの決定で「文書だけ」にした。設定の種類は無数にあり、網羅的に戻すのは無理なため
-
-**Why:** ノードごとに OS スレッドを立てると、ノードが多いときにコンテキストスイッチとスレッド数に縛られる。ブロッキングする I/O のノードはワーカーを占有するので、逃げ道として専用スレッドを残した。プロセス共有のプールや pinning は、実行ごとの停止・終了の分離が複雑になる・負荷の偏りを直せないので採らなかった。
-
-**How to apply:** ノードの hook に「スレッドが固定」という前提を持ち込まない。スレッドごとの設定は hook の中の `with` に閉じるか、`_on_enter` で毎回設定する。既定のワーカー数は PR 3 のベンチマークで確かめた（上の Q2）。SMT のある機械での論理と物理の差は未確認（[[project-open-decisions]]）。
+**How to apply:** ノードの hook に「スレッドが固定」という前提を持ち込まない。SMT のある機械での論理と物理の差は未確認（`specs/native-core.md` の「ワーカー数の既定」）。

@@ -49,7 +49,7 @@ just container just run   # start the container if needed, then run `just run` i
 | `just test-rs`         | `cargo test --workspace`                                                                            |
 | `just test-py`         | pytest on all tests, including slow ones, with coverage                                             |
 | `just test-fast`       | `cargo test --workspace`, then pytest without the slow tests. Use it while you iterate              |
-| `just type`            | pyright, strict on `src/`                                                                           |
+| `just type`            | pyright: strict on `src/`, standard on the rest (tests, examples, benchmarks, hooks)                |
 | `just run`             | `format`, `test`, `type` and `docs-build`, in this order                                            |
 | `just docs`            | Serve the documentation at <http://127.0.0.1:8000> with live reload. Arguments go to `mkdocs serve` |
 | `just docs-build`      | Build the documentation into `site/`; any warning (a broken link, a missing API object) fails       |
@@ -63,16 +63,16 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 
 ## Project layout
 
-| Path                   | Contents                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `src/mujou/`           | The Python package. Public names are in `mujou.*`; the implementation is in the private package `mujou._core`       |
-| `crates/mujou-core`    | The core in pure Rust                                                                                               |
-| `crates/mujou-python`  | The PyO3 bindings, built as `mujou._core._native`                                                                   |
-| `crates/mujou-stubgen` | Writes the type stub `_native.pyi` from the built extension (used by `just stub`)                                   |
-| `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                                   |
-| `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                                  |
-| `specs/`               | Design specifications for developers, in Japanese. They record design decisions, including ones not implemented yet |
-| `examples/`            | Programs for users, as guides. The tests do not run them                                                            |
+| Path                   | Contents                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `src/mujou/`           | The Python package. Public names are in `mujou.*`; the implementation is in the private package `mujou._core` |
+| `crates/mujou-core`    | The core in pure Rust                                                                                         |
+| `crates/mujou-python`  | The PyO3 bindings, built as `mujou._core._native`                                                             |
+| `crates/mujou-stubgen` | Writes the type stub `_native.pyi` from the built extension (used by `just stub`)                             |
+| `tests/`               | pytest tests; `tests/mujou/` mirrors `src/mujou/`                                                             |
+| `docs/`                | The user documentation (MkDocs), in English (`docs/en/`) and Japanese (`docs/ja/`)                            |
+| `specs/`               | Design specifications for developers, in Japanese: the current design and the reasons for it                  |
+| `examples/`            | Programs for users, as guides. The tests do not run them                                                      |
 
 `src/mujou/_core/_native.pyi` is generated and committed. After changing the bindings, run `just stub` and commit the result. A pre-commit hook runs `just stub` when the Rust sources, `pyproject.toml` or the stub change, and fails when the stub was stale; the Test workflow in CI checks it too.
 
@@ -83,7 +83,9 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Do not build a learning rule into nodes, messages or the scheduler. The update rule must stay replaceable.
 - Prefix internals, including attributes set in `__init__`, with `_`. Make public only what users need.
 - Subclasses of `Node` and `Network` call `super().__init__()` first in `__init__`, and the same hook of `super()` first in every hook they override (`on_start`, `on_update(dt)`, `on_stop`, ...). Write examples and docs this way too.
-- pyright is strict on `src/`; ruff checks and formats with a line length of 88.
+- Imports follow the layers that `tests/test_layers.py` checks: a module imports only modules of lower layers, at the top level of the file (no cycles, no imports in functions or under `TYPE_CHECKING`), and `mujou.pc` imports only the public names of `mujou`. `specs/architecture.md` explains the layers.
+- Add a check of the user's input only for a mistake listed in the guard ledger of `specs/scenarios.md`, and add a test for it there.
+- pyright is strict on `src/` and standard on the rest of the repository; ruff checks and formats with a line length of 88.
 - Write docstrings and comments in English. Docstrings use the Google style.
 - Add dependencies with `uv add` (or `uv add --dev`) and commit `uv.lock`. Do not use `pip install`.
 
@@ -93,7 +95,7 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Prefer oracles derived from theory, such as finite differences and known equilibria, to checks that "the loss went down".
 - Keep tests deterministic. Run on a `VirtualTimer` and step the nodes by hand with `mujou.testing.run` and `ManualRun.step`, and fix the seeds (a node's `seed`).
 - Mark long-running convergence or training checks with `@pytest.mark.slow`. Markers are strict: register new ones under `markers` in `pyproject.toml`.
-- The tests do not run the programs in `examples/`, which are guides for users. Run the ones your change affects by hand. The rules for examples are in [examples/README.md](examples/README.md).
+- The tests do not run the programs in `examples/`, which are guides for users, but `just type` checks them with pyright, so a change of the API that breaks one fails it. Run the ones your change affects by hand. The rules for examples are in [examples/README.md](examples/README.md).
 
 ## Documentation
 

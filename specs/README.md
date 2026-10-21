@@ -1,34 +1,49 @@
 # mujou 仕様書
 
-mujou の設計方針と仕様をまとめた文書群。2026-10-18 時点で `memory/` に記録されている決定事項を、読み物として再構成した。
+開発者向けの設計仕様。今の設計とその理由だけを書く。決定の経緯は git の履歴に、利用者向けの使い方は [docs/](../docs/)（英語と日本語）にある。
 
-開発者向けの設計仕様で、設計判断とその理由を書く。利用者向けの使い方は [docs/](../docs/)（mkdocs のサイト、英語と日本語）に書く。
+## 目次（読む順）
 
-> 状態: 初期開発中。ここに書いた仕様は設計上の決定であり、まだ実装されていないものを含む。
+| 文書 | 内容 |
+| --- | --- |
+| [概要](overview.md) | 目的、名前の由来、不変の原則 |
+| [構成](architecture.md) | 層と各モジュールの責務、Rust と Python の境界、free-threaded の規則、内部の名前の規約 |
+| [提供シナリオとガード](scenarios.md) | 支える使い方、サポートしないもの、ガードの判定規則と台帳（ガードの正本） |
+| [ノード](nodes.md) | ノード、hook と呼ぶ順、Driver、状態の規則、周期、CUDA |
+| [実行モデル](execution-model.md) | 共有スロット、連続時間、RunClock、停止・取得・復元、状態の木の意味、終了と例外 |
+| [ネットワーク](network.md) | Port・MultiPort・Channel、connect、パス、`__dict__` の走査、起動の 3 段、ホストの入出力 |
+| [メッセージ](messages.md) | spec、torch とコアの変換（codec）、DLPack で必ずコピーすること、バッファプール |
+| [ネイティブコア](native-core.md) | Rust の責務、M:N スケジューラ、ABI、ツールチェーン、性能の予算 |
+| [更新手法](update-rules.md) | 更新手法の差し替え、`mujou.pc` が基盤の外の利用者であること |
+| [mujou.pc](pc.md) | PC-ALM のノードの設計（状態、メッセージ、`on_update` の段、LearnClock、時定数、Chain） |
+| [PC-ALM の連続時間系](pc-alm-continuous-time.md) | 連続時間形の各式の意味、時定数、平衡点、離散化 |
+| [PC の比較実験](research/pc-experiments.md) | `mujou.pc` の設計を決めた実験の表と、採らなかった案 |
+| [性能の基準値](research/benchmarks.md) | 性能の基準値と測り方 |
+| [未決定事項](open-decisions.md) | まだ決めていない設計判断 |
 
-## 目次
+## 知識の置き場所
 
-| 文書                                             | 内容                                                                            |
-| ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [概要](overview.md)                              | mujou の目的、名前の由来、狙う用途、設計判断の拠り所                            |
-| [ノード](nodes.md)                            | 計算単位「ノード」の定義、大きさ、ライフサイクル hook                         |
-| [実行モデル](execution-model.md)                 | 共有スロット、グローバルタイマー、連続時間、停止と状態の取得・復元、終了と例外  |
-| [メッセージ](messages.md)                        | 値の型（`torch.Tensor`）とメッセージの型、スキーマ、スロット、メモリ管理       |
-| [ネットワーク](network.md)                       | ノード・ネットワーク・Port・Channel、双方向の接続、入れ子、入出力、分岐と合流 |
-| [提供シナリオとガード](scenarios.md) | 提供するシナリオ、サポートしないもの、ガードの判定規則と台帳（ガードの正本） |
-| [ネイティブコア](native-core.md)                 | Rust コア、M:N スケジューリング、メッセージの値の型                             |
-| [更新手法](update-rules.md)                      | 更新手法の差し替え、既定の PC-ALM の位置づけと連続時間形                        |
-| [PC-ALM の連続時間系](pc-alm-continuous-time.md) | 連続時間形の各式の意味、時定数、平衡点での BP との一致、離散化                  |
-| [mujou.pc の実装計画](pc-module.md) | `mujou.pc` のノード・状態・メッセージ・θ の更新間隔・時定数・版番号によるリセット・MNIST の example |
-| [PyTorch の利用](torch.md)                       | モジュール構成、GPU の扱い、`mujou.Node`、プロセス全体に効く設定                 |
-| [Python 環境](python-environment.md)             | free-threaded Python 3.14t での開発と GIL ありビルドのサポート                  |
-| [性能の基準値](research/benchmarks.md) | 作り直しの各ステップで比べる、性能の基準値と測り方 |
-| [未決定事項](open-decisions.md)                  | まだ決めていない設計判断                                                        |
+1 つの事実は 1 か所に置く。ほかの場所は正本へリンクする。
 
-## 読む順番
-
-初めて読む場合は、[概要](overview.md)、[ノード](nodes.md)、[実行モデル](execution-model.md) の順に読むと、残りの文書の前提がそろう。
+| 知識 | 正本 | ほかの場所の扱い |
+| --- | --- | --- |
+| 公開名の一覧 | `__all__` と `tests/mujou/test_init.py` | specs と memory には書かない |
+| API の振る舞い（引数、例外） | docstring | docs は mkdocstrings で取り込む。specs には書かない |
+| 状態の木の形 | `Run.state_dict` の docstring | `tests/mujou/_core/test_state.py` で固定する。docs と specs はリンクだけ |
+| 状態に入るものの規則 | `Node` の docstring | `docs/*/concepts.md` は 1 文とリンク |
+| ノードが守る規則と注意書き | `docs/*/concepts.md` の 1 節 | 各ページは 1 行のリンクだけ |
+| 使い方のコード | `examples/` | docs は snippet で取り込む |
+| 設計とその理由 | `specs/` | skill は specs にリンクする |
+| import の層 | `tests/test_layers.py` | [構成](architecture.md) は理由を書いてリンクする |
+| 内部の名前の規約 | [構成](architecture.md#内部の名前の規約) | skill `refactor-conventions` はリンクする |
+| ガード | [提供シナリオとガード](scenarios.md) の台帳 | 利用者向けには docstring の `Raises:` |
+| PC の理論 | skill `pc-alm` | [mujou.pc](pc.md) は mujou の選択だけ |
+| 実験の数値と性能の基準値 | `specs/research/` | ほかの文書はリンクする |
+| 決定とユーザーの好み | `memory/`（1 ファイル 1 決定。今の決定と理由だけ） | 履歴は git |
+| dtype の対応表 | `mujou._core.spec.DLPACK` | `TensorSpec.dtypes` で公開する |
+| hook の名前 | Rust の `Hook` と、bindings の対応表 | — |
+| 属性の所属（ポート、子） | インスタンスの `__dict__` | レジストリを持たない |
 
 ## 関連資料
 
-PC-ALM の式・平衡点の性質・実装上の落とし穴は skill `pc-alm`（`.claude/skills/pc-alm/SKILL.md`）に、実行モデルの不変条件と禁止パターンは skill `locality-and-async`（`.claude/skills/locality-and-async/SKILL.md`）にある。決定の経緯と個別のメモは [memory/](../memory/) を参照。
+PC-ALM の式・平衡点の性質・実装上の落とし穴は skill `pc-alm` に、実行モデルの不変条件と禁止パターンは skill `locality-and-async` にある。

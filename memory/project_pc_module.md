@@ -1,37 +1,25 @@
 ---
 name: project-pc-module
-description: PC-ALM は Rust ではなく PyTorch で実装し、mujou.pc から公開する（トップレベルには出さない）。α=0 で PC に退化するのでモジュール名は pc
+description: PC-ALM は PyTorch で実装し、src/mujou/pc に置いて mujou.pc から公開する（公開 API だけに依存、トップレベルには出さない）。任意の nn.Module を包み、状態は h と λ で持ち離散的な跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、学習の時刻は書いた時刻から learn_interval ごと（LearnClock）、周期 τ_h/4、テストは tests/mujou/pc
 metadata:
   type: project
 ---
 
-2026-10-15 決定。
+設計の正本は `specs/pc.md`、実験の数値は `specs/research/pc-experiments.md`。
 
-- **PC-ALM は PyTorch で実装する。Rust では実装しない。** 計算はノードの内側の行列演算なので、PyTorch の演算と、必要なら `torch.compile` などで足りる（ユーザーの判断）。Rust のコア（`mujou._core._native`）は学習則を知らない基盤にとどめる
-- **公開元は `mujou.pc`。** `mujou.Node` を継承したクラスとして提供する。`mujou.*` のトップレベルには再公開しない（基盤と更新手法の区別を名前に残すため）。別の更新手法も手法ごとのモジュールにする
-- モジュール名を `pcalm` でなく `pc` にしたのは、双対のステップサイズ α=0 で PC-ALM が通常の PC に退化し、PC も同じモジュールに収まるから
-- 「PC-ALM をコアの責務として提供する」（[[project-core-message-framework]]）のコアは mujou の中核の機能の意味で、`mujou._core` パッケージ（とその中の Rust の拡張モジュール `_native`）のことではない
+- **PC-ALM は PyTorch で実装する（2026-10-15、ユーザーの判断）。** 計算はノードの内側の行列演算なので、Rust では書かない。Rust のコアは学習則を知らない基盤にとどめる
+- **置き場所は `src/mujou/pc/`、公開元は `mujou.pc`。** pc は `mujou` の公開名だけを import し、`mujou._core` は pc を知らない（`tests/test_layers.py`）。トップレベルに再公開しない（基盤と更新手法の区別を名前に残す）。α=0 で PC に退化するのでモジュール名は `pc`
+- **公開名:** 正本は `mujou.pc.__all__` と `tests/mujou/test_init.py`。`Layer` / `Output` / `TimeConstants` / `Input` の名前はユーザーが承認（2026-10-20）
+- **ノードは任意の微分可能な `nn.Module` を包む。** ノードの内側は VJP、ノードの間は PC-ALM。VJP はバッチの和、1/B は θ の勾配にだけ（ユーザーの承認）
+- **状態は h と λ で持ち、入力が変わってもリセットしない。** μ が離散的に跳ぶとき（新しいサンプル、前のノードの h の跳び、自分の θ の更新）だけ h を付け替え、跳びの回数 `jumps` を `Activity` で次へ連鎖させる。ずれ u = h − μ を状態にする形は深い鎖で発散したので採らない
+- **目標は入力に付随させる（2026-10-20、ユーザーの決定）。** `Activity` は `{h, jumps, y, mask, time}` で、各ノードが y・mask・time を次へ写す（コアの carry は廃止した: [[project-carry]]）
+- **ノードは `act` で繋ぐ。** `Input` と `Layer` が送る spec を `act` で公開し、次のノードが `act=` で受け取る。B の照合は `activity_spec` の 1 か所（K28）
+- **学習の時刻は、ホストが入力を書いた時刻から `learn_interval` ごと**（plan-implementer の判断をユーザーが承認）。`LearnClock(*, period, learn_interval, max_dt)` と `Tick` に切り出した。`learn_interval=None` は毎回、`math.inf` は学習しない。目安は 2 × ホップ数 × period より長く（検査はしない）
+- **dt は `max_dt`（既定 min(τ_h/2, 3τ_λ)）で打ち切る。** 周期の既定は τ_h/4（ユーザーの提案）。λ は更新後の h の r で更新（公式実装と同じ順）
+- **過負荷で発散するのは許容する**（ユーザー「過負荷では仕方ない」）
 
-**Why:** Rust で書く利点（並行処理の安全性）はノードの間の基盤で効くもので、ノードの内側の行列演算には要らない。
+**Why:** Rust で書く利点（並行処理の安全性）はノードの間の基盤で効くもので、ノードの内側の行列演算には要らない。pc を公開 API だけで書けば、pc でできることは利用者の更新手法でもできる。
 
-**How to apply:** `mujou.pc` の中のクラス名は実装時に決める（ユーザーに確認）。`torch.compile` が 3.14t で多数のスレッドから使えるかは、使うときに確かめる。テストは `tests/mujou/pc/` に置く。仕様は `specs/update-rules.md` の「実装と公開元」。
+**How to apply:** pc のために基盤へ特別な口を足す必要が出たら、利用者にも要る口として公開 API に足す。テストは `tests/mujou/pc/`。
 
 関連: [[project-pluggable-update-rule]], [[project-torch-module]], [[project-node-lifecycle]]
-
-## 実装計画の決定（2026-10-19〜20、`specs/pc-module.md`）
-
-- ノードは任意の微分可能な `nn.Module` `f` を包む。ノードの内側は VJP（BP）、ノードの間は PC-ALM。バッチの規約は「VJP はバッチの和、1/B は θ の勾配にだけ」（ユーザー承認）
-- **状態は予測からのずれ u = h − μ と λ で持ち、入力が変わってもリセットしない**（ユーザー「素晴らしい」）。h を状態にすると i.i.d. のバッチで h_old − μ_new が θ を壊すが、u なら持ち越すのは credit 程度。代わりに記事の離散更新との一致はオラクルにできず、不動点での BP 一致を使う
-- **ターゲットは入力に付随させ、コアの carry で活動と同じメッセージに載せて中継する**（2026-10-20、ユーザーの決定。当初は入力の時刻で揃える案だったが、伝播より速く書くと一致しなくなるので切り替えた）。別の Port に分けると読み手が別々の瞬間に読み組み違うので、1 つのメッセージに入れる。コアは `Message` のバッファを `Arc` で持ちゼロコピーで中継する
-- θ の更新間隔は秒の `learn_interval`、入力の時刻が変わったときと学習したときに位相を戻す。重みは前回からの Σdt（ユーザー承認）
-- 周期の既定は τ_h/4（ユーザーの提案）。λ は更新後の u で更新（公式実装 SakanaAI/pc-alm と同じ順）
-- 公開名 `pc.Layer`・`pc.Output`・`pc.TimeConstants` はユーザー承認。`pc.Input` も承認（2026-10-20）。付随データは `pc.Carried` / `pc.carry_spec`
-- 数値の状態（入力の時刻・位相・経過時間）のためにコアへ `Node.register_state(name)` を足す（ユーザーの提案。任意の値、復元は代入で差し替え）
-
-**Why:** 同期シミュレーションの MNIST（3 層、B=64）で、u で持ち持ち越す方式が S=32 で BP と同等（relu 97.60 対 97.65）、勾配も cos 1.000 だった。
-
-## 実装後の決定（2026-10-20）
-
-- 学習の時刻は、ホストが入力を書いた時刻（付随データの `time`）から `learn_interval` ごと（plan-implementer の判断をユーザーが承認）。ノードが入力を見た時刻から数えると非同期の更新順で発散した
-- 過負荷（32 コアに busy loop 32 本、time scale 1）で発散するのは許容する（ユーザー「過負荷では仕方ない」）
-- 状態は h で持ち、離散的な跳び（新しいサンプル、自分の θ の更新）だけ付け替えて `pc.Activity` の epoch で連鎖させる。u の形は ResBlock 6 ノード以上で発散したので採らない（`specs/pc-module.md`、skill `pc-alm` 7.2）

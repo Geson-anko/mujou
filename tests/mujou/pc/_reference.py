@@ -1,4 +1,4 @@
-"""PC-ALM in plain PyTorch, from the equations of ``specs/pc-module.md``: the
+"""PC-ALM in plain PyTorch, from the equations of ``specs/pc.md``: the
 oracles that the tests of the nodes of ``mujou.pc`` compare with."""
 
 import copy
@@ -107,7 +107,7 @@ def credits(
 
 
 class Clock:
-    """When a node learns, as ``specs/pc-module.md`` states it: from the time
+    """When a node learns, as ``specs/pc.md`` states it: from the time
     ``time`` (ns) the host wrote the input, every ``interval`` (ns) after it,
     never in the update that first sees the input; ``elapsed`` is the time since
     the last update, dropped when the input changes before the node learned."""

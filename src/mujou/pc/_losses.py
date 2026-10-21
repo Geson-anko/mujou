@@ -2,7 +2,7 @@
 
 A loss takes the prediction ``y_hat`` and the target ``y`` and returns the loss of
 each sample, ``(B,)``. The node sums them; it never averages, so that the gradient
-it sends to the previous node is the credit of each sample (``specs/pc-module.md``).
+it sends to the previous node is the credit of each sample (``specs/pc.md``).
 """
 
 import torch
