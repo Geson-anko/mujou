@@ -10,6 +10,7 @@
 
 ## project
 
+- [モジュールは公開する](project_public_modules.md) — `_core` と `pc/_*.py` をやめ、`mujou/` 直下に 1 責務 1 ファイル。private は `mujou._native` だけ。`run.py` は関数 `mujou.run` と衝突するので `execution.py`（2026-10-21）
 - [作り直し（2026-10-20）](project_restructure_2026_10_20.md) — 作り直しの決定の正本は specs/architecture.md と specs/scenarios.md。R1〜R8 は 2026-10-21 にユーザーが承認。テンソルの容器は register_state、pc.Chain.layers を公開
 - [プロジェクトの目的](project_purpose.md) — 推論と学習を同時に行い、知能に「無常」を実現するフレームワーク。既定の更新手法は暫定的に PC-ALM
 - [更新手法の差し替え](project_pluggable_update_rule.md) — PC-ALM は暫定の既定。ノードの基盤と更新手法を分離し、他の手法も与えられるようにする
@@ -19,7 +20,7 @@
 - [Rust コアと M:N 実行](project_native_core_rust.md) — コアは Rust（仕組み）、Python はインターフェース（方針）。Rust は Python の Driver を hook ごとに 1 回呼ぶ。例外は Python で定義。コアの値の型は内部に閉じ、torch とは DLPack で必ずコピー
 - [実行ごとのタイマー](project_timer_per_run.md) — 時間軸は実行ごとに 1 本、既定は global_timer、復元した実行は保存した時刻から始まる専用の Timer。ランタイムの時刻源は RunClock。時刻は Timestamp | None
 - [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer.pause / resume / is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は秒の float
-- [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_core/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
+- [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ、torch.Tensor / TypedDict、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
 - [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
@@ -33,7 +34,7 @@
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語、tutorial / topics / api）。サンプルは examples/（snippet で取り込み、テストでは実行しない）。GitHub Pages に mike で版ごと
 - [テスト用の公開の口](project_testing_api.md) — mujou.testing.run と ManualRun.step(dt, *nodes)。mujou 自身と利用者のテストが同じ口を使う。VirtualTimer は mujou.time
-- [実行の API とモジュール構成](project_runtime_api_revision.md) — 実装は mujou._core、Rust は _core._native。build と Graph は持たず、mujou.run がハンドル Run を返す。state_dict は実行中と正常終了の後
+- [実行の API とモジュール構成](project_runtime_api_revision.md) — モジュールは公開、private は Rust の mujou._native だけ。build と Graph は持たず、mujou.run がハンドル Run を返す。state_dict は実行中と正常終了の後
 - [ノードの実行周期](project_node_period.md) — `Node(period=0.01)` が既定、`0.0` は明示したときだけ、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す。Δt は実経過。手動モードは周期を無視。シグネチャと復元後の目標は確認待ち
 - [run はルート 1 つ、write は時刻を返す](project_run_node_and_write_time.md) — `mujou.run(root)`（並べるのは Group、R4）。ノード単体もルート（パス ""）。`Run.write` が `Timestamp` を返す
 - [Group と mujou.typing の廃止](project_group_and_typing.md) — 並べるだけの入れ物は `Group(**named)`。`mujou.typing` は廃止し、`MessageSpec` はトップレベル

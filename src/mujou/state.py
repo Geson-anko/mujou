@@ -13,11 +13,11 @@ from typing import Any, Final, cast, final
 
 import torch
 
-from mujou._core.codec import from_core, to_core
-from mujou._core.node import map_tensors
-from mujou._core.port import AnyPort, AnySlot
-from mujou._core.spec import MessageSpec
-from mujou._core.wiring import Wiring
+from mujou.codec import from_core, to_core
+from mujou.node import map_tensors
+from mujou.port import AnyPort, AnySlot
+from mujou.spec import MessageSpec
+from mujou.wiring import Wiring
 
 # Where the tree holds its tensors.
 _CPU: Final = torch.device("cpu")

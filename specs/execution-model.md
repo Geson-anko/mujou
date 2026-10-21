@@ -123,7 +123,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 ### 状態の木の意味
 
-木の形の正本は `Run.state_dict` の docstring で、`tests/mujou/_core/test_state.py` が固定する。
+木の形の正本は `Run.state_dict` の docstring で、`tests/mujou/test_state.py` が固定する。
 
 木は素の dict で、テンソルはすべて CPU のコピーである。`torch.save(tree)` と `torch.load(..., weights_only=True)` がそのまま通るので、dict のサブクラスや safe globals の登録が要らない。中身は次の 4 つ。
 
@@ -187,7 +187,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 ### インタプリタの終了
 
-ホストが `Run` を手放しても、実行は止まらない。`run.py` は走っている実行を覚えておき、atexit で `shutdown` して `on_stop` を待つ（終了中のインタプリタにランタイムのスレッドが入らないようにするため）。CPython は non-daemon のスレッドを join してから atexit を呼ぶので、`with` も `shutdown` も使わずに `subscribe` を回すスレッドを残すと、終了がそのまま待つ。これはサポートしない（[提供シナリオとガード](scenarios.md#サポートしないもの)）。docs は `with` を前提に書く。
+ホストが `Run` を手放しても、実行は止まらない。`execution.py` は走っている実行を覚えておき、atexit で `shutdown` して `on_stop` を待つ（終了中のインタプリタにランタイムのスレッドが入らないようにするため）。CPython は non-daemon のスレッドを join してから atexit を呼ぶので、`with` も `shutdown` も使わずに `subscribe` を回すスレッドを残すと、終了がそのまま待つ。これはサポートしない（[提供シナリオとガード](scenarios.md#サポートしないもの)）。docs は `with` を前提に書く。
 
 ### グローバルなバリアとの関係
 

@@ -64,7 +64,7 @@ container *args:
     devcontainer up --workspace-folder "$main" > /dev/null
     devcontainer exec --workspace-folder "$main" bash -lc 'cd "$1" && shift && exec "$@"' _ "{{justfile_directory()}}" "$@"
 
-# Generate src/mujou/_core/_native.pyi from the Rust signatures and doc comments (commit it)
+# Generate src/mujou/_native.pyi from the Rust signatures and doc comments (commit it)
 stub:
     #!/usr/bin/env -S uv run --quiet python
     import importlib.util, re, subprocess, tomllib

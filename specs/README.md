@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | 公開名の一覧 | `__all__` と `tests/mujou/test_init.py` | specs と memory には書かない |
 | API の振る舞い（引数、例外） | docstring | docs は mkdocstrings で取り込む。specs には書かない |
-| 状態の木の形 | `Run.state_dict` の docstring | `tests/mujou/_core/test_state.py` で固定する。docs と specs はリンクだけ |
+| 状態の木の形 | `Run.state_dict` の docstring | `tests/mujou/test_state.py` で固定する。docs と specs はリンクだけ |
 | 状態に入るものの規則 | `Node` の docstring | `docs/*/concepts.md` は 1 文とリンク |
 | ノードが守る規則と注意書き | `docs/*/concepts.md` の 1 節 | 各ページは 1 行のリンクだけ |
 | 使い方のコード | `examples/` | docs は snippet で取り込む |
@@ -40,7 +40,7 @@
 | PC の理論 | skill `pc-alm` | [mujou.pc](pc.md) は mujou の選択だけ |
 | 実験の数値と性能の基準値 | `specs/research/` | ほかの文書はリンクする |
 | 決定とユーザーの好み | `memory/`（1 ファイル 1 決定。今の決定と理由だけ） | 履歴は git |
-| dtype の対応表 | `mujou._core.spec.DLPACK` | `TensorSpec.dtypes` で公開する |
+| dtype の対応表 | `mujou.spec.DLPACK` | `TensorSpec.dtypes` で公開する |
 | hook の名前 | Rust の `Hook` と、bindings の対応表 | — |
 | 属性の所属（ポート、子） | インスタンスの `__dict__` | レジストリを持たない |
 

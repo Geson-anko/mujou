@@ -15,7 +15,7 @@ mujou のコアには 2 つの責務がある。1 つは各ノードを非同期
 
 ## 実装言語
 
-コアは Rust で実装し、Python はインターフェースにする。Python からは PyO3 + maturin で作る private な拡張モジュール `mujou._core._native` として使う。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。コアは torch を import しない。フレームワークの基礎を自分たちで制御するため（[構成](architecture.md#rust-と-python-の境界)）。
+コアは Rust で実装し、Python はインターフェースにする。Python からは PyO3 + maturin で作る private な拡張モジュール `mujou._native` として使う。Rust を選んだのは、並行処理の安全性をコンパイラが保証し、PyO3 で Python から使えるからである。コアは torch を import しない。フレームワークの基礎を自分たちで制御するため（[構成](architecture.md#rust-と-python-の境界)）。
 
 ## ABI
 
@@ -28,11 +28,11 @@ mujou のコアには 2 つの責務がある。1 つは各ノードを非同期
 | `start`、`Runtime` | 実行 |
 | `current` | いま hook を走らせている Driver |
 
-- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`run.py`）の列で、並べたリストの長さを照合する引数を表せなくした
+- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`execution.py`）の列で、並べたリストの長さを照合する引数を表せなくした
 - `Runtime` は `step(order)`、`capture(build, timeout)`、`shutdown(timeout) -> bool`（止める要求を出して待つ。timeout の変換は要求の前に行い、断られた呼び出しは何も変えない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
 - 正常に終わった後の取得も `Runtime.capture` の同じ口で行う
 - bindings は `Runtime` の hook を、`Hook` から Driver のメソッド名への対応表で呼ぶ。Python を呼ぶ直前に thread-local の `CURRENT` に Driver を付け、戻ったら外す（`current.rs`）。core の `RUNTIME_OF_THREAD`（このスレッドがどのランタイムのものか）は、内部の `Reentrant` の検査のためにあり、「hook の中か」とは別の事実
-- 例外は Python の `mujou._core.errors.NetworkError` を `import_exception!` で参照する。停止の timeout は組み込みの `TimeoutError`
+- 例外は Python の `mujou.errors.NetworkError` を `import_exception!` で参照する。停止の timeout は組み込みの `TimeoutError`
 - 内部の契約（値の個数、DLPack で読めない値、無いチャネルの番号など）の検査は FFI の健全性のためだけに残す内部エラーで、利用者に届いたら mujou のバグ（[提供シナリオとガード](scenarios.md#ガードではない意味論)）
 - コアの `Slot` は 1 つの型で、書き手を `Source`（`Outlet` か `InputGroup`）で区別する。bindings は書き手の違いを型で見せるため `Slot` と `InputSlot` に分ける
 
@@ -106,21 +106,21 @@ lock-free の `arc-swap` は使わない。arc-swap の読み手は、読んだ�
 | crate | 中身 |
 | --- | --- |
 | `crates/mujou-core` | コアの本体。PyO3 に依存しないので、`cargo test` が libpython をリンクせずに回る |
-| `crates/mujou-python` | PyO3 の bindings。拡張モジュール `mujou._core._native` になる。free-threaded 対応を明示する（`gil_used = false`）。`test = false` で、bindings は pytest で確かめる |
+| `crates/mujou-python` | PyO3 の bindings。拡張モジュール `mujou._native` になる。free-threaded 対応を明示する（`gil_used = false`）。`test = false` で、bindings は pytest で確かめる |
 | `crates/mujou-stubgen` | `_native` の型スタブの生成器（`just stub` が使う） |
 
-- Python のパッケージのビルドバックエンドは maturin。`uv sync` が拡張モジュールをビルドして `src/mujou/_core/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
+- Python のパッケージのビルドバックエンドは maturin。`uv sync` が拡張モジュールをビルドして `src/mujou/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
 - 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `importlib.metadata` から取る
 - Rust の版は `rust-toolchain.toml` で固定する。最低限サポートする版は `Cargo.toml` の `rust-version` で、CI の MSRV ジョブがその版で `cargo check --workspace --all-targets` を通す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で、`cargo doc`（警告で失敗）は CI で回す
 - 実行時の依存は `torch` だけ。examples が使う numpy は dependency group `examples` に置き、`default-groups` で `uv sync` が入れる
 
 ### 型スタブ
 
-`src/mujou/_core/_native.pyi` は `just stub` で生成し、生成物をコミットする。手で編集しない。
+`src/mujou/_native.pyi` は `just stub` で生成し、生成物をコミットする。手で編集しない。
 
 - pyo3 の `experimental-inspect` が拡張モジュールに埋め込むシグネチャと doc comment を、`crates/mujou-stubgen`（`pyo3-introspection`）が読んで書き出し、ruff で整形する。docstring の正本は Rust の doc comment で、前提条件・例外・スレッドの約束はそこに書く
 - pre-commit のフックが毎回生成し直し、コミットしたスタブが古ければ失敗する。CI の pre-commit ジョブは拡張モジュールをビルドしないのでこのフックを飛ばし、代わりに Test のワークフローが `just stub && git diff --exit-code` で確かめる
-- introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou._core", name = "_native")]` で決まり、`pyproject.toml` の `module-name` もそろえる
+- introspection は inline module（`#[pymodule] mod`）にしか効かない。モジュールの名前は `lib.rs` の `#[pymodule(module = "mujou", name = "_native")]` で決まり、`pyproject.toml` の `module-name` もそろえる
 - 生成器は pyo3 の足りない所を補う。`__new__` の戻りを `typing.Self` にし、注釈の無い `*args` / `**kwargs` を `typing.Any` にし、`object` のメソッドの override に `@typing.override` を付ける
 - `#[pyo3(signature = ...)]` の文字列の注釈は import を伴わないので、組み込みとモジュール内の名前だけを書く。`collections.abc.Callable` などが要る型は、小さな型で表す（`crates/mujou-python/src/hint.rs`）
 - `pyo3-stub-gen` は pyo3 0.30 に対応していないので使わない

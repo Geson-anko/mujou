@@ -2,12 +2,12 @@
 
 import importlib.metadata
 
-from mujou._core.errors import NetworkError
-from mujou._core.network import Group, Network
-from mujou._core.node import Node
-from mujou._core.port import Channel, MultiPort, Port
-from mujou._core.run import Run, run
-from mujou._core.spec import DictSpec, MessageSpec, TensorSpec
+from mujou.errors import NetworkError
+from mujou.execution import Run, run
+from mujou.network import Group, Network
+from mujou.node import Node
+from mujou.port import Channel, MultiPort, Port
+from mujou.spec import DictSpec, MessageSpec, TensorSpec
 
 __all__ = [
     "Channel",

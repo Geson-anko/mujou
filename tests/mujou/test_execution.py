@@ -21,10 +21,10 @@ import torch
 import mujou
 import mujou.testing
 from mujou import NetworkError, Run
-from mujou._core.network import Group, Network
-from mujou._core.node import Node
-from mujou._core.port import Port
-from mujou._core.spec import TensorSpec
+from mujou.network import Group, Network
+from mujou.node import Node
+from mujou.port import Port
+from mujou.spec import TensorSpec
 from mujou.testing import ManualRun
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer, global_timer
 from tests.mujou.nodes import (

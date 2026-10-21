@@ -16,10 +16,10 @@ from typing import TypeIs, cast, final
 import torch
 from torch import nn
 
-from mujou._core.component import is_part
-from mujou._core.network import Network
-from mujou._core.node import Node, initialized, is_state
-from mujou._core.port import AnyPort, MultiPort, Port
+from mujou.component import is_part
+from mujou.network import Network
+from mujou.node import Node, initialized, is_state
+from mujou.port import AnyPort, MultiPort, Port
 
 
 @final

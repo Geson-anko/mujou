@@ -32,24 +32,24 @@ from typing import Any, Final, NamedTuple, Self, cast, final, override
 
 import torch
 
-from mujou._core import _native
-from mujou._core._native import (
+from mujou import _native
+from mujou._native import (
     ReadOnlyTimer,
     Timer,
     Timestamp,
     VirtualTimer,
     global_timer,
 )
-from mujou._core.codec import from_core
-from mujou._core.current import running
-from mujou._core.driver import Driver
-from mujou._core.errors import NetworkError
-from mujou._core.network import Network
-from mujou._core.node import Node
-from mujou._core.port import MultiPort, Port
-from mujou._core.state import capture, cpu, restore, saved_time
-from mujou._core.tree import Tree, walk
-from mujou._core.wiring import Wiring, wire
+from mujou.codec import from_core
+from mujou.current import running
+from mujou.driver import Driver
+from mujou.errors import NetworkError
+from mujou.network import Network
+from mujou.node import Node
+from mujou.port import MultiPort, Port
+from mujou.state import capture, cpu, restore, saved_time
+from mujou.tree import Tree, walk
+from mujou.wiring import Wiring, wire
 
 # Real seconds between the checks of `subscribe` for the end of the run.
 _POLL: Final = 0.05

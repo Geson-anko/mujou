@@ -72,7 +72,7 @@ fn method(py: Python<'_>, hook: Hook) -> &Bound<'_, PyString> {
     }
 }
 
-/// A node's driver (`mujou._core.driver.Driver`) as the runtime sees it: each
+/// A node's driver (`mujou.driver.Driver`) as the runtime sees it: each
 /// hook is one call of the driver's method for it, which `current()` returns
 /// the driver during.
 struct PyDriver {
@@ -264,7 +264,7 @@ type Record<'py> = (
 ///
 /// Each node is a record `(driver, name, period, dedicated_thread,
 /// last_update_ns, state)`. The runtime runs each hook of the node as one call
-/// of a method of `driver` (`mujou._core.driver.Driver`): `start()`,
+/// of a method of `driver` (`mujou.driver.Driver`): `start()`,
 /// `restore(state)`, `update(dt)`, `pause()`, `resume()`, `exception()`,
 /// `stop()` and `capture()`, which returns the node's state. `name` names the
 /// node in the errors and the logs, which name the hooks as the node's author
@@ -355,7 +355,7 @@ fn wait<T: Send>(py: Python<'_>, reply: Reply<T>) -> PyResult<T> {
 
 /// The running nodes of one run, from `start`: on a pool of worker threads,
 /// or each dedicated node on a thread of its own, under one control thread.
-#[pyclass(frozen, module = "mujou._core._native")]
+#[pyclass(frozen, module = "mujou._native")]
 pub struct Runtime(core::Runtime<PyDriver>);
 
 #[pymethods]

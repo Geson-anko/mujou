@@ -8,8 +8,8 @@ from typing import Protocol, override
 
 import pytest
 
-from mujou._core._native import ReadOnlyTimer, Runtime, VirtualTimer, current, start
-from mujou._core.errors import NetworkError
+from mujou._native import ReadOnlyTimer, Runtime, VirtualTimer, current, start
+from mujou.errors import NetworkError
 
 H_NS = 1_000_000
 H = H_NS / 1e9
@@ -41,7 +41,7 @@ class Log:
 
 
 class Recorder:
-    """A driver (the runtime's side of a node, ``mujou._core.driver.Driver``)
+    """A driver (the runtime's side of a node, ``mujou.driver.Driver``)
     that records the calls of its methods; raises in ``raise_in`` on its
     ``at``-th call."""
 

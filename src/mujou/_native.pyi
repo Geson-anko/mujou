@@ -520,7 +520,7 @@ class VirtualTimer(Timer):
 
 def current() -> "object | None":
     """
-    The driver (`mujou._core.driver.Driver`) of the node whose hook the
+    The driver (`mujou.driver.Driver`) of the node whose hook the
     calling thread runs; `None` outside a hook.
     """
 
@@ -548,7 +548,7 @@ def start(
 
     Each node is a record `(driver, name, period, dedicated_thread,
     last_update_ns, state)`. The runtime runs each hook of the node as one call
-    of a method of `driver` (`mujou._core.driver.Driver`): `start()`,
+    of a method of `driver` (`mujou.driver.Driver`): `start()`,
     `restore(state)`, `update(dt)`, `pause()`, `resume()`, `exception()`,
     `stop()` and `capture()`, which returns the node's state. `name` names the
     node in the errors and the logs, which name the hooks as the node's author

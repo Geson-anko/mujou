@@ -3,7 +3,7 @@
 //! signatures and the doc comments of `crates/mujou-python`.
 //!
 //! Usage: `mujou-stubgen <library> <module> <output.pyi>`, where `<module>` is the
-//! full name of the module (such as `mujou._core._native`). Run it through `just stub`.
+//! full name of the module (such as `mujou._native`). Run it through `just stub`.
 
 use std::path::Path;
 use std::{env, fs};

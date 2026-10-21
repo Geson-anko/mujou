@@ -9,7 +9,7 @@ attributes of ``__slots__``.
 
 from typing import Any
 
-from mujou._core.port import MultiPort, Port
+from mujou.port import MultiPort, Port
 
 
 class Component:

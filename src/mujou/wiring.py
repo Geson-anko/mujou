@@ -16,11 +16,11 @@ from typing import Any, cast, final
 
 import torch
 
-from mujou._core import _native
-from mujou._core.codec import schema, to_core
-from mujou._core.port import AnyPort, AnySlot, Channel, Port, Wire
-from mujou._core.spec import MessageSpec
-from mujou._core.tree import Tree
+from mujou import _native
+from mujou.codec import schema, to_core
+from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
+from mujou.spec import MessageSpec
+from mujou.tree import Tree
 
 
 @final

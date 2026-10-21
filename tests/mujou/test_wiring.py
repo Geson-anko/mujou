@@ -1,12 +1,12 @@
 import pytest
 import torch
 
-from mujou._core.network import Group, Network
-from mujou._core.port import MultiPort, Port
-from mujou._core.spec import TensorSpec
-from mujou._core.tree import walk
-from mujou._core.wiring import Wiring, wire
+from mujou.network import Group, Network
+from mujou.port import MultiPort, Port
+from mujou.spec import TensorSpec
 from mujou.time import ReadOnlyTimer, VirtualTimer
+from mujou.tree import walk
+from mujou.wiring import Wiring, wire
 from tests.mujou.nodes import F64, Chain, Hidden, Probe, vec
 
 

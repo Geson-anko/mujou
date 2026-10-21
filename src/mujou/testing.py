@@ -49,10 +49,10 @@ from typing import Any
 
 import torch
 
-from mujou._core.network import Network
-from mujou._core.node import Node
-from mujou._core.port import Port
-from mujou._core.run import MANUAL_RUN, ManualRun, start
+from mujou.execution import MANUAL_RUN, ManualRun, start
+from mujou.network import Network
+from mujou.node import Node
+from mujou.port import Port
 from mujou.time import VirtualTimer
 
 __all__ = ["ManualRun", "run"]

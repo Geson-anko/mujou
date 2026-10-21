@@ -12,8 +12,8 @@ from typing import Any, cast
 
 import torch
 
-from mujou._core import _native
-from mujou._core.spec import DLPACK, DictSpec, MessageSpec, TensorSpec
+from mujou import _native
+from mujou.spec import DLPACK, DictSpec, MessageSpec, TensorSpec
 
 
 def fields(spec: MessageSpec[Any]) -> Mapping[str, TensorSpec]:

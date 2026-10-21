@@ -31,7 +31,7 @@ pub(crate) fn in_hook() -> bool {
     CURRENT.with_borrow(Option::is_some)
 }
 
-/// The driver (`mujou._core.driver.Driver`) of the node whose hook the
+/// The driver (`mujou.driver.Driver`) of the node whose hook the
 /// calling thread runs; `None` outside a hook.
 #[pyfunction]
 #[pyo3(signature = () -> "object | None")]

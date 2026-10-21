@@ -1,7 +1,7 @@
 """Networks: the composites of nodes and other networks (``specs/network.md``)."""
 
-from mujou._core.component import Component
-from mujou._core.node import Node
+from mujou.component import Component
+from mujou.node import Node
 
 
 class Network(Component):

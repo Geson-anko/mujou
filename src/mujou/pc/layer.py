@@ -6,10 +6,10 @@ import torch
 from torch import nn
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
-from mujou.pc._clock import LearnClock
-from mujou.pc._messages import Activity, activity_spec, rows
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.clock import LearnClock
 from mujou.pc.functional import learn_, relax_, vjp
+from mujou.pc.messages import Activity, activity_spec, rows
+from mujou.pc.time_constants import TimeConstants
 
 
 class Layer(Node):

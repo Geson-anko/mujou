@@ -4,11 +4,11 @@ import pytest
 import torch
 from torch import nn
 
-from mujou._core.network import Group, Network
-from mujou._core.node import Node
-from mujou._core.port import MultiPort, Port
-from mujou._core.spec import TensorSpec
-from mujou._core.tree import walk
+from mujou.network import Group, Network
+from mujou.node import Node
+from mujou.port import MultiPort, Port
+from mujou.spec import TensorSpec
+from mujou.tree import walk
 from tests.mujou.nodes import Hidden
 
 

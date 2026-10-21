@@ -14,7 +14,7 @@ mujou の本質は「推論と学習が同時に行われ、知能に『無常�
 
 ## mujou.pc は基盤の外の利用者
 
-PC-ALM は `src/mujou/pc/` に実装し、`mujou` の公開名だけに依存する。`mujou._core` は pc を知らず、pc も `mujou._core` を import しない（`tests/test_layers.py` が強制する）。
+PC-ALM は `src/mujou/pc/` に実装し、`mujou` の公開名だけに依存する。基盤のモジュール（`mujou.node`、`mujou.port` など）は pc を知らず、pc もそれらを直接 import しない（`tests/test_layers.py` が強制する）。
 
 - 基盤と更新手法を区別する方針を、物理的な木と一致させる。pc が使っているのは、利用者が使うのと同じ `Node`、`Port`、`MultiPort`、`Network`、`TensorSpec`、`DictSpec`、`Run`、`self.timer` だけ
 - そのため、pc でできることは利用者の更新手法でもできる。pc のために基盤へ特別な口を足す必要が出たら、それは利用者にも要る口として公開 API に足す

@@ -29,14 +29,14 @@ Import it as a submodule::
 """
 
 from mujou.pc import functional as functional
-from mujou.pc._chain import Chain, show
-from mujou.pc._clock import LearnClock, Tick
-from mujou.pc._input import Input
-from mujou.pc._layer import Layer
-from mujou.pc._losses import cross_entropy, mse
-from mujou.pc._messages import Activity, Prediction, Sample, activity_spec
-from mujou.pc._output import Output
-from mujou.pc._time_constants import TimeConstants
+from mujou.pc.chain import Chain, show
+from mujou.pc.clock import LearnClock, Tick
+from mujou.pc.input import Input
+from mujou.pc.layer import Layer
+from mujou.pc.losses import cross_entropy, mse
+from mujou.pc.messages import Activity, Prediction, Sample, activity_spec
+from mujou.pc.output import Output
+from mujou.pc.time_constants import TimeConstants
 
 __all__ = [
     "Chain",
