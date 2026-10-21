@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/api/pc/">
       
       
-        <link rel="prev" href="../testing/">
+        <link rel="prev" href="../types/">
       
       
       
@@ -1130,6 +1130,8 @@
       
         
       
+        
+      
     
     
     
@@ -1322,6 +1324,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1395,17 +1425,6 @@
   
     <nav class="md-nav" aria-label="pc">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.Size" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Size
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#mujou.pc.Chain" class="md-nav__link">
@@ -2367,17 +2386,6 @@
   
     <nav class="md-nav" aria-label="pc">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.Size" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Size
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#mujou.pc.Chain" class="md-nav__link">
@@ -3372,23 +3380,6 @@ net = pc.Chain(
 
 
 
-<div class="doc doc-object doc-type_alias">
-
-
-
-<h3 id="mujou.pc.Size" class="doc doc-heading">
-            <span class="doc doc-object-name doc-type_alias-name">Size</span>
-
-
-<a href="#mujou.pc.Size" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">Size</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-    </div>
-
-</div>
-
 
 <div class="doc doc-object doc-class">
 
@@ -3573,7 +3564,7 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -3924,7 +3915,7 @@ node.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -6349,7 +6340,7 @@ loss = pc.MSELoss(64)  # y_hat (64, out) -&gt; (64,)
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -6433,7 +6424,7 @@ loss = pc.CrossEntropyLoss(64)  # y_hat (64, C), y (64,) -&gt; (64,)
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -7349,7 +7340,7 @@ then (<code>LearnClock.of</code> never learns).</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
               </p>
             </td>
@@ -7439,7 +7430,7 @@ explicit steps stable; for a scalar target, a loss of your own such as
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -7581,7 +7572,7 @@ probability of each class, of the shape of <code>y_hat</code>.</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><a class="autorefs autorefs-internal" title="Size (mujou.pc.messages.Size)" href="#mujou.pc.Size">Size</a></code>
+                      <code><a class="autorefs autorefs-internal" title="Size (mujou.types.Size)" href="../types/#mujou.types.Size">Size</a></code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
