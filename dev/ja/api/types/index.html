@@ -1413,6 +1413,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mujou.types.Device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.types.Message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Message
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1511,6 +1533,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mujou.types.Device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.types.Message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Message
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1551,12 +1595,18 @@
 
     <div class="doc doc-contents first">
 
-        <p>The types of mujou that annotations use, such as <code>Size</code>.</p>
-<p><code>Size</code> is a shape: an int <code>n</code> is <code>(n,)</code>, and <code>()</code> has no dimension, as
-the batch of <code>mujou.pc</code> (<code>mujou.pc.activity_spec</code>). Unlike <code>torch.Size</code>,
-it takes an int as well.</p>
-<p>Import it from here::</p>
-<div class="highlight"><pre><span></span><code>from mujou.types import Size
+        <p>The types of mujou that annotations use.</p>
+<ul>
+<li><code>Size</code> is a shape: an int <code>n</code> is <code>(n,)</code>, and <code>()</code> has no dimension,
+  as the batch of <code>mujou.pc</code> (<code>mujou.pc.activity_spec</code>). Unlike
+  <code>torch.Size</code>, it takes an int as well.</li>
+<li><code>Device</code> is where a node computes or a tensor is made: a <code>torch.device</code>
+  or its name, such as <code>"cpu"</code> or <code>"cuda:0"</code>.</li>
+<li><code>Message</code> is a message the host writes: a <code>torch.Tensor</code>, or a dict of
+  them (a <code>TypedDict</code> of the port's <code>DictSpec</code>).</li>
+</ul>
+<p>Import them from here::</p>
+<div class="highlight"><pre><span></span><code>from mujou.types import Device, Message, Size
 </code></pre></div>
 
 
@@ -1587,6 +1637,40 @@ it takes an int as well.</p>
 
 <a href="#mujou.types.Size" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">Size</span> <span class="o">=</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-type_alias">
+
+
+
+<h3 id="mujou.types.Device" class="doc doc-heading">
+            <span class="doc doc-object-name doc-type_alias-name">Device</span>
+
+
+<a href="#mujou.types.Device" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">Device</span> <span class="o">=</span> <span class="n">device</span> <span class="o">|</span> <span class="nb">str</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-type_alias">
+
+
+
+<h3 id="mujou.types.Message" class="doc doc-heading">
+            <span class="doc doc-object-name doc-type_alias-name">Message</span>
+
+
+<a href="#mujou.types.Message" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">Message</span> <span class="o">=</span> <span class="n">Tensor</span> <span class="o">|</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
