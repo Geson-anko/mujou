@@ -137,7 +137,7 @@ flowchart LR
 
 ### LearnClock
 
-ノードは毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼ぶ。返る `Tick` の意味。
+ノードは毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼ぶ。返る `Tick` の意味。
 
 | フィールド | 意味                                                   | 使い道                  |
 | ---------- | ------------------------------------------------------ | ----------------------- |
