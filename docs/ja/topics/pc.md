@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数の決め方、BP との違い、落とし穴、MNIST、自作のノードを説明する。
+`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数と optimizer の決め方、BP との違い、落とし穴、MNIST、自作のノードを説明する。
 
 ## BP との違い
 
@@ -32,22 +32,49 @@
 
 `mujou.pc` の速さはすべて実行のタイマーの秒で指定する。次の表の順に決める。
 
-| 値               | 決めるもの                                   | 決め方                                                                                                                                                           | MNIST  |
-| ---------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `tau.h`          | 各活動 `h` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                               | 4 ms   |
-| 周期             | 各ノードが更新する間隔                       | `tau.period`（`tau.h / 4`）。`Layer`・`Output` の既定で、`pc.Chain` の周期                                                                                       | 1 ms   |
-| `tau.lam`        | 双対変数 `lam` が追従する速さ                | `2 * tau.h`                                                                                                                                                      | 8 ms   |
-| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S = 32`                                                                                                                                               | 32 ms  |
-| `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                              | 24 ms  |
-| `tau.theta`      | 重みの時定数（学習率はその逆数）             | 見せる時間を、1 バッチあたりの学習率で割る                                                                                                                       | 0.32 s |
-| `max_dt`         | 1 回の更新で数える `dt` の上限               | 既定の `tau.max_dt`（`min(tau.h / 2, 3 * tau.lam)`、ここでは 2 周期）。周期より短い `max_dt` は `ValueError` になる。`tau.lam < tau.h / 12` なら既定でもそうなる | 2 ms   |
+| 値               | 決めるもの                                   | 決め方                                                                                                                                                           | MNIST              |
+| ---------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `tau.h`          | 各活動 `h` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                               | 4 ms               |
+| 周期             | 各ノードが更新する間隔                       | `tau.period`（`tau.h / 4`）。`Layer`・`Output` の既定で、`pc.Chain` の周期                                                                                       | 1 ms               |
+| `tau.lam`        | 双対変数 `lam` が追従する速さ                | `2 * tau.h`                                                                                                                                                      | 8 ms               |
+| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S = 32`                                                                                                                                               | 32 ms              |
+| `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                              | 24 ms              |
+| `optimizer`      | 重みが学ぶ速さ                               | `pc.SGD(tau=見せる時間 / lr)`。`lr` は 1 バッチあたりの学習率。[optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)を参照                                  | `pc.SGD(tau=0.32)` |
+| `max_dt`         | 1 回の更新で数える `dt` の上限               | 既定の `tau.max_dt`（`min(tau.h / 2, 3 * tau.lam)`、ここでは 2 周期）。周期より短い `max_dt` は `ValueError` になる。`tau.lam < tau.h / 12` なら既定でもそうなる | 2 ms               |
 
-- **学習率**: 1 回の重みの更新で、重みは「そのノードが前に学んでからの時間 / `tau.theta`」にバッチの勾配の平均を掛けた分だけ動く。1 バッチに 1 回学ぶならその時間は見せる時間なので、`tau.theta = 見せる時間 / lr` とすれば 1 バッチあたりの学習率が `lr` になる。この時間はその間の各更新の `dt`（1 回ごとに `max_dt` で打ち切ったもの）の和で、周期どおりの更新なら `dt` は 1 周期なのでそのまま数えられる
+- **学習率**: `pc.SGD` では、重みは 1 回の更新で `elapsed / tau` にバッチの勾配の平均を掛けた分だけ動く。`elapsed` はそのノードが前に学んでからの時間。1 バッチに 1 回学ぶなら `elapsed` は見せる時間なので、`pc.SGD(tau=見せる時間 / lr)` とすれば 1 バッチあたりの学習率が `lr` になる。`elapsed` はその間の各更新の `dt`（1 回ごとに `max_dt` で打ち切ったもの）の和で、周期どおりの更新なら `dt` は 1 周期なのでそのまま数えられる
 - **勾配の平均**: サンプルごとの勾配の和を、バッチのサンプルの数 `B`（バッチが無ければ 1）で割ったもの。`mask` が False のサンプルは和に何も足さないが、`B` には数える
 - **`learn_interval` を見せる時間の半分から全体の間にする理由**: `learn_interval` はホストが書き込んだ時刻（活動の `time`）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから `learn_interval` 後に学び、バッチを見せている間は以後 `learn_interval` ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない
 - **credit の往復**: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ `2 × ホップ数 × 周期`（ホップ数は経路上の接続の数。MNIST では `Input` から `Output` まで 3 本で 6 周期）。`learn_interval` はこれより長くすることを勧める。短いと、落ち着く前の credit から重みが学ぶ。設計時の測定では、往復が 18 周期の深い鎖が、16 周期では収束し、4 周期では有界だが約 4 倍ずれ、2 周期と 1 周期では発散した
-- **入力がフレームごとに変わるストリーム**: `learn_interval=None` を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は `1 / tau.theta` になる。ストリームに適した値はまだ測っていない
+- **入力がフレームごとに変わるストリーム**: `learn_interval=None` を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は `pc.SGD` の `1 / tau` になる。ストリームに適した値はまだ測っていない
 - **安定性**: `tau.h` に対して周期が短いほど安定する。設計時の測定では、ReLU で `period / tau.h` が 0.5 までは安定し、`period / tau.lam` は 0.1〜0.3 が最もよかった。`S = 32` で BP と同じ精度が出た。それより短い見せる時間は確かめていない
+
+## optimizer を選ぶ
+
+`pc.Layer`・`pc.Output`・`pc.Chain` は `optimizer=` が必須。optimizer はノードが学ぶときに、バッチの勾配の平均 `g` で重みをどう動かすかを決める。状態を持たない設定なので、`pc.Chain` は同じものを全ノードに渡す。各ノードはそれを自分の重みに bind し、重みの状態を自分で持つ。
+
+| optimizer                                                              | `elapsed` 秒の 1 回の学習                                                                    | 状態                   |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------- |
+| `pc.SGD(tau=...)`                                                      | `p -= (elapsed / tau) * g`                                                                   | 無し                   |
+| `pc.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | 学習率 `elapsed / tau` の AdamW。moment の `m` と `v` は時定数 `tau_m` と `tau_v` で減衰する | `m`、`v`、`c_m`、`c_v` |
+
+- **ステップでなく時間**: `tau` はどれも秒。`elapsed` はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの `elapsed` を合わせると見せる時間になる。そのため `pc.SGD` では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ
+- **SGD** は MNIST が使うもの。`tau` は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める
+- **AdamW** は勾配の大きさによらず、各重みを 1 回におよそ `elapsed / tau` 動かす。`mujou.pc` に適した AdamW の値はまだ測っていない
+- **`torch.optim.AdamW` からの換算**: `Δt` は 2 回の学習の間の時間で、1 バッチに 1 回学ぶなら見せる時間。`torch.optim.AdamW` の `lr`・`betas` の値を使うなら、`tau = Δt / lr`、`tau_m = -Δt / ln(beta1)`、`tau_v = -Δt / ln(beta2)` とする。`Δt` が一定なら、歩みは `torch.optim.AdamW` と同じになる。32 ms に 1 回学ぶなら、`beta1 = 0.9` は `tau_m` ≈ 0.30 s、`beta2 = 0.999` は `tau_v` ≈ 32 s
+- **`weight_decay`** は `torch.optim.AdamW` と同じく単位を持たない。重みを時定数 `tau / weight_decay` で減衰させる
+- **不正な値**: `tau` と `eps` はどれも有限で > 0、`weight_decay` は有限で >= 0 でなければ、optimizer が `ValueError` を送出する。ノードに学ばせないときは、その `pc.Layer` か `pc.Output` に無限大の `tau` でなく `learn_interval=math.inf` を渡す（`pc.Chain` は 1 つの `learn_interval` を全ノードに渡す）
+- **学ぶ重みだけ**: ノードは `requires_grad=True` のパラメータだけを bind する。凍結したパラメータには weight decay も掛からない
+- **状態**: ノードの optimizer の状態は `run.state_dict()["nodes"][path]["state"]["optimizer"]` にある。`pc.AdamW` ならキー `"m"`・`"v"`・`"c_m"`・`"c_v"` の dict、`pc.SGD` なら空の dict。実行のほかの状態と一緒に保存・復元される
+
+```python
+# torch の lr=1e-3, betas=(0.9, 0.999) を、32 ms のバッチごとに 1 回学ぶ場合に換算して丸めたもの。
+optimizer = pc.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0)
+```
+
+??? question "`torch.optim` を使わないのはなぜ？"
+
+    `torch.optim` の optimizer は時間でなくステップを数えるので、`betas` が与える時定数がノードの学ぶ頻度で変わる。また、作るだけで free-threaded の Python に GIL が戻る。
 
 ## MNIST
 
@@ -115,15 +142,17 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 
 ## 自分のノードを書く
 
-`mujou.pc.functional` に、ノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）、`learn_`（重みの更新）。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。ここに出てくる名前（`mu`・`lam`・`g_in`・`jumps`・`Tick`）は [mujou.pc の仕組み](pc-concepts.md)で説明している。
+`mujou.pc.functional` にノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）。重みは optimizer が動かす。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。ここに出てくる名前（`mu`・`lam`・`g_in`・`jumps`・`Tick`）は [mujou.pc の仕組み](pc-concepts.md)で説明している。
 
-1. クロックを属性に置く: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる。それだけでノードの状態に入る
+1. `__init__` で module を device に載せた後、クロックと bind した optimizer を属性に置く。どちらもそれだけでノードの状態に入る
+    - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる
+    - `self.optimizer = optimizer.bind(params)`。`params` は学ぶパラメータ。bind はノードごとに行う。bind した同じ optimizer を 2 つのノードに持たせてはいけない
 2. 毎回の更新で `t = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼ぶ
-3. `pc.functional.vjp` で予測 `mu`、`g_in`、学ぶなら `g_theta` を求め、`g_in` を前のノードへ送る
+3. bind した `params` を同じ順で `pc.functional.vjp` に渡し、予測 `mu`、`g_in`、学ぶなら `g_theta` を求めて、`g_in` を前のノードへ送る
 4. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
 5. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす
 6. `h` を `pc.Activity` で送る。自分の `jumps` と、受け取った活動の `y`・`mask`・`time` を組にする
-7. `t.learn` なら `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)` で学ぶ
+7. `t.learn` が True で `mask` が True のサンプルがあれば、`self.optimizer.step_([g / B for g in g_theta], t.elapsed)` で学ぶ。`B` はバッチのサンプルの数。optimizer はバッチを知らないので、`B` で割るのはノード
 
 手順 4 を抜くと、ノードは `pc.Layer` と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 `h - mu` に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした `mu` の跳びの分も `h` を動かし、`jumps` に 1 を足す。`pc.Layer` はどちらも 1 回後の更新で行う（docstring に説明がある）。
 
