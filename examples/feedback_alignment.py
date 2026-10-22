@@ -30,7 +30,8 @@ import torch
 
 import mujou
 import mujou.pc as pc
-from mujou import DictSpec, Node, Port, TensorSpec
+from mujou import DictSpec, Node, Port, TensorSpec, TimestampSpec
+from mujou.time import Timestamp
 
 BATCH, N_IN, N_HIDDEN, N_OUT = 32, 8, 64, 2
 SHOWN = 0.02  # seconds of the run's timer each batch is shown
@@ -47,15 +48,15 @@ class Sample(TypedDict):
 class Activity(TypedDict):
     h: torch.Tensor
     y: torch.Tensor  # the target of the sample h was computed from
-    time: torch.Tensor  # () int64: the time (ns) the sample was written at
+    time: Timestamp  # the time the sample was written at
 
 
 class Error(TypedDict):
     e: torch.Tensor  # y_hat - y
-    time: torch.Tensor  # the time of the sample, as the activity had it
+    time: Timestamp  # the time of the sample, as the activity had it
 
 
-TIME = TensorSpec((), torch.int64)
+TIME = TimestampSpec()
 SAMPLE = DictSpec(Sample, x=TensorSpec((BATCH, N_IN)), y=TensorSpec((BATCH, N_OUT)))
 ACTIVITY = DictSpec(
     Activity, h=TensorSpec((BATCH, N_HIDDEN)), y=TensorSpec((BATCH, N_OUT)), time=TIME
@@ -86,11 +87,10 @@ class Hidden(Node):
             return
         x = sample["x"]
         h = torch.tanh(x @ self.w1.T)
-        time = torch.tensor(t.ns)
-        self.next.send({"h": h, "y": sample["y"], "time": time})  # relays y
+        self.next.send({"h": h, "y": sample["y"], "time": t})  # relays y
         error = self.next.recv()
         tick = self.clock.tick(dt, t.ns, self.timer.now().ns)
-        if tick.learn and int(error["time"]) == t.ns:  # the error of this sample
+        if tick.learn and error["time"] == t:  # the error of this sample
             delta = (error["e"] @ self.b) * (1 - h**2)  # B e, not W2^T e
             self.w1 -= tick.elapsed / TAU * (delta.T @ x) / BATCH
 
@@ -120,7 +120,7 @@ class Output(Node):
         h = act["h"]
         e = h @ self.w2.T - act["y"]  # the prediction against its own target
         self.prev.send({"e": e, "time": act["time"]})
-        tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)
+        tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)
         if tick.new:  # the first update with this sample, before learning from it
             self.loss.send(0.5 * e.pow(2).sum(dim=1).mean())
         if tick.learn:

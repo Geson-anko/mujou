@@ -136,6 +136,7 @@ pamiq-core は全スレッドが止まってからタイマーを止めるが、
 
 - ノードはルートからのパスで、ポートは属性名で、相手ごとのスロットは相手のポートのパスで引く。相手は「相手 → Channel」の dict で一意なので、接続の順序に依存しない。番号で引くと、相手の取り違えを復元の検査（K21）で見つけられない
 - メッセージの項目は常に同じ形 `{"value", "time_ns"}` で、`time_ns` が `None` なら書き手がまだ書いていない
+- 木の中の時刻はどれも ns の `int` で持つ。メッセージの中の `Timestamp`（`TimestampSpec` のフィールド）も ns の `int` にして入れ、復元するときに `Timestamp` へ戻す（`codec.times_to_ns` / `times_from_ns`）。`torch.load(weights_only=True)` は `Timestamp` を読めないため
 - バッファプールは入れない
 
 ### コピーする理由

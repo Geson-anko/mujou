@@ -65,9 +65,9 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K4 | S9 | `device` が cpu / cuda 以外、または CUDA が使えないのに cuda | `Node.__init__` | `ValueError` | stream の同期が無いまま走るか、実行中の遠い場所で壊れる | `test_node.py` の `TestDevice` |
 | K5 | S1 | `period` が負、または NaN | `Node.__init__`（`not period >= 0` の 1 行） | `ValueError` | 起動後に、ノードの外で壊れる | `test_node.py` の `TestPeriod.test_rejects_what_is_negative_or_nan` |
 | K6 | S1/S2 | Node か Network の属性に、Port・Node・Network を含む list・tuple・dict を代入する | `tree.walk`（段 1） | `TypeError` | 黙って抜け落ち、Port なら後で K12 が誤った誘導をする | `test_tree.py` の `test_parts_in_a_list_a_tuple_or_a_dict` |
-| K7 | S1 | `TensorSpec` にサポート外の dtype を渡す | `TensorSpec.__init__`（`TensorSpec.dtypes` を示す） | `TypeError` | Schema を作る段 2 という、遠い場所で壊れる | `test_spec.py` の `test_rejects_unsupported_dtypes` |
-| K8 | S1 | `DictSpec` のキーワード引数が TypedDict のキーと一致しない | `DictSpec.__init__` | `TypeError` | 黙って欠ける | `test_spec.py` の `test_missing_key`、`test_unknown_key` |
-| K9 | S1/S3/S5 | send / send_to / write / inputs / initial / 復元する値の、構造（Tensor か、dict のキーの過不足）または shape・dtype の誤り | 構造は `codec.to_core`、shape・dtype は Rust の `copy_from`。どちらもポートの label とフィールドを名指しする。inputs・initial・復元は段 2 | 構造は `TypeError`、shape・dtype は `ValueError` | 最も多い誤り。2 か所はそれぞれ、自分にしか見えないものを 1 回ずつ見る | `test_codec.py` の `TestStructure`、`native/test_slot.py` の `test_rejects_mismatch_naming_slot_and_field`、`test_port.py` の `TestInitial` |
+| K7 | S1 | `TensorSpec` にサポート外の dtype を渡す。`IntSpec` に 8 / 16 / 32 / 64 以外の bits を渡す | `TensorSpec.__init__`（`TensorSpec.dtypes` を示す）、`IntSpec.__init__` | `TypeError`、`IntSpec` は `ValueError` | Schema を作る段 2 という、遠い場所で壊れる | `test_spec.py` の `test_rejects_unsupported_dtypes`、`test_rejects_other_bits` |
+| K8 | S1 | `DictSpec` のキーワード引数が TypedDict のキーと一致しない。`DictSpec.field` で別の種別として取り出す | `DictSpec.__init__`、`DictSpec.field` | `TypeError` | 黙って欠ける。別の種別の属性を読んで遠くで壊れる | `test_spec.py` の `test_missing_key`、`test_unknown_key`、`test_field_of_another_kind` |
+| K9 | S1/S3/S5 | send / send_to / write / inputs / initial / 復元する値の、構造（フィールドの種別に合う値か、dict のキーの過不足）、shape・dtype、int の範囲の誤り | 構造は `codec.to_core`、shape・dtype と範囲は Rust（`copy_from` とスカラーの読み取り）。どちらもポートの label とフィールドを名指しする。inputs・initial・復元は段 2 | 構造は `TypeError`、shape・dtype は `ValueError`、範囲は `OverflowError` | 最も多い誤り。2 か所はそれぞれ、自分にしか見えないものを 1 回ずつ見る。int は黙って折り返さない | `test_codec.py` の `TestStructure` と `TestScalars`、`native/test_slot.py` の `test_rejects_mismatch_naming_slot_and_field`、`test_port.py` の `TestInitial` |
 | K10 | S2 | `connect` で spec が逆向きに一致しない | `Port.connect`（両端の spec を示す） | `TypeError` | 根本の誤り | `test_port.py` の `test_rejects_specs_that_are_not_reversed` |
 | K11 | S2 | 受け取る `Port` に、別の相手を繋ぐ（どちらの端から繋いでも） | `Port.connect`（両端を見て「MultiPort を使う」） | `ValueError` | recv が曖昧になり、黙って片方だけを読む | `test_port.py` の `test_a_port_that_receives_takes_one_peer` |
 | K12 | S1 | Port の recv / recv_with_time / send / send_to を、所有ノードの hook の外で使う（`__init__`、他のノード、ホスト、run の外、`on_start` で作った Port、そのノードの `state_dict` の中）。`Node.timer` をそのノードの hook の外で読む | Port は Driver の `wires` の lookup（`port.py` の `_wire(port)`）、timer は `Node.timer` が走っている Driver のノードと照合する。どちらも `current.running()` を通し、文言は `current.outside(name, hint)` の 1 つの文に、用途ごとの案内（Port なら `__init__` での宣言と `run.read` / `run.write`、timer なら `run.timer`）を足す | `RuntimeError` | 局所性の不変原則。状態を取るための停止が、他のノードとホストから見えないようにする（`state_dict` の間は Driver の `wires` が空） | `test_port.py` の `TestOutsideTheHooks`、`test_node.py` の `TestTimer`、`test_state.py` の `test_the_ports_refuse_in_the_node_state_dict` |
@@ -108,7 +108,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 - Rust の `Reentrant` の検査（コアの内部のデッドロックを防ぐもの。Python からは K16 が先に止めるので届かない）
 - FFI の健全性の検査（内部エラー）。文言は作り込まない。利用者に届いたら mujou のバグ
   - `Outlet` / `Slot` / `InputGroup` に渡す値の個数がフィールドの数と違う（codec はフィールドごとに 1 つ渡す）
-  - DLPack で読めない値、ホストのメモリに無い値（`FieldError::InvalidDLPack` / `UnsupportedDevice`。codec は CPU のテンソルだけを渡す）
+  - DLPack で読めない値、ホストのメモリに無い値（`FieldError::InvalidDLPack` / `UnsupportedDevice`。codec は CPU のテンソルとスカラーだけを渡す）
   - `Outlet` に無いチャネルの番号（`IndexError`。`Wire.targets` は connect の順の番号だけを持つ）
   - `InputGroup.write` に別のグループのスロットか、同じスロットを 2 回渡す（コアが panic する。`Wiring.write` は、その run の Port から引いたスロットを 1 回ずつ渡す）
   - `RuntimeError::Internal`（スレッドを作れない、capture の build が panic した、手動でない runtime に `step` を頼んだ、など。`step` を呼ぶのは `ManualRun` だけ）
@@ -120,7 +120,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 
 - 密でないテンソル（sparse など）を送る: torch の `__dlpack__` が `BufferError` を出す（`Port.send` の docstring が約束し、`test_port.py` の `test_rejects_a_tensor_that_is_not_dense` が固定する）
 - `TensorSpec` の次元が 1 未満: Rust の `Schema` が段 2 で `ValueError` を出す
-- `DictSpec` に TypedDict でないクラスを渡す: キーが無いので、キーの照合（K8）が断る。キーの注釈が `torch.Tensor` でない TypedDict は、pyright が見る型の誤り（G3）
+- `DictSpec` に TypedDict でないクラスを渡す: キーが無いので、キーの照合（K8）が断る。キーの注釈がその spec の値の型（`torch.Tensor`、`int`、`float`、`bool`、`Timestamp`）でない TypedDict は、pyright が見る型の誤り（G3）
 - `Timestamp(ns=)` が 0 から 2⁶⁴ − 1 の外: 整数の変換が `OverflowError` を出す
 - `state_dict` / `shutdown` / `join` の timeout が負か NaN、`sleep` / `advance` の秒が有限で 0 以上でない、time scale が有限で 0 より大きくない: コアの時間（単調に進む ns）への変換が `ValueError` を出す。`shutdown` は止める要求を出す前に変換するので、断られた呼び出しは何も変えない
 - `subscribe` / `wait_for` の timeout が負: 期限がもう過ぎているので、最初の値の次の待ちで `TimeoutError` になる（最初の値は待たずに渡す）。NaN は待ちの秒の変換が `ValueError` を出す

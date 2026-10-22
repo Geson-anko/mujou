@@ -81,7 +81,8 @@ impl Buffer {
         &self.pool.field
     }
 
-    pub(crate) fn bytes(&self) -> &[u8] {
+    /// The field's value as compact row-major bytes.
+    pub fn bytes(&self) -> &[u8] {
         let storage = self
             .storage
             .as_deref()

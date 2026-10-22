@@ -34,7 +34,7 @@ The activity carries the target `y` of its sample and the time of the write it c
 
 ## Telling what is new
 
-`recv()` returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time `recv_with_time()` returns, or a time the message carries. Before anyone sends, the time is `None` (or, for a time in the message, whatever the zeros of the initial value say).
+`recv()` returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time `recv_with_time()` returns, or a time the message carries. Before anyone sends, the time is `None` (or, for a time in the message, its initial value: `Timestamp(ns=0)` of a `TimestampSpec`).
 
 ## `pc.LearnClock`
 

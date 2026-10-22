@@ -6,7 +6,7 @@ from typing import override
 import torch
 from torch import nn
 
-from mujou import DictSpec, Node, Port, TensorSpec
+from mujou import DictSpec, Node, Port, TensorSpec, TimestampSpec
 from mujou.pc.clock import LearnClock
 from mujou.pc.functional import learn_, loss_vjp
 from mujou.pc.messages import Activity, Prediction
@@ -108,15 +108,16 @@ class Output(Node):
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
         self._loss = loss
-        self._batch = act_spec.specs["mask"].shape
+        self._batch = act_spec.field("mask", TensorSpec).shape
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
-        specs = act_spec.specs
-        h_in, y, mask = specs["h"], specs["y"], specs["mask"]
+        h_in = act_spec.field("h", TensorSpec)
+        y = act_spec.field("y", TensorSpec)
+        mask = act_spec.field("mask", TensorSpec)
         y_hat, _, _ = loss_vjp(
             module,
             h_in.zeros(device=self.device),
@@ -131,7 +132,7 @@ class Output(Node):
                 y_hat=TensorSpec(y_hat.shape, y_hat.dtype),
                 y=y,
                 mask=mask,
-                time=specs["time"],
+                time=act_spec.field("time", TimestampSpec),
             )
         )
 
@@ -139,7 +140,7 @@ class Output(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         act = self.prev.recv()
-        tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)
+        tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)
         # Nothing to learn from an input without a target: its time is dropped.
         learn = tick.learn and bool(act["mask"].any())
         y_hat, g_in, g_theta = loss_vjp(

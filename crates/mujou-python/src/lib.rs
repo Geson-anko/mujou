@@ -12,6 +12,7 @@ mod dlpack;
 mod errors;
 mod hint;
 mod runtime;
+mod scalar;
 mod slot;
 mod time;
 mod wait;

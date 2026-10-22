@@ -13,7 +13,7 @@ from typing import Any, Final, cast, final
 
 import torch
 
-from mujou.codec import from_core, to_core
+from mujou.codec import from_core, times_from_ns, times_to_ns, to_core
 from mujou.node import map_tensors
 from mujou.port import AnyPort, AnySlot
 from mujou.spec import MessageSpec
@@ -148,7 +148,7 @@ def _entry(held: _Held) -> dict[str, Any]:
     message = held.slot.read()
     time = message.timestamp
     return {
-        "value": from_core(held.spec, message.values, _CPU),
+        "value": times_to_ns(held.spec, from_core(held.spec, message.values, _CPU)),
         "time_ns": None if time is None else time.ns,
     }
 
@@ -157,7 +157,8 @@ def _write(slots: _PortSlots | dict[str, _Held], entries: Mapping[str, Any]) -> 
     for key, held in slots.items():
         if isinstance(held, _Held):
             entry = entries[key]
-            values = to_core(held.spec, entry["value"], held.slot.name)
+            value = times_from_ns(held.spec, entry["value"])
+            values = to_core(held.spec, value, held.slot.name)
             held.slot.restore(values, entry["time_ns"])
         else:
             _write(held, entries[key])

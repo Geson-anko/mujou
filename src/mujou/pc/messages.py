@@ -5,7 +5,8 @@ from typing import TypedDict
 
 import torch
 
-from mujou import DictSpec, TensorSpec
+from mujou import DictSpec, IntSpec, TensorSpec, TimestampSpec
+from mujou.time import Timestamp
 from mujou.types import Size
 
 
@@ -13,11 +14,11 @@ class Activity(TypedDict):
     """The activity a node sends to the next nodes, with the target of each of
     its samples.
 
-    The shapes start with the batch, ``batch``: ``()`` for one sample, ``(B,)``
+    The tensors start with the batch, ``batch``: ``()`` for one sample, ``(B,)``
     for ``B`` samples, or more dimensions (see ``activity_spec``).
 
     - ``h``: the activity, ``(*batch, *out)``.
-    - ``jumps``: ``()`` int64, the number of times the sender's ``h`` has jumped
+    - ``jumps``: an ``int``, the number of times the sender's ``h`` has jumped
       rather than relaxed continuously: an ``Input`` counts the writes of the
       host, and a ``Layer`` counts its moves with a new sample and with a jump
       of the ``h`` it receives, and the jumps of its own ``theta`` when it
@@ -27,8 +28,8 @@ class Activity(TypedDict):
     - ``y``: the target of each sample, ``(*batch, *target)``.
     - ``mask``: ``batch`` bool, whether each sample has a target. A sample whose
       ``mask`` is False adds nothing to the loss, whatever its ``y`` is.
-    - ``time``: ``()`` int64, the time in nanoseconds that ``Run.write``
-      returned for the input ``h`` was computed from; 0 before the host first
+    - ``time``: the ``Timestamp`` that ``Run.write`` returned for the input
+      ``h`` was computed from; ``Timestamp(ns=0)`` before the host first
       writes.
 
     ``y``, ``mask`` and ``time`` come from the ``Sample`` the host wrote, and
@@ -38,10 +39,10 @@ class Activity(TypedDict):
     """
 
     h: torch.Tensor
-    jumps: torch.Tensor
+    jumps: int
     y: torch.Tensor
     mask: torch.Tensor
-    time: torch.Tensor
+    time: Timestamp
 
 
 class Sample(TypedDict):
@@ -61,7 +62,7 @@ class Prediction(TypedDict):
     y_hat: torch.Tensor
     y: torch.Tensor
     mask: torch.Tensor
-    time: torch.Tensor
+    time: Timestamp
 
 
 def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Activity]:
@@ -99,10 +100,10 @@ def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Ac
     return DictSpec(
         Activity,
         h=h,
-        jumps=TensorSpec((), torch.int64),
+        jumps=IntSpec(),
         y=y,
         mask=TensorSpec(batch, torch.bool),
-        time=TensorSpec((), torch.int64),
+        time=TimestampSpec(),
     )
 
 

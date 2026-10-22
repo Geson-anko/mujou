@@ -1,9 +1,10 @@
 //! Bindings of `mujou_core::slot`.
 //!
-//! Values come in as any object with `__dlpack__` (in practice `torch.Tensor`) and
-//! are copied into pooled buffers; they go out as `BufferView`s, which torch reads
-//! with `torch.from_dlpack(view)` and then copies. Copying on both sides keeps every
-//! message immutable however the caller later changes its tensors
+//! Values come in as any object with `__dlpack__` (in practice `torch.Tensor`) or
+//! as Python scalars (`crate::scalar`), and are copied into pooled buffers; they
+//! go out as `BufferView`s, which torch reads with `torch.from_dlpack(view)` and
+//! then copies, or which `item()` reads as a scalar. Copying on both sides keeps
+//! every message immutable however the caller later changes its tensors
 //! (`specs/messages.md`).
 
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use std::time::Instant;
 
 use crate::dlpack::{TensorPtr, borrow_tensor, export_capsule};
 use crate::hint::Values;
+use crate::scalar::{Scalar, read_scalar, to_python};
 use crate::time::{PyReadOnlyTimer, PyTimestamp};
 use crate::wait::{to_duration, wait_interruptibly};
 use mujou_core::buffer::{Buffer, Message};
@@ -29,18 +31,24 @@ fn to_py_err(err: SlotError) -> PyErr {
     }
 }
 
-/// The values of one message, borrowed over DLPack until they are copied. The
-/// capsules stay unconsumed and are held here, so the producers' memory lives
-/// until the copy is done, and each capsule's destructor calls the deleter when
-/// it is dropped.
-struct Borrowed<'py> {
-    _capsules: Vec<Bound<'py, PyAny>>,
-    tensors: Vec<TensorPtr>,
+/// One value of a message, ready to be copied without the GIL.
+enum Value {
+    Tensor(TensorPtr),
+    Scalar(Scalar),
 }
 
-/// Takes the DLPack capsule of each value, checking the count against `fields`
-/// (the fields the write fills). All Python calls happen here, before any buffer
-/// is filled.
+/// The values of one message, tensors borrowed over DLPack until they are
+/// copied. The capsules stay unconsumed and are held here, so the producers'
+/// memory lives until the copy is done, and each capsule's destructor calls the
+/// deleter when it is dropped.
+struct Borrowed<'py> {
+    _capsules: Vec<Bound<'py, PyAny>>,
+    values: Vec<Value>,
+}
+
+/// Takes the DLPack capsule of each tensor and reads each scalar, checking the
+/// count against `fields` (the fields the write fills). All Python calls happen
+/// here, before any buffer is filled.
 fn borrow_values<'py>(
     values: &Bound<'py, PyAny>,
     fields: &[FieldSpec],
@@ -56,28 +64,41 @@ fn borrow_values<'py>(
             fields.len()
         )));
     }
-    let (capsules, tensors) = values
-        .iter()
-        .zip(fields)
-        .map(|(value, field)| borrow_tensor(value, &core::location(slot, &field.name)))
-        .collect::<PyResult<Vec<_>>>()?
-        .into_iter()
-        .unzip();
-    Ok(Borrowed {
-        _capsules: capsules,
-        tensors,
-    })
+    let mut borrowed = Borrowed {
+        _capsules: Vec::new(),
+        values: Vec::with_capacity(fields.len()),
+    };
+    for (value, field) in values.iter().zip(fields) {
+        let at = core::location(slot, &field.name);
+        let value = match borrow_tensor(value, &at)? {
+            Some((capsule, tensor)) => {
+                borrowed._capsules.push(capsule);
+                Value::Tensor(tensor)
+            }
+            None => Value::Scalar(read_scalar(value, field, &at)?),
+        };
+        borrowed.values.push(value);
+    }
+    Ok(borrowed)
 }
 
-/// Copies each borrowed tensor into the buffer of its field. Calls no Python, so
+/// Copies each borrowed value into the buffer of its field. Calls no Python, so
 /// it runs without the GIL.
 fn copy_into(
-    tensors: &[TensorPtr],
+    values: &[Value],
     fields: &[FieldSpec],
     slot: &str,
     bytes: &mut [&mut [u8]],
 ) -> Result<(), SlotError> {
-    for ((t, field), dst) in tensors.iter().zip(fields).zip(bytes.iter_mut()) {
+    for ((value, field), dst) in values.iter().zip(fields).zip(bytes.iter_mut()) {
+        let t = match value {
+            Value::Tensor(t) => t,
+            // `read_scalar` read it as the scalar of this very field.
+            Value::Scalar(s) => {
+                dst.copy_from_slice(s.bytes());
+                continue;
+            }
+        };
         // SAFETY: `t` came from a capsule that the caller's `Borrowed` keeps
         // alive, and the producer guarantees it describes readable memory
         // (checked to be on the host by `copy_from`). `dst` is a pool buffer,
@@ -105,8 +126,8 @@ where
     W: Send + FnOnce(&dyn Fn(&mut [&mut [u8]]) -> Result<(), SlotError>) -> Result<T, SlotError>,
 {
     let borrowed = borrow_values(values, fields, slot)?;
-    let tensors = &borrowed.tensors;
-    let fill = |bytes: &mut [&mut [u8]]| copy_into(tensors, fields, slot, bytes);
+    let borrowed_values = &borrowed.values;
+    let fill = |bytes: &mut [&mut [u8]]| copy_into(borrowed_values, fields, slot, bytes);
     values.py().detach(|| write(&fill)).map_err(to_py_err)
 }
 
@@ -161,9 +182,9 @@ impl PySchema {
     }
 }
 
-/// One field of a message, lent over DLPack.
+/// One field of a message, lent over DLPack, or read as a Python scalar.
 ///
-/// Read it with `torch.from_dlpack(view)` and copy the result at once: the
+/// Read a tensor with `torch.from_dlpack(view)` and copy the result at once: the
 /// memory belongs to the core and must not be written. `__dlpack__` raises
 /// `BufferError` without a `max_version` of 1 or later, for `copy=True` or for
 /// a `dl_device` other than the CPU.
@@ -172,6 +193,15 @@ pub struct BufferView(Arc<Buffer>);
 
 #[pymethods]
 impl BufferView {
+    /// The value of a field of shape `()` as a Python scalar: an `int` of an
+    /// integer dtype, a `float` of `float64` or a `bool` of `bool`.
+    ///
+    /// Raises:
+    ///     TypeError: The field is of another shape or dtype.
+    fn item<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        to_python(py, &self.0)
+    }
+
     #[pyo3(signature = (*, stream = None, max_version = None, dl_device = None, copy = None))]
     fn __dlpack__<'py>(
         &self,
@@ -408,11 +438,11 @@ impl PyInputGroup {
             )?);
             slots.push(slot);
         }
-        let tensors: Vec<&[TensorPtr]> = borrowed.iter().map(|b| b.tensors.as_slice()).collect();
+        let values: Vec<&[Value]> = borrowed.iter().map(|b| b.values.as_slice()).collect();
         py.detach(|| {
             self.0.write(&slots, |i, bytes| {
                 copy_into(
-                    tensors[i],
+                    values[i],
                     slots[i].schema().fields(),
                     slots[i].name(),
                     bytes,

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from mujou import DictSpec, TensorSpec
+from mujou import DictSpec, IntSpec, TensorSpec, TimestampSpec
 from mujou.pc import Activity, activity_spec
 from mujou.types import Size
 
@@ -11,10 +11,10 @@ class TestActivitySpec:
         h, y = TensorSpec((4, 3)), TensorSpec((4, 10), torch.float64)
         assert dict(activity_spec(h, y, batch=4).specs) == {
             "h": h,
-            "jumps": TensorSpec((), torch.int64),
+            "jumps": IntSpec(),
             "y": y,
             "mask": TensorSpec((4,), torch.bool),
-            "time": TensorSpec((), torch.int64),
+            "time": TimestampSpec(),
         }
 
     def test_equal_arguments_give_equal_specs(self):

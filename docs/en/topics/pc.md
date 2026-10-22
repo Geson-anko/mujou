@@ -118,7 +118,7 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 `mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
 
 1. Hold the clock as an attribute: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does. It is in the node's state by itself
-2. In each update, `t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)`
+2. In each update, `t = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)`
 3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, and send `g_in` to the node before
 4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
 5. Move the activity with `pc.functional.relax_(..., t.dt, tau)`

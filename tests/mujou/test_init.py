@@ -9,9 +9,13 @@ class TestPublicNames:
         # The top-level names of specs/network.md; a change here is a change of the
         # public API.
         assert sorted(mujou.__all__) == [
+            "BoolSpec",
             "Channel",
             "DictSpec",
+            "FieldSpec",
+            "FloatSpec",
             "Group",
+            "IntSpec",
             "MessageSpec",
             "MultiPort",
             "Network",
@@ -20,6 +24,7 @@ class TestPublicNames:
             "Port",
             "Run",
             "TensorSpec",
+            "TimestampSpec",
             "__version__",
             "run",
         ]

@@ -39,7 +39,7 @@ class TestInput:
             assert torch.equal(sent["h"], x)
             assert torch.equal(sent["y"], y)
             assert torch.equal(sent["mask"], mask)
-            assert int(sent["time"]) == written_at.ns
+            assert sent["time"] == written_at.ns  # the tree holds a time as its ns
 
     def test_sends_zeros_without_a_target_before_the_host_writes(
         self, start_manual: StartManual
@@ -50,10 +50,10 @@ class TestInput:
         run.step(H, inp)
         sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
         assert torch.equal(sent["h"], torch.zeros(B, 4))
-        assert int(sent["jumps"]) == 0
+        assert sent["jumps"] == 0
         assert torch.equal(sent["y"], torch.zeros(B, dtype=torch.int64))
         assert torch.equal(sent["mask"], torch.zeros(B, dtype=torch.bool))
-        assert int(sent["time"]) == 0
+        assert sent["time"] == 0
 
     def test_the_jumps_count_the_writes(self, start_manual: StartManual):
         # A write at time 0, the time of the zeros before it, still counts; an
@@ -70,11 +70,7 @@ class TestInput:
                 run.write({inp.prev: sample})  # at times 0 and 3 ms
             run.step(H, inp)
             jumps.append(
-                int(
-                    run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"][
-                        "jumps"
-                    ]
-                )
+                run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]["jumps"]
             )
         assert jumps == [1, 1, 1, 2, 2]
         assert run.state_dict()["nodes"][""]["state"]["seen_write"] == 3_000_000

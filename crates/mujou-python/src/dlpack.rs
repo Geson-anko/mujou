@@ -29,17 +29,14 @@ unsafe impl Send for TensorPtr {}
 unsafe impl Sync for TensorPtr {}
 
 /// Asks `value` for its DLPack capsule of the 1.x protocol (`torch.Tensor`
-/// gives one).
+/// gives one), or returns `None` if it has no `__dlpack__`.
 pub(crate) fn borrow_tensor<'py>(
     value: &Bound<'py, PyAny>,
     at: &str,
-) -> PyResult<(Bound<'py, PyAny>, TensorPtr)> {
+) -> PyResult<Option<(Bound<'py, PyAny>, TensorPtr)>> {
     let py = value.py();
     let Some(method) = value.getattr_opt(intern!(py, "__dlpack__"))? else {
-        return Err(PyTypeError::new_err(format!(
-            "{at}: expected a tensor supporting DLPack, such as torch.Tensor, got {}",
-            value.get_type().name()?
-        )));
+        return Ok(None);
     };
     let borrow = || -> PyResult<_> {
         let kwargs = PyDict::new(py);
@@ -48,7 +45,7 @@ pub(crate) fn borrow_tensor<'py>(
         let tensor = capsule_tensor(&capsule)?;
         Ok((capsule, TensorPtr(tensor)))
     };
-    borrow().map_err(|e| {
+    borrow().map(Some).map_err(|e| {
         // The producer's own errors (such as torch refusing a tensor that requires
         // grad) do not say which value was being written.
         let note = format!("while reading the value of {at} over DLPack");

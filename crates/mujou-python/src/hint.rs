@@ -13,7 +13,7 @@ const ANY: PyStaticExpr = PyStaticExpr::Attribute {
     attr: "Any",
 };
 
-/// The values of one message: `Sequence[Any]` (in practice, of tensors). Not
+/// The values of one message: `Sequence[Any]` (tensors and Python scalars). Not
 /// checked here: `borrow_values` rejects what it cannot read. The stub cannot
 /// say `SupportsDLPack`, which only a hand-written stub could define.
 pub struct Values<'py>(pub Bound<'py, PyAny>);

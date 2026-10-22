@@ -203,12 +203,13 @@ self.prev = Port(recv=VECTOR)  # receives only
 self.next = Port(send=VECTOR)  # sends only
 ```
 
-Two ports connect only when the spec each sends matches the spec the other receives. The values are always `torch.Tensor` or a dict of them, and there are two kinds of spec:
+Two ports connect only when the spec each sends matches the spec the other receives. The values are `torch.Tensor`, Python scalars, or a dict of them:
 
-| Spec                       | What it carries          | Use it for                                                        |
-| -------------------------- | ------------------------ | ----------------------------------------------------------------- |
-| `TensorSpec(shape, dtype)` | One tensor               | One value, such as an activity or an error                        |
-| `DictSpec`                 | A `TypedDict` of tensors | Values that must arrive together, such as an input and its target |
+| Spec                                                      | What it carries                           | Use it for                                                        |
+| --------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| `TensorSpec(shape, dtype)`                                | One tensor                                | One value, such as an activity or an error                        |
+| `IntSpec(bits)`, `FloatSpec`, `BoolSpec`, `TimestampSpec` | One `int`, `float`, `bool` or `Timestamp` | A count, a flag or a time, without wrapping it in a tensor        |
+| `DictSpec`                                                | A `TypedDict` of tensors and scalars      | Values that must arrive together, such as an input and its target |
 
 !!! warning "Send values that belong together in one message"
 

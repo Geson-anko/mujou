@@ -18,6 +18,6 @@ metadata:
 - 設計と実装の優先度は、メッセージプロトコル（何を、どの形式で、いつ送るか）と実行フレーム（スケジューラ・通信・状態の所有）を先にする
 - PC-ALM をコアで提供しても、ノード・スロット・スケジューラは特定の学習則を前提にしない。更新手法の差し替え（[[project-pluggable-update-rule]]）と、ノード間の局所性・非同期性の不変条件を保つ
 - ノード内部の実装（PyTorch による PC-ALM ノードや BP ノードなど）は、プロトコルの上に載る差し替え可能な部品として扱う
-- プロトコルとフレームは Rust で実装し、メッセージの値の型は独自に持つ（`mujou._native` の内部に閉じ、利用者には `torch.Tensor` だけを見せる）。特定のテンソルライブラリには依存しない。torch に依存しないのは private な拡張モジュール `mujou._native` だけで、それ以外は PyTorch を全面的に採用する（[[project-native-core-rust]], [[project-torch-module]]）
+- プロトコルとフレームは Rust で実装し、メッセージの値の型は独自に持つ（`mujou._native` の内部に閉じ、利用者には `torch.Tensor` と Python のスカラーだけを見せる）。特定のテンソルライブラリには依存しない。torch に依存しないのは private な拡張モジュール `mujou._native` だけで、それ以外は PyTorch を全面的に採用する（[[project-native-core-rust]], [[project-torch-module]]）
 
 関連: [[project-purpose]], [[project-compute-granularity]], [[project-pluggable-update-rule]], [[project-native-core-rust]]

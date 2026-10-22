@@ -13,16 +13,16 @@ t = run.write({net.prev: x, net.teacher: y})  # 書き込みの時刻を返す
 - 書いた値は次に書くまで残る。入力は時間とともに変わる信号で、ノードは同じ入力を何度も読む
 - 1 回の `write` の値は一緒に切り替わる。ノードが片方の新しい値ともう片方の古い値を読むことはない。入力とその目標のように組になる値は 1 回の `write` で書く（か、1 つの `DictSpec` のメッセージにする）
 - 値はコピーされる。書いた後でテンソルを書き換えてもネットワークには届かない
-- shape や dtype の違う値は `ValueError`、キーの足りない dict や余分なキーのある dict は `TypeError` になる。どちらも Port を名指しする
+- shape や dtype の違う値は `ValueError`、種別の違う値（`IntSpec` にテンソルなど）やキーの足りない dict、余分なキーのある dict は `TypeError`、`IntSpec` の範囲外の `int` は `OverflowError` になる。どれも Port を名指しする
 
 ## 初期値
 
-| 方法                                   | 読む側が受け取るもの          | その時刻             |
-| -------------------------------------- | ----------------------------- | -------------------- |
-| 何もしない                             | ゼロ                          | `None`               |
-| `Port(send=..., initial=value)`        | Port が最初に送るまで `value` | `None`               |
-| `mujou.run(net, inputs={port: value})` | 最初の更新から `value`        | 実行が始まった時刻   |
-| `run.write({port: value})`             | 書き込みの後は `value`        | `write` が返した時刻 |
+| 方法                                   | 読む側が受け取るもの                 | その時刻             |
+| -------------------------------------- | ------------------------------------ | -------------------- |
+| 何もしない                             | ゼロ（スカラーは `0`、`False` など） | `None`               |
+| `Port(send=..., initial=value)`        | Port が最初に送るまで `value`        | `None`               |
+| `mujou.run(net, inputs={port: value})` | 最初の更新から `value`               | 実行が始まった時刻   |
+| `run.write({port: value})`             | 書き込みの後は `value`               | `write` が返した時刻 |
 
 `initial` はノードが送る Port のためのもので、`inputs` と `write` はホストが書く Port のためのもの。`mujou.run` が戻るとノードはすぐに更新を始めるので、その直後に `write` しても、それより前の何回かの更新ではゼロを読むことがある。最初の更新から入力を見せるなら `inputs` で渡す。
 

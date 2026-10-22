@@ -13,16 +13,16 @@ t = run.write({net.prev: x, net.teacher: y})  # returns the time of the write
 - A written value stays until the next write: an input is a signal over time, and the nodes read it many times
 - The values of one `write` switch together. A node never reads the new value of one with the old value of the other, so write values that belong together, such as an input and its target, in one `write` (or as one `DictSpec` message)
 - The values are copied: changing the tensor after the write does not reach the network
-- A value of another shape or dtype raises `ValueError`, and a dict with a missing or an extra key raises `TypeError`, naming the port
+- A value of another shape or dtype raises `ValueError`, a value of another kind (a tensor for an `IntSpec`, say) or a dict with a missing or an extra key raises `TypeError`, and an `int` out of the range of its `IntSpec` raises `OverflowError`, naming the port
 
 ## Initial values
 
-| Way                                    | What a reader gets                  | Its time                |
-| -------------------------------------- | ----------------------------------- | ----------------------- |
-| Nothing                                | Zeros                               | `None`                  |
-| `Port(send=..., initial=value)`        | `value`, until the port first sends | `None`                  |
-| `mujou.run(net, inputs={port: value})` | `value`, from the first update      | The time the run starts |
-| `run.write({port: value})`             | `value`, from the write on          | What `write` returned   |
+| Way                                    | What a reader gets                    | Its time                |
+| -------------------------------------- | ------------------------------------- | ----------------------- |
+| Nothing                                | Zeros (`0`, `False`, ... for scalars) | `None`                  |
+| `Port(send=..., initial=value)`        | `value`, until the port first sends   | `None`                  |
+| `mujou.run(net, inputs={port: value})` | `value`, from the first update        | The time the run starts |
+| `run.write({port: value})`             | `value`, from the write on            | What `write` returned   |
 
 `initial` is for a port that a node sends on, and `inputs` and `write` are for the ports the host writes. Once `mujou.run` returns, the nodes start updating, so a `write` right after it may come after a few updates that read zeros: to show an input from the first update, pass it as `inputs`.
 

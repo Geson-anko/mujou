@@ -35,24 +35,25 @@ class Merge(Node):
         super().__init__(period=TAU.period)
         self.module = module
         self.clock = pc.LearnClock.of(TAU, period=self.period, learn_interval=None)
-        self.sizes = [a.specs["h"].shape[-1], b.specs["h"].shape[-1]]
+        h_a, h_b = a.field("h", TensorSpec), b.field("h", TensorSpec)
+        self.sizes = [h_a.shape[-1], h_b.shape[-1]]
         h = TensorSpec((B, module(torch.zeros(B, sum(self.sizes))).shape[-1]))
         self.h, self.lam, self.mu = h.zeros(), h.zeros(), h.zeros()
         self.jumps, self.seen = 0, [0, 0]  # the jumps it sent, and read from a, b
         self.register_state("jumps")
         self.register_state("seen")
-        self.act_spec = pc.activity_spec(h, a.specs["y"], B)
-        self.a = Port(send=a.specs["h"], recv=a)  # sends back g_in of h_a
-        self.b = Port(send=b.specs["h"], recv=b)
+        self.act_spec = pc.activity_spec(h, a.field("y", TensorSpec), B)
+        self.a = Port(send=h_a, recv=a)  # sends back g_in of h_a
+        self.b = Port(send=h_b, recv=b)
         self.next = MultiPort(send=self.act_spec, recv=h)
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         a, b = self.a.recv(), self.b.recv()
-        t = self.clock.tick(dt, int(a["time"]), self.timer.now().ns)
+        t = self.clock.tick(dt, a["time"].ns, self.timer.now().ns)
         # A new sample or a jump of either input: h jumps with mu, keeping r.
-        seen = [int(a["jumps"]), int(b["jumps"])]
+        seen = [a["jumps"], b["jumps"]]
         jump, self.seen = t.new or seen != self.seen, seen
         r = self.h - self.mu
         labeled = a["mask"].unsqueeze(-1)  # a sample without a target sends no credit
@@ -73,7 +74,7 @@ class Merge(Node):
         pc.functional.relax_(self.h, self.lam, mu, g, t.dt, TAU)
         self.mu = mu
         # The y, mask and time of a go on with h.
-        self.next.send({**a, "h": self.h, "jumps": torch.tensor(self.jumps)})
+        self.next.send({**a, "h": self.h, "jumps": self.jumps})
         if a["mask"].any():  # nothing to learn from samples without a target
             pc.functional.learn_(params, g_theta, t.elapsed, TAU, B)
 

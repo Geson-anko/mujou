@@ -46,9 +46,9 @@ The global timer, which every run not given a timer of its own uses.
 @final
 class BufferView:
     """
-    One field of a message, lent over DLPack.
+    One field of a message, lent over DLPack, or read as a Python scalar.
 
-    Read it with `torch.from_dlpack(view)` and copy the result at once: the
+    Read a tensor with `torch.from_dlpack(view)` and copy the result at once: the
     memory belongs to the core and must not be written. `__dlpack__` raises
     `BufferError` without a `max_version` of 1 or later, for `copy=True` or for
     a `dl_device` other than the CPU.
@@ -63,6 +63,14 @@ class BufferView:
         copy: bool | None = None,
     ) -> Any: ...
     def __dlpack_device__(self, /) -> tuple[int, int]: ...
+    def item(self, /) -> Any:
+        """
+        The value of a field of shape `()` as a Python scalar: an `int` of an
+        integer dtype, a `float` of `float64` or a `bool` of `bool`.
+
+        Raises:
+            TypeError: The field is of another shape or dtype.
+        """
     def __new__(cls, /) -> NoReturn:
         """
         No constructor: calling the class raises `TypeError`.

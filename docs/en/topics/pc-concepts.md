@@ -77,8 +77,8 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 | `pc.Prediction` | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
 
 - `mask`: whether each sample has a target. A sample whose `mask` is False adds nothing to the loss, and `Layer` sets the `g_in` of its row to 0. With every `mask` False, `h` and `lam` still relax and only the weights do not learn. Evaluate this way
-- `time`: the time (ns) the host wrote the input. 0 before the first write
-- `jumps`: the number of times the sender's `h` jumped ([section 4](#4-learnclock-and-jumps))
+- `time`: the `Timestamp` at which the host wrote the input. `Timestamp(ns=0)` before the first write
+- `jumps`: an `int`, the number of times the sender's `h` jumped ([section 4](#4-learnclock-and-jumps))
 
 ### Port directions
 
@@ -137,7 +137,7 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 ### LearnClock
 
-In every update a node calls `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)`. What the returned `Tick` means:
+In every update a node calls `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)`. What the returned `Tick` means:
 
 | Field     | Meaning                                                                      | Use                           |
 | --------- | ---------------------------------------------------------------------------- | ----------------------------- |

@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 import mujou.pc as pc
-from mujou import DictSpec, Group, TensorSpec
+from mujou import DictSpec, Group, TensorSpec, TimestampSpec
 from mujou.testing import ManualRun
 from tests.mujou.nodes import F64, close
 
@@ -115,7 +115,7 @@ class TestConstruction:
             y_hat=TensorSpec((B, 10)),
             y=TensorSpec((B,), torch.int64),
             mask=TensorSpec((B,), torch.bool),
-            time=TensorSpec((), torch.int64),
+            time=TimestampSpec(),
         )
 
     def test_the_period_defaults_to_a_quarter_of_tau_h(self):
@@ -162,7 +162,7 @@ class TestPairing:
             close(prediction["y_hat"], y_hat)
             assert torch.equal(prediction["y"], y_)
             assert torch.equal(prediction["mask"], mask_)
-            assert int(prediction["time"]) == times[k - 1]
+            assert prediction["time"].ns == times[k - 1]
             g_sent = direct.run.read(direct.out.prev)
             close(g_sent, g_in)
             assert torch.equal(g_sent[~mask_], torch.zeros_like(g_sent[~mask_]))

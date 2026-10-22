@@ -12,14 +12,19 @@ import torch
 import mujou
 import mujou.testing
 from mujou import (
+    BoolSpec,
     Channel,
     DictSpec,
+    FieldSpec,
+    FloatSpec,
+    IntSpec,
     MessageSpec,
     MultiPort,
     Network,
     Node,
     Port,
     TensorSpec,
+    TimestampSpec,
 )
 from mujou.time import Timestamp, VirtualTimer
 
@@ -31,6 +36,14 @@ class Feedback(TypedDict):
 
 FEEDBACK = DictSpec(Feedback, error=TensorSpec((2,)), target=TensorSpec((2,)))
 VECTOR = TensorSpec((2,))
+
+
+class Mixed(TypedDict):
+    h: torch.Tensor
+    time: Timestamp
+
+
+MIXED = DictSpec(Mixed, h=TensorSpec((2,)), time=TimestampSpec())
 
 
 def sender[T](spec: MessageSpec[T]) -> MultiPort[T]:
@@ -88,6 +101,19 @@ class TestPorts:
         assert_type(sender(tensors), MultiPort[torch.Tensor, Never])
         assert_type(sender(feedback), MultiPort[Feedback, Never])
         assert isinstance(sender(FEEDBACK).send_spec, DictSpec)
+
+    def test_a_scalar_spec_gives_a_python_scalar(self):
+        assert_type(Port(send=IntSpec(8)), Port[int, Never])
+        assert_type(Port(recv=FloatSpec()), Port[Never, float])
+        assert_type(Port(send=BoolSpec(), initial=True), Port[bool, Never])
+        assert_type(Port(send=TimestampSpec()), Port[Timestamp, Never])
+        Port(send=IntSpec(), initial=torch.zeros(()))  # pyright: ignore[reportArgumentType]
+
+    def test_a_field_is_taken_by_its_kind(self):
+        assert_type(MIXED.specs["h"], FieldSpec)
+        assert_type(MIXED.field("h", TensorSpec), TensorSpec)
+        assert_type(MIXED.field("time", TimestampSpec), TimestampSpec)
+        assert MIXED.field("h", TensorSpec).shape == (2,)
 
 
 class Layer(Node):

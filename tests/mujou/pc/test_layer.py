@@ -165,7 +165,7 @@ class TestJacobi:
                     close(state["module"][key], value, 1e-12)
                 sent = tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]
                 close(sent["h"], reference.h[i + 1], 1e-12)
-                assert int(sent["jumps"]) == reference.jumps[i + 1]
+                assert sent["jumps"] == reference.jumps[i + 1]
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
                 assert torch.equal(sent["mask"], reference.carried[i + 1][1])
                 close(
@@ -174,7 +174,7 @@ class TestJacobi:
                     1e-12,
                 )
             assert (
-                int(tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["jumps"])
+                tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["jumps"]
                 == reference.jumps[0]
             )
             for key, value in reference.head.state_dict().items():
@@ -947,9 +947,7 @@ class TestJumps:
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            jumps.append(
-                int(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["jumps"])
-            )
+            jumps.append(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["jumps"])
             if s == 1:
                 continue  # the first update moves h from zeros
             h, lam = relaxed(before, after, module, H, reanchor=s in (2, 7))
@@ -985,9 +983,7 @@ class TestJumps:
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            jumps.append(
-                int(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["jumps"])
-            )
+            jumps.append(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["jumps"])
             if s < 3:
                 continue  # the moves from zeros and the zeros of l0
             h, lam = relaxed(
@@ -1022,9 +1018,7 @@ class TestJumps:
             for i in range(2):
                 assert tree["nodes"][f"l{i}"]["state"]["jumped"]
                 assert (
-                    int(
-                        tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["jumps"]
-                    )
+                    tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["jumps"]
                     == 2 + i
                 )
 

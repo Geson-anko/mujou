@@ -16,7 +16,7 @@
 | 層 | モジュール | 責務 |
 | --- | --- | --- |
 | 0 | `errors.py`、`_native`（Rust） | `NetworkError`（何も import しない葉。Rust も import して raise に使う）と、Rust の拡張モジュール |
-| 1 | `spec.py`、`current.py` | `MessageSpec`（抽象）、`TensorSpec`、`DictSpec` と、dtype の対応表 `DLPACK`。`running()`（いま hook を走らせている Driver を引く唯一の入口）と、hook の外での使用を断る `outside()` |
+| 1 | `spec.py`、`current.py` | `MessageSpec`（注釈用の基底）、`TensorSpec`、スカラーの `IntSpec` / `FloatSpec` / `BoolSpec` / `TimestampSpec`、別名 `FieldSpec`、`DictSpec` と、dtype の対応表 `DLPACK`。`running()`（いま hook を走らせている Driver を引く唯一の入口）と、hook の外での使用を断る `outside()` |
 | 2 | `codec.py` | torch とコアの唯一の変換（[メッセージ](messages.md#codec)） |
 | 3 | `port.py` | `Port`、`MultiPort`、`Channel`（宣言）と `Wire`（実行中の読み書き） |
 | 4 | `component.py` | `Node` と `Network` の共通の基底。クラス定義の時点の検査（K1）だけを持つ |
@@ -100,7 +100,7 @@ Rust は仕組みを、Python は方針を持つ。
 | 「いま hook を走らせている Driver」（bindings の `CURRENT`） | Port の所有者の検査（Driver の `wires` の lookup） |
 
 - コアは学習則を知らない。`NodeHooks` が hook の契約のすべてで、どの更新手法も載る
-- コアは torch を import しない。利用者がやり取りする値は `torch.Tensor` だけで、コアの値の型と dtype は公開しない
+- コアは torch を import しない。利用者がやり取りする値は `torch.Tensor` と Python のスカラー（`int` / `float` / `bool` / `Timestamp`）だけで、コアの値の型と dtype は公開しない
 - 例外は Python で定義し、Rust はそれを import して raise する（`NetworkError`）。timeout は組み込みの `TimeoutError`
 - 境界の約束は 1 か所ずつにする。torch とコアの変換は `codec.py`、shape と dtype の検査は Rust の `copy_from`、「いま hook を走らせている Driver」は bindings の thread-local
 - Rust は Python の `Driver` のメソッドを、hook 1 回につき 1 回だけ呼ぶ（[ノード](nodes.md#driver)）
