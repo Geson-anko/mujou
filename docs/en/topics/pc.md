@@ -147,7 +147,7 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 1. In `__init__`, after the module is on its device, hold the clock and the bound optimizer as attributes. Both are then in the node's state by themselves
     - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does
     - `self.optimizer = optimizer.bind(params)`, with `params` the parameters that learn. Bind in each node: two nodes must not hold the same bound optimizer
-2. In each update, `t = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)`
+2. In each update, `t = self.clock.tick(dt, act["time"], self.timer.now())`
 3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, given the bound `params` in the same order, and send `g_in` to the node before
 4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
 5. Move the activity with `pc.functional.relax_(..., t.dt, tau)`

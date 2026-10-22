@@ -38,7 +38,7 @@ The activity carries the target `y` of its sample and the time of the write it c
 
 ## `pc.LearnClock`
 
-Both nodes decide when to learn with a `pc.LearnClock`, a part of `mujou.pc` that any rule can use. In each update, `tick(dt, time_ns, now_ns)` takes the `dt`, the time the input was written at and the time now, and returns a `pc.Tick`:
+Both nodes decide when to learn with a `pc.LearnClock`, a part of `mujou.pc` that any rule can use. In each update, `tick(dt, time, now)` takes the `dt`, the time the input was written at and the time now, and returns a `pc.Tick`:
 
 - `new`: the input is new (its time is not the one seen last)
 - `learn`: learn in this update. With `learn_interval`, that is the first update `learn_interval` after each write (and every `learn_interval` while the input stays), but never the update that first sees an input; with `learn_interval=None`, every update

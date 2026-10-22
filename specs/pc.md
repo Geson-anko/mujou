@@ -126,7 +126,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 （`pc.SGD` の場合。一般には optimizer の `step_` が $g_\theta / B$ と $\Sigma\Delta t$ で動かす）。時間あたりの学習の速さは optimizer の $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
 
-学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt`）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time_ns, now_ns)` は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
+学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt`）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time, now)`（どちらも `Timestamp`） は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
 
 - ホストが入力を書いた時刻（`time`）から `learn_interval` ごとの時刻 `time + k * learn_interval`（$k = 1, 2, \dots$）を過ぎた最初の更新で学習する。ただし、その入力を初めて見た更新では学習しない。その更新の $\delta$ は、前の入力の $r + \lambda$ に新しい入力のヤコビアンを掛けたもので、新しい入力の credit ではない
 - `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない（学ばないノードの表し方はこの 1 通り）。格子の点が無限の先にあるので、学習の時刻に達しない
@@ -241,7 +241,7 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)` を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)` を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 

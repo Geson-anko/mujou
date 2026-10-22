@@ -7,9 +7,15 @@ import pytest
 import torch
 
 import mujou.pc as pc
+from mujou.time import Timestamp
 
 MS = 1_000_000  # ns
 DT = 1e-3  # seconds per update
+
+
+def at(ms: int) -> Timestamp:
+    """The time ``ms`` milliseconds into the run."""
+    return Timestamp(ns=ms * MS)
 
 
 def clock(learn_interval: float | None, max_dt: float = 1.0) -> pc.LearnClock:
@@ -19,7 +25,7 @@ def clock(learn_interval: float | None, max_dt: float = 1.0) -> pc.LearnClock:
 def run(learn: pc.LearnClock, updates: Sequence[tuple[int, int]]) -> dict[int, pc.Tick]:
     """Tick ``learn`` once per ``(now, time)`` in ms, each update ``DT`` long;
     return the ticks by ``now``."""
-    return {now: learn.tick(DT, time * MS, now * MS) for now, time in updates}
+    return {now: learn.tick(DT, at(time), at(now)) for now, time in updates}
 
 
 def learned(ticks: dict[int, pc.Tick]) -> dict[int, float]:
@@ -69,13 +75,13 @@ class TestElapsed:
 
     def test_dt_is_capped_at_max_dt_in_the_tick_and_the_elapsed_time(self):
         learn = clock(None, max_dt=2e-3)
-        assert learn.tick(5e-3, 0, MS) == pc.Tick(2e-3, True, True, 2e-3)
-        assert learn.tick(1e-3, 0, 2 * MS) == pc.Tick(1e-3, False, True, 1e-3)
+        assert learn.tick(5e-3, at(0), at(1)) == pc.Tick(2e-3, True, True, 2e-3)
+        assert learn.tick(1e-3, at(0), at(2)) == pc.Tick(1e-3, False, True, 1e-3)
 
     def test_the_time_beyond_max_dt_is_dropped_from_the_weight(self):
         learn = clock(3e-3, max_dt=2e-3)
-        learn.tick(1e-3, 0, MS)
-        tick = learn.tick(5e-3, 0, 6 * MS)
+        learn.tick(1e-3, at(0), at(1))
+        tick = learn.tick(5e-3, at(0), at(6))
         assert tick.learn and tick.elapsed == pytest.approx(3e-3)  # 1 + 2 ms
 
 
@@ -104,9 +110,9 @@ class TestFromTimeConstants:
         tau = pc.TimeConstants(h=4e-3, lam=0.5e-3)
         learn = pc.LearnClock.of(tau, period=DT, learn_interval=None)
         # max_dt is min(h / 2, 3 * lam) = 1.5 ms.
-        assert learn.tick(10 * DT, 0, MS).dt == pytest.approx(1.5e-3)
+        assert learn.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1.5e-3)
         given = pc.LearnClock.of(tau, period=DT, learn_interval=None, max_dt=1.2e-3)
-        assert given.tick(10 * DT, 0, MS).dt == pytest.approx(1.2e-3)
+        assert given.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1.2e-3)
 
 
 class TestChecks:

@@ -148,7 +148,7 @@ class Output(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         act = self.prev.recv()
-        tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)
+        tick = self.clock.tick(dt, act["time"], self.timer.now())
         # Nothing to learn from an input without a target: its time is dropped.
         learn = tick.learn and bool(act["mask"].any())
         y_hat, g_in, g_theta = loss_vjp(

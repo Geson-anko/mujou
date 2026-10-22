@@ -53,7 +53,7 @@ class Merge(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         a, b = self.a.recv(), self.b.recv()
-        t = self.clock.tick(dt, a["time"].ns, self.timer.now().ns)
+        t = self.clock.tick(dt, a["time"], self.timer.now())
         # A new sample or a jump of either input: h jumps with mu, keeping r.
         seen = [a["jumps"], b["jumps"]]
         jump, self.seen = t.new or seen != self.seen, seen

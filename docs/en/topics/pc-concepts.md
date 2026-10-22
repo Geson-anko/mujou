@@ -139,7 +139,7 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 ### LearnClock
 
-In every update a node calls `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)`. What the returned `Tick` means:
+In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer.now())`. What the returned `Tick` means:
 
 | Field     | Meaning                                                                      | Use                        |
 | --------- | ---------------------------------------------------------------------------- | -------------------------- |

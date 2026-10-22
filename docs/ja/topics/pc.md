@@ -147,7 +147,7 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 1. `__init__` で module を device に載せた後、クロックと bind した optimizer を属性に置く。どちらもそれだけでノードの状態に入る
     - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる
     - `self.optimizer = optimizer.bind(params)`。`params` は学ぶパラメータ。bind はノードごとに行う。bind した同じ optimizer を 2 つのノードに持たせてはいけない
-2. 毎回の更新で `t = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼ぶ
+2. 毎回の更新で `t = self.clock.tick(dt, act["time"], self.timer.now())` を呼ぶ
 3. bind した `params` を同じ順で `pc.functional.vjp` に渡し、予測 `mu`、`g_in`、学ぶなら `g_theta` を求めて、`g_in` を前のノードへ送る
 4. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
 5. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす

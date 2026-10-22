@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, NamedTuple, Self
 
 from mujou.pc.time_constants import TimeConstants
+from mujou.time import Timestamp
 
 
 class Tick(NamedTuple):
@@ -26,10 +27,10 @@ class LearnClock:
     """Decides, update by update, when a node updates its parameters, from the
     time the host wrote the node's input.
 
-    The node calls ``tick(dt, time_ns, now_ns)`` once in each update, with the
-    ``dt`` of the update, the time (ns) the input it received was written at,
-    and the time now (ns) on the run's timer. The clock learns in the first
-    update at or after ``time_ns + k * learn_interval`` (``k = 1, 2, ...``), but
+    The node calls ``tick(dt, time, now)`` once in each update, with the ``dt``
+    of the update, the ``Timestamp`` the input it received was written at, and
+    the time now on the run's timer. The clock learns in the first update at or
+    after ``time + k * learn_interval`` (``k = 1, 2, ...``), but
     never in the update that first sees an input: its gradient is still that of
     the input before. The nodes on a path read the one timer of the run, so
     they learn at about the same time, however deep they are. With
@@ -63,7 +64,7 @@ class LearnClock:
         self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
                                    max_dt=2e-3)
         # In on_update(dt):
-        tick = self.clock.tick(dt, activity["time"].ns, self.timer.now().ns)
+        tick = self.clock.tick(dt, activity["time"], self.timer.now())
         # ... move by tick.dt; if tick.learn, learn weighted by tick.elapsed.
 
     Args:
@@ -136,10 +137,11 @@ class LearnClock:
         a step of a continuous flow."""
         return self._interval_ns is not None
 
-    def tick(self, dt: float, time_ns: int, now_ns: int) -> Tick:
+    def tick(self, dt: float, time: Timestamp, now: Timestamp) -> Tick:
         """Count an update of ``dt`` seconds that received an input written at
-        ``time_ns``, at ``now_ns`` on the run's timer, and return what the
-        update does. With ``learn``, the clock has learned at ``now_ns``."""
+        ``time``, at ``now`` on the run's timer, and return what the update
+        does. With ``learn``, the clock has learned at ``now``."""
+        time_ns, now_ns = time.ns, now.ns
         dt = min(dt, self._max_dt)
         new = time_ns != self._seen_ns
         if new:
