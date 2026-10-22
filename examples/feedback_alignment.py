@@ -89,7 +89,7 @@ class Hidden(Node):
         h = torch.tanh(x @ self.w1.T)
         self.next.send({"h": h, "y": sample["y"], "time": t})  # relays y
         error = self.next.recv()
-        tick = self.clock.tick(dt, t.ns, self.timer.now().ns)
+        tick = self.clock.tick(dt, t, self.timer.now())
         if tick.learn and error["time"] == t:  # the error of this sample
             delta = (error["e"] @ self.b) * (1 - h**2)  # B e, not W2^T e
             self.w1 -= tick.elapsed / TAU * (delta.T @ x) / BATCH
@@ -120,7 +120,7 @@ class Output(Node):
         h = act["h"]
         e = h @ self.w2.T - act["y"]  # the prediction against its own target
         self.prev.send({"e": e, "time": act["time"]})
-        tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)
+        tick = self.clock.tick(dt, act["time"], self.timer.now())
         if tick.new:  # the first update with this sample, before learning from it
             self.loss.send(0.5 * e.pow(2).sum(dim=1).mean())
         if tick.learn:

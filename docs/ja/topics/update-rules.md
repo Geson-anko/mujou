@@ -38,7 +38,7 @@ uv run python examples/feedback_alignment.py
 
 ## `pc.LearnClock`
 
-どちらのノードも、いつ学ぶかを `pc.LearnClock` で決める。`mujou.pc` の部品だが、どの則でも使える。更新ごとに `tick(dt, time_ns, now_ns)` に `dt`、入力が書かれた時刻、今の時刻を渡すと、`pc.Tick` が返る。
+どちらのノードも、いつ学ぶかを `pc.LearnClock` で決める。`mujou.pc` の部品だが、どの則でも使える。更新ごとに `tick(dt, time, now)` に `dt`、入力が書かれた時刻、今の時刻を渡すと、`pc.Tick` が返る。
 
 - `new`: 入力が新しい（時刻が前回見たものと違う）
 - `learn`: この更新で学ぶ。`learn_interval` を渡したなら、各書き込みから `learn_interval` 後の最初の更新（入力が変わらない間は以後 `learn_interval` ごと）。ただし入力を初めて見た更新では学ばない。`learn_interval=None` なら毎回

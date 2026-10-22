@@ -45,7 +45,8 @@
 ## 段階 4: 自己レビュー
 
 - `Value` と `Scalar` の使っていない `Clone, Copy` を外した
-- 見送り: `LearnClock.tick` を `Timestamp` を受け取る形に変える案（API の変更が広がるので、呼ぶ側が `.ns` を渡す）。example の `TensorSpec(())` のスカラー（subscribe / timers / online_learning）を `FloatSpec` に置き換える案（要求の外）
+- `LearnClock.tick` を `Timestamp` を受け取る形に変える案は、ユーザーの依頼で stack した PR（`refactor/2026-10-22/learn-clock-timestamp`）で行った。`tick(dt, time, now)` はどちらも `Timestamp`、状態は ns の数のまま。
+- 見送り: example の `TensorSpec(())` のスカラー（subscribe / timers / online_learning）を `FloatSpec` に置き換える案（要求の外）
 
 ## レビュー（code-reviewer: request-changes → 対応、algorithm-reviewer: approve）
 
