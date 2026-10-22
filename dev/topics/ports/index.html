@@ -1754,7 +1754,40 @@
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">MultiPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">256</span><span class="p">)),</span> <span class="n">recv</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">256</span><span class="p">)))</span>  <span class="c1"># both ways</span>
 </code></pre></div>
 <p><code>TensorSpec(shape, dtype)</code> is one tensor; its dtype is <code>torch.float32</code> unless given, whatever <code>torch.get_default_dtype()</code> is. A value sent must match the spec in shape and dtype: no dtype is converted. The dtypes a spec takes are in <code>TensorSpec.dtypes</code>. A spec also makes values of its shape and dtype, for the state of a node or a test: <code>spec.zeros()</code> and <code>spec.empty()</code> (a dict of them for a <code>DictSpec</code>), and <code>TensorSpec.rand(generator=...)</code>.</p>
-<p>Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a <code>DictSpec</code> gives a <code>TensorSpec</code> for each key of a <code>TypedDict</code>, the whole dict arrives at once, and type checkers know the type of each key.</p>
+<p>A count, a flag or a time travels as a Python scalar, not as a tensor, so the receiver reads it without <code>int(...)</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>Value</th>
+<th>Initial value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IntSpec(bits=64, signed=True)</code></td>
+<td><code>int</code> of 8, 16, 32 or 64 bits</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>FloatSpec()</code></td>
+<td><code>float</code> (64 bits)</td>
+<td><code>0.0</code></td>
+</tr>
+<tr>
+<td><code>BoolSpec()</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>TimestampSpec()</code></td>
+<td><code>mujou.time.Timestamp</code></td>
+<td><code>Timestamp(ns=0)</code></td>
+</tr>
+</tbody>
+</table>
+<p>A message has a fixed size, so an <code>IntSpec</code> has a fixed number of bits: an <code>int</code> out of its range raises <code>OverflowError</code> when it is sent, and is never wrapped. A scalar spec has no shape and makes no values: write <code>0</code> or <code>False</code>.</p>
+<p>Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a <code>DictSpec</code> gives a spec for each key of a <code>TypedDict</code>, the whole dict arrives at once, and type checkers know the type of each key. To use the spec of one key, take it with its kind: <code>SAMPLE.field("x", TensorSpec).shape</code> (<code>TypeError</code> if it is of another kind).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Sample</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
@@ -1896,7 +1929,7 @@
 <p>The network hands the node the channels <code>connect</code> returned (<code>self.split.plus = ...</code>). Do not pick channels by their order in <code>self.next.channels</code> instead: swapping two <code>connect</code> calls would swap the destinations without any error. An attribute that holds a <code>Channel</code> is not part of the state.</p>
 <p>The host reads with <code>Run.read</code> only what a port sent with <code>send</code> (its initial value until then); it cannot read the values of <code>send_to</code>, nor a port that only receives.</p>
 <h2 id="before-anyone-sends">Before anyone sends<a class="headerlink" href="#before-anyone-sends" title="Permanent link">&para;</a></h2>
-<p>Until a port first sends, its peers, and the host that reads it, get its initial value: zeros, or the value of <code>initial=</code>, which must match <code>send</code> and is copied when the port is made. Its time is <code>None</code>.</p>
+<p>Until a port first sends, its peers, and the host that reads it, get its initial value: zeros (the initial values above for scalars), or the value of <code>initial=</code>, which must match <code>send</code> and is copied when the port is made. Its time is <code>None</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">256</span><span class="p">)),</span> <span class="n">initial</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">32</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span> <span class="mf">0.5</span><span class="p">))</span>
 </code></pre></div>
 <p><code>recv_with_time()</code> returns the value with the time it was sent (a <code>mujou.time.Timestamp</code>), or <code>None</code> before the first send. Compare it with the time of the value read last to tell a new value from the same one read again. A port that the host writes counts as sent from the <code>inputs=</code> of the run, or from the host's first <code>write</code>: see <a href="../host-io/#initial-values">Host I/O</a>.</p>

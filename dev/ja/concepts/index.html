@@ -2637,7 +2637,7 @@
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># 受け取るだけ</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># 送るだけ</span>
 </code></pre></div>
-<p>送る側の spec が受け取る側の spec と一致するときだけ <code>connect</code> できる。値はいつも <code>torch.Tensor</code> かその dict で、spec は 2 種類ある。</p>
+<p>送る側の spec が受け取る側の spec と一致するときだけ <code>connect</code> できる。値は <code>torch.Tensor</code>、Python のスカラー、またはその dict。</p>
 <table>
 <thead>
 <tr>
@@ -2653,8 +2653,13 @@
 <td>活動や誤差のような 1 つの値</td>
 </tr>
 <tr>
+<td><code>IntSpec(bits)</code>、<code>FloatSpec</code>、<code>BoolSpec</code>、<code>TimestampSpec</code></td>
+<td><code>int</code>、<code>float</code>、<code>bool</code>、<code>Timestamp</code> 1 つ</td>
+<td>回数・フラグ・時刻。テンソルに包まない</td>
+</tr>
+<tr>
 <td><code>DictSpec</code></td>
-<td><code>TypedDict</code> のテンソルの組</td>
+<td><code>TypedDict</code> のテンソルとスカラーの組</td>
 <td>入力とその目標のように、一緒に届けたい値</td>
 </tr>
 </tbody>

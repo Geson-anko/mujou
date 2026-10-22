@@ -1690,7 +1690,7 @@
 <li>書いた値は次に書くまで残る。入力は時間とともに変わる信号で、ノードは同じ入力を何度も読む</li>
 <li>1 回の <code>write</code> の値は一緒に切り替わる。ノードが片方の新しい値ともう片方の古い値を読むことはない。入力とその目標のように組になる値は 1 回の <code>write</code> で書く（か、1 つの <code>DictSpec</code> のメッセージにする）</li>
 <li>値はコピーされる。書いた後でテンソルを書き換えてもネットワークには届かない</li>
-<li>shape や dtype の違う値は <code>ValueError</code>、キーの足りない dict や余分なキーのある dict は <code>TypeError</code> になる。どちらも Port を名指しする</li>
+<li>shape や dtype の違う値は <code>ValueError</code>、種別の違う値（<code>IntSpec</code> にテンソルなど）やキーの足りない dict、余分なキーのある dict は <code>TypeError</code>、<code>IntSpec</code> の範囲外の <code>int</code> は <code>OverflowError</code> になる。どれも Port を名指しする</li>
 </ul>
 <h2 id="初期値">初期値<a class="headerlink" href="#初期値" title="Permanent link">&para;</a></h2>
 <table>
@@ -1704,7 +1704,7 @@
 <tbody>
 <tr>
 <td>何もしない</td>
-<td>ゼロ</td>
+<td>ゼロ（スカラーは <code>0</code>、<code>False</code> など）</td>
 <td><code>None</code></td>
 </tr>
 <tr>

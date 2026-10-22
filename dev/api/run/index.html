@@ -2280,8 +2280,20 @@ receives; or a shape or a dtype differs from the spec.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>A message is not a tensor, or a dict of tensors with the
-spec's keys.</p>
+                <p>A value is not of its field's kind (a tensor, an
+<code>int</code>, ...), or a dict message does not have the spec's keys.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="OverflowError">OverflowError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>An <code>int</code> is out of the range of its <code>IntSpec</code>.</p>
               </div>
             </td>
           </tr>
@@ -2776,7 +2788,8 @@ its latest message to each peer (<code>MultiPort.send_to</code> writes only one)
 by the path of the peer's port. An unconnected <code>Port</code> that receives has
 <code>"in"</code>, what the host wrote last. Each <code>E</code> is <code>{"value": message,
 "time_ns": int | None}</code>: <code>time_ns</code> is <code>None</code> while nothing was
-written.</p>
+written. As every time of the tree, a <code>Timestamp</code> in a message (a
+<code>TimestampSpec</code>) is held as its nanoseconds, an <code>int</code>.</p>
 
 
 <table>

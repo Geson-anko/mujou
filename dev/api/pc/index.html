@@ -4783,7 +4783,7 @@ does not take the <code>h</code> of <code>act_spec</code> on <code>device</code>
   </span>
 
 <a href="#mujou.pc.Layer.act_spec" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s1">'y'</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">act_spec</span> <span class="o">=</span> <span class="n">activity_spec</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s1">'y'</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_batch</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5236,7 +5236,7 @@ the target.</p>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">y_hat</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">(</span><span class="n">y_hat</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">y_hat</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">time</span><span class="o">=</span><span class="n">specs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">time</span><span class="o">=</span><span class="n">act_spec</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="n">TimestampSpec</span><span class="p">),</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">)</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </code></pre></div>
@@ -5545,7 +5545,7 @@ time constants.</p>
 <div class="highlight"><pre><span></span><code>self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
                            max_dt=2e-3)
 # In on_update(dt):
-tick = self.clock.tick(dt, int(activity["time"]), self.timer.now().ns)
+tick = self.clock.tick(dt, activity["time"].ns, self.timer.now().ns)
 # ... move by tick.dt; if tick.learn, learn weighted by tick.elapsed.
 </code></pre></div>
 
@@ -6090,11 +6090,11 @@ and the <code>y</code> and <code>mask</code> of <code>Activity</code>.</p>
 
         <p>The activity a node sends to the next nodes, with the target of each of
 its samples.</p>
-<p>The shapes start with the batch, <code>batch</code>: <code>()</code> for one sample, <code>(B,)</code>
+<p>The tensors start with the batch, <code>batch</code>: <code>()</code> for one sample, <code>(B,)</code>
 for <code>B</code> samples, or more dimensions (see <code>activity_spec</code>).</p>
 <ul>
 <li><code>h</code>: the activity, <code>(*batch, *out)</code>.</li>
-<li><code>jumps</code>: <code>()</code> int64, the number of times the sender's <code>h</code> has jumped
+<li><code>jumps</code>: an <code>int</code>, the number of times the sender's <code>h</code> has jumped
   rather than relaxed continuously: an <code>Input</code> counts the writes of the
   host, and a <code>Layer</code> counts its moves with a new sample and with a jump
   of the <code>h</code> it receives, and the jumps of its own <code>theta</code> when it
@@ -6104,8 +6104,8 @@ for <code>B</code> samples, or more dimensions (see <code>activity_spec</code>).
 <li><code>y</code>: the target of each sample, <code>(*batch, *target)</code>.</li>
 <li><code>mask</code>: <code>batch</code> bool, whether each sample has a target. A sample whose
   <code>mask</code> is False adds nothing to the loss, whatever its <code>y</code> is.</li>
-<li><code>time</code>: <code>()</code> int64, the time in nanoseconds that <code>Run.write</code>
-  returned for the input <code>h</code> was computed from; 0 before the host first
+<li><code>time</code>: the <code>Timestamp</code> that <code>Run.write</code> returned for the input
+  <code>h</code> was computed from; <code>Timestamp(ns=0)</code> before the host first
   writes.</li>
 </ul>
 <p><code>y</code>, <code>mask</code> and <code>time</code> come from the <code>Sample</code> the host wrote, and
@@ -6166,7 +6166,7 @@ fast the host writes.</p>
   </span>
 
 <a href="#mujou.pc.Activity.jumps" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">jumps</span><span class="p">:</span> <span class="n">Tensor</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">jumps</span><span class="p">:</span> <span class="nb">int</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6232,7 +6232,7 @@ fast the host writes.</p>
   </span>
 
 <a href="#mujou.pc.Activity.time" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Tensor</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Timestamp</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6370,7 +6370,7 @@ fast the host writes.</p>
   </span>
 
 <a href="#mujou.pc.Prediction.time" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Tensor</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">time</span><span class="p">:</span> <span class="n">Timestamp</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">

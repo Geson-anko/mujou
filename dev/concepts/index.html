@@ -2635,7 +2635,7 @@
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># receives only</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># sends only</span>
 </code></pre></div>
-<p>Two ports connect only when the spec each sends matches the spec the other receives. The values are always <code>torch.Tensor</code> or a dict of them, and there are two kinds of spec:</p>
+<p>Two ports connect only when the spec each sends matches the spec the other receives. The values are <code>torch.Tensor</code>, Python scalars, or a dict of them:</p>
 <table>
 <thead>
 <tr>
@@ -2651,8 +2651,13 @@
 <td>One value, such as an activity or an error</td>
 </tr>
 <tr>
+<td><code>IntSpec(bits)</code>, <code>FloatSpec</code>, <code>BoolSpec</code>, <code>TimestampSpec</code></td>
+<td>One <code>int</code>, <code>float</code>, <code>bool</code> or <code>Timestamp</code></td>
+<td>A count, a flag or a time, without wrapping it in a tensor</td>
+</tr>
+<tr>
 <td><code>DictSpec</code></td>
-<td>A <code>TypedDict</code> of tensors</td>
+<td>A <code>TypedDict</code> of tensors and scalars</td>
 <td>Values that must arrive together, such as an input and its target</td>
 </tr>
 </tbody>

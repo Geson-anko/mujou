@@ -1688,7 +1688,7 @@
 <li>A written value stays until the next write: an input is a signal over time, and the nodes read it many times</li>
 <li>The values of one <code>write</code> switch together. A node never reads the new value of one with the old value of the other, so write values that belong together, such as an input and its target, in one <code>write</code> (or as one <code>DictSpec</code> message)</li>
 <li>The values are copied: changing the tensor after the write does not reach the network</li>
-<li>A value of another shape or dtype raises <code>ValueError</code>, and a dict with a missing or an extra key raises <code>TypeError</code>, naming the port</li>
+<li>A value of another shape or dtype raises <code>ValueError</code>, a value of another kind (a tensor for an <code>IntSpec</code>, say) or a dict with a missing or an extra key raises <code>TypeError</code>, and an <code>int</code> out of the range of its <code>IntSpec</code> raises <code>OverflowError</code>, naming the port</li>
 </ul>
 <h2 id="initial-values">Initial values<a class="headerlink" href="#initial-values" title="Permanent link">&para;</a></h2>
 <table>
@@ -1702,7 +1702,7 @@
 <tbody>
 <tr>
 <td>Nothing</td>
-<td>Zeros</td>
+<td>Zeros (<code>0</code>, <code>False</code>, ... for scalars)</td>
 <td><code>None</code></td>
 </tr>
 <tr>

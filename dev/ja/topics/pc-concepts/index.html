@@ -1985,8 +1985,8 @@
 </table>
 <ul>
 <li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>g_in</code> を 0 にする。<code>mask</code> がすべて False の入力でも <code>h</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
-<li><code>time</code>: ホストがその入力を書いた時刻（ns）。書き込みの前は 0</li>
-<li><code>jumps</code>: 送り手の <code>h</code> が跳んだ回数（<a href="#4-learnclock-%E3%81%A8-jumps">4 節</a>）</li>
+<li><code>time</code>: ホストがその入力を書いた時刻（<code>Timestamp</code>）。書き込みの前は <code>Timestamp(ns=0)</code></li>
+<li><code>jumps</code>: 送り手の <code>h</code> が跳んだ回数（<code>int</code>）（<a href="#4-learnclock-%E3%81%A8-jumps">4 節</a>）</li>
 </ul>
 <h3 id="port-の向き">Port の向き<a class="headerlink" href="#port-の向き" title="Permanent link">&para;</a></h3>
 <table>
@@ -2118,7 +2118,7 @@
 <p><code>h</code> と <code>lam</code> は毎回の更新で動かし、重みは <code>LearnClock</code> が決めた更新でだけ動かす。<code>jumps</code> は「予測が跳んだので <code>h</code> も一緒に動かせ」という次のノードへの合図。</p>
 </div>
 <h3 id="learnclock">LearnClock<a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h3>
-<p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
+<p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
 <table>
 <thead>
 <tr>
