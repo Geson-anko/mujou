@@ -2116,7 +2116,7 @@
 <p><code>h</code> and <code>lam</code> move in every update; the weights move only in the updates <code>LearnClock</code> chooses. <code>jumps</code> is the signal to the next node: "the prediction jumped, so move <code>h</code> with it".</p>
 </div>
 <h3 id="learnclock">LearnClock<a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h3>
-<p>In every update a node calls <code>tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)</code>. What the returned <code>Tick</code> means:</p>
+<p>In every update a node calls <code>tick = self.clock.tick(dt, act["time"], self.timer.now())</code>. What the returned <code>Tick</code> means:</p>
 <table>
 <thead>
 <tr>

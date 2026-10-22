@@ -5516,10 +5516,10 @@ updates of <code>theta</code> alike.</p>
 
         <p>Decides, update by update, when a node updates its parameters, from the
 time the host wrote the node's input.</p>
-<p>The node calls <code>tick(dt, time_ns, now_ns)</code> once in each update, with the
-<code>dt</code> of the update, the time (ns) the input it received was written at,
-and the time now (ns) on the run's timer. The clock learns in the first
-update at or after <code>time_ns + k * learn_interval</code> (<code>k = 1, 2, ...</code>), but
+<p>The node calls <code>tick(dt, time, now)</code> once in each update, with the <code>dt</code>
+of the update, the <code>Timestamp</code> the input it received was written at, and
+the time now on the run's timer. The clock learns in the first update at or
+after <code>time + k * learn_interval</code> (<code>k = 1, 2, ...</code>), but
 never in the update that first sees an input: its gradient is still that of
 the input before. The nodes on a path read the one timer of the run, so
 they learn at about the same time, however deep they are. With
@@ -5547,7 +5547,7 @@ time constants.</p>
 <div class="highlight"><pre><span></span><code>self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
                            max_dt=2e-3)
 # In on_update(dt):
-tick = self.clock.tick(dt, activity["time"].ns, self.timer.now().ns)
+tick = self.clock.tick(dt, activity["time"], self.timer.now())
 # ... move by tick.dt; if tick.learn, learn weighted by tick.elapsed.
 </code></pre></div>
 
@@ -5750,14 +5750,14 @@ as <code>Layer</code> and <code>Output</code> make theirs: <code>max_dt</code> d
 
 
 <a href="#mujou.pc.LearnClock.tick" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">time_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">now_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tick</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span> <span class="n">now</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tick</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Count an update of <code>dt</code> seconds that received an input written at
-<code>time_ns</code>, at <code>now_ns</code> on the run's timer, and return what the
-update does. With <code>learn</code>, the clock has learned at <code>now_ns</code>.</p>
+<code>time</code>, at <code>now</code> on the run's timer, and return what the update
+does. With <code>learn</code>, the clock has learned at <code>now</code>.</p>
 
 
     </div>

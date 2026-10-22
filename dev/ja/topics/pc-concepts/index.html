@@ -2118,7 +2118,7 @@
 <p><code>h</code> と <code>lam</code> は毎回の更新で動かし、重みは <code>LearnClock</code> が決めた更新でだけ動かす。<code>jumps</code> は「予測が跳んだので <code>h</code> も一緒に動かせ」という次のノードへの合図。</p>
 </div>
 <h3 id="learnclock">LearnClock<a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h3>
-<p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
+<p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, act["time"], self.timer.now())</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
 <table>
 <thead>
 <tr>
