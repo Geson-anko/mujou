@@ -10,7 +10,17 @@ from mujou import Group, Network, TensorSpec
 from mujou.time import VirtualTimer
 from mujou.types import Size
 from tests.mujou.nodes import F64, assert_same_tree
-from tests.mujou.pc._reference import MASK, N_OUT, TAU, B, H, make_modules, sample
+from tests.mujou.pc._reference import (
+    ADAMW,
+    MASK,
+    N_OUT,
+    SGD,
+    TAU,
+    B,
+    H,
+    make_modules,
+    sample,
+)
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -20,7 +30,7 @@ X, Y = TensorSpec((B, WIDTHS[0]), F64), TensorSpec((B, N_OUT), F64)
 LEARN_INTERVAL = 3 * H
 
 
-def chain(*modules: nn.Module) -> pc.Chain:
+def chain(*modules: nn.Module, optimizer: pc.Optimizer = SGD) -> pc.Chain:
     return pc.Chain(
         *modules,
         x=X,
@@ -28,6 +38,7 @@ def chain(*modules: nn.Module) -> pc.Chain:
         batch=B,
         loss=pc.MSELoss(B),
         tau=TAU,
+        optimizer=optimizer,
         learn_interval=LEARN_INTERVAL,
     )
 
@@ -39,7 +50,11 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     last = nodes["input"]
     for i, module in enumerate(layers):
         layer = pc.Layer(
-            module, act_spec=last.act_spec, tau=TAU, learn_interval=LEARN_INTERVAL
+            module,
+            act_spec=last.act_spec,
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=LEARN_INTERVAL,
         )
         last.next.connect(layer.prev)
         nodes[f"layer{i}"] = last = layer
@@ -48,6 +63,7 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
         act_spec=last.act_spec,
         loss=pc.MSELoss(B),
         tau=TAU,
+        optimizer=SGD,
         learn_interval=LEARN_INTERVAL,
     )
     last.next.connect(nodes["output"].prev)
@@ -120,6 +136,21 @@ class TestChain:
         periods += [net.input.period, net.output.period]
         assert periods == pytest.approx([TAU.h / 4] * 4)
 
+    def test_each_node_binds_the_optimizer_to_its_own_parameters(
+        self, start_manual: StartManual
+    ):
+        # One AdamW for the whole chain: each node binds it to its own module,
+        # so each keeps moments of its own (one bound optimizer in two nodes
+        # would keep the run from starting).
+        layers, head = make_modules("linear", "tanh", WIDTHS)
+        net = chain(*layers, head, optimizer=ADAMW)
+        tree = run_states(start_manual, net, net.input)
+        modules = {"layer0": layers[0], "layer1": layers[1], "output": head}
+        for path, module in modules.items():
+            moments = tree["nodes"][path]["state"]["optimizer"]["m"]
+            assert [m.shape for m in moments] == [p.shape for p in module.parameters()]
+        assert "optimizer" not in tree["nodes"]["input"]["state"]
+
     def test_one_module_is_the_output(self):
         head = nn.Linear(WIDTHS[0], N_OUT).double()
         net = chain(head)
@@ -146,6 +177,7 @@ def learned(
         batch=batch,
         loss=loss(batch),
         tau=TAU,
+        optimizer=SGD,
         learn_interval=LEARN_INTERVAL,
     )
     run = start_manual(net, timer=VirtualTimer())

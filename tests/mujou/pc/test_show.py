@@ -7,7 +7,15 @@ import mujou.pc as pc
 from mujou import Network, TensorSpec
 from mujou.time import Timer
 from tests.mujou.nodes import F64, assert_same_tree, close
-from tests.mujou.pc._reference import N_OUT, TAU, B, forward, make_modules, sample
+from tests.mujou.pc._reference import (
+    N_OUT,
+    SGD,
+    TAU,
+    B,
+    forward,
+    make_modules,
+    sample,
+)
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start
@@ -26,7 +34,14 @@ class TestShow:
         head = make_modules("linear", "tanh", WIDTHS[:1])[1]
         initial = copy.deepcopy(head)
         net = pc.Chain(
-            head, x=X, y=Y, batch=B, loss=pc.MSELoss(B), tau=TAU, learn_interval=0.05
+            head,
+            x=X,
+            y=Y,
+            batch=B,
+            loss=pc.MSELoss(B),
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=0.05,
         )
         x, y = sample(WIDTHS, 0)
         labeled = torch.ones(B, dtype=torch.bool)
@@ -55,6 +70,7 @@ class TestShow:
             batch=B,
             loss=pc.MSELoss(B),
             tau=TAU,
+            optimizer=SGD,
             learn_interval=None,
         )
         x, y = sample(WIDTHS, 0)
@@ -81,6 +97,7 @@ class TestShow:
                     act_spec=self.input.act_spec,
                     loss=pc.MSELoss(B),
                     tau=TAU,
+                    optimizer=SGD,
                     learn_interval=None,
                     period=TAU.period / 2,
                 )

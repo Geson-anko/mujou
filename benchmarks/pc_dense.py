@@ -39,7 +39,8 @@ import mujou.testing
 from mujou import TensorSpec
 
 B = 64
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+OPTIMIZER = pc.SGD(tau=1.28)
 PERIOD = TAU.h / 4
 PATHS = ("inp", "l1", "l2", "out")
 
@@ -80,6 +81,7 @@ def build(
     torch.manual_seed(0)
     common: dict[str, Any] = {
         "tau": TAU,
+        "optimizer": OPTIMIZER,
         "learn_interval": 8 * PERIOD,
         "period": period,
         "device": device,

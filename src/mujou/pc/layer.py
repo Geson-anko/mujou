@@ -1,5 +1,6 @@
 """The hidden node of ``mujou.pc``."""
 
+import math
 from typing import override
 
 import torch
@@ -7,8 +8,9 @@ from torch import nn
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
 from mujou.pc.clock import LearnClock
-from mujou.pc.functional import learn_, relax_, vjp
+from mujou.pc.functional import relax_, vjp
 from mujou.pc.messages import Activity, activity_spec, rows
+from mujou.pc.optim import Optimizer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device
 
@@ -24,12 +26,13 @@ class Layer(Node):
 
     $$
     \tau_h \dot h = -(r + \lambda + g),\qquad
-    \tau_\lambda \dot\lambda = r,\qquad
-    \tau_\theta \dot\theta = -g_\theta / B,
+    \tau_\lambda \dot\lambda = r,
     $$
 
-    where $B$ is the number of samples in the batch (1 without one),
-    $g_\theta = -J_\theta^\top \delta$ and the node sends
+    and ``theta`` moves by ``optimizer`` (such as ``pc.SGD``,
+    $\tau_\theta \dot\theta = -g_\theta / B$) with the mean gradient
+    $g_\theta / B$, where $B$ is the number of samples in the batch (1 without
+    one), $g_\theta = -J_\theta^\top \delta$ and the node sends
     $g_{\mathrm{in}} = -J_h^\top \delta$ to the previous node (both from one
     vector-Jacobian product of ``module``, ``functional.vjp``). At a fixed point,
     $r = 0$ (``h`` is the forward pass) and ``lam`` is the credit
@@ -76,17 +79,17 @@ class Layer(Node):
     5. sends ``h`` with its ``jumps``, and the ``y``, ``mask`` and ``time``
        that came with ``h_in``;
     6. when it learns, moves ``theta`` by the time since its last update
-       (``functional.learn_``) and computes the jump of ``mu`` it made.
+       (``optimizer.step_``) and computes the jump of ``mu`` it made.
 
     Its ``clock`` (a ``LearnClock``) tells when it learns: in its first update
     once ``learn_interval`` seconds have passed since the host wrote the input
     (its ``time``, on the run's time), and then every ``learn_interval``
     seconds while the input stays, but never in the update that first sees an
     input (its ``delta`` is still that of the input before); with
-    ``learn_interval=None``, in every update; with ``tau.theta`` infinite,
-    never (``LearnClock.of``). The nodes read the one timer of the run, so the
-    nodes on a path learn at about the same time, however deep they are, and
-    each from the relaxed ``delta`` of the same input. A ``learn_interval``
+    ``learn_interval=None``, in every update; with ``math.inf``, never. The
+    nodes read the one timer of the run, so the nodes on a path learn at about
+    the same time, however deep they are, and each from the relaxed ``delta``
+    of the same input. A ``learn_interval``
     longer than the round trip of the credit down the path and back
     (``2 * hops * period``, with ``hops`` the number of connections from the
     ``Input`` to the ``Output``) is recommended: with intervals of a few
@@ -125,16 +128,17 @@ class Layer(Node):
     the last update (``"mu"``), the jump of ``theta`` still to add to ``h``
     (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it sends
     and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
-    learn (``"clock"``, the state of the ``LearnClock``). To watch the node
-    while it runs, read them there: ``Run.state_dict()`` pauses the run,
-    whereas reading ``module``, ``h`` or ``lam`` from the host's thread races
-    with the node's updates in place. ``act_spec`` is the spec of what the node
-    sends, for the next node.
+    learn (``"clock"``, the state of the ``LearnClock``), and the state of
+    ``optimizer`` (``"optimizer"``, such as the moments of ``pc.AdamW``). To
+    watch the node while it runs, read them there: ``Run.state_dict()`` pauses
+    the run, whereas reading ``module``, ``h`` or ``lam`` from the host's thread
+    races with the node's updates in place. ``act_spec`` is the spec of what the
+    node sends, for the next node.
 
     Example::
 
         B = 64
-        tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28)
+        tau = pc.TimeConstants(h=4e-3, lam=8e-3)
         inp = pc.Input(
             x=TensorSpec((B, 784)),
             y=TensorSpec((B,), torch.int64),
@@ -145,6 +149,7 @@ class Layer(Node):
             nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
             act_spec=inp.act_spec,
             tau=tau,
+            optimizer=pc.SGD(tau=1.28),
             learn_interval=24e-3,
         )
         inp.next.connect(hidden.prev)
@@ -155,7 +160,11 @@ class Layer(Node):
             ``device``.
         act_spec: The spec of the activity ``h_in`` it receives: the
             ``act_spec`` of the node before, which also gives the batch.
-        tau: The time constants.
+        tau: The time constants of ``h`` and ``lam``.
+        optimizer: How ``theta`` moves (``pc.SGD``, ``pc.AdamW`` or an
+            ``Optimizer`` of your own). The node binds it to its parameters
+            that require gradients and holds the bound optimizer as
+            ``optimizer``.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
             longer than ``2 * hops * period`` is recommended. ``None`` updates
@@ -182,6 +191,7 @@ class Layer(Node):
         *,
         act_spec: DictSpec[Activity],
         tau: TimeConstants,
+        optimizer: Optimizer,
         learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
@@ -189,13 +199,15 @@ class Layer(Node):
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
-        self._batch = act_spec.field("mask", TensorSpec).shape
+        batch = act_spec.field("mask", TensorSpec).shape
+        self._samples = math.prod(batch)  # B
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
+        self.optimizer = optimizer.bind(self._params)
         h_in = act_spec.field("h", TensorSpec)
         with torch.no_grad():
             mu = module(h_in.zeros(device=self.device))
@@ -213,7 +225,7 @@ class Layer(Node):
         for name in ("jumped", "jumps", "seen_jumps"):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
-        self.act_spec = activity_spec(out, act_spec.field("y", TensorSpec), self._batch)
+        self.act_spec = activity_spec(out, act_spec.field("y", TensorSpec), batch)
         self.prev = Port(send=h_in, recv=act_spec)
         self.next = MultiPort(send=self.act_spec, recv=out)
 
@@ -295,7 +307,8 @@ class Layer(Node):
     ) -> None:
         """Move ``theta``, and keep the jump of ``mu`` it made for ``h`` to take
         in the next update."""
-        learn_(self._params, g_theta, elapsed, self._tau, self._batch)
+        # theta moves by the mean gradient of the batch, g_theta / B.
+        self.optimizer.step_([g / self._samples for g in g_theta], elapsed)
         with torch.no_grad():
             moved = self.module(h_in)  # mu' = f(h_in; theta_new)
         torch.sub(moved, mu, out=self.jump)

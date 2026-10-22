@@ -27,8 +27,8 @@ def train(
     that turns the GIL on for the rest of the process.
 
     The loss sums over the samples with a label and divides by ``batch``, as the
-    PC-ALM nodes do (``sum_dt / tau.theta * g_theta / B``): for a full batch it is
-    the mean.
+    PC-ALM nodes do (``elapsed / tau * g_theta / B``, with the ``tau`` of
+    ``pc.SGD``): for a full batch it is the mean.
     """
     params = list(model.parameters())
     results: list[Epoch] = []

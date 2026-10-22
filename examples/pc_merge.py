@@ -21,7 +21,8 @@ from mujou import DictSpec, MultiPort, Network, Node, Port, TensorSpec
 
 B = 32  # the batch
 SHOWN = 0.032  # seconds of the run's timer each batch is shown
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=SHOWN / 0.3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+OPTIMIZER = pc.SGD(tau=SHOWN / 0.3)  # a rate of 0.3 per batch
 LEARN = 0.75 * SHOWN  # the towers and the output learn once per batch
 
 
@@ -34,6 +35,7 @@ class Merge(Node):
     ) -> None:
         super().__init__(period=TAU.period)
         self.module = module
+        self.optimizer = OPTIMIZER.bind(self.module.parameters())
         self.clock = pc.LearnClock.of(TAU, period=self.period, learn_interval=None)
         h_a, h_b = a.field("h", TensorSpec), b.field("h", TensorSpec)
         self.sizes = [h_a.shape[-1], h_b.shape[-1]]
@@ -76,7 +78,7 @@ class Merge(Node):
         # The y, mask and time of a go on with h.
         self.next.send({**a, "h": self.h, "jumps": self.jumps})
         if a["mask"].any():  # nothing to learn from samples without a target
-            pc.functional.learn_(params, g_theta, t.elapsed, TAU, B)
+            self.optimizer.step_([g_p / B for g_p in g_theta], t.elapsed)
 
 
 # --8<-- [end:merge]
@@ -86,7 +88,7 @@ class Merge(Node):
 class TwoTowers(Network):
     def __init__(self) -> None:
         super().__init__()
-        tower = partial(pc.Layer, tau=TAU, learn_interval=LEARN)
+        tower = partial(pc.Layer, tau=TAU, optimizer=OPTIMIZER, learn_interval=LEARN)
         self.inp = pc.Input(
             x=TensorSpec((B, 2)), y=TensorSpec((B, 1)), period=TAU.period, batch=B
         )
@@ -106,6 +108,7 @@ class TwoTowers(Network):
             act_spec=self.merge.act_spec,
             loss=pc.MSELoss(B),
             tau=TAU,
+            optimizer=OPTIMIZER,
             learn_interval=LEARN,
         )
         self.inp.next.connect(self.a.prev)

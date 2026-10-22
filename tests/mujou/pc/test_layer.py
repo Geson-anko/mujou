@@ -15,10 +15,12 @@ from mujou.testing import ManualRun
 from mujou.time import VirtualTimer
 from tests.mujou.nodes import F64, assert_same_tree, close
 from tests.mujou.pc._reference import (
+    ADAMW,
     MASK,
     N_OUT,
-    NO_LEARNING,
+    SGD,
     TAU,
+    TAU_THETA,
     B,
     H,
     Reference,
@@ -44,6 +46,7 @@ class HandChain:
         widths: Sequence[int],
         *,
         tau: pc.TimeConstants = TAU,
+        optimizer: pc.Optimizer = SGD,
         learn_interval: float | None = None,
         max_dt: float | None = None,
     ) -> None:
@@ -51,6 +54,7 @@ class HandChain:
         self.inp = pc.Input(x=x, y=y, period=H, batch=B)
         learning: dict[str, Any] = {
             "tau": tau,
+            "optimizer": optimizer,
             "learn_interval": learn_interval,
             "max_dt": max_dt,
         }
@@ -94,6 +98,7 @@ class TestConstruction:
         args: dict[str, Any] = {
             "act_spec": activity(TensorSpec((B, 4))),
             "tau": TAU,
+            "optimizer": SGD,
             "learn_interval": None,
         }
         module = kwargs.pop("module", nn.Linear(4, 5))
@@ -207,7 +212,7 @@ class TestFixedPoint:
     ):
         widths = [4, 4, 4] if block == "res" else [4, 5, 3]
         layers, head = make_modules(block, act, widths)
-        chain = HandChain(layers, head, widths, tau=NO_LEARNING)
+        chain = HandChain(layers, head, widths, learn_interval=math.inf)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -249,7 +254,7 @@ class TestFixedPoint:
         chain.write(run, x, y, MASK)
         run_steps(run, chain.from_next(), RELAX_STEPS)
         # Backpropagation of the mean loss, one step of the same rate.
-        rate = RELAX_STEPS * H / TAU.theta
+        rate = RELAX_STEPS * H / TAU_THETA
         _, y_hat = forward(sgd[:-1], sgd[-1], x)
         params = [p for m in sgd for p in m.parameters()]
         grads = torch.autograd.grad(masked_mse(y_hat, y, MASK) / B, params)
@@ -281,7 +286,7 @@ class TestDeepChain:
         with torch.no_grad():
             forward_hs, y_hat = forward(layers, head, x)
         y = y_hat + noise
-        chain = HandChain(layers, head, widths, tau=NO_LEARNING)
+        chain = HandChain(layers, head, widths, learn_interval=math.inf)
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         run_steps(run, chain.from_next(), DEEP_STEPS)
@@ -313,8 +318,10 @@ class TestDeepChain:
             _, y_hat = forward(layers, head, x)
         y = y_hat + noise
         bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
-        slow = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=1e9)
-        chain = HandChain(layers, head, widths, tau=slow, learn_interval=learn_interval)
+        slow = pc.SGD(tau=1e9)
+        chain = HandChain(
+            layers, head, widths, optimizer=slow, learn_interval=learn_interval
+        )
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         for _ in range(DEEP_STEPS // 100):
@@ -382,8 +389,8 @@ class TestPcLimit:
         # energy of predictive coding is stationary, away from the forward pass.
         widths = [4, 5, 3]
         layers, head = make_modules("linear", "tanh", widths)
-        tau = pc.TimeConstants(h=TAU.h, lam=math.inf, theta=math.inf)
-        chain = HandChain(layers, head, widths, tau=tau)
+        tau = pc.TimeConstants(h=TAU.h, lam=math.inf)
+        chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
         chain.write(run, x, y, MASK)
@@ -434,14 +441,19 @@ class TestScalar:
         one = TensorSpec((1, 1), F64)
         inp = pc.Input(x=one, y=one, period=H, batch=1)
         layer = pc.Layer(
-            first.double(), act_spec=inp.act_spec, tau=NO_LEARNING, learn_interval=None
+            first.double(),
+            act_spec=inp.act_spec,
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=math.inf,
         )
         out = pc.Output(
             head.double(),
             act_spec=layer.act_spec,
             loss=lambda y_hat, y: 0.5 * pc.functional.mse(y_hat, y, 1),
-            tau=NO_LEARNING,
-            learn_interval=None,
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=math.inf,
         )
         inp.next.connect(layer.prev)
         layer.next.connect(out.prev)
@@ -476,7 +488,7 @@ class TestSchedules:
         ]
         for order in orders:
             layers, head = make_modules("res", "tanh", widths)
-            chain = HandChain(layers, head, widths, tau=NO_LEARNING)
+            chain = HandChain(layers, head, widths, learn_interval=math.inf)
             run = start_manual(chain.net, timer=VirtualTimer())
             chain.write(run, x, y, MASK)
             for _ in range(RELAX_STEPS):
@@ -495,8 +507,8 @@ class TestSchedules:
         x, y = sample(widths, 0)
         layers, head = make_modules("linear", "tanh", widths)
         sgd = [copy.deepcopy(m) for m in [*layers, head]]
-        tau = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=RELAX_STEPS * H / 0.1)
-        rate = RELAX_STEPS * H / tau.theta
+        optimizer = pc.SGD(tau=RELAX_STEPS * H / 0.1)
+        rate = RELAX_STEPS * H / optimizer.tau
         params = [p for m in sgd for p in m.parameters()]
         for _ in range(2):
             _, y_hat = forward(sgd[:-1], sgd[-1], x)
@@ -513,7 +525,11 @@ class TestSchedules:
         for order in orders:
             layers, head = make_modules("linear", "tanh", widths)
             chain = HandChain(
-                layers, head, widths, tau=tau, learn_interval=RELAX_STEPS * H
+                layers,
+                head,
+                widths,
+                optimizer=optimizer,
+                learn_interval=RELAX_STEPS * H,
             )
             run = start_manual(chain.net, timer=VirtualTimer())
             chain.write(run, x, y, MASK)
@@ -606,6 +622,7 @@ class Learning:
         start_manual: StartManual,
         *,
         widths: Sequence[int] = (4, 5),
+        optimizer: pc.Optimizer = SGD,
         max_dt: float | None = None,
         seed: int = 0,
         state: dict[str, Any] | None = None,
@@ -614,7 +631,12 @@ class Learning:
         self.widths = list(widths)
         layers, head = make_modules("linear", "tanh", self.widths, seed=seed)
         self.chain = HandChain(
-            layers, head, self.widths, learn_interval=K * H, max_dt=max_dt
+            layers,
+            head,
+            self.widths,
+            optimizer=optimizer,
+            learn_interval=K * H,
+            max_dt=max_dt,
         )
         # A timer of its own, as the restored run has.
         timer = VirtualTimer() if state is None else None
@@ -636,18 +658,18 @@ def h_before_mu(state: dict[str, Any]) -> torch.Tensor:
     return state["h"] + state["jump"] if state["jumped"] else state["h"]
 
 
-def layer_update(
-    tree: dict[str, Any], module: nn.Module, elapsed: float, *, reanchor: bool = False
-) -> dict[str, torch.Tensor]:
-    """The parameters of ``l0`` after one update from the state ``tree`` taken
-    before the step: ``theta - (elapsed / tau_theta) g_theta / B``. With
-    ``reanchor``, ``h`` moves with ``mu`` in the step (a new input, or a jump of
-    ``h_in``), so ``h - mu`` is ``h - mu_last``.
+def layer_gradients(
+    tree: dict[str, Any], module: nn.Module, *, reanchor: bool = False
+) -> tuple[nn.Module, list[torch.Tensor]]:
+    """A copy of the ``module`` of ``l0`` with the parameters of the state
+    ``tree`` taken before a step, and the mean gradients ``g_theta / B`` that
+    the layer hands its optimizer in the step. With ``reanchor``, ``h`` moves
+    with ``mu`` in the step (a new input, or a jump of ``h_in``), so ``h - mu``
+    is ``h - mu_last``.
 
-    It computes ``g_theta`` with ``functional.vjp`` and moves the parameters
-    with ``functional.learn_``, which their own tests check against finite
-    differences and the written-out step: the tests that use it check when the
-    update comes and how much time weighs it.
+    It computes ``g_theta`` with ``functional.vjp``, which its own tests check
+    against finite differences: the tests that use it check when the update
+    comes and how much time weighs it.
     """
     module = copy.deepcopy(module)
     module.load_state_dict(tree["nodes"]["l0"]["state"]["module"])
@@ -662,7 +684,34 @@ def layer_update(
         return torch.where(labeled, r + state["lam"], 0.0)
 
     _, _, g_theta = pc.functional.vjp(module, sent["h"], delta, params)
-    pc.functional.learn_(params, g_theta, elapsed, TAU, B)
+    return module, [g / B for g in g_theta]
+
+
+def layer_update(
+    tree: dict[str, Any], module: nn.Module, elapsed: float, *, reanchor: bool = False
+) -> dict[str, torch.Tensor]:
+    """The parameters of ``l0`` after one update of SGD from the state ``tree``
+    taken before the step: ``theta - (elapsed / tau_theta) g_theta / B``."""
+    module, grads = layer_gradients(tree, module, reanchor=reanchor)
+    with torch.no_grad():
+        for p, g in zip(module.parameters(), grads, strict=True):
+            p -= (elapsed / TAU_THETA) * g
+    return module.state_dict()
+
+
+def adamw_first_update(
+    tree: dict[str, Any], module: nn.Module, elapsed: float
+) -> dict[str, torch.Tensor]:
+    """The parameters of ``l0`` after the first update of ``ADAMW`` from the
+    state ``tree`` taken before the step. The first step has ``m_hat = g`` and
+    ``v_hat = g^2`` whatever ``tau_m`` and ``tau_v``:
+    ``theta (1 - eta w) - eta g / (|g| + eps)``, ``eta = elapsed / tau``."""
+    module, grads = layer_gradients(tree, module)
+    eta = elapsed / ADAMW.tau
+    decay = 1 - eta * ADAMW.weight_decay
+    with torch.no_grad():
+        for p, g in zip(module.parameters(), grads, strict=True):
+            p.copy_(p * decay - eta * g / (g.abs() + ADAMW.eps))
     return module.state_dict()
 
 
@@ -731,34 +780,26 @@ class TestLearnInterval:
                     changed[name].append(s)
         assert changed == {"l0": [2 * K, 4 * K], "out": [2 * K, 4 * K]}
 
-    def test_without_learning_the_interval_changes_nothing(
-        self, start_manual: StartManual
-    ):
-        # theta = inf: the nodes never learn, whatever learn_interval, so theta
-        # stays and no jump of theta goes up the chain. The run is that of
-        # learn_interval=None bit for bit, but for the state of the clocks.
+    def test_an_infinite_interval_never_learns(self, start_manual: StartManual):
+        # learn_interval=math.inf: no node learns, though every input has
+        # targets, and the theta of every node stays the same to the bit.
         widths = [4, 5, 5]
-        trees: list[dict[str, Any]] = []
-        for learn_interval in (None, 2 * H):
-            layers, head = make_modules("linear", "tanh", widths)
-            initial = [copy.deepcopy(m.state_dict()) for m in [*layers, head]]
-            chain = HandChain(
-                layers, head, widths, tau=NO_LEARNING, learn_interval=learn_interval
+        layers, head = make_modules("linear", "tanh", widths)
+        chain = HandChain(layers, head, widths, learn_interval=math.inf)
+        run = start_manual(chain.net, timer=VirtualTimer())
+        before = run.state_dict()["nodes"]
+        for s in range(30):
+            if s % 7 == 0:
+                x, y = sample(widths, s)
+                chain.write(run, x, y, MASK)
+            run.step(H, *chain.from_next())
+        after = run.state_dict()["nodes"]
+        for path in ["l0", "l1", "out"]:
+            assert_same_tree(
+                after[path]["state"]["module"], before[path]["state"]["module"]
             )
-            run = start_manual(chain.net, timer=VirtualTimer())
-            for s in range(30):
-                if s % 7 == 0:
-                    x, y = sample(widths, s)
-                    chain.write(run, x, y, MASK)
-                run.step(H, *chain.from_next())
-            tree = run.state_dict()
-            for node in tree["nodes"].values():
-                node["state"].pop("clock", None)
-                node["state"].pop("generator")  # seeded by chance
-            trees.append(tree)
-            for module, state in zip([*layers, head], initial, strict=True):
-                assert equal_states(module.state_dict(), state)
-        assert_same_tree(trees[1], trees[0])
+        lam = after["l1"]["state"]["lam"]
+        assert not torch.equal(lam, before["l1"]["state"]["lam"])
 
     def test_an_input_that_changes_before_it_is_learned_drops_its_time(
         self, start_manual: StartManual
@@ -919,13 +960,16 @@ class TestMaxDt:
         # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
         # a period must not pass.
         layer = functools.partial(
-            pc.Layer, act_spec=activity(TensorSpec((B, 4))), learn_interval=None
+            pc.Layer,
+            act_spec=activity(TensorSpec((B, 4))),
+            optimizer=SGD,
+            learn_interval=None,
         )
-        fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, theta=1.0)
+        fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3)
         layer(nn.Linear(4, 5), tau=fast_dual, period=1.5e-3)
         with pytest.raises(ValueError, match="max_dt"):
             layer(nn.Linear(4, 5), tau=fast_dual, period=1.6e-3)
-        no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, theta=1.0)
+        no_dual = pc.TimeConstants(h=4e-3, lam=math.inf)
         layer(nn.Linear(4, 5), tau=no_dual, period=2e-3)
         with pytest.raises(ValueError, match="max_dt"):
             layer(nn.Linear(4, 5), tau=no_dual, period=2.1e-3)
@@ -1024,27 +1068,45 @@ class TestJumps:
 
 
 class TestUnlabeled:
+    @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
     @pytest.mark.parametrize("learn_interval", [None, K * H])
     def test_no_theta_moves_while_every_mask_is_false(
-        self, start_manual: StartManual, learn_interval: float | None
+        self,
+        start_manual: StartManual,
+        learn_interval: float | None,
+        optimizer: pc.Optimizer,
     ):
-        # With mask False for every sample of every input, no node learns: h
-        # moves, and the theta of every node stays the same to the bit.
+        # The first two inputs have targets, so every node has learned (with
+        # AdamW, its moments and masses have left 0, and a call of step_ would
+        # move theta by them and by the weight decay even with g = 0). Once
+        # mask is False for every sample of every input that the nodes see, no
+        # node learns: h moves, and the theta of every node stays the same to
+        # the bit.
         widths = [4, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
-        chain = HandChain(layers, head, widths, learn_interval=learn_interval)
+        chain = HandChain(
+            layers, head, widths, optimizer=optimizer, learn_interval=learn_interval
+        )
         run = start_manual(chain.net, timer=VirtualTimer())
-        before = run.state_dict()["nodes"]
+        labeled = torch.ones(B, dtype=torch.bool)
         no_target = torch.zeros(B, dtype=torch.bool)
-        for k in range(6 * M):
-            if k % M == 0:
-                x, y = sample(widths, k)
-                chain.write(run, x, y, no_target)
-            run.step(H, *chain.from_next())
+
+        def steps(ks: range) -> None:
+            for k in ks:
+                if k % M == 0:
+                    x, y = sample(widths, k)
+                    chain.write(run, x, y, labeled if k < 2 * M else no_target)
+                run.step(H, *chain.from_next())
+
+        steps(range(3 * M))  # every node has seen the inputs without a target
+        before = run.state_dict()["nodes"]
+        steps(range(3 * M, 8 * M))
         after = run.state_dict()["nodes"]
         learners = [path for path, node in after.items() if "module" in node["state"]]
         assert sorted(learners) == ["l0", "l1", "out"]
         for path in learners:
+            if optimizer is ADAMW:
+                assert before[path]["state"]["optimizer"]["c_m"] > 0
             assert_same_tree(
                 after[path]["state"]["module"], before[path]["state"]["module"]
             )
@@ -1112,14 +1174,18 @@ def without_generators(tree: dict[str, Any]) -> dict[str, Any]:
 
 
 class TestState:
-    def test_a_restored_run_goes_on_as_the_same_run(self, start_manual: StartManual):
+    @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
+    def test_a_restored_run_goes_on_as_the_same_run(
+        self, start_manual: StartManual, optimizer: pc.Optimizer
+    ):
         # Taken at step 6, mid-phase, right after the input sent the input it
         # was written (the layer has read the earlier one) and the layer took
-        # the jump of its theta.
-        whole = Learning(start_manual)
+        # the jump of its theta. With AdamW, the moments and their masses carry
+        # over too.
+        whole = Learning(start_manual, optimizer=optimizer)
         for _ in range(16):
             whole.step()
-        first = Learning(start_manual)
+        first = Learning(start_manual, optimizer=optimizer)
         for _ in range(6):
             first.step()
         tree = first.run.state_dict()
@@ -1131,15 +1197,56 @@ class TestState:
             "seen_jumps",
             "mu",
             "module",
+            "optimizer",
             "h",
             "lam",
         } <= set(tree["nodes"]["l0"]["state"])
         assert {"jumps", "seen_write"} <= set(tree["nodes"]["inp"]["state"])
         first.run.shutdown()
-        restored = Learning(start_manual, seed=1, state=tree, steps=6)
+        restored = Learning(
+            start_manual, optimizer=optimizer, seed=1, state=tree, steps=6
+        )
         for _ in range(10):
             restored.step()
         assert_same_tree(
             without_generators(restored.run.state_dict()),
             without_generators(whole.run.state_dict()),
         )
+
+
+class TestOptimizer:
+    def test_the_first_update_with_adamw_is_its_closed_form(
+        self, start_manual: StartManual
+    ):
+        # The layer first learns at step 4 (K steps after the write at step 1),
+        # weighted by 3 steps; AdamW's first step is sign-like, far from SGD's.
+        learning = Learning(start_manual, optimizer=ADAMW)
+        module = learning.chain.layers[0].module
+        for _ in range(3):
+            learning.step()
+        before = learning.run.state_dict()
+        learning.step()
+        after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
+        expected = adamw_first_update(before, module, K * H)
+        for key, value in expected.items():
+            close(after[key], value, 1e-12)
+
+    def test_frozen_parameters_stay_out_of_the_optimizer(
+        self, start_manual: StartManual
+    ):
+        # A frozen bias neither learns nor decays (weight_decay > 0), and the
+        # optimizer keeps moments for the weight alone.
+        widths = [4, 5]
+        layers, head = make_modules("linear", "tanh", widths)
+        linear = cast(nn.Linear, cast(nn.Sequential, layers[0])[0])
+        linear.bias.requires_grad_(False)
+        bias, weight = linear.bias.detach().clone(), linear.weight.detach().clone()
+        chain = HandChain(layers, head, widths, optimizer=ADAMW)
+        run = start_manual(chain.net)
+        x, y = sample(widths, 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), 10)
+        state = run.state_dict()["nodes"]["l0"]["state"]
+        assert torch.equal(state["module"]["0.bias"], bias)
+        assert not torch.equal(state["module"]["0.weight"], weight)
+        assert len(state["optimizer"]["m"]) == 1
