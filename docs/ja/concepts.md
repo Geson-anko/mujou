@@ -203,12 +203,13 @@ self.prev = Port(recv=VECTOR)  # 受け取るだけ
 self.next = Port(send=VECTOR)  # 送るだけ
 ```
 
-送る側の spec が受け取る側の spec と一致するときだけ `connect` できる。値はいつも `torch.Tensor` かその dict で、spec は 2 種類ある。
+送る側の spec が受け取る側の spec と一致するときだけ `connect` できる。値は `torch.Tensor`、Python のスカラー、またはその dict。
 
-| spec                       | 運ぶもの                   | 使いどころ                               |
-| -------------------------- | -------------------------- | ---------------------------------------- |
-| `TensorSpec(shape, dtype)` | テンソル 1 つ              | 活動や誤差のような 1 つの値              |
-| `DictSpec`                 | `TypedDict` のテンソルの組 | 入力とその目標のように、一緒に届けたい値 |
+| spec                                                      | 運ぶもの                                 | 使いどころ                               |
+| --------------------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| `TensorSpec(shape, dtype)`                                | テンソル 1 つ                            | 活動や誤差のような 1 つの値              |
+| `IntSpec(bits)`、`FloatSpec`、`BoolSpec`、`TimestampSpec` | `int`、`float`、`bool`、`Timestamp` 1 つ | 回数・フラグ・時刻。テンソルに包まない   |
+| `DictSpec`                                                | `TypedDict` のテンソルとスカラーの組     | 入力とその目標のように、一緒に届けたい値 |
 
 !!! warning "組になる値は 1 つのメッセージで送る"
 

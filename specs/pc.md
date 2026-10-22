@@ -54,7 +54,7 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 ## 符号・バッチ・損失の規約
 
 - 前のノードへ送る値は、自分のエネルギーの $h_{\mathrm{in}}$ に対する勾配。複数の相手からの値は足すだけ
-- バッチは shape `batch`（型は `mujou.types.Size`、`type Size = int | tuple[int, ...]`。既定は `()`）で、メッセージのテンソルはどれもこれで始まる。`()` はバッチの無い 1 サンプル、int の `B` は `(B,)`、`(E, A)` のような多次元も取る。$B$ はサンプルの数 `math.prod(batch)`（`()` なら 1）。既定を `()` にしたのは、mujou が狙うストリームの学習ではサンプルを 1 つずつ受け取るのが普通で、ダミーの次元 `(1, d)` を書かせないため（2026-10-21、ユーザーの決定）。多次元のバッチは平坦化した `(E*A,)` と同じ更新になる
+- バッチは shape `batch`（型は `mujou.types.Size`、`type Size = int | tuple[int, ...]`。既定は `()`）で、メッセージのテンソルはどれもこれで始まる（スカラーの `jumps` と `time` はバッチを持たない）。`()` はバッチの無い 1 サンプル、int の `B` は `(B,)`、`(E, A)` のような多次元も取る。$B$ はサンプルの数 `math.prod(batch)`（`()` なら 1）。既定を `()` にしたのは、mujou が狙うストリームの学習ではサンプルを 1 つずつ受け取るのが普通で、ダミーの次元 `(1, d)` を書かせないため（2026-10-21、ユーザーの決定）。多次元のバッチは平坦化した `(E*A,)` と同じ更新になる
 - バッチは `activity_spec(h, y, batch)`、`Input(batch=)`、`Chain(batch=)` で宣言する。`Layer` と `Output` は受け取る `act_spec` の `mask` の shape から読み、引数を持たない。どの次元がバッチかは shape からは決まらないので、推論しない
 - VJP はバッチの和で取り、$1/B$ は $\theta$ の勾配にだけ掛ける。局所のエネルギーを `.mean()` で作ると $h$ の勾配まで $1/B$ 倍になるので使わない。この規約で $\lambda$ はサンプルごとの credit $-\partial\ell_b/\partial h_b$、$\theta$ の更新は平均の損失の勾配降下になる
 - 出力ノードの損失は**サンプルごとの値** $\ell_b$（shape `batch`）を返す関数とし、和はノードが取る。平均を取る損失（`nn.MSELoss()` の既定など）を渡すと $g_{\mathrm{in}}$ が $1/B$ 倍、$\theta$ には $1/B$ が二重に掛かるので断る（K27）。バッチが `()` のときは損失も `()` なので見分けられないが、平均を取るバッチが無いので $1/B$ の問題は起きない
@@ -71,7 +71,7 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 | `Activity` | `h`、`jumps`、`y`、`mask`、`time` | `Input` / `Layer` の `next` → 次のノードの `prev` |
 | `Prediction` | `y_hat`、`y`、`mask`、`time` | `Output.next` → ホスト |
 
-- `time` は、その入力をホストが書いた時刻（`write` が返した時刻の ns、shape `()` の int64）。書き込みの前は 0
+- `time` は、その入力をホストが書いた時刻（`write` が返した `Timestamp`、`TimestampSpec()`）。書き込みの前は `Timestamp(ns=0)`。`jumps` は `int`（`IntSpec()`）
 - 目標 `y` と `mask` は入力に付随させ、活動と同じメッセージで運ぶ。各ノードは受け取った `y`、`mask`、`time` をそのまま次のメッセージに写す。読み手は 1 回の読み出しで同じサンプルの組を得るので、`Output` は常に、受け取った活動と同じメッセージの `y` と予測を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、ホストが伝播より速く次のサンプルを書いても組み違えない。別のポートで運ぶと、読み手は 2 つのスロットを別々の瞬間に読むので、別のサンプルの組になりうる
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい。学習モードと推論モードの区別は持ち込まない
 - 1 ホップごとに `y`、`mask`、`time` をコピーするコストは、分類（`y` が `batch`）では h より小さく、回帰（`y` が `(*batch, d)`）では h と同じ大きさになる（[性能の基準値](research/benchmarks.md)）
@@ -195,7 +195,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 

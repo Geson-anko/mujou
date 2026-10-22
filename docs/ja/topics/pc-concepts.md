@@ -77,8 +77,8 @@ flowchart LR
 | `pc.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
 
 - `mask`: サンプルごとに目標があるか。False のサンプルは損失に入らず、`Layer` はその行の `g_in` を 0 にする。`mask` がすべて False の入力でも `h` と `lam` は緩和し、重みだけ学ばない。評価はこれで行う
-- `time`: ホストがその入力を書いた時刻（ns）。書き込みの前は 0
-- `jumps`: 送り手の `h` が跳んだ回数（[4 節](#4-learnclock-%E3%81%A8-jumps)）
+- `time`: ホストがその入力を書いた時刻（`Timestamp`）。書き込みの前は `Timestamp(ns=0)`
+- `jumps`: 送り手の `h` が跳んだ回数（`int`）（[4 節](#4-learnclock-%E3%81%A8-jumps)）
 
 ### Port の向き
 
@@ -137,7 +137,7 @@ flowchart LR
 
 ### LearnClock
 
-ノードは毎回の更新で `tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼ぶ。返る `Tick` の意味。
+ノードは毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼ぶ。返る `Tick` の意味。
 
 | フィールド | 意味                                                   | 使い道                  |
 | ---------- | ------------------------------------------------------ | ----------------------- |

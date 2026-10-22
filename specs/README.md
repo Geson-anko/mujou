@@ -40,7 +40,7 @@
 | PC の理論 | skill `pc-alm` | [mujou.pc](pc.md) は mujou の選択だけ |
 | 実験の数値と性能の基準値 | `specs/research/` | ほかの文書はリンクする |
 | 決定とユーザーの好み | `memory/`（1 ファイル 1 決定。今の決定と理由だけ） | 履歴は git |
-| dtype の対応表 | `mujou.spec.DLPACK` | `TensorSpec.dtypes` で公開する |
+| dtype の対応表 | `mujou.spec.DLPACK`（スカラーの dtype は `codec._layout`） | `TensorSpec.dtypes` で公開する |
 | hook の名前 | Rust の `Hook` と、bindings の対応表 | — |
 | 属性の所属（ポート、子） | インスタンスの `__dict__` | レジストリを持たない |
 

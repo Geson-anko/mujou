@@ -24,7 +24,18 @@ self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  #
 
 `TensorSpec(shape, dtype)` はテンソル 1 つ。dtype を省くと、`torch.get_default_dtype()` の設定によらず `torch.float32` になる。送る値は shape と dtype の両方が spec と一致しなければならず、dtype は変換しない。spec が取れる dtype は `TensorSpec.dtypes` にある。spec はその shape と dtype の値も作れるので、ノードの状態やテストに使える。`spec.zeros()` と `spec.empty()`（`DictSpec` ならその dict）、`TensorSpec.rand(generator=...)` がある。
 
-2 つの Port の値は別々に届くので、読む側は一方の新しい値ともう一方の古い値を同時に読むことがある。入力とその目標のように組になる値は 1 つのメッセージで送る。`DictSpec` は `TypedDict` のキーごとに `TensorSpec` を与えるもので、dict 全体が一度に届き、キーごとの型は型検査器にも伝わる。
+回数・フラグ・時刻は、テンソルではなく Python のスカラーで運ぶ。受け取る側は `int(...)` で取り出さずに済む。
+
+| spec                            | 値                            | 初期値            |
+| ------------------------------- | ----------------------------- | ----------------- |
+| `IntSpec(bits=64, signed=True)` | 8 / 16 / 32 / 64 bit の `int` | `0`               |
+| `FloatSpec()`                   | `float`（64 bit）             | `0.0`             |
+| `BoolSpec()`                    | `bool`                        | `False`           |
+| `TimestampSpec()`               | `mujou.time.Timestamp`        | `Timestamp(ns=0)` |
+
+メッセージの大きさは固定なので、`IntSpec` は bit 数を持つ。範囲外の `int` は送るときに `OverflowError` になり、折り返さない。スカラーの spec は shape を持たず、値も作らない。`0` や `False` と書けばよい。
+
+2 つの Port の値は別々に届くので、読む側は一方の新しい値ともう一方の古い値を同時に読むことがある。入力とその目標のように組になる値は 1 つのメッセージで送る。`DictSpec` は `TypedDict` のキーごとに spec を与えるもので、dict 全体が一度に届き、キーごとの型は型検査器にも伝わる。1 つのキーの spec を使うときは、種別を指定して取り出す（`SAMPLE.field("x", TensorSpec).shape`、種別が違えば `TypeError`）。
 
 ```python
 class Sample(TypedDict):
@@ -93,7 +104,7 @@ def sender[T](spec: MessageSpec[T]) -> Port[T]:
 
 ## 誰も送る前
 
-Port が最初に送るまでは、相手も、その Port を読むホストも、Port の初期値を受け取る。初期値はゼロか、`initial=` で与えた値。`initial` は `send` と一致しなければならず、Port を作った時点でコピーされる。その時刻は `None`。
+Port が最初に送るまでは、相手も、その Port を読むホストも、Port の初期値を受け取る。初期値はゼロ（スカラーは上の表の初期値）か、`initial=` で与えた値。`initial` は `send` と一致しなければならず、Port を作った時点でコピーされる。その時刻は `None`。
 
 ```python
 self.next = Port(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))

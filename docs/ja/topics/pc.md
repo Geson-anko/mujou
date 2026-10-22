@@ -118,7 +118,7 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 `mujou.pc.functional` に、ノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）、`learn_`（重みの更新）。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。ここに出てくる名前（`mu`・`lam`・`g_in`・`jumps`・`Tick`）は [mujou.pc の仕組み](pc-concepts.md)で説明している。
 
 1. クロックを属性に置く: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる。それだけでノードの状態に入る
-2. 毎回の更新で `t = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)` を呼ぶ
+2. 毎回の更新で `t = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼ぶ
 3. `pc.functional.vjp` で予測 `mu`、`g_in`、学ぶなら `g_theta` を求め、`g_in` を前のノードへ送る
 4. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
 5. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす

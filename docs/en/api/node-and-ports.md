@@ -12,4 +12,14 @@
 
 ::: mujou.TensorSpec
 
+::: mujou.IntSpec
+
+::: mujou.FloatSpec
+
+::: mujou.BoolSpec
+
+::: mujou.TimestampSpec
+
+::: mujou.FieldSpec
+
 ::: mujou.DictSpec

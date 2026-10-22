@@ -24,7 +24,18 @@ self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  #
 
 `TensorSpec(shape, dtype)` is one tensor; its dtype is `torch.float32` unless given, whatever `torch.get_default_dtype()` is. A value sent must match the spec in shape and dtype: no dtype is converted. The dtypes a spec takes are in `TensorSpec.dtypes`. A spec also makes values of its shape and dtype, for the state of a node or a test: `spec.zeros()` and `spec.empty()` (a dict of them for a `DictSpec`), and `TensorSpec.rand(generator=...)`.
 
-Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a `DictSpec` gives a `TensorSpec` for each key of a `TypedDict`, the whole dict arrives at once, and type checkers know the type of each key.
+A count, a flag or a time travels as a Python scalar, not as a tensor, so the receiver reads it without `int(...)`:
+
+| Spec                            | Value                         | Initial value     |
+| ------------------------------- | ----------------------------- | ----------------- |
+| `IntSpec(bits=64, signed=True)` | `int` of 8, 16, 32 or 64 bits | `0`               |
+| `FloatSpec()`                   | `float` (64 bits)             | `0.0`             |
+| `BoolSpec()`                    | `bool`                        | `False`           |
+| `TimestampSpec()`               | `mujou.time.Timestamp`        | `Timestamp(ns=0)` |
+
+A message has a fixed size, so an `IntSpec` has a fixed number of bits: an `int` out of its range raises `OverflowError` when it is sent, and is never wrapped. A scalar spec has no shape and makes no values: write `0` or `False`.
+
+Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a `DictSpec` gives a spec for each key of a `TypedDict`, the whole dict arrives at once, and type checkers know the type of each key. To use the spec of one key, take it with its kind: `SAMPLE.field("x", TensorSpec).shape` (`TypeError` if it is of another kind).
 
 ```python
 class Sample(TypedDict):
@@ -93,7 +104,7 @@ The host reads with `Run.read` only what a port sent with `send` (its initial va
 
 ## Before anyone sends
 
-Until a port first sends, its peers, and the host that reads it, get its initial value: zeros, or the value of `initial=`, which must match `send` and is copied when the port is made. Its time is `None`.
+Until a port first sends, its peers, and the host that reads it, get its initial value: zeros (the initial values above for scalars), or the value of `initial=`, which must match `send` and is copied when the port is made. Its time is `None`.
 
 ```python
 self.next = Port(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))

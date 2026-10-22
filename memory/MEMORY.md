@@ -21,7 +21,7 @@
 - [実行ごとのタイマー](project_timer_per_run.md) — 時間軸は実行ごとに 1 本、既定は global_timer、復元した実行は保存した時刻から始まる専用の Timer。ランタイムの時刻源は RunClock。時刻は Timestamp | None
 - [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer.pause / resume / is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は秒の float
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
-- [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor だけ、torch.Tensor / TypedDict、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
+- [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor と Python のスカラー（IntSpec(bits) / FloatSpec / BoolSpec / TimestampSpec、2026-10-22）、1 つのフィールド / TypedDict、DictSpec.field、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
 - [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
 - [pc のバッチの shape](project_batch_shape.md) — `batch: mujou.types.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
