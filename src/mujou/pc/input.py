@@ -2,10 +2,9 @@
 
 from typing import override
 
-import torch
-
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
 from mujou.pc.messages import Sample, activity_spec
+from mujou.time import Timestamp
 from mujou.types import Device, Size
 
 
@@ -67,7 +66,7 @@ class Input(Node):
     ) -> None:
         super().__init__(device=device, period=period)
         self.act_spec = activity_spec(x, y, batch)
-        mask = self.act_spec.specs["mask"]
+        mask = self.act_spec.field("mask", TensorSpec)
         self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
         self.next = MultiPort(send=self.act_spec, recv=x)
         self.jumps = 0
@@ -82,15 +81,12 @@ class Input(Node):
         if written_at is not None and written_at.ns != self.seen_write:
             self.seen_write = written_at.ns
             self.jumps += 1
-        written_ns = 0 if written_at is None else written_at.ns
-        time = torch.tensor(written_ns, dtype=torch.int64, device=self.device)
-        jumps = torch.tensor(self.jumps, dtype=torch.int64, device=self.device)
         self.next.send(
             {
                 "h": sample["x"],
-                "jumps": jumps,
+                "jumps": self.jumps,
                 "y": sample["y"],
                 "mask": sample["mask"],
-                "time": time,
+                "time": Timestamp(ns=0) if written_at is None else written_at,
             }
         )

@@ -129,7 +129,7 @@ impl fmt::Display for FieldError {
 impl std::error::Error for FieldError {}
 
 /// `(2, 3)`, `(5,)` or `()`, as Python prints a shape.
-pub(crate) fn format_shape(shape: &[i64]) -> String {
+pub fn format_shape(shape: &[i64]) -> String {
     match shape {
         [n] => format!("({n},)"),
         _ => {
@@ -141,7 +141,7 @@ pub(crate) fn format_shape(shape: &[i64]) -> String {
 
 /// The name torch and NumPy use for the scalar dtypes, so that error messages
 /// read naturally; the raw code otherwise.
-pub(crate) fn format_dtype(dtype: DLDataType) -> String {
+pub fn format_dtype(dtype: DLDataType) -> String {
     let DLDataType { code, bits, lanes } = dtype;
     match (code, lanes) {
         (0, 1) => format!("int{bits}"),

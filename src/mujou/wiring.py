@@ -14,8 +14,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast, final
 
-import torch
-
 from mujou import _native
 from mujou.codec import schema, to_core
 from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
@@ -44,8 +42,9 @@ class Wiring:
         Raises:
             ValueError: A port is not one that the host writes in this run, or
                 a shape or a dtype differs from the spec.
-            TypeError: A message is not a tensor, or a dict of tensors with the
-                spec's keys.
+            TypeError: A value is not of its field's kind (a tensor, an
+                ``int``, ...), or a dict message does not have the spec's keys.
+            OverflowError: An ``int`` is out of the range of its ``IntSpec``.
         """
         return self.group.write(
             [self._item(port, value) for port, value in values.items()]
@@ -73,7 +72,7 @@ class Wiring:
 
     def _item(
         self, port: AnyPort, value: object
-    ) -> tuple[_native.InputSlot, list[torch.Tensor]]:
+    ) -> tuple[_native.InputSlot, list[object]]:
         slot = self.inputs.get(port)
         label = self.tree.label(port)
         if slot is None:

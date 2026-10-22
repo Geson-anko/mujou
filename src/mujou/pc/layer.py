@@ -189,14 +189,14 @@ class Layer(Node):
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
         self._tau = tau
-        self._batch = act_spec.specs["mask"].shape
+        self._batch = act_spec.field("mask", TensorSpec).shape
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
-        h_in = act_spec.specs["h"]
+        h_in = act_spec.field("h", TensorSpec)
         with torch.no_grad():
             mu = module(h_in.zeros(device=self.device))
         self.h = torch.zeros_like(mu)
@@ -213,7 +213,7 @@ class Layer(Node):
         for name in ("jumped", "jumps", "seen_jumps"):
             self.register_state(name)
         out = TensorSpec(mu.shape, mu.dtype)
-        self.act_spec = activity_spec(out, act_spec.specs["y"], self._batch)
+        self.act_spec = activity_spec(out, act_spec.field("y", TensorSpec), self._batch)
         self.prev = Port(send=h_in, recv=act_spec)
         self.next = MultiPort(send=self.act_spec, recv=out)
 
@@ -221,14 +221,13 @@ class Layer(Node):
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         act = self.prev.recv()
-        tick = self.clock.tick(dt, int(act["time"]), self.timer.now().ns)
+        tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)
         # Nothing to learn from an input without a target: its time is dropped.
         learn = tick.learn and bool(act["mask"].any())
         jumped = self._take_jump()
         # A new sample, or h_in jumped: h moves with mu, once.
-        seen_jumps = int(act["jumps"])
-        reanchor = tick.new or seen_jumps != self.seen_jumps
-        self.seen_jumps = seen_jumps
+        reanchor = tick.new or act["jumps"] != self.seen_jumps
+        self.seen_jumps = act["jumps"]
         mu, g_theta = self._predict(act, reanchor, learn)
         self._relax(mu, reanchor, tick.dt)
         # The jump of theta is discrete only when it learns at intervals.
@@ -277,11 +276,10 @@ class Layer(Node):
         self.mu.copy_(mu)
 
     def _send(self, act: Activity) -> None:
-        jumps = torch.tensor(self.jumps, dtype=torch.int64, device=self.device)
         self.next.send(
             {
                 "h": self.h,
-                "jumps": jumps,
+                "jumps": self.jumps,
                 "y": act["y"],
                 "mask": act["mask"],
                 "time": act["time"],

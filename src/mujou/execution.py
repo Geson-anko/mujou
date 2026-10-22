@@ -184,8 +184,9 @@ class Run:
                 written then).
             ValueError: A port is not an unconnected ``Port`` of this run that
                 receives; or a shape or a dtype differs from the spec.
-            TypeError: A message is not a tensor, or a dict of tensors with the
-                spec's keys.
+            TypeError: A value is not of its field's kind (a tensor, an
+                ``int``, ...), or a dict message does not have the spec's keys.
+            OverflowError: An ``int`` is out of the range of its ``IntSpec``.
             NetworkError: The run stopped because a node raised.
         """
         _host()
@@ -357,7 +358,8 @@ class Run:
         by the path of the peer's port. An unconnected ``Port`` that receives has
         ``"in"``, what the host wrote last. Each ``E`` is ``{"value": message,
         "time_ns": int | None}``: ``time_ns`` is ``None`` while nothing was
-        written.
+        written. As every time of the tree, a ``Timestamp`` in a message (a
+        ``TimestampSpec``) is held as its nanoseconds, an ``int``.
 
         Args:
             timeout: Real (wall-clock) seconds to wait for every node to pause

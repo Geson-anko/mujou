@@ -3,7 +3,16 @@ from typing import TypedDict, cast
 import pytest
 import torch
 
-from mujou.spec import DLPACK, DictSpec, TensorSpec
+from mujou.spec import (
+    DLPACK,
+    BoolSpec,
+    DictSpec,
+    FloatSpec,
+    IntSpec,
+    TensorSpec,
+    TimestampSpec,
+)
+from mujou.time import Timestamp
 
 
 class Feedback(TypedDict):
@@ -16,12 +25,31 @@ class Reversed(TypedDict):
     error: torch.Tensor
 
 
+class Mixed(TypedDict):
+    h: torch.Tensor
+    jumps: int
+    gain: float
+    on: bool
+    time: Timestamp
+
+
 ALL_DTYPES = list(DLPACK)
 FLOAT_DTYPES = [torch.float16, torch.bfloat16, torch.float32, torch.float64]
 
 
 def feedback_spec() -> DictSpec[Feedback]:
     return DictSpec(Feedback, error=TensorSpec((2, 3)), target=TensorSpec((2,)))
+
+
+def mixed_spec() -> DictSpec[Mixed]:
+    return DictSpec(
+        Mixed,
+        h=TensorSpec((2,)),
+        jumps=IntSpec(),
+        gain=FloatSpec(),
+        on=BoolSpec(),
+        time=TimestampSpec(),
+    )
 
 
 class TestTensorSpec:
@@ -123,8 +151,8 @@ class TestDictSpec:
         msg = spec.empty()
         assert list(msg) == ["error", "target"]
         for key, value in cast(dict[str, torch.Tensor], msg).items():
-            assert value.shape == spec.specs[key].shape
-            assert value.dtype == spec.specs[key].dtype
+            assert value.shape == spec.field(key, TensorSpec).shape
+            assert value.dtype == spec.field(key, TensorSpec).dtype
             assert value.device == torch.device("cpu")
 
     @pytest.mark.parametrize("make", ["zeros", "empty"])
@@ -158,3 +186,67 @@ class TestDictSpec:
             Reversed, error=TensorSpec((2, 3)), target=TensorSpec((2,))
         )
         assert spec != TensorSpec((2, 3))
+
+    @pytest.mark.parametrize("make", ["zeros", "empty"])
+    def test_scalar_values_are_zero(self, make: str):
+        msg = getattr(mixed_spec(), make)()
+        assert msg["jumps"] == 0 and type(msg["jumps"]) is int
+        assert msg["gain"] == 0.0 and type(msg["gain"]) is float
+        assert msg["on"] is False
+        assert msg["time"] == Timestamp(ns=0)
+
+    def test_field_returns_the_spec_of_the_kind(self):
+        spec = mixed_spec()
+        assert spec.field("h", TensorSpec) == TensorSpec((2,))
+        assert spec.field("jumps", IntSpec) == IntSpec()
+        assert spec.field("time", TimestampSpec) == TimestampSpec()
+
+    def test_field_of_another_kind(self):
+        with pytest.raises(TypeError, match="'jumps' is IntSpec, not TensorSpec"):
+            mixed_spec().field("jumps", TensorSpec)
+
+    def test_field_of_no_key(self):
+        with pytest.raises(KeyError, match="nope"):
+            mixed_spec().field("nope", TensorSpec)
+
+
+class TestIntSpec:
+    def test_64_bits_signed_by_default(self):
+        spec = IntSpec()
+        assert (spec.bits, spec.signed) == (64, True)
+
+    @pytest.mark.parametrize("bits", [8, 16, 32, 64])
+    def test_takes_whole_bytes_up_to_64_bits(self, bits: int):
+        assert IntSpec(bits, signed=False).bits == bits  # pyright: ignore[reportArgumentType]
+
+    @pytest.mark.parametrize("bits", [0, 1, 12, 24, 128])
+    def test_rejects_other_bits(self, bits: int):
+        with pytest.raises(ValueError, match="8, 16, 32 or 64"):
+            IntSpec(bits)  # pyright: ignore[reportArgumentType]
+
+    def test_equality_includes_bits_and_signedness(self):
+        assert IntSpec() == IntSpec(64, signed=True)
+        assert hash(IntSpec(8)) == hash(IntSpec(8))
+        assert IntSpec(8) != IntSpec(16)
+        assert IntSpec(64) != IntSpec(64, signed=False)
+        assert IntSpec() != TensorSpec((), torch.int64)
+
+    def test_repr(self):
+        assert repr(IntSpec(32, signed=False)) == "IntSpec(32, signed=False)"
+
+
+class TestFloatBoolTimestampSpec:
+    def test_equal_to_their_own_kind_only(self):
+        kinds = [FloatSpec(), BoolSpec(), TimestampSpec()]
+        for a in kinds:
+            assert a == type(a)()
+            assert hash(a) == hash(type(a)())
+            assert all(a != b for b in kinds if b is not a)
+        assert FloatSpec() != TensorSpec((), torch.float64)
+
+    def test_repr(self):
+        assert [repr(FloatSpec()), repr(BoolSpec()), repr(TimestampSpec())] == [
+            "FloatSpec()",
+            "BoolSpec()",
+            "TimestampSpec()",
+        ]

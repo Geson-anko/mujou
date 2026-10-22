@@ -53,8 +53,8 @@ class _Port[S, R]:
 
     @property
     def initial(self) -> S | None:
-        """What the port has sent before its first ``send``, or ``None`` for the
-        ``zeros()`` of its send spec."""
+        """What the port has sent before its first ``send``, or ``None`` for
+        zeros."""
         return self._initial
 
     @property
@@ -106,7 +106,9 @@ class _Port[S, R]:
     def send(self, msg: S) -> None:
         """Send ``msg`` to every peer and to what the host reads (``Run.read``).
 
-        ``msg`` must match the send spec exactly; dtypes are never converted. The
+        ``msg`` must match the send spec exactly; tensor dtypes are never
+        converted (a scalar is taken as Python's typing takes it: an ``int``
+        for a ``float``). The
         values are detached and copied, so changing ``msg`` afterwards changes
         nothing that was sent. A CUDA tensor is copied to the host on the node's
         stream. It never waits for the peers to read.
@@ -114,9 +116,11 @@ class _Port[S, R]:
         Raises:
             RuntimeError: The caller is not a hook of the node that owns the port,
                 while it runs (or is its ``state_dict``).
-            TypeError: A value is not a ``torch.Tensor``, or a ``DictSpec``
-                message is not a dict with the spec's keys.
+            TypeError: A value is not of its field's kind (a ``torch.Tensor``
+                for a ``TensorSpec``, an ``int`` for an ``IntSpec``, ...), or a
+                ``DictSpec`` message is not a dict with the spec's keys.
             ValueError: A shape or a dtype differs from the spec.
+            OverflowError: An ``int`` is out of the range of its ``IntSpec``.
             BufferError: A tensor is not dense (``torch.strided``).
         """
         _wire(cast(AnyPort, self)).send(msg)  # as in connect
@@ -146,7 +150,7 @@ class Port[S = Never, R = Never](_Port[S, R]):
 
     ``initial`` is what the port has sent before its first ``send``: what its
     peers receive and the host reads until then. A run copies it when it
-    starts. Without it, that is the ``zeros()`` of ``send``. A restored run
+    starts. Without it, that is zeros. A restored run
     takes the values from the state instead.
 
     A run names the port in its errors by the path of its node and its
@@ -181,9 +185,9 @@ class Port[S = Never, R = Never](_Port[S, R]):
 
         The message comes from the peer's ``send``; an unconnected port reads
         what the host writes with ``Run.write`` instead. Until that writer first
-        writes, it is the initial value: the peer port's ``initial``, or else the
-        recv spec's ``zeros()``. For a port the host writes, it is the value in
-        ``inputs`` of ``mujou.run``, or else the ``zeros()``. A restored run takes
+        writes, it is the initial value: the peer port's ``initial``, or else
+        zeros. For a port the host writes, it is the value in ``inputs`` of
+        ``mujou.run``, or else zeros. A restored run takes
         it from ``state``. ``recv_with_time`` tells whether the writer has
         written yet.
 
@@ -256,8 +260,8 @@ class MultiPort[S = Never, R = Never](_Port[S, R]):
         (a key of ``recv``).
 
         Unlike ``send``, it leaves what the host reads (``Run.read``) unchanged:
-        before the first ``send``, that is this port's ``initial`` (or the
-        ``zeros()`` of its send spec). Copies and raises as ``send`` does.
+        before the first ``send``, that is this port's ``initial`` (or
+        zeros). Copies and raises as ``send`` does.
         """
         _wire(self).send_to(channel, msg)
 
@@ -323,10 +327,10 @@ class Wire:
         return {channel: self._read(slot) for channel, slot in sources}
 
     def send(self, msg: object) -> None:
-        self._outlet().send(self._tensors(msg))
+        self._outlet().send(self._values(msg))
 
     def send_to(self, channel: Channel, msg: object) -> None:
-        self._outlet().send_to(self.targets[channel], self._tensors(msg))
+        self._outlet().send_to(self.targets[channel], self._values(msg))
 
     def _read(self, slot: AnySlot) -> tuple[object, _native.Timestamp | None]:
         message = slot.read()
@@ -336,8 +340,8 @@ class Wire:
     def _outlet(self) -> _native.Outlet:
         return cast(_native.Outlet, self.outlet)  # Never is the type of what it sends
 
-    def _tensors(self, msg: object) -> list[torch.Tensor]:
-        """The tensors of ``msg`` in host memory, for the outlet to copy."""
+    def _values(self, msg: object) -> list[object]:
+        """The values of ``msg`` (tensors in host memory), for the outlet to copy."""
         return to_core(cast("MessageSpec[Any]", self.port.send_spec), msg, self.label)
 
 

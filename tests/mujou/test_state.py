@@ -4,16 +4,27 @@ import pickle
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, TypedDict, override
 
 import pytest
 import torch
 from torch import nn
 
 import mujou
-from mujou import Group, MultiPort, NetworkError, Node, Port, Run, TensorSpec
+from mujou import (
+    DictSpec,
+    Group,
+    IntSpec,
+    MultiPort,
+    NetworkError,
+    Node,
+    Port,
+    Run,
+    TensorSpec,
+    TimestampSpec,
+)
 from mujou.testing import ManualRun
-from mujou.time import VirtualTimer, global_timer
+from mujou.time import Timestamp, VirtualTimer, global_timer
 from tests.mujou.nodes import (
     F64,
     Chain,
@@ -48,6 +59,24 @@ class Learned(Node):
         self.x = torch.zeros(2, dtype=F64)
         self.count = 0
         self.register_state("count")
+
+
+class Stamped(TypedDict):
+    t: Timestamp
+    n: int
+
+
+class Stamper(Node):
+    """Sends the time of its update and a count."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.out = Port(send=DictSpec(Stamped, t=TimestampSpec(), n=IntSpec()))
+
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        self.out.send({"t": self.timer.now(), "n": 3})
 
 
 class TestShape:
@@ -163,6 +192,18 @@ class TestCopies:
     def test_torch_load_reads_it_with_weights_only(self, start_manual: StartManual):
         node = Learned()
         tree = start_manual(Group(node=node)).state_dict()
+        buffer = io.BytesIO()
+        torch.save(tree, buffer)
+        buffer.seek(0)
+        assert_same_tree(torch.load(buffer, weights_only=True), tree)
+
+    def test_holds_a_timestamp_of_a_message_as_its_ns(self, start_manual: StartManual):
+        # As every time of the tree, so that weights_only reads it.
+        run = start_manual(Group(node=Stamper()))
+        run.step(H)
+        tree = run.state_dict()
+        out = port_slots(tree, "node", "out")["out"]
+        assert out["value"] == {"t": 1_000_000, "n": 3}
         buffer = io.BytesIO()
         torch.save(tree, buffer)
         buffer.seek(0)
@@ -556,3 +597,20 @@ class TestPauseTimeout:
         assert "nodes" in run.state_dict()  # the run kept running
         run.shutdown()
         run.state_dict()  # a normal end
+
+
+class TestScalarMessages:
+    def test_a_saved_timestamp_is_restored_as_a_timestamp(
+        self, start_manual: StartManual
+    ):
+        run = start_manual(Group(node=Stamper()))
+        run.step(H)
+        buffer = io.BytesIO()
+        torch.save(run.state_dict(), buffer)
+        run.shutdown()
+        buffer.seek(0)
+        node = Stamper()
+        restored = start_manual(
+            Group(node=node), state=torch.load(buffer, weights_only=True)
+        )
+        assert restored.read(node.out) == {"t": Timestamp(ns=1_000_000), "n": 3}

@@ -205,6 +205,25 @@ class TestOutlet:
             outlet.send([[1.0, 2.0]])  # pyright: ignore[reportArgumentType]
         assert "slot 'p/out', field 'x'" in str(exc.value)
 
+    def test_reads_a_python_scalar_only_into_a_scalar_dtype(self):
+        # A float32 of shape () is a tensor field: no Python scalar is read as one.
+        outlet = Outlet(schema(("x", (), torch.float32)), 0, "p", clock=CLOCK)
+        with pytest.raises(TypeError, match="DLPack") as exc:
+            outlet.send([1.0])
+        assert "slot 'p/out', field 'x'" in str(exc.value)
+
+    def test_names_the_slot_of_a_value_that_is_no_scalar(self):
+        outlet = Outlet(schema(("n", (), torch.int64)), 0, "p", clock=CLOCK)
+        with pytest.raises(TypeError) as exc:
+            outlet.send(["1"])
+        assert any("slot 'p/out', field 'n'" in note for note in exc.value.__notes__)
+
+    def test_item_reads_a_scalar_field_only(self):
+        outlet = Outlet(schema(("x", (2,), torch.int64)), 0, "p", clock=CLOCK)
+        (view,) = outlet.outbox.read().values
+        with pytest.raises(TypeError, match=r"shape \(2,\) and dtype int64"):
+            view.item()
+
     def test_producer_errors_name_the_slot(self):
         outlet = Outlet(tensor_schema((2,)), 0, "p", clock=CLOCK)
         with pytest.raises(BufferError) as exc:

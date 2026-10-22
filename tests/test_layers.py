@@ -20,7 +20,8 @@ EXTENSION = "mujou._native"
 
 # From the bottom up.
 LAYERS: list[set[str]] = [
-    {EXTENSION, "mujou.errors", "mujou.types"},
+    {EXTENSION},
+    {"mujou.errors", "mujou.types"},
     {"mujou.spec", "mujou.current"},
     {"mujou.codec"},
     {"mujou.port"},
@@ -43,6 +44,8 @@ LAYERS: list[set[str]] = [
 RANK = {module: rank for rank, layer in enumerate(LAYERS) for module in layer}
 
 NATIVE = {
+    "mujou.types",
+    "mujou.spec",
     "mujou.current",
     "mujou.codec",
     "mujou.port",

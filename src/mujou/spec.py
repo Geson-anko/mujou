@@ -1,22 +1,33 @@
 """Specs of the messages that flow between nodes.
 
-A message is either one ``torch.Tensor`` (``TensorSpec``) or a ``TypedDict`` whose
-values are ``torch.Tensor`` (``DictSpec``). A spec fixes the shape and the dtype of
-every value, so the slots that hold the message can be laid out when the network
-is built (``specs/messages.md``).
+A message is one field, or a ``TypedDict`` of fields (``DictSpec``). A field is a
+``torch.Tensor`` (``TensorSpec``) or a Python scalar: an ``int`` (``IntSpec``), a
+``float`` (``FloatSpec``), a ``bool`` (``BoolSpec``) or a ``Timestamp``
+(``TimestampSpec``). A spec fixes the size of every field, so the slots that hold
+the message can be laid out when the network is built (``specs/messages.md``).
 
 ``DLPACK``, the DLPack code of each supported dtype, is here rather than in the
 codec: ``TensorSpec.dtypes`` is its keys, and the codec reads the same one table.
 """
 
 import typing
-from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, ClassVar, Final, Generic, TypeVar, cast, final, override
+from typing import (
+    Any,
+    ClassVar,
+    Final,
+    Generic,
+    Literal,
+    TypeVar,
+    cast,
+    final,
+    override,
+)
 
 import torch
 
+from mujou._native import Timestamp
 from mujou.types import Device
 
 # The supported dtypes and their DLPack ``DLDataType`` (code, bits, lanes): the
@@ -45,31 +56,16 @@ DLPACK: Final[Mapping[torch.dtype, tuple[int, int, int]]] = MappingProxyType(
 _M = TypeVar("_M")
 
 
-class MessageSpec(ABC, Generic[_M]):
-    """The spec of a message of type ``_M``: its shape, dtype and initial value.
+class MessageSpec(Generic[_M]):
+    """The spec of a message of type ``_M``.
 
-    ``TensorSpec`` is a ``MessageSpec[torch.Tensor]`` and ``DictSpec(Sample,
-    ...)`` a ``MessageSpec[Sample]``. Annotate with it a function that takes
-    either::
+    ``TensorSpec`` is a ``MessageSpec[torch.Tensor]``, ``IntSpec`` a
+    ``MessageSpec[int]`` and ``DictSpec(Sample, ...)`` a ``MessageSpec[Sample]``.
+    Annotate with it a function that takes any spec::
 
         def sender[T](spec: MessageSpec[T]) -> Port[T]:
             return Port(send=spec)
     """
-
-    @abstractmethod
-    def zeros(self, *, device: Device = "cpu") -> _M:
-        """Return a message filled with zeros on ``device``.
-
-        On the CPU, this is the default initial value that a port receives before
-        the first message is written.
-        """
-
-    @abstractmethod
-    def empty(self, *, device: Device = "cpu") -> _M:
-        """Return a message on ``device`` whose values are not set.
-
-        Set them before use, in place (``fill_`` and the like).
-        """
 
 
 @final
@@ -124,12 +120,10 @@ class TensorSpec(MessageSpec[torch.Tensor]):
         """The dtype of the tensor."""
         return self._dtype
 
-    @override
     def zeros(self, *, device: Device = "cpu") -> torch.Tensor:
         """Return a tensor of this spec filled with zeros on ``device``."""
         return torch.zeros(self._shape, dtype=self._dtype, device=device)
 
-    @override
     def empty(self, *, device: Device = "cpu") -> torch.Tensor:
         """Return a tensor of this spec on ``device`` whose values are not set.
 
@@ -168,35 +162,132 @@ class TensorSpec(MessageSpec[torch.Tensor]):
 
 
 @final
-class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
-    """The spec of a message that is a ``TypedDict`` of ``torch.Tensor`` values.
+class IntSpec(MessageSpec[int]):
+    """A message that is one Python ``int`` of ``bits`` bits, ``signed`` or not.
 
-    Give the ``TypedDict`` class and one ``TensorSpec`` per key. Every key of the
-    ``TypedDict`` is required and annotated as ``torch.Tensor`` (no nesting), and
-    the keyword arguments name exactly its keys. The keys keep the order in which
-    the ``TypedDict`` defines them.
+    A value out of the range of ``bits`` and ``signed`` is an error when it is
+    sent or written (``OverflowError``); it is never wrapped. A ``bool`` is an
+    ``int`` and is taken as 0 or 1. The initial value is 0.
+
+    Two specs are equal when their ``bits`` and ``signed`` are equal.
+
+    Example::
+
+        count = IntSpec()  # int64
+        level = IntSpec(8, signed=False)  # 0 to 255
+
+    Raises:
+        ValueError: ``bits`` is not 8, 16, 32 or 64.
+    """
+
+    def __init__(self, bits: Literal[8, 16, 32, 64] = 64, signed: bool = True) -> None:
+        if bits not in (8, 16, 32, 64):
+            raise ValueError(f"IntSpec bits must be 8, 16, 32 or 64, got {bits!r}")
+        self._bits: Literal[8, 16, 32, 64] = bits
+        self._signed = signed
+
+    @property
+    def bits(self) -> Literal[8, 16, 32, 64]:
+        """The number of bits of the integer."""
+        return self._bits
+
+    @property
+    def signed(self) -> bool:
+        """Whether the integer is signed."""
+        return self._signed
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, IntSpec):
+            return NotImplemented
+        return self._bits == other._bits and self._signed == other._signed
+
+    @override
+    def __hash__(self) -> int:
+        return hash((IntSpec, self._bits, self._signed))
+
+    @override
+    def __repr__(self) -> str:
+        return f"IntSpec({self._bits}, signed={self._signed})"
+
+
+class _Unit:
+    """A spec without parameters: every instance of a class is equal."""
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _Unit):
+            return NotImplemented
+        return type(self) is type(other)
+
+    @override
+    def __hash__(self) -> int:
+        return hash(type(self))
+
+    @override
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+
+
+@final
+class FloatSpec(_Unit, MessageSpec[float]):
+    """A message that is one Python ``float`` (64 bits).
+
+    An ``int`` is taken too, as a ``float`` is in Python's typing, and is read
+    back as a ``float``. The initial value is 0.0. Every ``FloatSpec`` is equal.
+    """
+
+
+@final
+class BoolSpec(_Unit, MessageSpec[bool]):
+    """A message that is one Python ``bool``. The initial value is False. Every
+    ``BoolSpec`` is equal."""
+
+
+@final
+class TimestampSpec(_Unit, MessageSpec[Timestamp]):
+    """A message that is one ``mujou.time.Timestamp``, such as a time that
+    ``Run.write`` returned, carried on with what was computed from it.
+
+    The initial value is ``Timestamp(ns=0)``. Every ``TimestampSpec`` is equal.
+    """
+
+
+# The spec of a field: a value of a ``DictSpec``, or a whole message.
+type FieldSpec = TensorSpec | IntSpec | FloatSpec | BoolSpec | TimestampSpec
+
+
+@final
+class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
+    """The spec of a message that is a ``TypedDict`` of fields.
+
+    Give the ``TypedDict`` class and one ``FieldSpec`` per key: a ``TensorSpec``
+    for a key annotated as ``torch.Tensor``, ``IntSpec`` for ``int``,
+    ``FloatSpec`` for ``float``, ``BoolSpec`` for ``bool`` and
+    ``TimestampSpec`` for ``Timestamp``. Every key of the ``TypedDict`` is
+    required (no nesting), and the keyword arguments name exactly its keys. The
+    keys keep the order in which the ``TypedDict`` defines them.
 
     Two specs are equal when they use the same ``TypedDict`` class and equal
-    ``TensorSpec`` for every key.
+    specs for every key.
 
     Example::
 
         class Feedback(TypedDict):
             error: torch.Tensor
-            target: torch.Tensor
+            count: int
 
 
-        spec = DictSpec(
-            Feedback, error=TensorSpec((32, 256)), target=TensorSpec((32, 10))
-        )
+        spec = DictSpec(Feedback, error=TensorSpec((32, 256)), count=IntSpec())
         msg: Feedback = spec.zeros()
+        error = spec.field("error", TensorSpec)  # a TensorSpec, to type checkers too
 
     Raises:
         TypeError: The keyword arguments miss a key of the ``TypedDict`` or name
             a key it does not have.
     """
 
-    def __init__(self, typed_dict: type[TD], /, **specs: TensorSpec) -> None:
+    def __init__(self, typed_dict: type[TD], /, **specs: FieldSpec) -> None:
         keys = typing.get_type_hints(typed_dict)
         missing = [k for k in keys if k not in specs]
         unknown = [k for k in specs if k not in keys]
@@ -206,27 +297,62 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
                 f"TypedDict: missing {missing}, unknown {unknown}"
             )
         self._typed_dict = typed_dict
-        self._specs: Mapping[str, TensorSpec] = MappingProxyType(
+        self._specs: Mapping[str, FieldSpec] = MappingProxyType(
             {k: specs[k] for k in keys}
         )
 
     @property
-    def specs(self) -> Mapping[str, TensorSpec]:
-        """The ``TensorSpec`` of each key, in the order the ``TypedDict`` defines."""
+    def specs(self) -> Mapping[str, FieldSpec]:
+        """The spec of each key, in the order the ``TypedDict`` defines.
+
+        To use the spec of one key as its kind, take it with ``field``.
+        """
         return self._specs
 
-    @override
-    def zeros(self, *, device: Device = "cpu") -> TD:
-        """Return a message whose values are all zeros on ``device``."""
-        return cast(TD, {k: s.zeros(device=device) for k, s in self._specs.items()})
+    def field[F: FieldSpec](self, key: str, kind: type[F]) -> F:
+        """Return the spec of ``key``, checked to be a ``kind``.
 
-    @override
-    def empty(self, *, device: Device = "cpu") -> TD:
-        """Return a message on ``device`` whose values are not set.
+        Example::
 
-        Set them before use, in place: ``msg["error"].fill_(0.5)``.
+            h = act_spec.field("h", TensorSpec)
+            h.shape
+
+        Raises:
+            KeyError: No such key.
+            TypeError: The spec of ``key`` is not a ``kind``.
         """
-        return cast(TD, {k: s.empty(device=device) for k, s in self._specs.items()})
+        spec = self._specs[key]
+        if not isinstance(spec, kind):
+            raise TypeError(
+                f"{self!r}: the spec of {key!r} is {type(spec).__name__}, "
+                f"not {kind.__name__}"
+            )
+        return spec
+
+    def zeros(self, *, device: Device = "cpu") -> TD:
+        """Return a message whose tensors are zeros on ``device`` and whose
+        scalars are zero (``0``, ``0.0``, ``False``, ``Timestamp(ns=0)``)."""
+        return cast(
+            TD,
+            {
+                k: s.zeros(device=device) if isinstance(s, TensorSpec) else _zero(s)
+                for k, s in self._specs.items()
+            },
+        )
+
+    def empty(self, *, device: Device = "cpu") -> TD:
+        """Return a message whose tensors are on ``device`` and not set, and
+        whose scalars are zero as in ``zeros``.
+
+        Set the tensors before use, in place: ``msg["error"].fill_(0.5)``.
+        """
+        return cast(
+            TD,
+            {
+                k: s.empty(device=device) if isinstance(s, TensorSpec) else _zero(s)
+                for k, s in self._specs.items()
+            },
+        )
 
     @override
     def __eq__(self, other: object) -> bool:
@@ -248,3 +374,16 @@ class DictSpec[TD: Mapping[str, object]](MessageSpec[TD]):
     def __repr__(self) -> str:
         args = ", ".join(f"{k}={s!r}" for k, s in self._specs.items())
         return f"DictSpec({self._typed_dict.__qualname__}, {args})"
+
+
+def _zero(spec: IntSpec | FloatSpec | BoolSpec | TimestampSpec) -> object:
+    """The zero of a scalar field: the value a slot holds before its first write."""
+    match spec:
+        case IntSpec():
+            return 0
+        case FloatSpec():
+            return 0.0
+        case BoolSpec():
+            return False
+        case TimestampSpec():
+            return Timestamp(ns=0)

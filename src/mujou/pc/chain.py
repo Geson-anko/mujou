@@ -155,6 +155,6 @@ def show(run: Run, chain: _Shown, sample: Sample, *, seconds: float) -> Predicti
         NetworkError: The run stopped because a node raised.
     """
     written = run.write({chain.prev: sample})
-    prediction, _ = run.wait_for(chain.next, lambda p: int(p["time"]) == written.ns)
+    prediction, _ = run.wait_for(chain.next, lambda p: p["time"] == written)
     run.timer.sleep(max(0.0, seconds - (run.timer.now() - written)))
     return prediction

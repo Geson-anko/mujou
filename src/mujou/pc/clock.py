@@ -63,7 +63,7 @@ class LearnClock:
         self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
                                    max_dt=2e-3)
         # In on_update(dt):
-        tick = self.clock.tick(dt, int(activity["time"]), self.timer.now().ns)
+        tick = self.clock.tick(dt, activity["time"].ns, self.timer.now().ns)
         # ... move by tick.dt; if tick.learn, learn weighted by tick.elapsed.
 
     Args:
