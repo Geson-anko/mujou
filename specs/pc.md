@@ -14,7 +14,9 @@ $$g_{\mathrm{in}} = -J_h^\top \delta_i,\qquad g_{\theta} = -J_\theta^\top \delta
 
 $f = \sigma(Wh)$ なら $J_h^\top\delta = W^\top\varepsilon$、$J_W^\top\delta = \varepsilon h^\top$ となり記事の式に戻る。次のノードから届く値の和を $g_i$ とすると、連続時間形は次のとおり。
 
-$$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\qquad \tau_\theta \dot\theta_i = -g_\theta / B$$
+$$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i$$
+
+$\theta_i$ は、平均の勾配 $g_\theta / B$ を受け取るノードの optimizer が動かす（「重みの optimizer」）。既定の形は SGD の勾配流 $\tau_\theta \dot\theta_i = -g_\theta / B$。
 
 - 受け取る $g_i$ は全体の損失の勾配ではなく、次のノードのエネルギー項の偏微分。平衡点（$r = 0$）で $\lambda_i = -\partial\ell/\partial h_i$ となり BP の credit に一致する
 - `h_in` はスロットから読んだコピーなので、計算グラフは葉で切れる。ノードをまたぐ `.backward()` は無い
@@ -94,8 +96,8 @@ $$\tau_h \dot h_i = -(\delta_i + g_i),\qquad \tau_\lambda \dot\lambda_i = r_i,\q
 
 | ノード | 状態 |
 | --- | --- |
-| `Layer` | `module`、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
-| `Output` | `module`、`clock` |
+| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
+| `Output` | `module`、`optimizer`、`clock` |
 | `Input` | `jumps`、`seen_write`（最後に見た書き込みの時刻、書き込みの前は -1） |
 
 $\delta$ は状態にせず、更新のたびに今の `h_in` から $\mu$ を計算し直して作る。$\sigma'$ をキャッシュで評価しない（skill `pc-alm` の落とし穴 2）ことが、これで自動で守られる。
@@ -122,12 +124,12 @@ $h$、$\lambda$ は毎回の更新で動かし、$\theta$ は間隔を空けて�
 
 $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\theta}{B}$$
 
-時間あたりの学習の速さは $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
+（`pc.SGD` の場合。一般には optimizer の `step_` が $g_\theta / B$ と $\Sigma\Delta t$ で動かす）。時間あたりの学習の速さは optimizer の $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
 
-学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt` と、`theta` が inf なら学ばない規則）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time_ns, now_ns)` は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
+学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt`）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time_ns, now_ns)` は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
 
 - ホストが入力を書いた時刻（`time`）から `learn_interval` ごとの時刻 `time + k * learn_interval`（$k = 1, 2, \dots$）を過ぎた最初の更新で学習する。ただし、その入力を初めて見た更新では学習しない。その更新の $\delta$ は、前の入力の $r + \lambda$ に新しい入力のヤコビアンを掛けたもので、新しい入力の credit ではない
-- `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない。`TimeConstants` の `theta` が inf なら、`LearnClock.of` が `learn_interval=inf` にする。格子の点が無限の先にあるので、学習の時刻に達しない
+- `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない（学ばないノードの表し方はこの 1 通り）。格子の点が無限の先にあるので、学習の時刻に達しない
 - `learn` を返した時点で学習したものとして数え直す（$\Sigma\Delta t$ と次の格子）。ノードが mask の無い入力で学習を飛ばしても同じで、その時間は捨てる。前の入力から持ち越した $\delta$ で学習しないため
 - 学習しないまま入力が切り替わったら（入力が `learn_interval` より速く変わる）$\Sigma\Delta t$ を捨てる。溜めたままにすると、入力が止まった最初の学習にまとめて掛かり、学習率が際限なく跳ね上がる
 - $\Sigma\Delta t$ は `max_dt` で打ち切った `dt` の和。学習の時刻は実行の時間で決まる（打ち切った時間も含む）
@@ -148,17 +150,62 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ## 不変条件
 
-- mask がすべて False の `Activity` では、どのノードも `learn_` を呼ばない（$\theta$ が動かない。$h$ と $\lambda$ は動く）。テストは全ノードの $\theta$ のビット一致で確かめる
+- mask がすべて False の `Activity` では、どのノードも optimizer の `step_` を呼ばない（$\theta$ が動かない。$h$ と $\lambda$ は動く）。テストは全ノードの $\theta$ のビット一致で確かめる
 - 書き込みの前の `Activity` の `time` は 0、`LearnClock` の初期値（最後に見た入力の時刻）は -1。最初の `Activity`（ゼロ、mask がすべて False）は新しい入力として見られ、学習の格子を 0 から始める。時刻 0 に書いたサンプルも同じ格子に乗り、`Input` の `jumps` が変わるので付け替えも起きる。学習するかどうかは mask で決まるので、ゼロの `Activity` では学習しない
 
 ## 時定数
 
-`TimeConstants(*, h, lam, theta)` に秒で持つ（K25: h は有限で > 0、lam と theta は > 0。inf は可）。
+`TimeConstants(*, h, lam)` に秒で持つ（K25: h は有限で > 0、lam は > 0。lam の inf は可）。$\tau_\theta$ は optimizer が持つ（「重みの optimizer」）。
 
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
-- 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
+- `pc.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
 - ノードの周期の既定は $\tau_h / 4$（$\eta_h = 0.25$）。利用者は時定数だけを決めればよい。記事の公式実装の $\eta_h = 1/\lambda_{\max}$（約 0.2〜0.25）とほぼ同じ
 - 安定な範囲の実測（$\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$、$c \approx 1 + \|J\|^2$）は [PC の比較実験](research/pc-experiments.md#時定数の安定な範囲)。example の既定は $\tau_\lambda = 2\tau_h$（$\alpha = 0.125$）
+
+## 重みの optimizer
+
+$\theta$ の時間発展は差し替えられる部品にする（`src/mujou/pc/optim.py`）。
+
+- **設定 + bind**: `pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は値だけを持つ frozen dataclass（`Optimizer` Protocol）。状態を持たないので `Chain` の全ノードで共有してよい。ノードは `optimizer.bind(params)` で自分の param の束縛（`BoundOptimizer` Protocol）を作り、`self.optimizer` に置く。束縛は `step_(grads, elapsed)` と `state_dict` / `load_state_dict` を持ち、`LearnClock` と同じく属性に置くだけでノードの状態に入る（キー `"optimizer"`）。束縛はノードごとに別で、同じ束縛を 2 ノードに置くと `tree.walk` が断る（K24）
+- Protocol にしたのは、SGD と AdamW で共有する実装が無く、利用者の optimizer を継承なしに書けるようにするため（`is_state` のダックタイピングと揃う）。`runtime_checkable` にはしない
+- `optimizer` は `Layer`・`Output`・`Chain` の必須の引数。時間で表した既定の学習率は無い（`learn_interval` に既定を置かないのと同じ理由）
+- ノードは `requires_grad` の param だけを bind する。frozen な param には weight decay も掛からない
+- **$1/B$ の位置**: ノードが $g_\theta$ を $B$ で割ってから `step_` に渡す。optimizer はバッチを知らない
+- **`elapsed` の意味**: その歩みが重みとする時間（`Tick.elapsed`。前に学んでからの、`max_dt` で打ち切った dt の和で、時計が捨てた時間を含まない）。前回の `step_` からの実時間とは限らない。捨てた時間は AdamW のモーメントと $c$ も動かさず（流れが止まっている扱い）、weight decay もラベルのある時間にだけ掛かる
+
+### 連続時間形
+
+$g = g_\theta / B$ として、
+
+- SGD: $\tau_\theta \dot\theta = -g$
+- AdamW: $\tau_m \dot m = g - m$、$\tau_v \dot v = g^2 - v$、$\tau_\theta \dot\theta = -\left(\hat m / (\sqrt{\hat v} + \varepsilon) + w\,\theta\right)$
+- 質量（bias 補正）: $\tau_m \dot c_m = 1 - c_m$、$\tau_v \dot c_v = 1 - c_v$（$c(0) = 0$）。$\hat m = m / c_m$、$\hat v = v / c_v$。ステップのカウンタの代わりに、moment が集めた重みを時間で持つ
+
+### 離散化（`elapsed` = $\Delta t$ の 1 歩）
+
+SGD は `p.sub_(g, alpha=elapsed / tau)`。状態は空。AdamW は torch の `_single_tensor_adam`（decoupled weight decay、非 capturable）と同じ順にする。
+
+1. `elapsed == 0` なら何もしない（0 秒の流れは恒等写像。初回の前は $c = 0$ で $\hat m = 0/0$ になる。`ManualRun.step(0.0)` や `learn_interval=None` で起こりうる）
+2. $a = -\mathrm{expm1}(-\Delta t/\tau)$（$1 - e^{-\Delta t/\tau}$ を小さな $\Delta t$ でも精度よく）を $m$ と $v$ それぞれで取り、$c \leftarrow c + a(1 - c)$
+3. $\eta = \Delta t/\tau_\theta$。param ごとに $\theta \leftarrow \theta(1 - \eta w)$（decay を先に）、$m \leftarrow m + a_m(g - m)$、$v \leftarrow v + a_v(g^2 - v)$、$\theta \leftarrow \theta - \frac{\eta}{c_m}\cdot\frac{m}{\sqrt{v}/\sqrt{c_v} + \varepsilon}$（ε は $\sqrt{\hat v}$ に足す）
+
+$m$、$v$、$c$ は $g$ を $\Delta t$ の間一定とした流れを厳密に解くので、同じ $g$ なら $\Delta t$ を 2 回と $2\Delta t$ を 1 回で同じ値になる。$\theta$ は torch と同じ順で、decay は歩みの前の $\theta$ に陽的に掛け、Adam の項はその歩みで更新した後の $m$・$v$・$c$ で取る（$\Delta t \to 0$ で 1 次の精度。decay を $e^{-\eta w}$ にする厳密な案は torch と一致しなくなるので採らない。$\eta w > 1$ で符号が反転するが、`elapsed` は `learn_interval` 程度で $\eta$ は小さい）。
+
+$\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ となり、`torch.optim.AdamW(lr=Δt/τθ, betas=(e^{−Δt/τm}, e^{−Δt/τv}), eps=ε, weight_decay=w)` と丸めの範囲で一致する（テストのオラクル）。torch の β からの換算は $\tau_m = -\Delta t/\ln\beta_1$（32 ms に 1 回学ぶなら β1 = 0.9 で約 0.30 s、β2 = 0.999 で約 32 s）。
+
+### 決めたこと
+
+- **w の単位**: 無次元で $1/\tau_\theta$ と組む（decay の時定数は $\tau_\theta / w$）。torch の `weight_decay` と同じ値が同じ意味になる。独立の時定数にする案は、torch との対応が崩れ、学習率を変えると decay の比も変わる AdamW の decoupled の定義と合わないので採らない
+- **c は Python の float**: `torch.load(weights_only=True)` で読め、復元は代入で同じ値になる。torch の非 capturable の bias 補正も倍精度の Python の float。0-d テンソルにすると dtype を選ぶ必要があり、float32 では 1 に近い c の精度が落ちる。倍精度では約 $37\tau$ で $c$ がちょうど 1.0 になり、そのとき $\hat m = m$ で害はない
+- **状態の dtype/device**: $m$、$v$ は `torch.zeros_like(p)`。bind は module が device に載った後（ノードの `__init__`）に呼ぶ
+- **`torch.optim` を使わない**: (1) 3.14t ではコンストラクタが `torch._dynamo` → `triton._C` を import し、プロセス全体の GIL が戻る。(2) β が 1 ステップあたりなので、実効の時定数が学習の間隔に依存する。(3) `state["step"]` が float32 で $2^{24}$ 回で増えなくなる。自前の optim は `torch.optim` を実行時に import しない
+- 構築時の検査（K31）: `tau`・`tau_m`・`tau_v`・`eps` は有限で > 0、`weight_decay` は有限で >= 0。`eps=0` を断るのは、勾配がずっと 0 の要素（batch 全体で死んだ ReLU の行など、PC でよく出る）が $m = v = 0$ のまま $0/0$ で NaN になり、跳び Δ を通して鎖全体に広がるため（torch は 0 を受け付けるが合わせない）。`tau=inf` を断るのは、学ばないことを `learn_interval=math.inf` の 1 通りで表すため（`tau_m=inf` は $\hat m = 0/0$ になる）。フィールドはキーワード専用
+- AdamW の推奨の時定数は未測定（`open-decisions.md`）
+- AdamW は勾配の大きさで歩みを縮めない（成分ごとに約 $\eta$ 動く）。そのため、緩和しきらない $\delta$ の残差が、BP の勾配がほぼ 0 の成分でも sign 程度の歩みになりうる。SGD なら残差 $e$ による $\theta$ の誤差は $\eta e$ で小さい。`learn_interval` を往復より長くする推奨は SGD より強く効く可能性がある（未測定）
+
+### 段階 2（h と λ）
+
+緩和の則として h と λ を 1 組で差し替える。不動点（$r = 0$、$\lambda = -g$）は、勾配の零点だけを停留点に持つ則（SGD、モーメンタム、weight decay の無い Adam）なら保てる（h や λ に decay や leak を入れると、λ の不動点は BP の credit からずれる）が、陽的な結合の安定性、跳びでの付け替え（$r$ を保つこと）との整合、サンプルごとの状態（バッチの各行に別の状態）が課題で、研究から始める。今は実装しない。
 
 ## dt の打ち切り
 
@@ -171,7 +218,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ## Chain と show
 
-`Chain(*modules, x=, y=, loss=, tau=, learn_interval=, max_dt=, device=)` は `Input → Layer → … → Output` の `Network`。`modules[:-1]` が `Layer`、`modules[-1]` が `Output` になる。
+`Chain(*modules, x=, y=, loss=, tau=, optimizer=, learn_interval=, max_dt=, device=)` は `Input → Layer → … → Output` の `Network`。`modules[:-1]` が `Layer`、`modules[-1]` が `Output` になる。
 
 - 子のパスは `"input"`、`"layer0"`、…、`"output"`（`modules[i]` が `layer{i}`）。`*modules` は `nn.Sequential` と同じ形なので、番号も 0 から始める
 - period はすべて $\tau_h / 4$。period を変えたい利用者は個別のノードで組む
@@ -191,11 +238,10 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - `vjp(f, h_in, delta, params) -> (mu, g_in, g_theta)`: δ は $\mu$ から作る callable（`Layer` は付け替えの更新で $\mu$ に依存しない δ を、ほかの更新で $r + \lambda$ を作る）。δ と μ の shape が違えば断る（K29）
 - `loss_vjp(f, h_in, y, mask, loss, params) -> (y_hat, g_in, g_theta)`: 損失の shape が `mask` の shape（`batch`）でなければ断る（K27）。`Output` の構築時の probe も同じ関数を通る
 - `relax_(h, lam, mu, g, dt, tau)`: 1 歩の陽的 Euler
-- `learn_(params, g_theta, elapsed, tau, batch)`: $\theta$ の 1 歩。`batch` は shape で、そのサンプルの数で割る
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` を属性に置き（それだけで状態に入る。`max_dt` の既定と、`tau.theta` が無限大なら学ばない規則は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `learn_(..., tick.elapsed, ...)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)` を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"].ns, self.timer.now().ns)` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -210,7 +256,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 | $\lambda$ の更新 | 更新後の $h$ の $r$ | 同じ |
 | 重みの勾配の $\lambda$ | 最後の dual 更新の前 | VJP を取ったときの更新前の値 |
 | ステップの大きさ | 離散の $\eta_h, \alpha$ | 時定数と実経過の `dt`（`max_dt` で打ち切る） |
-| 重みの最適化 | Adam | 勾配流（SGD） |
+| 重みの最適化 | Adam | 時間で進める SGD か AdamW（`pc.SGD` / `pc.AdamW`） |
 | 出力の損失 | バッチ平均の $\tfrac12\|y-\hat y\|^2$ | サンプルごとの任意の損失の和（`MSELoss` は特徴の平均で $\tfrac12$ なし） |
 
 ## テスト
@@ -230,3 +276,4 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 11. 2 つの制約を 1 ノードにまとめた鎖と、2 ノードに分けた鎖で、不動点での $\theta$ の更新が一致する（ノードの分け方に依らない）
 12. 時刻 0 に書いた最初の入力を学ぶ
 13. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
+14. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
