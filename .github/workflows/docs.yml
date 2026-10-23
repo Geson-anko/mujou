@@ -4,7 +4,8 @@ name: Docs
 # on every pull request, and deploy versioned docs to GitHub Pages with mike:
 #   - push to main              -> the "dev" version
 #   - push a stable v* tag      -> "<X.Y.Z>", and move the "latest" alias to it and
-#                                  make it the default (the site root redirects there)
+#                                  make it the default (the site root redirects there),
+#                                  unless a newer version has "latest"
 #   - push a prerelease v* tag  -> "<X.Y.Z>" only ("latest" stays where it is)
 # Until the first stable release, the site root redirects to "dev".
 #
@@ -17,6 +18,7 @@ on:
     tags: ["v*"]
     paths: &paths
       - "docs/**"
+      - "CHANGELOG.md"
       - "examples/**"
       - "src/**/*.py"
       - "src/**/*.pyi"
@@ -29,7 +31,7 @@ on:
       - "justfile"
       - ".github/workflows/docs.yml"
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
     paths: *paths
   # Deploys by hand: on main for "dev", on a tag for that version.
   workflow_dispatch:
@@ -80,7 +82,10 @@ jobs:
           git fetch origin gh-pages:gh-pages || true
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
-            if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ ]]; then
+            # A patch of an older release line (release/X.Y) does not take "latest".
+            LATEST="$(uv run mike list --json | python3 -c 'import json, sys; print(next((v["version"] for v in json.load(sys.stdin) if "latest" in v["aliases"]), ""))')"
+            NEWEST="$(printf '%s\n%s\n' "${LATEST}" "${VERSION}" | sort -V | tail -n 1)"
+            if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ || "${NEWEST}" != "${VERSION}" ]]; then
               uv run mike deploy --push "${VERSION}"
             else
               uv run mike deploy --push --update-aliases "${VERSION}" latest
