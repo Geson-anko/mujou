@@ -34,7 +34,7 @@ def to_html(root: Node | Network) -> str:
 
         import mujou.viz
 
-        Path("net.html").write_text(mujou.viz.to_html(net))
+        Path("net.html").write_text(mujou.viz.to_html(net), "utf-8")
 
     Raises:
         TypeError, ValueError: ``root`` is not a tree that ``mujou.run`` runs,
