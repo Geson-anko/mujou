@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from mujou.pc import CrossEntropyLoss, MSELoss, TimeConstants
-from mujou.pc.functional import cross_entropy, learn_, loss_vjp, mse, relax_, vjp
+from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
 
 B = 3
 EPS = 1e-6  # central differences: truncation ~EPS^2, rounding ~1e-16 / EPS
@@ -260,7 +260,7 @@ class TestLossVjp:
 
 
 class TestRelax:
-    TAU = TimeConstants(h=4e-3, lam=8e-3, theta=1.0)
+    TAU = TimeConstants(h=4e-3, lam=8e-3)
 
     @staticmethod
     def _state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -284,7 +284,7 @@ class TestRelax:
         h, lam, mu, g = self._state()
         h[0, 0] = math.inf
         lam0 = lam.clone()
-        relax_(h, lam, mu, g, 1e-3, TimeConstants(h=4e-3, lam=math.inf, theta=1.0))
+        relax_(h, lam, mu, g, 1e-3, TimeConstants(h=4e-3, lam=math.inf))
         assert torch.equal(lam, lam0)
 
     def test_zero_dt_changes_nothing(self):
@@ -293,38 +293,6 @@ class TestRelax:
         relax_(h, lam, mu, g, 0.0, self.TAU)
         assert torch.equal(h, h0)
         assert torch.equal(lam, lam0)
-
-
-class TestLearn:
-    def test_step_on_the_mean_gradient(self):
-        tau = TimeConstants(h=4e-3, lam=8e-3, theta=0.5)
-        params = [_randn(4, 5, seed=1), _randn(5, seed=2)]
-        g_theta = [_randn(4, 5, seed=3), _randn(5, seed=4)]
-        before = [p.clone() for p in params]
-        elapsed = 3e-3
-        learn_(params, g_theta, elapsed, tau, batch=B)
-        for p, p0, g in zip(params, before, g_theta, strict=True):
-            torch.testing.assert_close(
-                p, p0 - elapsed / tau.theta * g / B, rtol=1e-15, atol=1e-15
-            )
-
-    def test_infinite_theta_time_constant_keeps_the_parameters(self):
-        tau = TimeConstants(h=4e-3, lam=8e-3, theta=math.inf)
-        params = [_randn(4, 5, seed=1)]
-        before = params[0].clone()
-        learn_(params, [_randn(4, 5, seed=2)], 1.0, tau, batch=B)
-        assert torch.equal(params[0], before)
-
-    @pytest.mark.parametrize(("batch", "n"), [((), 1), ((2, 3), 6)])
-    def test_divides_by_the_number_of_samples(self, batch: tuple[int, ...], n: int):
-        tau = TimeConstants(h=4e-3, lam=8e-3, theta=0.5)
-        params = [_randn(4, 5, seed=1)]
-        g = _randn(4, 5, seed=3)
-        before = params[0].clone()
-        learn_(params, [g], 1e-3, tau, batch=batch)
-        torch.testing.assert_close(
-            params[0], before - 1e-3 / tau.theta * g / n, rtol=1e-15, atol=1e-15
-        )
 
 
 def _pair(*shape: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -341,7 +309,8 @@ class TestMse:
             torch.testing.assert_close(ell[b], expected, rtol=1e-14, atol=0)
 
     def test_mean_is_the_mean_loss_of_torch(self):
-        # With the 1 / B of learn_, theta follows the gradient of nn.MSELoss().
+        # With the 1 / B that the nodes take before their optimizer, theta
+        # follows the gradient of nn.MSELoss().
         y_hat, y = _pair(B, 5)
         torch.testing.assert_close(
             mse(y_hat, y, B).mean(), nn.MSELoss()(y_hat, y), rtol=1e-14, atol=0

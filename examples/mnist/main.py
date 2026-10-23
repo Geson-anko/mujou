@@ -80,9 +80,10 @@ def train_pc(
     # --8<-- [start:chain]
     period = args.tau_h / 4  # the period of every node of pc.Chain
     shown = args.steps * period  # how long the host shows each batch
-    # The learning rate of one batch is shown / tau.theta: the nodes learn once
-    # per batch, for the time since they last learned.
-    tau = pc.TimeConstants(h=args.tau_h, lam=2 * args.tau_h, theta=shown / args.lr)
+    # The learning rate of one batch is shown / optimizer.tau: the nodes learn
+    # once per batch, for the time since they last learned.
+    tau = pc.TimeConstants(h=args.tau_h, lam=2 * args.tau_h)
+    optimizer = pc.SGD(tau=shown / args.lr)
     net = pc.Chain(
         *modules,
         x=TensorSpec((args.batch, 784)),
@@ -90,6 +91,7 @@ def train_pc(
         batch=args.batch,
         loss=pc.CrossEntropyLoss(args.batch),
         tau=tau,
+        optimizer=optimizer,
         learn_interval=0.75 * shown,  # learn once, 3/4 of the way through each batch
     )
     # --8<-- [end:chain]

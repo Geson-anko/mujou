@@ -8,6 +8,7 @@
     - ノードの間を流れるメッセージと Port の向き
     - `pc.Layer` が 1 回の `on_update(dt)` で行うこと
     - `pc.LearnClock` が返す `Tick`、`jumps`、`pc.TimeConstants` の意味
+    - `pc.SGD` と `pc.AdamW` が重みを時間で動かす仕組み
 
     前提は PyTorch・誤差逆伝播法（BP）と、[Mujou の仕組み](../concepts.md)のノード・Port・`dt`。predictive coding の知識は要らない。
 
@@ -31,7 +32,7 @@ PC-ALM では各ノードが自分の**活動** `h` を持ち、前のノード�
 
 !!! abstract "要点"
 
-    利用者が普段使うのは `Chain`・`show`・`TimeConstants`・損失・`Sample`。自分のノードを書くときに `LearnClock`・`functional`・`Activity` を使う。
+    利用者が普段使うのは `Chain`・`show`・`TimeConstants`・optimizer・損失・`Sample`。自分のノードを書くときに `LearnClock`・`functional`・`Activity` を使う。
 
 | 部品                                        | 種類       | 役割                                                                                                                      | 主に使う場面    |
 | ------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- |
@@ -41,13 +42,14 @@ PC-ALM では各ノードが自分の**活動** `h` を持ち、前のノード�
 | `pc.Chain`                                  | Network    | `Input → Layer → … → Output` をまとめて作りつなぐ                                                                         | 普段            |
 | `pc.show`                                   | 関数       | ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す                                                                  | 普段            |
 | `pc.Sample`・`pc.Activity`・`pc.Prediction` | メッセージ | 流れるデータの型（[2 節](#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE)） | `Sample` は普段 |
-| `pc.TimeConstants`                          | 設定       | 速さを秒で持つ（[5 節](#5-timeconstants)）                                                                                | 普段            |
+| `pc.TimeConstants`                          | 設定       | `h` と `lam` の速さを秒で持つ（[5 節](#5-timeconstants)）                                                                 | 普段            |
+| `pc.SGD`・`pc.AdamW`                        | 設定       | optimizer。重みを時間でどう動かすか（[6 節](#6-optimizer)）                                                               | 普段            |
 | `pc.MSELoss`・`pc.CrossEntropyLoss`         | 損失       | サンプルごとの損失を返す。`Output` に渡す                                                                                 | 普段            |
 | `pc.LearnClock`                             | 部品       | いつ学ぶかを決める（[4 節](#4-learnclock-%E3%81%A8-jumps)）                                                               | 自分のノード    |
-| `pc.functional`                             | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`・`learn_`）。`Layer` と `Output` もこれで書く                               | 自分のノード    |
+| `pc.functional`                             | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`）。`Layer` と `Output` もこれで書く                                         | 自分のノード    |
 | `pc.activity_spec`                          | 関数       | `Activity` の spec を作る                                                                                                 | 自分のノード    |
 
-`Layer` と `Output` は `LearnClock` と `functional` を組み合わせたもの。同じ部品で入力が 2 つのノードのような `Layer` で書けないノードも作れる。
+`Layer` と `Output` は `LearnClock`・`functional`・optimizer を組み合わせたもの。同じ部品で入力が 2 つのノードのような `Layer` で書けないノードも作れる。
 
 ## 2. つながりと流れるもの
 
@@ -101,7 +103,7 @@ flowchart LR
 
 !!! abstract "要点"
 
-    `Layer.on_update(dt)` は「読む → `tick` → `vjp` → `g_in` を送る → `relax_` → `Activity` を送る → `learn_`」の順に進む。
+    `Layer.on_update(dt)` は「読む → `tick` → `vjp` → `g_in` を送る → `relax_` → `Activity` を送る → `optimizer.step_`」の順に進む。
 
 | 段  | 使う部品            | 計算                                                                                                                                                                            |
 | --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -110,14 +112,14 @@ flowchart LR
 | 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                         |
 | 4   | `functional.relax_` | 跳びがあれば `h` を付け替え、$h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$、続けて動かした `h` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
 | 5   | `Activity`          | 必要なら自分の `jumps` を進め、`h` と `jumps` に受け取った `y`・`mask`・`time` を付けて `next` から送る                                                                         |
-| 6   | `functional.learn_` | $\theta \leftarrow \theta - \frac{\mathrm{elapsed}}{\tau_\theta}\cdot\frac{g_\theta}{B}$。`tick.learn` が True で、`mask` に True があるときだけ                                |
+| 6   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                        |
 
 - 段 3 の `delta` は段 2 の後、段 4 の前の `h`・`lam` で作る
-- 勾配はバッチで和を取り、サンプルの数 $B$ で割るのは `learn_` だけ。だから `lam` はサンプルごとの credit になる。1 回の学習は学習率 `elapsed / tau.theta` でバッチの平均勾配を下る SGD に当たる
+- 勾配はバッチで和を取り、$B$ で割るのは段 6 だけ。だから `lam` はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る
 - `vjp` の `delta` は値ではなく、`mu` から `delta` を作る関数（`mu` は `vjp` の中で計算するため）。ふだんは `lambda mu: h - mu + lam`。段 4 で付け替える更新では、付け替え前のずれ `h - mu_last` を使い `lambda mu: (h - mu_last) + lam` を渡す（[jumps](#jumps)）
 - `vjp` は `h_in` を detach してから微分するので、計算グラフは前のノードに届かない
 
-`Output` は `h` も `lam` も持たない。段 3 で `functional.loss_vjp` を使い、損失 $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ の勾配 $\partial\ell/\partial h_{\mathrm{in}}$ を `g_in` として送り、`Prediction` を送る。学ぶ条件と `learn_` は `Layer` と同じ。付け替える `h` が無いので `jumps` は読まない。
+`Output` は `h` も `lam` も持たない。段 3 で `functional.loss_vjp` を使い、損失 $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ の勾配 $\partial\ell/\partial h_{\mathrm{in}}$ を `g_in` として送り、`Prediction` を送る。学ぶ条件と `optimizer.step_` は `Layer` と同じ。付け替える `h` が無いので `jumps` は読まない。
 
 ??? question "g_in を前のノードへ送るのは BP と何が違うの？"
 
@@ -139,22 +141,23 @@ flowchart LR
 
 ノードは毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼ぶ。返る `Tick` の意味。
 
-| フィールド | 意味                                                   | 使い道                  |
-| ---------- | ------------------------------------------------------ | ----------------------- |
-| `dt`       | `max_dt` で打ち切った `dt`                             | `relax_` に渡す         |
-| `new`      | 受け取った入力の `time` が前回と違う（新しいサンプル） | `h` を付け替える        |
-| `learn`    | この更新で学ぶか                                       | `learn_` を呼ぶか決める |
-| `elapsed`  | 前に学んでからの、打ち切った `dt` の和。この更新を含む | `learn_` に渡す重み     |
+| フィールド | 意味                                                   | 使い道                 |
+| ---------- | ------------------------------------------------------ | ---------------------- |
+| `dt`       | `max_dt` で打ち切った `dt`                             | `relax_` に渡す        |
+| `new`      | 受け取った入力の `time` が前回と違う（新しいサンプル） | `h` を付け替える       |
+| `learn`    | この更新で学ぶか                                       | `step_` を呼ぶか決める |
+| `elapsed`  | 前に学んでからの、打ち切った `dt` の和。この更新を含む | `step_` に渡す時間     |
 
 `learn` が True になるのは次のとき。`learn_interval` は `Layer`・`Output`・`Chain`・`LearnClock` に渡す秒数。
 
-| `learn_interval` | 学ぶ更新                                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 正の秒数         | 書き込み時刻 `time` の `learn_interval` 後、2 倍後、… の各時刻を過ぎた最初の更新。ただし `new` が True の更新では学ばず、次の更新で学ぶ |
-| `None`           | 毎回の更新（入力が新しくても）。入力がフレームごとに変わるストリーム向け                                                                |
-| `math.inf`       | 学ばない。`tau.theta` が `math.inf` のとき `LearnClock.of` もこうする                                                                   |
+| `learn_interval` | 学ぶ更新                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正の秒数         | `time + learn_interval`、`time + 2 * learn_interval`、… の各時刻（`time` はホストが入力を書いた時刻）以降の最初の更新。ただし `new` が True の更新では学ばず、次の更新で学ぶ |
+| `None`           | 毎回の更新（入力が新しくても）。入力がフレームごとに変わるストリーム向け                                                                                                     |
+| `math.inf`       | 学ばない。学ばない方法はこれだけ（optimizer は `tau=math.inf` を受け付けない）                                                                                               |
 
 - `new` が True の更新で学ばないのは、その更新の `delta` がまだ前の入力のものだから
+- だから同じ入力が続く間は `learn_interval` 秒ごとに学び、`elapsed` はおよそ `learn_interval`
 - 学ばないまま入力が変わると、`elapsed` に溜めた時間は捨てる
 - 自分のノードでは `pc.LearnClock.of(tau, period=..., learn_interval=...)` で作り、属性に置く。それだけでノードの状態に入る
 
@@ -194,18 +197,86 @@ flowchart LR
 
     速さはすべて実行のタイマーの秒で決める。各ノードは実際に経った `dt` だけ式を進めるので、周期の違うノードも時間あたり同じ速さで変化する。
 
-`pc.TimeConstants(h=, lam=, theta=)` が 3 つの時定数を持つ。
+`pc.TimeConstants(h=, lam=)` が活動の 2 つの時定数を持つ。重みの時定数は optimizer が持つ（[6 節](#6-optimizer)）。
 
-| 値          | 何の速さか                | 1 回の更新で動く割合         | `math.inf` にすると                                                                        |
-| ----------- | ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `tau.h`     | 活動 `h` が緩和する速さ   | `dt / tau.h`                 | 不可（有限で正）                                                                           |
-| `tau.lam`   | `lam` が `r` を溜める速さ | `dt / tau.lam`               | `lam` は 0 のまま。`r` が 0 に戻らず、平衡点で BP と一致しない（ただの predictive coding） |
-| `tau.theta` | 重みが学ぶ速さ            | 学習率 `elapsed / tau.theta` | 学ばない                                                                                   |
+| 値        | 何の速さか                | 1 回の更新で動く割合 | `math.inf` にすると                                                                        |
+| --------- | ------------------------- | -------------------- | ------------------------------------------------------------------------------------------ |
+| `tau.h`   | 活動 `h` が緩和する速さ   | `dt / tau.h`         | 不可（有限で正）                                                                           |
+| `tau.lam` | `lam` が `r` を溜める速さ | `dt / tau.lam`       | `lam` は 0 のまま。`r` が 0 に戻らず、平衡点で BP と一致しない（ただの predictive coding） |
 
 時定数から既定が決まる値が 2 つある。`tau.period`（`tau.h / 4`）はノードの更新の間隔で、`Chain` の全ノードの周期。`tau.max_dt`（`min(tau.h / 2, 3 * tau.lam)`）は 1 回の更新で数える `dt` の上限で、超えた分は緩和からも `elapsed` からも捨てる。
 
-`tau.theta` は `tau.h` よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の `delta` で学ぶ。値の決め方は [時定数を決める](pc.md#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B)、引数の一覧は [API リファレンス](../api/pc.md)。
+optimizer の `tau` は `tau.h` よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の `delta` で学ぶ。値の決め方は [時定数を決める](pc.md#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B)、引数の一覧は [API リファレンス](../api/pc.md)。
 
 ??? question "なぜ dt を max_dt で打ち切るの？"
 
     `g` は次のノードが最後に更新したときの `h` から作られ、ノード同士は 1 歩遅れで結合している。負荷で全ノードが止まった後に `dt` が一斉に伸びると、この結合でネットワークが発散する。ノードの内側で刻みを分割しても防げないので 1 回に数える時間を打ち切る。
+
+## 6. optimizer
+
+!!! abstract "要点"
+
+    重みも秒で動く。optimizer は時間に沿った流れで、時定数を秒で持ち、1 歩ごとにその歩みが受け持つ `elapsed` 秒だけ進む。だから学ぶ頻度を変えても、重みが 1 秒あたりに動く速さは変わらない。
+
+### 設定を各ノードで束縛する
+
+`pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は設定で、状態を持たない frozen な値。`Layer`・`Output`・`Chain` は必須の引数 `optimizer=` で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、**束縛した optimizer** を `self.optimizer` に置く。状態を持ち、重みを動かすのは束縛した optimizer。
+
+```mermaid
+flowchart LR
+    S["pc.AdamW(...)<br/>設定、状態なし"] -->|"bind(params)"| B0["Layer 0: 束縛した optimizer<br/>m, v, c_m, c_v"]
+    S -->|"bind(params)"| B1["Layer 1: 束縛した optimizer<br/>m, v, c_m, c_v"]
+    S -->|"bind(params)"| B2["Output: 束縛した optimizer<br/>m, v, c_m, c_v"]
+```
+
+```python
+self.optimizer = optimizer.bind(params)  # in __init__, with only the weights that learn
+# in on_update, when the node learns:
+self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
+```
+
+- 1 つの設定を全ノードに渡してよい（`Chain` はそうする）。状態はノードごとに、束縛した optimizer の中にある
+- 束縛した optimizer はノードの状態のキー `"optimizer"` に入る（`LearnClock` が `"clock"` に入るのと同じ）
+- ノードが $g_\theta$ を $B$ で割ってから `step_` に渡す。optimizer はバッチを知らない
+- `elapsed == 0` の歩みは重みも状態も動かさない
+
+### SGD と AdamW
+
+平均の勾配を $g = g_\theta / B$ とする。
+
+| optimizer  | 時間に沿った流れ                                                                                                                                    | `elapsed` $= \Delta t$ 秒の 1 歩                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.SGD`   | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$。学習率 $\Delta t / \tau_\theta$ の SGD                                   |
+| `pc.AdamW` | $\tau_m \dot m = g - m$、$\tau_v \dot v = g^2 - v$、$\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $a_m = 1 - e^{-\Delta t/\tau_m}$ で $m \leftarrow m + a_m (g - m)$、$v$ も同様。続けて $\eta = \Delta t/\tau_\theta$ で AdamW の 1 歩 |
+
+- `tau` は $\tau_\theta$、`tau_m` は $\tau_m$、`tau_v` は $\tau_v$ で、どれも秒。有限で > 0。学ばないならノードに `learn_interval=math.inf` を渡す
+- `eps`（$\varepsilon$）は > 0。勾配が 0 のままだった重みが `0 / 0` にならないようにするため
+- `weight_decay`（$w$）は無次元。$\theta$ を時定数 $\tau_\theta / w$ で減衰させる。`torch.optim.AdamW` の `weight_decay` が `lr` と組むのと同じ
+- AdamW は勾配の大きさによらず、1 歩で各重みをおよそ $\eta$ ずつ動かす。Adam の `lr` に合わせるなら、2 回の学習の間の時間を $\Delta t$ とし（1 入力につき 1 回学ぶなら入力を見せる時間）、`tau` を $\Delta t$ / `lr` にする
+
+### 質量 c: 時間で行う bias 補正
+
+$m$ と $v$ は 0 から始まるので、はじめは小さすぎる。`torch.optim.AdamW` はステップ数 $t$ で補正し、$m$ を $1 - \beta_1^t$ で割る。`pc.AdamW` はステップを数えない。代わりに moment ごとに**質量** $c$ を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。
+
+$$\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m$$
+
+1 歩は moment と同じように $c_m \leftarrow c_m + a_m(1 - c_m)$ で質量を動かす。$t$ 秒ぶんの勾配の後は $c_m = 1 - e^{-t/\tau_m}$。$g$ が一定なら $m = c_m g$ なので、最初の 1 歩から $\hat m = g$。$v$ も自分の質量 $c_v$ を同じように持つ。
+
+1 歩は、$g$ が $\Delta t$ の間一定だとして流れを厳密に解く。だから moment と質量は歩みの回数ではなく歩みの秒数の合計で決まる。$\tau_m = 0.1$ 秒のときは次のとおり。
+
+| 歩み           | `pc.AdamW` の $c_m$  | 0.05 秒の歩みに合わせて $\beta_1 = e^{-0.05/0.1}$ に固定し、ステップを数えると |
+| -------------- | -------------------- | ------------------------------------------------------------------------------ |
+| 0.05 秒を 2 回 | $1 - e^{-1} = 0.632$ | $1 - \beta_1^2 = 0.632$                                                        |
+| 0.1 秒を 1 回  | $1 - e^{-1} = 0.632$ | $1 - \beta_1^1 = 0.393$                                                        |
+
+$\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))` と同じになる。だから torch の $\beta$ からは $\tau_m = -\Delta t / \ln\beta_1$ と決まる。$\Delta t$ はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、$\beta_1 = 0.9$ は約 0.30 秒、$\beta_2 = 0.999$ は約 32 秒。SGD と AdamW の選び方と値は [optimizer を選ぶ](pc.md#optimizer-%E3%82%92%E9%81%B8%E3%81%B6) へ。
+
+??? question "なぜ torch.optim を使わないの？"
+
+    1. ステップを数え、時間を数えない。$\beta$ と `lr` が 1 ステップあたりなので、1 秒あたりの速さが `learn_interval` や歩みごとに異なる `elapsed` で変わる
+    2. ステップ数が float32 のテンソルで、$2^{24}$ 回で増えなくなる（24 ms ごとに学ぶと約 4.7 日）。mujou は学び続ける機械のためのもの
+    3. 作るときに `torch._dynamo` を import し、free-threaded の Python（3.14t）でプロセス全体の GIL を有効に戻す
+
+### 自分の optimizer
+
+基底クラスは要らない。設定は `bind(params)` を持ち、`bind` が返すものは `step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を持つ。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。

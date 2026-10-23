@@ -10,13 +10,15 @@ previous node, and keeps its activity ``h`` and the dual ``lam`` of the constrai
   vector-Jacobian product inside the node). The node sends the one of ``h_in`` to
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
-- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds; ``learn_`` moves ``theta``.
+- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds; an optimizer of
+  ``mujou.pc.optim`` (``pc.SGD``, ``pc.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
 
 Every ``g`` here is a gradient of an energy; the update subtracts it. Gradients are
 summed over the batch, and the ``1 / B`` (``B`` the number of samples) is applied
-to ``theta`` only (in ``learn_``), so ``lam`` holds the credit of each sample.
+to ``theta`` only (the node divides ``g_theta`` by ``B`` before it gives it to the
+optimizer), so ``lam`` holds the credit of each sample.
 The shapes start with the batch, ``batch`` (see ``activity_spec``).
 """
 
@@ -30,7 +32,7 @@ from mujou.pc.messages import batch_shape, rows
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Size
 
-__all__ = ["cross_entropy", "learn_", "loss_vjp", "mse", "relax_", "vjp"]
+__all__ = ["cross_entropy", "loss_vjp", "mse", "relax_", "vjp"]
 
 
 def vjp(
@@ -203,44 +205,13 @@ def relax_(
             lam.add_(h - mu, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
 
 
-def learn_(
-    params: Sequence[torch.Tensor],
-    g_theta: Sequence[torch.Tensor],
-    elapsed: float,
-    tau: TimeConstants,
-    batch: Size,
-) -> None:
-    """Move ``params`` in place by ``elapsed`` seconds of
-    ``tau_theta * dtheta/dt = -g_theta / B``.
-
-    That is one gradient step on the mean loss of the batch with the learning
-    rate ``elapsed / tau.theta``: ``p -= (elapsed / tau.theta) * g / B``, where
-    ``B`` is the number of samples in ``batch`` (1 for ``()``).
-    ``tau.theta = inf`` makes the rate 0, which leaves ``params`` as they are
-    while the gradients are finite; the nodes of ``mujou.pc`` do not call it
-    then (``LearnClock.of`` never learns).
-
-    Args:
-        params: The parameters of the node.
-        g_theta: Their gradients summed over the batch, in the same order, as
-            ``vjp`` or ``loss_vjp`` returns them.
-        elapsed: The time since the last update of ``params``, in seconds.
-        tau: The time constants; ``tau.theta`` is used.
-        batch: The batch, the shape the activities start with.
-    """
-    rate = elapsed / tau.theta / math.prod(batch_shape(batch))
-    with torch.no_grad():
-        for p, g in zip(params, g_theta, strict=True):
-            p.sub_(g, alpha=rate)  # tau_theta dtheta/dt = -g_theta / B
-
-
 def mse(y_hat: torch.Tensor, y: torch.Tensor, batch: Size = ()) -> torch.Tensor:
     """Return the mean squared error of each sample of ``batch``.
 
     The squared error is averaged over the dimensions of a sample, as
     ``nn.MSELoss`` averages it, but not over the batch: the mean of the result
-    is ``nn.MSELoss()(y_hat, y)``, and with the ``1 / B`` of ``learn_``,
-    ``theta`` follows its gradient.
+    is ``nn.MSELoss()(y_hat, y)``, and with the ``1 / B`` the node applies before
+    its optimizer, ``theta`` follows its gradient.
 
     With ``d`` values in a sample, its gradient with respect to ``y_hat`` is
     ``(2 / d) * (y_hat - y)``: that of ``0.5 * ||y - y_hat||^2`` for ``d = 2``,

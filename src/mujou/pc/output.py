@@ -1,5 +1,6 @@
 """The output node of ``mujou.pc``."""
 
+import math
 from collections.abc import Callable
 from typing import override
 
@@ -8,8 +9,9 @@ from torch import nn
 
 from mujou import DictSpec, Node, Port, TensorSpec, TimestampSpec
 from mujou.pc.clock import LearnClock
-from mujou.pc.functional import learn_, loss_vjp
+from mujou.pc.functional import loss_vjp
 from mujou.pc.messages import Activity, Prediction
+from mujou.pc.optim import Optimizer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device
 
@@ -23,11 +25,13 @@ class Output(Node):
     was computed from, however fast the host writes. With
 
     $$
-    \ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),\qquad
-    \tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta},
+    \ell = \sum_b \mathrm{mask}_b\, \ell_b(\hat y_b, y_b),
     $$
 
-    where $B$ is the number of samples in the batch (1 without one), it sends
+    ``theta`` moves by ``optimizer`` with the mean gradient
+    $\frac{1}{B}\frac{\partial\ell}{\partial\theta}$ (``pc.SGD`` makes it
+    $\tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta}$),
+    where $B$ is the number of samples in the batch (1 without one), and it sends
     $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
     previous node (``functional.loss_vjp``): zero for a sample without a target
     while its ``y_hat`` is finite. Each ``on_update(dt)`` caps ``dt`` at
@@ -55,8 +59,9 @@ class Output(Node):
     ``y_hat``. ``module`` must treat the samples independently, as in
     ``Layer``.
 
-    The state holds ``"generator"``, ``"module"`` and when to learn
-    (``"clock"``). Read it with ``Run.state_dict()``, as for ``Layer``.
+    The state holds ``"generator"``, ``"module"``, when to learn
+    (``"clock"``) and the state of ``optimizer`` (``"optimizer"``). Read it with
+    ``Run.state_dict()``, as for ``Layer``.
 
     Example::
 
@@ -65,6 +70,7 @@ class Output(Node):
             act_spec=hidden.act_spec,  # hidden: a pc.Layer
             loss=pc.CrossEntropyLoss(B),
             tau=tau,
+            optimizer=pc.SGD(tau=1.28),
             learn_interval=24e-3,
         )
         hidden.next.connect(out.prev)
@@ -76,8 +82,9 @@ class Output(Node):
         act_spec: The spec of the activity ``h_in`` it receives: the
             ``act_spec`` of the node before, which also gives the batch.
         loss: The loss of each sample, ``(y_hat, y) -> batch``.
-        tau: The time constants; ``tau.theta`` is used, and the defaults of
-            ``period`` and ``max_dt``.
+        tau: The time constants; the defaults of ``period`` and ``max_dt``
+            are taken from them.
+        optimizer: How ``theta`` moves, as in ``Layer``.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.period``
             (``tau.h / 4``). It must not be longer than ``max_dt``.
@@ -100,21 +107,22 @@ class Output(Node):
         act_spec: DictSpec[Activity],
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
+        optimizer: Optimizer,
         learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
         device: Device = "cpu",
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
-        self._tau = tau
         self._loss = loss
-        self._batch = act_spec.field("mask", TensorSpec).shape
+        self._samples = math.prod(act_spec.field("mask", TensorSpec).shape)  # B
         self.clock = LearnClock.of(
             tau, period=self.period, learn_interval=learn_interval, max_dt=max_dt
         )
         self.module = module
         # Frozen parameters do not learn.
         self._params = [p for p in module.parameters() if p.requires_grad]
+        self.optimizer = optimizer.bind(self._params)
         h_in = act_spec.field("h", TensorSpec)
         y = act_spec.field("y", TensorSpec)
         mask = act_spec.field("mask", TensorSpec)
@@ -156,4 +164,6 @@ class Output(Node):
             {"y_hat": y_hat, "y": act["y"], "mask": act["mask"], "time": act["time"]}
         )
         if learn:
-            learn_(self._params, g_theta, tick.elapsed, self._tau, self._batch)
+            # theta moves by the mean gradient of the batch.
+            grads = [g / self._samples for g in g_theta]
+            self.optimizer.step_(grads, tick.elapsed)

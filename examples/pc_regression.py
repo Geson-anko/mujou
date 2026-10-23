@@ -23,8 +23,10 @@ B = 32  # the batch: x and y start with it, and so does the loss of each sample
 # --8<-- [start:chain]
 SHOWN = 0.032  # seconds of the run's timer each batch is shown
 # tau.h sets how fast the activities relax (and the period of the nodes, h / 4),
-# and the weights learn once per batch, by SGD at the rate SHOWN / theta = 0.3.
-tau = pc.TimeConstants(h=4e-3, lam=8e-3, theta=SHOWN / 0.3)
+# and the weights learn once per batch, by SGD at the rate
+# SHOWN / optimizer.tau = 0.3.
+tau = pc.TimeConstants(h=4e-3, lam=8e-3)
+optimizer = pc.SGD(tau=SHOWN / 0.3)
 torch.manual_seed(0)  # the initial weights, before the run
 net = pc.Chain(
     nn.Sequential(nn.Linear(2, 64), nn.Tanh()),
@@ -35,6 +37,7 @@ net = pc.Chain(
     batch=B,
     loss=pc.MSELoss(B),  # the loss of each sample, (B,)
     tau=tau,
+    optimizer=optimizer,
     learn_interval=0.75 * SHOWN,  # learn once, 3/4 of the way through each batch
 )
 # --8<-- [end:chain]

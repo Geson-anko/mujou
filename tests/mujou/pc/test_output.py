@@ -9,13 +9,14 @@ import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec, TimestampSpec
 from mujou.testing import ManualRun
 from tests.mujou.nodes import F64, close
+from tests.mujou.pc._reference import ADAMW, SGD, TAU_THETA
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
 
 H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
 ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
@@ -35,8 +36,13 @@ class Direct:
         self, start_manual: StartManual, module: nn.Module, **kwargs: Any
     ) -> None:
         self.inp = pc.Input(x=X, y=Y, period=H, batch=B)
+        learning: dict[str, Any] = {"optimizer": SGD, **kwargs}
         self.out = pc.Output(
-            module, act_spec=self.inp.act_spec, loss=pc.MSELoss(B), tau=TAU, **kwargs
+            module,
+            act_spec=self.inp.act_spec,
+            loss=pc.MSELoss(B),
+            tau=TAU,
+            **learning,
         )
         self.inp.next.connect(self.out.prev)
         self.run: ManualRun = start_manual(Group(inp=self.inp, out=self.out))
@@ -96,6 +102,7 @@ class TestConstruction:
                 loss=nn.MSELoss(),
                 act_spec=ACT,
                 tau=TAU,
+                optimizer=SGD,
                 learn_interval=None,
             )
 
@@ -108,6 +115,7 @@ class TestConstruction:
             act_spec=act,
             loss=pc.CrossEntropyLoss(B),
             tau=TAU,
+            optimizer=SGD,
             learn_interval=None,
         )
         assert out.next.send_spec == DictSpec(
@@ -124,6 +132,7 @@ class TestConstruction:
             loss=pc.MSELoss(B),
             act_spec=ACT,
             tau=TAU,
+            optimizer=SGD,
             learn_interval=None,
         )
         assert out.period == pytest.approx(TAU.h / 4)
@@ -135,6 +144,7 @@ class TestConstruction:
                 loss=pc.MSELoss(B),
                 act_spec=ACT,
                 tau=TAU,
+                optimizer=SGD,
                 learn_interval=None,
                 period=TAU.h,  # max_dt is tau.h / 2
             )
@@ -169,7 +179,7 @@ class TestPairing:
             if mask_.any():
                 with torch.no_grad():
                     for p, g in zip(reference.parameters(), g_theta, strict=True):
-                        p -= (H / TAU.theta) * g / B
+                        p -= (H / TAU_THETA) * g / B
             for key, value in reference.state_dict().items():
                 close(direct.weights()[key], value)
 
@@ -198,7 +208,7 @@ class TestUnlabeled:
         _, _, g_theta = gradients(reference, x_b, y_b, mask_b)
         with torch.no_grad():
             for p, g in zip(reference.parameters(), g_theta, strict=True):
-                p -= (3 * H / TAU.theta) * g / B
+                p -= (3 * H / TAU_THETA) * g / B
         for key, value in reference.state_dict().items():
             close(direct.weights()[key], value)
 
@@ -217,6 +227,31 @@ class TestMaxDt:
         _, _, g_theta = gradients(reference, x, y, mask)
         with torch.no_grad():
             for p, g in zip(reference.parameters(), g_theta, strict=True):
-                p -= (2 * H / TAU.theta) * g / B
+                p -= (2 * H / TAU_THETA) * g / B
         for key, value in reference.state_dict().items():
             close(direct.weights()[key], value)
+
+
+class TestOptimizer:
+    def test_the_first_update_with_adamw_is_its_closed_form(
+        self, start_manual: StartManual
+    ):
+        # Learning in every update: the output first learns at step 2, by H.
+        # The first step of AdamW has m_hat = g and v_hat = g^2 whatever tau_m
+        # and tau_v: theta (1 - eta w) - eta g / (|g| + eps), eta = H / tau,
+        # with the mean gradient g = g_theta / B.
+        module = head()
+        reference = copy.deepcopy(module)
+        direct = Direct(start_manual, module, optimizer=ADAMW, learn_interval=None)
+        x, y, mask = samples(1)[0]
+        direct.step((x, y, mask))  # the output reads zeros: nothing to learn
+        direct.step(None)
+        _, _, g_theta = gradients(reference, x, y, mask)
+        eta = H / ADAMW.tau
+        decay = 1 - eta * ADAMW.weight_decay
+        with torch.no_grad():
+            for p, g_sum in zip(reference.parameters(), g_theta, strict=True):
+                g = g_sum / B
+                p.copy_(p * decay - eta * g / (g.abs() + ADAMW.eps))
+        for key, value in reference.state_dict().items():
+            close(direct.weights()[key], value, 1e-12)

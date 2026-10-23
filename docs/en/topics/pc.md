@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants, how it differs from BP, the pitfalls, MNIST, and nodes of your own.
+The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants and the optimizer, how it differs from BP, the pitfalls, MNIST, and nodes of your own.
 
 ## How it differs from BP
 
@@ -32,22 +32,49 @@ Put in a node any `nn.Module` that treats each sample of the batch on its own: o
 
 Every rate in `mujou.pc` is a time in seconds of the run's timer. Choose them in this order.
 
-| Value            | What it sets                                                        | How to choose it                                                                                                                                                                   | MNIST  |
-| ---------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `tau.h`          | How fast each activity `h` relaxes                                  | First. The others follow from it                                                                                                                                                   | 4 ms   |
-| The period       | How often each node updates                                         | `tau.period` (`tau.h / 4`), the default of `Layer` and `Output` and the period of `pc.Chain`                                                                                       | 1 ms   |
-| `tau.lam`        | How fast the dual `lam` follows                                     | `2 * tau.h`                                                                                                                                                                        | 8 ms   |
-| The showing time | How long the host shows each batch                                  | `S` periods, with `S = 32`                                                                                                                                                         | 32 ms  |
-| `learn_interval` | When the weights update, counted from the write                     | Longer than half of the showing time, shorter than the showing time, and longer than the round trip of the credit. MNIST uses 3/4                                                  | 24 ms  |
-| `tau.theta`      | The time constant of the weights (the learning rate is its inverse) | The showing time divided by the learning rate per batch                                                                                                                            | 0.32 s |
-| `max_dt`         | The longest `dt` one update counts                                  | The default, `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`, 2 periods here). A `max_dt` shorter than the period raises `ValueError`; so does the default when `tau.lam < tau.h / 12` | 2 ms   |
+| Value            | What it sets                                    | How to choose it                                                                                                                                                                   | MNIST              |
+| ---------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `tau.h`          | How fast each activity `h` relaxes              | First. The others follow from it                                                                                                                                                   | 4 ms               |
+| The period       | How often each node updates                     | `tau.period` (`tau.h / 4`), the default of `Layer` and `Output` and the period of `pc.Chain`                                                                                       | 1 ms               |
+| `tau.lam`        | How fast the dual `lam` follows                 | `2 * tau.h`                                                                                                                                                                        | 8 ms               |
+| The showing time | How long the host shows each batch              | `S` periods, with `S = 32`                                                                                                                                                         | 32 ms              |
+| `learn_interval` | When the weights update, counted from the write | Longer than half of the showing time, shorter than the showing time, and longer than the round trip of the credit. MNIST uses 3/4                                                  | 24 ms              |
+| `optimizer`      | How fast the weights learn                      | `pc.SGD(tau=showing time / lr)`, with `lr` the learning rate per batch. See [Choosing the optimizer](#choosing-the-optimizer)                                                      | `pc.SGD(tau=0.32)` |
+| `max_dt`         | The longest `dt` one update counts              | The default, `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`, 2 periods here). A `max_dt` shorter than the period raises `ValueError`; so does the default when `tau.lam < tau.h / 12` | 2 ms               |
 
-- **The learning rate.** A weight update moves the weights by (the time since the node last learned) / `tau.theta` times the mean gradient of the batch. With one update per batch, that time is the showing time, so `tau.theta = showing time / lr` gives the learning rate `lr` per batch. The time is the sum of the `dt` of the updates in between, each capped at `max_dt`; updates on time have a `dt` of one period, so it is counted in full
+- **The learning rate.** With `pc.SGD`, a weight update moves the weights by `elapsed / tau` times the mean gradient of the batch, with `elapsed` the time since the node last learned. With one update per batch, `elapsed` is the showing time, so `pc.SGD(tau=showing time / lr)` gives the learning rate `lr` per batch. `elapsed` is the sum of the `dt` of the updates in between, each capped at `max_dt`; updates on time have a `dt` of one period, so it is counted in full
 - **The mean gradient.** The sum of the per-sample gradients divided by `B`, the number of samples in the batch (1 without a batch). A sample whose `mask` is False adds nothing to the sum but still counts in `B`
 - **Why `learn_interval` is between half and all of the showing time.** It is counted from the time the host wrote the input (the `time` of the activity), not from when a node received it, so the nodes learn at about the same time however deep they are. A node learns `learn_interval` after each write, and again every `learn_interval` while the batch is still shown: shorter than half, it learns twice or more per batch. If it is as long as the showing time or longer, the next batch is written first, and the node never learns
 - **The round trip of the credit.** A node never learns in the update in which it first sees a batch, and the credit needs time to go down the path and back: about `2 * hops * period`, with `hops` the number of connections on the path (3 connections and 6 periods for MNIST, from the `Input` to the `Output`). A `learn_interval` longer than that is recommended. Shorter, the weights learn from a credit that has not settled: in the measurements behind the design, a deep chain whose round trip was 18 periods converged with 16 periods, stayed bounded but off by about 4 times with 4, and diverged with 2 and 1
-- **A stream whose input changes at every frame.** Pass `learn_interval=None`: the node then learns in every update, whether or not the input changed, and `1 / tau.theta` is the learning rate per second. Good values for streams have not been measured yet
+- **A stream whose input changes at every frame.** Pass `learn_interval=None`: the node then learns in every update, whether or not the input changed, and `1 / tau` of `pc.SGD` is the learning rate per second. Good values for streams have not been measured yet
 - **Stability.** A shorter period relative to `tau.h` is more stable. In the measurements behind the design, `period / tau.h` up to 0.5 was stable for ReLU, and `period / tau.lam` between 0.1 and 0.3 worked best. `S = 32` gave the accuracy of BP; shorter showing times have not been verified
+
+## Choosing the optimizer
+
+`pc.Layer`, `pc.Output` and `pc.Chain` require `optimizer=`. It sets how the weights move with the mean gradient `g` of the batch when a node learns. The optimizer is a setting without state, so `pc.Chain` gives the same one to every node. Each node binds it to its own weights and holds the state of its weights itself.
+
+| Optimizer                                                              | One learning step of `elapsed` seconds                                                                                  | State                  |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `pc.SGD(tau=...)`                                                      | `p -= (elapsed / tau) * g`                                                                                              | None                   |
+| `pc.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | AdamW with the learning rate `elapsed / tau`. The moments `m` and `v` decay with the time constants `tau_m` and `tau_v` | `m`, `v`, `c_m`, `c_v` |
+
+- **Time, not steps.** Every `tau` is in seconds. `elapsed` is the time since the node last learned, so the `elapsed` of the steps in one batch add up to the showing time, however many steps there are. With `pc.SGD`, the weights thus move as far per batch whether the nodes learn once or twice per batch
+- **SGD** is what MNIST uses. Choose `tau` as in the table of the time constants: the showing time divided by the learning rate per batch
+- **AdamW** moves each weight by about `elapsed / tau` per step, whatever the size of its gradient. Good values of AdamW for `mujou.pc` have not been measured yet
+- **From `torch.optim.AdamW`.** Let `Δt` be the time between two learning steps: the showing time when the nodes learn once per batch. To reuse the values `lr` and `betas` of `torch.optim.AdamW`, set `tau = Δt / lr`, `tau_m = -Δt / ln(beta1)` and `tau_v = -Δt / ln(beta2)`. With a constant `Δt`, the steps are then those of `torch.optim.AdamW`. For one step every 32 ms, `beta1 = 0.9` is `tau_m` ≈ 0.30 s and `beta2 = 0.999` is `tau_v` ≈ 32 s
+- **`weight_decay`** has no unit, as in `torch.optim.AdamW`: it decays the weights with the time constant `tau / weight_decay`
+- **Invalid values.** Every `tau` and `eps` must be finite and > 0, and `weight_decay` finite and >= 0; otherwise the optimizer raises `ValueError`. For a node that never learns, give that `pc.Layer` or `pc.Output` `learn_interval=math.inf`, not an infinite `tau` (`pc.Chain` gives one `learn_interval` to every node)
+- **Only the weights that learn.** The nodes bind the parameters with `requires_grad=True` only. A frozen parameter gets no weight decay either
+- **The state** of a node's optimizer is in `run.state_dict()["nodes"][path]["state"]["optimizer"]`: a dict with the keys `"m"`, `"v"`, `"c_m"` and `"c_v"` for `pc.AdamW`, empty for `pc.SGD`. It is saved and restored with the rest of the run
+
+```python
+# lr=1e-3, betas=(0.9, 0.999) of torch, rounded, for one step per batch of 32 ms.
+optimizer = pc.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0)
+```
+
+??? question "Why not `torch.optim`?"
+
+    Its optimizers count steps, not time, so the time constant that `betas` gives depends on how often a node learns. Making one also brings the GIL back in a free-threaded Python.
 
 ## MNIST
 
@@ -115,15 +142,17 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 
 ## Nodes of your own
 
-`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy), `relax_` (one step of `h` and `lam`) and `learn_` (the weight update). Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
+`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy) and `relax_` (one step of `h` and `lam`). The optimizer moves the weights. Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
 
-1. Hold the clock as an attribute: `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does. It is in the node's state by itself
+1. In `__init__`, after the module is on its device, hold the clock and the bound optimizer as attributes. Both are then in the node's state by themselves
+    - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does
+    - `self.optimizer = optimizer.bind(params)`, with `params` the parameters that learn. Bind in each node: two nodes must not hold the same bound optimizer
 2. In each update, `t = self.clock.tick(dt, act["time"], self.timer.now())`
-3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, and send `g_in` to the node before
+3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, given the bound `params` in the same order, and send `g_in` to the node before
 4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
 5. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
 6. Send `h` as a `pc.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
-7. When `t.learn`, learn with `pc.functional.learn_(params, g_theta, t.elapsed, tau, batch)`
+7. When `t.learn` is True and the `mask` of some sample is True, learn with `self.optimizer.step_([g / B for g in g_theta], t.elapsed)`, with `B` the number of samples in the batch. The node divides by `B`: the optimizer does not know the batch
 
 Without step 4, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
 

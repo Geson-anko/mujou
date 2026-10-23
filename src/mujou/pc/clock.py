@@ -119,15 +119,14 @@ class LearnClock:
     ) -> Self:
         """Return the clock of a node of PC-ALM with the time constants ``tau``,
         as ``Layer`` and ``Output`` make theirs: ``max_dt`` defaults to
-        ``tau.max_dt``, and with ``tau.theta`` infinite the clock never learns
-        (``learn_interval=math.inf``), as the parameters would not move.
+        ``tau.max_dt``.
 
         Raises:
             ValueError: As ``LearnClock`` raises.
         """
         return cls(
             period=period,
-            learn_interval=math.inf if math.isinf(tau.theta) else learn_interval,
+            learn_interval=learn_interval,
             max_dt=tau.max_dt if max_dt is None else max_dt,
         )
 

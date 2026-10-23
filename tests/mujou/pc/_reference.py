@@ -2,7 +2,6 @@
 oracles that the tests of the nodes of ``mujou.pc`` compare with."""
 
 import copy
-import math
 from collections.abc import Callable, Sequence
 from typing import override
 
@@ -16,8 +15,11 @@ H = 1e-3  # seconds per step
 
 B = 3
 N_OUT = 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3, theta=0.05)
-NO_LEARNING = pc.TimeConstants(h=TAU.h, lam=TAU.lam, theta=math.inf)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU_THETA = 0.05  # the time constant of theta, in the SGD of every node
+SGD = pc.SGD(tau=TAU_THETA)
+# An AdamW whose first update is far from that of SGD; weight decay on.
+ADAMW = pc.AdamW(tau=TAU_THETA, tau_m=0.02, tau_v=0.5, eps=1e-8, weight_decay=0.1)
 MASK = torch.tensor([True, False, True])
 
 
@@ -258,5 +260,5 @@ class Reference:
         if mask.any():
             with torch.no_grad():
                 for p, g in zip(params, g_theta, strict=True):
-                    p -= (clock.elapsed / TAU.theta) * g / B
+                    p -= (clock.elapsed / TAU_THETA) * g / B
         clock.learned(now)

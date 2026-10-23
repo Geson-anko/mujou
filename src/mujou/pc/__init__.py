@@ -10,7 +10,9 @@ the previous one. The target of each sample travels with its input in the
 ``Chain`` connects the nodes for a sequence of modules, and ``show`` shows it a
 sample. Each node gives the spec of what it sends as ``act_spec``, which the
 next node takes, to build other shapes by hand. ``MSELoss`` and
-``CrossEntropyLoss`` give the loss of each sample. ``LearnClock`` and
+``CrossEntropyLoss`` give the loss of each sample. ``SGD`` and ``AdamW`` set
+how the parameters of a node move in time (``Optimizer``): each node binds the
+setting to its own parameters (``BoundOptimizer``). ``LearnClock`` and
 ``functional`` hold the parts the nodes are made of, for writing nodes of your
 own.
 
@@ -30,7 +32,8 @@ Import it as a submodule::
         y=TensorSpec((B,), torch.int64),
         batch=B,
         loss=pc.CrossEntropyLoss(B),
-        tau=pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28),
+        tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+        optimizer=pc.SGD(tau=1.28),
         learn_interval=0.15,
     )
 """
@@ -42,6 +45,7 @@ from mujou.pc.input import Input
 from mujou.pc.layer import Layer
 from mujou.pc.losses import CrossEntropyLoss, MSELoss
 from mujou.pc.messages import Activity, Prediction, Sample, activity_spec
+from mujou.pc.optim import SGD, AdamW, BoundOptimizer, Optimizer
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
 
@@ -52,6 +56,10 @@ __all__ = [
     "Layer",
     "Output",
     "TimeConstants",
+    "Optimizer",
+    "BoundOptimizer",
+    "SGD",
+    "AdamW",
     "LearnClock",
     "Tick",
     "Sample",

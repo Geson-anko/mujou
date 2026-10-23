@@ -52,14 +52,18 @@ class TestPcPublicNames:
 
         assert sorted(mujou.pc.__all__) == [
             "Activity",
+            "AdamW",
+            "BoundOptimizer",
             "Chain",
             "CrossEntropyLoss",
             "Input",
             "Layer",
             "LearnClock",
             "MSELoss",
+            "Optimizer",
             "Output",
             "Prediction",
+            "SGD",
             "Sample",
             "Tick",
             "TimeConstants",
@@ -69,7 +73,6 @@ class TestPcPublicNames:
         ]
         assert sorted(mujou.pc.functional.__all__) == [
             "cross_entropy",
-            "learn_",
             "loss_vjp",
             "mse",
             "relax_",

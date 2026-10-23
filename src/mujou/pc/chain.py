@@ -11,6 +11,7 @@ from mujou import Network, Port, Run, TensorSpec
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
 from mujou.pc.messages import Prediction, Sample
+from mujou.pc.optim import Optimizer
 from mujou.pc.output import Output
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device, Size
@@ -42,7 +43,8 @@ class Chain(Network):
             y=TensorSpec((B,), torch.int64),
             batch=B,
             loss=pc.CrossEntropyLoss(B),
-            tau=pc.TimeConstants(h=4e-3, lam=8e-3, theta=1.28),
+            tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+            optimizer=pc.SGD(tau=1.28),
             learn_interval=0.15,
         )
         with mujou.run(net) as run:
@@ -54,6 +56,8 @@ class Chain(Network):
         y: The spec of the targets, ``(*batch, *target)``.
         loss: The loss of each sample, as in ``Output``.
         tau: The time constants of every node.
+        optimizer: How the parameters of every node move, as in ``Layer``:
+            each node binds it to its own parameters.
         learn_interval: As in ``Layer``. Longer than the round trip of the
             credit, ``2 * len(modules) * tau.period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
@@ -72,6 +76,7 @@ class Chain(Network):
         y: TensorSpec,
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
+        optimizer: Optimizer,
         learn_interval: float | None,
         batch: Size = (),
         max_dt: float | None = None,
@@ -85,6 +90,7 @@ class Chain(Network):
                 module,
                 act_spec=last.act_spec,
                 tau=tau,
+                optimizer=optimizer,
                 learn_interval=learn_interval,
                 max_dt=max_dt,
                 device=device,
@@ -97,6 +103,7 @@ class Chain(Network):
             act_spec=last.act_spec,
             loss=loss,
             tau=tau,
+            optimizer=optimizer,
             learn_interval=learn_interval,
             max_dt=max_dt,
             device=device,

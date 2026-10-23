@@ -8,6 +8,7 @@ This page explains what the parts of `mujou.pc` do, how they connect, and what o
     - The messages that flow between the nodes, and which way the ports face
     - What a `pc.Layer` does in one `on_update(dt)`
     - What the `Tick` that `pc.LearnClock` returns, `jumps` and `pc.TimeConstants` mean
+    - How `pc.SGD` and `pc.AdamW` move the weights in time
 
     You should know PyTorch and backpropagation (BP), and the nodes, ports and `dt` of [How Mujou Works](../concepts.md). You need not know predictive coding.
 
@@ -31,7 +32,7 @@ In PC-ALM every node holds its own **activity** `h`, and **predicts** it from th
 
 !!! abstract "Key idea"
 
-    You usually use `Chain`, `show`, `TimeConstants`, a loss and `Sample`. You use `LearnClock`, `functional` and `Activity` to write nodes of your own.
+    You usually use `Chain`, `show`, `TimeConstants`, an optimizer, a loss and `Sample`. You use `LearnClock`, `functional` and `Activity` to write nodes of your own.
 
 | Part                                        | Kind      | What it does                                                                                                            | Mainly used        |
 | ------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
@@ -41,13 +42,14 @@ In PC-ALM every node holds its own **activity** `h`, and **predicts** it from th
 | `pc.Chain`                                  | Network   | Makes `Input → Layer → … → Output` and connects them                                                                    | Usually            |
 | `pc.show`                                   | Function  | The host writes a sample, shows it for a while, and gets the prediction made before learning                            | Usually            |
 | `pc.Sample`, `pc.Activity`, `pc.Prediction` | Messages  | The types of the data that flows ([section 2](#2-connections-and-what-flows))                                           | `Sample` usually   |
-| `pc.TimeConstants`                          | Settings  | Holds the speeds in seconds ([section 5](#5-timeconstants))                                                             | Usually            |
+| `pc.TimeConstants`                          | Settings  | Holds the speeds of `h` and `lam` in seconds ([section 5](#5-timeconstants))                                            | Usually            |
+| `pc.SGD`, `pc.AdamW`                        | Settings  | The optimizers: how the weights move in time ([section 6](#6-optimizers))                                               | Usually            |
 | `pc.MSELoss`, `pc.CrossEntropyLoss`         | Losses    | Return the loss of each sample. Given to `Output`                                                                       | Usually            |
 | `pc.LearnClock`                             | Part      | Decides when to learn ([section 4](#4-learnclock-and-jumps))                                                            | Nodes of your own  |
-| `pc.functional`                             | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`, `learn_`). `Layer` and `Output` are written with them too          | Nodes of your own  |
+| `pc.functional`                             | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`). `Layer` and `Output` are written with them too                    | Nodes of your own  |
 | `pc.activity_spec`                          | Function  | Makes the spec of an `Activity`                                                                                         | Nodes of your own  |
 
-`Layer` and `Output` combine `LearnClock` and `functional`. With the same parts you can also make nodes that `Layer` cannot express, such as a node with two inputs.
+`Layer` and `Output` combine `LearnClock`, `functional` and an optimizer. With the same parts you can also make nodes that `Layer` cannot express, such as a node with two inputs.
 
 ## 2. Connections and what flows
 
@@ -101,7 +103,7 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 !!! abstract "Key idea"
 
-    `Layer.on_update(dt)` goes "read → `tick` → `vjp` → send `g_in` → `relax_` → send `Activity` → `learn_`".
+    `Layer.on_update(dt)` goes "read → `tick` → `vjp` → send `g_in` → `relax_` → send `Activity` → `optimizer.step_`".
 
 | Step | Part                | Computation                                                                                                                                                                                    |
 | ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -110,14 +112,14 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 | 3    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP. Sends `g_in` from `prev`                                         |
 | 4    | `functional.relax_` | Re-anchors `h` if `mu` jumped, then $h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$, and then, with the moved `h`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
 | 5    | `Activity`          | Advances its own `jumps` if needed, and sends from `next` `h` and `jumps`, with the `y`, `mask` and `time` it received                                                                         |
-| 6    | `functional.learn_` | $\theta \leftarrow \theta - \frac{\mathrm{elapsed}}{\tau_\theta}\cdot\frac{g_\theta}{B}$. Only when `tick.learn` is True and some `mask` is True                                               |
+| 6    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True           |
 
 - The `delta` of step 3 is made from `h` and `lam` after step 2 and before step 4
-- Gradients are summed over the batch, and only `learn_` divides by the number of samples $B$. So `lam` is the credit of each sample. One update of the weights is a step of SGD down the mean gradient of the batch, with the learning rate `elapsed / tau.theta`
+- Gradients are summed over the batch, and only step 6 divides by $B$. So `lam` is the credit of each sample, and the optimizer gets the mean gradient of the batch
 - The `delta` of `vjp` is not a value but a function that makes `delta` from `mu` (`mu` is computed inside `vjp`). Usually `lambda mu: h - mu + lam`. In an update that re-anchors in step 4, pass `lambda mu: (h - mu_last) + lam`, with the deviation `h - mu_last` before re-anchoring ([jumps](#jumps))
 - `vjp` detaches `h_in` before it differentiates, so the graph does not reach the previous node
 
-`Output` holds neither `h` nor `lam`. In step 3 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`learn_`) are as in `Layer`. It has no `h` to re-anchor, so it does not read `jumps`.
+`Output` holds neither `h` nor `lam`. In step 3 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`optimizer.step_`) are as in `Layer`. It has no `h` to re-anchor, so it does not read `jumps`.
 
 ??? question "How does sending g_in back differ from backpropagation?"
 
@@ -139,22 +141,23 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer.now())`. What the returned `Tick` means:
 
-| Field     | Meaning                                                                      | Use                           |
-| --------- | ---------------------------------------------------------------------------- | ----------------------------- |
-| `dt`      | `dt` capped at `max_dt`                                                      | Passed to `relax_`            |
-| `new`     | The `time` of the input received differs from last time (a new sample)       | Re-anchor `h`                 |
-| `learn`   | Whether to learn in this update                                              | Whether to call `learn_`      |
-| `elapsed` | The sum of the capped `dt` since the node last learned, this update included | The weight passed to `learn_` |
+| Field     | Meaning                                                                      | Use                        |
+| --------- | ---------------------------------------------------------------------------- | -------------------------- |
+| `dt`      | `dt` capped at `max_dt`                                                      | Passed to `relax_`         |
+| `new`     | The `time` of the input received differs from last time (a new sample)       | Re-anchor `h`              |
+| `learn`   | Whether to learn in this update                                              | Whether to call `step_`    |
+| `elapsed` | The sum of the capped `dt` since the node last learned, this update included | The time passed to `step_` |
 
 `learn` is True as follows. `learn_interval` is the number of seconds given to `Layer`, `Output`, `Chain` and `LearnClock`.
 
-| `learn_interval` | The updates that learn                                                                                                                                             |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Positive seconds | The first update after each of `learn_interval`, twice it, … past the time of the write `time`. But not an update where `new` is True: then the next update learns |
-| `None`           | Every update (with a new input too). For a stream whose input changes every frame                                                                                  |
-| `math.inf`       | Never. `LearnClock.of` does this too when `tau.theta` is `math.inf`                                                                                                |
+| `learn_interval` | The updates that learn                                                                                                                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Positive seconds | The first update at or after `time + learn_interval`, `time + 2 * learn_interval`, … (`time` is when the host wrote the input). But not an update where `new` is True: then the next update learns |
+| `None`           | Every update (with a new input too). For a stream whose input changes every frame                                                                                                                  |
+| `math.inf`       | Never. This is the only way not to learn: the optimizers reject `tau=math.inf`                                                                                                                     |
 
 - An update where `new` is True does not learn because its `delta` is still that of the input before
+- So while one input stays, the node learns every `learn_interval` seconds, and `elapsed` is about `learn_interval`
 - When the input changes before the node learned, the time summed in `elapsed` is dropped
 - In a node of your own, make it with `pc.LearnClock.of(tau, period=..., learn_interval=...)` and put it in an attribute. That alone puts it in the node's state
 
@@ -194,18 +197,86 @@ flowchart LR
 
     All speeds are set in seconds of the run's timer. Each node moves its equations by the `dt` that actually passed, so nodes with different periods change at the same speed per second.
 
-`pc.TimeConstants(h=, lam=, theta=)` holds the three time constants.
+`pc.TimeConstants(h=, lam=)` holds the two time constants of the activities. The time constant of the weights belongs to the optimizer ([section 6](#6-optimizers)).
 
-| Value       | The speed of                       | Share moved in one update               | With `math.inf`                                                                                          |
-| ----------- | ---------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tau.h`     | The relaxation of the activity `h` | `dt / tau.h`                            | Not allowed (finite and > 0)                                                                             |
-| `tau.lam`   | How fast `lam` sums up `r`         | `dt / tau.lam`                          | `lam` stays 0. `r` does not return to 0, and the fixed point does not match BP (plain predictive coding) |
-| `tau.theta` | The learning of the weights        | The learning rate `elapsed / tau.theta` | No learning                                                                                              |
+| Value     | The speed of                       | Share moved in one update | With `math.inf`                                                                                          |
+| --------- | ---------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `tau.h`   | The relaxation of the activity `h` | `dt / tau.h`              | Not allowed (finite and > 0)                                                                             |
+| `tau.lam` | How fast `lam` sums up `r`         | `dt / tau.lam`            | `lam` stays 0. `r` does not return to 0, and the fixed point does not match BP (plain predictive coding) |
 
 Two values take their defaults from the time constants. `tau.period` (`tau.h / 4`) is the interval between a node's updates, the period of every node of a `Chain`. `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
 
-Make `tau.theta` much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
+Make the `tau` of the optimizer much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
 
 ??? question "Why cap dt at max_dt?"
 
     `g` is made from `h` as it was when the next node last updated, so the nodes are coupled one step behind. When a load stalls every node and then `dt` grows in all of them at once, this coupling makes the network diverge. Splitting the step inside a node does not prevent it, so the time one update counts is capped.
+
+## 6. Optimizers
+
+!!! abstract "Key idea"
+
+    The weights move in seconds too. An optimizer is a flow in time: its time constants are in seconds, and each step moves it by the `elapsed` seconds the step covers. So how often a node learns does not change how fast its weights move per second.
+
+### A setting, bound in each node
+
+`pc.SGD(tau=)` and `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` are settings: frozen values without state. `Layer`, `Output` and `Chain` take one as the required argument `optimizer=`. Each node binds the setting to its own weights that require gradients, and keeps the **bound optimizer** as `self.optimizer`. The bound optimizer holds the state and moves the weights.
+
+```mermaid
+flowchart LR
+    S["pc.AdamW(...)<br/>setting, no state"] -->|"bind(params)"| B0["Layer 0: bound optimizer<br/>m, v, c_m, c_v"]
+    S -->|"bind(params)"| B1["Layer 1: bound optimizer<br/>m, v, c_m, c_v"]
+    S -->|"bind(params)"| B2["Output: bound optimizer<br/>m, v, c_m, c_v"]
+```
+
+```python
+self.optimizer = optimizer.bind(params)  # in __init__, with only the weights that learn
+# in on_update, when the node learns:
+self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
+```
+
+- One setting can be given to every node, as `Chain` does. Each node has its own state, in its bound optimizer
+- The bound optimizer is in the node's state under the key `"optimizer"`, as the `LearnClock` is under `"clock"`
+- The node divides $g_\theta$ by $B$ before `step_`. The optimizer does not know the batch
+- A step with `elapsed == 0` moves nothing: neither the weights nor the state
+
+### SGD and AdamW
+
+With the mean gradient $g = g_\theta / B$:
+
+| Optimizer  | Flow in time                                                                                                                                        | One step of `elapsed` $= \Delta t$ seconds                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.SGD`   | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$: SGD with the learning rate $\Delta t / \tau_\theta$                                        |
+| `pc.AdamW` | $\tau_m \dot m = g - m$, $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $m \leftarrow m + a_m (g - m)$ with $a_m = 1 - e^{-\Delta t/\tau_m}$, the same for $v$; then $\theta$ steps as AdamW with $\eta = \Delta t/\tau_\theta$ |
+
+- `tau` is $\tau_\theta$, `tau_m` is $\tau_m$ and `tau_v` is $\tau_v$, all in seconds. Each must be finite and > 0. Never to learn, give the node `learn_interval=math.inf`
+- `eps` ($\varepsilon$) must be > 0, so that a weight whose gradient has been 0 does not get `0 / 0`
+- `weight_decay` ($w$) has no unit. It decays $\theta$ with the time constant $\tau_\theta / w$, as `weight_decay` works with `lr` in `torch.optim.AdamW`
+- AdamW moves each weight by about $\eta$ per step, whatever the size of its gradient. To match the `lr` of Adam, take $\Delta t$, the time between two learning steps (the time each input is shown, when a node learns once per input), and set `tau` to $\Delta t$ / `lr`
+
+### The mass c: bias correction in time
+
+$m$ and $v$ start at 0, so at first they are too small. `torch.optim.AdamW` corrects this with the number of steps $t$: it divides $m$ by $1 - \beta_1^t$. `pc.AdamW` counts no steps. Instead it keeps a **mass** $c$ for each moment: the share of the moment made of gradients so far (the rest is the zero it started from). The mass moves with the time constant of its moment.
+
+$$\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m$$
+
+A step moves the mass as it moves the moment: $c_m \leftarrow c_m + a_m(1 - c_m)$. After $t$ seconds of gradients, $c_m = 1 - e^{-t/\tau_m}$. With a constant $g$, $m = c_m g$, so $\hat m = g$ from the first step. $v$ has its own mass $c_v$ in the same way.
+
+A step solves the flow exactly for a $g$ held over $\Delta t$. So the moments and masses depend on the seconds the steps add up to, not on how many steps there were. With $\tau_m = 0.1$ s:
+
+| Steps               | $c_m$ of `pc.AdamW`  | A step count with $\beta_1 = e^{-0.05/0.1}$, fixed for steps of 0.05 s |
+| ------------------- | -------------------- | ---------------------------------------------------------------------- |
+| Two steps of 0.05 s | $1 - e^{-1} = 0.632$ | $1 - \beta_1^2 = 0.632$                                                |
+| One step of 0.1 s   | $1 - e^{-1} = 0.632$ | $1 - \beta_1^1 = 0.393$                                                |
+
+When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))`. So from the $\beta$ of torch, $\tau_m = -\Delta t / \ln\beta_1$, with the same $\Delta t$ between two learning steps. Learning every 32 ms, $\beta_1 = 0.9$ is about 0.30 s and $\beta_2 = 0.999$ about 32 s. To choose between SGD and AdamW and their values, see [Choosing the optimizer](pc.md#choosing-the-optimizer).
+
+??? question "Why not use torch.optim?"
+
+    1. Its optimizers count steps, not time. $\beta$ and `lr` are per step, so the speed per second changes with `learn_interval`, and with the uneven `elapsed` of each step
+    2. Its count of steps is a float32 tensor, which stops growing after $2^{24}$ steps (about 4.7 days when learning every 24 ms). mujou is for machines that keep learning
+    3. Making one imports `torch._dynamo`, which turns the GIL back on in a free-threaded Python (3.14t), for the whole process
+
+### An optimizer of your own
+
+An optimizer needs no base class. The setting has `bind(params)`, and what `bind` returns has `step_(grads, elapsed)`, `state_dict()` and `load_state_dict(state)`. Pass `bind` only the weights that learn. The [API reference](../api/pc.md) has an example.
