@@ -1563,6 +1563,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.Shown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Shown.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Shown.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.Input" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2005,28 +2044,6 @@
     <span class="md-ellipsis">
       
         step_
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.BoundOptimizer.state_dict" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        state_dict
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.BoundOptimizer.load_state_dict" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        load_state_dict
       
     </span>
   </a>
@@ -2752,6 +2769,45 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.Shown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Shown.prev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prev
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.Shown.next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        next
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.Input" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3194,28 +3250,6 @@
     <span class="md-ellipsis">
       
         step_
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.BoundOptimizer.state_dict" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        state_dict
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujou.pc.BoundOptimizer.load_state_dict" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        load_state_dict
       
     </span>
   </a>
@@ -3901,7 +3935,7 @@ net = pc.Chain(
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Network" href="../network/#mujou.Network">Network</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Network" href="../network/#mujou.Network">Network</a></code>, <code><a class="autorefs autorefs-internal" title="Shown (mujou.pc.chain.Shown)" href="#mujou.pc.Shown">Shown</a></code></p>
 
 
 
@@ -4289,6 +4323,108 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
 
         <p>The <code>Layer</code> of each module but the last, in order: <code>layers[i]</code> is
 the child <code>layer{i}</code>.</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.Shown" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Shown</span>
+
+
+<a href="#mujou.pc.Shown" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>What <code>show</code> shows a sample: a network whose <code>prev</code> takes a <code>Sample</code>
+and whose <code>next</code> sends a <code>Prediction</code>.</p>
+<p><code>Chain</code> is one. A network built by hand is one by inheriting this class
+as well as <code>Network</code>, and assigning the <code>prev</code> of its <code>Input</code> and the
+<code>next</code> of its <code>Output</code> to <code>prev</code> and <code>next</code> in <code>__init__</code>::</p>
+<div class="highlight"><pre><span></span><code>class Tower(mujou.Network, pc.Shown):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        ...
+        self.prev, self.next = self.input.prev, self.output.next
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Shown.prev" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">prev</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Shown.prev" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">prev</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">Never</span><span class="p">,</span> <span class="n">Sample</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.Shown.next" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">next</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.Shown.next" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">next</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">Prediction</span><span class="p">,</span> <span class="n">Never</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
 
     </div>
 
@@ -5992,7 +6128,7 @@ updates of the parameters alike.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
 
 
 
@@ -6001,16 +6137,17 @@ updates of the parameters alike.</p>
 makes the <code>BoundOptimizer</code> of the parameters of one node, which holds the
 state. Give it only the parameters that learn (<code>pc.Layer</code> and
 <code>pc.Output</code> bind those that require gradients).</p>
-<p>An optimizer of your own needs no base class. For example, SGD with a
-learning rate per step rather than per second::</p>
+<p>An optimizer of your own inherits this class, and its bound optimizer
+<code>BoundOptimizer</code>. For example, SGD with a learning rate per step rather
+than per second::</p>
 <div class="highlight"><pre><span></span><code>@dataclass(frozen=True)
-class StepSGD:
+class StepSGD(pc.Optimizer):
     lr: float
 
     def bind(self, params):
         return _BoundStepSGD(list(params), self.lr)
 
-class _BoundStepSGD:
+class _BoundStepSGD(pc.BoundOptimizer):
     def __init__(self, params, lr):
         self._params, self._lr = params, lr
 
@@ -6054,6 +6191,10 @@ class _BoundStepSGD:
             <span class="doc doc-object-name doc-function-name">bind</span>
 
 
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
 <a href="#mujou.pc.Optimizer.bind" class="headerlink" title="Permanent link">&para;</a></h4>
 <div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">bind</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BoundOptimizer</span>
 </code></pre></div>
@@ -6088,15 +6229,17 @@ class _BoundStepSGD:
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="typing.Protocol">Protocol</span></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Stateful" href="../node-and-ports/#mujou.Stateful">Stateful</a></code></p>
 
 
 
         <p>An optimizer bound to the parameters of one node, which holds its state.</p>
 <p>It holds the parameters by reference. The node that bound it owns it and
-calls it from its own hooks only. An attribute of a node that holds it is in
-the node's state by itself (it has <code>state_dict</code> and <code>load_state_dict</code>,
-as <code>LearnClock</code> has).</p>
+calls it from its own hooks only. It is a <code>Stateful</code>, so an attribute of a
+node that holds it is in the node's state by itself: <code>state_dict</code> returns
+the state with tensors that share memory with the optimizer's, and
+<code>load_state_dict</code> copies the tensors of the state into those (it keeps
+none of the state it is given).</p>
 
 
 
@@ -6125,6 +6268,10 @@ as <code>LearnClock</code> has).</p>
 <h4 id="mujou.pc.BoundOptimizer.step_" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">step_</span>
 
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
 
 <a href="#mujou.pc.BoundOptimizer.step_" class="headerlink" title="Permanent link">&para;</a></h4>
 <div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">step_</span><span class="p">(</span><span class="n">grads</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">elapsed</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
@@ -6213,47 +6360,6 @@ time the clock dropped).</p>
 
 </div>
 
-<div class="doc doc-object doc-function">
-
-
-<h4 id="mujou.pc.BoundOptimizer.state_dict" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">state_dict</span>
-
-
-<a href="#mujou.pc.BoundOptimizer.state_dict" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">state_dict</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return the state, whose tensors share memory with the optimizer's.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="mujou.pc.BoundOptimizer.load_state_dict" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">load_state_dict</span>
-
-
-<a href="#mujou.pc.BoundOptimizer.load_state_dict" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Restore the state that <code>state_dict</code> returned, copying its tensors
-into those of the optimizer (it keeps none of <code>state</code>).</p>
-
-
-    </div>
-
-</div>
-
 
 
   </div>
@@ -6279,6 +6385,8 @@ into those of the optimizer (it keeps none of <code>state</code>).</p>
 </code></pre></div>
 
     <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Optimizer (mujou.pc.optim.Optimizer)" href="#mujou.pc.Optimizer">Optimizer</a></code></p>
 
 
 
@@ -6441,6 +6549,8 @@ node that learns once from each), the step is of the learning rate
 </code></pre></div>
 
     <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Optimizer (mujou.pc.optim.Optimizer)" href="#mujou.pc.Optimizer">Optimizer</a></code></p>
 
 
 
@@ -6800,6 +6910,8 @@ masses at zero.</p>
 </code></pre></div>
 
     <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Stateful" href="../node-and-ports/#mujou.Stateful">Stateful</a></code></p>
 
 
 
@@ -7856,15 +7968,15 @@ loss = pc.CrossEntropyLoss(64)  # y_hat (64, C), y (64,) -&gt; (64,)
 
 
 <a href="#mujou.pc.show" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">show</span><span class="p">(</span><span class="n">run</span><span class="p">:</span> <span class="n">Run</span><span class="p">,</span> <span class="n">chain</span><span class="p">:</span> <span class="n">_Shown</span><span class="p">,</span> <span class="n">sample</span><span class="p">:</span> <span class="n">Sample</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">seconds</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Prediction</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">show</span><span class="p">(</span><span class="n">run</span><span class="p">:</span> <span class="n">Run</span><span class="p">,</span> <span class="n">chain</span><span class="p">:</span> <span class="n">Shown</span><span class="p">,</span> <span class="n">sample</span><span class="p">:</span> <span class="n">Sample</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">seconds</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Prediction</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Return the prediction <code>chain</code> makes for <code>sample</code> before it learns from
 it (a prequential prediction), after showing it <code>seconds</code> long.</p>
-<p><code>chain</code> is a <code>Chain</code>, or any network of the nodes of <code>mujou.pc</code> that
-exposes the <code>prev</code> of its <code>Input</code> and the <code>next</code> of its <code>Output</code>.
+<p><code>chain</code> is a <code>Shown</code>: a <code>Chain</code>, or a network of the nodes of
+<code>mujou.pc</code> built by hand that inherits <code>Shown</code>.
 Writes <code>sample</code> to <code>chain.prev</code>, waits for the first prediction the
 host reads for that write, and returns it once <code>seconds</code> (of
 <code>run.timer</code>) have passed since the write, while the nodes learn from the

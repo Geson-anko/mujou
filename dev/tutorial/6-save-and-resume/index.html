@@ -1848,7 +1848,7 @@
 <li><strong>Inputs.</strong> With both <code>state=</code> and <code>inputs=</code>, the values of <code>inputs</code> replace those of the tree</li>
 </ul>
 <h2 id="values-of-your-own-in-the-state">Values of your own in the state<a class="headerlink" href="#values-of-your-own-in-the-state" title="Permanent link">&para;</a></h2>
-<p>Tensors, objects with <code>state_dict</code> and <code>load_state_dict</code>, and the state of <code>self.generator</code> are collected; numbers, strings, and lists or dicts of tensors are not. For a plain value that changes while the node runs, assign the attribute in <code>__init__</code> and register it:</p>
+<p>Tensors, <code>mujou.Stateful</code> objects (every <code>nn.Module</code>, <code>pc.LearnClock</code>, or a class of your own that inherits <code>mujou.Stateful</code>), and the state of <code>self.generator</code> are collected; numbers, strings, and lists or dicts of tensors are not. An object that only has methods named <code>state_dict</code> and <code>load_state_dict</code> is not collected: inherit <code>mujou.Stateful</code>. For a plain value that changes while the node runs, assign the attribute in <code>__init__</code> and register it:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
 </code></pre></div>

@@ -2476,7 +2476,7 @@
 </ol>
 </details>
 <h3 id="an-optimizer-of-your-own">An optimizer of your own<a class="headerlink" href="#an-optimizer-of-your-own" title="Permanent link">&para;</a></h3>
-<p>An optimizer needs no base class. The setting has <code>bind(params)</code>, and what <code>bind</code> returns has <code>step_(grads, elapsed)</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>. Pass <code>bind</code> only the weights that learn. The <a href="../../api/pc/">API reference</a> has an example.</p>
+<p>An optimizer of your own is two classes. The setting inherits <code>pc.Optimizer</code> and implements <code>bind(params)</code>. What <code>bind</code> returns inherits <code>pc.BoundOptimizer</code> (a <code>mujou.Stateful</code>) and implements <code>step_(grads, elapsed)</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>; a class that leaves one out raises <code>TypeError</code> when it is made. Pass <code>bind</code> only the weights that learn. The <a href="../../api/pc/">API reference</a> has an example.</p>
 
 
 

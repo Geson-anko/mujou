@@ -1482,6 +1482,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#mujou.Stateful" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateful
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stateful">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mujou.Port" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2378,6 +2417,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#mujou.Stateful" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateful
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stateful">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mujou.Port" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2950,11 +3028,10 @@ paused (or, after a normal end, on the host's thread that called
 taking the state is not seen by the other nodes. The framework copies what
 it returns before the node resumes.</p>
 <p>The state of a node is, as for an <code>nn.Module</code>, every attribute that holds
-a <code>torch.Tensor</code> (<code>nn.Parameter</code> included) or an object with
-<code>state_dict</code> and <code>load_state_dict</code> (an <code>nn.Module</code>, a
-<code>pc.LearnClock</code>; not a class), every attribute registered with
-<code>register_state</code>, and the state of <code>generator</code>. What an attribute holds
-when the state is taken or loaded decides. The settings that <code>__init__</code>
+a <code>torch.Tensor</code> (<code>nn.Parameter</code> included) or a <code>Stateful</code> (an
+<code>nn.Module</code>, a <code>pc.LearnClock</code>; not a class), every attribute
+registered with <code>register_state</code>, and the state of <code>generator</code>. What an
+attribute holds when the state is taken or loaded decides. The settings that <code>__init__</code>
 computes from its arguments (a time constant, say) are no state: a node
 restored with other arguments keeps its own. Register the plain values that
 change while the node runs (a counter, the time last seen), and the
@@ -3363,8 +3440,8 @@ as a replay buffer), which are not state by themselves. The
 attribute is state while it is assigned, whatever it holds. The default
 <code>state_dict</code> returns the value as it is, and the default
 <code>load_state_dict</code> assigns a deep copy of the saved value (or copies
-into a tensor, or loads into an object with <code>load_state_dict</code>, that
-the attribute holds then).</p>
+into a tensor, or loads into a <code>Stateful</code>, that the attribute holds
+then).</p>
 <p>Register in <code>__init__</code>: a restore loads into new instances, which
 must have the same state.</p>
 <p>The state is data: when the run takes it, it detaches every tensor of
@@ -3551,7 +3628,7 @@ ignored.</p>
         <p>Return the node's state: <code>"generator"</code>, the state of
 <code>generator</code>, then each attribute of the state in the order of
 assignment, under its name: a tensor <code>detach</code>-ed, the <code>state_dict()</code>
-of an object that has one, or a registered value as it is.</p>
+of a <code>Stateful</code>, or a registered value as it is.</p>
 <p>The tensors share memory with the attributes (the framework copies the
 tree). <code>requires_grad</code> and <code>.grad</code> are not part of the state, as in
 <code>nn.Module.state_dict</code>.</p>
@@ -3576,7 +3653,7 @@ tree). <code>requires_grad</code> and <code>.grad</code> are not part of the sta
 
         <p>Restore <code>state</code>, as the default <code>state_dict</code> returned it, into the
 attributes of the state, without recording gradients: <code>copy_</code> into
-each tensor, <code>load_state_dict</code> into each object that has one, and
+each tensor, <code>load_state_dict</code> into each <code>Stateful</code>, and
 assign a <code>copy.deepcopy</code> of the saved value to any other registered
 attribute, with the tensors in it (in its dicts, lists and tuples)
 moved to <code>device</code>.</p>
@@ -3613,6 +3690,120 @@ state, or a tensor's shape differs.</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.Stateful" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.Stateful</span>
+
+
+<a href="#mujou.Stateful" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>An object with a state of its own, which a node keeps in its state.</p>
+<p>An attribute of a <code>Node</code> that holds a <code>Stateful</code> is in the node's state
+by itself: the default <code>Node.state_dict</code> returns its <code>state_dict()</code>
+under the attribute's name, and <code>Node.load_state_dict</code> passes that back
+to its <code>load_state_dict</code>. An object is one by inheriting this class, not
+by having methods of these names. <code>nn.Module</code> is registered as one;
+register a class of another library with <code>Stateful.register(cls)</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Counter(mujou.Stateful):
+    def __init__(self) -&gt; None:
+        self.n = 0
+
+    def state_dict(self) -&gt; dict[str, int]:
+        return {"n": self.n}
+
+    def load_state_dict(self, state: Mapping[str, int]) -&gt; None:
+        self.n = state["n"]
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Stateful.state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">state_dict</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+<a href="#mujou.Stateful.state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">state_dict</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the state. Its tensors may share memory with the object's: the
+run copies the state it takes.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Stateful.load_state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_state_dict</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+<a href="#mujou.Stateful.load_state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Restore the state that <code>state_dict</code> returned, in place.</p>
 
 
     </div>

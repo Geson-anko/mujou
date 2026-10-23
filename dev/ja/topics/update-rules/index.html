@@ -1783,7 +1783,7 @@
 <li><code>elapsed</code>: 前に学んでからの時間。各 <code>dt</code> は <code>max_dt</code> で打ち切る。刻みはこれで重み付けする。<span class="arithmatex">\(W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla\)</span> は勾配流 <span class="arithmatex">\(\tau \dot W = -\nabla\)</span> をたどるので、どれだけ学ぶかはノードの更新回数ではなく時間で決まる</li>
 <li><code>dt</code>: <code>max_dt</code> で打ち切った <code>dt</code></li>
 </ul>
-<p>クロックは <code>state_dict</code> と <code>load_state_dict</code> を持つので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。</p>
+<p>クロックは <code>mujou.Stateful</code> なので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。</p>
 
 
 

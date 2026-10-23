@@ -2478,7 +2478,7 @@
 </ol>
 </details>
 <h3 id="自分の-optimizer">自分の optimizer<a class="headerlink" href="#自分の-optimizer" title="Permanent link">&para;</a></h3>
-<p>基底クラスは要らない。設定は <code>bind(params)</code> を持ち、<code>bind</code> が返すものは <code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を持つ。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
+<p>自作の optimizer は 2 つのクラスで書く。設定は <code>pc.Optimizer</code> を継承して <code>bind(params)</code> を実装する。<code>bind</code> が返すものは <code>pc.BoundOptimizer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
 
 
 
