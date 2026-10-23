@@ -34,6 +34,7 @@
 - [GPU の扱い](project_gpu_policy.md) — コアは GPU をサポートしない。GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡しだけ。ノードのデバイスは CPU と CUDA だけ
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — PyTorch を必須の依存として全面採用、torch に依存させないのは _native と mujou.time だけ。mujou.Node は純 Python で Driver が CUDA と同期を受け持つ（R3）。乱数生成器は super().__init__ で作り状態に入る
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
+- [Windows の CI](project_windows_ci.md) — Test は Ubuntu・macOS・Windows。encoding を明示、SIGINT は raise_signal、.claude/ は Windows 対象外（2026-10-23）
 - [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語、tutorial / topics / api）。サンプルは examples/（snippet で取り込み、テストでは実行しない）。GitHub Pages に mike で版ごと
 - [テスト用の公開の口](project_testing_api.md) — mujou.testing.run と ManualRun.step(dt, *nodes)。mujou 自身と利用者のテストが同じ口を使う。VirtualTimer は mujou.time
 - [実行の API とモジュール構成](project_runtime_api_revision.md) — モジュールは公開、private は Rust の mujou._native だけ。build と Graph は持たず、mujou.run がハンドル Run を返す。state_dict は実行中と正常終了の後

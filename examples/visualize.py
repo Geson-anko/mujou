@@ -67,7 +67,7 @@ class Plant(mujou.Network):
 
 
 net = Plant()
-Path("graph.html").write_text(mujou.viz.to_html(net))  # open it in a browser
+Path("graph.html").write_text(mujou.viz.to_html(net), "utf-8")  # open it in a browser
 # --8<-- [end:viz]
 
 # --8<-- [start:chain]
@@ -83,6 +83,6 @@ chain = pc.Chain(
     optimizer=pc.SGD(tau=1.28),
     learn_interval=0.15,
 )
-Path("chain.html").write_text(mujou.viz.to_html(chain))
+Path("chain.html").write_text(mujou.viz.to_html(chain), "utf-8")
 # --8<-- [end:chain]
 print("wrote graph.html and chain.html")
