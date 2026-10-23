@@ -11,15 +11,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
-# On Windows, `bash` on PATH is WSL's; Claude Code and the justfile use Git Bash.
-BASH = "C:/Program Files/Git/bin/bash.exe" if sys.platform == "win32" else "bash"
 
 
 def run_hook(
     script: str, payload: Mapping[str, object], env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     path = HOOKS_DIR / script
-    command = [sys.executable, str(path)] if path.suffix == ".py" else [BASH, str(path)]
+    command = (
+        [sys.executable, str(path)] if path.suffix == ".py" else ["bash", str(path)]
+    )
     return subprocess.run(
         command,
         input=json.dumps(payload),
@@ -167,6 +167,9 @@ class TestPostToolUseLocalityGuard:
         assert result.stdout == ""
 
 
+# The shell hooks call `python3`, which Windows does not have: the .claude/ tooling
+# does not support Windows.
+@pytest.mark.skipif(sys.platform == "win32", reason="the hooks need python3")
 class TestCompactionRecovery:
     def test_post_compact_marker_triggers_one_shot_recovery(self, tmp_path: Path):
         env = {"TMPDIR": str(tmp_path)}
