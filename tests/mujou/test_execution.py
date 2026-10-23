@@ -1494,10 +1494,10 @@ class Net(Network):
     ):
         marker = tmp_path / "marker"
         body = (
-            "import os, signal\n"
+            "import signal\n"
             "class SlowStart(Slow):\n"
             "    def on_start(self) -> None:\n"
-            "        os.kill(os.getpid(), signal.SIGINT)\n"
+            "        signal.raise_signal(signal.SIGINT)\n"
             "        time.sleep(0.5)  # the host sees Ctrl-C meanwhile\n"
             "try:\n"
             "    mujou.run(SlowStart())\n"

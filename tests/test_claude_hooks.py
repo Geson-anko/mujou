@@ -11,15 +11,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOOKS_DIR = REPO_ROOT / ".claude" / "hooks"
+# On Windows, `bash` on PATH is WSL's; Claude Code and the justfile use Git Bash.
+BASH = "C:/Program Files/Git/bin/bash.exe" if sys.platform == "win32" else "bash"
 
 
 def run_hook(
     script: str, payload: Mapping[str, object], env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     path = HOOKS_DIR / script
-    command = (
-        [sys.executable, str(path)] if path.suffix == ".py" else ["bash", str(path)]
-    )
+    command = [sys.executable, str(path)] if path.suffix == ".py" else [BASH, str(path)]
     return subprocess.run(
         command,
         input=json.dumps(payload),
