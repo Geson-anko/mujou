@@ -156,13 +156,16 @@ pamiq-core の `SleepIntervalAdjustor` は、step の後に「前回の待ちが
 
 状態の規則の正本は `Node` の docstring。ここには理由を書く。
 
-状態に入るのは、テンソルの属性（`nn.Parameter` を含む）、`state_dict` と `load_state_dict` を持つ属性（`nn.Module`、`pc.LearnClock` など。クラスそのものは除く）、`register_state` した名前、そして乱数生成器の状態である。どれも取得と復元のときに `__dict__` から決め、最後に代入した値で決まる。
+状態に入るのは、テンソルの属性（`nn.Parameter` を含む）、`mujou.Stateful` の属性（`nn.Module`、`pc.LearnClock`、束縛した optimizer など。クラスそのものは除く）、`register_state` した名前、そして乱数生成器の状態である。どれも取得と復元のときに `__dict__` から決め、最後に代入した値で決まる。
+
+- `mujou.Stateful` は `state_dict` と `load_state_dict` を抽象メソッドに持つ ABC。継承で名目上の型にし、メソッドの名前で判定するダックタイピングはしない（2026-10-23、ユーザーの決定）。メソッドを書き忘れたクラスは作った時点で `TypeError` になる。継承できない他のライブラリの型は `Stateful.register(cls)` で登録し、mujou は `nn.Module` を登録する
+- `state_dict` と `load_state_dict` を持つだけで `Stateful` でないオブジェクトは、状態に入らない（黙って落ちる）。検出するには名前を見るダックタイピングに戻るので、ガードは置かない
 
 - `nn.Module` と同じ線引き（テンソルと部品は状態、Python の属性は設定）にした。設定（コンストラクタの引数から作る時定数など）は状態に入れない。設定まで状態にすると、引数を変えて作り直したネットワークに古い木を戻したとき新しい値が黙って上書きされ、状態から外す仕組みが要り、I/O のハンドルやロガーで取得が壊れる
 - 実行中に変わる普通の値（カウンタ、最後に見た時刻）は `register_state` で加える。まだ代入していない名前は K30（綴りの誤りは、`__dict__` から決める以上黙って漏れる）。値は `torch.load(weights_only=True)` で読める型にする
 - 乱数生成器の状態は、既定の `state_dict` が `"generator"` のキーで必ず含める。`generator` は property なので利用者の属性と衝突しない
-- 既定の `load_state_dict` は strict で、キーの集合が一致することを求める（K22）。テンソルは shape を照合して `copy_` し、`state_dict` を持つ物は `load_state_dict` を呼び、`register_state` した値は `copy.deepcopy` を代入する。オブジェクトは差し替えないので、`on_start` で取った参照は復元後の値を指し、勾配を記録する leaf は leaf のまま。全部を検査してからコピーする原子性は持たない。失敗すれば `NetworkError` で実行が終わるので「何も変わらない」ことに意味が無い
-- 2 つのノードが同じテンソル、同じ `state_dict` を持つ物、module の同じ Parameter・buffer を状態に持つことは、段 1 で断る（K24）。2 つのノードから in place で書かれると、free-threaded ではデータ競合になり、黙って誤った結果になる。見つけるのは同じオブジェクトだけで、view による部分的な共有はサポートしない
+- 既定の `load_state_dict` は strict で、キーの集合が一致することを求める（K22）。テンソルは shape を照合して `copy_` し、`Stateful` は `load_state_dict` を呼び、`register_state` した値は `copy.deepcopy` を代入する。オブジェクトは差し替えないので、`on_start` で取った参照は復元後の値を指し、勾配を記録する leaf は leaf のまま。全部を検査してからコピーする原子性は持たない。失敗すれば `NetworkError` で実行が終わるので「何も変わらない」ことに意味が無い
+- 2 つのノードが同じテンソル、同じ `Stateful`、module の同じ Parameter・buffer を状態に持つことは、段 1 で断る（K24）。2 つのノードから in place で書かれると、free-threaded ではデータ競合になり、黙って誤った結果になる。見つけるのは同じオブジェクトだけで、view による部分的な共有はサポートしない
 - 状態を自分で選ぶノードは、`state_dict` と `load_state_dict` の両方を override する。`super().state_dict()` の戻り値を拡張し、`super().load_state_dict` には自分で足したキーを除いて渡す
 - 状態は `__init__` で作り、`add_`・`addmm_` などでその場で更新する。ステップごとに大きなテンソルを確保すると、多数のスレッドで動かしたときにメモリの確保が律速になる（[性能の基準値](research/benchmarks.md#ノードの内側のライブラリ)）
 - `requires_grad` と `.grad` は状態に入らない（`nn.Module.state_dict` と同じ）。数歩分の勾配を溜めてから更新するノードや optimizer を持つノードは、`state_dict` を override して足す

@@ -45,4 +45,4 @@ Both nodes decide when to learn with a `pc.LearnClock`, a part of `mujou.pc` tha
 - `elapsed`: the time since the clock last learned, each `dt` capped at `max_dt`. Weigh the step with it: $W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla$ follows the gradient flow $\tau \dot W = -\nabla$, so how far a node learns depends on time, not on how often it updates
 - `dt`: the `dt` capped at `max_dt`
 
-The clock has `state_dict` and `load_state_dict`, so an attribute that holds it is in the node's state by itself. The nodes on a path read the one timer of the run, so they learn at about the same time after each write, however deep they are.
+The clock is a `mujou.Stateful`, so an attribute that holds it is in the node's state by itself. The nodes on a path read the one timer of the run, so they learn at about the same time after each write, however deep they are.

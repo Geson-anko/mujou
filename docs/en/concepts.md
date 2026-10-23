@@ -361,7 +361,7 @@ flowchart TD
 | Attribute                                | In the state?                        |
 | ---------------------------------------- | ------------------------------------ |
 | `self.x = SCALAR.zeros()`                | Yes, by itself: a tensor             |
-| `self.model = nn.Linear(4, 2)`           | Yes, by itself: it has `state_dict`  |
+| `self.model = nn.Linear(4, 2)`           | Yes, by itself: a `mujou.Stateful`   |
 | `self.count = 0`                         | With `self.register_state("count")`  |
 | `self.buffer = []` (a list of tensors)   | With `self.register_state("buffer")` |
 | `self.tau = 0.05` (a setting that stays) | No                                   |

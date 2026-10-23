@@ -166,8 +166,8 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 $\theta$ の時間発展は差し替えられる部品にする（`src/mujou/pc/optim.py`）。
 
-- **設定 + bind**: `pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は値だけを持つ frozen dataclass（`Optimizer` Protocol）。状態を持たないので `Chain` の全ノードで共有してよい。ノードは `optimizer.bind(params)` で自分の param の束縛（`BoundOptimizer` Protocol）を作り、`self.optimizer` に置く。束縛は `step_(grads, elapsed)` と `state_dict` / `load_state_dict` を持ち、`LearnClock` と同じく属性に置くだけでノードの状態に入る（キー `"optimizer"`）。束縛はノードごとに別で、同じ束縛を 2 ノードに置くと `tree.walk` が断る（K24）
-- Protocol にしたのは、SGD と AdamW で共有する実装が無く、利用者の optimizer を継承なしに書けるようにするため（`is_state` のダックタイピングと揃う）。`runtime_checkable` にはしない
+- **設定 + bind**: `pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は値だけを持つ frozen dataclass で、ABC の `pc.Optimizer` を継承する。状態を持たないので `Chain` の全ノードで共有してよい。ノードは `optimizer.bind(params)` で自分の param の束縛（ABC の `pc.BoundOptimizer`）を作り、`self.optimizer` に置く。束縛は `step_(grads, elapsed)` と `state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので `LearnClock` と同じく属性に置くだけでノードの状態に入る（キー `"optimizer"`）。束縛はノードごとに別で、同じ束縛を 2 ノードに置くと `tree.walk` が断る（K24）
+- ABC にしたのは、メソッドを書き忘れた自作の optimizer を、最初に学ぶ更新（実行中の hook の例外で全体が止まる）ではなく、作った時点の `TypeError` で知らせるため（2026-10-23、ユーザーの決定。最初は Protocol だった）。mujou はダックタイピングを使わない（[ノード](nodes.md#状態)）
 - `optimizer` は `Layer`・`Output`・`Chain` の必須の引数。時間で表した既定の学習率は無い（`learn_interval` に既定を置かないのと同じ理由）
 - ノードは `requires_grad` の param だけを bind する。frozen な param には weight decay も掛からない
 - **$1/B$ の位置**: ノードが $g_\theta$ を $B$ で割ってから `step_` に渡す。optimizer はバッチを知らない
@@ -225,7 +225,7 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 - `prev`（`Sample` を受ける）と `next`（`Prediction` を送る）を公開する
 - 名前を `Sequential` にしなかったのは、同じ式の中で `nn.Sequential` と並び、読み違えを生むから。`x` / `y` は `Sample` のキーと一致し、`input` は組み込み関数を隠す
 
-`show(run, chain, sample, *, seconds) -> Prediction` は、`sample` を書き、その書き込みに対する最初の予測（学習する前の、prequential な予測）を返す。返すのは、書き込みから `seconds` の間サンプルを提示し続けた後。`chain` は `Chain` に限らず、`Sample` を受け取る `prev` と `Prediction` を送る `next` を持つもの（Protocol）を取る。周期や形を変えて手で組んだネットワークにも、同じ 1 つのやり方で見せられる。
+`show(run, chain, sample, *, seconds) -> Prediction` は、`sample` を書き、その書き込みに対する最初の予測（学習する前の、prequential な予測）を返す。返すのは、書き込みから `seconds` の間サンプルを提示し続けた後。`chain` は ABC の `pc.Shown`（`Sample` を受け取る `prev` と `Prediction` を送る `next` を型注釈で宣言する）を取る。`Chain` が継承し、周期や形を変えて手で組んだネットワークも `mujou.Network` とあわせて継承すれば、同じ 1 つのやり方で見せられる。ポートはインスタンスの属性（`__dict__` が唯一のレジストリ）なので、抽象 property にはせず、抽象メソッドの無い名目上の型にした。
 
 - 評価は mask をすべて False にした `Sample` で行う。教師の有無は `Sample` の mask が表すので、`y=None` のような特別扱いは持たない。評価では、伝播に足りる短い `seconds` でよい
 - outbox は最新値のスロットなので、ホストが学習の始まりより遅れると、学習を始めた後の予測を読みうる

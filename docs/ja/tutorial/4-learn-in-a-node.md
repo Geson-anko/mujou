@@ -23,7 +23,7 @@ the learner's weight = -0.988, bias = 0.498
 --8<-- "examples/online_learning.py:node"
 ```
 
-- **モジュールは状態。** `self.model` は `state_dict` と `load_state_dict` を持つので、テンソルの属性と同じく自動で状態に入る
+- **モジュールは状態。** `self.model` はどの `nn.Module` とも同じく `mujou.Stateful` なので、テンソルの属性と同じく自動で状態に入る
 - **seed。** `seed=0` はノード専用の乱数生成器 `self.generator` の seed。`nn.Linear` の既定の初期化は全ノードが共有する生成器を使うので、重みは `self.generator` で初期化し直す
 - **素の値は `register_state` で状態に加える。** `last` と `elapsed` は実行中に変わるが、テンソルでもモジュールでもない。登録しておけばほかと一緒に保存・復元される
 - **新しいかどうか。** `recv_with_time()` はバッチを送られた時刻と一緒に返す。教師が最初に送るまで時刻は `None`、次に送るまで時刻は同じなので、学習するノードは各バッチから 1 回だけ学ぶ

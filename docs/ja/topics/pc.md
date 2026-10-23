@@ -24,7 +24,7 @@
 
 `pc.Activity` は `h`・`jumps`・`y`・`mask`・`time` を運ぶ。`jumps` は送り手の `h` が緩和でなく跳んだ回数。`pc.Input` はホストの書き込みを数え、`pc.Layer` は新しいサンプルや受け取る `h` の跳びに合わせて動いた回数と、間隔を置いて学ぶときに自分の重みが起こした跳びを数える。受け手は `jumps` の変化を見たら自分の `h` を予測と一緒に 1 回動かし、跳びを偏差 `h - mu` に入れない。
 
-`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.h / 4`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
+`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.h / 4`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`mujou.Network` とあわせて `pc.Shown` を継承し、`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
 
 ノードにはバッチの各サンプルを独立に扱う `nn.Module` なら何でも入れられる。1 層でも、層を重ねたものでも、残差ブロックでもよい。`Dropout` と `BatchNorm` は training mode でサンプルを落としたり混ぜたりするので使わない。`LayerNorm` は使える。重みはモジュールを作るときに初期化しておく。ノードは初期化しない。`requires_grad=False` のパラメータは学習しない。
 
