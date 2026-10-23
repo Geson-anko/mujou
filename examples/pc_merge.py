@@ -85,7 +85,7 @@ class Merge(Node):
 
 
 # --8<-- [start:network]
-class TwoTowers(Network):
+class TwoTowers(Network, pc.Shown):
     def __init__(self) -> None:
         super().__init__()
         tower = partial(pc.Layer, tau=TAU, optimizer=OPTIMIZER, learn_interval=LEARN)

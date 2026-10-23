@@ -1,8 +1,9 @@
 """A chain of ``mujou.pc`` nodes in one ``Network``, and how the host shows it a
 sample."""
 
+from abc import ABC
 from collections.abc import Callable
-from typing import Never, Protocol
+from typing import Never
 
 import torch
 from torch import nn
@@ -17,7 +18,26 @@ from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device, Size
 
 
-class Chain(Network):
+class Shown(ABC):
+    """What ``show`` shows a sample: a network whose ``prev`` takes a ``Sample``
+    and whose ``next`` sends a ``Prediction``.
+
+    ``Chain`` is one. A network built by hand is one by inheriting this class
+    as well as ``Network``, and assigning the ``prev`` of its ``Input`` and the
+    ``next`` of its ``Output`` to ``prev`` and ``next`` in ``__init__``::
+
+        class Tower(mujou.Network, pc.Shown):
+            def __init__(self) -> None:
+                super().__init__()
+                ...
+                self.prev, self.next = self.input.prev, self.output.next
+    """
+
+    prev: Port[Never, Sample]
+    next: Port[Prediction, Never]
+
+
+class Chain(Network, Shown):
     """``Input -> Layer -> ... -> Output``: a network that learns ``modules`` in
     sequence by PC-ALM, as ``nn.Sequential(*modules)`` would compute them.
 
@@ -119,23 +139,12 @@ class Chain(Network):
         return tuple(v for v in vars(self).values() if isinstance(v, Layer))
 
 
-class _Shown(Protocol):
-    """What ``show`` shows a sample: a ``Chain``, or a network built by hand whose
-    ``prev`` takes a ``Sample`` and whose ``next`` sends a ``Prediction``."""
-
-    @property
-    def prev(self) -> Port[Never, Sample]: ...
-
-    @property
-    def next(self) -> Port[Prediction, Never]: ...
-
-
-def show(run: Run, chain: _Shown, sample: Sample, *, seconds: float) -> Prediction:
+def show(run: Run, chain: Shown, sample: Sample, *, seconds: float) -> Prediction:
     """Return the prediction ``chain`` makes for ``sample`` before it learns from
     it (a prequential prediction), after showing it ``seconds`` long.
 
-    ``chain`` is a ``Chain``, or any network of the nodes of ``mujou.pc`` that
-    exposes the ``prev`` of its ``Input`` and the ``next`` of its ``Output``.
+    ``chain`` is a ``Shown``: a ``Chain``, or a network of the nodes of
+    ``mujou.pc`` built by hand that inherits ``Shown``.
     Writes ``sample`` to ``chain.prev``, waits for the first prediction the
     host reads for that write, and returns it once ``seconds`` (of
     ``run.timer``) have passed since the write, while the nodes learn from the

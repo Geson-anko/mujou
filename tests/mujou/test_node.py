@@ -12,6 +12,7 @@ import pytest
 import torch
 from torch import nn
 
+import mujou
 from mujou import Group, NetworkError, Node, Port, TensorSpec
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer
 from tests.mujou.nodes import Calls
@@ -523,14 +524,16 @@ class TestStateCollection:
         node._h = torch.zeros(3)  # pyright: ignore[reportPrivateUsage]  # at its place
         assert list(node.state_dict()) == ["generator", "w", "_h", "linear", "rate"]
 
-    def test_collects_an_object_with_its_own_state_but_not_a_class(self):
-        class Counter:
+    def test_collects_a_stateful_object_but_not_a_class(self):
+        class Counter(mujou.Stateful):
             def __init__(self) -> None:
                 self.n = 0
 
+            @override
             def state_dict(self) -> dict[str, int]:
                 return {"n": self.n}
 
+            @override
             def load_state_dict(self, state: Mapping[str, int]) -> None:
                 self.n = state["n"]
 
@@ -548,6 +551,35 @@ class TestStateCollection:
         counter = target.counter
         target.load_state_dict(copy.deepcopy(state))
         assert target.counter is counter and counter.n == 3
+
+    def test_does_not_collect_an_object_that_only_has_the_methods(self):
+        # A state of its own is declared by inheriting mujou.Stateful, not by
+        # having methods of the same names.
+        class Lookalike:
+            def state_dict(self) -> dict[str, int]:
+                return {"n": 1}
+
+            def load_state_dict(self, state: Mapping[str, int]) -> None:
+                pass
+
+        class Holder(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.lookalike = Lookalike()
+
+        assert list(Holder().state_dict()) == ["generator"]
+
+    def test_a_module_is_stateful(self):
+        assert isinstance(nn.Linear(2, 2), mujou.Stateful)
+
+    def test_a_stateful_needs_both_methods(self):
+        class OnlySaves(mujou.Stateful):
+            @override
+            def state_dict(self) -> dict[str, int]:
+                return {}
+
+        with pytest.raises(TypeError, match="load_state_dict"):
+            OnlySaves()  # pyright: ignore[reportAbstractUsage]
 
     def test_does_not_collect_a_property(self):
         class WithProperty(Node):

@@ -8,27 +8,34 @@ and the timer only in the hooks of their node, the host's methods only outside
 every hook.
 """
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from mujou import _native
 
 
-class Running(Protocol):
-    """What a hook sees of the node it runs as: the node's driver
-    (``driver.py``)."""
+class Running(ABC):
+    """What a hook sees of the node it runs as: the node's driver.
+
+    ``driver.Driver`` inherits it. The modules below ``driver`` that ask
+    (``port``, ``node``) see the driver through this class."""
 
     @property
-    def node(self) -> object: ...
+    @abstractmethod
+    def node(self) -> object:
+        """The node whose hook runs."""
 
     @property
-    def wires(self) -> Mapping[object, Any]:
-        """The wire (``port.Wire``) of each port of the node: none in its
-        ``state_dict``."""
-        ...
+    @abstractmethod
+    def wires(self) -> Mapping[Any, Any]:
+        """The wire (``port.Wire``) of each port (``port.AnyPort``) of the node:
+        none in its ``state_dict``."""
 
     @property
-    def clock(self) -> _native.ReadOnlyTimer: ...
+    @abstractmethod
+    def clock(self) -> _native.ReadOnlyTimer:
+        """The node's view of the run's timer."""
 
 
 def running() -> Running | None:

@@ -13,22 +13,28 @@ and making one brings the GIL back into a free-threaded Python.
 """
 
 import math
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, override
 
 import torch
 
+from mujou import Stateful
 
-class BoundOptimizer(Protocol):
+
+class BoundOptimizer(Stateful):
     """An optimizer bound to the parameters of one node, which holds its state.
 
     It holds the parameters by reference. The node that bound it owns it and
-    calls it from its own hooks only. An attribute of a node that holds it is in
-    the node's state by itself (it has ``state_dict`` and ``load_state_dict``,
-    as ``LearnClock`` has).
+    calls it from its own hooks only. It is a ``Stateful``, so an attribute of a
+    node that holds it is in the node's state by itself: ``state_dict`` returns
+    the state with tensors that share memory with the optimizer's, and
+    ``load_state_dict`` copies the tensors of the state into those (it keeps
+    none of the state it is given).
     """
 
+    @abstractmethod
     def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
         """Move the parameters in place by ``elapsed`` seconds of the flow,
         without recording gradients.
@@ -45,19 +51,9 @@ class BoundOptimizer(Protocol):
         Raises:
             ValueError: ``grads`` does not have one gradient per parameter.
         """
-        ...
-
-    def state_dict(self) -> dict[str, Any]:
-        """Return the state, whose tensors share memory with the optimizer's."""
-        ...
-
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Restore the state that ``state_dict`` returned, copying its tensors
-        into those of the optimizer (it keeps none of ``state``)."""
-        ...
 
 
-class Optimizer(Protocol):
+class Optimizer(ABC):
     """The setting of how the parameters of a node move in time.
 
     It holds values only, no state, so the nodes may share it. ``bind(params)``
@@ -65,17 +61,18 @@ class Optimizer(Protocol):
     state. Give it only the parameters that learn (``pc.Layer`` and
     ``pc.Output`` bind those that require gradients).
 
-    An optimizer of your own needs no base class. For example, SGD with a
-    learning rate per step rather than per second::
+    An optimizer of your own inherits this class, and its bound optimizer
+    ``BoundOptimizer``. For example, SGD with a learning rate per step rather
+    than per second::
 
         @dataclass(frozen=True)
-        class StepSGD:
+        class StepSGD(pc.Optimizer):
             lr: float
 
             def bind(self, params):
                 return _BoundStepSGD(list(params), self.lr)
 
-        class _BoundStepSGD:
+        class _BoundStepSGD(pc.BoundOptimizer):
             def __init__(self, params, lr):
                 self._params, self._lr = params, lr
 
@@ -91,9 +88,9 @@ class Optimizer(Protocol):
                 pass
     """
 
+    @abstractmethod
     def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
         """Return the optimizer bound to ``params``, with a fresh state."""
-        ...
 
 
 def _check_positive(owner: str, name: str, value: float) -> None:
@@ -102,7 +99,7 @@ def _check_positive(owner: str, name: str, value: float) -> None:
 
 
 @dataclass(frozen=True, kw_only=True)
-class SGD:
+class SGD(Optimizer):
     r"""Gradient descent in time, $\tau_\theta \dot\theta = -g$.
 
     A step of ``elapsed`` seconds is one step of SGD with the learning rate
@@ -129,30 +126,34 @@ class SGD:
     def __post_init__(self) -> None:
         _check_positive("SGD", "tau", self.tau)
 
+    @override
     def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
         """Return the optimizer bound to ``params``."""
         return _BoundSGD(list(params), self.tau)
 
 
-class _BoundSGD:
+class _BoundSGD(BoundOptimizer):
     def __init__(self, params: list[torch.Tensor], tau: float) -> None:
         self._params = params
         self._tau = tau
 
+    @override
     def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
         with torch.no_grad():
             for p, g in zip(self._params, grads, strict=True):
                 p.sub_(g, alpha=elapsed / self._tau)  # tau dtheta/dt = -g
 
+    @override
     def state_dict(self) -> dict[str, Any]:
         return {}
 
+    @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class AdamW:
+class AdamW(Optimizer):
     r"""AdamW in time: moments that decay with time constants, and decoupled
     weight decay.
 
@@ -244,13 +245,14 @@ class AdamW:
                 f"AdamW.weight_decay must be finite and >= 0, got {self.weight_decay!r}"
             )
 
+    @override
     def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
         """Return the optimizer bound to ``params``, with the moments and the
         masses at zero."""
         return _BoundAdamW(list(params), self)
 
 
-class _BoundAdamW:
+class _BoundAdamW(BoundOptimizer):
     def __init__(self, params: list[torch.Tensor], config: AdamW) -> None:
         self._params = params
         self._config = config
@@ -259,6 +261,7 @@ class _BoundAdamW:
         self._c_m = 0.0
         self._c_v = 0.0
 
+    @override
     def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
         if elapsed == 0:
             return  # the flow of no time; before the first step, c = 0
@@ -278,6 +281,7 @@ class _BoundAdamW:
                 denom = (v.sqrt() / sqrt_c_v).add_(config.eps)
                 p.addcdiv_(m, denom, value=-eta / self._c_m)
 
+    @override
     def state_dict(self) -> dict[str, Any]:
         return {
             "m": list(self._m),
@@ -286,6 +290,7 @@ class _BoundAdamW:
             "c_v": self._c_v,
         }
 
+    @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         with torch.no_grad():
             for mine, saved in zip(self._m, state["m"], strict=True):

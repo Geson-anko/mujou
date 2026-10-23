@@ -2,6 +2,8 @@
 
 ::: mujou.Node
 
+::: mujou.Stateful
+
 ::: mujou.Port
 
 ::: mujou.MultiPort

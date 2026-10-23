@@ -98,6 +98,10 @@ class TestChain:
         learned = expected["nodes"]["output"]["state"]["module"]["weight"]
         assert not torch.equal(learned, initial["weight"])  # it did learn
 
+    def test_is_shown_samples(self):
+        layers, head = make_modules("linear", "tanh", WIDTHS)
+        assert isinstance(chain(*layers, head), pc.Shown)
+
     def test_the_children_are_named_after_their_place(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head)

@@ -39,7 +39,7 @@ Import it as a submodule::
 """
 
 from mujou.pc import functional as functional
-from mujou.pc.chain import Chain, show
+from mujou.pc.chain import Chain, Shown, show
 from mujou.pc.clock import LearnClock, Tick
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
@@ -51,6 +51,7 @@ from mujou.pc.time_constants import TimeConstants
 
 __all__ = [
     "Chain",
+    "Shown",
     "show",
     "Input",
     "Layer",

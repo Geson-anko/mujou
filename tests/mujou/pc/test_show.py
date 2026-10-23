@@ -87,7 +87,7 @@ class TestShow:
             assert_same_tree(module.state_dict(), state)
 
     def test_shows_a_network_built_by_hand(self, start: Start):
-        class ByHand(Network):
+        class ByHand(Network, pc.Shown):
             def __init__(self) -> None:
                 super().__init__()
                 self.input = pc.Input(x=X, y=Y, period=TAU.period, batch=B)

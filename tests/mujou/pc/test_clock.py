@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 import torch
 
+import mujou
 import mujou.pc as pc
 from mujou.time import Timestamp
 
@@ -137,6 +138,10 @@ class TestChecks:
 
 
 class TestState:
+    def test_is_stateful(self):
+        # A node holds it as an attribute, so it is in the node's state.
+        assert isinstance(clock(3e-3), mujou.Stateful)
+
     @pytest.mark.parametrize("learn_interval", [None, 3e-3, math.inf])
     def test_a_restored_clock_goes_on_as_the_same_clock(
         self, learn_interval: float | None

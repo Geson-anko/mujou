@@ -9,11 +9,12 @@ import os
 import subprocess
 import sys
 import sysconfig
-from typing import Any
+from typing import Any, override
 
 import pytest
 import torch
 
+import mujou
 import mujou.pc as pc
 from tests.mujou.nodes import F64, assert_same_tree
 
@@ -247,6 +248,42 @@ class TestBound:
         bound = optimizer.bind(params())
         with pytest.raises(ValueError):
             bound.step_(grads(0)[:1], DT)
+
+    @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
+    def test_is_a_bound_optimizer_with_a_state(self, optimizer: pc.Optimizer):
+        # A node holds it as an attribute, so it is in the node's state.
+        bound = optimizer.bind([])
+        assert isinstance(bound, pc.BoundOptimizer)
+        assert isinstance(bound, mujou.Stateful)
+
+
+class TestAbstract:
+    def test_an_optimizer_needs_bind(self):
+        class NoBind(pc.Optimizer):
+            pass
+
+        with pytest.raises(TypeError, match="bind"):
+            NoBind()  # pyright: ignore[reportAbstractUsage]
+
+    def test_a_bound_optimizer_needs_step_and_its_state(self):
+        class NoStep(pc.BoundOptimizer):
+            @override
+            def state_dict(self) -> dict[str, Any]:
+                return {}
+
+            @override
+            def load_state_dict(self, state: Any, /) -> None:
+                pass
+
+        class NoState(pc.BoundOptimizer):
+            @override
+            def step_(self, grads: Any, elapsed: float) -> None:
+                pass
+
+        with pytest.raises(TypeError, match="step_"):
+            NoStep()  # pyright: ignore[reportAbstractUsage]
+        with pytest.raises(TypeError, match="state_dict"):
+            NoState()  # pyright: ignore[reportAbstractUsage]
 
 
 def saved(state: dict[str, Any]) -> dict[str, Any]:

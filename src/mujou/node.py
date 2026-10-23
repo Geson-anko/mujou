@@ -1,11 +1,13 @@
 """The node, the unit of asynchronous computation."""
 
 import copy
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, TypeIs, cast, final
+from typing import Any, cast, final
 
 import torch
+from torch import nn
 
 from mujou._native import ReadOnlyTimer
 from mujou.component import Component
@@ -67,11 +69,10 @@ class Node(Component):
     it returns before the node resumes.
 
     The state of a node is, as for an ``nn.Module``, every attribute that holds
-    a ``torch.Tensor`` (``nn.Parameter`` included) or an object with
-    ``state_dict`` and ``load_state_dict`` (an ``nn.Module``, a
-    ``pc.LearnClock``; not a class), every attribute registered with
-    ``register_state``, and the state of ``generator``. What an attribute holds
-    when the state is taken or loaded decides. The settings that ``__init__``
+    a ``torch.Tensor`` (``nn.Parameter`` included) or a ``Stateful`` (an
+    ``nn.Module``, a ``pc.LearnClock``; not a class), every attribute
+    registered with ``register_state``, and the state of ``generator``. What an
+    attribute holds when the state is taken or loaded decides. The settings that ``__init__``
     computes from its arguments (a time constant, say) are no state: a node
     restored with other arguments keeps its own. Register the plain values that
     change while the node runs (a counter, the time last seen), and the
@@ -262,8 +263,8 @@ class Node(Component):
         attribute is state while it is assigned, whatever it holds. The default
         ``state_dict`` returns the value as it is, and the default
         ``load_state_dict`` assigns a deep copy of the saved value (or copies
-        into a tensor, or loads into an object with ``load_state_dict``, that
-        the attribute holds then).
+        into a tensor, or loads into a ``Stateful``, that the attribute holds
+        then).
 
         Register in ``__init__``: a restore loads into new instances, which
         must have the same state.
@@ -320,7 +321,7 @@ class Node(Component):
         """Return the node's state: ``"generator"``, the state of
         ``generator``, then each attribute of the state in the order of
         assignment, under its name: a tensor ``detach``-ed, the ``state_dict()``
-        of an object that has one, or a registered value as it is.
+        of a ``Stateful``, or a registered value as it is.
 
         The tensors share memory with the attributes (the framework copies the
         tree). ``requires_grad`` and ``.grad`` are not part of the state, as in
@@ -334,7 +335,7 @@ class Node(Component):
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         """Restore ``state``, as the default ``state_dict`` returned it, into the
         attributes of the state, without recording gradients: ``copy_`` into
-        each tensor, ``load_state_dict`` into each object that has one, and
+        each tensor, ``load_state_dict`` into each ``Stateful``, and
         assign a ``copy.deepcopy`` of the saved value to any other registered
         attribute, with the tensors in it (in its dicts, lists and tuples)
         moved to ``device``.
@@ -386,7 +387,7 @@ class Node(Component):
                     f"{shape}, the tensor {tuple(value.shape)}"
                 )
             value.copy_(saved)
-        elif _has_state(value):
+        elif isinstance(value, Stateful):
             value.load_state_dict(saved)
         else:
             # The tree keeps its tensors on the CPU; the node holds them on its
@@ -400,25 +401,46 @@ def initialized(node: Node) -> bool:
     return "_Node__config" in vars(node)
 
 
-class _Stateful(Protocol):
-    def state_dict(self) -> Any: ...
-    def load_state_dict(self, state: Any, /) -> Any: ...
+class Stateful(ABC):
+    """An object with a state of its own, which a node keeps in its state.
+
+    An attribute of a ``Node`` that holds a ``Stateful`` is in the node's state
+    by itself: the default ``Node.state_dict`` returns its ``state_dict()``
+    under the attribute's name, and ``Node.load_state_dict`` passes that back
+    to its ``load_state_dict``. An object is one by inheriting this class, not
+    by having methods of these names. ``nn.Module`` is registered as one;
+    register a class of another library with ``Stateful.register(cls)``.
+
+    Example::
+
+        class Counter(mujou.Stateful):
+            def __init__(self) -> None:
+                self.n = 0
+
+            def state_dict(self) -> dict[str, int]:
+                return {"n": self.n}
+
+            def load_state_dict(self, state: Mapping[str, int]) -> None:
+                self.n = state["n"]
+    """
+
+    @abstractmethod
+    def state_dict(self) -> Any:
+        """Return the state. Its tensors may share memory with the object's: the
+        run copies the state it takes."""
+
+    @abstractmethod
+    def load_state_dict(self, state: Any, /) -> None:
+        """Restore the state that ``state_dict`` returned, in place."""
 
 
-def _has_state(value: object) -> TypeIs[_Stateful]:
-    """Whether ``value`` has a state of its own: it has ``state_dict`` and
-    ``load_state_dict`` and is not a class (whose methods these would be)."""
-    return (
-        not isinstance(value, type)
-        and hasattr(value, "state_dict")
-        and hasattr(value, "load_state_dict")
-    )
+Stateful.register(nn.Module)
 
 
 def is_state(value: object) -> bool:
     """Whether an attribute that holds ``value`` is part of a node's state by
-    itself: a tensor, or an object with a state of its own."""
-    return isinstance(value, torch.Tensor) or _has_state(value)
+    itself: a tensor or a ``Stateful``."""
+    return isinstance(value, torch.Tensor | Stateful)
 
 
 def _state_of(value: object) -> object:
@@ -426,7 +448,7 @@ def _state_of(value: object) -> object:
     ``value``, as ``Node.__load`` loads it back."""
     if isinstance(value, torch.Tensor):
         return value.detach()
-    if _has_state(value):
+    if isinstance(value, Stateful):
         return value.state_dict()
     return value
 
