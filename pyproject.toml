@@ -10,7 +10,7 @@ dependencies = [
     "torch>=2.14.1",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Programming Language :: Python :: 3",
@@ -22,7 +22,10 @@ classifiers = [
 ]
 
 [project.urls]
+Documentation = "https://geson-anko.github.io/mujou/"
 Repository = "https://github.com/Geson-anko/mujou"
+Issues = "https://github.com/Geson-anko/mujou/issues"
+Changelog = "https://github.com/Geson-anko/mujou/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["maturin>=1.15,<2"]

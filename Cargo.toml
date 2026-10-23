@@ -4,7 +4,7 @@ resolver = "3"
 
 # The version of the Python package `mujou` too (maturin reads it).
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
