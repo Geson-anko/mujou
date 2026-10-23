@@ -13,6 +13,7 @@ metadata:
 - `just docs` でローカルに立ち上げ、`just docs-build`（strict）は `just run` と CI に入っている
 - サイトは GitHub Pages（<https://geson-anko.github.io/mujou/>）に公開する（2026-10-18、ユーザーの決定）。ドキュメントはバージョンごとに分ける（ユーザーの指示、MLShukai/ResoniteIO に倣う）。mike で gh-pages ブランチに版を積み、`.github/workflows/docs.yml` がそのブランチを `actions/deploy-pages` で配信する。main への push で `dev`、安定版のタグ `v*` で `X.Y.Z` と別名 `latest`（ルートの既定）、プレリリース（`a`/`b`/`rc`）は `X.Y.Z` だけ。最初の安定版までルートは `dev` を指す。手動のデプロイは workflow_dispatch
 - Installation のページには、PyPI（`uv add mujou` / `pip install mujou`）とソースからのビルドの両方を書く
+- Changelog のページ（`changelog.md`）はリポジトリ直下の `CHANGELOG.md` を snippet で取り込む（2026-10-23、[[project-release-strategy]]）
 
 **Why:** 開発者向けの設計判断と利用者向けの使い方は読者が違う。サンプルを snippet で取り込めば、ページのコードと手で実行できるプログラムが同じものになり、`just type` が API の変更による壊れを捕まえる。
 

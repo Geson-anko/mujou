@@ -108,6 +108,8 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 
 - `main` から `<種別>/<日付>/<内容>` で分岐する（例: `feature/2026-10-11/pc-alm-layer`）。種別は `feature`, `fix`, `refactor`, `docs`, `chore`
 - `main` に直接 commit しない。main への merge はユーザー判断
+- リリースは `release/X.Y` ブランチに打つタグ `vX.Y.Z`（Publish のワークフローが Test PyPI → PyPI → GitHub Release）。hotfix は `release/X.Y` から切って release へ PR し、その後 release → main を merge する。手順は `CONTRIBUTING.md` の Releases（[memory/project_release_strategy.md](memory/project_release_strategy.md)）
+- 利用者に見える変更は `CHANGELOG.md` の `## [Unreleased]` に書く。リリースノートはここから自動で作る
 - commit は `<種別>(<スコープ>): <内容>`、1 commit 1 関心事。`just run` が通る前に commit しない
 - force push、`git reset --hard`、`--no-verify`、未確認の破壊的操作を行わない
 
