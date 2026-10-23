@@ -167,6 +167,9 @@ class TestPostToolUseLocalityGuard:
         assert result.stdout == ""
 
 
+# The shell hooks call `python3`, which Windows does not have: the .claude/ tooling
+# does not support Windows.
+@pytest.mark.skipif(sys.platform == "win32", reason="the hooks need python3")
 class TestCompactionRecovery:
     def test_post_compact_marker_triggers_one_shot_recovery(self, tmp_path: Path):
         env = {"TMPDIR": str(tmp_path)}

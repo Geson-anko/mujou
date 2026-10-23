@@ -73,7 +73,7 @@ def sources() -> dict[str, Path]:
 
 def imports(path: Path, modules: set[str]) -> Iterator[str]:
     """The modules of ``modules`` that ``path`` imports."""
-    for node in ast.walk(ast.parse(path.read_text(), str(path))):
+    for node in ast.walk(ast.parse(path.read_text("utf-8"), str(path))):
         if isinstance(node, ast.Import):
             names = [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
@@ -89,7 +89,7 @@ def imports(path: Path, modules: set[str]) -> Iterator[str]:
 def defined(path: Path) -> set[str]:
     """The names that the module at ``path`` defines at its top level."""
     names: set[str] = set()
-    for node in ast.parse(path.read_text(), str(path)).body:
+    for node in ast.parse(path.read_text("utf-8"), str(path)).body:
         if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.TypeAlias):
             names.add(node.name.id if isinstance(node, ast.TypeAlias) else node.name)
         elif isinstance(node, ast.Assign):
@@ -128,7 +128,7 @@ class TestLayers:
     def test_every_import_is_at_the_top_level(self):
         nested: list[str] = []
         for path in sources().values():
-            module = ast.parse(path.read_text(), str(path))
+            module = ast.parse(path.read_text("utf-8"), str(path))
             nested += [
                 f"{path}:{node.lineno}"
                 for node in ast.walk(module)
@@ -142,7 +142,7 @@ class TestLayers:
         borrowed = [
             f"{importer}: {node.module}.{alias.name}"
             for importer, path in modules.items()
-            for node in ast.walk(ast.parse(path.read_text(), str(path)))
+            for node in ast.walk(ast.parse(path.read_text("utf-8"), str(path)))
             if isinstance(node, ast.ImportFrom)
             and node.module in modules
             and node.module not in REEXPORTING
