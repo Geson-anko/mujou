@@ -45,4 +45,4 @@ uv run python examples/feedback_alignment.py
 - `elapsed`: 前に学んでからの時間。各 `dt` は `max_dt` で打ち切る。刻みはこれで重み付けする。$W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla$ は勾配流 $\tau \dot W = -\nabla$ をたどるので、どれだけ学ぶかはノードの更新回数ではなく時間で決まる
 - `dt`: `max_dt` で打ち切った `dt`
 
-クロックは `state_dict` と `load_state_dict` を持つので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。
+クロックは `mujou.Stateful` なので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。

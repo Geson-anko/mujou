@@ -361,7 +361,7 @@ flowchart TD
 | 属性の例                               | 状態になるか                           |
 | -------------------------------------- | -------------------------------------- |
 | `self.x = SCALAR.zeros()`              | テンソルなので自動で入る               |
-| `self.model = nn.Linear(4, 2)`         | `state_dict` を持つので自動で入る      |
+| `self.model = nn.Linear(4, 2)`         | `mujou.Stateful` なので自動で入る      |
 | `self.count = 0`                       | `self.register_state("count")` で入る  |
 | `self.buffer = []`（テンソルのリスト） | `self.register_state("buffer")` で入る |
 | `self.tau = 0.05`（変わらない設定）    | 入らない                               |

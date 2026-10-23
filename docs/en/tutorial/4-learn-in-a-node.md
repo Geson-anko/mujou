@@ -23,7 +23,7 @@ the learner's weight = -0.988, bias = 0.498
 --8<-- "examples/online_learning.py:node"
 ```
 
-- **The module is state.** `self.model` has `state_dict` and `load_state_dict`, so it is in the node's state by itself, as a tensor attribute is
+- **The module is state.** `self.model` is a `mujou.Stateful`, as every `nn.Module` is, so it is in the node's state by itself, as a tensor attribute is
 - **The seed.** `seed=0` seeds `self.generator`, the node's own random generator. The default initialization of `nn.Linear` draws from the global generator that every node shares, so initialize the weights again from `self.generator`
 - **Plain values join the state with `register_state`.** `last` and `elapsed` change while the node runs, but they are neither tensors nor modules: registered, they are saved and restored with the rest
 - **New or not.** `recv_with_time()` returns the batch with the time it was sent. Its time is `None` until the teacher first sends, and it stays the same until the teacher sends again, so the learner learns once from each batch

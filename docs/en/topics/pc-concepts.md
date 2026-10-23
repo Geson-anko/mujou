@@ -279,4 +279,4 @@ When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / 
 
 ### An optimizer of your own
 
-An optimizer needs no base class. The setting has `bind(params)`, and what `bind` returns has `step_(grads, elapsed)`, `state_dict()` and `load_state_dict(state)`. Pass `bind` only the weights that learn. The [API reference](../api/pc.md) has an example.
+An optimizer of your own is two classes. The setting inherits `pc.Optimizer` and implements `bind(params)`. What `bind` returns inherits `pc.BoundOptimizer` (a `mujou.Stateful`) and implements `step_(grads, elapsed)`, `state_dict()` and `load_state_dict(state)`; a class that leaves one out raises `TypeError` when it is made. Pass `bind` only the weights that learn. The [API reference](../api/pc.md) has an example.

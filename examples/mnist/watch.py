@@ -2,13 +2,13 @@
 
 ``watch(node)`` wraps the node's ``on_update`` (a run calls the hook it finds on
 the node, so a wrapper set before the run is called instead) to count each
-``dt`` in a histogram of quarter periods. The histogram has ``state_dict``, so
-it is in the node's state, and the host reads it from ``Run.state_dict()``.
+``dt`` in a histogram of quarter periods. The histogram is a ``mujou.Stateful``,
+so it is in the node's state, and the host reads it from ``Run.state_dict()``.
 """
 
 import math
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, override
 
 import torch
 
@@ -17,7 +17,7 @@ import mujou
 BINS = 8 * 4  # quarter periods up to 8 periods, then the rest
 
 
-class Histogram:
+class Histogram(mujou.Stateful):
     """Counts ``dt`` in bins of a quarter ``period``: bin ``i`` holds
     ``(i - 1) / 4 < dt / period <= i / 4``, and the last one the rest."""
 
@@ -30,9 +30,11 @@ class Histogram:
         quarters = math.ceil(4 * dt / self.period - 1e-6)
         self.counts[min(quarters, BINS + 1)] += 1
 
+    @override
     def state_dict(self) -> dict[str, Any]:
         return {"counts": self.counts}
 
+    @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         self.counts.copy_(state["counts"])
 

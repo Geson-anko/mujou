@@ -20,11 +20,12 @@ detached before the copy, and no graph goes with them.
 import contextvars
 import copy
 from collections.abc import Callable, Mapping
-from typing import Final, final
+from typing import Final, final, override
 
 import torch
 
 from mujou._native import ReadOnlyTimer
+from mujou.current import Running
 from mujou.node import Node, map_tensors
 from mujou.port import AnyPort, Wire
 
@@ -34,17 +35,17 @@ _NO_WIRES: Final[Mapping[AnyPort, Wire]] = {}
 
 
 @final
-class Driver:
+class Driver(Running):
     """What the runtime calls for the hooks of ``node``, which runs on
     ``clock`` and whose ports read and write through ``wires``."""
 
     def __init__(
         self, node: Node, clock: ReadOnlyTimer, wires: Mapping[AnyPort, Wire]
     ) -> None:
-        self.node = node
-        self.clock = clock
+        self._node = node
+        self._clock = clock
         # What the ports of the running hook find (port.py).
-        self.wires = wires
+        self._wires = wires
         # Empty, as a new thread's: the hooks do not see the host's variables,
         # and keep their own whichever worker runs them.
         self._context = contextvars.Context()
@@ -55,13 +56,28 @@ class Driver:
         # queues on it later.
         self._stream = torch.cuda.Stream(device) if device.type == "cuda" else None
 
+    @property
+    @override
+    def node(self) -> Node:
+        return self._node
+
+    @property
+    @override
+    def wires(self) -> Mapping[AnyPort, Wire]:
+        return self._wires
+
+    @property
+    @override
+    def clock(self) -> ReadOnlyTimer:
+        return self._clock
+
     def start(self) -> None:
-        self._run(self.node.on_start)
+        self._run(self._node.on_start)
 
     def restore(self, state: object) -> None:
         # The copies queue on the node's stream; wait for them, so that the host
         # may drop the tree it passed (whose memory they read) once run returns.
-        self._run(self.node.load_state_dict, state)
+        self._run(self._node.load_state_dict, state)
         if self._stream is not None:
             self._stream.record_event().synchronize()
 
@@ -70,22 +86,22 @@ class Driver:
         stream = self._stream
         if stream is not None:
             _use(stream)
-        self._context.run(self.node.on_update, dt)
+        self._context.run(self._node.on_update, dt)
         if stream is not None:
             # The CPU never runs ahead of the GPU.
             stream.record_event().synchronize()
 
     def pause(self) -> None:
-        self._run(self.node.on_pause)
+        self._run(self._node.on_pause)
 
     def resume(self) -> None:
-        self._run(self.node.on_resume)
+        self._run(self._node.on_resume)
 
     def exception(self) -> None:
-        self._run(self.node.on_exception)
+        self._run(self._node.on_exception)
 
     def stop(self) -> None:
-        self._run(self.node.on_stop)
+        self._run(self._node.on_stop)
 
     def capture(self) -> object:
         stream = self._stream
@@ -109,15 +125,15 @@ class Driver:
         return self._context.run(hook, *args)
 
     def _copy(self) -> object:
-        wires, self.wires = self.wires, _NO_WIRES
+        wires, self._wires = self._wires, _NO_WIRES
         try:
             return self._context.run(self._detached_state)
         finally:
-            self.wires = wires
+            self._wires = wires
 
     def _detached_state(self) -> object:
         """A deep copy of the node's ``state_dict``, its tensors detached."""
-        return copy.deepcopy(map_tensors(self.node.state_dict(), torch.Tensor.detach))
+        return copy.deepcopy(map_tensors(self._node.state_dict(), torch.Tensor.detach))
 
 
 def _use(stream: torch.cuda.Stream) -> None:

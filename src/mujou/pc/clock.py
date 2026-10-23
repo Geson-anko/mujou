@@ -3,8 +3,9 @@
 
 import math
 from collections.abc import Mapping
-from typing import Any, NamedTuple, Self
+from typing import Any, NamedTuple, Self, override
 
+from mujou import Stateful
 from mujou.pc.time_constants import TimeConstants
 from mujou.time import Timestamp
 
@@ -23,7 +24,7 @@ class Tick(NamedTuple):
     update included: the weight of the update when ``learn`` is True."""
 
 
-class LearnClock:
+class LearnClock(Stateful):
     """Decides, update by update, when a node updates its parameters, from the
     time the host wrote the node's input.
 
@@ -170,6 +171,7 @@ class LearnClock:
             behind = now_ns - self._learn_at_ns  # >= 0
             self._learn_at_ns += (behind // self._interval_ns + 1) * self._interval_ns
 
+    @override
     def state_dict(self) -> dict[str, Any]:
         """Return the state: plain numbers, which ``torch.load`` reads with
         ``weights_only=True``."""
@@ -180,6 +182,7 @@ class LearnClock:
             "learned_input": self._learned_input,
         }
 
+    @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         """Restore the state that ``state_dict`` returned."""
         self._seen_ns = state["seen_ns"]

@@ -279,4 +279,4 @@ $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(e
 
 ### 自分の optimizer
 
-基底クラスは要らない。設定は `bind(params)` を持ち、`bind` が返すものは `step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を持つ。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。
+自作の optimizer は 2 つのクラスで書く。設定は `pc.Optimizer` を継承して `bind(params)` を実装する。`bind` が返すものは `pc.BoundOptimizer`（`mujou.Stateful` の一種）を継承し、`step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。

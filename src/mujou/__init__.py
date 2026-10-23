@@ -5,7 +5,7 @@ import importlib.metadata
 from mujou.errors import NetworkError
 from mujou.execution import Run, run
 from mujou.network import Group, Network
-from mujou.node import Node
+from mujou.node import Node, Stateful
 from mujou.port import Channel, MultiPort, Port
 from mujou.spec import (
     BoolSpec,
@@ -33,6 +33,7 @@ __all__ = [
     "Node",
     "Port",
     "Run",
+    "Stateful",
     "TensorSpec",
     "TimestampSpec",
     "__version__",
