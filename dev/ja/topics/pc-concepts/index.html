@@ -1235,6 +1235,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#6-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#設定を各ノードで束縛する" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        設定を各ノードで束縛する
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-と-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD と AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#質量-c-時間で行う-bias-補正" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        質量 c: 時間で行う bias 補正
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#自分の-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1772,6 +1833,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#6-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#設定を各ノードで束縛する" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        設定を各ノードで束縛する
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-と-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD と AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#質量-c-時間で行う-bias-補正" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        質量 c: 時間で行う bias 補正
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#自分の-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1801,6 +1923,7 @@
 <li>ノードの間を流れるメッセージと Port の向き</li>
 <li><code>pc.Layer</code> が 1 回の <code>on_update(dt)</code> で行うこと</li>
 <li><code>pc.LearnClock</code> が返す <code>Tick</code>、<code>jumps</code>、<code>pc.TimeConstants</code> の意味</li>
+<li><code>pc.SGD</code> と <code>pc.AdamW</code> が重みを時間で動かす仕組み</li>
 </ul>
 <p>前提は PyTorch・誤差逆伝播法（BP）と、<a href="../../concepts/">Mujou の仕組み</a>のノード・Port・<code>dt</code>。predictive coding の知識は要らない。</p>
 </div>
@@ -1856,7 +1979,7 @@
 <h2 id="1-部品">1. 部品<a class="headerlink" href="#1-部品" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p>利用者が普段使うのは <code>Chain</code>・<code>show</code>・<code>TimeConstants</code>・損失・<code>Sample</code>。自分のノードを書くときに <code>LearnClock</code>・<code>functional</code>・<code>Activity</code> を使う。</p>
+<p>利用者が普段使うのは <code>Chain</code>・<code>show</code>・<code>TimeConstants</code>・optimizer・損失・<code>Sample</code>。自分のノードを書くときに <code>LearnClock</code>・<code>functional</code>・<code>Activity</code> を使う。</p>
 </div>
 <table>
 <thead>
@@ -1907,7 +2030,13 @@
 <tr>
 <td><code>pc.TimeConstants</code></td>
 <td>設定</td>
-<td>速さを秒で持つ（<a href="#5-timeconstants">5 節</a>）</td>
+<td><code>h</code> と <code>lam</code> の速さを秒で持つ（<a href="#5-timeconstants">5 節</a>）</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.SGD</code>・<code>pc.AdamW</code></td>
+<td>設定</td>
+<td>optimizer。重みを時間でどう動かすか（<a href="#6-optimizer">6 節</a>）</td>
 <td>普段</td>
 </tr>
 <tr>
@@ -1925,7 +2054,7 @@
 <tr>
 <td><code>pc.functional</code></td>
 <td>関数群</td>
-<td>状態を持たない式（<code>vjp</code>・<code>loss_vjp</code>・<code>relax_</code>・<code>learn_</code>）。<code>Layer</code> と <code>Output</code> もこれで書く</td>
+<td>状態を持たない式（<code>vjp</code>・<code>loss_vjp</code>・<code>relax_</code>）。<code>Layer</code> と <code>Output</code> もこれで書く</td>
 <td>自分のノード</td>
 </tr>
 <tr>
@@ -1936,7 +2065,7 @@
 </tr>
 </tbody>
 </table>
-<p><code>Layer</code> と <code>Output</code> は <code>LearnClock</code> と <code>functional</code> を組み合わせたもの。同じ部品で入力が 2 つのノードのような <code>Layer</code> で書けないノードも作れる。</p>
+<p><code>Layer</code> と <code>Output</code> は <code>LearnClock</code>・<code>functional</code>・optimizer を組み合わせたもの。同じ部品で入力が 2 つのノードのような <code>Layer</code> で書けないノードも作れる。</p>
 <h2 id="2-つながりと流れるもの">2. つながりと流れるもの<a class="headerlink" href="#2-つながりと流れるもの" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
@@ -2052,7 +2181,7 @@
 <h2 id="3-layer-の-1-回の更新">3. Layer の 1 回の更新<a class="headerlink" href="#3-layer-の-1-回の更新" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p><code>Layer.on_update(dt)</code> は「読む → <code>tick</code> → <code>vjp</code> → <code>g_in</code> を送る → <code>relax_</code> → <code>Activity</code> を送る → <code>learn_</code>」の順に進む。</p>
+<p><code>Layer.on_update(dt)</code> は「読む → <code>tick</code> → <code>vjp</code> → <code>g_in</code> を送る → <code>relax_</code> → <code>Activity</code> を送る → <code>optimizer.step_</code>」の順に進む。</p>
 </div>
 <table>
 <thead>
@@ -2090,18 +2219,18 @@
 </tr>
 <tr>
 <td>6</td>
-<td><code>functional.learn_</code></td>
-<td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\mathrm{elapsed}}{\tau_\theta}\cdot\frac{g_\theta}{B}\)</span>。<code>tick.learn</code> が True で、<code>mask</code> に True があるときだけ</td>
+<td><code>optimizer.step_</code></td>
+<td><span class="arithmatex">\(g_\theta\)</span> をサンプルの数 <span class="arithmatex">\(B\)</span> で割り、重みを <code>tick.elapsed</code> 秒ぶん動かす（<a href="#6-optimizer">6 節</a>）。<code>tick.learn</code> が True で、<code>mask</code> に True があるときだけ</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>段 3 の <code>delta</code> は段 2 の後、段 4 の前の <code>h</code>・<code>lam</code> で作る</li>
-<li>勾配はバッチで和を取り、サンプルの数 <span class="arithmatex">\(B\)</span> で割るのは <code>learn_</code> だけ。だから <code>lam</code> はサンプルごとの credit になる。1 回の学習は学習率 <code>elapsed / tau.theta</code> でバッチの平均勾配を下る SGD に当たる</li>
+<li>勾配はバッチで和を取り、<span class="arithmatex">\(B\)</span> で割るのは段 6 だけ。だから <code>lam</code> はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る</li>
 <li><code>vjp</code> の <code>delta</code> は値ではなく、<code>mu</code> から <code>delta</code> を作る関数（<code>mu</code> は <code>vjp</code> の中で計算するため）。ふだんは <code>lambda mu: h - mu + lam</code>。段 4 で付け替える更新では、付け替え前のずれ <code>h - mu_last</code> を使い <code>lambda mu: (h - mu_last) + lam</code> を渡す（<a href="#jumps">jumps</a>）</li>
 <li><code>vjp</code> は <code>h_in</code> を detach してから微分するので、計算グラフは前のノードに届かない</li>
 </ul>
-<p><code>Output</code> は <code>h</code> も <code>lam</code> も持たない。段 3 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>learn_</code> は <code>Layer</code> と同じ。付け替える <code>h</code> が無いので <code>jumps</code> は読まない。</p>
+<p><code>Output</code> は <code>h</code> も <code>lam</code> も持たない。段 3 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。付け替える <code>h</code> が無いので <code>jumps</code> は読まない。</p>
 <details class="question">
 <summary>g_in を前のノードへ送るのは BP と何が違うの？</summary>
 <p><code>g_in</code> の計算は BP の 1 層分と同じ VJP（<span class="arithmatex">\(-J_h^\top\delta\)</span>）で、平衡点では <code>lam</code> が BP の credit と同じ漸化式を満たす。違うのは <code>g_in</code> の扱い方。</p>
@@ -2141,12 +2270,12 @@
 <tr>
 <td><code>learn</code></td>
 <td>この更新で学ぶか</td>
-<td><code>learn_</code> を呼ぶか決める</td>
+<td><code>step_</code> を呼ぶか決める</td>
 </tr>
 <tr>
 <td><code>elapsed</code></td>
 <td>前に学んでからの、打ち切った <code>dt</code> の和。この更新を含む</td>
-<td><code>learn_</code> に渡す重み</td>
+<td><code>step_</code> に渡す時間</td>
 </tr>
 </tbody>
 </table>
@@ -2161,7 +2290,7 @@
 <tbody>
 <tr>
 <td>正の秒数</td>
-<td>書き込み時刻 <code>time</code> の <code>learn_interval</code> 後、2 倍後、… の各時刻を過ぎた最初の更新。ただし <code>new</code> が True の更新では学ばず、次の更新で学ぶ</td>
+<td><code>time + learn_interval</code>、<code>time + 2 * learn_interval</code>、… の各時刻（<code>time</code> はホストが入力を書いた時刻）以降の最初の更新。ただし <code>new</code> が True の更新では学ばず、次の更新で学ぶ</td>
 </tr>
 <tr>
 <td><code>None</code></td>
@@ -2169,12 +2298,13 @@
 </tr>
 <tr>
 <td><code>math.inf</code></td>
-<td>学ばない。<code>tau.theta</code> が <code>math.inf</code> のとき <code>LearnClock.of</code> もこうする</td>
+<td>学ばない。学ばない方法はこれだけ（optimizer は <code>tau=math.inf</code> を受け付けない）</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li><code>new</code> が True の更新で学ばないのは、その更新の <code>delta</code> がまだ前の入力のものだから</li>
+<li>だから同じ入力が続く間は <code>learn_interval</code> 秒ごとに学び、<code>elapsed</code> はおよそ <code>learn_interval</code></li>
 <li>学ばないまま入力が変わると、<code>elapsed</code> に溜めた時間は捨てる</li>
 <li>自分のノードでは <code>pc.LearnClock.of(tau, period=..., learn_interval=...)</code> で作り、属性に置く。それだけでノードの状態に入る</li>
 </ul>
@@ -2231,7 +2361,7 @@
 <p class="admonition-title">要点</p>
 <p>速さはすべて実行のタイマーの秒で決める。各ノードは実際に経った <code>dt</code> だけ式を進めるので、周期の違うノードも時間あたり同じ速さで変化する。</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=, theta=)</code> が 3 つの時定数を持つ。</p>
+<p><code>pc.TimeConstants(h=, lam=)</code> が活動の 2 つの時定数を持つ。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
 <table>
 <thead>
 <tr>
@@ -2254,20 +2384,101 @@
 <td><code>dt / tau.lam</code></td>
 <td><code>lam</code> は 0 のまま。<code>r</code> が 0 に戻らず、平衡点で BP と一致しない（ただの predictive coding）</td>
 </tr>
-<tr>
-<td><code>tau.theta</code></td>
-<td>重みが学ぶ速さ</td>
-<td>学習率 <code>elapsed / tau.theta</code></td>
-<td>学ばない</td>
-</tr>
 </tbody>
 </table>
 <p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / 4</code>）はノードの更新の間隔で、<code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
-<p><code>tau.theta</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
+<p>optimizer の <code>tau</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
 <details class="question">
 <summary>なぜ dt を max_dt で打ち切るの？</summary>
 <p><code>g</code> は次のノードが最後に更新したときの <code>h</code> から作られ、ノード同士は 1 歩遅れで結合している。負荷で全ノードが止まった後に <code>dt</code> が一斉に伸びると、この結合でネットワークが発散する。ノードの内側で刻みを分割しても防げないので 1 回に数える時間を打ち切る。</p>
 </details>
+<h2 id="6-optimizer">6. optimizer<a class="headerlink" href="#6-optimizer" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>重みも秒で動く。optimizer は時間に沿った流れで、時定数を秒で持ち、1 歩ごとにその歩みが受け持つ <code>elapsed</code> 秒だけ進む。だから学ぶ頻度を変えても、重みが 1 秒あたりに動く速さは変わらない。</p>
+</div>
+<h3 id="設定を各ノードで束縛する">設定を各ノードで束縛する<a class="headerlink" href="#設定を各ノードで束縛する" title="Permanent link">&para;</a></h3>
+<p><code>pc.SGD(tau=)</code> と <code>pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
+<pre class="mermaid"><code>flowchart LR
+    S["pc.AdamW(...)&lt;br/&gt;設定、状態なし"] --&gt;|"bind(params)"| B0["Layer 0: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B1["Layer 1: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B2["Output: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># in __init__, with only the weights that learn</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># in on_update, when the node learns:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">g</span> <span class="o">/</span> <span class="n">B</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">g_theta</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>1 つの設定を全ノードに渡してよい（<code>Chain</code> はそうする）。状態はノードごとに、束縛した optimizer の中にある</li>
+<li>束縛した optimizer はノードの状態のキー <code>"optimizer"</code> に入る（<code>LearnClock</code> が <code>"clock"</code> に入るのと同じ）</li>
+<li>ノードが <span class="arithmatex">\(g_\theta\)</span> を <span class="arithmatex">\(B\)</span> で割ってから <code>step_</code> に渡す。optimizer はバッチを知らない</li>
+<li><code>elapsed == 0</code> の歩みは重みも状態も動かさない</li>
+</ul>
+<h3 id="sgd-と-adamw">SGD と AdamW<a class="headerlink" href="#sgd-と-adamw" title="Permanent link">&para;</a></h3>
+<p>平均の勾配を <span class="arithmatex">\(g = g_\theta / B\)</span> とする。</p>
+<table>
+<thead>
+<tr>
+<th>optimizer</th>
+<th>時間に沿った流れ</th>
+<th><code>elapsed</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 歩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.SGD</code></td>
+<td><span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span></td>
+<td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>。学習率 <span class="arithmatex">\(\Delta t / \tau_\theta\)</span> の SGD</td>
+</tr>
+<tr>
+<td><code>pc.AdamW</code></td>
+<td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>、<span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
+<td><span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span> で <span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>、<span class="arithmatex">\(v\)</span> も同様。続けて <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span> で AdamW の 1 歩</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>tau</code> は <span class="arithmatex">\(\tau_\theta\)</span>、<code>tau_m</code> は <span class="arithmatex">\(\tau_m\)</span>、<code>tau_v</code> は <span class="arithmatex">\(\tau_v\)</span> で、どれも秒。有限で &gt; 0。学ばないならノードに <code>learn_interval=math.inf</code> を渡す</li>
+<li><code>eps</code>（<span class="arithmatex">\(\varepsilon\)</span>）は &gt; 0。勾配が 0 のままだった重みが <code>0 / 0</code> にならないようにするため</li>
+<li><code>weight_decay</code>（<span class="arithmatex">\(w\)</span>）は無次元。<span class="arithmatex">\(\theta\)</span> を時定数 <span class="arithmatex">\(\tau_\theta / w\)</span> で減衰させる。<code>torch.optim.AdamW</code> の <code>weight_decay</code> が <code>lr</code> と組むのと同じ</li>
+<li>AdamW は勾配の大きさによらず、1 歩で各重みをおよそ <span class="arithmatex">\(\eta\)</span> ずつ動かす。Adam の <code>lr</code> に合わせるなら、2 回の学習の間の時間を <span class="arithmatex">\(\Delta t\)</span> とし（1 入力につき 1 回学ぶなら入力を見せる時間）、<code>tau</code> を <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code> にする</li>
+</ul>
+<h3 id="質量-c-時間で行う-bias-補正">質量 c: 時間で行う bias 補正<a class="headerlink" href="#質量-c-時間で行う-bias-補正" title="Permanent link">&para;</a></h3>
+<p><span class="arithmatex">\(m\)</span> と <span class="arithmatex">\(v\)</span> は 0 から始まるので、はじめは小さすぎる。<code>torch.optim.AdamW</code> はステップ数 <span class="arithmatex">\(t\)</span> で補正し、<span class="arithmatex">\(m\)</span> を <span class="arithmatex">\(1 - \beta_1^t\)</span> で割る。<code>pc.AdamW</code> はステップを数えない。代わりに moment ごとに<strong>質量</strong> <span class="arithmatex">\(c\)</span> を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。</p>
+<div class="arithmatex">\[\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m\]</div>
+<p>1 歩は moment と同じように <span class="arithmatex">\(c_m \leftarrow c_m + a_m(1 - c_m)\)</span> で質量を動かす。<span class="arithmatex">\(t\)</span> 秒ぶんの勾配の後は <span class="arithmatex">\(c_m = 1 - e^{-t/\tau_m}\)</span>。<span class="arithmatex">\(g\)</span> が一定なら <span class="arithmatex">\(m = c_m g\)</span> なので、最初の 1 歩から <span class="arithmatex">\(\hat m = g\)</span>。<span class="arithmatex">\(v\)</span> も自分の質量 <span class="arithmatex">\(c_v\)</span> を同じように持つ。</p>
+<p>1 歩は、<span class="arithmatex">\(g\)</span> が <span class="arithmatex">\(\Delta t\)</span> の間一定だとして流れを厳密に解く。だから moment と質量は歩みの回数ではなく歩みの秒数の合計で決まる。<span class="arithmatex">\(\tau_m = 0.1\)</span> 秒のときは次のとおり。</p>
+<table>
+<thead>
+<tr>
+<th>歩み</th>
+<th><code>pc.AdamW</code> の <span class="arithmatex">\(c_m\)</span></th>
+<th>0.05 秒の歩みに合わせて <span class="arithmatex">\(\beta_1 = e^{-0.05/0.1}\)</span> に固定し、ステップを数えると</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.05 秒を 2 回</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^2 = 0.632\)</span></td>
+</tr>
+<tr>
+<td>0.1 秒を 1 回</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^1 = 0.393\)</span></td>
+</tr>
+</tbody>
+</table>
+<p><span class="arithmatex">\(\Delta t\)</span> が一定なら、歩みは <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code> と同じになる。だから torch の <span class="arithmatex">\(\beta\)</span> からは <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span> と決まる。<span class="arithmatex">\(\Delta t\)</span> はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、<span class="arithmatex">\(\beta_1 = 0.9\)</span> は約 0.30 秒、<span class="arithmatex">\(\beta_2 = 0.999\)</span> は約 32 秒。SGD と AdamW の選び方と値は <a href="../pc/#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a> へ。</p>
+<details class="question">
+<summary>なぜ torch.optim を使わないの？</summary>
+<ol>
+<li>ステップを数え、時間を数えない。<span class="arithmatex">\(\beta\)</span> と <code>lr</code> が 1 ステップあたりなので、1 秒あたりの速さが <code>learn_interval</code> や歩みごとに異なる <code>elapsed</code> で変わる</li>
+<li>ステップ数が float32 のテンソルで、<span class="arithmatex">\(2^{24}\)</span> 回で増えなくなる（24 ms ごとに学ぶと約 4.7 日）。mujou は学び続ける機械のためのもの</li>
+<li>作るときに <code>torch._dynamo</code> を import し、free-threaded の Python（3.14t）でプロセス全体の GIL を有効に戻す</li>
+</ol>
+</details>
+<h3 id="自分の-optimizer">自分の optimizer<a class="headerlink" href="#自分の-optimizer" title="Permanent link">&para;</a></h3>
+<p>基底クラスは要らない。設定は <code>bind(params)</code> を持ち、<code>bind</code> が返すものは <code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を持つ。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
 
 
 

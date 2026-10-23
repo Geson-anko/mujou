@@ -1233,6 +1233,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#6-optimizers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Optimizers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Optimizers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-setting-bound-in-each-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A setting, bound in each node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-and-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD and AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-mass-c-bias-correction-in-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The mass c: bias correction in time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#an-optimizer-of-your-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An optimizer of your own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1770,6 +1831,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#6-optimizers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Optimizers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Optimizers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-setting-bound-in-each-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A setting, bound in each node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-and-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD and AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-mass-c-bias-correction-in-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The mass c: bias correction in time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#an-optimizer-of-your-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An optimizer of your own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1799,6 +1921,7 @@
 <li>The messages that flow between the nodes, and which way the ports face</li>
 <li>What a <code>pc.Layer</code> does in one <code>on_update(dt)</code></li>
 <li>What the <code>Tick</code> that <code>pc.LearnClock</code> returns, <code>jumps</code> and <code>pc.TimeConstants</code> mean</li>
+<li>How <code>pc.SGD</code> and <code>pc.AdamW</code> move the weights in time</li>
 </ul>
 <p>You should know PyTorch and backpropagation (BP), and the nodes, ports and <code>dt</code> of <a href="../../concepts/">How Mujou Works</a>. You need not know predictive coding.</p>
 </div>
@@ -1854,7 +1977,7 @@
 <h2 id="1-the-parts">1. The parts<a class="headerlink" href="#1-the-parts" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p>You usually use <code>Chain</code>, <code>show</code>, <code>TimeConstants</code>, a loss and <code>Sample</code>. You use <code>LearnClock</code>, <code>functional</code> and <code>Activity</code> to write nodes of your own.</p>
+<p>You usually use <code>Chain</code>, <code>show</code>, <code>TimeConstants</code>, an optimizer, a loss and <code>Sample</code>. You use <code>LearnClock</code>, <code>functional</code> and <code>Activity</code> to write nodes of your own.</p>
 </div>
 <table>
 <thead>
@@ -1905,7 +2028,13 @@
 <tr>
 <td><code>pc.TimeConstants</code></td>
 <td>Settings</td>
-<td>Holds the speeds in seconds (<a href="#5-timeconstants">section 5</a>)</td>
+<td>Holds the speeds of <code>h</code> and <code>lam</code> in seconds (<a href="#5-timeconstants">section 5</a>)</td>
+<td>Usually</td>
+</tr>
+<tr>
+<td><code>pc.SGD</code>, <code>pc.AdamW</code></td>
+<td>Settings</td>
+<td>The optimizers: how the weights move in time (<a href="#6-optimizers">section 6</a>)</td>
 <td>Usually</td>
 </tr>
 <tr>
@@ -1923,7 +2052,7 @@
 <tr>
 <td><code>pc.functional</code></td>
 <td>Functions</td>
-<td>Formulas without state (<code>vjp</code>, <code>loss_vjp</code>, <code>relax_</code>, <code>learn_</code>). <code>Layer</code> and <code>Output</code> are written with them too</td>
+<td>Formulas without state (<code>vjp</code>, <code>loss_vjp</code>, <code>relax_</code>). <code>Layer</code> and <code>Output</code> are written with them too</td>
 <td>Nodes of your own</td>
 </tr>
 <tr>
@@ -1934,7 +2063,7 @@
 </tr>
 </tbody>
 </table>
-<p><code>Layer</code> and <code>Output</code> combine <code>LearnClock</code> and <code>functional</code>. With the same parts you can also make nodes that <code>Layer</code> cannot express, such as a node with two inputs.</p>
+<p><code>Layer</code> and <code>Output</code> combine <code>LearnClock</code>, <code>functional</code> and an optimizer. With the same parts you can also make nodes that <code>Layer</code> cannot express, such as a node with two inputs.</p>
 <h2 id="2-connections-and-what-flows">2. Connections and what flows<a class="headerlink" href="#2-connections-and-what-flows" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
@@ -2050,7 +2179,7 @@
 <h2 id="3-one-update-of-a-layer">3. One update of a Layer<a class="headerlink" href="#3-one-update-of-a-layer" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p><code>Layer.on_update(dt)</code> goes "read → <code>tick</code> → <code>vjp</code> → send <code>g_in</code> → <code>relax_</code> → send <code>Activity</code> → <code>learn_</code>".</p>
+<p><code>Layer.on_update(dt)</code> goes "read → <code>tick</code> → <code>vjp</code> → send <code>g_in</code> → <code>relax_</code> → send <code>Activity</code> → <code>optimizer.step_</code>".</p>
 </div>
 <table>
 <thead>
@@ -2088,18 +2217,18 @@
 </tr>
 <tr>
 <td>6</td>
-<td><code>functional.learn_</code></td>
-<td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\mathrm{elapsed}}{\tau_\theta}\cdot\frac{g_\theta}{B}\)</span>. Only when <code>tick.learn</code> is True and some <code>mask</code> is True</td>
+<td><code>optimizer.step_</code></td>
+<td>Divides <span class="arithmatex">\(g_\theta\)</span> by the number of samples <span class="arithmatex">\(B\)</span> and moves the weights by <code>tick.elapsed</code> seconds (<a href="#6-optimizers">section 6</a>). Only when <code>tick.learn</code> is True and some <code>mask</code> is True</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>The <code>delta</code> of step 3 is made from <code>h</code> and <code>lam</code> after step 2 and before step 4</li>
-<li>Gradients are summed over the batch, and only <code>learn_</code> divides by the number of samples <span class="arithmatex">\(B\)</span>. So <code>lam</code> is the credit of each sample. One update of the weights is a step of SGD down the mean gradient of the batch, with the learning rate <code>elapsed / tau.theta</code></li>
+<li>Gradients are summed over the batch, and only step 6 divides by <span class="arithmatex">\(B\)</span>. So <code>lam</code> is the credit of each sample, and the optimizer gets the mean gradient of the batch</li>
 <li>The <code>delta</code> of <code>vjp</code> is not a value but a function that makes <code>delta</code> from <code>mu</code> (<code>mu</code> is computed inside <code>vjp</code>). Usually <code>lambda mu: h - mu + lam</code>. In an update that re-anchors in step 4, pass <code>lambda mu: (h - mu_last) + lam</code>, with the deviation <code>h - mu_last</code> before re-anchoring (<a href="#jumps">jumps</a>)</li>
 <li><code>vjp</code> detaches <code>h_in</code> before it differentiates, so the graph does not reach the previous node</li>
 </ul>
-<p><code>Output</code> holds neither <code>h</code> nor <code>lam</code>. In step 3 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>learn_</code>) are as in <code>Layer</code>. It has no <code>h</code> to re-anchor, so it does not read <code>jumps</code>.</p>
+<p><code>Output</code> holds neither <code>h</code> nor <code>lam</code>. In step 3 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>optimizer.step_</code>) are as in <code>Layer</code>. It has no <code>h</code> to re-anchor, so it does not read <code>jumps</code>.</p>
 <details class="question">
 <summary>How does sending g_in back differ from backpropagation?</summary>
 <p><code>g_in</code> is computed with the same VJP as one layer of backpropagation (<span class="arithmatex">\(-J_h^\top\delta\)</span>), and at equilibrium <code>lam</code> follows the same recursion as the credit of backpropagation. What differs is what is done with <code>g_in</code>:</p>
@@ -2139,12 +2268,12 @@
 <tr>
 <td><code>learn</code></td>
 <td>Whether to learn in this update</td>
-<td>Whether to call <code>learn_</code></td>
+<td>Whether to call <code>step_</code></td>
 </tr>
 <tr>
 <td><code>elapsed</code></td>
 <td>The sum of the capped <code>dt</code> since the node last learned, this update included</td>
-<td>The weight passed to <code>learn_</code></td>
+<td>The time passed to <code>step_</code></td>
 </tr>
 </tbody>
 </table>
@@ -2159,7 +2288,7 @@
 <tbody>
 <tr>
 <td>Positive seconds</td>
-<td>The first update after each of <code>learn_interval</code>, twice it, … past the time of the write <code>time</code>. But not an update where <code>new</code> is True: then the next update learns</td>
+<td>The first update at or after <code>time + learn_interval</code>, <code>time + 2 * learn_interval</code>, … (<code>time</code> is when the host wrote the input). But not an update where <code>new</code> is True: then the next update learns</td>
 </tr>
 <tr>
 <td><code>None</code></td>
@@ -2167,12 +2296,13 @@
 </tr>
 <tr>
 <td><code>math.inf</code></td>
-<td>Never. <code>LearnClock.of</code> does this too when <code>tau.theta</code> is <code>math.inf</code></td>
+<td>Never. This is the only way not to learn: the optimizers reject <code>tau=math.inf</code></td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>An update where <code>new</code> is True does not learn because its <code>delta</code> is still that of the input before</li>
+<li>So while one input stays, the node learns every <code>learn_interval</code> seconds, and <code>elapsed</code> is about <code>learn_interval</code></li>
 <li>When the input changes before the node learned, the time summed in <code>elapsed</code> is dropped</li>
 <li>In a node of your own, make it with <code>pc.LearnClock.of(tau, period=..., learn_interval=...)</code> and put it in an attribute. That alone puts it in the node's state</li>
 </ul>
@@ -2229,7 +2359,7 @@
 <p class="admonition-title">Key idea</p>
 <p>All speeds are set in seconds of the run's timer. Each node moves its equations by the <code>dt</code> that actually passed, so nodes with different periods change at the same speed per second.</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=, theta=)</code> holds the three time constants.</p>
+<p><code>pc.TimeConstants(h=, lam=)</code> holds the two time constants of the activities. The time constant of the weights belongs to the optimizer (<a href="#6-optimizers">section 6</a>).</p>
 <table>
 <thead>
 <tr>
@@ -2252,20 +2382,101 @@
 <td><code>dt / tau.lam</code></td>
 <td><code>lam</code> stays 0. <code>r</code> does not return to 0, and the fixed point does not match BP (plain predictive coding)</td>
 </tr>
-<tr>
-<td><code>tau.theta</code></td>
-<td>The learning of the weights</td>
-<td>The learning rate <code>elapsed / tau.theta</code></td>
-<td>No learning</td>
-</tr>
 </tbody>
 </table>
 <p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / 4</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code>. <code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
-<p>Make <code>tau.theta</code> much larger than <code>tau.h</code>. When the weights move more slowly than the activities settle, they learn from the settled <code>delta</code> even though inference and learning run at the same time. To choose the values, see <a href="../pc/#choosing-the-time-constants">Choosing the time constants</a>; for the arguments, the <a href="../../api/pc/">API reference</a>.</p>
+<p>Make the <code>tau</code> of the optimizer much larger than <code>tau.h</code>. When the weights move more slowly than the activities settle, they learn from the settled <code>delta</code> even though inference and learning run at the same time. To choose the values, see <a href="../pc/#choosing-the-time-constants">Choosing the time constants</a>; for the arguments, the <a href="../../api/pc/">API reference</a>.</p>
 <details class="question">
 <summary>Why cap dt at max_dt?</summary>
 <p><code>g</code> is made from <code>h</code> as it was when the next node last updated, so the nodes are coupled one step behind. When a load stalls every node and then <code>dt</code> grows in all of them at once, this coupling makes the network diverge. Splitting the step inside a node does not prevent it, so the time one update counts is capped.</p>
 </details>
+<h2 id="6-optimizers">6. Optimizers<a class="headerlink" href="#6-optimizers" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>The weights move in seconds too. An optimizer is a flow in time: its time constants are in seconds, and each step moves it by the <code>elapsed</code> seconds the step covers. So how often a node learns does not change how fast its weights move per second.</p>
+</div>
+<h3 id="a-setting-bound-in-each-node">A setting, bound in each node<a class="headerlink" href="#a-setting-bound-in-each-node" title="Permanent link">&para;</a></h3>
+<p><code>pc.SGD(tau=)</code> and <code>pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> are settings: frozen values without state. <code>Layer</code>, <code>Output</code> and <code>Chain</code> take one as the required argument <code>optimizer=</code>. Each node binds the setting to its own weights that require gradients, and keeps the <strong>bound optimizer</strong> as <code>self.optimizer</code>. The bound optimizer holds the state and moves the weights.</p>
+<pre class="mermaid"><code>flowchart LR
+    S["pc.AdamW(...)&lt;br/&gt;setting, no state"] --&gt;|"bind(params)"| B0["Layer 0: bound optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B1["Layer 1: bound optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B2["Output: bound optimizer&lt;br/&gt;m, v, c_m, c_v"]</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># in __init__, with only the weights that learn</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># in on_update, when the node learns:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">g</span> <span class="o">/</span> <span class="n">B</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">g_theta</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>One setting can be given to every node, as <code>Chain</code> does. Each node has its own state, in its bound optimizer</li>
+<li>The bound optimizer is in the node's state under the key <code>"optimizer"</code>, as the <code>LearnClock</code> is under <code>"clock"</code></li>
+<li>The node divides <span class="arithmatex">\(g_\theta\)</span> by <span class="arithmatex">\(B\)</span> before <code>step_</code>. The optimizer does not know the batch</li>
+<li>A step with <code>elapsed == 0</code> moves nothing: neither the weights nor the state</li>
+</ul>
+<h3 id="sgd-and-adamw">SGD and AdamW<a class="headerlink" href="#sgd-and-adamw" title="Permanent link">&para;</a></h3>
+<p>With the mean gradient <span class="arithmatex">\(g = g_\theta / B\)</span>:</p>
+<table>
+<thead>
+<tr>
+<th>Optimizer</th>
+<th>Flow in time</th>
+<th>One step of <code>elapsed</code> <span class="arithmatex">\(= \Delta t\)</span> seconds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.SGD</code></td>
+<td><span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span></td>
+<td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>: SGD with the learning rate <span class="arithmatex">\(\Delta t / \tau_\theta\)</span></td>
+</tr>
+<tr>
+<td><code>pc.AdamW</code></td>
+<td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>, <span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>, <span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
+<td><span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span> with <span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span>, the same for <span class="arithmatex">\(v\)</span>; then <span class="arithmatex">\(\theta\)</span> steps as AdamW with <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>tau</code> is <span class="arithmatex">\(\tau_\theta\)</span>, <code>tau_m</code> is <span class="arithmatex">\(\tau_m\)</span> and <code>tau_v</code> is <span class="arithmatex">\(\tau_v\)</span>, all in seconds. Each must be finite and &gt; 0. Never to learn, give the node <code>learn_interval=math.inf</code></li>
+<li><code>eps</code> (<span class="arithmatex">\(\varepsilon\)</span>) must be &gt; 0, so that a weight whose gradient has been 0 does not get <code>0 / 0</code></li>
+<li><code>weight_decay</code> (<span class="arithmatex">\(w\)</span>) has no unit. It decays <span class="arithmatex">\(\theta\)</span> with the time constant <span class="arithmatex">\(\tau_\theta / w\)</span>, as <code>weight_decay</code> works with <code>lr</code> in <code>torch.optim.AdamW</code></li>
+<li>AdamW moves each weight by about <span class="arithmatex">\(\eta\)</span> per step, whatever the size of its gradient. To match the <code>lr</code> of Adam, take <span class="arithmatex">\(\Delta t\)</span>, the time between two learning steps (the time each input is shown, when a node learns once per input), and set <code>tau</code> to <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code></li>
+</ul>
+<h3 id="the-mass-c-bias-correction-in-time">The mass c: bias correction in time<a class="headerlink" href="#the-mass-c-bias-correction-in-time" title="Permanent link">&para;</a></h3>
+<p><span class="arithmatex">\(m\)</span> and <span class="arithmatex">\(v\)</span> start at 0, so at first they are too small. <code>torch.optim.AdamW</code> corrects this with the number of steps <span class="arithmatex">\(t\)</span>: it divides <span class="arithmatex">\(m\)</span> by <span class="arithmatex">\(1 - \beta_1^t\)</span>. <code>pc.AdamW</code> counts no steps. Instead it keeps a <strong>mass</strong> <span class="arithmatex">\(c\)</span> for each moment: the share of the moment made of gradients so far (the rest is the zero it started from). The mass moves with the time constant of its moment.</p>
+<div class="arithmatex">\[\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m\]</div>
+<p>A step moves the mass as it moves the moment: <span class="arithmatex">\(c_m \leftarrow c_m + a_m(1 - c_m)\)</span>. After <span class="arithmatex">\(t\)</span> seconds of gradients, <span class="arithmatex">\(c_m = 1 - e^{-t/\tau_m}\)</span>. With a constant <span class="arithmatex">\(g\)</span>, <span class="arithmatex">\(m = c_m g\)</span>, so <span class="arithmatex">\(\hat m = g\)</span> from the first step. <span class="arithmatex">\(v\)</span> has its own mass <span class="arithmatex">\(c_v\)</span> in the same way.</p>
+<p>A step solves the flow exactly for a <span class="arithmatex">\(g\)</span> held over <span class="arithmatex">\(\Delta t\)</span>. So the moments and masses depend on the seconds the steps add up to, not on how many steps there were. With <span class="arithmatex">\(\tau_m = 0.1\)</span> s:</p>
+<table>
+<thead>
+<tr>
+<th>Steps</th>
+<th><span class="arithmatex">\(c_m\)</span> of <code>pc.AdamW</code></th>
+<th>A step count with <span class="arithmatex">\(\beta_1 = e^{-0.05/0.1}\)</span>, fixed for steps of 0.05 s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Two steps of 0.05 s</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^2 = 0.632\)</span></td>
+</tr>
+<tr>
+<td>One step of 0.1 s</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^1 = 0.393\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>When <span class="arithmatex">\(\Delta t\)</span> is constant, the steps are those of <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code>. So from the <span class="arithmatex">\(\beta\)</span> of torch, <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span>, with the same <span class="arithmatex">\(\Delta t\)</span> between two learning steps. Learning every 32 ms, <span class="arithmatex">\(\beta_1 = 0.9\)</span> is about 0.30 s and <span class="arithmatex">\(\beta_2 = 0.999\)</span> about 32 s. To choose between SGD and AdamW and their values, see <a href="../pc/#choosing-the-optimizer">Choosing the optimizer</a>.</p>
+<details class="question">
+<summary>Why not use torch.optim?</summary>
+<ol>
+<li>Its optimizers count steps, not time. <span class="arithmatex">\(\beta\)</span> and <code>lr</code> are per step, so the speed per second changes with <code>learn_interval</code>, and with the uneven <code>elapsed</code> of each step</li>
+<li>Its count of steps is a float32 tensor, which stops growing after <span class="arithmatex">\(2^{24}\)</span> steps (about 4.7 days when learning every 24 ms). mujou is for machines that keep learning</li>
+<li>Making one imports <code>torch._dynamo</code>, which turns the GIL back on in a free-threaded Python (3.14t), for the whole process</li>
+</ol>
+</details>
+<h3 id="an-optimizer-of-your-own">An optimizer of your own<a class="headerlink" href="#an-optimizer-of-your-own" title="Permanent link">&para;</a></h3>
+<p>An optimizer needs no base class. The setting has <code>bind(params)</code>, and what <code>bind</code> returns has <code>step_(grads, elapsed)</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>. Pass <code>bind</code> only the weights that learn. The <a href="../../api/pc/">API reference</a> has an example.</p>
 
 
 
