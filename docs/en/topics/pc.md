@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants and the optimizer, how it differs from BP, the pitfalls, MNIST, and nodes of your own.
+The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants and the optimizer, how it differs from BP, the pitfalls, MNIST and CIFAR-10, and nodes of your own.
 
 ## How it differs from BP
 
@@ -99,6 +99,25 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 - **`--watch`** counts the `dt` of each node (`watch.py`), and warns when the updates come later than 1.5 periods (median) or 2 periods (99%)
 - `data.py`, `metrics.py` and `bp.py` do not depend on `mujou.pc`: the data are plain tensors, and the BP baseline is plain PyTorch
 
+## CIFAR-10
+
+`examples/cifar10/` learns CIFAR-10 with a ResNet-20 on a CUDA device, cut into two modules that become the two nodes after the `Input` of a `pc.Chain`, and trains the same network by BP on the GPU, from the same initial weights on the same batches with the same `pc.AdamW`. In the 3rd epoch, the prequential accuracy was 55.00% for PC-ALM and 55.76% for BP (seed 0), and the test accuracy after it 55.98% and 58.23%. The test accuracy moves by a few points from epoch to epoch for both, as the learning rate does not decay, and the GPU does not compute bit for bit the same in every run.
+
+```sh
+uv run python examples/cifar10/main.py            # 3 epochs, about 5 minutes on an RTX 4090
+uv run python examples/cifar10/main.py --epochs 10
+```
+
+```python
+--8<-- "examples/cifar10/main.py:chain"
+```
+
+- **Two nodes, with BP inside each.** `layer0` holds the stem and the first two stages, `output` the third stage and the head. Inside a node, autograd differentiates its module; between the two, only the messages of PC-ALM flow. Why the network is cut there is in [the pitfalls](#pitfalls) (the Jacobian of the next node)
+- **On the GPU.** `device="cuda"` makes every node compute on the GPU. Each message a node sends or receives is copied between the device and the host ([Devices](threads-and-devices.md#devices)), which takes a quarter to a third of the CPU time of an update here. With batches of 64, an update of `layer0` takes longer than the period of 1 ms, so the run's timer goes at `--time-scale` 0.3, slower than real time. There, 99% of the updates of `layer0` came within 2 periods (`max_dt`) on an RTX 4090; at 0.4, 1% came later than 3.5 periods
+- **AdamW**, made from the `lr` of Adam as in [Choosing the optimizer](#choosing-the-optimizer). The BP baseline binds the same `pc.AdamW` to its whole model and steps it by the showing time once per batch, so both take about the same steps for the same gradients (the nodes learn for the time since they last learned, which is close to the showing time)
+- **`tau.lam = tau.h`.** With the `tau.lam = 2 * tau.h` of MNIST, the credit did not settle in 32 periods, and PC-ALM fell behind BP. With `tau.lam = tau.h`, the same 32 periods are enough
+- **GroupNorm** instead of BatchNorm: it has no running statistics and no mode to switch, and the samples of a batch, padded ones included, do not affect each other
+
 ## The batch
 
 The batch is the shape that every tensor of the messages starts with. Give it as `batch` to `pc.Chain`, `pc.Input` or `pc.activity_spec`, and start the specs `x` and `y` with it. `pc.Layer` and `pc.Output` take it from the `act_spec` they receive.
@@ -139,6 +158,10 @@ The batch is the shape that every tensor of the messages starts with. Give it as
     - **Other processes on the cores.** A node that waits for a core lets its neighbors run ahead. On 32 cores at time scale 1, one epoch ran through beside 26 busy processes and diverged beside 32; at 0.5 it ran through beside 32. Run on an otherwise idle machine, or lower the time scale
 
     `max_dt` does not prevent this. It caps the time each single update counts, and the time beyond it is dropped: from the relaxation and from the next weight update alike.
+
+!!! warning "A module with a large Jacobian makes the relaxation diverge"
+
+    A node relaxes its activity `h` with what the next node sends back, which goes through the Jacobian `J` of the next node's module. With the period `tau.h / 4` of `pc.Chain`, this is stable only while the largest singular value of `J` stays below about 2.6: `h` then relaxes at a rate of up to `(1 + |J|^2) / tau.h`, and a step of `tau.h / 4` must keep it below 2. That is the bound when every update comes on time. A late update takes a longer step, up to `max_dt` (2 periods by default), and a node may read what the next node sent a period before: in a linear chain, the bound then fell to about 1.2 to 1.8. When the next node is the `Output`, the curvature of the loss (at most 1/2 for the cross entropy) multiplies `|J|^2`, which loosens the bound. The stages of a ResNet go far past it. In `examples/cifar10/`, the Jacobian of a stage grew to 5 to 12 as the network learned, and with a node per stage the relaxation diverged: `lam` grew without bound and no longer pointed along the credit. Cut the network where the module of the next node has a small Jacobian: there, before the last stage and the head: about 1.3 after 3 epochs and 2.2 after 10, below 2 with the curvature of the cross entropy, and 10 epochs ran without diverging. A period and a `max_dt` shorter than `tau.h / 4` (building the nodes one by one) widen the bound at the cost of more updates; this has not been measured.
 
 ## Nodes of your own
 

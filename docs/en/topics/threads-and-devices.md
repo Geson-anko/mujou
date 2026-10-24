@@ -71,6 +71,8 @@ For a node on CUDA, Mujou:
 
 So a node writes no synchronization. To synchronize yourself, wait only for your own stream (`torch.cuda.current_stream().record_event().synchronize()`), never `torch.cuda.synchronize()`, which waits for the whole device, the other nodes included. A device has a pool of 32 streams, so past 32 CUDA nodes on one device, some nodes share a stream.
 
+The messages themselves stay in the host's memory: a node on CUDA copies each message it sends to the host, and each one it receives to its device. With large activations, these copies take a large part of an update: in `examples/cifar10/`, a quarter to a third of the CPU time of an update of a ResNet node with batches of 64. With a node per block and batches of 128, they took 60% of it. Cut such a network into few nodes with small messages between them, and slow the run's timer (`time_scale`) until the nodes keep up with their period.
+
 !!! tip "Create CUDA tensors and modules in `on_start`"
 
     Tensors and modules made on CUDA in `__init__` work: `mujou.run` synchronizes the host's stream before it starts the nodes. Still, create them in `on_start` or later. PyTorch's caching allocator ties memory to the stream current when it was allocated, so memory allocated in `__init__` stays tied to the host's stream; when the node drops such a tensor, the memory may be reused by the host before the node's work on it has finished. A restore loads the state after `on_start`, so state made there is restored too.
