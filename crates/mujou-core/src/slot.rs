@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::buffer::{Fill, Message, Messages};
+use crate::buffer::{FieldOut, Fill, Message, Messages};
 use crate::lock;
 use crate::schema::{FieldError, Schema};
 use crate::time::{RunClock, Timestamp, remaining};
@@ -336,7 +336,7 @@ impl InputGroup {
     }
 
     /// Writes one message to each of `slots`, all stamped with the same time,
-    /// and returns that time. `fill(i, bytes)` fills every field of the
+    /// and returns that time. `fill(i, out)` sets every field of the
     /// message of `slots[i]`.
     /// Every message is filled before any is placed, so if one `fill` fails no
     /// slot changes.
@@ -345,7 +345,7 @@ impl InputGroup {
     pub fn write<E>(
         &self,
         slots: &[&Slot],
-        mut fill: impl FnMut(usize, &mut [&mut [u8]]) -> Result<(), E>,
+        mut fill: impl FnMut(usize, &mut [FieldOut<'_>]) -> Result<(), E>,
     ) -> Result<Timestamp, E> {
         assert!(
             slots.iter().all(|s| s.belongs_to(self)),
@@ -362,7 +362,7 @@ impl InputGroup {
         let filled = slots
             .iter()
             .enumerate()
-            .map(|(i, slot)| slot.messages.fill(|bytes: &mut [&mut [u8]]| fill(i, bytes)))
+            .map(|(i, slot)| slot.messages.fill(|out: &mut [FieldOut<'_>]| fill(i, out)))
             .collect::<Result<Vec<_>, E>>()?;
         let time_ns = self.clock.now_ns();
         // Under the lock no write is in flight, so every next value is already
@@ -391,6 +391,7 @@ mod tests {
     use std::thread;
 
     use super::*;
+    use crate::buffer::{Buffer, Held, Value};
     use crate::dlpack::ffi::DLDataType;
     use crate::schema::FieldSpec;
     use crate::time::{Source, Timer};
@@ -433,12 +434,29 @@ mod tests {
     }
 
     /// Fills every field with `k`.
-    fn fill_k(k: i64) -> impl FnOnce(&mut [&mut [u8]]) -> Result<(), SlotError> {
-        move |bytes| {
-            for b in bytes {
-                b.copy_from_slice(&k.to_ne_bytes());
+    fn fill_k(k: i64) -> impl FnOnce(&mut [FieldOut<'_>]) -> Result<(), SlotError> {
+        move |out| {
+            for field in out {
+                field.bytes().copy_from_slice(&k.to_ne_bytes());
             }
             Ok(())
+        }
+    }
+
+    /// Holds `held` in every field.
+    fn hold(held: &Held) -> impl FnOnce(&mut [FieldOut<'_>]) -> Result<(), SlotError> {
+        move |out| {
+            for field in out {
+                field.hold(Arc::clone(held));
+            }
+            Ok(())
+        }
+    }
+
+    fn buffer(value: &Value) -> &Buffer {
+        match value {
+            Value::Bytes(buffer) => buffer,
+            Value::Held(_) => panic!("a held value"),
         }
     }
 
@@ -456,7 +474,7 @@ mod tests {
     fn values(msg: &Message) -> Vec<i64> {
         msg.values()
             .iter()
-            .map(|b| i64::from_ne_bytes(b.bytes().try_into().unwrap()))
+            .map(|v| i64::from_ne_bytes(buffer(v).bytes().try_into().unwrap()))
             .collect()
     }
 
@@ -569,6 +587,85 @@ mod tests {
         assert!(allocations(slot) <= 3, "allocated {}", allocations(slot));
     }
 
+    fn held(value: &Value) -> &Held {
+        match value {
+            Value::Held(held) => held,
+            Value::Bytes(_) => panic!("a buffer"),
+        }
+    }
+
+    #[test]
+    fn a_held_value_takes_no_buffer() {
+        let outlet = Outlet::new(pair_schema(), 1, "p", clock());
+        let slot = outlet.outbox();
+        let before = allocations(slot);
+        let value: Held = Arc::new(7_i64);
+        for _ in 0..10 {
+            outlet.send(Target::All, hold(&value)).unwrap();
+        }
+        assert_eq!(allocations(slot), before);
+        // A buffer taken before the value is held goes back to its pool.
+        outlet
+            .send(Target::All, |out: &mut [FieldOut<'_>]| {
+                for field in out.iter_mut() {
+                    field.bytes().fill(0);
+                    field.hold(Arc::clone(&value));
+                }
+                Ok::<_, SlotError>(())
+            })
+            .unwrap();
+        let pools = outlet.outbox().messages.pools();
+        assert!(pools.iter().all(|p| p.free() == p.allocated()));
+        let msg = outlet.channel(0).load();
+        for v in msg.values() {
+            assert!(Arc::ptr_eq(held(v), &value));
+            assert_eq!(held(v).downcast_ref::<i64>(), Some(&7));
+        }
+    }
+
+    #[test]
+    fn a_held_value_is_dropped_with_the_last_message() {
+        let outlet = Outlet::new(scalar_schema(), 2, "p", clock());
+        let value: Held = Arc::new(0_i64);
+        outlet.send(Target::All, hold(&value)).unwrap();
+        // One message, shared by the outbox and both channels.
+        assert_eq!(Arc::strong_count(&value), 2);
+        let read = outlet.channel(1).load();
+        outlet.send(Target::All, fill_k(1)).unwrap();
+        assert_eq!(Arc::strong_count(&value), 2, "held by the reader");
+        drop(read);
+        assert_eq!(Arc::strong_count(&value), 1);
+    }
+
+    #[test]
+    fn input_group_switches_held_values_at_once() {
+        let group = InputGroup::new(clock());
+        let (a, b) = (
+            group.input(scalar_schema(), "a"),
+            group.input(scalar_schema(), "b"),
+        );
+        let written: [Held; 2] = [Arc::new(1_i64), Arc::new(2_i64)];
+        group
+            .write(&[&a, &b], |i, out| hold(&written[i])(out))
+            .unwrap();
+        for (slot, value) in [(&a, &written[0]), (&b, &written[1])] {
+            assert!(Arc::ptr_eq(held(&slot.load().values()[0]), value));
+        }
+        a.restore(None, fill_k(3)).unwrap();
+        assert_eq!(values(&a.load()), [3]);
+        assert_eq!(Arc::strong_count(&written[0]), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "left the field 'b' unset")]
+    fn a_fill_must_set_every_field() {
+        let outlet = Outlet::new(pair_schema(), 0, "p", clock());
+        let _ = outlet.send(Target::All, |out: &mut [FieldOut<'_>]| {
+            out[0].bytes().fill(0);
+            Ok::<_, SlotError>(())
+        });
+    }
+
     #[test]
     fn readers_see_whole_messages_in_order() {
         const WRITES: i64 = 20_000;
@@ -621,7 +718,7 @@ mod tests {
                     let fields: Vec<_> = msg
                         .values()
                         .iter()
-                        .map(|b| b.field().name.as_str())
+                        .map(|v| buffer(v).field().name.as_str())
                         .collect();
                     assert_eq!(fields, expected, "read a message of another slot");
                 }

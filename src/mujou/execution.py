@@ -768,15 +768,15 @@ def _nodes(
     saved = restored or [(None, None)] * len(members)
     return [
         _NodeEntry(
-            Driver(member.node, clock, wires),
+            Driver(member.node, clock, wires, devices),
             wiring.tree.name(member.path),
             member.node.period,
             member.node.dedicated_thread,
             last_update_ns,
             state,
         )
-        for member, wires, (state, last_update_ns) in zip(
-            members, wiring.wires, saved, strict=True
+        for member, wires, devices, (state, last_update_ns) in zip(
+            members, wiring.wires, wiring.read_devices, saved, strict=True
         )
     ]
 

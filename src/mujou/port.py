@@ -110,8 +110,12 @@ class _Port[S, R]:
         converted (a scalar is taken as Python's typing takes it: an ``int``
         for a ``float``). The
         values are detached and copied, so changing ``msg`` afterwards changes
-        nothing that was sent. A CUDA tensor is copied to the host on the node's
-        stream. It never waits for the peers to read.
+        nothing that was sent. A tensor on the node's CUDA device is copied on
+        the device, on the node's stream, and ``send`` waits for that stream
+        before the peers can read it; a peer on CUDA copies it from device to
+        device. Any other CUDA tensor is copied to the host, and so is one on
+        the node's device while the hook has made another device current
+        (``torch.cuda.device(...)``). It never waits for the peers to read.
 
         Raises:
             RuntimeError: The caller is not a hook of the node that owns the port,
@@ -306,6 +310,8 @@ class Wire:
     label: str
     # Where the received messages arrive: the owning node's device.
     device: torch.device
+    # The device if it is a CUDA device, where the tensors sent stay; else None.
+    cuda: torch.device | None
     # Where send writes: None for a port that does not send.
     outlet: _native.Outlet | None
     # What the port reads, (channel, slot) in connection order: an unconnected
@@ -341,8 +347,10 @@ class Wire:
         return cast(_native.Outlet, self.outlet)  # Never is the type of what it sends
 
     def _values(self, msg: object) -> list[object]:
-        """The values of ``msg`` (tensors in host memory), for the outlet to copy."""
-        return to_core(cast("MessageSpec[Any]", self.port.send_spec), msg, self.label)
+        """The values of ``msg`` for the outlet: tensors in host memory, or
+        clones on the node's CUDA device."""
+        spec = cast("MessageSpec[Any]", self.port.send_spec)
+        return to_core(spec, msg, self.label, device=self.cuda)
 
 
 _HINT: Final = (

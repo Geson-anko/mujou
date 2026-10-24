@@ -102,7 +102,9 @@ pub enum FieldError {
         expected: String,
         actual: String,
     },
-    /// The tensor is not in host memory.
+    /// The tensor is not in host memory, which the core copies. The bindings
+    /// hold a tensor on a CUDA device instead of copying it, so they meet this
+    /// only for other devices.
     UnsupportedDevice { device_type: i32 },
     /// The producer handed over something that is not a valid DLPack tensor.
     InvalidDLPack { reason: String },
