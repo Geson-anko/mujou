@@ -81,36 +81,54 @@ jobs:
             target: aarch64
           - os: macos-latest
             target: aarch64
+          - os: windows-latest
+            target: x86_64
     steps:
       - uses: actions/checkout@v4
 
-      # maturin builds the macOS wheels with these interpreters; on Linux it
-      # builds in a manylinux container, which has its own.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.14
-            3.14t
+      - uses: astral-sh/setup-uv@v7
 
-      # One wheel for the regular build and one for the free-threaded build. The
-      # manylinux version is the one of the PyTorch wheels.
+      # One wheel for the regular build and one for the free-threaded build. On
+      # Linux, maturin builds in a manylinux container, which has both
+      # interpreters; elsewhere it builds with the ones uv installs.
+      - name: Find the interpreters
+        id: python
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            echo "interpreters=python3.14 python3.14t" >> "${GITHUB_OUTPUT}"
+          else
+            uv python install 3.14 3.14t
+            regular="$(uv python find --system 3.14)"
+            free_threaded="$(uv python find --system 3.14t)"
+            if [[ "${RUNNER_OS}" == "Windows" ]]; then
+              regular="$(cygpath -m "${regular}")"
+              free_threaded="$(cygpath -m "${free_threaded}")"
+            fi
+            echo "interpreters=${regular} ${free_threaded}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # The manylinux version is the one of the PyTorch wheels.
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: "2_28"
-          args: --release --out dist --interpreter python3.14 python3.14t
-
-      - uses: astral-sh/setup-uv@v7
+          args: --release --out dist --interpreter ${{ steps.python.outputs.interpreters }}
 
       - name: Run examples/quickstart.py with each wheel
         shell: bash
         run: |
           set -euo pipefail
+          bin="bin"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            bin="Scripts"
+          fi
           for abi in cp314 cp314t; do
             uv venv --python "${abi/cp314/3.14}" "../venv-${abi}"
             uv pip install --python "../venv-${abi}" dist/mujou-*-cp314-"${abi}"-*.whl
-            "../venv-${abi}/bin/python" -c "import mujou; print(mujou.__version__)"
-            "../venv-${abi}/bin/python" examples/quickstart.py
+            "../venv-${abi}/${bin}/python" -c "import mujou; print(mujou.__version__)"
+            "../venv-${abi}/${bin}/python" examples/quickstart.py
           done
 
       - uses: actions/upload-artifact@v4
