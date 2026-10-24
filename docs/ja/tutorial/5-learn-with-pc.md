@@ -47,4 +47,5 @@ batch 300: loss 0.0059 (the mean of the last 50)
 
 - 部品のつながりと、ノードが 1 回の更新で行うこと: [mujou.pc の仕組み](../topics/pc-concepts.md)
 - `pc.Chain` で MNIST を学ぶ 784-256-256-10 のネットワークと BP の比較: `examples/mnist/`（`uv run python examples/mnist/main.py`）。説明は [PC-ALM](../topics/pc.md#mnist)
+- GPU の上の `pc.Chain` で CIFAR-10 を学ぶ ResNet-20 と BP の比較: `examples/cifar10/`（`uv run python examples/cifar10/main.py`）。説明は [PC-ALM](../topics/pc.md#cifar-10)
 - 時定数・optimizer・`learn_interval` の決め方、落とし穴、自作のノード: [PC-ALM](../topics/pc.md)

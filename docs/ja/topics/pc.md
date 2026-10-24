@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数と optimizer の決め方、BP との違い、落とし穴、MNIST、自作のノードを説明する。
+`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数と optimizer の決め方、BP との違い、落とし穴、MNIST と CIFAR-10、自作のノードを説明する。
 
 ## BP との違い
 
@@ -99,6 +99,25 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 - **`--watch`** は各ノードの `dt` を数え（`watch.py`）、更新が中央値で 1.5 周期、99% 点で 2 周期より遅れると警告する
 - `data.py`・`metrics.py`・`bp.py` は `mujou.pc` に依存しない。データは素のテンソルで、BP の基準は素の PyTorch
 
+## CIFAR-10
+
+`examples/cifar10/` は CUDA のデバイスに載せた ResNet-20 を 2 つのモジュールに切り、`pc.Chain` の `Input` の後ろの 2 つのノードにして、CIFAR-10 に学習させる。同じネットワークを同じ初期重み・同じバッチ・同じ `pc.AdamW` で、GPU 上の BP でも学習させる。3 epoch 目の prequential 精度は PC-ALM が 55.00%、BP が 55.76%、その後のテスト精度は 55.98% と 58.23% だった（seed 0）。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も実行ごとにビット単位では一致しない。
+
+```sh
+uv run python examples/cifar10/main.py            # 3 epoch、RTX 4090 で約 5 分
+uv run python examples/cifar10/main.py --epochs 10
+```
+
+```python
+--8<-- "examples/cifar10/main.py:chain"
+```
+
+- **2 つのノード**: `layer0` が stem と最初の 2 つのステージを、`output` が 3 つ目のステージと head を持つ。ノードの内側では autograd がモジュールを微分し（BP）、2 つのノードの間には PC-ALM のメッセージだけが流れる。そこで切る理由は[落とし穴](#%E8%90%BD%E3%81%A8%E3%81%97%E7%A9%B4)のヤコビアンの項
+- **GPU**: `device="cuda"` で、すべてのノードが GPU で計算する。ノードが送受信するメッセージは、そのたびにデバイスとホストの間でコピーされ（[デバイス](threads-and-devices.md#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9)）、このコピーがここでは更新の CPU 時間の 1/4〜1/3 を占める。バッチが 64 なら、`layer0` の 1 回の更新は周期 1 ms より長くかかる。そこで実行のタイマーを `--time-scale` 0.3 で実時間より遅く進める。RTX 4090 では、このとき `layer0` の更新の 99% が 2 周期（`max_dt`）以内に来た。0.4 では 1% が 3.5 周期より遅れた
+- **AdamW**: [optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)のとおり、Adam の `lr` から作る。BP の基準も同じ `pc.AdamW` をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが学ぶ時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は同じ勾配に PC-ALM とほぼ同じステップを踏む
+- **`tau.lam = tau.h`**: MNIST と同じ `tau.lam = 2 * tau.h` では 32 周期の間に credit が落ち着かず、PC-ALM が BP に遅れた。`tau.lam = tau.h` なら同じ 32 周期で足りる
+- **GroupNorm**: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない
+
 ## バッチ
 
 バッチはメッセージのどのテンソルも先頭に持つ shape。`pc.Chain`・`pc.Input`・`pc.activity_spec` に `batch` で渡し、spec の `x` と `y` もこの shape で始める。`pc.Layer` と `pc.Output` は受け取る `act_spec` から読む。
@@ -139,6 +158,10 @@ uv run python examples/mnist/main.py --epochs 1 --watch
     - **ほかのプロセスがコアを使っている**: コアを待つノードがあると、隣のノードが先に進む。32 コアの機械で時間の速さ 1 なら、busy loop 26 本と並べて 1 epoch を完走し、32 本では発散した。0.5 なら 32 本でも完走した。ほかに何も動いていない機械で回すか、時間の速さを下げる
 
     `max_dt` ではこれを防げない。`max_dt` は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。
+
+!!! warning "ヤコビアンの大きいモジュールでは緩和が発散する"
+
+    ノードは、次のノードが送り返す値で活動 `h` を緩和する。この値は次のノードのモジュールのヤコビアン `J` を通る。`pc.Chain` の周期 `tau.h / 4` でこれが安定なのは、`J` の最大特異値がおよそ 2.6 より小さい間だけ。`h` の緩和の速さは最大で `(1 + |J|^2) / tau.h` になり、これに 1 ステップの `tau.h / 4` を掛けた値を 2 未満に保たなければならない。これはどの更新も遅れないときの境界。遅れた更新は `max_dt`（既定は 2 周期）までの長い 1 歩を進め、ノードは次のノードが 1 周期前に送った値を読むこともある。このとき、線形の鎖では境界が 1.2〜1.8 程度まで下がった。次のノードが `Output` なら、損失の曲率（交差エントロピーなら 1/2 以下）が `|J|^2` に掛かり、境界は緩む。ResNet のステージはこの範囲を大きく超える。`examples/cifar10/` では学習につれてステージのヤコビアンが 5〜12 に育ち、ステージごとにノードを分けると緩和が発散した。`lam` は際限なく大きくなり、credit の向きも指さなくなった。ネットワークは次のノードのモジュールのヤコビアンが小さいところで切る。この例では最後のステージと head の前で切り、そのヤコビアンは 3 epoch 後に約 1.3、10 epoch 後に 2.2 だった。交差エントロピーの曲率を掛ければ 2 未満で、10 epoch の実行も発散しなかった。ノードを 1 つずつ組み、`period` と `max_dt` を `tau.h / 4` より短くしても範囲は広がるが、更新の回数が増える。こちらは測っていない。
 
 ## 自分のノードを書く
 
