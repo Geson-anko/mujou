@@ -70,7 +70,7 @@ For a node on CUDA, Mujou:
 - waits for it before and after `state_dict`, on a thread of its own (on the host's thread once the run has ended), so no worker waits for it
 - keeps a tensor that the node sends on its own device there: `send` copies it on the node's stream and waits for that stream before the peers can read it. A peer on CUDA copies the message from device to device, without host memory in between (between two GPUs without peer access, the CUDA driver may still stage the copy through the host). A node on the CPU, and the host (`run.read`, `subscribe`, `wait_for`, `state_dict`), get a CPU copy when they read it. A tensor on another device is sent through host memory
 
-So a node writes no synchronization. To synchronize yourself, wait only for your own stream (`torch.cuda.current_stream().record_event().synchronize()`), never `torch.cuda.synchronize()`, which waits for the whole device, the other nodes included. A device has a pool of 32 streams, so past 32 CUDA nodes on one device, some nodes share a stream.
+So a node writes no synchronization. To synchronize yourself, wait only for your own stream (`torch.cuda.current_stream().record_event().synchronize()`), never `torch.cuda.synchronize()`, which waits for the whole device, the other nodes included. A device has a pool of 32 streams, so past 32 streams on one device, some nodes share a stream. The streams for copies of the nodes that read another device (below) count too. Sharing a stream stays correct but may slow a node down: a reader that shares the writer's stream waits for what the writer queued after it sent, and a node on the CPU waits for it on the host.
 
 !!! tip "Create CUDA tensors and modules in `on_start`"
 

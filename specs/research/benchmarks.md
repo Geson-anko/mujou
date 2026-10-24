@@ -402,7 +402,7 @@ CUDA の送受信（scratch のスクリプト。manual run で書き手と読�
 
 - 同じ GPU のノードの間は、100 万要素で send + recv が 2.9 ms から 0.06 ms になった。小さいメッセージは同期の遅延が支配的で、差は小さい
 - CPU の読み手には、D2H が send から recv へ移る。100 万要素では合計が 1.7 ms から 1.4 ms に減るが、小さいメッセージでは合計が約 17 µs 増える（書き手の stream の待ちと、読み手の D2H の同期の 2 回になる）
-- P2P の無い 2 枚（4090 と 4060）の間の recv は、ドライバがホストを中継するので変わらない。send の D2H は無くなる
+- P2P の無い 2 枚（4090 と 4060。`torch.cuda.can_device_access_peer` が False）の間の recv は、ドライバがホストを中継するので変わらない。send の D2H は無くなる
 - ホストを経由しないことは、`tests/mujou/test_port.py` の `test_a_message_between_cuda_nodes_skips_host_memory` が `torch.profiler` の Memcpy の端点で確かめる
 
 ## M:N スケジューラの比較

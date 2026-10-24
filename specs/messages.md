@@ -53,7 +53,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 - 別の CUDA device の読み手: ATen は、コピーを「呼んだスレッドの、元の device の current stream」に積み、読み手の device の stream と event で前後を揃える。ワーカーには直前に走った別のノードの stream が残っているので、Driver がノードごとに元の device の副 stream を持ち、hook のたびに current にする（[ノード](nodes.md#cuda)）
 - CPU のノードとホスト: 副 stream（ホストはそのスレッドの current stream）の上で `.to("cpu")` する。同期のコピーなので、終わってから返る
 
-P2P の無い GPU の組（この機械の RTX 4090 と RTX 4060 は `can_device_access_peer` が False）では、device の間のコピーをドライバが内部でホストを中継する。コードはホストのメモリを経由しない。
+P2P の無い GPU の組（計測した機械の例は [research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）では、device の間のコピーをドライバが内部でホストを中継する。コードはホストのメモリを経由しない。
 
 ## codec
 
@@ -128,6 +128,6 @@ torch とコアの変換は `codec.py` の 1 か所だけが行う。spec の公
 - device に置く値のプールは torch のキャッシュアロケータで、定常状態で `cudaMalloc` しない。独自の device のプールは持たない（アロケータが二重になる）。device に置くフィールドは、ホストのプールからバッファを取らない
 - 書き手の `clone` の塊は、値がスロットから外れると書き手の stream のアロケータへ戻り、次の `clone` がすぐ使いうる。読み手はコピーを積んだあと元の値に `record_stream(コピーした stream)` を付け、コピーが終わるまで再利用させない。読み手の Driver が読んだ値を `on_update` の後まで握る案は、recv のたびの記録と hook ごとの後始末が要るので採らない
 - 各スロットは最新の値を device に 1 つ持つ（outbox とチャネルは同じメッセージを共有する）
-- 保持する値（bindings の `Py<PyAny>`）が落ちるのは、スロットの mutex の外、GIL を離した区間の中（`publish` の `drop(old)`）。PyO3 はその decref を reference pool に回し、`detach` から戻るときに同じスレッドで処理する
+- 保持する値（bindings の `Py<PyAny>`）は、それを持つ最後の `Message` が落ちたときに落ちる。書き手の send・ホストの write・復元が値を差し替えたときは、スロットの mutex の外、GIL を離した区間の中（`publish` や `InputGroup::write` の `drop(old)`）で落ち、PyO3 はその decref を reference pool に回して、`detach` から戻るときに同じスレッドで処理する。読み手の `Message`（Python のオブジェクト）が最後の参照なら、GIL を持ったまま落ちる
 
 seqlock で 1 つのバッファを上書きし、読み手がコピーする方式は持たない。メモリの使用量は増えるが、安全性と速度を優先する。

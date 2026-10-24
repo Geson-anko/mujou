@@ -210,7 +210,7 @@ GPU の演算器・帯域・メモリの取り合いは、CPU のコアの取り
 | 起動の前（段 2 の終わり） | `mujou.run` を呼んだスレッド | そのスレッドの、ノードが使う各 device の現在の stream | ノードが、`__init__` で確保したテンソルを確保が終わる前に使う |
 
 - 自分の device 以外の CUDA device にある値を読むノードには、Driver がその device ごとに副 stream を作り、hook のたびに current にする（`Wiring.read_devices` が、読むスロットの書き手の device から決める）。ATen は device の間のコピーを、呼んだスレッドの元の device の current stream に積む。副 stream が無いと、ワーカーで直前に走った別のノードの stream に積まれ、ノード同士が同じ stream で絡む。`torch.cuda.set_stream` は current device をその stream の device に変えるので、自分の stream を最後に設定する。副 stream のコピーは待たない。CUDA の読み手なら ATen が自分の stream に event で繋ぎ、CPU の読み手なら `.to("cpu")` が同期のコピーだからである
-- 待つときは stream 全体を `synchronize` せず、stream に event を記録してその event だけを待つ。PyTorch は `torch.cuda.Stream()` を device ごとのプール（32 本）から割り当てるので、32 を超える CUDA のノードは stream を共有する。event なら、記録より後にほかのノードが積んだ仕事を待たない
+- 待つときは stream 全体を `synchronize` せず、stream に event を記録してその event だけを待つ。PyTorch は `torch.cuda.Stream()` を device ごとのプール（32 本）から割り当てるので、32 を超える CUDA のノードは stream を共有する。event なら、記録より後にほかのノードが積んだ仕事を待たない。副 stream も同じプールから取るので、ノード自身の stream と合わせて device ごとに 32 本を超えると、副 stream がほかのノードの stream と重なりうる。書き手の stream と重なると、読み手のコピーが書き手の公開した後の仕事の後ろに並ぶ（CPU の読み手の D2H は stream 全体を同期するので、ホストまで待つ）。値は正しいままで、性能だけの問題である（2026-10-24 の監査で再現した。書き手 1 つと idle な cuda:0 のノード 31 個のあとに置いた CPU の読み手の recv が、書き手が送った後に積んだ約 0.5 s の仕事を待った）
 - `"cuda"` のように添字の無いデバイスは、構築したときのホストの現在のデバイスに決める
 - CUDA のテンソルやモジュールは `on_start` 以降で作るよう docs で勧める。`__init__` で作っても起動の前の同期で正しく動くが、キャッシュアロケータはメモリを確保した時点の現在の stream に結び付けるので、ノードがテンソルを捨てたとき、ノードの stream の計算が終わる前にホストの確保へ回りうる
 - 乱数生成器はノードの device の上に作る。生成器の状態は device の種類ごとの形式なので、CUDA のノードの状態を CPU のノードに戻すことはサポートしない（同じ形に作り直すことが S5 の前提）
