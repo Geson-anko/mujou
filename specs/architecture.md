@@ -93,7 +93,7 @@ Rust は仕組みを、Python は方針を持つ。
 
 | Rust（仕組み） | Python（方針） |
 | --- | --- |
-| スロット、バッファプール、shape と dtype の照合（`copy_from`） | spec、メッセージの構造の検査、torch との変換（`codec.py`） |
+| スロット、バッファプールと不透明な値（`Held`）、shape と dtype の照合（`copy_from` / `check`）。どの値を device に置くかは bindings が DLPack の device 種別で決める | spec、メッセージの構造の検査、torch との変換と device に置く値の `clone`・stream の同期（`codec.py`） |
 | タイマー、RunClock、停止の保持 | 実行のタイマーの選び方（既定、渡したもの、復元した時刻から） |
 | ライフサイクルの状態機械、ワーカー、周期の待ち | hook で何をするか（Driver）、CUDA の device と stream |
 | hook の呼び出しと例外の捕捉、終了の流れ | 木の読み方、パスと label、ガード、状態の木の形 |
@@ -109,7 +109,7 @@ Rust は仕組みを、Python は方針を持つ。
 
 torch は必須の依存で、ノードの内側の計算に全面的に採用する。torch に依存させないと決めているのは `_native` と `mujou/time.py` だけで、ほかのモジュールは要るなら torch を使ってよい。バックエンドを分けた `mujou.torch` などは持たない。
 
-GPU はコアでサポートしない。コアの値はホストのメモリにだけ置き、GPU を使うノードは境界で device → host → device とコピーする。ノードの内側での GPU の利用は自由（[ノード](nodes.md#cuda)）。
+コアは GPU の意味論（device・stream・event）を持たない。CUDA のノードが自分の device の上で送ったテンソルは、codec が device の上で作ったコピーを、bindings がコアの不透明な値（`Held`）としてそのまま持つ。stream の同期は codec が torch で行う。それ以外の値はホストのメモリに置く（2026-10-24 に、コアは GPU をサポートせず境界で device → host → device とコピーするという 2026-10-15 の決定を覆した。[メッセージ](messages.md#コアの中の値)）。ノードの内側での GPU の利用は自由（[ノード](nodes.md#cuda)）。
 
 ## free-threaded の規則
 
