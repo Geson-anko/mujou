@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from mujou._native import BufferView
 from mujou.network import Group, Network
 from mujou.port import MultiPort, Port
 from mujou.spec import TensorSpec
@@ -122,6 +123,17 @@ class TestDevices:
         net = Group(a=a, b=b, c=c, sink=sink, on_cpu=on_cpu)
         cuda0 = frozenset({torch.device("cuda", 0)})
         assert wired(net).read_devices == (frozenset(),) * 3 + (cuda0, cuda0)
+
+    @pytest.mark.cuda
+    def test_what_the_host_writes_is_in_host_memory(self):
+        # The host's thread may have another current device and stream.
+        node = probe_on("cuda:0", inp=Port(recv=vec()))
+        wiring = wired(Group(node=node))
+        x = torch.ones(2, dtype=F64, device="cuda:0")
+        wiring.write({node.inp: x})  # pyright: ignore[reportAttributeAccessIssue]
+        (value,) = wiring.inputs[node.inp].read().values  # pyright: ignore[reportAttributeAccessIssue]
+        assert isinstance(value, BufferView)
+        assert torch.equal(torch.from_dlpack(value), x.cpu())
 
     @pytest.mark.cuda
     def test_the_outbox_and_every_channel_hold_one_clone_on_the_device(self):

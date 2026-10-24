@@ -690,16 +690,18 @@ def delay_the_stream() -> None:
 
 
 class OnCuda0(Node):
-    """A node on ``cuda:0`` on a thread of its own that, in ``on_start``, runs
-    each kind of kernel the tests run: CUDA loads the code of a kernel when it
-    first runs, and waits for the whole device to load it, which would hide a
-    missing wait for a stream."""
+    """A node on ``device`` (``cuda:0`` by default) on a thread of its own that,
+    in ``on_start``, runs each kind of kernel the tests run on a CUDA device:
+    CUDA loads the code of a kernel when it first runs, and waits for the whole
+    device to load it, which would hide a missing wait for a stream."""
 
-    def __init__(self) -> None:
-        super().__init__(device="cuda:0", dedicated_thread=True)
+    def __init__(self, device: str = "cuda:0") -> None:
+        super().__init__(device=device, dedicated_thread=True)
 
     @override
     def on_start(self) -> None:
+        if self.device.type != "cuda":
+            return
         x = torch.empty(BIG.shape, device=self.device)
         x.fill_(1.0)
         x.clone().to(self.device, copy=True).cpu()
@@ -770,6 +772,54 @@ class Reads(OnCuda0):
         self.before()
         received = self.inp.recv()
         self.between()
+        self.received = received.cpu()
+        self.done.set()
+
+
+class SendsThenWorks(OnCuda0):
+    """Sends 1s, then queues long work on its stream, records ``busy`` after
+    it and sets ``sent``: once."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.out = Port(send=BIG)
+        self.sent = threading.Event()
+        self.busy: torch.cuda.Event | torch.Event | None = None
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.sent.is_set():
+            return
+        self.out.send(torch.ones(BIG.shape, device=self.device))
+        delay_the_stream()
+        self.busy = torch.cuda.current_stream().record_event()
+        self.sent.set()
+
+
+class ReadsAndCheck(OnCuda0):
+    """Once ``writer`` has sent: receives, waits for its own stream, and keeps
+    in ``writer_done`` whether the writer's work after the send had finished
+    by then. Once."""
+
+    def __init__(self, device: str, writer: SendsThenWorks) -> None:
+        super().__init__(device)
+        self.inp = Port(recv=BIG)
+        # Not the node itself: a node holds no nodes.
+        self.sent = writer.sent
+        self.busy = lambda: cast("torch.cuda.Event | torch.Event", writer.busy)
+        self.writer_done: bool | None = None
+        self.received: torch.Tensor | None = None
+        self.done = threading.Event()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.done.is_set():
+            return
+        assert self.sent.wait(10.0)
+        received = self.inp.recv()
+        if received.is_cuda:
+            torch.cuda.current_stream().synchronize()
+        self.writer_done = self.busy().query()
         self.received = received.cpu()
         self.done.set()
 
@@ -966,6 +1016,24 @@ class TestCuda:
         virtual.advance(0.01)
         assert reader.done.wait(10.0)
         assert torch.equal(cast(torch.Tensor, reader.received), torch.ones(BIG.shape))
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "reader", ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.cuda(2)), "cpu"]
+    )
+    def test_a_reader_does_not_wait_for_what_the_writer_queues_after_sending(
+        self, virtual: VirtualTimer, start: Start, reader: str
+    ):
+        # S2: the writer waits for its stream before it publishes, so the
+        # reader's copy depends on nothing of the writer's stream.
+        writer = SendsThenWorks()
+        sink = ReadsAndCheck(reader, writer)
+        writer.out.connect(sink.inp)
+        start(Group(writer=writer, sink=sink), timer=virtual)
+        virtual.advance(0.01)
+        assert sink.done.wait(10.0)
+        assert sink.writer_done is False
+        assert torch.equal(cast(torch.Tensor, sink.received), torch.ones(BIG.shape))
 
     @pytest.mark.cuda(2)
     def test_sends_while_the_hook_has_made_another_device_current(
