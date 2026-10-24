@@ -36,6 +36,7 @@ from tests.mujou.nodes import (
     assert_same_tree,
     entries,
     port_slots,
+    probe_on,
     updates,
     vec,
 )
@@ -1507,6 +1508,31 @@ class Net(Network):
         done = self.run_script(body, marker)
         assert done.returncode == 0, done.stderr
         assert done.stdout.strip() == "stopped"
+
+
+@pytest.mark.cuda
+class TestCuda:
+    def test_the_host_reads_what_a_cuda_node_sends_on_the_cpu(
+        self, start_manual: StartManual
+    ):
+        out = Port(send=vec())
+        x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
+        node = probe_on("cuda:0", lambda: out.send(x), out=out)
+        run = start_manual(Group(node=node))
+        run.step(H)
+        expected = x.cpu()
+        values = run.subscribe(out, timeout=10.0)
+        read = [
+            run.read(out),
+            run.read_with_time(out)[0],
+            next(values)[0],
+            run.wait_for(out, lambda _: True, timeout=10.0)[0],
+        ]
+        for value in read:
+            assert value.device == torch.device("cpu")
+            assert torch.equal(value, expected)
+        run.shutdown()
+        assert torch.equal(run.read(out), expected)
 
 
 # Large enough that the GPU is still working when the CPU moves on: a missing wait

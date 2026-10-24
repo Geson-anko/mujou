@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from mujou._native import Outlet, ReadOnlyTimer, VirtualTimer
-from mujou.codec import fields, from_core, schema, to_core
+from mujou.codec import fields, from_core, peek, schema, to_core
 from mujou.spec import (
     DLPACK,
     BoolSpec,
@@ -20,6 +20,7 @@ from mujou.spec import (
 from mujou.time import Timestamp
 
 CPU = torch.device("cpu")
+CUDA0 = torch.device("cuda", 0)
 
 
 class Feedback(TypedDict):
@@ -67,12 +68,15 @@ def bits(t: torch.Tensor) -> torch.Tensor:
 
 
 def through_the_core(
-    spec: MessageSpec[Any], msg: object, label: str = "a.next"
+    spec: MessageSpec[Any],
+    msg: object,
+    label: str = "a.next",
+    device: torch.device | None = None,
 ) -> object:
     """Send ``msg`` through an outlet of ``spec`` and read it back, as a port
-    and the host do."""
+    of a node on ``device`` (a CUDA device, or ``None``) and the host do."""
     outlet = Outlet(schema(spec), 0, label, clock=ReadOnlyTimer(VirtualTimer()))
-    outlet.send(to_core(spec, msg, label))
+    outlet.send(to_core(spec, msg, label, device=device))
     return from_core(spec, outlet.outbox.read().values, CPU)
 
 
@@ -284,14 +288,96 @@ class TestStructure:
         with pytest.raises(TypeError, match=f"^{message}$"):
             to_core(spec, msg, "a.next")
 
-    def test_the_core_names_the_slot_and_field_of_a_wrong_shape_or_dtype(self):
+    @pytest.mark.parametrize(
+        "device", [None, pytest.param(CUDA0, marks=pytest.mark.cuda)], ids=str
+    )
+    def test_the_core_names_the_slot_and_field_of_a_wrong_shape_or_dtype(
+        self, device: torch.device | None
+    ):
+        # On CUDA, the core checks the tensors that it holds on the device.
+        on = device or CPU
         spec = feedback_spec()
-        msg = {"error": torch.zeros(2, 3), "target": torch.zeros(3)}
-        with pytest.raises(ValueError, match=r"'a\.next/out', field 'target'.*shape"):
-            through_the_core(spec, msg)
         msg = {
-            "error": torch.zeros(2, 3, dtype=torch.float64),
-            "target": torch.zeros(2),
+            "error": torch.zeros(2, 3, device=on),
+            "target": torch.zeros(3, device=on),
+        }
+        with pytest.raises(ValueError, match=r"'a\.next/out', field 'target'.*shape"):
+            through_the_core(spec, msg, device=device)
+        msg = {
+            "error": torch.zeros(2, 3, dtype=torch.float64, device=on),
+            "target": torch.zeros(2, device=on),
         }
         with pytest.raises(ValueError, match=r"'a\.next/out', field 'error'.*dtype"):
-            through_the_core(spec, msg)
+            through_the_core(spec, msg, device=device)
+
+
+def outlet_of(spec: MessageSpec[Any]) -> Outlet:
+    return Outlet(schema(spec), 0, "a.next", clock=ReadOnlyTimer(VirtualTimer()))
+
+
+@pytest.mark.cuda
+class TestCuda:
+    @pytest.mark.parametrize("dtype", list(DLPACK), ids=str)
+    def test_a_tensor_on_the_device_round_trips_every_dtype_bit_for_bit(
+        self, dtype: torch.dtype
+    ):
+        spec = TensorSpec((3, 5), dtype)
+        x = sample(spec.shape, dtype)
+        y = through_the_core(spec, x.to(CUDA0), device=CUDA0)
+        assert isinstance(y, torch.Tensor)
+        assert torch.equal(bits(y), bits(x))
+
+    def test_the_core_holds_a_contiguous_clone_on_the_device(self):
+        spec = TensorSpec((3, 2))
+        x = torch.arange(6.0, device=CUDA0).reshape(2, 3).t()  # not contiguous
+        w = torch.ones((), device=CUDA0, requires_grad=True)
+        (y,) = to_core(spec, x * w, "a.next", device=CUDA0)
+        assert isinstance(y, torch.Tensor)
+        assert y.device == CUDA0 and y.is_contiguous() and not y.requires_grad
+        assert torch.equal(y, x)
+        outlet = outlet_of(spec)
+        outlet.send([y])
+        (held,) = outlet.outbox.read().values
+        assert held is y
+
+    def test_a_tensor_elsewhere_goes_to_host_memory(self):
+        spec = TensorSpec((2,))
+        (on_cpu,) = to_core(spec, torch.ones(2), "a.next", device=CUDA0)
+        (by_the_host,) = to_core(spec, torch.ones(2, device=CUDA0), "a.next")
+        for y in (on_cpu, by_the_host):
+            assert isinstance(y, torch.Tensor) and y.device == CPU
+
+    def test_a_tensor_that_is_not_dense_is_refused(self):
+        spec = TensorSpec((2, 2))
+        sparse = torch.eye(2, device=CUDA0).to_sparse()
+        with pytest.raises(BufferError):
+            outlet_of(spec).send(to_core(spec, sparse, "a.next", device=CUDA0))
+
+    def test_reading_copies_and_peeking_does_not(self):
+        spec = mixed_spec()
+        msg = {
+            "h": torch.ones(2, device=CUDA0),
+            "jumps": 3,
+            "gain": 0.5,
+            "on": True,
+            "time": Timestamp(ns=7),
+        }
+        outlet = outlet_of(spec)
+        outlet.send(to_core(spec, msg, "a.next", device=CUDA0))
+        views = outlet.outbox.read().values
+        for device in (CUDA0, CPU):
+            read = from_core(spec, views, device)
+            assert isinstance(read, dict)
+            assert read["h"].device == device
+            assert read["h"].data_ptr() != views[0].data_ptr()
+            assert torch.equal(read["h"].cpu(), torch.ones(2))
+            assert {k: v for k, v in read.items() if k != "h"} == {
+                "jumps": 3,
+                "gain": 0.5,
+                "on": True,
+                "time": Timestamp(ns=7),
+            }
+        peeked = peek(spec, views)
+        assert isinstance(peeked, dict)
+        assert peeked["h"] is views[0]
+        assert peeked["jumps"] == 3

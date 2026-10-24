@@ -9,18 +9,15 @@ Its ports mirror the slots that ``wiring.wire`` lays out (``_slots``):
 
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, cast, final
+from typing import Any, cast, final
 
 import torch
 
-from mujou.codec import from_core, times_from_ns, times_to_ns, to_core
+from mujou.codec import peek, times_from_ns, times_to_ns, to_core
 from mujou.node import map_tensors
 from mujou.port import AnyPort, AnySlot
 from mujou.spec import MessageSpec
 from mujou.wiring import Wiring
-
-# Where the tree holds its tensors.
-_CPU: Final = torch.device("cpu")
 
 
 @final
@@ -47,8 +44,9 @@ def capture(
 ) -> dict[str, Any]:
     """The tree of a paused or ended run at ``time_ns`` on its timer, from the
     copies of the nodes' states (``Driver.capture``) and their last update
-    times, in the order of the tree's members. ``cpu`` moves the states to the
-    CPU afterwards."""
+    times, in the order of the tree's members. The values of the slots that
+    the core holds on a CUDA device come uncopied, so as not to lengthen the
+    pause: ``cpu`` moves them and the states to the CPU afterwards."""
     return {
         "timer": {"time_ns": time_ns, "time_scale": time_scale},
         "nodes": {
@@ -68,10 +66,11 @@ def capture(
 
 
 def cpu(tree: dict[str, Any]) -> dict[str, Any]:
-    """``tree`` with the tensors of every node's state on the CPU (the rest of
-    the tree is on the CPU already)."""
+    """``tree`` with the tensors of every node's state and of its ports on the
+    CPU, as copies (the rest of the tree is on the CPU already)."""
     for node in tree["nodes"].values():
         node["state"] = map_tensors(node["state"], torch.Tensor.cpu)
+        node["ports"] = map_tensors(node["ports"], torch.Tensor.cpu)
     return tree
 
 
@@ -148,7 +147,7 @@ def _entry(held: _Held) -> dict[str, Any]:
     message = held.slot.read()
     time = message.timestamp
     return {
-        "value": times_to_ns(held.spec, from_core(held.spec, message.values, _CPU)),
+        "value": times_to_ns(held.spec, peek(held.spec, message.values)),
         "time_ns": None if time is None else time.ns,
     }
 

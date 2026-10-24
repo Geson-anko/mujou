@@ -1,5 +1,8 @@
 import queue
 import re
+import subprocess
+import sys
+import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Never, TypedDict, cast, override
 
@@ -9,9 +12,9 @@ import torch
 from mujou.network import Group
 from mujou.node import Node
 from mujou.port import Channel, MultiPort, Port
-from mujou.spec import DictSpec, TensorSpec
+from mujou.spec import DictSpec, IntSpec, TensorSpec
 from mujou.time import Timestamp, VirtualTimer
-from tests.mujou.nodes import Probe
+from tests.mujou.nodes import Probe, probe_on
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -29,6 +32,11 @@ class Feedback(TypedDict):
 
 class Other(TypedDict):
     error: torch.Tensor
+
+
+class Tagged(TypedDict):
+    x: torch.Tensor
+    k: int
 
 
 def h() -> TensorSpec:
@@ -608,6 +616,164 @@ class TestInitial:
             start_manual(Group(node=node))
 
 
+# Steps a node on argv[1] that sends to a node on argv[2] under torch.profiler,
+# and prints the name of each copy on a GPU.
+_PROFILED = """
+import sys
+import threading
+from typing import override
+
+import torch
+from torch.profiler import ProfilerActivity, profile
+
+import mujou.testing
+from mujou import Group, Node, Port, TensorSpec
+
+SPEC = TensorSpec((1024,))
+
+
+class Source(Node):
+    def __init__(self) -> None:
+        super().__init__(device=sys.argv[1])
+        self.out = Port(send=SPEC)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.out.send(torch.ones(1024, device=self.device))
+
+
+class Sink(Node):
+    def __init__(self) -> None:
+        super().__init__(device=sys.argv[2])
+        self.inp = Port(recv=SPEC)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.inp.recv()
+
+
+source, sink = Source(), Sink()
+source.out.connect(sink.inp)
+run = mujou.testing.run(Group(source=source, sink=sink))
+run.step(0.001, source, sink)
+with profile(activities=[ProfilerActivity.CUDA]) as prof:
+    for _ in range(3):
+        run.step(0.001, source, sink)
+run.shutdown()
+for event in prof.events():
+    if event.name.startswith("Memcpy"):
+        print(event.name)
+"""
+
+
+def profiled_copies(source: str, sink: str) -> list[str]:
+    """The copies on a GPU while a node on ``source`` sends to one on ``sink``,
+    in a new interpreter: the profiler loads modules that enable the GIL."""
+    done = subprocess.run(
+        [sys.executable, "-c", _PROFILED, source, sink],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    return done.stdout.splitlines()
+
+
+BIG = TensorSpec((1 << 20,))
+
+
+def delay_the_stream() -> None:
+    """Keep the current stream busy for about 0.1 s of GPU time, so that what
+    is queued after it is still pending when the CPU moves on. ``_sleep`` is a
+    private API of torch, which its own tests use for this."""
+    torch.cuda._sleep(250_000_000)  # pyright: ignore[reportPrivateUsage]
+
+
+class OnCuda0(Node):
+    """A node on ``cuda:0`` on a thread of its own that, in ``on_start``, runs
+    each kind of kernel the tests run: CUDA loads the code of a kernel when it
+    first runs, and waits for the whole device to load it, which would hide a
+    missing wait for a stream."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0", dedicated_thread=True)
+
+    @override
+    def on_start(self) -> None:
+        x = torch.empty(BIG.shape, device=self.device)
+        x.fill_(1.0)
+        x.clone().to(self.device, copy=True).cpu()
+        torch.cuda._sleep(1)  # pyright: ignore[reportPrivateUsage]
+        torch.cuda.current_stream().synchronize()
+
+
+class Late(OnCuda0):
+    """Sends 7s that its stream fills late, once, and then sets ``sent``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.out = Port(send=BIG)
+        self.sent = threading.Event()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.sent.is_set():
+            return
+        x = torch.empty(BIG.shape, device=self.device)
+        delay_the_stream()
+        x.fill_(7.0)
+        self.out.send(x)
+        self.sent.set()
+
+
+class Resends(OnCuda0):
+    """Sends 1s and sets ``first``, then, once ``read`` is set, sends 2s, 3s and
+    4s and sets ``again``: once."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.out = Port(send=BIG)
+        self.first, self.read, self.again = (threading.Event() for _ in range(3))
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.first.is_set():
+            return
+        self.out.send(torch.ones(BIG.shape, device=self.device))
+        self.first.set()
+        assert self.read.wait(10.0)
+        for k in (2.0, 3.0, 4.0):
+            self.out.send(torch.full(BIG.shape, k, device=self.device))
+        self.again.set()
+
+
+class Reads(OnCuda0):
+    """Once ``ready`` is set: calls ``before``, receives one message, calls
+    ``between`` and keeps the message on the CPU in ``received``. Once."""
+
+    def __init__(
+        self, ready: threading.Event, before: Callable[[], object] = lambda: None
+    ) -> None:
+        super().__init__()
+        self.inp = Port(recv=BIG)
+        self.ready = ready
+        self.before = before
+        self.between: Callable[[], object] = lambda: None
+        self.received: torch.Tensor | None = None
+        self.done = threading.Event()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        if self.done.is_set():
+            return
+        assert self.ready.wait(10.0)
+        self.before()
+        received = self.inp.recv()
+        self.between()
+        self.received = received.cpu()
+        self.done.set()
+
+
 @pytest.mark.cuda
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
@@ -636,6 +802,156 @@ class TestCuda:
         sent = run.read(back)
         assert sent.device == torch.device("cpu")
         assert torch.equal(sent, torch.full((2, 3), 2.0))
+
+    @pytest.mark.parametrize(
+        "reader", ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.cuda(2)), "cpu"]
+    )
+    def test_a_message_of_a_cuda_node_arrives_on_the_readers_device(
+        self, start_manual: StartManual, reader: str
+    ):
+        out, inp = Port(send=h()), Port(recv=h())
+        out.connect(inp)
+        x = torch.arange(6.0).reshape(3, 2).t()  # (2, 3), not contiguous
+
+        def send() -> None:
+            w = torch.ones((), device="cuda:0", requires_grad=True)
+            out.send(x.to("cuda:0") * w)
+
+        source = probe_on("cuda:0", send, out=out)
+        sink = probe_on(reader, inp.recv, inp=inp)
+        run = start_manual(Group(source=source, sink=sink))
+        run.step(H, source, sink)
+        received = cast(torch.Tensor, sink.results[0])
+        assert received.device == torch.device(reader)
+        assert received.is_contiguous() and not received.requires_grad
+        assert torch.equal(received.cpu(), x)
+        assert torch.equal(run.read(out), x)
+
+    def test_a_dict_mixes_a_tensor_on_the_device_and_scalars(
+        self, start_manual: StartManual
+    ):
+        spec = DictSpec(Tagged, x=h(), k=IntSpec())
+        out, inp = Port(send=spec), Port(recv=spec)
+        out.connect(inp)
+        msg = {"x": torch.ones(2, 3, device="cuda:0"), "k": 5}
+        source = probe_on("cuda:0", lambda: out.send(msg), out=out)  # pyright: ignore[reportArgumentType]
+        sink = probe_on("cuda:0", inp.recv, inp=inp)
+        run = start_manual(Group(source=source, sink=sink))
+        run.step(H, source, sink)
+        received = cast(dict[str, Any], sink.results[0])
+        assert received["k"] == 5
+        assert received["x"].device == torch.device("cuda", 0)
+        assert torch.equal(received["x"].cpu(), torch.ones(2, 3))
+
+    def test_a_reader_changing_its_message_changes_no_one_elses(
+        self, start_manual: StartManual
+    ):
+        out, a, b = Port(send=h()), Port(recv=h()), Port(recv=h())
+        out.connect(a)
+        out.connect(b)
+
+        def send() -> None:
+            x = torch.ones(2, 3, device="cuda:0")
+            out.send(x)
+            x.add_(1.0)  # after the send: must not reach the message
+
+        source = probe_on("cuda:0", send, out=out)
+        changes = probe_on("cuda:0", lambda: a.recv().add_(1.0), inp=a)
+        reads = probe_on("cuda:0", b.recv, inp=b)
+        run = start_manual(Group(source=source, changes=changes, reads=reads))
+        run.step(H, source, changes, reads)
+        ones = torch.ones(2, 3)
+        assert torch.equal(cast(torch.Tensor, changes.results[0]).cpu(), 2 * ones)
+        assert torch.equal(cast(torch.Tensor, reads.results[0]).cpu(), ones)
+        assert torch.equal(run.read(out), ones)
+
+    def test_send_to_reaches_only_its_peer(self, start_manual: StartManual):
+        out, a, b = MultiPort(send=h()), Port(recv=h()), Port(recv=h())
+        to_a = out.connect(a)
+        out.connect(b)
+        ones = torch.ones(2, 3, device="cuda:0")
+        source = probe_on("cuda:0", lambda: out.send_to(to_a, ones), out=out)
+        sink_a = probe_on("cuda:0", a.recv, inp=a)
+        sink_b = probe_on("cuda:0", b.recv, inp=b)
+        run = start_manual(Group(source=source, a=sink_a, b=sink_b))
+        run.step(H, source, sink_a, sink_b)
+        assert torch.equal(cast(torch.Tensor, sink_a.results[0]).cpu(), ones.cpu())
+        assert torch.equal(cast(torch.Tensor, sink_b.results[0]).cpu(), 0 * ones.cpu())
+        assert torch.equal(run.read(out), torch.zeros(2, 3))
+
+    def test_rejects_a_tensor_that_is_not_dense(self, start_manual: StartManual):
+        out = Port(send=TensorSpec((2, 2)))
+        sparse = torch.eye(2, device="cuda:0").to_sparse()
+        node = probe_on("cuda:0", lambda: out.send(sparse), out=out)
+        run = start_manual(Group(node=node))
+        run.step(H)
+        assert isinstance(node.results[0], BufferError)
+
+    @pytest.mark.cuda(2)
+    def test_a_tensor_on_another_device_arrives(self, start_manual: StartManual):
+        out, inp = Port(send=h()), Port(recv=h())
+        out.connect(inp)
+        x = torch.ones(2, 3, device="cuda:1")
+        source = probe_on("cuda:0", lambda: out.send(x), out=out)
+        sink = probe_on("cuda:0", inp.recv, inp=inp)
+        run = start_manual(Group(source=source, sink=sink))
+        run.step(H, source, sink)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), x.cpu())
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        ("source", "sink", "via_the_host"),
+        [
+            ("cuda:0", "cuda:0", False),
+            pytest.param("cuda:0", "cuda:1", False, marks=pytest.mark.cuda(2)),
+            # The control: the oracle sees a copy from host memory.
+            ("cpu", "cuda:0", True),
+        ],
+    )
+    def test_a_message_between_cuda_nodes_skips_host_memory(
+        self, source: str, sink: str, via_the_host: bool
+    ):
+        copies = profiled_copies(source, sink)
+        assert copies, "the profiler saw no copy"
+        # "Memcpy HtoD (Pageable -> Device)": the ends are in the parentheses. A
+        # copy between GPUs without peer access is "Memcpy DtoH (Device ->
+        # Device)", which the driver may stage through the host by itself.
+        ends = {
+            end for name in copies for end in re.findall(r"\w+", name.split("(")[-1])
+        }
+        assert bool(ends & {"Pageable", "Pinned"}) == via_the_host, copies
+
+    @pytest.mark.slow
+    def test_a_reader_gets_what_a_late_stream_wrote(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # The reader copies the message the moment the writer has sent it,
+        # while the writer is still in its on_update: send waits for the stream.
+        writer = Late()
+        reader = Reads(writer.sent)
+        writer.out.connect(reader.inp)
+        start(Group(writer=writer, reader=reader), timer=virtual)
+        virtual.advance(0.01)
+        assert reader.done.wait(10.0)
+        assert torch.equal(
+            cast(torch.Tensor, reader.received), torch.full(BIG.shape, 7.0)
+        )
+
+    @pytest.mark.slow
+    def test_a_copy_still_queued_keeps_its_message_from_reuse(
+        self, virtual: VirtualTimer, start: Start
+    ):
+        # The reader's copy waits on its stream while the writer replaces the
+        # message: the memory of the 1s goes back to the caching allocator, and
+        # the next message of its size would take it, before the copy has run.
+        writer = Resends()
+        reader = Reads(writer.first, before=delay_the_stream)
+        reader.between = lambda: (writer.read.set(), writer.again.wait(10.0))
+        writer.out.connect(reader.inp)
+        start(Group(writer=writer, reader=reader), timer=virtual)
+        virtual.advance(0.01)
+        assert reader.done.wait(10.0)
+        assert torch.equal(cast(torch.Tensor, reader.received), torch.ones(BIG.shape))
 
     def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))

@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast, final
 
+import torch
+
 from mujou import _native
 from mujou.codec import schema, to_core
 from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
@@ -34,6 +36,9 @@ class Wiring:
     inputs: Mapping[AnyPort, _native.InputSlot]
     # The wires of the ports of each node, in the order of tree.members.
     wires: tuple[Mapping[AnyPort, Wire], ...]
+    # For each node, in the same order: the CUDA devices other than its own of
+    # the nodes whose slots it reads, where the core may hold what they send.
+    read_devices: tuple[frozenset[torch.device], ...]
 
     def write(self, values: Mapping[Any, object]) -> _native.Timestamp:
         """Write ``values`` to the ports the host writes, all at once, and return
@@ -117,6 +122,7 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
                 port=port,
                 label=tree.label(port),
                 device=member.node.device,
+                cuda=member.node.device if member.node.device.type == "cuda" else None,
                 outlet=outlets.get(port),
                 sources=_sources(port, outlets, inputs, indices),
                 targets=indices[port],
@@ -125,7 +131,23 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         }
         for member in tree.members
     )
-    return Wiring(tree, group, outlets, inputs, wires)
+    device = {
+        port: member.node.device
+        for member in tree.members
+        for port in member.ports.values()
+    }
+    read_devices = tuple(
+        frozenset(
+            peer
+            for port in member.ports.values()
+            if port.recv_spec is not None
+            for channel in port.channels
+            if (peer := device[channel.other(port)]).type == "cuda"
+            and peer != member.node.device
+        )
+        for member in tree.members
+    )
+    return Wiring(tree, group, outlets, inputs, wires, read_devices)
 
 
 def written_by_the_host(port: AnyPort) -> bool:

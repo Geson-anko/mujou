@@ -4,7 +4,7 @@ import pickle
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, Any, TypedDict, override
+from typing import TYPE_CHECKING, Any, Never, TypedDict, cast, override
 
 import pytest
 import torch
@@ -23,8 +23,11 @@ from mujou import (
     TensorSpec,
     TimestampSpec,
 )
+from mujou.state import capture, cpu
 from mujou.testing import ManualRun
-from mujou.time import Timestamp, VirtualTimer, global_timer
+from mujou.time import ReadOnlyTimer, Timestamp, VirtualTimer, global_timer
+from mujou.tree import walk
+from mujou.wiring import wire
 from tests.mujou.nodes import (
     F64,
     Chain,
@@ -35,6 +38,7 @@ from tests.mujou.nodes import (
     assert_same_tree,
     entries,
     port_slots,
+    probe_on,
     updates,
     vec,
 )
@@ -614,3 +618,53 @@ class TestScalarMessages:
             Group(node=node), state=torch.load(buffer, weights_only=True)
         )
         assert restored.read(node.out) == {"t": Timestamp(ns=1_000_000), "n": 3}
+
+
+def sends_on_cuda() -> tuple[Probe, Probe, Port[torch.Tensor, Never]]:
+    """A node on ``cuda:0`` that sends ``[1, 2]``, and a node that receives it;
+    the port that sends."""
+    out, inp = Port(send=vec()), Port(recv=vec())
+    out.connect(inp)
+    x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
+    return probe_on("cuda:0", lambda: out.send(x), out=out), Probe(inp=inp), out
+
+
+@pytest.mark.cuda
+class TestCuda:
+    @pytest.mark.parametrize("ended", [False, True])
+    def test_a_port_value_on_the_device_is_saved_on_the_cpu_and_restored(
+        self, start_manual: StartManual, ended: bool
+    ):
+        source, sink, out = sends_on_cuda()
+        run = start_manual(Group(source=source, sink=sink))
+        run.step(H, source)
+        if ended:
+            run.shutdown()
+        tree = run.state_dict()
+        expected = torch.tensor([1.0, 2.0], dtype=F64)
+        for entry in entries(tree):
+            assert entry["value"].device == torch.device("cpu")
+        slots = port_slots(tree, "source", "out")
+        for entry in (slots["out"], slots["to"]["sink.inp"]):
+            assert torch.equal(entry["value"], expected)
+        run.shutdown()
+
+        source, sink, out = sends_on_cuda()
+        restored = start_manual(Group(source=source, sink=sink), state=tree)
+        assert torch.equal(restored.read(out), expected)
+        sink.update = sink.inp.recv  # pyright: ignore[reportAttributeAccessIssue]
+        restored.step(H, sink)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]), expected)
+
+    def test_a_paused_run_gives_the_values_on_the_device_uncopied(self):
+        # What a pause reads, before Run.state_dict moves it to the CPU.
+        source, sink, out = sends_on_cuda()
+        tree = walk(Group(source=source, sink=sink))
+        wiring = wire(tree, ReadOnlyTimer(VirtualTimer()))
+        wiring.wires[0][out].send(torch.ones(2, dtype=F64, device="cuda:0"))
+        (held,) = wiring.outlets[out].outbox.read().values
+        taken = capture(wiring, [None, None], [0, 0], 0, 1.0)
+        assert port_slots(taken, "source", "out")["out"]["value"] is held
+        moved = port_slots(cpu(taken), "source", "out")["out"]["value"]
+        assert moved.device == torch.device("cpu")
+        assert torch.equal(moved, torch.ones(2, dtype=F64))
