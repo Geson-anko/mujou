@@ -26,3 +26,10 @@
 ## IF 変更通知
 
 なし（並列の implementer はいない）。内部の口の変更は計画書のとおり（`to_core(device=)` の意味だけ上の 2 のとおり変えた）。
+
+## レビュー差し戻しへの対応（2026-10-24）
+
+- must-fix（hook が `torch.cuda.device(1)` の中で cuda:0 のテンソルを送ると `BufferError`）: `to_core` で `torch.cuda.current_device() != device.index` のときは保持せずホストの経路に回す（変更前と同じ挙動）。書き手の device を current にして export する案は、Wire と bindings の両方に手が入るうえ、利用者が device を変えて送る稀な場合のためだけなので採らなかった。確認は CUDA のノードの send にだけ入る（CPU の hot path は `device is None` で抜ける）。`ports.py` は変更前と 3% 以内。回帰テストは `test_sends_while_the_hook_has_made_another_device_current`（`cuda(2)`）
+- 「読み手は書き手の公開後の仕事を待たない」の回帰テスト `test_a_reader_does_not_wait_for_what_the_writer_queues_after_sending`（cuda:0 / cuda:1 / cpu）。`_read` に `torch.cuda.synchronize(view.device)` を足す変異で 3 件とも落ちる
+- 副 stream がプールの 32 本に数えられ、重なると読み手が書き手の公開後の仕事を待つことを `specs/nodes.md`・docs・`project_gpu_policy.md` に書いた（コードは変えない）
+- nit: `codec._CPU` を上へ、`_value` の引数を `stays_on` に、`UnsupportedDevice` の文言を「host memory (1 or 3)」に戻した（コアの `copy_from` が出すので）、`messages.md` の機械固有の記述を benchmarks へ、保持値が落ちる場所の記述、`state.cpu` の docstring、ホストの write が `Held` にならない白箱テスト
