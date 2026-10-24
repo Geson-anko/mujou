@@ -774,6 +774,20 @@ class Reads(OnCuda0):
         self.done.set()
 
 
+class SendsOnAnotherCurrentDevice(Node):
+    """On ``cuda:0``, sends 1s while ``cuda:1`` is the current device."""
+
+    def __init__(self) -> None:
+        super().__init__(device="cuda:0")
+        self.out = Port(send=BIG)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        x = torch.ones(BIG.shape, device=self.device)
+        with torch.cuda.device(1):
+            self.out.send(x)
+
+
 @pytest.mark.cuda
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
@@ -952,6 +966,20 @@ class TestCuda:
         virtual.advance(0.01)
         assert reader.done.wait(10.0)
         assert torch.equal(cast(torch.Tensor, reader.received), torch.ones(BIG.shape))
+
+    @pytest.mark.cuda(2)
+    def test_sends_while_the_hook_has_made_another_device_current(
+        self, start_manual: StartManual
+    ):
+        # torch exports a CUDA tensor over DLPack only on its current device.
+        source, inp = SendsOnAnotherCurrentDevice(), Port(recv=BIG)
+        source.out.connect(inp)
+        sink = probe_on("cuda:0", inp.recv, inp=inp)
+        run = start_manual(Group(source=source, sink=sink))
+        run.step(H, source, sink)
+        ones = torch.ones(BIG.shape)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), ones)
+        assert torch.equal(run.read(source.out), ones)
 
     def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))

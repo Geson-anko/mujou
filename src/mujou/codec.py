@@ -75,7 +75,10 @@ def to_core(
     sees it, this waits for the calling thread's current stream on the device
     (the node's own, in its hooks) once the clones are queued. Any other
     tensor is copied to host memory on the current stream of its device, and
-    only that stream is synchronized.
+    only that stream is synchronized. So is a tensor on ``device`` while the
+    calling thread's current device is another (inside a
+    ``torch.cuda.device(...)`` of the hook): torch exports a CUDA tensor over
+    DLPack only on its own current device.
 
     Raises:
         TypeError: ``msg`` is not a value of the spec's kind for a message of
@@ -88,6 +91,8 @@ def to_core(
         expected = _EXPECTED[type(names[""])] if "" in names else _keys(names)
         got = type(values[""]).__name__ if "" in values else _keys(values)
         raise TypeError(f"{label}: expected {expected}, got {got}")
+    if device is not None and torch.cuda.current_device() != device.index:
+        device = None
     out = [_value(f, values[name], label, name, device) for name, f in names.items()]
     # Every other tensor is in host memory by now.
     if device is not None and any(

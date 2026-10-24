@@ -113,8 +113,9 @@ class _Port[S, R]:
         nothing that was sent. A tensor on the node's CUDA device is copied on
         the device, on the node's stream, and ``send`` waits for that stream
         before the peers can read it; a peer on CUDA copies it from device to
-        device. Any other CUDA tensor is copied to the host. It never waits for
-        the peers to read.
+        device. Any other CUDA tensor is copied to the host, and so is one on
+        the node's device while the hook has made another device current
+        (``torch.cuda.device(...)``). It never waits for the peers to read.
 
         Raises:
             RuntimeError: The caller is not a hook of the node that owns the port,
