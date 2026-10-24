@@ -1,0 +1,219 @@
+name: Publish
+
+# Push a tag vX.Y.Z on release/X.Y to publish the release (CONTRIBUTING.md, Releases):
+#   check -> sdist + wheels (each wheel runs examples/quickstart.py)
+#         -> Test PyPI -> PyPI -> GitHub Release (notes from CHANGELOG.md)
+# The uploads use Trusted Publishing (OIDC): no token is stored in the repository.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag against the version, the branch and CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+          if [[ "${tag}" != "${version}" ]]; then
+            echo "::error::the tag (${tag}) does not match the version in Cargo.toml (${version})"
+            exit 1
+          fi
+          # X.Y.Z, X.Y.ZaN, X.Y.ZbN or X.Y.ZrcN is tagged on release/X.Y.
+          branch="release/$(cut -d. -f1-2 <<< "${tag}")"
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${branch}"; then
+            echo "::error::the tag is not on ${branch}"
+            exit 1
+          fi
+          if ! grep -qF "## [${tag}]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section ## [${tag}]"
+            exit 1
+          fi
+
+  sdist:
+    name: Build the sdist
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/
+
+  wheels:
+    name: Build the wheels / ${{ matrix.os }}
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # The platforms that have PyTorch wheels and run the Test workflow. Elsewhere
+      # pip builds the sdist, which needs a Rust toolchain.
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+          - os: ubuntu-24.04-arm
+            target: aarch64
+          - os: macos-latest
+            target: aarch64
+          - os: windows-latest
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v7
+
+      # One wheel for the regular build and one for the free-threaded build. On
+      # Linux, maturin builds in a manylinux container, which has both
+      # interpreters; elsewhere it builds with the ones uv installs.
+      - name: Find the interpreters
+        id: python
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_OS}" == "Linux" ]]; then
+            echo "interpreters=python3.14 python3.14t" >> "${GITHUB_OUTPUT}"
+          else
+            uv python install 3.14 3.14t
+            regular="$(uv python find --system 3.14)"
+            free_threaded="$(uv python find --system 3.14t)"
+            if [[ "${RUNNER_OS}" == "Windows" ]]; then
+              regular="$(cygpath -m "${regular}")"
+              free_threaded="$(cygpath -m "${free_threaded}")"
+            fi
+            echo "interpreters=${regular} ${free_threaded}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # The manylinux version is the one of the PyTorch wheels.
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: "2_28"
+          args: --release --out dist --interpreter ${{ steps.python.outputs.interpreters }}
+
+      - name: Run examples/quickstart.py with each wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="bin"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            bin="Scripts"
+          fi
+          for abi in cp314 cp314t; do
+            uv venv --python "${abi/cp314/3.14}" "../venv-${abi}"
+            uv pip install --python "../venv-${abi}" dist/mujou-*-cp314-"${abi}"-*.whl
+            "../venv-${abi}/${bin}/python" -c "import mujou; print(mujou.__version__)"
+            "../venv-${abi}/${bin}/python" examples/quickstart.py
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/
+
+  publish-to-testpypi:
+    name: Publish to Test PyPI
+    needs: [sdist, wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/mujou
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: publish-to-testpypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mujou
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create the GitHub Release
+    needs: publish-to-pypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+
+      # The section "## [X.Y.Z] - date" of CHANGELOG.md, up to the next heading
+      # "## ", the link definitions or the snippet marker at the end of the file.
+      - name: Extract the release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk -v header="## [${GITHUB_REF_NAME#v}]" '
+            index($0, header) == 1 { found = 1; next }
+            found && (/^## / || /^\[[^]]+\]: / || /^<!--/) { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          cat notes.md
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc)[0-9]+$ ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md "${prerelease[@]}" dist/*

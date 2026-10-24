@@ -111,8 +111,9 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 - Write commit messages in English as `<type>(<scope>): <summary>`, one concern per commit.
 - Do not commit to `main` directly, force-push, or skip hooks with `--no-verify`.
 - Before opening a pull request, merge the latest `main` into your branch and run `just run`.
+- Note a change that users can see under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/): `### Added`, `### Changed`, `### Fixed`, `### Removed`). Write a breaking change under `### Changed` or `### Removed` and say what to use instead.
 
-CI runs these workflows on pull requests to `main`, except GPU. Test, Type Check and Docs run only when files they depend on change.
+CI runs these workflows on pull requests to `main` and to `release/**`, except GPU. Test, Type Check and Docs run only when files they depend on change.
 
 | Workflow      | Checks                                                                                                                                                                                                                                                                              |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,6 +122,69 @@ CI runs these workflows on pull requests to `main`, except GPU. Test, Type Check
 | Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                                            |
 | Docs          | `just docs-build`                                                                                                                                                                                                                                                                   |
 | GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. On pushes and pull requests, but not from forks ([.github/runner/README.md](.github/runner/README.md))                                                                                                                 |
+
+The Publish workflow runs on a pushed tag `v*` instead ([Releases](#releases)).
+
+## Releases
+
+Mujou follows [Semantic Versioning](https://semver.org/). Until 1.0.0, a minor release (`0.x.0`) may break the API, and a patch release (`0.x.y`) only fixes bugs.
+
+### Branches and tags
+
+- `main` is for development. Every feature, fix and refactor branches from `main` and merges into it.
+- Each minor release line has a branch `release/X.Y` (`release/0.1`, `release/0.2`, ...), cut from `main` for its first release `X.Y.0`. It is never deleted: its patch releases are made there.
+- A release is the tag `vX.Y.Z` on `release/X.Y`. Pre-releases follow PEP 440 (`vX.Y.ZrcN`, also `aN` and `bN`); `pip` installs them only with `--pre`.
+- The version is `version` in `[workspace.package]` of `Cargo.toml`. maturin gives it to the Python package, and `mujou.__version__` reads it from the package metadata.
+
+Pushing a tag `v*` runs the Publish workflow (`.github/workflows/publish.yml`):
+
+1. **check**: the tag matches the version in `Cargo.toml`, is on `release/X.Y`, and `CHANGELOG.md` has a section `## [X.Y.Z]`.
+2. **sdist** and **wheels**: the sdist, and wheels for Python 3.14 and 3.14t on Linux (x86_64, aarch64; manylinux_2_28), macOS (arm64) and Windows (x86_64). Each wheel is installed and runs `examples/quickstart.py`.
+3. **publish-to-testpypi**, then **publish-to-pypi**: uploads with Trusted Publishing (no token).
+4. **github-release**: a GitHub Release with the section of `CHANGELOG.md` as its notes and the files as assets. A pre-release tag makes a pre-release.
+
+The Docs workflow deploys the documentation of the tag as version `X.Y.Z`, and moves the alias `latest` to it unless a newer version has it.
+
+PyPI and Test PyPI never take the same version twice, even after a deletion. If a step fails after an upload, release the next number (`X.Y.Z+1`, or `rcN+1`). If only **check**, **sdist** or **wheels** failed, nothing was uploaded: delete the tag, fix the cause, and push the tag again. A broken release on PyPI is yanked, not deleted, and fixed by a patch release.
+
+### Release a new minor version
+
+1. On a branch `chore/<YYYY-MM-DD>/release-vX.Y.0` from `main`:
+
+   - Set `version` in `Cargo.toml` to `X.Y.0` and run `cargo metadata --format-version 1 > /dev/null` to update `Cargo.lock`.
+   - In `CHANGELOG.md`, turn `## [Unreleased](.../compare/vA.B.C...HEAD)` into `## [X.Y.0](.../releases/tag/vX.Y.0) - YYYY-MM-DD`, and add an empty `## [Unreleased](.../compare/vX.Y.0...HEAD)` above it. Keep the headings `## [<version>]...`: the Publish workflow finds the notes by them.
+   - Update the classifier `Development Status` in `pyproject.toml` if the maturity changed.
+
+2. Run `just run` and `uv build`, open a pull request to `main` and merge it.
+
+3. Cut the release branch and push it, then the tag:
+
+   ```sh
+   git switch main && git pull
+   git switch -c release/X.Y && git push -u origin release/X.Y
+   git tag -a vX.Y.0 -m vX.Y.0 && git push origin vX.Y.0
+   ```
+
+4. Watch the Publish workflow. When it is green, check the pages on Test PyPI and PyPI, the GitHub Release, and `pip install mujou==X.Y.0` in a clean virtual environment.
+
+To rehearse, release `X.Y.0rc1` the same way first (version `X.Y.0rc1`, section `## [X.Y.0rc1]`), then make the stable release on `release/X.Y` like a patch release.
+
+### Release a patch (hotfix)
+
+A fix for a released line is made on its release branch, not on `main`: `main` may already hold breaking changes that do not belong in a patch.
+
+1. Branch `fix/<YYYY-MM-DD>/<topic>` from `release/X.Y`. Fix the bug, add its test and a `### Fixed` entry under `## [Unreleased]`, and open a pull request to `release/X.Y`.
+2. On a branch `chore/<YYYY-MM-DD>/release-vX.Y.Z` from `release/X.Y`, set the version to `X.Y.Z` and turn `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` as above. Open a pull request to `release/X.Y` and merge it.
+3. Tag `vX.Y.Z` on `release/X.Y` and push the tag.
+4. Open a pull request from `release/X.Y` to `main` and merge it (a merge commit, not a squash), so that `main` gets the fix and the changelog. Resolve conflicts on `main`'s side: keep `main`'s version if it is ahead, and keep the newer sections of `CHANGELOG.md` from both.
+
+### One-time setup
+
+These were done before the first release; redo them if the repository or the workflow is renamed.
+
+- On [PyPI](https://pypi.org/manage/account/publishing/) and [Test PyPI](https://test.pypi.org/manage/account/publishing/), add a (pending) Trusted Publisher: owner `Geson-anko`, repository `mujou`, workflow `publish.yml`, environment `pypi` (PyPI) or `testpypi` (Test PyPI).
+- In the repository settings, create the environments `pypi` and `testpypi`. Add required reviewers to `pypi`, so that a person approves each upload to PyPI after the one to Test PyPI.
+- Protect the branches `release/*`: require pull requests and forbid force pushes and deletion.
 
 `CLAUDE.md`, `.claude/` and `memory/` configure the AI coding agents used in this repository; human contributors can ignore them.
 

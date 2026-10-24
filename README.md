@@ -5,12 +5,12 @@
 [![Test](https://github.com/Geson-anko/mujou/actions/workflows/test.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/test.yml)
 [![Type Check](https://github.com/Geson-anko/mujou/actions/workflows/type-check.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/type-check.yml)
 [![Format & Lint](https://github.com/Geson-anko/mujou/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/Geson-anko/mujou/actions/workflows/pre-commit.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Geson-anko/mujou/blob/main/LICENSE)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/)
 
 Mujou (無常, "impermanence") is a deep learning framework where inference and learning happen at the same time. You write nodes in PyTorch code and connect them into a network that runs in the background. Most models are trained once and then frozen; Mujou is for machines that keep learning from a stream, such as real-time systems and robots.
 
-> **Status: early development.** The API works but may still change.
+> **Status: early development (0.x).** The API works but will still change; a minor release (0.x.0) may break it. See the [changelog](https://github.com/Geson-anko/mujou/blob/main/CHANGELOG.md).
 
 ## Key ideas
 
@@ -21,17 +21,18 @@ Mujou (無常, "impermanence") is a deep learning framework where inference and 
 
 ## Install
 
-Mujou is not on PyPI yet; build it from source. You need [uv](https://docs.astral.sh/uv/), a Rust toolchain ([rustup](https://rustup.rs/)) and Python 3.14 (uv can install it). The free-threaded build 3.14t is recommended, because the nodes run on several threads at once.
+Mujou is on PyPI. It needs Python 3.14 or later; the free-threaded build 3.14t is recommended, because the nodes run on several threads at once.
 
 ```sh
-git clone https://github.com/Geson-anko/mujou.git
-cd mujou
-uv sync   # creates .venv/, installs PyTorch and builds the Rust core
+uv add mujou       # in a uv project
+pip install mujou  # or in a virtual environment with Python 3.14
 ```
+
+Wheels are built for Linux (x86_64, aarch64), macOS (arm64) and Windows (x86_64), for both 3.14 and 3.14t. PyTorch is installed as a dependency. On other platforms, pip builds Mujou from the source, which needs a Rust toolchain ([rustup](https://rustup.rs/)). The [installation guide](https://geson-anko.github.io/mujou/latest/install/) also explains how to build from a clone of the repository.
 
 ## Example
 
-Two nodes compute `y = 2x + 1` in the background; the program writes `x` and waits for `y` (`examples/quickstart.py`).
+Two nodes compute `y = 2x + 1` in the background; the program writes `x` and waits for `y` ([`examples/quickstart.py`](https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py)).
 
 ```python
 from typing import override
@@ -83,16 +84,16 @@ with mujou.run(net) as run:
 print(f"y = {y} at t = {float(t):.3f} s")
 ```
 
-More programs, from writing a node to learning MNIST with PC-ALM, are in [`examples/`](examples/).
+More programs, from writing a node to learning MNIST with PC-ALM, are in [`examples/`](https://github.com/Geson-anko/mujou/blob/main/examples/).
 
 ## Documentation
 
-The documentation is at <https://geson-anko.github.io/mujou/> (English and Japanese). To serve it locally, run `just docs` (needs [just](https://just.systems/)) and open <http://127.0.0.1:8000>. You can also read the Markdown in [`docs/en/`](docs/en/) (English) and [`docs/ja/`](docs/ja/) (Japanese).
+The documentation is at <https://geson-anko.github.io/mujou/> (English and Japanese). To serve it locally, run `just docs` (needs [just](https://just.systems/)) and open <http://127.0.0.1:8000>. You can also read the Markdown in [`docs/en/`](https://github.com/Geson-anko/mujou/blob/main/docs/en/) (English) and [`docs/ja/`](https://github.com/Geson-anko/mujou/blob/main/docs/ja/) (Japanese).
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the dev container, the commands and the rules.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](https://github.com/Geson-anko/mujou/blob/main/CONTRIBUTING.md) for the development setup, the dev container, the commands and the rules.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/Geson-anko/mujou/blob/main/LICENSE).

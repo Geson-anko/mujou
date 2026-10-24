@@ -11,7 +11,7 @@ metadata:
 - ファイルの読み書きは `encoding` を明示する（Windows の既定は cp1252。`viz.html` の `⇄` などは書けない）
 - テストで SIGINT を起こすときは `signal.raise_signal`。Windows の `os.kill(pid, SIGINT)` はプロセスを終了させる
 - `.claude/` のツール（hook・statusline）は `python3` に依存し、Windows を対象にしない。`TestCompactionRecovery` は Windows で skip
-- Windows の wheel の公開（publish.yml）は別の判断。リリース戦略は [[project-release-strategy]]
+- Windows（x86_64）の wheel も publish.yml で公開する（2026-10-24）。リリース戦略は [[project-release-strategy]]
 
 **Why:** 利用者が Windows で使えることを CI で担保するため。
 

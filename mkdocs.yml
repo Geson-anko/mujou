@@ -142,6 +142,7 @@ plugins:
             Testing: テスト
             Types: 型
             Visualization: 可視化
+            Changelog: 変更履歴
   # The API pages are built once per language, so mujou.Node has a page in each:
   # a reference goes to the one of its own language.
   - autorefs:
@@ -210,6 +211,7 @@ nav:
       - Types: api/types.md
       - PC-ALM: api/pc.md
       - Visualization: api/viz.md
+  - Changelog: changelog.md
 
 extra_css:
   - stylesheets/extra.css
