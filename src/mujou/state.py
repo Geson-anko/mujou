@@ -67,7 +67,9 @@ def capture(
 
 def cpu(tree: dict[str, Any]) -> dict[str, Any]:
     """``tree`` with the tensors of every node's state and of its ports on the
-    CPU, as copies (the rest of the tree is on the CPU already)."""
+    CPU (the rest of the tree is on the CPU already). The tensors that
+    ``capture`` put in are copies or values that nobody changes, so the tree
+    shares no memory that the run writes."""
     for node in tree["nodes"].values():
         node["state"] = map_tensors(node["state"], torch.Tensor.cpu)
         node["ports"] = map_tensors(node["ports"], torch.Tensor.cpu)

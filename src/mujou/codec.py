@@ -115,6 +115,9 @@ def _keys(values: Mapping[str, object]) -> str:
     return f"a dict with the keys {list(values)}"
 
 
+# Where peek copies what the core holds in host memory.
+_CPU: Final = torch.device("cpu")
+
 # What each kind of field takes, as the errors say it.
 _EXPECTED: Mapping[type, str] = {
     TensorSpec: "a torch.Tensor",
@@ -126,16 +129,16 @@ _EXPECTED: Mapping[type, str] = {
 
 
 def _value(
-    spec: FieldSpec, value: object, label: str, name: str, held: torch.device | None
+    spec: FieldSpec, value: object, label: str, name: str, stays_on: torch.device | None
 ) -> object:
     """``value`` as the core takes it for a field of ``spec``: the values that
     the field's annotation takes in Python's typing (a ``bool`` is an ``int``,
-    an ``int`` is a ``float``). A dense tensor on ``held`` is cloned there."""
+    an ``int`` is a ``float``). A dense tensor on ``stays_on`` is cloned there."""
     match spec:
         case TensorSpec() if isinstance(value, torch.Tensor):
             if (
-                held is not None
-                and value.device == held
+                stays_on is not None
+                and value.device == stays_on
                 and value.layout == torch.strided
             ):
                 return value.detach().clone(memory_format=torch.contiguous_format)
@@ -191,9 +194,6 @@ def peek(spec: MessageSpec[Any], views: Views) -> object:
         return dict(zip(names, values, strict=True))
     (value,) = values
     return value
-
-
-_CPU: Final = torch.device("cpu")
 
 
 def times_to_ns(spec: MessageSpec[Any], msg: object) -> object:
