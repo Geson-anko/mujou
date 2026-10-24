@@ -102,7 +102,8 @@ pub enum FieldError {
         expected: String,
         actual: String,
     },
-    /// The tensor is not in host memory.
+    /// The tensor is neither in host memory, which the core copies, nor in the
+    /// memory of a CUDA device, which the bindings hold.
     UnsupportedDevice { device_type: i32 },
     /// The producer handed over something that is not a valid DLPack tensor.
     InvalidDLPack { reason: String },
@@ -118,8 +119,9 @@ impl fmt::Display for FieldError {
             } => write!(f, "expected {what} {expected}, got {actual}"),
             Self::UnsupportedDevice { device_type } => write!(
                 f,
-                "expected a tensor in host memory (DLPack device type 1 or 3), \
-                 got device type {device_type}; move it to the CPU first"
+                "expected a tensor in host memory or on a CUDA device (DLPack \
+                 device type 1, 3 or 2), got device type {device_type}; move it to \
+                 the CPU first"
             ),
             Self::InvalidDLPack { reason } => write!(f, "invalid DLPack tensor: {reason}"),
         }

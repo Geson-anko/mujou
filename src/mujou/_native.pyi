@@ -142,9 +142,11 @@ class Message:
         until its writer first writes (zeros, or an initial value).
         """
     @property
-    def values(self, /) -> list[BufferView]:
+    def values(self, /) -> list[Any]:
         """
-        One view per field, in key order.
+        One value per field, in key order: a `BufferView` of a value in host
+        memory, or the very tensor held for a tensor on a CUDA device (read it
+        without changing it).
         """
     def __new__(cls, /) -> NoReturn:
         """
@@ -161,16 +163,24 @@ class Outlet:
     out of time order, or the outward slot and the channels holding different
     messages.
 
-    Values are copied in without the GIL, so changing them afterwards does not
-    change what readers see. Resizing or freeing a value from another thread
-    while it is being sent is a data race in the caller's code.
+    Values in host memory are copied in without the GIL, so changing them
+    afterwards does not change what readers see. Resizing or freeing a value
+    from another thread while it is being sent is a data race in the caller's
+    code.
+
+    A tensor on a CUDA device is not copied: the message holds that very
+    tensor, and readers get it from `Message.values`. Hand over a copy that
+    nobody changes, whose writes are complete (the codec clones it and waits
+    for the stream it cloned on). torch's `__dlpack__` requires the calling
+    thread's current device to be the tensor's device.
 
     Raises (`send`, `send_to`):
         ValueError: The number of values, a shape or a dtype differs from the
             schema (the message names the slot and the field).
-        TypeError: A value does not support DLPack or is not in host memory.
-            Pinned memory is read without synchronizing any CUDA stream, so
-            synchronize the copy that filled it before sending.
+        TypeError: A value does not support DLPack or is neither in host
+            memory nor on a CUDA device. Pinned memory is read without
+            synchronizing any CUDA stream, so synchronize the copy that filled
+            it before sending.
         IndexError: No such channel.
     """
     def __new__(

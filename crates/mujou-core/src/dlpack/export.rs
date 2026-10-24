@@ -81,15 +81,15 @@ unsafe extern "C" fn delete(t: *mut DLManagedTensorVersioned) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::buffer::Messages;
+    use crate::buffer::{FieldOut, Messages, Value};
     use crate::dlpack::ffi::DLDataType;
     use crate::dlpack::import::copy_from;
     use crate::schema::{FieldSpec, Schema};
 
     /// Fills the field of shape (2, 3) with `k`, `k + 1`, ...
-    fn fill_range(k: i64) -> impl FnOnce(&mut [&mut [u8]]) -> Result<(), ()> {
-        move |bytes| {
-            for (i, chunk) in bytes[0].chunks_exact_mut(8).enumerate() {
+    fn fill_range(k: i64) -> impl FnOnce(&mut [FieldOut<'_>]) -> Result<(), ()> {
+        move |out| {
+            for (i, chunk) in out[0].bytes().chunks_exact_mut(8).enumerate() {
                 chunk.copy_from_slice(&(k + i as i64).to_ne_bytes());
             }
             Ok(())
@@ -111,7 +111,10 @@ mod tests {
         let pool = Arc::clone(&messages.pools()[0]);
         for k in [0, 100] {
             let msg = messages.build(None, fill_range(k)).unwrap();
-            let buffer = Arc::clone(&msg.values()[0]);
+            let Value::Bytes(buffer) = &msg.values()[0] else {
+                panic!("a held value")
+            };
+            let buffer = Arc::clone(buffer);
             let field = buffer.field().clone();
             let expected = buffer.bytes().to_vec();
             let before = Arc::strong_count(&buffer);

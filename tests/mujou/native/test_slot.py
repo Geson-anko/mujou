@@ -1,3 +1,4 @@
+import sys
 import threading
 from collections.abc import Callable, Sequence
 
@@ -143,6 +144,25 @@ class TestOutlet:
         assert torch.equal(view, torch.full((8,), 0))
         assert torch.equal(values(held)[0], torch.full((8,), 0))
         assert torch.equal(values(outlet.channel(0).read())[0], torch.full((8,), 100))
+
+    @pytest.mark.cuda
+    def test_holds_a_tensor_on_a_cuda_device_as_it_is(self):
+        outlet = Outlet(
+            schema(("x", (2,), torch.float32), ("k", (), torch.int64)),
+            1,
+            "p",
+            clock=CLOCK,
+        )
+        x = torch.ones(2, device="cuda:0")
+        outlet.send([x, 3])
+        before = sys.getrefcount(x)
+        for slot in (outlet.outbox, outlet.channel(0)):
+            held, k = slot.read().values
+            assert held is x
+            assert k.item() == 3
+        del held
+        outlet.send([torch.zeros(2), 4])  # the message that held x goes
+        assert sys.getrefcount(x) == before - 1
 
     def test_without_channels_writes_only_the_outbox(self):
         outlet = Outlet(tensor_schema((1,)), 0, "p", clock=CLOCK)
