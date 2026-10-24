@@ -22,6 +22,6 @@ The first release. The API works but will still change in breaking ways in the 0
 - Testing: `mujou.testing.run` and `ManualRun.step` to step nodes by hand, deterministically.
 - PC-ALM (Augmented Lagrangian Predictive Coding): the nodes of `mujou.pc` (`Input`, `Layer`, `Output`, `Chain`), the losses `MSELoss` and `CrossEntropyLoss`, and the optimizers `SGD` and `AdamW` that advance with time.
 - Visualization: `mujou.viz.to_html` draws a network as a self-contained HTML page.
-- Wheels for Python 3.14 and the free-threaded 3.14t on Linux (x86_64, aarch64) and macOS (arm64).
+- Wheels for Python 3.14 and the free-threaded 3.14t on Linux (x86_64, aarch64), macOS (arm64) and Windows (x86_64).
 
 <!-- --8<-- [end:releases] -->

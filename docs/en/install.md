@@ -29,7 +29,7 @@ Or with pip, in a virtual environment with Python 3.14 or later:
 pip install mujou
 ```
 
-Wheels are published for Linux (x86_64 and aarch64) and macOS (arm64), each for 3.14 and 3.14t. On other platforms, pip builds Mujou from the sdist, which needs Rust.
+Wheels are published for Linux (x86_64 and aarch64), macOS (arm64) and Windows (x86_64), each for 3.14 and 3.14t. On other platforms, pip builds Mujou from the sdist, which needs Rust.
 
 PyTorch is installed from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the [PyTorch installation guide](https://pytorch.org/get-started/locally/).
 

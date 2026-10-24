@@ -28,7 +28,7 @@ uv add mujou       # in a uv project
 pip install mujou  # or in a virtual environment with Python 3.14
 ```
 
-Wheels are built for Linux (x86_64, aarch64) and macOS (arm64), for both 3.14 and 3.14t. PyTorch is installed as a dependency. On other platforms, pip builds Mujou from the source, which needs a Rust toolchain ([rustup](https://rustup.rs/)). The [installation guide](https://geson-anko.github.io/mujou/latest/install/) also explains how to build from a clone of the repository.
+Wheels are built for Linux (x86_64, aarch64), macOS (arm64) and Windows (x86_64), for both 3.14 and 3.14t. PyTorch is installed as a dependency. On other platforms, pip builds Mujou from the source, which needs a Rust toolchain ([rustup](https://rustup.rs/)). The [installation guide](https://geson-anko.github.io/mujou/latest/install/) also explains how to build from a clone of the repository.
 
 ## Example
 

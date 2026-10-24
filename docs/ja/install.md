@@ -29,7 +29,7 @@ pip なら、Python 3.14 以上の仮想環境で:
 pip install mujou
 ```
 
-wheel は Linux（x86_64、aarch64）と macOS（arm64）向けに、それぞれ 3.14 と 3.14t の分を公開している。ほかのプラットフォームでは pip が sdist からビルドするので、Rust が要る。
+wheel は Linux（x86_64、aarch64）、macOS（arm64）、Windows（x86_64）向けに、それぞれ 3.14 と 3.14t の分を公開している。ほかのプラットフォームでは pip が sdist からビルドするので、Rust が要る。
 
 PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は [PyTorch のインストール案内](https://pytorch.org/get-started/locally/)を参照。
 

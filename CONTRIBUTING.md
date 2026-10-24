@@ -139,7 +139,7 @@ Mujou follows [Semantic Versioning](https://semver.org/). Until 1.0.0, a minor r
 Pushing a tag `v*` runs the Publish workflow (`.github/workflows/publish.yml`):
 
 1. **check**: the tag matches the version in `Cargo.toml`, is on `release/X.Y`, and `CHANGELOG.md` has a section `## [X.Y.Z]`.
-2. **sdist** and **wheels**: the sdist, and wheels for Python 3.14 and 3.14t on Linux (x86_64, aarch64; manylinux_2_28) and macOS (arm64). Each wheel is installed and runs `examples/quickstart.py`.
+2. **sdist** and **wheels**: the sdist, and wheels for Python 3.14 and 3.14t on Linux (x86_64, aarch64; manylinux_2_28), macOS (arm64) and Windows (x86_64). Each wheel is installed and runs `examples/quickstart.py`.
 3. **publish-to-testpypi**, then **publish-to-pypi**: uploads with Trusted Publishing (no token).
 4. **github-release**: a GitHub Release with the section of `CHANGELOG.md` as its notes and the files as assets. A pre-release tag makes a pre-release.
 
