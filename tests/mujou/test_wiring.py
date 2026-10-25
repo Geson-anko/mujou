@@ -163,6 +163,13 @@ class TestDevices:
             assert torch.equal(held, sent)
 
     @pytest.mark.cuda
+    def test_a_port_without_peers_sends_through_host_memory(self):
+        # Only the host reads it.
+        out = Port(send=vec())
+        wiring = wired(Group(source=probe_on("cuda:0", out=out)))
+        assert wiring.wires[0][out].cuda is None
+
+    @pytest.mark.cuda
     def test_a_port_that_no_node_on_cuda_reads_sends_through_host_memory(self):
         out = Port(send=vec())
         source = probe_on("cuda:0", out=out)
