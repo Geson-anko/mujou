@@ -17,7 +17,7 @@ from typing import Any, cast, final
 import torch
 
 from mujou import _native
-from mujou.codec import schema, to_core
+from mujou.codec import THEIR_DEVICES, schema, to_core
 from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
 from mujou.spec import MessageSpec
 from mujou.tree import Tree
@@ -43,7 +43,8 @@ class Wiring:
 
     def write(self, values: Mapping[Any, object]) -> _native.Timestamp:
         """Write ``values`` to the ports the host writes, all at once, and return
-        the time they bear.
+        the time they bear. A dense CUDA tensor stays on its device (as
+        ``codec.to_core`` says of ``THEIR_DEVICES``).
 
         Raises:
             ValueError: A port is not one that the host writes in this run, or
@@ -87,7 +88,7 @@ class Wiring:
                 "of this run that receives"
             )
         spec = cast("MessageSpec[Any]", port.recv_spec)  # it receives
-        return slot, to_core(spec, value, label)
+        return slot, to_core(spec, value, label, device=THEIR_DEVICES)
 
 
 def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:

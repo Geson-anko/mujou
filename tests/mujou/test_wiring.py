@@ -1,14 +1,22 @@
+from typing import TypedDict
+
 import pytest
 import torch
 
 from mujou._native import BufferView
+from mujou.codec import peek
 from mujou.network import Group, Network
 from mujou.port import MultiPort, Port
-from mujou.spec import TensorSpec
+from mujou.spec import DictSpec, TensorSpec
 from mujou.time import ReadOnlyTimer, VirtualTimer
 from mujou.tree import walk
 from mujou.wiring import Wiring, wire
 from tests.mujou.nodes import F64, Chain, Hidden, Probe, probe_on, vec
+
+
+class Both(TypedDict):
+    x: torch.Tensor
+    y: torch.Tensor
 
 
 def wired(root: Network | Probe) -> Wiring:
@@ -132,6 +140,27 @@ class TestDevices:
         (value,) = wiring.inputs[node.inp].read().values  # pyright: ignore[reportAttributeAccessIssue]
         assert isinstance(value, BufferView)
         assert torch.equal(torch.from_dlpack(value), x)
+
+    @pytest.mark.cuda(2)
+    def test_cuda_tensors_that_the_host_writes_stay_on_their_devices(self):
+        # One write to two ports, with tensors on two devices; the host's
+        # current device is cuda:0.
+        spec = DictSpec(Both, x=vec(), y=vec())
+        node = probe_on("cuda:0", a=Port(recv=vec()), b=Port(recv=spec))
+        wiring = wired(Group(node=node))
+        a = torch.ones(2, dtype=F64, device="cuda:1")
+        b = {
+            "x": torch.full((2,), 2.0, dtype=F64, device="cuda:0"),
+            "y": torch.full((2,), 3.0, dtype=F64, device="cuda:1"),
+        }
+        wiring.write({node.a: a, node.b: b})  # pyright: ignore[reportAttributeAccessIssue]
+        read_a = peek(vec(), wiring.inputs[node.a].read().values)  # pyright: ignore[reportAttributeAccessIssue]
+        read_b = peek(spec, wiring.inputs[node.b].read().values)  # pyright: ignore[reportAttributeAccessIssue]
+        assert isinstance(read_a, torch.Tensor) and isinstance(read_b, dict)
+        for held, sent in ((read_a, a), (read_b["x"], b["x"]), (read_b["y"], b["y"])):
+            assert held.device == sent.device
+            assert held.data_ptr() != sent.data_ptr()
+            assert torch.equal(held, sent)
 
     @pytest.mark.cuda
     def test_a_port_that_no_node_on_cuda_reads_sends_through_host_memory(self):

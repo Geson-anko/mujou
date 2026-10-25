@@ -168,7 +168,10 @@ class Run:
         """Write messages to unconnected ports that receive, and return the time
         they are stamped with.
 
-        The values are detached and copied. All of them switch together and bear
+        The values are detached and copied: a dense tensor on a CUDA device on
+        that device (the copy queues on this thread's current stream of the
+        device, and ``write`` waits for it), any other tensor to host memory.
+        The nodes receive it on their own devices. All of them switch together and bear
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Any such port of the run
