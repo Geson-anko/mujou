@@ -42,7 +42,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 
 ### stream の同期
 
-ノードはそれぞれ自分の CUDA stream で計算するので、device に置いた値を別のノードが読むには stream をまたぐ順序が要る。書き手が send の中で、`clone` を積んだ自分の stream に event を記録してホストで待ち、それから公開する（2026-10-24 の S2）。ホストの write も同じで、clone を積んだ各 device の current stream を待ってから公開する（複数のポートへの一斉の write では、全ポートの値を待ってから版番号を進める）。読み手は待たない。公開された値は device の上で出来上がっているので、読み手の stream は何にも依存せずにコピーを積める。
+ノードはそれぞれ自分の CUDA stream で計算するので、device に置いた値を別のノードが読むには stream をまたぐ順序が要る。書き手が send の中で、`clone` を積んだ自分の stream に event を記録してホストで待ち、それから公開する（2026-10-24 の S2）。ホストの write も同じで、clone を積んだ各 device の current stream を待ってから公開する（複数のポートへの一斉の write では、全ポートの clone を積んでから device ごとに 1 回待ち、それから版番号を進める。`codec.wait_for_clones`）。読み手は待たない。公開された値は device の上で出来上がっているので、読み手の stream は何にも依存せずにコピーを積める。
 
 | 案 | 内容 | 判断 |
 | --- | --- | --- |

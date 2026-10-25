@@ -17,7 +17,7 @@ from typing import Any, cast, final
 import torch
 
 from mujou import _native
-from mujou.codec import THEIR_DEVICES, schema, to_core
+from mujou.codec import THEIR_DEVICES, schema, to_core, wait_for_clones
 from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
 from mujou.spec import MessageSpec
 from mujou.tree import Tree
@@ -53,9 +53,9 @@ class Wiring:
                 ``int``, ...), or a dict message does not have the spec's keys.
             OverflowError: An ``int`` is out of the range of its ``IntSpec``.
         """
-        return self.group.write(
-            [self._item(port, value) for port, value in values.items()]
-        )
+        items = [self._item(port, value) for port, value in values.items()]
+        wait_for_clones(item for _, item in items)
+        return self.group.write(items)
 
     def outbox(self, port: AnyPort) -> tuple[_native.Slot, MessageSpec[Any]]:
         """The slot of ``port`` that the host reads, and the spec of its

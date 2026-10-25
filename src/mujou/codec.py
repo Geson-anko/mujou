@@ -11,7 +11,7 @@ on that device as a clone on the device, which the core holds as it is
 (``to_core``), and which readers copy device to device (``from_core``).
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum, auto
 from typing import Any, Final, cast, final
 
@@ -80,9 +80,11 @@ def to_core(
       While the thread's current device is another (inside a
       ``torch.cuda.device(...)`` of the hook), none stays: torch exports a CUDA
       tensor over DLPack only on its current device
-    - ``THEIR_DEVICES`` (the host's write): every one, each on its own device.
-      This waits for the calling thread's current stream of each device, and
-      each clone exports itself with its device current
+    - ``THEIR_DEVICES`` (the host's write): every one, each on its own device,
+      and each clone exports itself with its device current. The clones queue
+      on the calling thread's current stream of each device: the caller waits
+      for them with ``wait_for_clones`` before it hands the values over (once
+      per device for the messages of one write)
     - ``None`` (any other sender, ``initial`` and a restore): none
 
     Any other tensor is copied to host memory on the current stream of its
@@ -128,14 +130,18 @@ class Their(Enum):
 THEIR_DEVICES: Final = Their.DEVICES
 
 
+def wait_for_clones(messages: Iterable[Sequence[object]]) -> None:
+    """Wait for the clones of ``messages`` (from ``to_core`` with
+    ``THEIR_DEVICES``): for the calling thread's current stream of each device
+    they are on, once."""
+    devices = {v.tensor.device for m in messages for v in m if type(v) is _OnItsDevice}
+    for d in devices:
+        torch.cuda.current_stream(d).record_event().synchronize()
+
+
 def _on_their_devices(out: list[object]) -> list[object]:
     """``out`` with each CUDA tensor (a clone) wrapped to export itself with
-    its device current, after waiting for the calling thread's current stream
-    of each device, where the clones were queued."""
-    devices = {v.device for v in out if isinstance(v, torch.Tensor) and v.is_cuda}
-    for d in devices:
-        with torch.cuda.device(d):
-            torch.cuda.current_stream(d).record_event().synchronize()
+    its device current."""
     return [
         _OnItsDevice(v) if isinstance(v, torch.Tensor) and v.is_cuda else v for v in out
     ]
@@ -231,8 +237,8 @@ def from_core(spec: MessageSpec[Any], views: Views, device: torch.device) -> obj
     and scalars.
 
     A tensor that the core holds (on the CUDA device of the node or the host
-    that wrote it) is copied on the calling thread's current stream of that device, without
-    passing through host memory to another CUDA device.
+    that wrote it) is copied on the calling thread's current stream of that
+    device, without passing through host memory to another CUDA device.
     """
     names = fields(spec)
     values = [
