@@ -17,17 +17,21 @@
 コアは、スロットの値をフィールドごとに 2 通りで持つ。
 
 - ホストのメモリの不変なバッファ: 連続した row-major の配置。スカラーと、CPU にあるテンソルと、下の場合以外の CUDA のテンソルはこちら
-- 書き手が渡した不透明な値（コアの `Held`）: CUDA のノードが hook の `send` / `send_to` で送った、そのノードの device の上の密なテンソルは、codec が device の上で作ったコピーを bindings がそのまま持つ（2026-10-24）。コアは中身を読まず、device・stream・event も知らない
+- 書き手が渡した不透明な値（コアの `Held`）: 次の密なテンソルは、codec が device の上で作ったコピーを bindings がそのまま持つ。コアは中身を読まず、device・stream・event も知らない
+    - CUDA のノードが hook の `send` / `send_to` で送った、そのノードの device の上のテンソル。ただしそのポートの接続先に CUDA のノードが 1 つ以上あるときだけ（2026-10-24、接続先の条件は 2026-10-25）。読み手が CPU のノードだけか、接続先が無い（ホストだけが読む）ポートは、send でホストのメモリへ移す。配線のときに `Wire.cuda` で決める
+    - ホストの `write`（と `inputs=`）で渡した CUDA のテンソル。そのテンソルの device の上に置く（2026-10-25）
 
 バッファは `_native` の内部の型で、利用者には見せない。どちらの値も不変なので、複数の読み手が同じ値を同時に読んでも、書き手との間でデータ競合が起きない。
 
-device の上に置くのは、CUDA のノードの間でメッセージが device → host → device と往復する無駄を無くすためである。往復は送るたびに同期の D2H を、読むたびに H2D を払い、100 万要素で 1 回の send に 0.5〜1.6 ms かかっていた（[research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）。置くのはノード自身の device の値だけで、ホストの `write`・`inputs=`・`initial`・復元はホストのメモリに置く。torch の `__dlpack__` は呼ぶスレッドの current device がテンソルの device であることを要求し、ホストのスレッドの current stream と device は保証できないからである。
+device の上に置くのは、CUDA のノードの間でメッセージが device → host → device と往復する無駄を無くすためである。往復は送るたびに同期の D2H を、読むたびに H2D を払い、100 万要素で 1 回の send に 0.5〜1.6 ms かかっていた（[research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）。CPU のノードとホストしか読まないポートを device に置かないのは、置くと D2H が送り手から読み手へ移り、小さいメッセージでは送り手の stream の待ちと読み手の D2H の同期の 2 回になって遅くなるからである（[research/benchmarks.md](research/benchmarks.md) の同じ節）。`initial` と復元はホストのメモリに置く。
+
+torch の `__dlpack__` は、呼ぶスレッドの current device がテンソルの device であることを要求する。ホストのスレッドの current device は保証できず、1 回の write に複数の device のテンソルが混ざりうるので、ホストの write の clone は codec の `_OnItsDevice` に包み、`__dlpack__` の間だけ自分の device を current にさせる。読み手の codec は包みを外してから読む。ノードの send では包まない。hook の中で別の device を current にしている間（`torch.cuda.device(...)`）は、device に置かずホストのメモリへ移す。
 
 torch とコアの間は DLPack で受け渡す。DLPack はデータの場所・dtype・shape・strides を表す標準の形式で、torch は `__dlpack__` と `torch.from_dlpack` で対応している。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。NumPy の配列を経由すると bfloat16 を受け渡せない。
 
 受け渡しは、読み書きのどちらでも必ずコピーする。ゼロコピーで共有すると、利用者が受け取ったテンソルをその場で書き換えたときに、ほかの読み手が見ているバッファまで変わってしまうからである。
 
-- 書くとき: 値を `detach()` する。勾配はノードをまたがない。ホストのメモリに置く値は、GPU 上なら呼んだスレッドの現在の stream でホストへコピーしてから、コアがプールから取ったバッファへコピーする。device に置く値は、ノードの stream の上で連続な row-major に `clone` し、その stream に event を記録してホストで待ってから渡す（下の「stream の同期」）
+- 書くとき: 値を `detach()` する。勾配はノードをまたがない。ホストのメモリに置く値は、GPU 上なら呼んだスレッドの現在の stream でホストへコピーしてから、コアがプールから取ったバッファへコピーする。device に置く値は、呼んだスレッドのその device の current stream（ノードの hook ならノードの stream）の上で連続な row-major に `clone` し、その stream に event を記録してホストで待ってから渡す（下の「stream の同期」）
 - 読むとき: コアのバッファの中身を、新しい `torch.Tensor` へコピーする。GPU のノードでは、ホストからデバイスへの転送がこのコピーを兼ねる。device に置いた値は、読み手の current stream の上で読み手の device へコピーし、元の値に `record_stream` を付ける。ホストの読み出しは CPU のテンソルを返す（device に置いた値ならここで 1 回だけ D2H）
 - スカラーは DLPack を経由しない。bindings が Python の値をフィールドの dtype のバイト列に直して書き（`__dlpack__` を持たない値をスカラーとして読む）、`BufferView.item()` が Python の値に戻す。どのフィールドがスカラーかは codec が spec から決め、コアの `Schema` は種別を持たない（shape `()` のフィールドになる）
 - bindings が受け取るのは、ホストから読めるメモリの値（DLPack のデバイス種別が CPU か pinned memory）と CUDA の値。CUDA の値は shape と dtype を照合（`dlpack::import::check`）してから、オブジェクトごと持つ。ほかのデバイスは `TypeError`
@@ -38,7 +42,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 
 ### stream の同期
 
-ノードはそれぞれ自分の CUDA stream で計算するので、device に置いた値を別のノードが読むには stream をまたぐ順序が要る。書き手が send の中で、`clone` を積んだ自分の stream に event を記録してホストで待ち、それから公開する（2026-10-24 の S2）。読み手は待たない。公開された値は device の上で出来上がっているので、読み手の stream は何にも依存せずにコピーを積める。
+ノードはそれぞれ自分の CUDA stream で計算するので、device に置いた値を別のノードが読むには stream をまたぐ順序が要る。書き手が send の中で、`clone` を積んだ自分の stream に event を記録してホストで待ち、それから公開する（2026-10-24 の S2）。ホストの write も同じで、clone を積んだ各 device の current stream を待ってから公開する（複数のポートへの一斉の write では、全ポートの値を待ってから版番号を進める）。読み手は待たない。公開された値は device の上で出来上がっているので、読み手の stream は何にも依存せずにコピーを積める。
 
 | 案 | 内容 | 判断 |
 | --- | --- | --- |
@@ -52,6 +56,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 - 同じ device の読み手: 自分の stream でコピーする
 - 別の CUDA device の読み手: ATen は、コピーを「呼んだスレッドの、元の device の current stream」に積み、読み手の device の stream と event で前後を揃える。ワーカーには直前に走った別のノードの stream が残っているので、Driver がノードごとに元の device の副 stream を持ち、hook のたびに current にする（[ノード](nodes.md#cuda)）
 - CPU のノードとホスト: 副 stream（ホストはそのスレッドの current stream）の上で `.to("cpu")` する。同期のコピーなので、終わってから返る
+- ホストが書いた値の読み手: どの device に書かれるかは write まで分からないので、副 stream は作らない（`Wiring.read_devices` に入れない）。読み手の device と違う device に書かれた値は、読み手のスレッドの元の device の current stream でコピーする。値は出来上がっているので正しいが、その stream がワーカーで直前に走った別のノードのものなら、そのノードの GPU の仕事の後ろに並ぶ（性能だけの問題。2026-10-25 の判断。全 device に副 stream を作ると、使わない GPU にも CUDA の context を作る）
 
 P2P の無い GPU の組（計測した機械の例は [research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）では、device の間のコピーをドライバが内部でホストを中継する。コードはホストのメモリを経由しない。
 
@@ -64,7 +69,7 @@ torch とコアの変換は `codec.py` の 1 か所だけが行う。spec の公
 - int の範囲の検査も Rust が書き込むときに 1 回だけ行う（K9 の範囲、`OverflowError`）。丸めも折り返しもしない
 - Tensor の dtype は変換しない。spec と違う dtype の値は断る。スカラーはフィールドの注釈が Python の型付けで受け付ける値を受け付ける（`bool` は `int`、`int` は `float` として受け付け、読み出すと宣言した型になる）
 - `initial`、inputs、復元する値も、段 2 で Outlet や Slot に書くときに同じ経路で検査され、ポートの label で名指しされる。`Port.__init__` の時点では label も Schema もまだ無い
-- `to_core(spec, msg, label, *, device=None)` の `device` は、送るノードの CUDA device（CPU のノードとホストは `None`）。`Wire` が段 2 で決めた値を渡すので、send のたびに `device.type` を見ない（1 回 約 0.1 µs、CPU の hot path の予算の大半になる）
+- `to_core(spec, msg, label, *, device=None)` の `device` は、CUDA のノードが読むポートなら送るノードの CUDA device、ホストの write なら `THEIR_DEVICES`（各テンソルが自分の device に残る）、それ以外（CPU のノード、CUDA のノードが読まないポート、`initial`、復元）は `None`。ノードの値は `Wire.cuda` が段 2 で決めるので、send のたびに `device.type` や読み手を見ない（`device.type` は 1 回 約 0.1 µs、CPU の hot path の予算の大半になる）
 - `from_core(spec, views, device)` は、ホストのバッファを `torch.from_dlpack` で、device に置いた値を `.to(device, copy=True)` で読む。区別は `type(view) is BufferView`（`isinstance(view, torch.Tensor)` は hot path で 0.1 µs 余計にかかる）
 - `peek(spec, views)` は、device に置いた値をコピーせずに返す（ホストのバッファは CPU のテンソルにコピーする）。状態の取得の停止中だけに使い、呼び手が再開の後に CPU へ移す（`state.cpu`）
 

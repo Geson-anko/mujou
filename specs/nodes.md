@@ -193,7 +193,7 @@ pamiq-core の `SleepIntervalAdjustor` は、step の後に「前回の待ちが
 
 ノードのデバイスは CPU と CUDA だけ（K4）。MPS など、ほかのアクセラレータはサポートしない。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、複数のスレッドが並行してノードを計算する実行モデルと合わない。ほかのアクセラレータは確かめる環境が無く、stream の意味と性能も確かめられない。
 
-CUDA のノードが自分の device の上で送ったテンソルは、スロットの中でもその device に置いたままにし、読み手は device の上でコピーして受け取る（2026-10-24。[メッセージ](messages.md#コアの中の値)）。ホストとの間を通るのは、CPU のノードとの境界と、ホストの読み書きだけになる。GPU のノード同士が正しさと実行順序の面で互いに影響しないよう、次を守る。
+CUDA のノードが自分の device の上で送ったテンソルは、そのポートを CUDA のノードが読むなら、スロットの中でもその device に置いたままにし、読み手は device の上でコピーして受け取る（2026-10-24、読み手の条件は 2026-10-25。[メッセージ](messages.md#コアの中の値)）。ホストが write で渡した CUDA のテンソルも、その device に置く。ホストのメモリを通るのは、CPU のノードとホストだけが読むポートと、ホストの読み出しと、CPU のテンソルの write になる。GPU のノード同士が正しさと実行順序の面で互いに影響しないよう、次を守る。
 
 1. ノードごとに自分の CUDA stream を持つ（Driver が作る）。既定の stream を共有すると、送るときの同期がほかのノードの仕事まで待つ
 2. 同期は自分の stream に対してだけ行う。`torch.cuda.synchronize()` は使わない
@@ -209,7 +209,7 @@ GPU の演算器・帯域・メモリの取り合いは、CPU のコアの取り
 | `capture` の前後 | 制御スレッド（終わった後はホストのスレッド） | 同上 | 複製が、ほかの hook の仕事が終わる前の値か、再開後に更新した値を写す |
 | 起動の前（段 2 の終わり） | `mujou.run` を呼んだスレッド | そのスレッドの、ノードが使う各 device の現在の stream | ノードが、`__init__` で確保したテンソルを確保が終わる前に使う |
 
-- 自分の device 以外の CUDA device にある値を読むノードには、Driver がその device ごとに副 stream を作り、hook のたびに current にする（`Wiring.read_devices` が、読むスロットの書き手の device から決める）。ATen は device の間のコピーを、呼んだスレッドの元の device の current stream に積む。副 stream が無いと、ワーカーで直前に走った別のノードの stream に積まれ、ノード同士が同じ stream で絡む。`torch.cuda.set_stream` は current device をその stream の device に変えるので、自分の stream を最後に設定する。副 stream のコピーは待たない。CUDA の読み手なら ATen が自分の stream に event で繋ぎ、CPU の読み手なら `.to("cpu")` が同期のコピーだからである
+- 自分の device 以外の CUDA device にある値を読むノードには、Driver がその device ごとに副 stream を作り、hook のたびに current にする（`Wiring.read_devices` が、読むスロットの書き手のうち、値を device に置くものの device から決める。ホストが書くスロットは入れない。[メッセージ](messages.md#stream-の同期)）。ATen は device の間のコピーを、呼んだスレッドの元の device の current stream に積む。副 stream が無いと、ワーカーで直前に走った別のノードの stream に積まれ、ノード同士が同じ stream で絡む。`torch.cuda.set_stream` は current device をその stream の device に変えるので、自分の stream を最後に設定する。副 stream のコピーは待たない。CUDA の読み手なら ATen が自分の stream に event で繋ぎ、CPU の読み手なら `.to("cpu")` が同期のコピーだからである
 - 待つときは stream 全体を `synchronize` せず、stream に event を記録してその event だけを待つ。PyTorch は `torch.cuda.Stream()` を device ごとのプール（32 本）から割り当てるので、32 を超える CUDA のノードは stream を共有する。event なら、記録より後にほかのノードが積んだ仕事を待たない。副 stream も同じプールから取るので、ノード自身の stream と合わせて device ごとに 32 本を超えると、副 stream がほかのノードの stream と重なりうる。書き手の stream と重なると、読み手のコピーが書き手の公開した後の仕事の後ろに並ぶ（CPU の読み手の D2H は stream 全体を同期するので、ホストまで待つ）。値は正しいままで、性能だけの問題である（2026-10-24 の監査で再現した。書き手 1 つと idle な cuda:0 のノード 31 個のあとに置いた CPU の読み手の recv が、書き手が送った後に積んだ約 0.5 s の仕事を待った）
 - `"cuda"` のように添字の無いデバイスは、構築したときのホストの現在のデバイスに決める
 - CUDA のテンソルやモジュールは `on_start` 以降で作るよう docs で勧める。`__init__` で作っても起動の前の同期で正しく動くが、キャッシュアロケータはメモリを確保した時点の現在の stream に結び付けるので、ノードがテンソルを捨てたとき、ノードの stream の計算が終わる前にホストの確保へ回りうる
