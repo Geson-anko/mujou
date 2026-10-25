@@ -44,7 +44,7 @@ mujou の目標は、推論と学習を同時に行い、知能に「無常」�
 - ブロッキングする hook はワーカーを占有し、ほかのノードの $\Delta t$ を伸ばす。そういうノードは `dedicated_thread=True` にする
 - **所有者の検査の正本は K12（Driver の `wires` の lookup）。** ポートのメソッドは、いま hook を走らせている Driver（bindings の thread-local、`_native.current()`）の `wires` から自分の Wire を引き、引けなければ `RuntimeError`。同じワーカーでも、ほかのノードのポートは読み書きできない。`state_dict` の間は `wires` が空なので、状態の取得はほかのノードから見えない（`specs/scenarios.md`）
 - スロットの読み書きはワーカーを止めない形（バッファプールと、スロットごとの lock の下での `Arc` の差し替え。`specs/messages.md`・`specs/native-core.md`）にする。lock-free の `arc-swap` には別のスロットの値を返す不具合があったので戻さない
-- 利用者が扱う値は `torch.Tensor` と Python のスカラー（`IntSpec` などの spec）だけ。torch とコアの変換は `codec.py` だけが行い、読み書きとも必ずコピーする（ゼロコピー共有・GPU 共有はしない。`specs/messages.md`）
+- 利用者が扱う値は `torch.Tensor` と Python のスカラー（`IntSpec` などの spec）だけ。torch とコアの変換は `codec.py` だけが行い、読み書きとも必ずコピーする（ゼロコピー共有はしない。CUDA のノードが自分の device で送った値は device の上でコピーし、書き手が send の中で自分の stream を待ってから公開する。読み手は書き手を待たない。`specs/messages.md`）
 
 ## 更新手法の差し替え
 
