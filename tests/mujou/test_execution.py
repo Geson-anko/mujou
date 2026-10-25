@@ -1515,11 +1515,13 @@ class TestCuda:
     def test_the_host_reads_what_a_cuda_node_sends_on_the_cpu(
         self, start_manual: StartManual
     ):
-        out = Port(send=vec())
+        # A peer on CUDA, so that the core holds the message on the device.
+        out, inp = Port(send=vec()), Port(recv=vec())
+        out.connect(inp)
         x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
         node = probe_on("cuda:0", lambda: out.send(x), out=out)
-        run = start_manual(Group(node=node))
-        run.step(H)
+        run = start_manual(Group(node=node, peer=probe_on("cuda:0", inp=inp)))
+        run.step(H, node)
         expected = x.cpu()
         values = run.subscribe(out, timeout=10.0)
         read = [

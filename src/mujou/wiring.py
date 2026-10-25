@@ -36,8 +36,9 @@ class Wiring:
     inputs: Mapping[AnyPort, _native.InputSlot]
     # The wires of the ports of each node, in the order of tree.members.
     wires: tuple[Mapping[AnyPort, Wire], ...]
-    # For each node, in the same order: the CUDA devices other than its own of
-    # the nodes whose slots it reads, where the core may hold what they send.
+    # For each node, in the same order: the CUDA devices other than its own
+    # where the core holds what its peers send (not what the host writes, on a
+    # device known only when it writes).
     read_devices: tuple[frozenset[torch.device], ...]
 
     def write(self, values: Mapping[Any, object]) -> _native.Timestamp:
@@ -116,13 +117,26 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         port: {channel: k for k, channel in enumerate(port.channels)}
         for port in tree.owners
     }
+    device = {
+        port: member.node.device
+        for member in tree.members
+        for port in member.ports.values()
+    }
+    # Where what each port that sends stays: its node's CUDA device, if a node
+    # on CUDA reads it. Nodes on the CPU and the host read a copy in host
+    # memory sooner, which the sender makes once.
+    held = {
+        port: device[port] if _held(port, device) else None
+        for port in tree.owners
+        if port.send_spec is not None
+    }
     wires = tuple(
         {
             port: Wire(
                 port=port,
                 label=tree.label(port),
                 device=member.node.device,
-                cuda=member.node.device if member.node.device.type == "cuda" else None,
+                cuda=held.get(port),
                 outlet=outlets.get(port),
                 sources=_sources(port, outlets, inputs, indices),
                 targets=indices[port],
@@ -131,23 +145,27 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         }
         for member in tree.members
     )
-    device = {
-        port: member.node.device
-        for member in tree.members
-        for port in member.ports.values()
-    }
     read_devices = tuple(
         frozenset(
             peer
             for port in member.ports.values()
             if port.recv_spec is not None
             for channel in port.channels
-            if (peer := device[channel.other(port)]).type == "cuda"
+            if (peer := held[channel.other(port)]) is not None
             and peer != member.node.device
         )
         for member in tree.members
     )
     return Wiring(tree, group, outlets, inputs, wires, read_devices)
+
+
+def _held(port: AnyPort, device: Mapping[AnyPort, torch.device]) -> bool:
+    """Whether the core holds what ``port`` sends on the CUDA device of its node:
+    the node is on CUDA, and so is the node of a peer (``device`` is that of
+    each port's node)."""
+    return device[port].type == "cuda" and any(
+        device[channel.other(port)].type == "cuda" for channel in port.channels
+    )
 
 
 def written_by_the_host(port: AnyPort) -> bool:

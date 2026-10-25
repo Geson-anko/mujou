@@ -621,12 +621,14 @@ class TestScalarMessages:
 
 
 def sends_on_cuda() -> tuple[Probe, Probe, Port[torch.Tensor, Never]]:
-    """A node on ``cuda:0`` that sends ``[1, 2]``, and a node that receives it;
-    the port that sends."""
+    """A node on ``cuda:0`` that sends ``[1, 2]``, and a node on ``cuda:0`` that
+    receives it (so the core holds the message on the device); the port that
+    sends."""
     out, inp = Port(send=vec()), Port(recv=vec())
     out.connect(inp)
     x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
-    return probe_on("cuda:0", lambda: out.send(x), out=out), Probe(inp=inp), out
+    source = probe_on("cuda:0", lambda: out.send(x), out=out)
+    return source, probe_on("cuda:0", inp=inp), out
 
 
 @pytest.mark.cuda
@@ -654,7 +656,7 @@ class TestCuda:
         assert torch.equal(restored.read(out), expected)
         sink.update = sink.inp.recv  # pyright: ignore[reportAttributeAccessIssue]
         restored.step(H, sink)
-        assert torch.equal(cast(torch.Tensor, sink.results[0]), expected)
+        assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), expected)
 
     def test_a_paused_run_gives_the_values_on_the_device_uncopied(self):
         # What a pause reads, before Run.state_dict moves it to the CPU.

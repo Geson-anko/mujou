@@ -970,6 +970,8 @@ class TestCuda:
             pytest.param("cuda:0", "cuda:1", False, marks=pytest.mark.cuda(2)),
             # The control: the oracle sees a copy from host memory.
             ("cpu", "cuda:0", True),
+            # Read by nodes on the CPU only: sent to host memory once.
+            ("cuda:0", "cpu", True),
         ],
     )
     def test_a_message_between_cuda_nodes_skips_host_memory(
@@ -1029,11 +1031,34 @@ class TestCuda:
         writer = SendsThenWorks()
         sink = ReadsAndCheck(reader, writer)
         writer.out.connect(sink.inp)
-        start(Group(writer=writer, sink=sink), timer=virtual)
+        # A reader on CUDA too, so that the core holds the message on the
+        # device for a reader on the CPU as well.
+        on_cuda = Port(recv=BIG)
+        writer.out.connect(on_cuda)
+        other = probe_on("cuda:0", inp=on_cuda)
+        start(Group(writer=writer, sink=sink, other=other), timer=virtual)
         virtual.advance(0.01)
         assert sink.done.wait(10.0)
         assert sink.writer_done is False
         assert torch.equal(cast(torch.Tensor, sink.received), torch.ones(BIG.shape))
+
+    def test_readers_on_the_cpu_and_on_cuda_receive_one_message(
+        self, start_manual: StartManual
+    ):
+        out, on_cpu, on_cuda = Port(send=h()), Port(recv=h()), Port(recv=h())
+        out.connect(on_cpu)
+        out.connect(on_cuda)
+        x = torch.arange(6.0).reshape(2, 3)
+        source = probe_on("cuda:0", lambda: out.send(x.to("cuda:0")), out=out)
+        a = probe_on("cpu", on_cpu.recv, inp=on_cpu)
+        b = probe_on("cuda:0", on_cuda.recv, inp=on_cuda)
+        run = start_manual(Group(source=source, a=a, b=b))
+        run.step(H, source, a, b)
+        for node, device in ((a, "cpu"), (b, "cuda:0")):
+            received = cast(torch.Tensor, node.results[0])
+            assert received.device == torch.device(device)
+            assert torch.equal(received.cpu(), x)
+        assert torch.equal(run.read(out), x)
 
     @pytest.mark.cuda(2)
     def test_sends_while_the_hook_has_made_another_device_current(

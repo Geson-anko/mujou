@@ -124,22 +124,35 @@ class TestDevices:
         cuda0 = frozenset({torch.device("cuda", 0)})
         assert wired(net).read_devices == (frozenset(),) * 3 + (cuda0, cuda0)
 
-    @pytest.mark.cuda
-    def test_what_the_host_writes_is_in_host_memory(self):
-        # The host's thread may have another current device and stream.
-        node = probe_on("cuda:0", inp=Port(recv=vec()))
+    def test_a_cpu_tensor_that_the_host_writes_is_in_host_memory(self):
+        node = Probe(inp=Port(recv=vec()))
         wiring = wired(Group(node=node))
-        x = torch.ones(2, dtype=F64, device="cuda:0")
+        x = torch.ones(2, dtype=F64)
         wiring.write({node.inp: x})  # pyright: ignore[reportAttributeAccessIssue]
         (value,) = wiring.inputs[node.inp].read().values  # pyright: ignore[reportAttributeAccessIssue]
         assert isinstance(value, BufferView)
-        assert torch.equal(torch.from_dlpack(value), x.cpu())
+        assert torch.equal(torch.from_dlpack(value), x)
+
+    @pytest.mark.cuda
+    def test_a_port_that_no_node_on_cuda_reads_sends_through_host_memory(self):
+        out = Port(send=vec())
+        source = probe_on("cuda:0", out=out)
+        sink = Probe(inp=Port(recv=vec()))
+        out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        wiring = wired(Group(source=source, sink=sink))
+        assert wiring.wires[0][out].cuda is None
+        assert wiring.read_devices == (frozenset(), frozenset())
+        wiring.wires[0][out].send(torch.ones(2, dtype=F64, device="cuda:0"))
+        for slot in (wiring.outlets[out].outbox, wiring.outlets[out].channel(0)):
+            assert isinstance(slot.read().values[0], BufferView)
 
     @pytest.mark.cuda
     def test_the_outbox_and_every_channel_hold_one_clone_on_the_device(self):
         out = Port(send=vec())
         source = probe_on("cuda:0", out=out)
-        sinks = {f"s{k}": Probe(inp=Port(recv=vec())) for k in range(3)}
+        # One reader on CUDA among readers on the CPU is enough.
+        sinks = {f"s{k}": Probe(inp=Port(recv=vec())) for k in range(2)}
+        sinks["s2"] = probe_on("cuda:0", inp=Port(recv=vec()))
         for sink in sinks.values():
             out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
         wiring = wired(Group(source=source, **sinks))
