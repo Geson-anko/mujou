@@ -658,6 +658,31 @@ class TestCuda:
         restored.step(H, sink)
         assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), expected)
 
+    def test_a_cuda_value_the_host_wrote_is_saved_on_the_cpu_and_restored(
+        self, start_manual: StartManual
+    ):
+        # The core holds what the host writes on CUDA wrapped; the state takes
+        # the tensor out of it.
+        inp = Port(recv=vec())
+        node = probe_on("cuda:0", inp=inp)
+        x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
+        run = start_manual(Group(node=node))
+        run.write({inp: x})
+        tree = run.state_dict()
+        run.shutdown()
+        entry = port_slots(tree, "node", "inp")["in"]
+        assert type(entry["value"]) is torch.Tensor
+        assert entry["value"].device == torch.device("cpu")
+        assert torch.equal(entry["value"], x.cpu())
+
+        inp = Port(recv=vec())
+        node = probe_on("cuda:0", inp.recv, inp=inp)
+        restored = start_manual(Group(node=node), state=tree)
+        restored.step(H, node)
+        received = cast(torch.Tensor, node.results[0])
+        assert received.device == torch.device("cuda", 0)
+        assert torch.equal(received.cpu(), x.cpu())
+
     def test_a_paused_run_gives_the_values_on_the_device_uncopied(self):
         # What a pause reads, before Run.state_dict moves it to the CPU.
         source, sink, out = sends_on_cuda()
