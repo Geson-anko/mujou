@@ -1,6 +1,6 @@
 ---
 name: project-gpu-policy
-description: CUDA のノードが自分の device の上で send したテンソルは、コアが不透明な値として device に置いたまま持ち、読み手は device の上でコピーする（2026-10-24 にユーザーが「コアは GPU をサポートしない」を覆した）。書き手が send の中で自分の stream を待ってから公開（S2）、読み手は record_stream、別の device を読むノードには副 stream。それ以外の値はホストのメモリ。ノードのデバイスは CPU と CUDA だけ
+description: CUDA のノードが自分の device の上で send したテンソルは、CUDA のノードが読むポートなら（2026-10-25）、コアが不透明な値として device に置いたまま持ち、読み手は device の上でコピーする（2026-10-24 にユーザーが「コアは GPU をサポートしない」を覆した）。書き手が send の中で自分の stream を待ってから公開（S2）、読み手は record_stream、別の device を読むノードには副 stream。ホストの write の CUDA のテンソルもその device に置く（2026-10-25）。それ以外の値はホストのメモリ。ノードのデバイスは CPU と CUDA だけ
 metadata:
   type: project
 ---
@@ -8,7 +8,9 @@ metadata:
 2026-10-15 決定、2026-10-24 にユーザーが覆して書き換えた。
 
 - **CUDA のノードの間のメッセージは device に置いたまま渡す（2026-10-24、ユーザーの依頼）。** 依頼の原文は「ノードが GPU デバイス上で計算した時、そのテンソルは device -> host -> device という無駄な経路を踏む。デバイス転送を無くしたい。ノードはそれぞれ別々の cuda stream になるので同期が必要」。それまでの「コアとメッセージは GPU をサポートせず、境界で device → host → device とコピーする」（2026-10-15）を覆した
-- **device に置くのは、ノードの hook の `send` / `send_to` で、ノード自身の CUDA device の上の密な（strided）テンソルだけ（確認事項 2 の推奨案で確定）。** ホストの `write`・`inputs=`・`initial`・復元はホストのメモリのまま。ほかの device のテンソル、sparse、スカラーも今どおり
+- **device に置くのは次の密な（strided）テンソル。** (1) ノードの hook の `send` / `send_to` で、ノード自身の CUDA device の上のもの。ただしそのポートの接続先に CUDA のノードが 1 つ以上あるときだけ（2026-10-25、ユーザーの決定。CPU のノードだけ・ホストだけが読むポートは send でホストへ移す。配線時に `Wire.cuda` で静的に決め、副 stream もその分だけ作る）。(2) ホストの `write`（と `inputs=`）で渡した CUDA のテンソル。そのテンソルの device に置く（2026-10-25、ユーザーの決定。`device=` 引数は足さない）。`initial`・復元はホストのメモリのまま。ほかの device のテンソル、sparse、スカラーも今どおり
+- **ホストの write の同期も S2。** 呼んだスレッドのその device の current stream で clone し、各 device の event を待ってから公開する。torch の `__dlpack__` は current device を要求するので、clone を `codec._OnItsDevice` に包み export の間だけその device を current にする（複数 device の dict や一斉の write でも正しい）。読み手の codec は包みを外す
+- **ホストが書いた値には副 stream を作らない。** どの device に書かれるかは write まで分からないため。別の device の読み手は、自分のスレッドの元の device の current stream でコピーする（正しいが、別のノードの stream の後ろに並ぶことがある。全 device に副 stream を作ると使わない GPU にも context ができる）
 - **コアは device・stream・event を知らない。** メッセージのフィールドは「プールのバッファ」か「不透明な値（`buffer::Held = Arc<dyn Any + Send + Sync>`）」。中身は bindings が入れる `Py<PyAny>`（codec が書き手の device の上で `clone(memory_format=contiguous_format)` した detach 済みのテンソル）。bindings は DLPack の device 種別が CUDA なら shape と dtype を `dlpack::import::check` で照合してオブジェクトごと持つ
 - **stream の同期は S2（確認事項 1 の推奨案で確定）。** 書き手が send の中で clone を積んだ自分の stream に event を記録してホストで待ち、それから公開する。読み手は待たない。読み手はコピーを積んだあと元の値に `record_stream(コピーした stream)` を付け、キャッシュアロケータが書き手の次の clone に塊を再利用するのを、コピーが終わるまで止める
 - **別の CUDA device の値を読むノード（CPU のノードを含む）は、Driver がその device ごとに副 stream を持ち、hook のたびに current にする。** ATen は device の間のコピーを「呼んだスレッドの、元の device の current stream」に積むため。自分の stream を最後に設定する（`set_stream` が current device を変える）

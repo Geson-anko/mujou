@@ -33,3 +33,12 @@
 - 「読み手は書き手の公開後の仕事を待たない」の回帰テスト `test_a_reader_does_not_wait_for_what_the_writer_queues_after_sending`（cuda:0 / cuda:1 / cpu）。`_read` に `torch.cuda.synchronize(view.device)` を足す変異で 3 件とも落ちる
 - 副 stream がプールの 32 本に数えられ、重なると読み手が書き手の公開後の仕事を待つことを `specs/nodes.md`・docs・`project_gpu_policy.md` に書いた（コードは変えない）
 - nit: `codec._CPU` を上へ、`_value` の引数を `stays_on` に、`UnsupportedDevice` の文言を「host memory (1 or 3)」に戻した（コアの `copy_from` が出すので）、`messages.md` の機械固有の記述を benchmarks へ、保持値が落ちる場所の記述、`state.cpu` の docstring、ホストの write が `Held` にならない白箱テスト
+
+## ユーザーの決定（2026-10-25）への対応
+
+- **B（CUDA → CPU の悪化）**: `wiring` が配線時に `held`（ポートごとに、ノードが CUDA で接続先に CUDA のノードが 1 つ以上あればその device、ほかは None）を決め、`Wire.cuda` に入れる。`read_devices` も `held` から作るので、device に置かないポートの分の副 stream は作らない。hot path は増えない。`cuda:1 → CPU` は変更前（`device=None`）と測定の揺れの中で一致
+- **A（ホストの write）**: `to_core(device=THEIR_DEVICES)`（`codec.Their` の enum の唯一の値）で、密な CUDA のテンソルを各自の device の上で clone し、device ごとに `with torch.cuda.device(d)` で current stream の event を待つ。clone は `codec._OnItsDevice` に包み、bindings が呼ぶ `__dlpack__` の間だけ device を切り替える（torch の current device の制約。dict の複数 device・一斉の write でも、値ごとに切り替わる）。bindings は包みを保持し、`from_core` / `peek` が外す。bindings の変更は無し
+  - 却下: write の全体を `torch.cuda.device(d)` で囲む（複数 device が混ざると効かない）。bindings で device を切り替える（`_native` は torch を使わない）。Python で shape・dtype を照合して capsule を経ない（K9 の正本が二重になる）
+- **ホストが書いた値の読み手の副 stream は作らない**（`read_devices` に入れない）。書かれる device は write まで分からない。別の device の読み手は自分のスレッドの元の device の current stream でコピーし、値は正しいが、別のノードの stream の後ろに並ぶことがある（性能だけ）。全 device に副 stream を作る案は、使わない GPU にも CUDA の context（数百 MB）を作るので採らない。`specs/messages.md` の「stream の同期」に記録
+- ホストの write の S2 は変異テスト（`_on_their_devices` の待ちを外す）で `test_a_write_waits_for_the_hosts_stream` が落ちることを確かめた
+- `ports.py`: input (64,784) の send が 6.0 と 7.6 µs の 2 峰に揺れた（HEAD の Python に戻しても 6.0、新しいコードでも 6.1 と 7.6 が出る）。ほかは変更前と 3% 以内
