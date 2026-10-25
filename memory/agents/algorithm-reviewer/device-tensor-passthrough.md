@@ -58,3 +58,65 @@
 2. **プールの重なり。** `Driver.__init__` は members の順にノード自身の stream を作り、続いて副 stream を作る。`{"w": Writer, i0..i30: Idle(cuda:0), "r": Reader(cpu)}` だと、cuda:0 の stream は 33 本目になり、r の副 stream が w の stream と重なる。このとき recv は 467.8 ms。i を 30 個にすると 2.0 ms
 3. **ホストのメモリを通る経路。** `to_core` の呼び手は `Wire._values`（`device=self.cuda`）、`wiring._input_value`（ホストの write / inputs）、`wiring._outlet`（initial）、`state._write`（復元）。保持の経路に入るのは最初の 1 つだけである。保持するかどうかを決める条件は `held is not None and value.device == held and value.layout == torch.strided`。sparse はホストの経路に回り、DLPack で `BufferError` になる（テストあり）。ほかの device の CUDA テンソルは `.to("cpu")` の経路を通る（テストあり）
 4. **計算グラフ。** `detach()` で autograd のグラフから切ってから `clone` するので、保持テンソルは葉でもなく、グラフも持たない。読み手の `.to(copy=True)` は勾配を記録する状態で呼ばれるが、入力が `requires_grad=False` なのでグラフは作られない。ノード内 autograd の目印（`# mujou: local-autograd`）が要る箇所は、この差分には無い
+
+---
+
+# 再監査（2026-10-25）: ホストの CUDA の write を device に置く（A）、CUDA の読み手が居るポートだけ device に置く（B）
+
+対象: `2435496..HEAD`（`5542352` wiring、`08a195b` codec、`6697546` docs、`1954322` memory）。基準は skill `locality-and-async`、`specs/execution-model.md`・`specs/messages.md`・`specs/nodes.md`、`memory/project_gpu_policy.md`・`memory/project_host_io.md`、実装ログ `memory/agents/plan-implementer/device-tensor-passthrough.md`。
+
+## verdict
+
+**request-changes**（確信度: 高）。B は正しく、前回の should-fix 3（hook の中で別の device を current にした send が `BufferError`）も解消した。A も、値の正しさ・版番号の原子性・時刻の意味・コピー・グラフについては問題無い。ただし A では、**ホストが書いた CUDA の値を CPU のノードや別の device のノードが読むと、そのノードがホストの write の後の GPU の仕事を待つ**。実機で再現した（must-fix 1）。S2 で避けたはずの「読み手が書き手を待つ」形が、ホストを書き手として戻ってきている。仕様（`specs/messages.md` の「stream の同期」の最後の項）は、これを「別のノードの stream の後ろに並ぶ。性能だけ」と説明している。ホストが stream を設定しない普通の使い方では、並ぶ先はホスト自身の既定の stream なので、この説明は実態と違う。ユーザーはこの説明を前提に判断したので、選び直してもらう必要がある。
+
+- 読み手が書き手を待たない（ノードの send）: 変わらず満たす。B は配線時に `Wire.cuda` を決めるだけで、書き手の待ち（`record_event().synchronize()`）と読み手の経路は前回と同じ
+- 読み手がホストを待たない: **同じ device の読み手は満たす。CPU と別の device の読み手は満たさない**（must-fix 1）
+- 一斉 write の版番号の原子性: 満たす。`Wiring.write` は、全ポートの `_item`→`to_core(device=THEIR_DEVICES)`（clone と各 device の event の待ち）を list の中で終えてから、`group.write` を 1 回呼ぶ。途中のポートで例外が出れば何も公開しない。複数の device の値を混ぜた write（ホストの current device が値と違う状態）も、1 つの時刻で一斉に切り替わることを確かめた（照合メモ 6）
+- スロットの時刻: 意味は変わらない。待ちは `group.write` より前にあり、コアは公開のときに時刻を付ける。時刻の意味は「値が device の上で出来上がった後」で、ノードの send と同じ
+- 不変・必ずコピー: 保たれる。ホストの write は `detach().clone()`。write の後に元のテンソルを `fill_` で書き換えても、読み手には届かない。読み手は `.to(device, copy=True)` で受け取り、状態の取得は `peek` が `_OnItsDevice` を外した後、`state.cpu` が CPU へコピーする（照合メモ 6）
+- グラフ: ノードをまたがない。`requires_grad=True` から作った値を write しても、`detach` してから clone する
+- グローバル同期: 持ち込んでいない。`_on_their_devices` が待つのは、ホストのスレッドの各 device の current stream に記録した event だけで、ノードの側にはバリアが無い
+- B（静的な判定）: 正しい。`connect` は両端の spec が互いに逆であることを要求する（`a.send_spec == b.recv_spec`）。そのため、`channel.other(port)` は必ずそのポートの読み手で、`_held` に読み手でないものが紛れることは無い。`read_devices` も `held` から作るので、device に置かないポートの分の副 stream は作らない。stream のプールの消費が減るので、前回の should-fix 1（32 本を超えると重なる）にも少し効く
+- 更新手法の焼き付け: 無い。PC-ALM の式には触れていない
+
+## must-fix
+
+1. **ホストが write した CUDA の値を、CPU のノードや別の CUDA device のノードが読むと、ホストが write の後に積んだ GPU の仕事を待つ**（確信度: 高。再現済み）
+    - 仕組み: こうした読み手には副 stream が無い（`read_devices` に入れない）。そのため ATen は、コピーを読み手のワーカーのスレッドの、値の device の current stream に積む。そのワーカーで値の device のノードがまだ一度も走っていなければ、それは **legacy default stream（`cuda_stream=0x0`）** になる。この stream はプロセスの全スレッドで共有されていて、ホストが stream を設定せずに計算していれば、ホストの仕事もここに積まれている。CPU の読み手の `.to("cpu")` は `memcpy_and_sync` で stream 全体を同期するので、ノードのスレッドがホストの仕事の終わりまで止まる。CUDA の読み手は、自分の stream が event でつながり、`Driver.update` の後の待ちを通じて同じように止まる
+    - 実測（`hostwrite.py`）: ホストが cuda:0 に write し、続けて自分の stream に約 0.5 s の `_sleep` を積んだ後に、読み手が recv した。recv（と CUDA の読み手は自分の stream の同期）にかかった時間は次のとおり
+
+        | 読み手 | ホストが既定の stream | ホストが自分の副 stream |
+        | --- | --- | --- |
+        | cpu | **483 ms** | 2.0 ms |
+        | cuda:1 | **467 ms** | 1.5 ms |
+        | cuda:0（同じ device） | 0.13 ms | — |
+
+        値はすべて正しい。読み手の cuda:0 の current stream は `0x0` だった
+    - そのワーカーで値の device のノードが以前に走っていた場合は、そのノードの stream に積まれる。そのノードがいま別のワーカーで走っていれば、読み手はそのノードの GPU の仕事を待つ。逆に、そのノードの send と `update` の後の event の待ちも、読み手のコピーを待つ。関係の無い 2 つのノードが、互いに相手を待つことになる（確信度: 中。順序の推論で、実行順が非決定的なので再現はしていない。前回の should-fix 1 と同じ機構）
+    - 仕様の誤り: `specs/messages.md` の「ホストが書いた値の読み手」の項と `memory/project_gpu_policy.md` の「ホストが書いた値には副 stream を作らない」は、これを「別のノードの stream の後ろに並ぶ（性能だけ）」と書いている。実際に待つ相手はホスト（書き手）自身で、skill `locality-and-async` 47 行の「読み手は書き手を待たない」に反する。全 device に副 stream を作る案を却下した理由（使わない GPU にも context を作る）も、遅延して作る案には当てはまらない。値が device Y にあれば、Y の context はすでにある
+    - 直す案（ユーザーの決定 A を狭めるものを含むので、メインがユーザーに確かめる）
+        - (i) **推奨。** B と同じく、読み手を見て静的に決める。ホストが書くポート（接続の無い受信ポート）の読み手は、そのポートを持つノード 1 つだけで、その device は配線のときに分かる。そこで `_item` が `device=` に持ち主の device を渡す。持ち主が CUDA なら、その device のテンソルだけを device に置く（ホストの current device と違っても置けるよう、`_OnItsDevice` で包むのは今のまま）。持ち主が CPU のノードなら `None` にして、ホストが D2H を払う（変更前と同じ）。持ち主と違う device のテンソルはホストのメモリを通す。hot path は増えず、ホストが書いた値の副 stream という問題そのものが無くなる。失うのは、ホストと読み手の device が違うときの D2D だけで、P2P の無い組では、もともとホストを中継している
+        - (ii) A を保つ。`_read` が `_OnItsDevice` を別の device で読むとき、Driver がノードごと・device ごとに副 stream を遅延して作り、current にしてからコピーする。経路が増え、副 stream はプールの 32 本を消費する
+        - どちらの案でも回帰テストを足す。既存の `test_a_reader_does_not_wait_for_what_the_writer_queues_after_sending` と同じ形で、書き手をホストにする（ホストが write の後に `_sleep` を積み、読み手（cpu / cuda:1 / cuda:0）が recv を終えた時点で、ホストの event が未完了であることを `Event.query()` で確かめる）。今のコードでは cpu と cuda:1 が落ちるはずである
+
+## should-fix
+
+1. **`CLAUDE.md:85` と skill `locality-and-async` 47 行が、この差分の後の挙動と合っていない**（確信度: 高）。どちらも「CUDA のノードが自分の device で送ったテンソルは device の上でコピー」と書いているが、置くのは CUDA のノードが読むポートだけ（B）で、ホストの write も置く（A）。47 行の「読み手は書き手を待たない」は、must-fix 1 を直すまでは事実と違う。どちらもメインがユーザーに確かめて直す（skill `edit-dot-claude`）
+2. **ホストが書いた CUDA の値を持つ InputSlot の状態の取得（`peek` が `_OnItsDevice` を外す経路）に、テストが無い**（確信度: 中）。手元では動いた（照合メモ 6）。`test_state.py` の `TestCuda` に、write の後の `state_dict` で `ports.<p>.in.value` が CPU のテンソルになることと、復元できることのテストを足すとよい
+
+## nit
+
+1. 1 回の write で同じ device の複数のポートに書くと、`_item` がポートごとに `to_core` を呼ぶので、event の待ちがポートの数だけ繰り返される。全ポートの clone を積んでから device ごとに 1 回だけ待てば足りる。正しさには影響しない（確信度: 中、優先度: 低）
+2. B では、CUDA と CPU の読み手が混ざった `MultiPort` は device に置く。その CPU の読み手は、小さいメッセージで前回測った「書き手の待ちと D2H の同期の 2 回」をそのまま払う。仕様の条件（CUDA のノードが 1 つ以上）どおりなので、`specs/research/benchmarks.md` に一言あればよい（確信度: 高、優先度: 低）
+
+## 検証結果（再監査）
+
+- `just run`: 通った（exit 0。format → `cargo test` 全部 ok → pytest 963 passed / 1 skipped（slow と `cuda(2)` を含む）→ pyright 0 errors → docs-build ok）。この差分のテストには must-fix 1 を捕まえるものが無いので、緑でも must-fix 1 は残る
+- 実機（RTX 4090 + RTX 4060）での確かめ。scratch のスクリプトは `/tmp/claude-1001/-data-geson-mujou/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/algo2/hostwrite.py` と `/tmp/claude-1001/-data-geson-mujou/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/algo2/state_probe.py`
+    - must-fix 1 の表
+    - 複数の device・ホストの current device が違う状態の write、write の後の書き換えが届かないこと、`requires_grad` の値の detach、状態の取得の値が CPU にあること（照合メモ 6）
+
+## 照合メモ（再監査）
+
+5. **ホストが書いた値の読み手の経路。** `_read` → `held = view.tensor` → `held.to(device, copy=True)`。device が違えば、ATen の `copy_device_to_device`（CUDA の読み手）と `memcpy_and_sync`（CPU の読み手）は、`getCurrentCUDAStream(src)` に積む。それは呼んだスレッド（ワーカー）の thread-local な current stream である。Driver の `_use` が設定するのは、ノード自身の device と `read_devices` の device だけなので、ホストが書いた値の device はワーカーに残っている状態のまま使われる。何も設定されていなければ legacy default stream になる。PyTorch のプールの stream は non-blocking なので、legacy default stream との暗黙の同期は無い。一方、ホストのスレッドが stream を設定していなければ、ホストの仕事も legacy default stream に載るので、読み手のコピーはその後ろに並ぶ。続く `record_stream(current_stream(held.device))` は、コピーした stream と同じ stream を指すので、アロケータについては正しい
+6. **A の正しさの確かめ（`state_probe.py`）。** CPU のノードの 2 つの受信ポートに、cuda:0 の値（`requires_grad=True` のテンソルから作った値）と cuda:1 の値を 1 回の write で書いた。ホストの current device は `torch.cuda.set_device(1)` で cuda:1 にした。write の直後に cuda:1 の元のテンソルを `fill_(9.0)` で書き換えた。受け取った値は `[1, 2]` と `[3, 4]` で、どちらも CPU にあり、時刻は同じ（`Timestamp(ns=0)`）だった。`state_dict` の `ports.{a,b}.in.value` は CPU のテンソルで、値も一致した

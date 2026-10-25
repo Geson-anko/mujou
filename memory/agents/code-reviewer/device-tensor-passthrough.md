@@ -61,3 +61,65 @@ must-fix は 1 件（hook の中で current device を変えたまま send す�
   - 変異なし → 両方 pass。変異なしで 5 回連続 pass（各 0.5 s 前後）
 - 回帰の再現: `/tmp/claude-1001/-data-geson-mujou/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/rev/other_device.py`（must-fix 1）
 - 成果物の汚染（`</content>` など）: 変更した全ファイルで無し。全ファイルが改行で終わる
+
+---
+
+# 再レビュー（2026-10-25、ユーザーの決定 A / B への対応）
+
+対象: `2435496..HEAD`（5542352, 08a195b, 6697546, 1954322）。実装ログ `memory/agents/plan-implementer/device-tensor-passthrough.md` の末尾。
+
+## verdict: approve
+
+must-fix は無し。前回の must-fix（hook の中で current device を変えて send すると `BufferError`）は前回の差し戻し対応で直っている。A（ホストの write の CUDA のテンソルをその device に置く、S2）と B（CUDA の読み手が居るポートだけ device に置く、配線時に静的に決める）は仕様どおりに実装されている。下の should-fix 1〜3 は PR の前に片付けるか、orchestrator が採否を決める。
+
+確かめたこと（指摘ではない根拠として）:
+
+- 包みを外し忘れる経路は無い。`Message.values` の読み手は `port._read`→`from_core`（recv 系）、`Run.read` / `read_with_time` / `subscribe` / `wait_for`→`from_core`（outbox だけで、ホストが書いた値は outbox に入らない）、`state._entry`→`peek` の 3 つだけで、`from_core` は `_read` が、`peek` は分岐で外す。復元は `to_core(device=None)` でホストのメモリ
+- `_OnItsDevice.__dlpack__` は bindings の `borrow_values`（GIL あり、同じスレッドで同期）から呼ばれ、torch 2.14.1 の `__dlpack__` の device の検査（`self.device.index != torch.cuda.current_device()`）を `with torch.cuda.device(...)` で満たす。capsule はその場で落ち、包みのオブジェクトが `Held` になる
+- dict で device が混ざる場合: `_on_their_devices` が device ごとに current stream の event を待ち、各値が自分で device を切り替えるので正しい（scratch で確認）
+- 一斉の write: `Wiring.write` は全ポートの `to_core`（待ちを含む）を済ませてから `group.write` を 1 回呼ぶので、版番号が進む前に全値が出来上がっている
+- `Their` enum: 単一メンバーの enum は型付きの sentinel の定石で、pyright の `is` による narrowing が効く。必要性はある（`None` / device と区別する第 3 の値）。名前は nit 4
+- hot path: CPU の send は `to_core` に `is THEIR_DEVICES` の比較 1 回だけ増える。`_value` は `stays_on is None` で短絡し、ノードの device の比較を先に置く。`_read` の追加の `type(...) is _OnItsDevice` は CUDA の値の分岐の中だけ
+- B: `_held` はポートのノードが CUDA で、接続先のノードのどれかが CUDA のとき真。`read_devices` も `held` から作るので、device に置かないポートの分の副 stream は作らない。`connect` が spec の相互一致を検査するので、recv のポートの相手は必ず send を持ち `held[...]` は KeyError にならない
+
+## must-fix
+
+なし。
+
+## should-fix
+
+1. **ホストが書いた CUDA の値の状態の取得・復元を通すテストが無い（`tests/mujou/test_state.py` の `TestCuda`）**
+   - 問題: `"in"` スロットに包んだ値が入った状態で `Run.state_dict` → `peek` の包み外し → `state.cpu` → 復元、の経路を通すテストが無い。`peek` の包み外しは `test_wiring.py` の白箱テストだけが確かめ、`state.cpu` まで通る end-to-end は無い。`peek` が外し忘れると `torch.Tensor.cpu` が `_OnItsDevice` に当たる（`map_tensors` が素通しして木に包みが残り、`torch.save(weights_only)` で落ちる）回帰を見逃す
+   - 根拠: skill `testing-strategy`（公開 API の経路）。scratch（`/tmp/claude-1001/-data-geson-mujou/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/rev2/test_scratch_host_cuda.py`、下の検証結果）では現状は正しく動くことを確かめた（current device が cuda:0 のホストが `inputs=` で cuda:1 のテンソル → 木の値は CPU、復元した実行のノードが同じ値を受け取る）
+   - 確信度: 高（テストの欠落）。深刻度: 低〜中
+
+2. **ホストが書いた値の別の device の読み手に副 stream を作らない判断はユーザーの決定ではない（`src/mujou/wiring.py` の `read_devices`、`specs/messages.md`「ホストが書いた値の読み手」）**
+   - 問題: 決定 A は置き場所と S2 だけを決めている。読み手側の stream は実装者の判断（実装ログ・specs に「2026-10-25 の判断」）。その結果、CPU のノード（や別の GPU のノード）がホストの書いた CUDA の値を読むと、ワーカーに残った別のノードの stream で D2H を積み、CPU のノードはそのノードが積んだ GPU の仕事をホストで待つ。正しさは保たれ、文書にも書いてあるが、ノード同士が stream で絡む（`specs/nodes.md` の副 stream が避けようとした状態そのもの）
+   - 根拠: `specs/nodes.md` の副 stream の理由（「副 stream が無いと、ワーカーで直前に走った別のノードの stream に積まれ、ノード同士が同じ stream で絡む」）
+   - より単純な緩和策（参考）: ホストが書くスロットを読むノードの `read_devices` に、その実行のノードが使う CUDA device（自分以外）を足す。どの device も既に context があるので「使わない GPU に context を作る」問題は起きず、実行のノードが使わない GPU に書かれた場合だけ今の扱いになる。採るかはユーザーに確認するのがよい
+   - 確信度: 中（性能だけの問題で、頻度は CPU のノードがホストの CUDA の入力を読む構成に限られる）
+
+3. **`CHANGELOG.md` が依然として無い（前回の should-fix 2 の持ち越し）**
+   - 問題: 利用者に見える変更（CUDA のノード間のメッセージが device に留まる、ホストの write の CUDA のテンソルが device に留まり write が自分の stream を待つ）の `## [Unreleased]` の項目が無い。このブランチにはファイル自体が無い（release ブランチの merge 待ち）
+   - 根拠: CLAUDE.md「利用者に見える変更は CHANGELOG.md の ## [Unreleased] に書く」
+   - 確信度: 高
+
+## nit
+
+1. `src/mujou/codec.py:137`（`_on_their_devices`）: `with torch.cuda.device(d):` は不要。`torch.cuda.current_stream(d)` は device を引数で取り、`record_event` / `Event.record` は stream の device で event を作る。外すと 1 段浅くなる（確信度: 中。外すなら `test_a_write_waits_for_the_hosts_stream` と cuda(2) のテストで確認）
+2. `src/mujou/wiring.py:56-58`（`Wiring.write`）: `to_core` をポートごとに呼ぶので、同じ device の N ポートへの一斉の write で event の待ちが N 回になる。全ポートの clone を積んでから device ごとに 1 回待てば足りる。ホストの経路だけで小さい（確信度: 中、深刻度: 低）
+3. `src/mujou/codec.py:234`: `from_core` の docstring の行が 91 文字（E501 は無効で formatter は docstring を折らないので CI は通る）（確信度: 高）
+4. `src/mujou/codec.py:121-128`: `Their` と `THEIR_DEVICES` の二重の名前は読み手に `Their` の意味を考えさせる。`class _Where(Enum): THEIR_DEVICES = auto()` のように 1 つの名前にするか、型注釈の `Their` だけ残して `Their.DEVICES` を直接使う程度で足りる。なお `type Views` が private の `_OnItsDevice` を含む（確信度: 低、好みの範囲に近い）
+5. より単純な設計（参考、確信度: 低）: ノードの send でも「current device が値の device と違う間はホストへ回す」（`to_core` の `current_device() != device.index` の分岐）を、clone を `_OnItsDevice` に包む扱いに揃えると、例外の記述（`Port.send` の docstring、`specs/messages.md`、docs）が 1 つ減り、hook の中で device を切り替えても device に留まる。包むのはその稀な場合だけなので hot path は増えない（`current_device()` の呼び出しは今もある）。ただし前回の差し戻しで実装者が「稀な場合だけのため」に採らなかった案で、今回 `_OnItsDevice` ができたので費用が下がった、という位置づけ
+6. `src/mujou/execution.py:171-174`（`Run.write`）: 「a dense tensor on a CUDA device on that device」は前置詞が続いて読みにくい（「a dense CUDA tensor is copied on its own device」など）。また `mujou.run` の `inputs` 引数の説明（`execution.py:628` 付近）は置き場所に触れない（`run.write` と同じと一言あるとよい）（確信度: 低）
+7. `tests/mujou/test_wiring.py`: 接続先の無い（ホストだけが読む）CUDA のノードのポートで `Wire.cuda is None` を確かめるテストは無い（`_held` の `any(())` が False になるだけなので自明に近い）（確信度: 低）
+
+## 検証結果（再レビュー）
+
+- just run: pass（cargo test pass、pytest 963 passed / 1 skipped、pyright 0 errors、mkdocs build --strict pass。実行後の `git status` は clean）
+- scratch（`PYTHONPATH=<worktree> uv run pytest -p tests.mujou.conftest <scratch>/rev2/test_scratch_host_cuda.py`、GPU 2 枚）: 4 passed
+  - current device が cuda:0 のホストが `inputs=` で cuda:1 のテンソル → `state_dict` の `"in"` の値は CPU、復元した実行の cuda:0 のノードが同じ値を受け取る
+  - `with torch.cuda.device(1)` の中で、cuda:0 の非連続な view と、requires_grad の cuda:1 のテンソルを混ぜた dict を write → cuda:1 のノードと CPU のノードが正しい値を受け取る
+  - 別スレッドからの write（例外なし）
+  - 包む値の shape / dtype の違いはスロット名つきの `ValueError`（`slot 'node.inp/in': expected shape (2,), got (3,)` など）
+- 成果物の汚染（`</content>` など）: 変更した全ファイルで無し
