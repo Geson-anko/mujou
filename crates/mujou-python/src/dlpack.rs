@@ -39,6 +39,8 @@ pub(crate) fn borrow_tensor<'py>(
         return Ok(None);
     };
     let borrow = || -> PyResult<_> {
+        // No `stream`: torch (2.14.1 and later, as the package requires) then
+        // synchronizes no CUDA stream, which the writer has done (`Outlet`).
         let kwargs = PyDict::new(py);
         kwargs.set_item("max_version", (VERSION.major, VERSION.minor))?;
         let capsule = method.call((), Some(&kwargs))?;

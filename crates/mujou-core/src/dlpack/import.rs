@@ -5,28 +5,16 @@ use std::ptr;
 use crate::dlpack::ffi::{DEVICE_CPU, DEVICE_CUDA_HOST, DLTensor};
 use crate::schema::{FieldError, FieldSpec, format_dtype, format_shape};
 
-/// Copies the tensor `t` into `dst` as compact row-major bytes, after checking it
-/// against `field`. Any strides are accepted, negative and zero (broadcast) ones
-/// included.
-///
-/// Pinned host memory (`kDLCUDAHost`) is read without synchronizing any CUDA
-/// stream, since no stream is passed to the producer. The writer must have
-/// synchronized the device-to-host copy that filled it before handing it over.
+/// Checks the dtype and the shape of the tensor `t` against `field`, wherever
+/// its memory is: only the tensor's description is read.
 ///
 /// The error does not name the field, which the caller knows.
 ///
 /// # Safety
 ///
-/// `t` must describe a live tensor as DLPack requires: `shape` (and `strides`,
-/// unless null) point to `ndim` values, and every element addressed by `data`,
-/// `byte_offset`, `shape` and `strides` is readable host memory if the device is
-/// the CPU or pinned host memory. `dst` must not overlap the tensor.
-pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Result<(), FieldError> {
-    if t.device.device_type != DEVICE_CPU && t.device.device_type != DEVICE_CUDA_HOST {
-        return Err(FieldError::UnsupportedDevice {
-            device_type: t.device.device_type,
-        });
-    }
+/// `t` must describe a live tensor as DLPack requires: `shape` points to `ndim`
+/// values.
+pub unsafe fn check(t: &DLTensor, field: &FieldSpec) -> Result<(), FieldError> {
     if t.dtype != field.dtype {
         return Err(FieldError::Mismatch {
             what: "dtype",
@@ -48,6 +36,36 @@ pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Resu
             actual: format_shape(shape),
         });
     }
+    Ok(())
+}
+
+/// Copies the tensor `t` into `dst` as compact row-major bytes, after checking it
+/// against `field` ([`check`]). Any strides are accepted, negative and zero
+/// (broadcast) ones included.
+///
+/// Pinned host memory (`kDLCUDAHost`) is read without synchronizing any CUDA
+/// stream, since no stream is passed to the producer. The writer must have
+/// synchronized the device-to-host copy that filled it before handing it over.
+///
+/// The error does not name the field, which the caller knows.
+///
+/// # Safety
+///
+/// `t` must describe a live tensor as DLPack requires: `shape` (and `strides`,
+/// unless null) point to `ndim` values, and every element addressed by `data`,
+/// `byte_offset`, `shape` and `strides` is readable host memory if the device is
+/// the CPU or pinned host memory. `dst` must not overlap the tensor.
+pub unsafe fn copy_from(t: &DLTensor, field: &FieldSpec, dst: &mut [u8]) -> Result<(), FieldError> {
+    if t.device.device_type != DEVICE_CPU && t.device.device_type != DEVICE_CUDA_HOST {
+        return Err(FieldError::UnsupportedDevice {
+            device_type: t.device.device_type,
+        });
+    }
+    // SAFETY: the caller's guarantee covers the check's.
+    unsafe { check(t, field) }?;
+    // Checked to be the tensor's own.
+    let shape = field.shape.as_slice();
+    let ndim = shape.len();
     if t.data.is_null() {
         return Err(invalid("null data pointer"));
     }
@@ -145,7 +163,7 @@ unsafe fn copy_strided(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dlpack::ffi::{DLDataType, DLDevice};
+    use crate::dlpack::ffi::{DEVICE_CUDA, DLDataType, DLDevice};
 
     const F32: DLDataType = DLDataType {
         code: 2,
@@ -282,9 +300,27 @@ mod tests {
     #[test]
     fn rejects_device_memory() {
         let mut t = Tensor::new(range(6), &[6], None);
-        t.device_type = 2; // kDLCUDA
+        t.device_type = DEVICE_CUDA;
         let err = t.copy(&field(&[6])).unwrap_err();
-        assert_eq!(err, FieldError::UnsupportedDevice { device_type: 2 });
+        assert_eq!(
+            err,
+            FieldError::UnsupportedDevice {
+                device_type: DEVICE_CUDA
+            }
+        );
+    }
+
+    #[test]
+    fn checks_device_memory_without_reading_it() {
+        let mut t = Tensor::new(Vec::new(), &[2, 3], None);
+        t.device_type = DEVICE_CUDA;
+        let mut dl = t.dl();
+        dl.data = ptr::null_mut();
+        // SAFETY: `dl` describes its shape, which `t` keeps alive.
+        unsafe { check(&dl, &field(&[2, 3])) }.unwrap();
+        // SAFETY: as above.
+        let err = unsafe { check(&dl, &field(&[3, 2])) }.unwrap_err();
+        assert!(matches!(err, FieldError::Mismatch { what: "shape", .. }));
     }
 
     #[test]

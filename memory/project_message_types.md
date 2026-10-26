@@ -11,7 +11,7 @@ metadata:
 - **利用者が扱う値は `torch.Tensor` と Python のスカラー（2026-10-22 に 2026-10-15 の「Tensor だけ」を改めた、ユーザーの決定）。** コアの値の型は `mujou._native` の内部に閉じる
 - **スカラーの spec（2026-10-22、ユーザーの決定）。** `IntSpec(bits=64, signed=True)`（bits は 8 / 16 / 32 / 64、サイズ固定のため必須で既定 64）、`FloatSpec()`（f64 固定）、`BoolSpec()`、`TimestampSpec()`（uint64 の ns、初期値 `Timestamp(ns=0)`）。shape も `zeros` / `empty` も持たず、`ZERO` / `ONE` も作らない。範囲外の int はエラーで折り返さない。bindings が Python の値を直接読み書きし、torch と GPU を経由しない。将来の候補は `ComplexSpec`、array は torch で足りるので持たない
 - **dtype は torch の dtype。** 一覧は `TensorSpec.dtypes`（正本は `spec.DLPACK`）。バッチは shape の一部で特別扱いしない
-- **コアの値はホストのメモリ上の不変なバッファ。** torch とは DLPack で受け渡し、読み書きとも必ずコピーする（ゼロコピーにすると、利用者が受け取った値を書き換えたときに他の読み手のバッファまで変わる）。変換は `codec.py` の 1 か所、shape と dtype の検査は Rust の `copy_from` の 1 か所
+- **コアの値はホストのメモリ上の不変なバッファか、CUDA のノードが自分の device で送った値の device の上のコピー（2026-10-24 から。[[project-gpu-policy]]）。** torch とは DLPack で受け渡し、読み書きとも必ずコピーする（ゼロコピーにすると、利用者が受け取った値を書き換えたときに他の読み手のバッファまで変わる）。device の値は書き手の codec が device の上で clone し、読み手が device の上でコピーする。変換は `codec.py` の 1 か所、shape と dtype の検査は Rust の `copy_from`（device の値は切り出した `check`）の 1 か所
 - **メッセージの型は 1 つのフィールド（Tensor かスカラー）と `TypedDict`。** `DictSpec(TD, **specs: FieldSpec)`。`specs` の値は Union なので、種別として使うときは `field(key, kind)` で取り出す（種別ごとのメソッドにしない）。`MessageSpec` は抽象メソッドを持たない。値が無いこと（`Tensor | None`）は表さない
 - **`TensorSpec(shape, dtype=torch.float32)`。** 既定を固定したのは、module のレベルの spec が import の順と既定の dtype の設定で変わらないようにするため。`zeros()` / `empty()` / `rand(*, generator=)`。spec の一致は dtype を含み、暗黙の dtype 変換はしない
 - **スロットは常に宣言どおりの型の値を持つ。** 既定はゼロ。送るポートは `initial=` で初期値を宣言できる（2026-10-17、ユーザーの決定。`on_start` での send は復元した値を上書きするので、初期値の手段にしない）

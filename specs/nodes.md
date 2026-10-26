@@ -98,7 +98,7 @@
 
 ランタイムは、ノード 1 つにつき 1 つの `Driver`（`driver.py`）のメソッド（`start` / `restore` / `update` / `pause` / `resume` / `exception` / `stop` / `capture`）を、hook 1 回につき 1 回だけ呼ぶ。Driver はどのメソッドでも同じ順で動く。
 
-1. CUDA のノードなら、ノードの device と stream をこのスレッドの現在のものにする
+1. CUDA のノードなら、ノードの device と stream をこのスレッドの現在のものにする。自分の device 以外の CUDA device にある値を読むノード（CPU のノードを含む）は、その device ごとの副 stream もこのスレッドの現在のものにする（[CUDA](#cuda)）
 2. ノード専用の `contextvars.Context` に入る
 3. hook を呼ぶ。hook はノードの属性から呼ぶたびに引くので、いつインスタンス属性に差し替えても次の呼び出しから反映される
 4. `on_update` と `load_state_dict` の後は、ノードの stream に積んだ仕事を待つ
@@ -193,9 +193,9 @@ pamiq-core の `SleepIntervalAdjustor` は、step の後に「前回の待ちが
 
 ノードのデバイスは CPU と CUDA だけ（K4）。MPS など、ほかのアクセラレータはサポートしない。PyTorch の MPS は 2 スレッドから同時に使うとプロセスが落ち、複数のスレッドが並行してノードを計算する実行モデルと合わない。ほかのアクセラレータは確かめる環境が無く、stream の意味と性能も確かめられない。
 
-コアは GPU をサポートしないので、GPU のノードは境界で device → host → device とコピーする（[メッセージ](messages.md#値の型)）。GPU のノード同士が正しさと実行順序の面で互いに影響しないよう、次を守る。
+CUDA のノードが自分の device の上で送ったテンソルは、そのポートを CUDA のノードが読むなら、スロットの中でもその device に置いたままにし、読み手は device の上でコピーして受け取る（2026-10-24、読み手の条件は 2026-10-25。[メッセージ](messages.md#コアの中の値)）。ホストが write で渡したテンソルも、そのポートを持つノードの CUDA device の上にあればその device に置く。ホストのメモリを通るのは、CPU のノードとホストだけが読むポートと、ホストの読み出しと、それ以外の write になる。GPU のノード同士が正しさと実行順序の面で互いに影響しないよう、次を守る。
 
-1. ノードごとに自分の CUDA stream を持つ（Driver が作る）。既定の stream を共有すると、ホストへ書き出す前の同期がほかのノードの仕事まで待つ
+1. ノードごとに自分の CUDA stream を持つ（Driver が作る）。既定の stream を共有すると、送るときの同期がほかのノードの仕事まで待つ
 2. 同期は自分の stream に対してだけ行う。`torch.cuda.synchronize()` は使わない
 3. プロセス全体に効く設定を、ノードの中で変えない（[プロセス全体に効くもの](#プロセス全体に効くもの)）
 
@@ -203,16 +203,18 @@ GPU の演算器・帯域・メモリの取り合いは、CPU のコアの取り
 
 | いつ | どのスレッドで | 何を待つか | 待たないと |
 | --- | --- | --- | --- |
-| 各 `on_update` の後 | ノードの hook を走らせるスレッド | 自分の stream に積んだ仕事 | CPU が GPU を追い越し、$\Delta t$ と実際に計算した時間がずれる |
+| `send` / `send_to` の中（device に置く値を `clone` した後） | ノードの hook を走らせるスレッド | 自分の stream に積んだ仕事 | 読み手が、device の上でまだ出来上がっていない値をコピーする |
+| 各 `on_update` の後 | 同上 | 同上 | CPU が GPU を追い越し、$\Delta t$ と実際に計算した時間がずれる。メッセージの正しさには要らなくなったが、この理由で残す |
 | `load_state_dict` の後 | 同上 | 同上 | 起動が戻った後にホストが木を手放すと、まだ読んでいる記憶域がほかの確保に回る |
 | `capture` の前後 | 制御スレッド（終わった後はホストのスレッド） | 同上 | 複製が、ほかの hook の仕事が終わる前の値か、再開後に更新した値を写す |
 | 起動の前（段 2 の終わり） | `mujou.run` を呼んだスレッド | そのスレッドの、ノードが使う各 device の現在の stream | ノードが、`__init__` で確保したテンソルを確保が終わる前に使う |
 
-- 待つときは stream 全体を `synchronize` せず、stream に event を記録してその event だけを待つ。PyTorch は `torch.cuda.Stream()` を device ごとのプール（32 本）から割り当てるので、32 を超える CUDA のノードは stream を共有する。event なら、記録より後にほかのノードが積んだ仕事を待たない
+- 自分の device 以外の CUDA device にある値を読むノードには、Driver がその device ごとに副 stream を作り、hook のたびに current にする（`Wiring.read_devices` が、読むスロットの書き手のうち、値を device に置くものの device から決める。ホストが書くスロットは入れない。[メッセージ](messages.md#stream-の同期)）。ATen は device の間のコピーを、呼んだスレッドの元の device の current stream に積む。副 stream が無いと、ワーカーで直前に走った別のノードの stream に積まれ、ノード同士が同じ stream で絡む。`torch.cuda.set_stream` は current device をその stream の device に変えるので、自分の stream を最後に設定する。副 stream のコピーは待たない。CUDA の読み手なら ATen が自分の stream に event で繋ぎ、CPU の読み手なら `.to("cpu")` が同期のコピーだからである
+- 待つときは stream 全体を `synchronize` せず、stream に event を記録してその event だけを待つ。PyTorch は `torch.cuda.Stream()` を device ごとのプール（32 本）から割り当てるので、32 を超える CUDA のノードは stream を共有する。event なら、記録より後にほかのノードが積んだ仕事を待たない。副 stream も同じプールから取るので、ノード自身の stream と合わせて device ごとに 32 本を超えると、副 stream がほかのノードの stream と重なりうる。書き手の stream と重なると、読み手のコピーが書き手の公開した後の仕事の後ろに並ぶ（CPU の読み手の D2H は stream 全体を同期するので、ホストまで待つ）。値は正しいままで、性能だけの問題である（2026-10-24 の監査で再現した。書き手 1 つと idle な cuda:0 のノード 31 個のあとに置いた CPU の読み手の recv が、書き手が送った後に積んだ約 0.5 s の仕事を待った）
 - `"cuda"` のように添字の無いデバイスは、構築したときのホストの現在のデバイスに決める
 - CUDA のテンソルやモジュールは `on_start` 以降で作るよう docs で勧める。`__init__` で作っても起動の前の同期で正しく動くが、キャッシュアロケータはメモリを確保した時点の現在の stream に結び付けるので、ノードがテンソルを捨てたとき、ノードの stream の計算が終わる前にホストの確保へ回りうる
 - 乱数生成器はノードの device の上に作る。生成器の状態は device の種類ごとの形式なので、CUDA のノードの状態を CPU のノードに戻すことはサポートしない（同じ形に作り直すことが S5 の前提）
-- 転送に pinned memory は使っていない。使うかどうかは未決定（[未決定事項](open-decisions.md)）
+- CPU と CUDA の境界（CPU のノードとの送受信、ホストの読み書き）と状態の取得の転送に、pinned memory は使っていない。使うかどうかは未決定（[未決定事項](open-decisions.md)）
 
 ## プロセス全体に効くもの
 

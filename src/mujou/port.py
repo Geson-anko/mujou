@@ -110,8 +110,13 @@ class _Port[S, R]:
         converted (a scalar is taken as Python's typing takes it: an ``int``
         for a ``float``). The
         values are detached and copied, so changing ``msg`` afterwards changes
-        nothing that was sent. A CUDA tensor is copied to the host on the node's
-        stream. It never waits for the peers to read.
+        nothing that was sent. If a node on CUDA reads the port, a tensor on
+        the node's CUDA device is copied on the device, on the node's stream,
+        and ``send`` waits for that stream before the peers can read it; a
+        peer on CUDA copies it from device to device. It stays on the device
+        also while the hook has made another device current
+        (``torch.cuda.device(...)``). Any other CUDA tensor is copied to the
+        host. It never waits for the peers to read.
 
         Raises:
             RuntimeError: The caller is not a hook of the node that owns the port,
@@ -306,6 +311,9 @@ class Wire:
     label: str
     # Where the received messages arrive: the owning node's device.
     device: torch.device
+    # Where the tensors sent stay: the node's CUDA device if a node on CUDA
+    # reads the port; else None (they go to host memory).
+    cuda: torch.device | None
     # Where send writes: None for a port that does not send.
     outlet: _native.Outlet | None
     # What the port reads, (channel, slot) in connection order: an unconnected
@@ -341,8 +349,10 @@ class Wire:
         return cast(_native.Outlet, self.outlet)  # Never is the type of what it sends
 
     def _values(self, msg: object) -> list[object]:
-        """The values of ``msg`` (tensors in host memory), for the outlet to copy."""
-        return to_core(cast("MessageSpec[Any]", self.port.send_spec), msg, self.label)
+        """The values of ``msg`` for the outlet: tensors in host memory, or
+        clones on the node's CUDA device."""
+        spec = cast("MessageSpec[Any]", self.port.send_spec)
+        return to_core(spec, msg, self.label, device=self.cuda)
 
 
 _HINT: Final = (

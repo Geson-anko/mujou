@@ -6,7 +6,9 @@ meanwhile. Every method does the framework's work around the hook in the same
 order, so that no override of a hook can skip it:
 
 1. on CUDA, make the node's device and stream current (and, around
-   ``state_dict``, set the calling thread's back afterwards);
+   ``state_dict``, set the calling thread's back afterwards), and on each other
+   CUDA device whose values the node reads, a stream of its own for the copies
+   (``Wiring.read_devices``);
 2. enter the node's own ``contextvars.Context``;
 3. call the hook, looked up on the node at each call;
 4. after ``on_update`` and ``load_state_dict``, wait for the work queued on the
@@ -19,7 +21,7 @@ detached before the copy, and no graph goes with them.
 
 import contextvars
 import copy
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from typing import Final, final, override
 
 import torch
@@ -37,10 +39,16 @@ _NO_WIRES: Final[Mapping[AnyPort, Wire]] = {}
 @final
 class Driver(Running):
     """What the runtime calls for the hooks of ``node``, which runs on
-    ``clock`` and whose ports read and write through ``wires``."""
+    ``clock`` and whose ports read and write through ``wires``. The node
+    reads values that the core holds on ``read_devices``, CUDA devices other
+    than its own."""
 
     def __init__(
-        self, node: Node, clock: ReadOnlyTimer, wires: Mapping[AnyPort, Wire]
+        self,
+        node: Node,
+        clock: ReadOnlyTimer,
+        wires: Mapping[AnyPort, Wire],
+        read_devices: Collection[torch.device] = (),
     ) -> None:
         self._node = node
         self._clock = clock
@@ -55,6 +63,12 @@ class Driver(Running):
         # share one, and the event does not wait for work that another node
         # queues on it later.
         self._stream = torch.cuda.Stream(device) if device.type == "cuda" else None
+        # The streams to make current before each hook. A copy from another
+        # device queues on the calling thread's current stream of that device,
+        # which would otherwise be one that the node last run on this worker
+        # left. Its own last: setting a stream makes its device current.
+        own = () if self._stream is None else (self._stream,)
+        self._streams = (*(torch.cuda.Stream(d) for d in read_devices), *own)
 
     @property
     @override
@@ -83,10 +97,10 @@ class Driver(Running):
 
     def update(self, dt: float) -> None:
         # The hot path: what _run does, without its call.
-        stream = self._stream
-        if stream is not None:
-            _use(stream)
+        if self._streams:
+            _use(self._streams)
         self._context.run(self._node.on_update, dt)
+        stream = self._stream
         if stream is not None:
             # The CPU never runs ahead of the GPU.
             stream.record_event().synchronize()
@@ -120,8 +134,8 @@ class Driver(Running):
         return state
 
     def _run[T](self, hook: Callable[..., T], *args: object) -> T:
-        if self._stream is not None:
-            _use(self._stream)
+        if self._streams:
+            _use(self._streams)
         return self._context.run(hook, *args)
 
     def _copy(self) -> object:
@@ -136,8 +150,10 @@ class Driver(Running):
         return copy.deepcopy(map_tensors(self._node.state_dict(), torch.Tensor.detach))
 
 
-def _use(stream: torch.cuda.Stream) -> None:
-    """Make ``stream`` and its device current on this thread: per thread, so set
-    again before each hook, as a worker runs other nodes in between."""
-    torch.cuda.set_device(stream.device)
-    torch.cuda.set_stream(stream)
+def _use(streams: tuple[torch.cuda.Stream, ...]) -> None:
+    """Make each of ``streams`` current on its device on this thread, and the
+    device of the last one current: per thread, so set again before each hook,
+    as a worker runs other nodes in between."""
+    for stream in streams:
+        torch.cuda.set_device(stream.device)
+        torch.cuda.set_stream(stream)

@@ -1,6 +1,6 @@
 ---
 name: project-native-core-rust
-description: コアは Rust で実装し、Python はインターフェース。実行モデルは M:N（実行ごとのワーカープールと opt-in の専用スレッド）。コアの値の型は内部に閉じ、利用者には torch.Tensor と Python のスカラーだけ。torch とは DLPack で必ずコピー。例外は Python で定義し、Rust は Python の Driver を呼ぶ。max_dt はコアでなく mujou.pc が持つ
+description: コアは Rust で実装し、Python はインターフェース。実行モデルは M:N（実行ごとのワーカープールと opt-in の専用スレッド）。コアの値の型は内部に閉じ、利用者には torch.Tensor と Python のスカラーだけ。torch とは DLPack で必ずコピー（CUDA のノードの値は device の上でコピーし、コアは不透明な値として持つ）。例外は Python で定義し、Rust は Python の Driver を呼ぶ。max_dt はコアでなく mujou.pc が持つ
 metadata:
   type: project
 ---

@@ -12,7 +12,7 @@
 - **実行の配置の指定**: 複数のノードを同じワーカーで決まった順に回すことを、利用者がどう指定するか
 - **スロットと時刻の lock**: スロットの読み書きと時刻の読み取りは mutex を取る。lock を持つスレッドが横取りされるとその間は待つ。問題になったら RwLock や seqlock などを検討する
 - **時刻の分解能**: 時刻は ns の整数で持ち、Δt も ns の差から作るので、長い実行でも分解能は落ちない。f64 を通るのは、タイマーが anchor からの実経過にスケールを掛ける所（`time.rs` の `ns_at`）だけで、anchor を張り替えずに約 104 日（$2^{53}$ ns）進むと 1 ns より粗くなる。手当てが要るかは決めていない
-- **pinned memory**: GPU のノードの転送と状態の取得に pinned memory を使うかどうか。今は使っていない。268 MB を GPU から CPU へ移すと、通常のメモリで約 100 ms、pinned memory で約 10 ms だった（`research/benchmarks.md` の R10）
+- **pinned memory**: CPU と CUDA の境界の転送（CPU のノードとの送受信、ホストの読み書き）と状態の取得に pinned memory を使うかどうか。今は使っていない。CUDA のノードの間のメッセージは、2026-10-24 から device の上に置くのでホストを経由しない（`messages.md` の「コアの中の値」）。268 MB を GPU から CPU へ移すと、通常のメモリで約 100 ms、pinned memory で約 10 ms だった（`research/benchmarks.md` の R10）
 
 ## ユーザーの確認待ち
 
