@@ -1,22 +1,22 @@
-"""ResNet-20 for CIFAR-10 (He et al., 2016), cut into the modules of two nodes.
+"""ResNet-20 for CIFAR-10 (He et al., 2016), cut into one module per node.
 
 The network is a stem, 9 residual blocks in three stages of 16, 32 and 64
 channels, and a head that pools and gives the 10 logits. ``resnet()`` cuts it
-into two modules, one per node: the stem and the first two stages, then the
-third stage and the head. Inside a node, autograd differentiates the module as
-in plain PyTorch; between the two nodes, only the messages of PC-ALM flow.
+into ten modules, one per node: the stem with the first block, each of the
+other 8 blocks, and the head. Inside a node, autograd differentiates the
+module as in plain PyTorch; between the nodes, only the messages of PC-ALM
+flow.
 
-Why cut there: a node relaxes its activity ``h`` with what the next node sends
-back, through the Jacobian ``J`` of the next node's module. With the period
-``tau.h / 4`` of ``pc.Chain``, that relaxation is stable only while the largest
-singular value of ``J`` is below about 2.6 (``1 + |J|^2 < 8``), and below
-about 1.2 to 1.8 when updates come late (in a linear chain). As the network
-learns, the Jacobian of a stage grows to 5 to 12 and that of a single block to
-3 to 6, while the third stage with the head (where the pooling averages 64
-pixels) is about 1.2 after 3 epochs and 2.0 after 10. As the next node is the
-output, the curvature of the cross entropy (at most 1/2) multiplies its square,
-so the relaxation stays stable. With a node per stage, the relaxation
-diverges; a node per block would be past the bound too.
+A node relaxes its activity ``h`` with what the next node sends back, through
+the Jacobian ``J`` of the next node's module. The singular values of ``J`` of a
+block grow while the network learns (2 to 9 after a few epochs, measured with
+BP), and with the period ``tau.h / 4`` of ``pc.Chain`` the explicit relaxation
+is stable only below about 2.6. The relaxation is therefore not exact in the
+nodes before the stiff blocks: with the weights of 3 epochs, the ``lam`` of the
+first five nodes had a cosine of 0.5 to 0.7 with the credit of backpropagation
+(0.8 and over in the last four). It still learns, as ``main.py`` shows, but the
+nodes need time to relax, which is why ``main.py`` shows each batch for many
+periods.
 
 GroupNorm replaces BatchNorm: it normalizes each sample on its own, so it has no
 running statistics and no train or eval mode to switch, and a batch padded with
@@ -60,22 +60,16 @@ class Block(nn.Module):
         return (shortcut + self.f(x)).relu()
 
 
-def stage(cin: int, cout: int) -> nn.Sequential:
-    """3 blocks from ``cin`` to ``cout`` channels; the first halves the
-    resolution when the channels grow."""
-    return nn.Sequential(
-        Block(cin, cout, stride=1 if cin == cout else 2),
-        Block(cout, cout),
-        Block(cout, cout),
-    )
-
-
 def resnet() -> list[nn.Module]:
-    """The modules of the two nodes: ``(N, 3, 32, 32) -> (N, 32, 16, 16)``, then
-    ``-> (N, 10)``."""
+    """The modules of the ten nodes: ``(N, 3, 32, 32) -> (N, 16, 32, 32)`` (the
+    stem and the first block), the other 8 blocks (the 4th and the 7th halve
+    the resolution and double the channels), then
+    ``(N, 64, 8, 8) -> (N, 10)``."""
     stem = nn.Sequential(nn.Conv2d(3, 16, 3, 1, 1, bias=False), norm(16), nn.ReLU())
     head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(64, 10))
-    return [
-        nn.Sequential(stem, stage(16, 16), stage(16, 32)),
-        nn.Sequential(stage(32, 64), head),
+    channels = [16] * 4 + [32] * 3 + [64] * 3  # the input of each block, then 64
+    blocks = [
+        Block(cin, cout, stride=1 if cin == cout else 2)
+        for cin, cout in zip(channels[:-1], channels[1:], strict=True)
     ]
+    return [nn.Sequential(stem, blocks[0]), *blocks[1:], head]

@@ -1,13 +1,14 @@
 """CIFAR-10 with a ResNet-20 of PC-ALM nodes on the GPU, compared with BP.
 
-A ResNet-20 learns CIFAR-10 as a ``pc.Chain`` of three nodes on a CUDA device:
-``input`` takes the batch the host writes, ``layer0`` (the stem and the first
-two stages) and ``output`` (the third stage, the head and the cross entropy)
-relax towards the target and update their weights from each other's messages
-only. Inside each node, autograd differentiates its module, as in plain PyTorch;
-``resnet.py`` explains where the network is cut and why. The same network, with
-the same initial weights, the same batches in the same order and the same
-``pc.AdamW``, is then trained by BP on the same GPU.
+A ResNet-20 learns CIFAR-10 as a ``pc.Chain`` of eleven nodes on a CUDA device:
+``input`` takes the batch the host writes, ``layer0`` to ``layer8`` (the stem
+with the first block, then one node for each of the other 8 residual blocks)
+and ``output`` (the head and the cross entropy) relax towards the target and
+update their weights from each other's messages only. Inside each node,
+autograd differentiates its module, as in plain PyTorch; ``resnet.py`` says how
+the network is cut. The same network, with the same initial weights, the same
+batches in the same order and the same ``pc.AdamW``, is then trained by BP on
+the same GPU.
 
 The host shows each batch, shuffled and augmented (random crops and flips), for
 ``S`` periods of the nodes with ``pc.show``, and measures the prequential
@@ -16,21 +17,27 @@ it), the test accuracy after each epoch (the test batches with ``mask`` False,
 so that nothing learns from them) and the real time.
 
 The messages between the nodes stay on the GPU: a node on CUDA sends to a node
-on CUDA from device to device. An update of ``layer0`` (forward and VJP of the
-stem and 6 blocks) takes about 3.7 ms on an RTX 4090, as long with 128 samples
-as with 64, so the batch is 128. That is longer than the period of 1 ms of the
-run's time, so the run's timer goes at ``--time-scale`` 0.3 (3.3 ms of real
-time per period). There, 99% of the updates of ``layer0`` came within 2
-periods of the one before (``max_dt``, beyond which a node drops the time); at
-0.4, 1% came later than 2.75 periods. On a slower GPU, lower the scale. With
-the defaults, in the 3rd epoch, the prequential accuracy was 55.11% (seed 0),
-against 54.45% for BP. The test accuracy moves by a few points from epoch to
-epoch (the learning rate does not decay), for both, and the GPU does not
-compute bit for bit the same in every run.
+on CUDA from device to device. An update of a node takes about 1.2 ms on an
+RTX 4090, whatever the batch (the CPU launching the kernels is the limit, so
+the batch is 128). The run's time is the real time (``--time-scale`` 1): with
+``tau.h`` 20 ms the period is 5 ms, and 99% of the updates of every node came
+within 2 periods of the one before (``max_dt`` is 2, beyond which a node drops
+the time) with 11 workers. On a machine with fewer cores or a slower GPU, raise
+``--tau-h`` or lower ``--time-scale``.
+
+A batch is shown for ``S = 128`` periods, long for 11 nodes: the sample takes
+about one period per node to reach the output and the credit about one per node
+to come back, so with 64 periods the 3rd epoch was about 10 points below BP.
+With the defaults, in the 3rd epoch the prequential accuracy was 50.72% (seed 0)
+against 54.45% for BP, and the test accuracy 54.18% against 59.02%; in the 10th,
+68.73% against 73.27% and 68.95% against 72.61%. The blocks make the relaxation
+stiff, so it finds the credit less exactly than BP does (``resnet.py``). The test
+accuracy moves by a few points from epoch to epoch (the learning rate does not
+decay), for both, and the GPU does not compute bit for bit the same in every run.
 
 Needs a CUDA GPU, and the network once to download CIFAR-10 (about 160 MB)
-into ``--data``. The defaults (3 epochs) take about 3 minutes. Run it from
-the repository::
+into ``--data``. The defaults (3 epochs) take about 16 minutes, 10 epochs about
+50. Run it from the repository::
 
     uv run python examples/cifar10/main.py
     uv run python examples/cifar10/main.py --epochs 10
@@ -89,7 +96,7 @@ def train_pc(
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
         loss=pc.CrossEntropyLoss(args.batch),
-        # The dual as fast as h: with lam = 2 h, S = 32 is too short to relax.
+        # The dual as fast as h: a slower one needs even more periods to relax.
         tau=pc.TimeConstants(h=args.tau_h, lam=args.tau_h),
         optimizer=adamw(shown, args.lr),  # learn once per batch
         learn_interval=0.75 * shown,
@@ -133,11 +140,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="CIFAR-10 with PC-ALM nodes and BP.")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch", type=int, default=128)
-    parser.add_argument("--steps", type=int, default=32, help="periods per batch (S)")
-    parser.add_argument("--tau-h", type=float, default=4e-3, help="seconds")
+    parser.add_argument("--steps", type=int, default=128, help="periods per batch (S)")
+    parser.add_argument("--tau-h", type=float, default=20e-3, help="seconds")
     parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
-    parser.add_argument("--time-scale", type=float, default=0.3)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--time-scale", type=float, default=1.0)
+    parser.add_argument("--workers", type=int, default=11)
     parser.add_argument("--device", default="cuda", help="a CUDA device")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -156,7 +163,7 @@ def main() -> None:
 
     gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
     print(
-        f"PC-ALM: ResNet-20 in 2 nodes on {device}, B = {args.batch}, "
+        f"PC-ALM: ResNet-20 in {len(modules) + 1} nodes on {device}, B = {args.batch}, "
         f"S = {args.steps}, tau.h = {args.tau_h * 1e3:g} ms, "
         f"time scale {args.time_scale:g}, {args.workers} workers, "
         f"GIL {'on' if gil else 'off'}"
