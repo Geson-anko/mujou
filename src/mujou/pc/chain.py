@@ -14,6 +14,7 @@ from mujou.pc.layer import Layer
 from mujou.pc.messages import Prediction, Sample
 from mujou.pc.optim import Optimizer
 from mujou.pc.output import Output
+from mujou.pc.relax import Euler, Relaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device, Size
 
@@ -78,6 +79,8 @@ class Chain(Network, Shown):
         tau: The time constants of every node.
         optimizer: How the parameters of every node move, as in ``Layer``:
             each node binds it to its own parameters.
+        relaxer: How ``h`` of every ``Layer`` moves, as in ``Layer``: each binds
+            it to its own ``h``. The ``Output`` has no ``h``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
             credit, ``2 * len(modules) * tau.period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
@@ -97,6 +100,7 @@ class Chain(Network, Shown):
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
         optimizer: Optimizer,
+        relaxer: Relaxer = Euler(),
         learn_interval: float | None,
         batch: Size = (),
         max_dt: float | None = None,
@@ -111,6 +115,7 @@ class Chain(Network, Shown):
                 act_spec=last.act_spec,
                 tau=tau,
                 optimizer=optimizer,
+                relaxer=relaxer,
                 learn_interval=learn_interval,
                 max_dt=max_dt,
                 device=device,

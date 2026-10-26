@@ -30,7 +30,11 @@ X, Y = TensorSpec((B, WIDTHS[0]), F64), TensorSpec((B, N_OUT), F64)
 LEARN_INTERVAL = 3 * H
 
 
-def chain(*modules: nn.Module, optimizer: pc.Optimizer = SGD) -> pc.Chain:
+def chain(
+    *modules: nn.Module,
+    optimizer: pc.Optimizer = SGD,
+    relaxer: pc.Relaxer = pc.Euler(),
+) -> pc.Chain:
     return pc.Chain(
         *modules,
         x=X,
@@ -39,6 +43,7 @@ def chain(*modules: nn.Module, optimizer: pc.Optimizer = SGD) -> pc.Chain:
         loss=pc.MSELoss(B),
         tau=TAU,
         optimizer=optimizer,
+        relaxer=relaxer,
         learn_interval=LEARN_INTERVAL,
     )
 
@@ -154,6 +159,20 @@ class TestChain:
             moments = tree["nodes"][path]["state"]["optimizer"]["m"]
             assert [m.shape for m in moments] == [p.shape for p in module.parameters()]
         assert "optimizer" not in tree["nodes"]["input"]["state"]
+
+    def test_each_layer_binds_the_relaxer_to_its_own_activity(
+        self, start_manual: StartManual
+    ):
+        # One HeavyBall for the whole chain: each layer binds it to its own h,
+        # so each keeps a velocity of its own; the output holds no h.
+        layers, head = make_modules("linear", "tanh", WIDTHS)
+        net = chain(*layers, head, relaxer=pc.HeavyBall(tau=3e-3))
+        tree = run_states(start_manual, net, net.input)
+        for path, width in (("layer0", WIDTHS[1]), ("layer1", WIDTHS[2])):
+            velocity = tree["nodes"][path]["state"]["relaxer"]["velocity"]
+            assert velocity.shape == (B, width)
+        assert "relaxer" not in tree["nodes"]["output"]["state"]
+        assert "relaxer" not in tree["nodes"]["input"]["state"]
 
     def test_one_module_is_the_output(self):
         head = nn.Linear(WIDTHS[0], N_OUT).double()

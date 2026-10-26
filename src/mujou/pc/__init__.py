@@ -12,7 +12,9 @@ sample. Each node gives the spec of what it sends as ``act_spec``, which the
 next node takes, to build other shapes by hand. ``MSELoss`` and
 ``CrossEntropyLoss`` give the loss of each sample. ``SGD`` and ``AdamW`` set
 how the parameters of a node move in time (``Optimizer``): each node binds the
-setting to its own parameters (``BoundOptimizer``). ``LearnClock`` and
+setting to its own parameters (``BoundOptimizer``). ``Euler`` and ``HeavyBall``
+set how the activity of a node moves (``Relaxer``): each node binds the setting
+to its own activity (``BoundRelaxer``). ``LearnClock`` and
 ``functional`` hold the parts the nodes are made of, for writing nodes of your
 own.
 
@@ -47,6 +49,7 @@ from mujou.pc.losses import CrossEntropyLoss, MSELoss
 from mujou.pc.messages import Activity, Prediction, Sample, activity_spec
 from mujou.pc.optim import SGD, AdamW, BoundOptimizer, Optimizer
 from mujou.pc.output import Output
+from mujou.pc.relax import BoundRelaxer, Euler, HeavyBall, Relaxer
 from mujou.pc.time_constants import TimeConstants
 
 __all__ = [
@@ -61,6 +64,10 @@ __all__ = [
     "BoundOptimizer",
     "SGD",
     "AdamW",
+    "Relaxer",
+    "BoundRelaxer",
+    "Euler",
+    "HeavyBall",
     "LearnClock",
     "Tick",
     "Sample",

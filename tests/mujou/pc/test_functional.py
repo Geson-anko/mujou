@@ -1,13 +1,20 @@
 import math
 from collections.abc import Callable
-from typing import override
+from typing import Any, override
 
 import pytest
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from mujou.pc import CrossEntropyLoss, MSELoss, TimeConstants
+from mujou.pc import (
+    BoundRelaxer,
+    CrossEntropyLoss,
+    Euler,
+    HeavyBall,
+    MSELoss,
+    TimeConstants,
+)
 from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
 
 B = 3
@@ -295,17 +302,20 @@ class TestRelax:
         assert torch.equal(lam, lam0)
 
 
-class TestRelaxWithMomentum:
-    TAU = TimeConstants(h=4e-3, lam=8e-3, momentum=2e-3)
+class TestRelaxWithRelaxer:
+    TAU = TimeConstants(h=4e-3, lam=8e-3)
+    HEAVY_BALL = HeavyBall(tau=2e-3)
 
     def test_one_heavy_ball_step(self):
         # v <- e^(-dt/m) v + force, then h <- h - dt/tau_h v, lam as before.
         h, lam, mu, g = TestRelax.state()
-        v = _randn(B, 5, seed=9)
+        relaxer = self.HEAVY_BALL.bind(h)
+        v = relaxer.state_dict()["velocity"]
+        v.copy_(_randn(B, 5, seed=9))
         h0, lam0, v0 = h.clone(), lam.clone(), v.clone()
         dt = 1e-3
-        relax_(h, lam, mu, g, dt, self.TAU, v)
-        v1 = math.exp(-dt / self.TAU.momentum) * v0 + (h0 - mu + lam0 + g)
+        relax_(h, lam, mu, g, dt, self.TAU, relaxer)
+        v1 = math.exp(-dt / self.HEAVY_BALL.tau) * v0 + (h0 - mu + lam0 + g)
         h1 = h0 - dt / self.TAU.h * v1
         torch.testing.assert_close(v, v1, rtol=1e-15, atol=1e-15)
         torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
@@ -313,51 +323,61 @@ class TestRelaxWithMomentum:
             lam, lam0 + dt / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
         )
 
-    def test_without_a_velocity_the_step_is_the_plain_one(self):
-        # The momentum of tau is the node's business: only a velocity moves h.
+    def test_euler_is_the_step_without_a_relaxer(self):
         h, lam, mu, g = TestRelax.state()
         plain = (h.clone(), lam.clone())
-        relax_(h, lam, mu, g, 1e-3, self.TAU)
-        relax_(plain[0], plain[1], mu, g, 1e-3, TimeConstants(h=4e-3, lam=8e-3))
+        # dt / tau.h is not a power of two, so the two must round alike.
+        relax_(h, lam, mu, g, 1.3e-3, self.TAU, Euler().bind(h))
+        relax_(plain[0], plain[1], mu, g, 1.3e-3, self.TAU)
         assert torch.equal(h, plain[0]) and torch.equal(lam, plain[1])
 
-    def test_a_velocity_needs_a_momentum(self):
+    def test_a_relaxer_of_your_own_gets_h_the_force_dt_and_tau_h(self):
+        # h is moved in place by the relaxer alone; lam follows with the r of
+        # the moved h.
         h, lam, mu, g = TestRelax.state()
-        with pytest.raises(ValueError, match="momentum"):
-            relax_(
-                h,
-                lam,
-                mu,
-                g,
-                1e-3,
-                TimeConstants(h=4e-3, lam=8e-3),
-                torch.zeros_like(h),
-            )
+        h0, lam0 = h.clone(), lam.clone()
+        calls: list[tuple[torch.Tensor, torch.Tensor, float, float]] = []
+
+        class Halve(BoundRelaxer):
+            @override
+            def step_(
+                self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+            ) -> None:
+                calls.append((h.clone(), force.clone(), dt, tau_h))
+                h.sub_(0.5 * force)
+
+            @override
+            def reset_(self) -> None:
+                pass
+
+            @override
+            def state_dict(self) -> dict[str, Any]:
+                return {}
+
+            @override
+            def load_state_dict(self, state: Any, /) -> None:
+                pass
+
+        relax_(h, lam, mu, g, 1e-3, self.TAU, Halve())
+        ((seen_h, force, dt, tau_h),) = calls
+        assert torch.equal(seen_h, h0)
+        torch.testing.assert_close(force, h0 - mu + lam0 + g, rtol=1e-15, atol=1e-15)
+        assert (dt, tau_h) == (1e-3, self.TAU.h)
+        h1 = h0 - 0.5 * force
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(
+            lam, lam0 + 1e-3 / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
+        )
 
     def test_an_update_of_no_time_changes_nothing(self):
         h, lam, mu, g = TestRelax.state()
-        v = _randn(B, 5, seed=9)
+        relaxer = self.HEAVY_BALL.bind(h)
+        v = relaxer.state_dict()["velocity"]
+        v.copy_(_randn(B, 5, seed=9))
         before = (h.clone(), lam.clone(), v.clone())
-        relax_(h, lam, mu, g, 0.0, self.TAU, v)
+        relax_(h, lam, mu, g, 0.0, self.TAU, relaxer)
         assert torch.equal(h, before[0]) and torch.equal(lam, before[1])
         assert torch.equal(v, before[2])
-
-    def test_a_tiny_momentum_is_the_plain_relaxation(self):
-        # e^(-dt/m) -> 0: the velocity is the force, and h takes the plain step.
-        h, lam, mu, g = TestRelax.state()
-        plain = (h.clone(), lam.clone())
-        relax_(
-            h,
-            lam,
-            mu,
-            g,
-            1e-3,
-            TimeConstants(h=4e-3, lam=8e-3, momentum=1e-9),
-            _randn(B, 5, seed=9),
-        )
-        relax_(plain[0], plain[1], mu, g, 1e-3, TimeConstants(h=4e-3, lam=8e-3))
-        torch.testing.assert_close(h, plain[0], rtol=1e-15, atol=1e-15)
-        torch.testing.assert_close(lam, plain[1], rtol=1e-15, atol=1e-15)
 
     def test_at_the_fixed_point_nothing_moves(self):
         # r = 0 and lam = -g: no force, and with no velocity there is none after.
@@ -365,25 +385,10 @@ class TestRelaxWithMomentum:
         h.copy_(mu)
         lam.copy_(-g)
         h0, lam0 = h.clone(), lam.clone()
-        v = torch.zeros_like(h)
-        relax_(h, lam, mu, g, 1e-3, self.TAU, v)
-        assert torch.equal(h, h0) and torch.equal(lam, lam0) and not v.any()
-
-    def test_a_constant_force_gives_up_to_the_geometric_series_of_the_velocity(self):
-        # With a force held at 1, v -> 1 / (1 - e^(-dt/m)): h moves that much faster.
-        h = torch.zeros(1, dtype=torch.float64)
-        lam = torch.zeros_like(h)
-        mu = h.clone()
-        g = torch.ones_like(h)  # force = r + lam + g = 1 while h = mu = 0
-        v = torch.zeros_like(h)
-        tau = TimeConstants(h=4e-3, lam=math.inf, momentum=2e-3)
-        for _ in range(200):
-            h.zero_()  # hold the force at g = 1
-            relax_(h, lam, mu, g, 1e-3, tau, v)
-        beta = math.exp(-1e-3 / 2e-3)
-        torch.testing.assert_close(
-            v, torch.tensor([1 / (1 - beta)], dtype=torch.float64), rtol=1e-12, atol=0
-        )
+        relaxer = self.HEAVY_BALL.bind(h)
+        relax_(h, lam, mu, g, 1e-3, self.TAU, relaxer)
+        assert torch.equal(h, h0) and torch.equal(lam, lam0)
+        assert not relaxer.state_dict()["velocity"].any()
 
 
 def _pair(*shape: int) -> tuple[torch.Tensor, torch.Tensor]:

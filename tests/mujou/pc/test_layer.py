@@ -3,12 +3,13 @@ import functools
 import math
 import random
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
 from torch import nn
 
+import mujou
 import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun
@@ -47,6 +48,7 @@ class HandChain:
         *,
         tau: pc.TimeConstants = TAU,
         optimizer: pc.Optimizer = SGD,
+        relaxer: pc.Relaxer = pc.Euler(),
         learn_interval: float | None = None,
         max_dt: float | None = None,
     ) -> None:
@@ -61,7 +63,9 @@ class HandChain:
         self.layers: list[pc.Layer] = []
         act = self.inp.act_spec
         for module in layers:
-            self.layers.append(pc.Layer(module, act_spec=act, **learning))
+            self.layers.append(
+                pc.Layer(module, act_spec=act, relaxer=relaxer, **learning)
+            )
             act = self.layers[-1].act_spec
         self.out = pc.Output(head, act_spec=act, loss=pc.MSELoss(B), **learning)
         senders = [self.inp, *self.layers]
@@ -623,6 +627,7 @@ class Learning:
         *,
         widths: Sequence[int] = (4, 5),
         optimizer: pc.Optimizer = SGD,
+        relaxer: pc.Relaxer = pc.Euler(),
         max_dt: float | None = None,
         seed: int = 0,
         state: dict[str, Any] | None = None,
@@ -635,6 +640,7 @@ class Learning:
             head,
             self.widths,
             optimizer=optimizer,
+            relaxer=relaxer,
             learn_interval=K * H,
             max_dt=max_dt,
         )
@@ -1175,20 +1181,32 @@ def without_generators(tree: dict[str, Any]) -> dict[str, Any]:
 
 class TestState:
     @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
+    @pytest.mark.parametrize(
+        "relaxer", [pc.Euler(), pc.HeavyBall(tau=3 * H)], ids=["euler", "heavy-ball"]
+    )
     def test_a_restored_run_goes_on_as_the_same_run(
-        self, start_manual: StartManual, optimizer: pc.Optimizer
+        self,
+        start_manual: StartManual,
+        optimizer: pc.Optimizer,
+        relaxer: pc.Relaxer,
     ):
         # Taken at step 6, mid-phase, right after the input sent the input it
         # was written (the layer has read the earlier one) and the layer took
         # the jump of its theta. With AdamW, the moments and their masses carry
-        # over too.
-        whole = Learning(start_manual, optimizer=optimizer)
+        # over too, and with HeavyBall, the velocity.
+        whole = Learning(start_manual, optimizer=optimizer, relaxer=relaxer)
         for _ in range(16):
             whole.step()
-        first = Learning(start_manual, optimizer=optimizer)
+        first = Learning(start_manual, optimizer=optimizer, relaxer=relaxer)
         for _ in range(6):
             first.step()
         tree = first.run.state_dict()
+        if isinstance(relaxer, pc.HeavyBall):
+            # The test must see the velocity: a run that dropped it differs.
+            assert (
+                float(tree["nodes"]["l0"]["state"]["relaxer"]["velocity"].abs().max())
+                > 1e-9
+            )
         assert {
             "clock",
             "jump",
@@ -1198,13 +1216,19 @@ class TestState:
             "mu",
             "module",
             "optimizer",
+            "relaxer",
             "h",
             "lam",
         } <= set(tree["nodes"]["l0"]["state"])
         assert {"jumps", "seen_write"} <= set(tree["nodes"]["inp"]["state"])
         first.run.shutdown()
         restored = Learning(
-            start_manual, optimizer=optimizer, seed=1, state=tree, steps=6
+            start_manual,
+            optimizer=optimizer,
+            relaxer=relaxer,
+            seed=1,
+            state=tree,
+            steps=6,
         )
         for _ in range(10):
             restored.step()
@@ -1252,18 +1276,54 @@ class TestOptimizer:
         assert len(state["optimizer"]["m"]) == 1
 
 
-class TestMomentum:
-    """``TimeConstants.momentum``: a heavy ball for ``h``, which keeps the fixed
-    point of the plain relaxation and gets there in fewer periods."""
+class SpyRelaxer(pc.Relaxer):
+    """A relaxer that counts the resets of the bound ones, and moves ``h`` as
+    ``pc.Euler`` does."""
 
-    MOMENTUM_TAU = pc.TimeConstants(h=4e-3, lam=8e-3, momentum=3e-3)
+    def __init__(self) -> None:
+        self.resets = 0
+
+    @override
+    def bind(self, h: torch.Tensor) -> pc.BoundRelaxer:
+        spy = self
+
+        class Bound(pc.BoundRelaxer):
+            @override
+            def step_(
+                self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+            ) -> None:
+                h.sub_((dt / tau_h) * force)
+
+            @override
+            def reset_(self) -> None:
+                spy.resets += 1
+
+            @override
+            def state_dict(self) -> dict[str, Any]:
+                return {}
+
+            @override
+            def load_state_dict(self, state: Any, /) -> None:
+                pass
+
+        return Bound()
+
+
+class TestRelaxer:
+    """``relaxer``: how ``h`` moves along the force on it. ``pc.HeavyBall``
+    keeps the fixed point of the plain relaxation and gets there in fewer
+    periods."""
+
+    HEAVY_BALL = pc.HeavyBall(tau=3e-3)
     WIDTHS = [4, 4, 4, 4, 4]
 
     def _lams(
-        self, start_manual: StartManual, tau: pc.TimeConstants, steps: int
+        self, start_manual: StartManual, relaxer: pc.Relaxer, steps: int
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         layers, head = make_modules("res", "tanh", self.WIDTHS)
-        chain = HandChain(layers, head, self.WIDTHS, tau=tau, learn_interval=math.inf)
+        chain = HandChain(
+            layers, head, self.WIDTHS, relaxer=relaxer, learn_interval=math.inf
+        )
         run = start_manual(chain.net)
         x, y = sample(self.WIDTHS, 0)
         chain.write(run, x, y, MASK)
@@ -1274,10 +1334,21 @@ class TestMomentum:
             credits(layers, head, x, y, MASK),
         )
 
+    def test_the_default_is_the_plain_relaxation(self, start_manual: StartManual):
+        layers, head = make_modules("linear", "tanh", [4, 5, 3])
+        chain = HandChain(layers, head, [4, 5, 3])
+        assert isinstance(chain.layers[0].relaxer, mujou.Stateful)
+        run = start_manual(chain.net)
+        x, y = sample([4, 5, 3], 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), 5)
+        state = run.state_dict()["nodes"]["l0"]["state"]
+        assert state["relaxer"] == {}
+
     def test_lam_is_still_the_credit_of_backpropagation(
         self, start_manual: StartManual
     ):
-        lams, expected = self._lams(start_manual, self.MOMENTUM_TAU, RELAX_STEPS)
+        lams, expected = self._lams(start_manual, self.HEAVY_BALL, RELAX_STEPS)
         for lam, credit in zip(lams, expected, strict=True):
             close(lam, credit, 1e-8)
 
@@ -1288,26 +1359,43 @@ class TestMomentum:
         # faster, so this looks at the first periods, with random weights.
         steps = 60
         error: dict[str, float] = {}
-        for name, tau in (("plain", TAU), ("heavy ball", self.MOMENTUM_TAU)):
-            lams, expected = self._lams(start_manual, tau, steps)
+        for name, relaxer in (("plain", pc.Euler()), ("heavy ball", self.HEAVY_BALL)):
+            lams, expected = self._lams(start_manual, relaxer, steps)
             error[name] = max(
                 float((lam - credit).abs().max())
                 for lam, credit in zip(lams, expected, strict=True)
             )
         assert error["heavy ball"] < 0.5 * error["plain"]
 
-    def test_the_velocity_is_in_the_state_only_with_a_momentum(
+    def test_the_state_of_the_relaxer_is_in_the_state_of_the_node(
         self, start_manual: StartManual
     ):
-        for tau, has in ((TAU, False), (self.MOMENTUM_TAU, True)):
-            layers, head = make_modules("linear", "tanh", [4, 5, 3])
-            chain = HandChain(layers, head, [4, 5, 3], tau=tau)
-            run = start_manual(chain.net)
-            x, y = sample([4, 5, 3], 0)
-            chain.write(run, x, y, MASK)
-            run_steps(run, chain.from_next(), 5)
-            state = run.state_dict()["nodes"]["l0"]["state"]
-            assert ("velocity" in state) == has
+        layers, head = make_modules("linear", "tanh", [4, 5, 3])
+        chain = HandChain(layers, head, [4, 5, 3], relaxer=self.HEAVY_BALL)
+        run = start_manual(chain.net)
+        x, y = sample([4, 5, 3], 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), 5)
+        state = run.state_dict()["nodes"]["l0"]["state"]
+        assert state["relaxer"]["velocity"].shape == state["h"].shape
+        assert "velocity" not in state
+
+    def _alone(
+        self, relaxer: pc.Relaxer, learn_interval: float
+    ) -> tuple[pc.Input, pc.Layer, Group]:
+        inp = pc.Input(
+            x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
+        )
+        layer = pc.Layer(
+            nn.Linear(4, 4).double(),
+            act_spec=inp.act_spec,
+            tau=TAU,
+            optimizer=SGD,
+            relaxer=relaxer,
+            learn_interval=learn_interval,
+        )
+        inp.next.connect(layer.prev)
+        return inp, layer, Group(inp=inp, layer=layer)
 
     def test_a_new_sample_drops_the_velocity_of_the_one_before(
         self, start_manual: StartManual
@@ -1315,27 +1403,79 @@ class TestMomentum:
         # A layer alone (g = 0), with h off its prediction so that a force builds
         # a velocity. The first update with another sample moves h by the force
         # r + lam of before and nothing of the old velocity.
-        inp = pc.Input(
-            x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
-        )
-        layer = pc.Layer(
-            nn.Linear(4, 4).double(),
-            act_spec=inp.act_spec,
-            tau=self.MOMENTUM_TAU,
-            optimizer=SGD,
-            learn_interval=math.inf,
-        )
-        inp.next.connect(layer.prev)
+        inp, layer, net = self._alone(self.HEAVY_BALL, math.inf)
         layer.h.add_(1.0)
-        run = start_manual(Group(inp=inp, layer=layer))
+        run = start_manual(net)
         x, y = sample([4, 4], 0)
         run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
         for _ in range(3):
             run.step(H, inp, layer)
         before = run.state_dict()["nodes"]["layer"]["state"]
-        assert float(before["velocity"].abs().max()) > 1e-6
+        assert float(before["relaxer"]["velocity"].abs().max()) > 1e-6
         x2, y2 = sample([4, 4], 1)
         run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK}})
         run.step(H, inp, layer)
         after = run.state_dict()["nodes"]["layer"]["state"]
-        close(after["velocity"], before["h"] - before["mu"] + before["lam"], 1e-12)
+        close(
+            after["relaxer"]["velocity"],
+            before["h"] - before["mu"] + before["lam"],
+            1e-12,
+        )
+
+    def test_the_relaxer_is_reset_by_a_new_sample_and_not_by_a_jump_of_theta(
+        self, start_manual: StartManual
+    ):
+        # theta jumps with every learning (learn_interval = 2 periods); h and mu
+        # move together then, the force does not jump, and the velocity stays.
+        # A new sample jumps the force (g) while r and lam are kept: reset.
+        spy = SpyRelaxer()
+        inp, layer, net = self._alone(spy, 2 * H)
+        layer.h.add_(1.0)
+        run = start_manual(net)
+        linear = cast(nn.Linear, layer.module)
+        weight = linear.weight.detach().clone()
+        x, y = sample([4, 4], 0)
+        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+        for _ in range(12):
+            run.step(H, inp, layer)
+        assert not torch.equal(linear.weight, weight)  # theta learned
+        assert spy.resets == 1  # the new sample, once
+        x2, y2 = sample([4, 4], 1)
+        run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK}})
+        for _ in range(12):
+            run.step(H, inp, layer)
+        assert spy.resets == 2
+
+    def test_the_relaxer_is_reset_by_a_jump_of_the_activity_it_reads(
+        self, start_manual: StartManual
+    ):
+        # The sample stays; the layer before learns and jumps (learn_interval =
+        # 2 periods), and the layer after, which reads its h, re-anchors with
+        # each jump of it and resets: more than the once the new sample did.
+        inp = pc.Input(
+            x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
+        )
+        before = pc.Layer(
+            nn.Linear(4, 4).double(),
+            act_spec=inp.act_spec,
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=2 * H,
+        )
+        spy = SpyRelaxer()
+        after = pc.Layer(
+            nn.Linear(4, 4).double(),
+            act_spec=before.act_spec,
+            tau=TAU,
+            optimizer=SGD,
+            relaxer=spy,
+            learn_interval=math.inf,
+        )
+        inp.next.connect(before.prev)
+        before.next.connect(after.prev)
+        run = start_manual(Group(inp=inp, before=before, after=after))
+        x, y = sample([4, 4], 0)
+        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+        for _ in range(12):
+            run.step(H, inp, before, after)
+        assert spy.resets > 2
