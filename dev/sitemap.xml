@@ -2,392 +2,392 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/concepts/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/concepts/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/concepts/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/examples/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/examples/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/examples/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/install/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/install/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/install/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/network/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/network/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/network/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/node-and-ports/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/node-and-ports/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/node-and-ports/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/pc/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/run/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/run/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/run/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/testing/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/testing/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/testing/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/time/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/time/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/time/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/types/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/types/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/types/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/api/viz/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/api/viz/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/api/viz/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/errors/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/errors/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/errors/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/groups/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/groups/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/groups/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/host-io/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/host-io/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/host-io/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/pc-concepts/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/pc-concepts/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/pc-concepts/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/pc/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/ports/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/ports/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/ports/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/threads-and-devices/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/threads-and-devices/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/threads-and-devices/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/time/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/time/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/time/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/update-rules/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/update-rules/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/update-rules/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/topics/visualize/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/topics/visualize/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/topics/visualize/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/1-run/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/1-run/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/1-run/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/2-node/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/2-node/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/2-node/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/3-test/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/3-test/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/3-test/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/4-learn-in-a-node/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/4-learn-in-a-node/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/4-learn-in-a-node/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/5-learn-with-pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/5-learn-with-pc/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/5-learn-with-pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/tutorial/6-save-and-resume/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev/tutorial/6-save-and-resume/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/devja/tutorial/6-save-and-resume/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/dev"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/concepts/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/concepts/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devconcepts/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/examples/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/examples/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devexamples/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/install/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/install/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devinstall/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/network/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/network/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/network/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/node-and-ports/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/node-and-ports/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/node-and-ports/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/pc/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/run/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/run/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/run/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/testing/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/testing/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/testing/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/time/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/time/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/time/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/types/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/types/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/types/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/api/viz/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/api/viz/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devapi/viz/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/errors/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/errors/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/errors/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/groups/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/groups/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/groups/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/host-io/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/host-io/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/host-io/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/pc-concepts/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/pc-concepts/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/pc-concepts/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/pc/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/ports/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/ports/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/ports/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/threads-and-devices/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/threads-and-devices/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/threads-and-devices/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/time/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/time/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/time/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/update-rules/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/update-rules/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/update-rules/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/topics/visualize/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/topics/visualize/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtopics/visualize/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/1-run/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/1-run/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/1-run/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/2-node/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/2-node/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/2-node/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/3-test/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/3-test/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/3-test/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/4-learn-in-a-node/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/4-learn-in-a-node/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/4-learn-in-a-node/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/5-learn-with-pc/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/5-learn-with-pc/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/5-learn-with-pc/"/>
     </url>
     <url>
         <loc>https://geson-anko.github.io/mujou/dev/ja/tutorial/6-save-and-resume/</loc>
-        <lastmod>2026-10-23</lastmod>
+        <lastmod>2026-10-26</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="ja" href="https://geson-anko.github.io/mujou/dev/ja/tutorial/6-save-and-resume/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://geson-anko.github.io/mujou/devtutorial/6-save-and-resume/"/>

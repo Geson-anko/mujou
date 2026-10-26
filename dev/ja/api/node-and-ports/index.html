@@ -4081,8 +4081,13 @@ other.recv_spec</code> or <code>self.recv_spec != other.send_spec</code>.</p>
 converted (a scalar is taken as Python's typing takes it: an <code>int</code>
 for a <code>float</code>). The
 values are detached and copied, so changing <code>msg</code> afterwards changes
-nothing that was sent. A CUDA tensor is copied to the host on the node's
-stream. It never waits for the peers to read.</p>
+nothing that was sent. If a node on CUDA reads the port, a tensor on
+the node's CUDA device is copied on the device, on the node's stream,
+and <code>send</code> waits for that stream before the peers can read it; a
+peer on CUDA copies it from device to device. It stays on the device
+also while the hook has made another device current
+(<code>torch.cuda.device(...)</code>). Any other CUDA tensor is copied to the
+host. It never waits for the peers to read.</p>
 
 
 <table>
@@ -4492,8 +4497,13 @@ other.recv_spec</code> or <code>self.recv_spec != other.send_spec</code>.</p>
 converted (a scalar is taken as Python's typing takes it: an <code>int</code>
 for a <code>float</code>). The
 values are detached and copied, so changing <code>msg</code> afterwards changes
-nothing that was sent. A CUDA tensor is copied to the host on the node's
-stream. It never waits for the peers to read.</p>
+nothing that was sent. If a node on CUDA reads the port, a tensor on
+the node's CUDA device is copied on the device, on the node's stream,
+and <code>send</code> waits for that stream before the peers can read it; a
+peer on CUDA copies it from device to device. It stays on the device
+also while the hook has made another device current
+(<code>torch.cuda.device(...)</code>). Any other CUDA tensor is copied to the
+host. It never waits for the peers to read.</p>
 
 
 <table>

@@ -1942,7 +1942,8 @@ own shares.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The initial values of unconnected ports that receive, as
-<code>Run.write</code> takes them, written when the run starts. Written after
+<code>Run.write</code> takes them (and copies them, to the same places),
+written when the run starts. Written after
 <code>state</code>, they replace its values.</p>
               </div>
               <p>
@@ -2229,7 +2230,12 @@ pauses and scales the time of the run with it.</p>
 
         <p>Write messages to unconnected ports that receive, and return the time
 they are stamped with.</p>
-<p>The values are detached and copied. All of them switch together and bear
+<p>The values are detached and copied. A dense tensor on the CUDA device
+of the port's node is copied on that device, on this thread's current
+stream of it, which <code>write</code> waits for; any other tensor is copied to
+host memory (so a node on another device or on the CPU never waits for
+what this thread queues on a GPU). The nodes receive the values on
+their own devices. All of them switch together and bear
 the same time: at any one moment, a node sees either all of them or none.
 (A node that reads two of them one after the other may still see a later
 write in between; compare the times to tell.) Any such port of the run
