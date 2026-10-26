@@ -116,7 +116,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - **既定はシングルエージェント**。ユーザーの指定がない限り skill `solo-dev-cycle` で 計画 → テスト → 実装 → リファクタ → ドキュメント を自分で回す
 - 「エージェントチームで」「並列で」と明示されたときだけ skill `agent-team-startup` に従い、自分が `orchestrator` の役割を担う
 - agent 構成（`.claude/agents/`）: `implementation-planner` →（任意 `spec-test-author`）→ `plan-implementer` → `code-reviewer`（＋学習則に触れるなら `algorithm-reviewer`）⇄ `code-simplifier`。文書改善用に `doc-teacher` / `doc-student`（haiku）
-- `doc-student` を除く全 agent が `model: inherit`。深さは `effort` で差別化する（reviewer 2 体は high、他は medium。セッション既定は `settings.json` の `effortLevel: medium`）
+- `plan-implementer` は `model: sonnet`、`doc-student` は haiku、他の agent は `model: inherit`。深さは `effort` で差別化する（reviewer 2 体は high、他は medium。セッション既定は `settings.json` の `effortLevel: medium`）
 - **ユーザーに質問できるのはメインエージェントだけ**。サブエージェントの質問は報告に含めて返し、メインが中継する
 - 中間メモは `memory/agents/<agent-name>/<task-slug>.md`
 
