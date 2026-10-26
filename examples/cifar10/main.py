@@ -25,19 +25,26 @@ within 2 periods of the one before (``max_dt`` is 2, beyond which a node drops
 the time) with 11 workers. On a machine with fewer cores or a slower GPU, raise
 ``--tau-h`` or lower ``--time-scale``.
 
-A batch is shown for ``S = 128`` periods, long for 11 nodes: the sample takes
+A batch is shown for ``S = 64`` periods, long for 11 nodes: the sample takes
 about one period per node to reach the output and the credit about one per node
-to come back, so with 64 periods the 3rd epoch was about 10 points below BP.
-With the defaults, in the 3rd epoch the prequential accuracy was 50.72% (seed 0)
-against 54.45% for BP, and the test accuracy 54.18% against 59.02%; in the 10th,
-68.73% against 73.27% and 68.95% against 72.61%. The blocks make the relaxation
-stiff, so it finds the credit less exactly than BP does (``resnet.py``). The test
+to come back. ``tau.momentum`` (``--momentum``, in ``tau.h``) gives ``h`` the
+inertia of a heavy ball, which carries the credit across the chain in fewer
+periods: without it, 64 periods left the 3rd epoch about 10 points below BP and
+128 were needed (``--steps 128 --momentum 0``), twice the real time. With the
+defaults, in the 3rd epoch the prequential accuracy was 49.48% (seed 0) against
+54.45% for BP, and the test accuracy 48.71% against 59.02%; in the 10th, 62.77%
+against 73.27% and 62.89% against 72.61%. Without the momentum and with 128
+periods, the 10th epoch was 68.73% and 68.95%, so the momentum trades some
+accuracy in a long run for half the time. A momentum of 0.8 per update diverged
+and with 32 periods the nodes did not learn. The blocks make the relaxation stiff,
+so it finds the credit less exactly than BP does (``resnet.py``). The test
 accuracy moves by a few points from epoch to epoch (the learning rate does not
-decay), for both, and the GPU does not compute bit for bit the same in every run.
+decay), for both, and the GPU does not compute bit for bit the same in every
+run.
 
 Needs a CUDA GPU, and the network once to download CIFAR-10 (about 160 MB)
-into ``--data``. The defaults (3 epochs) take about 16 minutes, 10 epochs about
-50. Run it from the repository::
+into ``--data``. The defaults (3 epochs) take about 8 minutes, 10 epochs about
+25. Run it from the repository::
 
     uv run python examples/cifar10/main.py
     uv run python examples/cifar10/main.py --epochs 10
@@ -97,7 +104,9 @@ def train_pc(
         batch=args.batch,
         loss=pc.CrossEntropyLoss(args.batch),
         # The dual as fast as h: a slower one needs even more periods to relax.
-        tau=pc.TimeConstants(h=args.tau_h, lam=args.tau_h),
+        tau=pc.TimeConstants(
+            h=args.tau_h, lam=args.tau_h, momentum=args.momentum * args.tau_h
+        ),
         optimizer=adamw(shown, args.lr),  # learn once per batch
         learn_interval=0.75 * shown,
         device=args.device,  # every node computes on the GPU
@@ -140,9 +149,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="CIFAR-10 with PC-ALM nodes and BP.")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch", type=int, default=128)
-    parser.add_argument("--steps", type=int, default=128, help="periods per batch (S)")
+    parser.add_argument("--steps", type=int, default=64, help="periods per batch (S)")
     parser.add_argument("--tau-h", type=float, default=20e-3, help="seconds")
     parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
+    parser.add_argument(
+        "--momentum", type=float, default=0.25, help="time constant, in tau.h"
+    )
     parser.add_argument("--time-scale", type=float, default=1.0)
     parser.add_argument("--workers", type=int, default=11)
     parser.add_argument("--device", default="cuda", help="a CUDA device")
