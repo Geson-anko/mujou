@@ -20,12 +20,12 @@ metadata:
 - **ノードのデバイスは CPU と CUDA だけ（2026-10-17、ユーザーの決定）。** それ以外の種類（`mps`、`xpu` など）は、torch が使えるかどうかに関わらず `Node(device=...)` が断る（K4）
 - ノードの内側で PyTorch を使うときの設定（ノードごとの stream、同期）は Driver が行う（[[project-torch-module]]）
 
-**Why:** 往復は送るたびに同期の D2H を、読むたびに H2D を払う（100 万要素で send が 0.5〜1.6 ms）。device に置いたままなら send は clone と自分の stream の待ちだけになる。S1（読み手の stream が書き手の event を待つ）は 1 send あたり約 12 µs 速いが、読み手の GPU の仕事が書き手の進行中の計算を待ち、「ノードは他のノードを待たない」が GPU の側で崩れ、スロットの時刻も値が出来上がる前になるので採らない。コアに CUDA の意味論を入れず不透明な値にしたのは、torch を import しない原則を保ち、版番号の一斉切り替え・`wait_newer`・寿命の管理を二重に持たないため。ホストからの書き込みを device に置かないのは、torch の `__dlpack__` が current device をテンソルの device に求め、ホストのスレッドの stream と device を保証できないため。MPS は 2 スレッドから同時に使うとプロセスが落ち（torch 2.14.1、GIL ありでも 10/10 で再現）、ノードを複数のスレッドで並行に計算する実行モデルと合わない。
+**Why:** 往復は送るたびに同期の D2H を、読むたびに H2D を払う（100 万要素で send が 0.5〜1.6 ms）。device に置いたままなら send は clone と自分の stream の待ちだけになる。S1（読み手の stream が書き手の event を待つ）は 1 send あたり約 12 µs 速いが、読み手の GPU の仕事が書き手の進行中の計算を待ち、「ノードは他のノードを待たない」が GPU の側で崩れ、スロットの時刻も値が出来上がる前になるので採らない。コアに CUDA の意味論を入れず不透明な値にしたのは、torch を import しない原則を保ち、版番号の一斉切り替え・`wait_newer`・寿命の管理を二重に持たないため。ホストの write を持ち主のノードの device に限るのは、ほかの読み手が自分で設定していない stream でコピーし、ホストの GPU の仕事を待つため（上の「持ち主の device に狭めた理由」）。ホストのスレッドや hook の current device がテンソルの device と違う問題（torch の `__dlpack__` の制約）は `_OnItsDevice` で解いた。MPS は 2 スレッドから同時に使うとプロセスが落ち（torch 2.14.1、GIL ありでも 10/10 で再現）、ノードを複数のスレッドで並行に計算する実行モデルと合わない。
 
 **How to apply:**
 
 - コア・スロット・バッファプールに device・stream・event の概念を入れない。device の判断は bindings（DLPack の device 種別）と codec（torch）に閉じる
-- device に置く値を増やす（ホストの書き込みなど）ときは、`__dlpack__` の current device の制約と、読み手の副 stream の device が静的に決まらない問題を先に解く
+- device に置く値を増やすときは、読み手が自分の stream（または副 stream）でコピーできること、つまり読み手の device が配線のときに分かることを先に確かめる。ホストの write ではこれを「持ち主の device だけ」（`Wiring.input_devices`）で、`__dlpack__` の current device の制約は `_OnItsDevice` で解いた（2026-10-25）
 - ノード・ランタイムに `torch.accelerator` の汎用経路や MPS 向けの分岐を入れない。サポートするデバイスを増やすときはユーザーに確認する
 - 仕様は `specs/messages.md` の「コアの中の値」と「stream の同期」、`specs/nodes.md` の「CUDA」
 
