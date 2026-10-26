@@ -732,12 +732,16 @@ class OnCuda0(Node):
 
 
 class Late(OnCuda0):
-    """Sends 7s that its stream fills late, once, and then sets ``sent``."""
+    """Sends ``7 + current`` (7 without ``current``) that its stream fills
+    late, once, and then sets ``sent``; sends while device ``current`` is
+    current, if given. A value of each case of its own: memory of an earlier
+    case may still hold another."""
 
-    def __init__(self) -> None:
+    def __init__(self, current: int | None = None) -> None:
         super().__init__()
         self.out = Port(send=BIG)
         self.sent = threading.Event()
+        self.current = current
 
     @override
     def on_update(self, dt: float) -> None:
@@ -745,8 +749,12 @@ class Late(OnCuda0):
             return
         x = torch.empty(BIG.shape, device=self.device)
         delay_the_stream()
-        x.fill_(7.0)
-        self.out.send(x)
+        x.fill_(7.0 + (self.current or 0))
+        if self.current is None:
+            self.out.send(x)
+        else:
+            with torch.cuda.device(self.current):
+                self.out.send(x)
         self.sent.set()
 
 
@@ -1018,19 +1026,24 @@ class TestCuda:
         assert via_host_memory(source, sink) == via_the_host
 
     @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "current", [None, pytest.param(1, marks=pytest.mark.cuda(2))]
+    )
     def test_a_reader_gets_what_a_late_stream_wrote(
-        self, virtual: VirtualTimer, start: Start
+        self, virtual: VirtualTimer, start: Start, current: int | None
     ):
         # The reader copies the message the moment the writer has sent it,
-        # while the writer is still in its on_update: send waits for the stream.
-        writer = Late()
+        # while the writer is still in its on_update: send waits for the stream,
+        # the node's, also while the hook has made another device current.
+        writer = Late(current)
         reader = Reads(writer.sent)
         writer.out.connect(reader.inp)
         start(Group(writer=writer, reader=reader), timer=virtual)
         virtual.advance(0.01)
         assert reader.done.wait(10.0)
         assert torch.equal(
-            cast(torch.Tensor, reader.received), torch.full(BIG.shape, 7.0)
+            cast(torch.Tensor, reader.received),
+            torch.full(BIG.shape, 7.0 + (current or 0)),
         )
 
     @pytest.mark.slow

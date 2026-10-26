@@ -1589,28 +1589,38 @@ class TestCuda:
         assert torch.equal(received.cpu(), x.cpu())
 
     @pytest.mark.slow
-    def test_a_write_waits_for_the_hosts_stream(self, start_manual: StartManual):
-        inp = Port(recv=TensorSpec((1 << 20,)))
+    @pytest.mark.parametrize("current", [0, pytest.param(1, marks=pytest.mark.cuda(2))])
+    def test_a_write_waits_for_the_hosts_stream(
+        self, start_manual: StartManual, current: int
+    ):
+        # With cuda:1 current, the write waits for this thread's stream of the
+        # tensor's device all the same.
+        n = 1 << 22  # large enough that a missing wait shows
+        inp = Port(recv=TensorSpec((n,)))
         node = probe_on("cuda:0", inp.recv, inp=inp)
         run = start_manual(Group(node=node))
         # Run each kind of kernel once: CUDA loads a kernel's code when it
         # first runs, waiting for the whole device, which would hide a missing
         # wait for the stream.
-        warm = torch.ones(1 << 20, device="cuda:0")
+        warm = torch.ones(n, device="cuda:0")
         warm.clone().fill_(2.0).cpu()
         torch.cuda._sleep(1)  # pyright: ignore[reportPrivateUsage]
-        run.write({inp: warm})
+        with torch.cuda.device(current):
+            run.write({inp: warm})
         run.step(H, node)
         torch.cuda.synchronize()
-        x = torch.empty(1 << 20, device="cuda:0")
-        # About 0.1 s on this thread's stream before x is filled; _sleep is a
-        # private API of torch, which its own tests use for this.
+        x = torch.empty(n, device="cuda:0")
+        # About 0.1 s on this thread's stream of cuda:0 before x is filled;
+        # _sleep is a private API of torch, which its own tests use for this.
         torch.cuda._sleep(250_000_000)  # pyright: ignore[reportPrivateUsage]
-        x.fill_(5.0)
-        run.write({inp: x})
+        # A value of its own: memory of an earlier case may still hold another.
+        value = 5.0 + current
+        x.fill_(value)
+        with torch.cuda.device(current):
+            run.write({inp: x})
         run.step(H, node)
         assert torch.equal(
-            cast(torch.Tensor, node.results[-1]).cpu(), torch.full((1 << 20,), 5.0)
+            cast(torch.Tensor, node.results[-1]).cpu(), torch.full((n,), value)
         )
 
 
