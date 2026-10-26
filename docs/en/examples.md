@@ -52,4 +52,4 @@ uv run python examples/mnist/main.py
 uv run python examples/cifar10/main.py
 ```
 
-Only `cifar10/` uses a GPU, and needs CUDA. Each finishes within 15 seconds, except `mnist/` and `cifar10/`. `mnist/` downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. `cifar10/` downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 5 minutes on an RTX 4090.
+Only `cifar10/` uses a GPU, and needs CUDA. Each finishes within 15 seconds, except `mnist/` and `cifar10/`. `mnist/` downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. `cifar10/` downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 3 minutes on an RTX 4090.

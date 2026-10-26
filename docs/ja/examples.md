@@ -52,4 +52,4 @@ uv run python examples/mnist/main.py
 uv run python examples/cifar10/main.py
 ```
 
-GPU を使うのは `cifar10/` だけで、CUDA が要る。`mnist/` と `cifar10/` 以外は 15 秒以内に終わる。`mnist/` は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。`cifar10/` は初回に CIFAR-10（約 160 MB）をダウンロードし、既定の 3 epoch で RTX 4090 なら約 5 分かかる。
+GPU を使うのは `cifar10/` だけで、CUDA が要る。`mnist/` と `cifar10/` 以外は 15 秒以内に終わる。`mnist/` は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。`cifar10/` は初回に CIFAR-10（約 160 MB）をダウンロードし、既定の 3 epoch で RTX 4090 なら約 3 分かかる。
