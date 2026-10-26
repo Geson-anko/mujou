@@ -13,7 +13,7 @@ metadata:
 - **時刻は `Timestamp | None`。** `None` は書き手がまだ書いていない（initial か zeros）。`recv_with_time` / `read_with_time` / `subscribe` / `wait_for` が同じ型で返す。`has_received` は無い。「送られたか」と時刻を 1 回の読み出しから得るので、両者が別のメッセージの情報になる競合が起きない
 - **複数のポートへの同時書き込み（ユーザーの決定）。** 1 回の `write` の値はどのノードからも一斉に切り替わり、同じ時刻が付く。方式は版番号（外から書けるスロットは現在の値と版番号付きの次の値を持つ）。書き手も読み手も待たない
 - **読み出しは `read`（最新値）、`read_with_time`、`subscribe`（呼んだ時点の値を最初に返し、新しい値ごとに最新値を返すイテレータ）、`wait_for`（条件を満たす最初の値）。** 消費者だけが待ち、途中の値は飛ばす。正常終了でイテレータが終わる。`send_to` は outbox に書かないので、`send_to` だけを使うポートを読むと `initial` か zeros が返る（推奨案で、ユーザーの確認待ち。`specs/open-decisions.md`）
-- **write の値の置き場所は渡したテンソルの device（2026-10-25、ユーザーの決定）。** CUDA のテンソルはその device に置き（`inputs=` も同じ）、CPU のテンソルはホストのメモリ。`device=` 引数は足さない。同期は S2 と同じで、write が呼んだスレッドのその device の current stream を待つ（[[project-gpu-policy]]）
+- **write の値は、ポートを持つノードの CUDA device の上のテンソルだけ device に置く（2026-10-25、ユーザーの決定）。** `inputs=` も同じ。持ち主が CPU のノードのとき、持ち主と別の device のテンソル、CPU のテンソルはホストのメモリ。最初は「渡したテンソルの device」と決めたが、持ち主以外の読み手がホストの GPU の仕事を待つと分かり、同じ日に狭めた。`device=` 引数は足さない。同期は S2 と同じで、write が呼んだスレッドのその device の current stream を待つ（[[project-gpu-policy]]）
 - **入力はその実行のタイマー上の信号（ユーザー了承）。** スロットは最新値なので sample-and-hold。データセットでは提示時間をユーザーが決め、ホストは `run.timer.sleep` で待つ
 - **持たないもの:** 書き込みごとのコールバック、全値の記録（future work）、外部プロセスへの転送、サンプル ID の伝搬
 

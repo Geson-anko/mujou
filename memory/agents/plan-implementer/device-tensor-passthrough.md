@@ -42,3 +42,9 @@
 - **ホストが書いた値の読み手の副 stream は作らない**（`read_devices` に入れない）。書かれる device は write まで分からない。別の device の読み手は自分のスレッドの元の device の current stream でコピーし、値は正しいが、別のノードの stream の後ろに並ぶことがある（性能だけ）。全 device に副 stream を作る案は、使わない GPU にも CUDA の context（数百 MB）を作るので採らない。`specs/messages.md` の「stream の同期」に記録
 - ホストの write の S2 は変異テスト（`_on_their_devices` の待ちを外す）で `test_a_write_waits_for_the_hosts_stream` が落ちることを確かめた
 - `ports.py`: input (64,784) の send が 6.0 と 7.6 µs の 2 峰に揺れた（HEAD の Python に戻しても 6.0、新しいコードでも 6.1 と 7.6 が出る）。ほかは変更前と 3% 以内
+
+## ユーザーの決定（2026-10-25、2 回目）への対応
+
+- **algorithm-reviewer must-fix 1 を (i) で直した。** ホストの write で device に置くのは、そのポートを持つノード（唯一の読み手）の CUDA device の上のテンソルだけ。`Wiring.input_devices`（配線時に決める）を `_item` が `to_core(device=...)` に渡す。`THEIR_DEVICES` と `codec.Their` は消した。回帰テスト `test_a_reader_does_not_wait_for_what_the_host_queues_after_writing`（cuda:0 / cpu / cuda:1）は、`input_devices` を常に cuda:0 にする変異で cpu と cuda:1 が落ちる（ホストの `_sleep` を待つ）。profiler のオラクルに host:cuda:0 → cuda:0（ホストを経由しない）、host:cuda:0 → cpu、host:cuda:1 → cuda:0（ホストを経由する）を足した
+- **code-reviewer nit 5**: ノードの send で別の device が current のときも device に置く。`to_core` は device が決まっていれば clone し、`torch.cuda.current_device() != device.index` なら `_OnItsDevice` で包む（ホストの write と同じ仕組み）。S2 の待ちは `wait_for_clones` が clone の device の current stream（hook ではノードの stream）に対して行う。`test_sends_while_the_hook_has_made_another_device_current` に memcpy のオラクルを足し、ホストへ回す旧挙動の変異で落ちることを確かめた
+- `to_core` に `wait: bool = True` を足した。ホストの write だけ `wait=False` で、`Wiring.write` が全ポートの clone を積んでから device ごとに 1 回待つ
