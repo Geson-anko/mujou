@@ -1561,6 +1561,34 @@ class TestCuda:
             assert torch.equal(received[1].cpu(), second.cpu())
 
     @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "reader", ["cuda:0", "cpu", pytest.param("cuda:1", marks=pytest.mark.cuda(2))]
+    )
+    def test_a_reader_does_not_wait_for_what_the_host_queues_after_writing(
+        self, start_manual: StartManual, reader: str
+    ):
+        # The host computes on the default stream, which a reader that copied
+        # the value on a stream it has not set would share.
+        inp = Port(recv=TensorSpec((1 << 20,)))
+        node = probe_on(reader, inp.recv, inp=inp)
+        run = start_manual(Group(node=node))
+        # Run the kernel once: CUDA loads a kernel's code when it first runs,
+        # waiting for the whole device.
+        torch.cuda._sleep(1)  # pyright: ignore[reportPrivateUsage]
+        torch.cuda.synchronize()
+        x = torch.full((1 << 20,), 5.0, device="cuda:0")
+        run.write({inp: x})
+        # About 0.1 s on this thread's stream; _sleep is a private API of
+        # torch, which its own tests use for this.
+        torch.cuda._sleep(250_000_000)  # pyright: ignore[reportPrivateUsage]
+        busy = torch.cuda.current_stream(0).record_event()
+        run.step(H, node)
+        assert not busy.query()
+        received = cast(torch.Tensor, node.results[0])
+        assert received.device == torch.device(reader)
+        assert torch.equal(received.cpu(), x.cpu())
+
+    @pytest.mark.slow
     def test_a_write_waits_for_the_hosts_stream(self, start_manual: StartManual):
         inp = Port(recv=TensorSpec((1 << 20,)))
         node = probe_on("cuda:0", inp.recv, inp=inp)

@@ -12,7 +12,6 @@ on that device as a clone on the device, which the core holds as it is
 """
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from enum import Enum, auto
 from typing import Any, Final, cast, final
 
 import torch
@@ -64,28 +63,26 @@ def to_core(
     msg: object,
     label: str,
     *,
-    device: torch.device | Their | None = None,
+    device: torch.device | None = None,
+    wait: bool = True,
 ) -> list[object]:
     """The values of ``msg`` in field order for the core: tensors detached,
     and scalars (a ``Timestamp`` as its nanoseconds). ``label`` names the
     message in the errors.
 
-    ``device`` says which dense tensors stay on their CUDA device, where the
-    core holds a contiguous clone of each:
-
-    - a CUDA device: those on it. A node on that device passes it when a node
-      on CUDA reads the port (``Wire.cuda``). The clones queue on the calling
-      thread's current stream of the device (the node's own, in its hooks),
-      which this waits for once, so that no reader sees a clone unfinished.
-      While the thread's current device is another (inside a
-      ``torch.cuda.device(...)`` of the hook), none stays: torch exports a CUDA
-      tensor over DLPack only on its current device
-    - ``THEIR_DEVICES`` (the host's write): every one, each on its own device,
-      and each clone exports itself with its device current. The clones queue
-      on the calling thread's current stream of each device: the caller waits
-      for them with ``wait_for_clones`` before it hands the values over (once
-      per device for the messages of one write)
-    - ``None`` (any other sender, ``initial`` and a restore): none
+    ``device`` is the CUDA device where the dense tensors on it stay, or
+    ``None``. It is the device of the node that reads the values when the
+    sender knows it, and that node is on CUDA: a node that sends to a node on
+    CUDA (``Wire.cuda``), or the host writing to the port of such a node
+    (``Wiring.write``). The core holds a contiguous clone of each such tensor.
+    The clones queue on the calling thread's current stream of the device (a
+    node's own, in its hooks), which this waits for once, so that no reader
+    sees a clone unfinished; with ``wait=False`` the caller waits with
+    ``wait_for_clones`` instead (once for the messages of one write). While
+    the thread's current device is another (the host's, or a hook's inside
+    ``torch.cuda.device(...)``), each clone exports itself with its device
+    current, as torch exports a CUDA tensor over DLPack only on its current
+    device.
 
     Any other tensor is copied to host memory on the current stream of its
     device, and only that stream is synchronized.
@@ -101,57 +98,40 @@ def to_core(
         expected = _EXPECTED[type(names[""])] if "" in names else _keys(names)
         got = type(values[""]).__name__ if "" in values else _keys(values)
         raise TypeError(f"{label}: expected {expected}, got {got}")
-    if device is THEIR_DEVICES:
-        out = [
-            _value(f, values[name], label, name, device) for name, f in names.items()
-        ]
-        return _on_their_devices(out)
-    if device is not None and torch.cuda.current_device() != device.index:
-        device = None
     out = [_value(f, values[name], label, name, device) for name, f in names.items()]
+    if device is None:
+        return out
     # Every other tensor is in host memory by now.
-    if device is not None and any(
-        isinstance(v, torch.Tensor) and v.is_cuda for v in out
-    ):
-        # One wait for every clone, on this stream only: past PyTorch's pool of
-        # 32 streams per device, nodes share one, and the event does not wait
-        # for what another node queues on it later.
-        torch.cuda.current_stream(device).record_event().synchronize()
+    if torch.cuda.current_device() != device.index:
+        out = [
+            _OnItsDevice(v) if isinstance(v, torch.Tensor) and v.is_cuda else v
+            for v in out
+        ]
+    if wait:
+        wait_for_clones([out])
     return out
 
 
-class Their(Enum):
-    """The kind of ``THEIR_DEVICES``."""
-
-    DEVICES = auto()
-
-
-# For to_core: every dense CUDA tensor stays on its own device.
-THEIR_DEVICES: Final = Their.DEVICES
-
-
 def wait_for_clones(messages: Iterable[Sequence[object]]) -> None:
-    """Wait for the clones of ``messages`` (from ``to_core`` with
-    ``THEIR_DEVICES``): for the calling thread's current stream of each device
-    they are on, once."""
-    devices = {v.tensor.device for m in messages for v in m if type(v) is _OnItsDevice}
+    """Wait for the clones of ``messages`` (from ``to_core``): for the calling
+    thread's current stream of each device they are on, once. Only that
+    stream: past PyTorch's pool of 32 streams per device, nodes share one, and
+    the event does not wait for what another node queues on it later."""
+    devices = {
+        v.device if isinstance(v, torch.Tensor) else v.tensor.device
+        for m in messages
+        for v in m
+        if (isinstance(v, torch.Tensor) and v.is_cuda) or type(v) is _OnItsDevice
+    }
     for d in devices:
         torch.cuda.current_stream(d).record_event().synchronize()
-
-
-def _on_their_devices(out: list[object]) -> list[object]:
-    """``out`` with each CUDA tensor (a clone) wrapped to export itself with
-    its device current."""
-    return [
-        _OnItsDevice(v) if isinstance(v, torch.Tensor) and v.is_cuda else v for v in out
-    ]
 
 
 @final
 class _OnItsDevice:
     """A CUDA tensor that the core holds, which makes its device current while
-    it exports itself over DLPack: torch requires that, and the host's thread
-    may have another current device."""
+    it exports itself over DLPack: torch requires that, and the sender's thread
+    has another current device."""
 
     __slots__ = ("tensor",)
 
@@ -192,21 +172,16 @@ def _value(
     value: object,
     label: str,
     name: str,
-    stays_on: torch.device | Their | None,
+    stays_on: torch.device | None,
 ) -> object:
     """``value`` as the core takes it for a field of ``spec``: the values that
     the field's annotation takes in Python's typing (a ``bool`` is an ``int``,
-    an ``int`` is a ``float``). A dense tensor that stays on its device (as
-    ``to_core`` says of ``stays_on``) is cloned there."""
+    an ``int`` is a ``float``). A dense tensor on ``stays_on`` is cloned there."""
     match spec:
         case TensorSpec() if isinstance(value, torch.Tensor):
             if (
                 stays_on is not None
-                # A node's device first: the hot path.
-                and (
-                    value.device == stays_on
-                    or (stays_on is THEIR_DEVICES and value.is_cuda)
-                )
+                and value.device == stays_on
                 and value.layout == torch.strided
             ):
                 return value.detach().clone(memory_format=torch.contiguous_format)
@@ -228,7 +203,7 @@ def _value(
 
 # The values of a message from the core (``Message.values``): a view of a value
 # in host memory, or a tensor that the core holds on a CUDA device (wrapped if
-# the host wrote it).
+# its sender's thread had another current device).
 type Views = Sequence[_native.BufferView | torch.Tensor | _OnItsDevice]
 
 
