@@ -8,7 +8,7 @@ This page explains what the parts of `mujou.pc` do, how they connect, and what o
     - The messages that flow between the nodes, and which way the ports face
     - What a `pc.Layer` does in one `on_update(dt)`
     - What the `Tick` that `pc.LearnClock` returns, `jumps` and `pc.TimeConstants` mean
-    - How `pc.SGD` and `pc.AdamW` move the weights in time
+    - How `pc.SGD` and `pc.AdamW` move the weights in time, and `pc.Euler` and `pc.HeavyBall` the activity
 
     You should know PyTorch and backpropagation (BP), and the nodes, ports and `dt` of [How Mujou Works](../concepts.md). You need not know predictive coding.
 
@@ -105,14 +105,14 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
     `Layer.on_update(dt)` goes "read → `tick` → `vjp` → send `g_in` → `relax_` → send `Activity` → `optimizer.step_`".
 
-| Step | Part                | Computation                                                                                                                                                                                    |
-| ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `LearnClock.tick`   | Reads the `Activity` from `prev` and gets the `Tick` (`dt`, `new`, `learn`, `elapsed`)                                                                                                         |
-| 2    | —                   | If it learned its own weights in the previous update, adds the jump they made to `h` (not the re-anchoring of step 4; the third row of the table in [jumps](#jumps))                           |
-| 3    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP. Sends `g_in` from `prev`                                         |
-| 4    | `functional.relax_` | Re-anchors `h` if `mu` jumped, then $h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$, and then, with the moved `h`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
-| 5    | `Activity`          | Advances its own `jumps` if needed, and sends from `next` `h` and `jumps`, with the `y`, `mask` and `time` it received                                                                         |
-| 6    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True           |
+| Step | Part                | Computation                                                                                                                                                                                                                                                             |
+| ---- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `LearnClock.tick`   | Reads the `Activity` from `prev` and gets the `Tick` (`dt`, `new`, `learn`, `elapsed`)                                                                                                                                                                                  |
+| 2    | —                   | If it learned its own weights in the previous update, adds the jump they made to `h` (not the re-anchoring of step 4; the third row of the table in [jumps](#jumps))                                                                                                    |
+| 3    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP. Sends `g_in` from `prev`                                                                                                                  |
+| 4    | `functional.relax_` | Re-anchors `h` if `mu` jumped, then $h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$ (as `pc.Euler`, the default relaxer, moves it; [section 7](#7-relaxers)), and then, with the moved `h`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
+| 5    | `Activity`          | Advances its own `jumps` if needed, and sends from `next` `h` and `jumps`, with the `y`, `mask` and `time` it received                                                                                                                                                  |
+| 6    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True                                                                                    |
 
 - The `delta` of step 3 is made from `h` and `lam` after step 2 and before step 4
 - Gradients are summed over the batch, and only step 6 divides by $B$. So `lam` is the credit of each sample, and the optimizer gets the mean gradient of the batch
@@ -280,3 +280,36 @@ When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / 
 ### An optimizer of your own
 
 An optimizer of your own is two classes. The setting inherits `pc.Optimizer` and implements `bind(params)`. What `bind` returns inherits `pc.BoundOptimizer` (a `mujou.Stateful`) and implements `step_(grads, elapsed)`, `state_dict()` and `load_state_dict(state)`; a class that leaves one out raises `TypeError` when it is made. Pass `bind` only the weights that learn. The [API reference](../api/pc.md) has an example.
+
+## 7. Relaxers
+
+!!! abstract "Key idea"
+
+    How the activity `h` moves along the force on it is a setting too. A relaxer is to `h` what an optimizer is to the weights: a setting without state, bound in each node, that moves `h` by `dt` seconds.
+
+`pc.Euler()` and `pc.HeavyBall(tau=)` are settings. `Layer` and `Chain` take one as `relaxer=`, `pc.Euler()` by default. A `Chain` gives the same setting to each of its `Layer`s, which is safe because the setting holds no state. `Output` has no `h` and takes none. Each `Layer` binds the setting to its own `h` and keeps the **bound relaxer** as `self.relaxer`. The bound relaxer holds the state and moves `h`.
+
+```python
+self.relaxer = relaxer.bind(self.h)  # in __init__
+# in on_update, inside functional.relax_, with the force h - mu + lam + g:
+self.relaxer.step_(h, force, dt, tau.h)
+# with a new sample or a jump of the h it reads:
+self.relaxer.reset_()
+```
+
+With the force $F = r + \lambda + g$:
+
+| Relaxer        | One step of `dt` $= \Delta t$ seconds                                                      |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `pc.Euler`     | $h \leftarrow h - \frac{\Delta t}{\tau_h} F$                                               |
+| `pc.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$, then $h \leftarrow h - \frac{\Delta t}{\tau_h} v$ |
+
+- A relaxer changes how `h` gets to the fixed point, not where it is: at the fixed point $F = 0$ and $v = 0$. The relaxer does not move $\lambda$. $\lambda$ moves after `h`, with the $r$ of the moved `h` ([section 3](#3-one-update-of-a-layer)), whichever relaxer moves `h`
+- The velocity of `pc.HeavyBall` starts at 0, so its first step is the step of `pc.Euler`. Each update adds the force $F$ once, not $F\,\Delta t$: in a steady state $v = F / (1 - e^{-\Delta t/\tau})$, so a shorter period gives a larger gain, and a late update (a longer `dt`) forgets more of the velocity, which is on the stable side. A step with `dt == 0` leaves `h` and the velocity as they are
+- With a new sample or a jump of the `h` it reads, $r$ and $\lambda$ are kept, but the velocity was built from the forces of the input before ([jumps](#jumps)), so the node calls `reset_()` and drops it. A jump of the node's own weights moves `h` and `mu` together, $r$ and the force do not jump, and `reset_` is not called
+- The bound relaxer is in the node's state under the key `"relaxer"`: `{"velocity": ...}` for `pc.HeavyBall`, empty for `pc.Euler`
+- To choose a relaxer and its value, see [Choosing the relaxer](pc.md#choosing-the-relaxer)
+
+### A relaxer of your own
+
+A relaxer of your own is two classes. The setting inherits `pc.Relaxer` and implements `bind(h)`, which makes the state with the shape, dtype and device of `h`. What `bind` returns inherits `pc.BoundRelaxer` (a `mujou.Stateful`) and implements `step_(h, force, dt, tau_h)`, `reset_()`, `state_dict()` and `load_state_dict(state)`; a class that leaves one out raises `TypeError` when it is made. Its fixed point must be where the force is zero and its own state is at rest, or `lam` is no longer the credit of BP. The [API reference](../api/pc.md) has an example.

@@ -8,7 +8,7 @@
     - ノードの間を流れるメッセージと Port の向き
     - `pc.Layer` が 1 回の `on_update(dt)` で行うこと
     - `pc.LearnClock` が返す `Tick`、`jumps`、`pc.TimeConstants` の意味
-    - `pc.SGD` と `pc.AdamW` が重みを時間で動かす仕組み
+    - `pc.SGD` と `pc.AdamW` が重みを、`pc.Euler` と `pc.HeavyBall` が活動を時間で動かす仕組み
 
     前提は PyTorch・誤差逆伝播法（BP）と、[Mujou の仕組み](../concepts.md)のノード・Port・`dt`。predictive coding の知識は要らない。
 
@@ -105,14 +105,14 @@ flowchart LR
 
     `Layer.on_update(dt)` は「読む → `tick` → `vjp` → `g_in` を送る → `relax_` → `Activity` を送る → `optimizer.step_`」の順に進む。
 
-| 段  | 使う部品            | 計算                                                                                                                                                                            |
-| --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る                                                                                                  |
-| 2   | —                   | 前の更新で自分の重みを学んでいれば、その跳びを `h` に足す（段 4 の付け替えとは別。[jumps](#jumps) の表の 3 行目）                                                               |
-| 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                         |
-| 4   | `functional.relax_` | 跳びがあれば `h` を付け替え、$h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$、続けて動かした `h` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
-| 5   | `Activity`          | 必要なら自分の `jumps` を進め、`h` と `jumps` に受け取った `y`・`mask`・`time` を付けて `next` から送る                                                                         |
-| 6   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                        |
+| 段  | 使う部品            | 計算                                                                                                                                                                                                                                           |
+| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る                                                                                                                                                                 |
+| 2   | —                   | 前の更新で自分の重みを学んでいれば、その跳びを `h` に足す（段 4 の付け替えとは別。[jumps](#jumps) の表の 3 行目）                                                                                                                              |
+| 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                                                                                        |
+| 4   | `functional.relax_` | 跳びがあれば `h` を付け替え、$h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$（既定の relaxer の `pc.Euler` が動かす形。[7 節](#7-relaxer)）、続けて動かした `h` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
+| 5   | `Activity`          | 必要なら自分の `jumps` を進め、`h` と `jumps` に受け取った `y`・`mask`・`time` を付けて `next` から送る                                                                                                                                        |
+| 6   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                       |
 
 - 段 3 の `delta` は段 2 の後、段 4 の前の `h`・`lam` で作る
 - 勾配はバッチで和を取り、$B$ で割るのは段 6 だけ。だから `lam` はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る
@@ -280,3 +280,36 @@ $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(e
 ### 自分の optimizer
 
 自作の optimizer は 2 つのクラスで書く。設定は `pc.Optimizer` を継承して `bind(params)` を実装する。`bind` が返すものは `pc.BoundOptimizer`（`mujou.Stateful` の一種）を継承し、`step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。
+
+## 7. relaxer
+
+!!! abstract "要点"
+
+    活動 `h` が自分に掛かる力に沿ってどう動くかも設定である。relaxer は `h` にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、`h` を `dt` 秒だけ動かす。
+
+`pc.Euler()` と `pc.HeavyBall(tau=)` が設定である。`Layer` と `Chain` が `relaxer=` で 1 つ取る。既定は `pc.Euler()` である。`Chain` は同じ設定を各 `Layer` に渡す。設定は状態を持たないので、共有しても安全である。`Output` は `h` を持たないので取らない。各 `Layer` は設定を自分の `h` に bind し、**bind した relaxer** を `self.relaxer` に持つ。bind した relaxer が状態を持ち、`h` を動かす。
+
+```python
+self.relaxer = relaxer.bind(self.h)  # __init__ で
+# on_update の functional.relax_ の中で、力 h - mu + lam + g を渡して:
+self.relaxer.step_(h, force, dt, tau.h)
+# 新しいサンプルのとき、または読んでいる h が跳んだとき:
+self.relaxer.reset_()
+```
+
+力を $F = r + \lambda + g$ とすると、relaxer ごとの 1 回の動きは次の表になる。
+
+| relaxer        | `dt` $= \Delta t$ 秒の 1 回の動き                                                            |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `pc.Euler`     | $h \leftarrow h - \frac{\Delta t}{\tau_h} F$                                                 |
+| `pc.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$、続けて $h \leftarrow h - \frac{\Delta t}{\tau_h} v$ |
+
+- relaxer が変えるのは `h` が不動点に着くまでの道で、不動点ではない。不動点では $F = 0$ かつ $v = 0$ になる。relaxer は $\lambda$ を動かさない。$\lambda$ は、どの relaxer が `h` を動かしても、`h` が動いたあとにその `h` の $r$ で進む（[3 節](#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0)）
+- `pc.HeavyBall` の速度は 0 から始まるので、最初の 1 歩は `pc.Euler` の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、$F\,\Delta t$ ではない。定常では $v = F / (1 - e^{-\Delta t/\tau})$ なので、周期が短いほど利得が大きい。遅れた更新（長い `dt`）は速度をより多く忘れるので、安定な側に働く。`dt == 0` の 1 歩は `h` も速度もそのままにする
+- 新しいサンプルのとき、また読んでいる `h` が跳んだときは、$r$ と $\lambda$ は保たれるが、速度が積んだのは前の入力の力である（[jumps](#jumps)）。そこでノードは `reset_()` を呼び、その速度を捨てる。ノード自身の重みが跳んだときは `h` と `mu` が一緒に動き、$r$ も力も跳ばないので、`reset_` は呼ばない
+- bind した relaxer はノードの状態のキー `"relaxer"` に入る。`pc.HeavyBall` なら `{"velocity": ...}`、`pc.Euler` なら空
+- relaxer と値の選び方は[relaxer を選ぶ](pc.md#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)を見る
+
+### 自分の relaxer
+
+自作の relaxer は 2 つのクラスで書く。設定は `pc.Relaxer` を継承して `bind(h)` を実装し、`h` と同じ shape・dtype・device の状態を作る。`bind` が返すものは `pc.BoundRelaxer`（`mujou.Stateful` の一種）を継承し、`step_(h, force, dt, tau_h)`・`reset_()`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと `lam` は BP の credit にならない。例は [API リファレンス](../api/pc.md)にある。

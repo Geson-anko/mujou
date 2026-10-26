@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数と optimizer の決め方、BP との違い、落とし穴、MNIST と CIFAR-10、自作のノードを説明する。
+`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュール。[5. PC-ALM で学習する](../tutorial/5-learn-with-pc.md)では `pc.Chain` で鎖を組み、`pc.show` でバッチを見せた。このページでは時定数・optimizer・relaxer の決め方、BP との違い、落とし穴、MNIST と CIFAR-10、自作のノードを説明する。
 
 ## BP との違い
 
@@ -37,7 +37,7 @@
 | `tau.h`          | 各活動 `h` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                               | 4 ms               |
 | 周期             | 各ノードが更新する間隔                       | `tau.period`（`tau.h / 4`）。`Layer`・`Output` の既定で、`pc.Chain` の周期                                                                                       | 1 ms               |
 | `tau.lam`        | 双対変数 `lam` が追従する速さ                | `2 * tau.h`                                                                                                                                                      | 8 ms               |
-| `tau.momentum`   | `h` の慣性（0 は慣性なし）                   | 小さいノードが多い深い鎖だけ。`tau.h / 4`。下の項を見る                                                                                                          | 1 ms               |
+| `relaxer`        | `h` が自分に掛かる力に沿ってどう動くか       | 既定は `pc.Euler()`。ノードが多い深い鎖だけ `pc.HeavyBall(tau=tau.h / 4)`。[relaxer を選ぶ](#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)を見る                          |                    |
 | 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S = 32`                                                                                                                                               | 32 ms              |
 | `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                              | 24 ms              |
 | `optimizer`      | 重みが学ぶ速さ                               | `pc.SGD(tau=見せる時間 / lr)`。`lr` は 1 バッチあたりの学習率。[optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)を参照                                  | `pc.SGD(tau=0.32)` |
@@ -48,7 +48,6 @@
 - **`learn_interval` を見せる時間の半分から全体の間にする理由**: `learn_interval` はホストが書き込んだ時刻（活動の `time`）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから `learn_interval` 後に学び、バッチを見せている間は以後 `learn_interval` ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない
 - **credit の往復**: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ `2 × ホップ数 × 周期`（ホップ数は経路上の接続の数。MNIST では `Input` から `Output` まで 3 本で 6 周期）。`learn_interval` はこれより長くすることを勧める。短いと、落ち着く前の credit から重みが学ぶ。設計時の測定では、往復が 18 周期の深い鎖が、16 周期では収束し、4 周期では有界だが約 4 倍ずれ、2 周期と 1 周期では発散した
 - **入力がフレームごとに変わるストリーム**: `learn_interval=None` を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は `pc.SGD` の `1 / tau` になる。ストリームに適した値はまだ測っていない
-- **深い鎖の慣性**: `pc.TimeConstants` の `momentum` を決めると、ノードは前の更新の力を覚える `h` の速度を持つ（heavy ball）。`v <- exp(-dt / momentum) * v + 力`、`h -= dt / tau.h * v`。力が続くと `h` が速く動くので、多くのノードの鎖を credit が少ない周期で渡る。不動点は変わらない。新しいサンプルで速度を捨てる。ResNet の 11 ノードでは、`momentum = tau.h / 4` で 64 周期が、慣性なしの 128 周期とほぼ同じ精度になり、実時間は半分で済んだ。`tau.h / 3` は 3 回の実行のうち 1 回で崩れた。力は `dt` ではなく 1 回の更新の重みで効くので、周期に依存する。係数 `exp(-dt / momentum)` が 1 更新あたり 0.8 だと発散した。効くのは credit の先頭を速めることで、恒等写像に近い鎖の遅いモードは速くならない。そのため長く学ぶと、慣性なしで同じ時間見せたときより遅れる（[CIFAR-10](#cifar-10)）
 - **安定性**: `tau.h` に対して周期が短いほど安定する。設計時の測定では、ReLU で `period / tau.h` が 0.5 までは安定し、`period / tau.lam` は 0.1〜0.3 が最もよかった。`S = 32` で BP と同じ精度が出た。それより短い見せる時間は確かめていない
 
 ## optimizer を選ぶ
@@ -77,6 +76,23 @@ optimizer = pc.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0)
 ??? question "`torch.optim` を使わないのはなぜ？"
 
     `torch.optim` の optimizer は時間でなくステップを数えるので、`betas` が与える時定数がノードの学ぶ頻度で変わる。また、作るだけで free-threaded の Python に GIL が戻る。
+
+## relaxer を選ぶ
+
+`pc.Layer` と `pc.Chain` は `relaxer=` を取る。relaxer は、活動 `h` が自分に掛かる力 `F = r + lam + g` に沿ってどう動くかを決める。optimizer が重みに対して行うことの、`h` 版である。省略でき、既定は `pc.Euler()`。状態を持たない設定なので、`pc.Chain` は同じものを全 `pc.Layer` に渡す。各 `pc.Layer` はそれを自分の `h` に bind し、`h` の状態を自分で持つ。`pc.Output` は `h` を持たないので、relaxer を取らない。
+
+| relaxer                 | `dt` 秒の 1 回の動き                                         | 状態       |
+| ----------------------- | ------------------------------------------------------------ | ---------- |
+| `pc.Euler()`            | `h -= (dt / tau.h) * F`                                      | 無し       |
+| `pc.HeavyBall(tau=...)` | `v = exp(-dt / tau) * v + F`、続けて `h -= (dt / tau.h) * v` | `velocity` |
+
+- relaxer が変えるのは `h` が不動点に着くまでの道で、不動点ではない。不動点では `F = 0` で、`lam` は BP の credit になる。どの relaxer が `h` を動かしても、`lam` はこれまでどおり動かした後の `h` で進む
+- 深い鎖には HeavyBall を使う。速度が前の更新の力を覚える（heavy ball）。力が続くと `h` が速く動くので、多くのノードの鎖を credit が少ない周期で渡る。効くのは credit の先頭を速めることで、緩和の遅い裾は速くならない。そのため長く学ぶと、慣性なしで同じ時間見せたときより遅れる（[CIFAR-10](#cifar-10)）。浅い鎖には要らない。MNIST は既定のまま使う
+- `tau` は周期に合わせて選ぶ。力は `dt` ではなく 1 回の更新ごとに掛かるので、利得は 1 更新あたりの係数 `exp(-dt / tau)` で決まる。試した値は周期 `tau.period` に対する `tau = tau.h / 4` で、係数は 0.37（`tau` が周期と同じ）になる。ResNet の 11 ノードでは 64 周期が `pc.Euler()` の 128 周期とほぼ同じ精度になり、実時間は半分で済んだ。ResNet では係数 0.47（`tau.h / 3`）が 3 回の実行のうち 1 回で崩れ、0.8 は発散した。約 0.78 という限界は恒等写像の線形な鎖のもので、実際の限界はそれより低く、更新が遅れるとさらに低くなる。周期を変えるときは、係数を 0.37 の近くに保つ
+- 新しいサンプルのとき、また読んでいる `h` が跳んだときには、速度を 0 に戻す。`r` と `lam` は保たれるが、速度が覚えているのは前の入力の力だからである。ノード自身の重みが跳んだときは戻さない
+- `pc.HeavyBall` の `tau` は有限で > 0 でなければ、`ValueError` を送出する
+- ノードの relaxer の状態は `run.state_dict()["nodes"][path]["state"]["relaxer"]` にある。`pc.HeavyBall` ならキー `"velocity"` の dict、`pc.Euler` なら空の dict。実行のほかの状態と一緒に保存・復元される
+- relaxer を自作するには、optimizer を自作するときと同じく、`pc.Relaxer` と `pc.BoundRelaxer` を継承して書く（[mujou.pc の仕組み](pc-concepts.md#7-relaxer)）。不動点は `F = 0` のところでなければならない。`lam` が credit になるのはそこだけだからである
 
 ## MNIST
 
@@ -117,7 +133,7 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 
 - **残差ブロックごとのノード**: ノードの内側では autograd がモジュール（ブロックのスキップ接続と活性化を含む）を微分し（BP）、ノードの間には PC-ALM のメッセージだけが流れる。ブロックが緩和をどれだけ硬くするかは[落とし穴](#%E8%90%BD%E3%81%A8%E3%81%97%E7%A9%B4)の項に書いた
 - **GPU で実時間**: `device="cuda"` で、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（[デバイス](threads-and-devices.md#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9)）。ノードの 1 回の更新は RTX 4090 で約 1.2 ms かかり、サンプルが 1 でも 128 でも変わらない（カーネルを起動する CPU が限界になる）ので、バッチを 128 にした。`tau.h` を 20 ms にすると周期は 5 ms になり、ワーカー 11 本ならどのノードも、更新の 99% が前の更新から 2 周期（`max_dt`）以内に来た。そのためタイマーは実時間のまま進める（`--time-scale` 1）。周期 3 ms・ワーカー 8 本では追いつかなかった
-- **1 バッチに 64 周期と慣性**: サンプルが出力まで届くのに 1 ノードあたり約 1 周期、credit が戻るのにも同じだけかかるので、11 ノードには 2 ノードのときよりずっと多くの周期が要る。慣性なしでは、64 周期だと 3 epoch 目が BP より 10 ポイントほど低く、128 周期が要った。`tau.momentum = tau.h / 4`（[時定数を決める](#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B)）にすると、64 周期で 3 epoch 目が 128 周期と同じ精度になり、実時間は半分で済む。`tau.h / 3` は 3 回の実行のうち 1 回で崩れ、32 周期ではノードが学習しなかった
+- **1 バッチに 64 周期と慣性**: サンプルが出力まで届くのに 1 ノードあたり約 1 周期、credit が戻るのにも同じだけかかるので、11 ノードには 2 ノードのときよりずっと多くの周期が要る。慣性なしでは、64 周期だと 3 epoch 目が BP より 10 ポイントほど低く、128 周期が要った。`relaxer=pc.HeavyBall(tau=tau.h / 4)`（[relaxer を選ぶ](#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)）にすると、64 周期で 3 epoch 目が 128 周期と同じ精度になり、実時間は半分で済む。`tau.h / 3` は 3 回の実行のうち 1 回で崩れ、32 周期ではノードが学習しなかった
 - **AdamW**: [optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)のとおり、Adam の `lr` から作る。BP の基準も同じ `pc.AdamW` をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが学ぶ時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は同じ勾配に PC-ALM とほぼ同じステップを踏む
 - **`tau.lam = tau.h`**: MNIST と同じ `tau.lam = 2 * tau.h` では credit の落ち着きが遅く、短く見せると PC-ALM が BP に遅れた
 - **GroupNorm**: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない
@@ -169,7 +185,7 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 
     ResNet のブロックはこの範囲を超える。`examples/cifar10/` では、BP で数 epoch 学習した後のブロックの最大特異値が 2〜9 で、3 つのブロックのステージでは 5〜12 になった。範囲を超えると、`lam` は BP の credit に落ち着かない。BP が 1 epoch で学習した重みでは、ブロックごとのノードの `lam` が際限なく大きくなった。PC-ALM が 3 epoch で学習した重みでは、どれだけ緩和しても `lam` と credit の cos が、最初の 5 ノードで 0.5〜0.7 にとどまった（最後の 4 ノードは 0.8 以上）。それでも学習できるのは出力に近いノードが正確だからだが、BP には数ポイント届かない。
 
-    効いたものは 3 つある。1 つ目は、1 バッチを見せる周期を増やすことである。credit がすべてのノードを渡らなければならないからである。2 つ目は、`h` に慣性（`tau.momentum`）を持たせることで、credit が渡るのに要る周期が半分になる。ただし長く学んだときの精度までは上がらない。3 つ目は、ネットワークを少数の大きなノードに切ることで、最も効く。切れ目ごとに次のノードのヤコビアンが小さいところを選ぶ。最後のステージと head の前で切る 2 ノードは、メッセージを GPU に置いたまま渡す実行で、10 epoch 後に BP と並んだ。
+    効いたものは 3 つある。1 つ目は、1 バッチを見せる周期を増やすことである。credit がすべてのノードを渡らなければならないからである。2 つ目は、`h` に慣性（`pc.HeavyBall`）を持たせることで、credit が渡るのに要る周期が半分になる。ただし長く学んだときの精度までは上がらない。3 つ目は、ネットワークを少数の大きなノードに切ることで、最も効く。切れ目ごとに次のノードのヤコビアンが小さいところを選ぶ。最後のステージと head の前で切る 2 ノードは、メッセージを GPU に置いたまま渡す実行で、10 epoch 後に BP と並んだ。
 
     効かなかったものが 2 つある。1 つ目は、新しいサンプルで行ごとの `lam` とずれを捨てることで、学習が進まなかった（prequential 精度が 27% のまま）。2 つ目は、次のノードが硬いところで、ノードの刻みを縮める方法である（べき乗法で最大の曲率を見積もった）。固定した重みでは `lam` が正しくなったが、学習は遅くなった。刻みを縮めたサンプルは前のバッチの `lam` を長く引きずり、学習中の credit が間違っていたからである。刻みが縮むほど、600 バッチ後のテスト精度は 46% から 20% に下がった。
 
@@ -177,15 +193,16 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 
 ## 自分のノードを書く
 
-`mujou.pc.functional` にノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）。重みは optimizer が動かす。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。ここに出てくる名前（`mu`・`lam`・`g_in`・`jumps`・`Tick`）は [mujou.pc の仕組み](pc-concepts.md)で説明している。
+`mujou.pc.functional` にノードを構成する計算がある。`vjp` と `loss_vjp`（ノードのエネルギーの勾配）、`relax_`（`h` と `lam` の 1 ステップ）。重みは optimizer が、`h` は relaxer が動かす。複数の入力を持つノードのように `pc.Layer` で書けないノードは、これらで書く。ここに出てくる名前（`mu`・`lam`・`g_in`・`jumps`・`Tick`）は [mujou.pc の仕組み](pc-concepts.md)で説明している。
 
-1. `__init__` で module を device に載せた後、クロックと bind した optimizer を属性に置く。どちらもそれだけでノードの状態に入る
+1. `__init__` で module を device に載せた後、クロックと bind した optimizer（`h` を `pc.HeavyBall` などで動かすなら、bind した relaxer も）を属性に置く。どれもそれだけでノードの状態に入る
     - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる
     - `self.optimizer = optimizer.bind(params)`。`params` は学ぶパラメータ。bind はノードごとに行う。bind した同じ optimizer を 2 つのノードに持たせてはいけない
+    - `self.relaxer = relaxer.bind(h)`。`h` はノードが持つ活動で、同じくノードごとに bind する。置かなければ、`relax_` は素の 1 歩を進める
 2. 毎回の更新で `t = self.clock.tick(dt, act["time"], self.timer.now())` を呼ぶ
 3. bind した `params` を同じ順で `pc.functional.vjp` に渡し、予測 `mu`、`g_in`、学ぶなら `g_theta` を求めて、`g_in` を前のノードへ送る
 4. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
-5. `pc.functional.relax_(..., t.dt, tau)` で活動を動かす
+5. `pc.functional.relax_(..., t.dt, tau, self.relaxer)` で活動を動かす。手順 4 で付け替えたときは、先に `self.relaxer.reset_()` を呼ぶ。relaxer が覚えているのは前の入力の力だからである
 6. `h` を `pc.Activity` で送る。自分の `jumps` と、受け取った活動の `y`・`mask`・`time` を組にする
 7. `t.learn` が True で `mask` が True のサンプルがあれば、`self.optimizer.step_([g / B for g in g_theta], t.elapsed)` で学ぶ。`B` はバッチのサンプルの数。optimizer はバッチを知らないので、`B` で割るのはノード
 
