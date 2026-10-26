@@ -69,3 +69,11 @@
 - 固定刻みのまま、ブロックごとの 11 ノードを S=128、τ_h=20 ms、倍率 1.0、ワーカー 11 本で動かすと学べる。S=64 は 10 ホップの遅れで実効の緩和時間が足りず BP より約 10 ポイント低い（10 epoch で頭打ち 51%）。ノードの 1 更新は B=1 でも 128 でも約 1.2 ms なので、B=128 のまま（B=1 は 1 epoch が 128 倍遅い）
 - 例を更新: `resnet()` が 10 モジュール（stem+block1、block2〜9、head）、`main.py` の既定を steps 128、tau-h 20e-3、time-scale 1.0、workers 11 に。結果（seed 0、main.py の既定）: 3 epoch 目 prequential PC 50.72% / BP 54.45%、test 54.18% / 59.02%。10 epoch 目 68.73% / 73.27%、68.95% / 72.61%。1 epoch は PC 251 s（実時間）、BP 2.8 s。3 epoch 約 14 分、10 epoch 約 45 分
 - docs（en / ja の pc.md、examples.md）を更新。ja は yomiyasu（run 20261026T163945Z-51101be3、verify 済み）。落とし穴の項を「発散する」から「正確にならない」に直し、効いたもの・効かなかったものを書いた
+
+## /goal の追加対応（2026-10-26）: 新しい緩和の機能 TimeConstants.momentum
+
+Stop hook が「新しい feature が動く形で入っていない」と指摘したので、さらに 2 つ試した。
+
+- 新しいサンプルで行の λ と h を捨てる `reset_on_new`: S=64 で prequential が 27% のまま。却下
+- h の heavy ball（`TimeConstants.momentum`）: 採用。S=64 + `momentum = 0.25 τ_h` で 3 epoch 目が慣性なしの S=128 と並び、実時間が半分（1 epoch 126 s、3 epoch 約 8 分、10 epoch 約 25 分）。例の既定を steps 64、`--momentum` 0.25（τ_h の倍数）に。結果（seed 0）: 3 epoch 目 prequential 49.48% / BP 54.45%、test 48.71% / 59.02%。10 epoch 目 62.77% / 73.27%、62.89% / 72.61%。`--steps 128 --momentum 0` は 68.73% / 68.95%
+- algorithm-reviewer の指摘（should-fix 3 件）は反映: dt=0 は何もしない、docstring に「過渡だけ速い・更新あたりの重み・安定域」を書いた、`specs/pc.md` に記録。テストを足した（TestRelaxWithMomentum、TestMomentum）
