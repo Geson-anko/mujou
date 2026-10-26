@@ -14,8 +14,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast, final
 
+import torch
+
 from mujou import _native
-from mujou.codec import schema, to_core
+from mujou.codec import schema, to_core, wait_for_clones
 from mujou.port import AnyPort, AnySlot, Channel, Port, Wire
 from mujou.spec import MessageSpec
 from mujou.tree import Tree
@@ -34,10 +36,17 @@ class Wiring:
     inputs: Mapping[AnyPort, _native.InputSlot]
     # The wires of the ports of each node, in the order of tree.members.
     wires: tuple[Mapping[AnyPort, Wire], ...]
+    # For each node, in the same order: the CUDA devices other than its own
+    # where the core holds what its peers send.
+    read_devices: tuple[frozenset[torch.device], ...]
+    # Where what the host writes to each of its ports stays: the CUDA device of
+    # the port's node (its only reader), or None for a node on the CPU.
+    input_devices: Mapping[AnyPort, torch.device | None]
 
     def write(self, values: Mapping[Any, object]) -> _native.Timestamp:
         """Write ``values`` to the ports the host writes, all at once, and return
-        the time they bear.
+        the time they bear. A dense tensor on the CUDA device of the port's
+        node stays there (``input_devices``).
 
         Raises:
             ValueError: A port is not one that the host writes in this run, or
@@ -46,9 +55,9 @@ class Wiring:
                 ``int``, ...), or a dict message does not have the spec's keys.
             OverflowError: An ``int`` is out of the range of its ``IntSpec``.
         """
-        return self.group.write(
-            [self._item(port, value) for port, value in values.items()]
-        )
+        items = [self._item(port, value) for port, value in values.items()]
+        wait_for_clones(item for _, item in items)
+        return self.group.write(items)
 
     def outbox(self, port: AnyPort) -> tuple[_native.Slot, MessageSpec[Any]]:
         """The slot of ``port`` that the host reads, and the spec of its
@@ -81,7 +90,8 @@ class Wiring:
                 "of this run that receives"
             )
         spec = cast("MessageSpec[Any]", port.recv_spec)  # it receives
-        return slot, to_core(spec, value, label)
+        device = self.input_devices[port]
+        return slot, to_core(spec, value, label, device=device, wait=False)
 
 
 def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
@@ -111,12 +121,26 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         port: {channel: k for k, channel in enumerate(port.channels)}
         for port in tree.owners
     }
+    device = {
+        port: member.node.device
+        for member in tree.members
+        for port in member.ports.values()
+    }
+    # Where what each port that sends stays: its node's CUDA device, if a node
+    # on CUDA reads it. Nodes on the CPU and the host read a copy in host
+    # memory sooner, which the sender makes once.
+    held = {
+        port: device[port] if _held(port, device) else None
+        for port in tree.owners
+        if port.send_spec is not None
+    }
     wires = tuple(
         {
             port: Wire(
                 port=port,
                 label=tree.label(port),
                 device=member.node.device,
+                cuda=held.get(port),
                 outlet=outlets.get(port),
                 sources=_sources(port, outlets, inputs, indices),
                 targets=indices[port],
@@ -125,7 +149,34 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
         }
         for member in tree.members
     )
-    return Wiring(tree, group, outlets, inputs, wires)
+    read_devices = tuple(
+        frozenset(
+            peer
+            for port in member.ports.values()
+            if port.recv_spec is not None
+            for channel in port.channels
+            if (peer := held[channel.other(port)]) is not None
+            and peer != member.node.device
+        )
+        for member in tree.members
+    )
+    # The reader of what the host writes is the port's node, so that it reads
+    # on its own stream: a node elsewhere would copy the value on a stream it
+    # has not set, maybe the default one that the host computes on, and so wait
+    # for the host.
+    input_devices = {
+        port: device[port] if device[port].type == "cuda" else None for port in inputs
+    }
+    return Wiring(tree, group, outlets, inputs, wires, read_devices, input_devices)
+
+
+def _held(port: AnyPort, device: Mapping[AnyPort, torch.device]) -> bool:
+    """Whether the core holds what ``port`` sends on the CUDA device of its node:
+    the node is on CUDA, and so is the node of a peer (``device`` is that of
+    each port's node)."""
+    return device[port].type == "cuda" and any(
+        device[channel.other(port)].type == "cuda" for channel in port.channels
+    )
 
 
 def written_by_the_host(port: AnyPort) -> bool:

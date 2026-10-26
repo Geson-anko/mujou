@@ -1,13 +1,22 @@
+from typing import TypedDict
+
 import pytest
 import torch
 
+from mujou._native import BufferView
+from mujou.codec import peek
 from mujou.network import Group, Network
 from mujou.port import MultiPort, Port
-from mujou.spec import TensorSpec
+from mujou.spec import DictSpec, TensorSpec
 from mujou.time import ReadOnlyTimer, VirtualTimer
 from mujou.tree import walk
 from mujou.wiring import Wiring, wire
-from tests.mujou.nodes import F64, Chain, Hidden, Probe, vec
+from tests.mujou.nodes import F64, Chain, Hidden, Probe, probe_on, vec
+
+
+class Both(TypedDict):
+    x: torch.Tensor
+    y: torch.Tensor
 
 
 def wired(root: Network | Probe) -> Wiring:
@@ -103,3 +112,104 @@ class TestWrite:
         wiring.write({node.inp: torch.tensor(1.0)})  # pyright: ignore[reportAttributeAccessIssue]
         (value,) = wiring.inputs[node.inp].read().values  # pyright: ignore[reportAttributeAccessIssue]
         assert torch.equal(torch.from_dlpack(value), torch.tensor(1.0))
+
+
+class TestDevices:
+    def test_nodes_on_the_cpu_read_no_cuda_device(self):
+        assert wired(Chain()).read_devices == (frozenset(), frozenset())
+
+    @pytest.mark.cuda(2)
+    def test_a_node_reads_the_cuda_devices_of_its_peers_but_its_own(self):
+        devices = ("cuda:0", "cuda:1", "cpu")
+        sources = [probe_on(d, out=Port(send=vec())) for d in devices]
+        sink = probe_on("cuda:1", inp=MultiPort(recv=vec()))
+        on_cpu = probe_on("cpu", inp=Port(recv=vec()))
+        for source in sources:
+            source.out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        sources[0].out.connect(on_cpu.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        a, b, c = sources
+        net = Group(a=a, b=b, c=c, sink=sink, on_cpu=on_cpu)
+        cuda0 = frozenset({torch.device("cuda", 0)})
+        assert wired(net).read_devices == (frozenset(),) * 3 + (cuda0, cuda0)
+
+    def test_a_cpu_tensor_that_the_host_writes_is_in_host_memory(self):
+        node = Probe(inp=Port(recv=vec()))
+        wiring = wired(Group(node=node))
+        x = torch.ones(2, dtype=F64)
+        wiring.write({node.inp: x})  # pyright: ignore[reportAttributeAccessIssue]
+        (value,) = wiring.inputs[node.inp].read().values  # pyright: ignore[reportAttributeAccessIssue]
+        assert isinstance(value, BufferView)
+        assert torch.equal(torch.from_dlpack(value), x)
+
+    @pytest.mark.cuda(2)
+    def test_what_the_host_writes_stays_only_on_the_device_of_its_node(self):
+        # One write to the ports of a node on cuda:0 and of a node on the CPU,
+        # with tensors on two devices, while the host's current device is
+        # cuda:1. Only a tensor on cuda:0 for the node on cuda:0 stays.
+        spec = DictSpec(Both, x=vec(), y=vec())
+        on_cuda = probe_on("cuda:0", a=Port(recv=vec()), b=Port(recv=spec))
+        on_cpu = Probe(c=Port(recv=vec()))
+        wiring = wired(Group(on_cuda=on_cuda, on_cpu=on_cpu))
+        a = torch.ones(2, dtype=F64, device="cuda:0")
+        b = {
+            "x": torch.full((2,), 2.0, dtype=F64, device="cuda:0"),
+            "y": torch.full((2,), 3.0, dtype=F64, device="cuda:1"),
+        }
+        c = torch.full((2,), 4.0, dtype=F64, device="cuda:0")
+        ports = (on_cuda.a, on_cuda.b, on_cpu.c)  # pyright: ignore[reportAttributeAccessIssue]
+        with torch.cuda.device(1):
+            wiring.write(dict(zip(ports, (a, b, c), strict=True)))
+        read_a, read_b, read_c = (
+            peek(port.recv_spec, wiring.inputs[port].read().values) for port in ports
+        )
+        assert isinstance(read_a, torch.Tensor) and isinstance(read_c, torch.Tensor)
+        assert isinstance(read_b, dict)
+        for read, sent, stays in (
+            (read_a, a, True),
+            (read_b["x"], b["x"], True),
+            (read_b["y"], b["y"], False),
+            (read_c, c, False),
+        ):
+            assert read.device == (sent.device if stays else torch.device("cpu"))
+            assert read.data_ptr() != sent.data_ptr()
+            assert torch.equal(read.cpu(), sent.cpu())
+
+    @pytest.mark.cuda
+    def test_a_port_without_peers_sends_through_host_memory(self):
+        # Only the host reads it.
+        out = Port(send=vec())
+        wiring = wired(Group(source=probe_on("cuda:0", out=out)))
+        assert wiring.wires[0][out].cuda is None
+
+    @pytest.mark.cuda
+    def test_a_port_that_no_node_on_cuda_reads_sends_through_host_memory(self):
+        out = Port(send=vec())
+        source = probe_on("cuda:0", out=out)
+        sink = Probe(inp=Port(recv=vec()))
+        out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        wiring = wired(Group(source=source, sink=sink))
+        assert wiring.wires[0][out].cuda is None
+        assert wiring.read_devices == (frozenset(), frozenset())
+        wiring.wires[0][out].send(torch.ones(2, dtype=F64, device="cuda:0"))
+        for slot in (wiring.outlets[out].outbox, wiring.outlets[out].channel(0)):
+            assert isinstance(slot.read().values[0], BufferView)
+
+    @pytest.mark.cuda
+    def test_the_outbox_and_every_channel_hold_one_clone_on_the_device(self):
+        out = Port(send=vec())
+        source = probe_on("cuda:0", out=out)
+        # One reader on CUDA among readers on the CPU is enough.
+        sinks = {f"s{k}": Probe(inp=Port(recv=vec())) for k in range(2)}
+        sinks["s2"] = probe_on("cuda:0", inp=Port(recv=vec()))
+        for sink in sinks.values():
+            out.connect(sink.inp)  # pyright: ignore[reportAttributeAccessIssue]
+        wiring = wired(Group(source=source, **sinks))
+        x = torch.ones(2, dtype=F64, device="cuda:0")
+        wiring.wires[0][out].send(x)
+        outlet = wiring.outlets[out]
+        (held,) = outlet.outbox.read().values
+        assert isinstance(held, torch.Tensor)
+        assert held.device == torch.device("cuda", 0)
+        assert held.data_ptr() != x.data_ptr()
+        for k in range(3):
+            assert outlet.channel(k).read().values[0] is held

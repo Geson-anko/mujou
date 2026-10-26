@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import pytest
 import torch
@@ -36,6 +36,7 @@ from tests.mujou.nodes import (
     assert_same_tree,
     entries,
     port_slots,
+    probe_on,
     updates,
     vec,
 )
@@ -1507,6 +1508,120 @@ class Net(Network):
         done = self.run_script(body, marker)
         assert done.returncode == 0, done.stderr
         assert done.stdout.strip() == "stopped"
+
+
+@pytest.mark.cuda
+class TestCuda:
+    def test_the_host_reads_what_a_cuda_node_sends_on_the_cpu(
+        self, start_manual: StartManual
+    ):
+        # A peer on CUDA, so that the core holds the message on the device.
+        out, inp = Port(send=vec()), Port(recv=vec())
+        out.connect(inp)
+        x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
+        node = probe_on("cuda:0", lambda: out.send(x), out=out)
+        run = start_manual(Group(node=node, peer=probe_on("cuda:0", inp=inp)))
+        run.step(H, node)
+        expected = x.cpu()
+        values = run.subscribe(out, timeout=10.0)
+        read = [
+            run.read(out),
+            run.read_with_time(out)[0],
+            next(values)[0],
+            run.wait_for(out, lambda _: True, timeout=10.0)[0],
+        ]
+        for value in read:
+            assert value.device == torch.device("cpu")
+            assert torch.equal(value, expected)
+        run.shutdown()
+        assert torch.equal(run.read(out), expected)
+
+    @pytest.mark.parametrize(
+        "written", ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.cuda(2))]
+    )
+    def test_nodes_on_any_device_receive_what_the_host_writes_on_cuda(
+        self, start_manual: StartManual, written: str
+    ):
+        devices = ["cuda:0", "cpu"] + (["cuda:1"] if written == "cuda:1" else [])
+        ports = [Port(recv=vec()) for _ in devices]
+        nodes = {
+            f"n{k}": probe_on(d, port.recv, inp=port)
+            for k, (d, port) in enumerate(zip(devices, ports, strict=True))
+        }
+        first = torch.tensor([1.0, 2.0], dtype=F64, device=written)
+        run = start_manual(Group(**nodes), inputs={port: first for port in ports})
+        run.step(H, *nodes.values())
+        second = torch.tensor([3.0, 4.0], dtype=F64, device=written)
+        run.write({port: second for port in ports})
+        run.step(H, *nodes.values())
+        for d, node in zip(devices, nodes.values(), strict=True):
+            received = [cast(torch.Tensor, r) for r in node.results]
+            assert [r.device for r in received] == [torch.device(d)] * 2
+            assert torch.equal(received[0].cpu(), first.cpu())
+            assert torch.equal(received[1].cpu(), second.cpu())
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize(
+        "reader", ["cuda:0", "cpu", pytest.param("cuda:1", marks=pytest.mark.cuda(2))]
+    )
+    def test_a_reader_does_not_wait_for_what_the_host_queues_after_writing(
+        self, start_manual: StartManual, reader: str
+    ):
+        # The host computes on the default stream, which a reader that copied
+        # the value on a stream it has not set would share.
+        inp = Port(recv=TensorSpec((1 << 20,)))
+        node = probe_on(reader, inp.recv, inp=inp)
+        run = start_manual(Group(node=node))
+        # Run the kernel once: CUDA loads a kernel's code when it first runs,
+        # waiting for the whole device.
+        torch.cuda._sleep(1)  # pyright: ignore[reportPrivateUsage]
+        torch.cuda.synchronize()
+        x = torch.full((1 << 20,), 5.0, device="cuda:0")
+        run.write({inp: x})
+        # About 0.1 s on this thread's stream; _sleep is a private API of
+        # torch, which its own tests use for this.
+        torch.cuda._sleep(250_000_000)  # pyright: ignore[reportPrivateUsage]
+        busy = torch.cuda.current_stream(0).record_event()
+        run.step(H, node)
+        assert not busy.query()
+        received = cast(torch.Tensor, node.results[0])
+        assert received.device == torch.device(reader)
+        assert torch.equal(received.cpu(), x.cpu())
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("current", [0, pytest.param(1, marks=pytest.mark.cuda(2))])
+    def test_a_write_waits_for_the_hosts_stream(
+        self, start_manual: StartManual, current: int
+    ):
+        # With cuda:1 current, the write waits for this thread's stream of the
+        # tensor's device all the same.
+        n = 1 << 22  # large enough that a missing wait shows
+        inp = Port(recv=TensorSpec((n,)))
+        node = probe_on("cuda:0", inp.recv, inp=inp)
+        run = start_manual(Group(node=node))
+        # Run each kind of kernel once: CUDA loads a kernel's code when it
+        # first runs, waiting for the whole device, which would hide a missing
+        # wait for the stream.
+        warm = torch.ones(n, device="cuda:0")
+        warm.clone().fill_(2.0).cpu()
+        torch.cuda._sleep(1)  # pyright: ignore[reportPrivateUsage]
+        with torch.cuda.device(current):
+            run.write({inp: warm})
+        run.step(H, node)
+        torch.cuda.synchronize()
+        x = torch.empty(n, device="cuda:0")
+        # About 0.1 s on this thread's stream of cuda:0 before x is filled;
+        # _sleep is a private API of torch, which its own tests use for this.
+        torch.cuda._sleep(250_000_000)  # pyright: ignore[reportPrivateUsage]
+        # A value of its own: memory of an earlier case may still hold another.
+        value = 5.0 + current
+        x.fill_(value)
+        with torch.cuda.device(current):
+            run.write({inp: x})
+        run.step(H, node)
+        assert torch.equal(
+            cast(torch.Tensor, node.results[-1]).cpu(), torch.full((n,), value)
+        )
 
 
 # Large enough that the GPU is still working when the CPU moves on: a missing wait

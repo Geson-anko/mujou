@@ -4,14 +4,15 @@ import queue
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, Any, cast, override
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Never, cast, override
 
 import pytest
 import torch
 
 from mujou import Group, Network, NetworkError, Node, Port, TensorSpec
 from mujou.time import VirtualTimer
-from tests.mujou.nodes import F64, vec
+from tests.mujou.nodes import F64, probe_on, vec
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import Start, StartManual
@@ -541,6 +542,45 @@ print(torch.cuda.is_initialized())
         assert received is not None
         assert received.device == torch.device("cuda", 1)
         assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
+
+    @pytest.mark.cuda(2)
+    def test_a_reader_off_the_writers_device_copies_on_a_stream_of_its_own(
+        self, start_manual: StartManual
+    ):
+        # The copy from cuda:0 queues on the reader's current stream of cuda:0.
+        out = Port(send=vec())
+        x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")
+
+        def send() -> torch.cuda.Stream:
+            out.send(x)
+            return torch.cuda.current_stream(0)
+
+        def reads(inp: Port[Never, torch.Tensor]) -> Callable[[], object]:
+            def read() -> tuple[torch.cuda.Stream, int]:
+                inp.recv()
+                return torch.cuda.current_stream(0), torch.cuda.current_device()
+
+            return read
+
+        a, b = Port(recv=vec()), Port(recv=vec())
+        out.connect(a)
+        out.connect(b)
+        source = probe_on("cuda:0", send, out=out)
+        on_cpu, on_cuda1 = (
+            probe_on("cpu", reads(a), a=a),
+            probe_on("cuda:1", reads(b), b=b),
+        )
+        run = start_manual(Group(source=source, on_cpu=on_cpu, on_cuda1=on_cuda1))
+        run.step(H, source, on_cpu, on_cuda1)
+        writers = source.results[0]
+        (cpu_stream, _), (cuda1_stream, cuda1_device) = (
+            cast(tuple[torch.cuda.Stream, int], node.results[0])
+            for node in (on_cpu, on_cuda1)
+        )
+        for stream in (cpu_stream, cuda1_stream):
+            assert stream not in (torch.cuda.default_stream(0), writers)
+        assert cpu_stream != cuda1_stream
+        assert cuda1_device == 1
 
     def test_the_state_is_on_the_cpu_and_restores_to_the_device(
         self, start_manual: StartManual

@@ -4,6 +4,8 @@ use std::ffi::c_void;
 
 /// `kDLCPU`: ordinary host memory.
 pub const DEVICE_CPU: i32 = 1;
+/// `kDLCUDA`: the memory of a CUDA device, which the CPU cannot read.
+pub const DEVICE_CUDA: i32 = 2;
 /// `kDLCUDAHost`: pinned host memory, readable from the CPU as well.
 pub(crate) const DEVICE_CUDA_HOST: i32 = 3;
 

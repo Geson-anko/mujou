@@ -153,6 +153,19 @@ class Probe(Node):
             self.results.append(e)
 
 
+def probe_on(
+    device: str,
+    update: Callable[[], object] = lambda: None,
+    **ports: Port[Any, Any] | MultiPort[Any, Any],
+) -> Probe:
+    """A ``Probe`` that computes on ``device``."""
+
+    class On(Probe):
+        on_device = device
+
+    return On(update, **ports)
+
+
 class Hidden(Node):
     """Sends and receives ``(2, 3)`` on both sides."""
 

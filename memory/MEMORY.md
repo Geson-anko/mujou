@@ -30,8 +30,8 @@
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook の例外でも全体を終了。end は失敗を検出した時刻、全ノードの on_exception → on_stop、以後のホストの呼び出しが NetworkError。例外時の状態は取得しない
 - [ネットワークと Port](project_network_ports.md) — 接続点は Port（受け取る相手は高々 1、送るだけなら何本でも）と MultiPort、向きなしの send / recv の spec の組、接続は相手 → Channel の dict、Network の Port は参照、集約は更新手法の責任
 - [コアの carry は廃止](project_carry.md) — 目標 y・mask・time は Activity のフィールドで運ぶ（R1）
-- [ホストの入出力](project_host_io.md) — run はバックグラウンド、Run の write / read / read_with_time / subscribe / wait_for / state_dict。時刻 None はまだ書かれていない、has_received は無い。初期値は initial / inputs= / write。複数 Port の write は版番号で一斉切り替え
-- [GPU の扱い](project_gpu_policy.md) — コアは GPU をサポートしない。GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡しだけ。ノードのデバイスは CPU と CUDA だけ
+- [ホストの入出力](project_host_io.md) — run はバックグラウンド、Run の write / read / read_with_time / subscribe / wait_for / state_dict。時刻 None はまだ書かれていない、has_received は無い。初期値は initial / inputs= / write。複数 Port の write は版番号で一斉切り替え。write は持ち主のノードの CUDA device のテンソルだけ device に置く
+- [GPU の扱い](project_gpu_policy.md) — CUDA のノードが自分の device で送ったテンソルは、CUDA のノードが読むポートならコアが device に置いたまま持つ。ホストの write は持ち主のノードの device のテンソルだけ（2026-10-24 にユーザーが「コアは GPU をサポートしない」を覆した）。書き手が send で自分の stream を待つ（S2）、読み手は record_stream。ノードのデバイスは CPU と CUDA だけ
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — PyTorch を必須の依存として全面採用、torch に依存させないのは _native と mujou.time だけ。mujou.Node は純 Python で Driver が CUDA と同期を受け持つ（R3）。乱数生成器は super().__init__ で作り状態に入る
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [Windows の CI](project_windows_ci.md) — Test は Ubuntu・macOS・Windows。encoding を明示、SIGINT は raise_signal、.claude/ は Windows 対象外（2026-10-23）

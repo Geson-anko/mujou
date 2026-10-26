@@ -86,6 +86,14 @@ asyncio や Redis が 1 スレッドで大量のタスクを捌けるのは、�
 
 lock-free の `arc-swap` は使わない。arc-swap の読み手は、読んだポインタを「借り」として、プロセスに 1 つの一覧に記録する。書き手は値を外すと、外したポインタと**値が同じ**借りを、どの `ArcSwap` のものかを区別せずに払う。読み手がスロット A からポインタ P を読んだあと、借りを記録する前に、P が解放されて同じアドレスにスロット B の値が置かれることがある。そのあと B の書き手がその値を外すと、読み手の借りを払ってしまい、読み手は B の値を A の値として返す。型が違えば型の取り違えになり、SIGSEGV を起こした。`readers_never_see_a_message_of_another_slot`（`crates/mujou-core/src/slot.rs`）はこれを確率的に捉える smoke test。
 
+メッセージのフィールドは、プールのバッファ（`Value::Bytes`）か、書き手がプールの外に持つ不透明な値（`Value::Held`、`Arc<dyn Any + Send + Sync>`）のどちらか。書き手は `Fill` に渡されるフィールドごとの `FieldOut` に、`bytes()`（初回にプールからバッファを取る）か `hold(value)` で値を置く。保持するフィールドはホストのプールからバッファを取らない。不透明な値の中身は bindings が入れる `Py<PyAny>`（codec が書き手の device の上で作った、detach したコピーの `torch.Tensor`）で、コアは読まず検査もしない。device・stream・event もコアは知らない。shape と dtype の照合は `dlpack::import::check`（`copy_from` から切り出したもの）を bindings が呼ぶ（[メッセージ](messages.md#コアの中の値)）。
+
+却下した案は次のとおり。
+
+- コアのスロットに device ポインタ・stream・event を持たせる: コアに CUDA の意味論が入り、torch を import しない原則も崩れる
+- Python の側に別の表を持ち、スロットには鍵だけを置く: 版番号の一斉切り替え・`wait_newer`・寿命の管理を、コアと二重に持つことになる
+- `Slot<V>` の総称化: 変更が大きく、得るものが無い
+
 複数のマシンにまたがる実行は想定しない。
 
 ## 性能の予算

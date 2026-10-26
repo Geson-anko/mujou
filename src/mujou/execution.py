@@ -168,7 +168,12 @@ class Run:
         """Write messages to unconnected ports that receive, and return the time
         they are stamped with.
 
-        The values are detached and copied. All of them switch together and bear
+        The values are detached and copied. A dense tensor on the CUDA device
+        of the port's node is copied on that device, on this thread's current
+        stream of it, which ``write`` waits for; any other tensor is copied to
+        host memory (so a node on another device or on the CPU never waits for
+        what this thread queues on a GPU). The nodes receive the values on
+        their own devices. All of them switch together and bear
         the same time: at any one moment, a node sees either all of them or none.
         (A node that reads two of them one after the other may still see a later
         write in between; compare the times to tell.) Any such port of the run
@@ -623,7 +628,8 @@ def run[P: Port[Any, Any]](
             ``mujou.time.global_timer``, which every run without a timer of its
             own shares.
         inputs: The initial values of unconnected ports that receive, as
-            ``Run.write`` takes them, written when the run starts. Written after
+            ``Run.write`` takes them (and copies them, to the same places),
+            written when the run starts. Written after
             ``state``, they replace its values.
         state: A tree from ``Run.state_dict`` to restore. The slots, the
             nodes' states (through each node's ``load_state_dict``, after its
@@ -768,15 +774,15 @@ def _nodes(
     saved = restored or [(None, None)] * len(members)
     return [
         _NodeEntry(
-            Driver(member.node, clock, wires),
+            Driver(member.node, clock, wires, devices),
             wiring.tree.name(member.path),
             member.node.period,
             member.node.dedicated_thread,
             last_update_ns,
             state,
         )
-        for member, wires, (state, last_update_ns) in zip(
-            members, wiring.wires, saved, strict=True
+        for member, wires, devices, (state, last_update_ns) in zip(
+            members, wiring.wires, wiring.read_devices, saved, strict=True
         )
     ]
 

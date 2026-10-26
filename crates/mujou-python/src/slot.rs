@@ -1,11 +1,13 @@
 //! Bindings of `mujou_core::slot`.
 //!
 //! Values come in as any object with `__dlpack__` (in practice `torch.Tensor`) or
-//! as Python scalars (`crate::scalar`), and are copied into pooled buffers; they
-//! go out as `BufferView`s, which torch reads with `torch.from_dlpack(view)` and
-//! then copies, or which `item()` reads as a scalar. Copying on both sides keeps
-//! every message immutable however the caller later changes its tensors
-//! (`specs/messages.md`).
+//! as Python scalars (`crate::scalar`). A value in host memory is copied into a
+//! pooled buffer and goes out as a `BufferView`, which torch reads with
+//! `torch.from_dlpack(view)` and then copies, or which `item()` reads as a
+//! scalar. A tensor on a CUDA device is checked and held as it is, and goes out
+//! as that very tensor: the writer hands over a copy that nobody changes, and
+//! the reader copies it (the codec does both). Either way every message stays
+//! immutable however the caller later changes its tensors (`specs/messages.md`).
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -15,9 +17,9 @@ use crate::hint::Values;
 use crate::scalar::{Scalar, read_scalar, to_python};
 use crate::time::{PyReadOnlyTimer, PyTimestamp};
 use crate::wait::{to_duration, wait_interruptibly};
-use mujou_core::buffer::{Buffer, Message};
-use mujou_core::dlpack::ffi::{DEVICE_CPU, DLDataType, VERSION};
-use mujou_core::dlpack::import::copy_from;
+use mujou_core::buffer::{Buffer, FieldOut, Held, Message, Value as CoreValue};
+use mujou_core::dlpack::ffi::{DEVICE_CPU, DEVICE_CUDA, DLDataType, VERSION};
+use mujou_core::dlpack::import::{check, copy_from};
 use mujou_core::schema::{FieldError, FieldSpec, Schema, SchemaError};
 use mujou_core::slot::{self as core, SlotError, Target};
 use mujou_core::time::Timestamp;
@@ -34,6 +36,8 @@ fn to_py_err(err: SlotError) -> PyErr {
 /// One value of a message, ready to be copied without the GIL.
 enum Value {
     Tensor(TensorPtr),
+    /// A tensor on a CUDA device (a `Py<PyAny>`), checked and held as it is.
+    Held(Held),
     Scalar(Scalar),
 }
 
@@ -71,6 +75,21 @@ fn borrow_values<'py>(
     for (value, field) in values.iter().zip(fields) {
         let at = core::location(slot, &field.name);
         let value = match borrow_tensor(value, &at)? {
+            // SAFETY: the capsule owns the tensor and is alive.
+            Some((_capsule, tensor))
+                if unsafe { (*tensor.0).device.device_type } == DEVICE_CUDA =>
+            {
+                // SAFETY: as above; the check reads only its description.
+                unsafe { check(&*tensor.0, field) }.map_err(|error| {
+                    to_py_err(SlotError {
+                        slot: slot.to_owned(),
+                        field: field.name.clone(),
+                        error,
+                    })
+                })?;
+                let held: Py<PyAny> = value.clone().unbind();
+                Value::Held(Arc::new(held))
+            }
             Some((capsule, tensor)) => {
                 borrowed._capsules.push(capsule);
                 Value::Tensor(tensor)
@@ -82,28 +101,32 @@ fn borrow_values<'py>(
     Ok(borrowed)
 }
 
-/// Copies each borrowed value into the buffer of its field. Calls no Python, so
-/// it runs without the GIL.
+/// Sets each field from its borrowed value: copies a host value into a buffer,
+/// and holds a CUDA tensor. Calls no Python, so it runs without the GIL.
 fn copy_into(
     values: &[Value],
     fields: &[FieldSpec],
     slot: &str,
-    bytes: &mut [&mut [u8]],
+    out: &mut [FieldOut<'_>],
 ) -> Result<(), SlotError> {
-    for ((value, field), dst) in values.iter().zip(fields).zip(bytes.iter_mut()) {
+    for ((value, field), dst) in values.iter().zip(fields).zip(out.iter_mut()) {
         let t = match value {
             Value::Tensor(t) => t,
+            Value::Held(held) => {
+                dst.hold(Arc::clone(held));
+                continue;
+            }
             // `read_scalar` read it as the scalar of this very field.
             Value::Scalar(s) => {
-                dst.copy_from_slice(s.bytes());
+                dst.bytes().copy_from_slice(s.bytes());
                 continue;
             }
         };
         // SAFETY: `t` came from a capsule that the caller's `Borrowed` keeps
         // alive, and the producer guarantees it describes readable memory
-        // (checked to be on the host by `copy_from`). `dst` is a pool buffer,
-        // distinct from it.
-        unsafe { copy_from(&*t.0, field, dst) }.map_err(|error| SlotError {
+        // (checked to be on the host by `copy_from`). The bytes are a pool
+        // buffer, distinct from it.
+        unsafe { copy_from(&*t.0, field, dst.bytes()) }.map_err(|error| SlotError {
             slot: slot.to_owned(),
             field: field.name.clone(),
             error,
@@ -113,8 +136,7 @@ fn copy_into(
 }
 
 /// Borrows `values` of `fields` for `slot` with the GIL, then runs `write`
-/// without it, giving it a `fill` that copies the values into the buffers of
-/// those fields.
+/// without it, giving it a `fill` that sets the fields from the values.
 fn write_values<T, W>(
     values: &Bound<'_, PyAny>,
     fields: &[FieldSpec],
@@ -123,11 +145,14 @@ fn write_values<T, W>(
 ) -> PyResult<T>
 where
     T: Send,
-    W: Send + FnOnce(&dyn Fn(&mut [&mut [u8]]) -> Result<(), SlotError>) -> Result<T, SlotError>,
+    W: Send + FnOnce(&dyn Fn(&mut [FieldOut<'_>]) -> Result<(), SlotError>) -> Result<T, SlotError>,
 {
     let borrowed = borrow_values(values, fields, slot)?;
     let borrowed_values = &borrowed.values;
-    let fill = |bytes: &mut [&mut [u8]]| copy_into(borrowed_values, fields, slot, bytes);
+    let fill = |out: &mut [FieldOut<'_>]| copy_into(borrowed_values, fields, slot, out);
+    // A message that a send replaces may drop the last reference to a held
+    // tensor without the GIL: PyO3 defers that decref to the return from
+    // `detach`, on this thread.
     values.py().detach(|| write(&fill)).map_err(to_py_err)
 }
 
@@ -244,11 +269,25 @@ pub struct PyMessage(Arc<Message>);
 
 #[pymethods]
 impl PyMessage {
-    /// One view per field, in key order.
+    /// One value per field, in key order: a `BufferView` of a value in host
+    /// memory, or the very tensor held for a tensor on a CUDA device (read it
+    /// without changing it).
     #[getter]
-    fn values(&self) -> Vec<BufferView> {
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let values = self.0.values().iter();
-        values.map(|b| BufferView(Arc::clone(b))).collect()
+        values
+            .map(|value| match value {
+                CoreValue::Bytes(buffer) => {
+                    Ok(Bound::new(py, BufferView(Arc::clone(buffer)))?.into_any())
+                }
+                CoreValue::Held(held) => {
+                    let tensor = held
+                        .downcast_ref::<Py<PyAny>>()
+                        .expect("the bindings hold only Python objects");
+                    Ok(tensor.bind(py).clone())
+                }
+            })
+            .collect()
     }
 
     /// The time it was written at, or `None` for the value the slot holds
@@ -320,16 +359,24 @@ impl PySlot {
 /// out of time order, or the outward slot and the channels holding different
 /// messages.
 ///
-/// Values are copied in without the GIL, so changing them afterwards does not
-/// change what readers see. Resizing or freeing a value from another thread
-/// while it is being sent is a data race in the caller's code.
+/// Values in host memory are copied in without the GIL, so changing them
+/// afterwards does not change what readers see. Resizing or freeing a value
+/// from another thread while it is being sent is a data race in the caller's
+/// code.
+///
+/// A tensor on a CUDA device is not copied: the message holds that very
+/// tensor, and readers get it from `Message.values`. Hand over a copy that
+/// nobody changes, whose writes are complete (the codec clones it and waits
+/// for the stream it cloned on). torch's `__dlpack__` requires the calling
+/// thread's current device to be the tensor's device.
 ///
 /// Raises (`send`, `send_to`):
 ///     ValueError: The number of values, a shape or a dtype differs from the
 ///         schema (the message names the slot and the field).
-///     TypeError: A value does not support DLPack or is not in host memory.
-///         Pinned memory is read without synchronizing any CUDA stream, so
-///         synchronize the copy that filled it before sending.
+///     TypeError: A value does not support DLPack or is neither in host
+///         memory nor on a CUDA device. Pinned memory is read without
+///         synchronizing any CUDA stream, so synchronize the copy that filled
+///         it before sending.
 ///     IndexError: No such channel.
 #[pyclass(frozen, module = "mujou._native", name = "Outlet")]
 pub struct PyOutlet(core::Outlet);
@@ -440,13 +487,8 @@ impl PyInputGroup {
         }
         let values: Vec<&[Value]> = borrowed.iter().map(|b| b.values.as_slice()).collect();
         py.detach(|| {
-            self.0.write(&slots, |i, bytes| {
-                copy_into(
-                    values[i],
-                    slots[i].schema().fields(),
-                    slots[i].name(),
-                    bytes,
-                )
+            self.0.write(&slots, |i, out| {
+                copy_into(values[i], slots[i].schema().fields(), slots[i].name(), out)
             })
         })
         .map(PyTimestamp)
