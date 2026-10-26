@@ -661,8 +661,8 @@ class TestCuda:
     def test_a_cuda_value_the_host_wrote_is_saved_on_the_cpu_and_restored(
         self, start_manual: StartManual
     ):
-        # The core holds what the host writes on CUDA wrapped; the state takes
-        # the tensor out of it.
+        # The core holds what the host writes on the device of the port's node
+        # on that device; the state copies it to the CPU.
         inp = Port(recv=vec())
         node = probe_on("cuda:0", inp=inp)
         x = torch.tensor([1.0, 2.0], dtype=F64, device="cuda:0")

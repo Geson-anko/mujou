@@ -403,7 +403,7 @@ CUDA の送受信（scratch のスクリプト。manual run で書き手と読�
 - 同じ GPU のノードの間は、100 万要素で send + recv が 2.9 ms から 0.06 ms になった。小さいメッセージは同期の遅延が支配的で、差は小さい
 - CPU の読み手には、D2H が send から recv へ移る。100 万要素では合計が 1.7 ms から 1.4 ms に減るが、小さいメッセージでは合計が約 17 µs 増える（書き手の stream の待ちと、読み手の D2H の同期の 2 回になる）。2026-10-25 に、CUDA のノードが読まないポートは device に置かない（send でホストへ移す）ようにして解消した。同じスクリプトで `cuda:1 → CPU` を前（`device=None`）と後で交互に 2 回ずつ測ると、send 18.8〜19.0 / 18.3〜19.2 µs、recv 4.4〜4.7 / 3.3〜4.5 µs（64 要素）、send 1561〜1564 / 1562〜1563 µs、recv 87 / 87〜91 µs（100 万要素）で、差は測定の揺れの中。`cuda:1 → cuda:1` は 100 万要素で send 30〜31 µs、recv 31〜32 µs のまま。ただし CUDA と CPU の読み手が混ざったポート（MultiPort の相手など）は device に置くので、CPU の読み手には小さいメッセージでも同期が 2 回（書き手の stream の待ちと自分の D2H）かかる元の悪化が残る（64 要素で合計約 17 µs 増）
 - P2P の無い 2 枚（4090 と 4060。`torch.cuda.can_device_access_peer` が False）の間の recv は、ドライバがホストを中継するので変わらない。send の D2H は無くなる
-- ホストを経由しないことは、`tests/mujou/test_port.py` の `test_a_message_between_cuda_nodes_skips_host_memory` が `torch.profiler` の Memcpy の端点で確かめる
+- ホストを経由しないことは、`tests/mujou/test_port.py` の `test_a_message_skips_host_memory_only_from_a_cuda_device_to_a_node_on_it` が `torch.profiler` の Memcpy の端点で確かめる
 
 ## M:N スケジューラの比較
 

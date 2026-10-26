@@ -1014,13 +1014,17 @@ class TestCuda:
             ("cpu", "cuda:0", True),
             # Read by nodes on the CPU only: sent to host memory once.
             ("cuda:0", "cpu", True),
+            # Sent while the hook has made another device current.
+            pytest.param("cuda:0@1", "cuda:0", False, marks=pytest.mark.cuda(2)),
             # The host writes to a node on the device of the tensor, or not.
+            # (A copy to a node on the CPU shows either way, where the host or
+            # the node makes it: test_execution.py checks who waits.)
             ("host:cuda:0", "cuda:0", False),
             ("host:cuda:0", "cpu", True),
             pytest.param("host:cuda:1", "cuda:0", True, marks=pytest.mark.cuda(2)),
         ],
     )
-    def test_a_message_between_cuda_nodes_skips_host_memory(
+    def test_a_message_skips_host_memory_only_from_a_cuda_device_to_a_node_on_it(
         self, source: str, sink: str, via_the_host: bool
     ):
         assert via_host_memory(source, sink) == via_the_host
@@ -1116,8 +1120,6 @@ class TestCuda:
         ones = torch.ones(BIG.shape)
         assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), ones)
         assert torch.equal(run.read(source.out), ones)
-        # The message stays on the device all the same.
-        assert not via_host_memory("cuda:0@1", "cuda:0")
 
     def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))
