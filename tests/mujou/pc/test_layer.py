@@ -1250,3 +1250,92 @@ class TestOptimizer:
         assert torch.equal(state["module"]["0.bias"], bias)
         assert not torch.equal(state["module"]["0.weight"], weight)
         assert len(state["optimizer"]["m"]) == 1
+
+
+class TestMomentum:
+    """``TimeConstants.momentum``: a heavy ball for ``h``, which keeps the fixed
+    point of the plain relaxation and gets there in fewer periods."""
+
+    MOMENTUM_TAU = pc.TimeConstants(h=4e-3, lam=8e-3, momentum=3e-3)
+    WIDTHS = [4, 4, 4, 4, 4]
+
+    def _lams(
+        self, start_manual: StartManual, tau: pc.TimeConstants, steps: int
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        layers, head = make_modules("res", "tanh", self.WIDTHS)
+        chain = HandChain(layers, head, self.WIDTHS, tau=tau, learn_interval=math.inf)
+        run = start_manual(chain.net)
+        x, y = sample(self.WIDTHS, 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), steps)
+        nodes = run.state_dict()["nodes"]
+        return (
+            [nodes[f"l{i}"]["state"]["lam"] for i in range(len(layers))],
+            credits(layers, head, x, y, MASK),
+        )
+
+    def test_lam_is_still_the_credit_of_backpropagation(
+        self, start_manual: StartManual
+    ):
+        lams, expected = self._lams(start_manual, self.MOMENTUM_TAU, RELAX_STEPS)
+        for lam, credit in zip(lams, expected, strict=True):
+            close(lam, credit, 1e-8)
+
+    def test_the_front_of_the_credit_crosses_the_chain_in_fewer_periods(
+        self, start_manual: StartManual
+    ):
+        # A transient: the slow mode of a chain near the identity does not relax
+        # faster, so this looks at the first periods, with random weights.
+        steps = 60
+        error: dict[str, float] = {}
+        for name, tau in (("plain", TAU), ("heavy ball", self.MOMENTUM_TAU)):
+            lams, expected = self._lams(start_manual, tau, steps)
+            error[name] = max(
+                float((lam - credit).abs().max())
+                for lam, credit in zip(lams, expected, strict=True)
+            )
+        assert error["heavy ball"] < 0.5 * error["plain"]
+
+    def test_the_velocity_is_in_the_state_only_with_a_momentum(
+        self, start_manual: StartManual
+    ):
+        for tau, has in ((TAU, False), (self.MOMENTUM_TAU, True)):
+            layers, head = make_modules("linear", "tanh", [4, 5, 3])
+            chain = HandChain(layers, head, [4, 5, 3], tau=tau)
+            run = start_manual(chain.net)
+            x, y = sample([4, 5, 3], 0)
+            chain.write(run, x, y, MASK)
+            run_steps(run, chain.from_next(), 5)
+            state = run.state_dict()["nodes"]["l0"]["state"]
+            assert ("velocity" in state) == has
+
+    def test_a_new_sample_drops_the_velocity_of_the_one_before(
+        self, start_manual: StartManual
+    ):
+        # A layer alone (g = 0), with h off its prediction so that a force builds
+        # a velocity. The first update with another sample moves h by the force
+        # r + lam of before and nothing of the old velocity.
+        inp = pc.Input(
+            x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
+        )
+        layer = pc.Layer(
+            nn.Linear(4, 4).double(),
+            act_spec=inp.act_spec,
+            tau=self.MOMENTUM_TAU,
+            optimizer=SGD,
+            learn_interval=math.inf,
+        )
+        inp.next.connect(layer.prev)
+        layer.h.add_(1.0)
+        run = start_manual(Group(inp=inp, layer=layer))
+        x, y = sample([4, 4], 0)
+        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+        for _ in range(3):
+            run.step(H, inp, layer)
+        before = run.state_dict()["nodes"]["layer"]["state"]
+        assert float(before["velocity"].abs().max()) > 1e-6
+        x2, y2 = sample([4, 4], 1)
+        run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK}})
+        run.step(H, inp, layer)
+        after = run.state_dict()["nodes"]["layer"]["state"]
+        close(after["velocity"], before["h"] - before["mu"] + before["lam"], 1e-12)

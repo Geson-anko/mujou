@@ -112,6 +112,12 @@ class Layer(Node):
     default ``tau.max_dt``, ``min(tau.h / 2, 3 * tau.lam)``, keeps the step of
     ``h`` and ``lam`` stable in the node itself.
 
+    With ``tau.momentum`` > 0, ``h`` moves along the velocity of a heavy ball
+    instead of the force (``functional.relax_``): a force that lasts moves it
+    faster, so a deep chain relaxes in fewer periods, and the fixed point does not
+    change. The velocity is dropped, as the deviation is kept, with each new
+    sample or jump of ``h_in``.
+
     ``module`` must treat the samples of the batch independently (no
     ``BatchNorm`` in training mode): the gradient of each sample must be its
     own. It must also be deterministic and keep no state of its own (no
@@ -124,7 +130,8 @@ class Layer(Node):
 
     The state (``Run.state_dict()["nodes"][path]["state"]``) holds
     ``"generator"`` (the state of the node's ``generator``), ``"module"`` (its
-    ``state_dict``), ``"h"`` and ``"lam"`` (``(*batch, *out)``), the prediction of
+    ``state_dict``), ``"h"`` and ``"lam"`` (``(*batch, *out)``), with
+    ``tau.momentum`` the velocity of ``h`` (``"velocity"``), the prediction of
     the last update (``"mu"``), the jump of ``theta`` still to add to ``h``
     (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it sends
     and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
@@ -212,6 +219,8 @@ class Layer(Node):
         with torch.no_grad():
             mu = module(h_in.zeros(device=self.device))
         self.h = torch.zeros_like(mu)
+        # The velocity of h, with tau.momentum > 0.
+        self.velocity = torch.zeros_like(mu) if tau.momentum > 0 else None
         self.lam = torch.zeros_like(mu)
         # The prediction of the last update, from which h moves with a new mu.
         # At zero with h, the first update moves h to the forward pass.
@@ -284,7 +293,13 @@ class Layer(Node):
         if reanchor:
             self.h.sub_(self.mu).add_(mu)  # h <- mu + (h - mu_last)
         g = sum(self.next.recv().values(), torch.zeros_like(self.h))
-        relax_(self.h, self.lam, mu, g, dt, self._tau)
+        if reanchor and self.velocity is not None:
+            # g jumps with the sample (or the jump of h_in) while r and lam are
+            # kept, so the velocity of the forces before is dropped. A jump of
+            # theta moves h and mu together, r and the force do not jump, and the
+            # velocity stays.
+            self.velocity.zero_()
+        relax_(self.h, self.lam, mu, g, dt, self._tau, self.velocity)
         self.mu.copy_(mu)
 
     def _send(self, act: Activity) -> None:

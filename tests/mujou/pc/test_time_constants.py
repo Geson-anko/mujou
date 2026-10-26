@@ -32,3 +32,18 @@ class TestTimeConstants:
             1.5e-3  # 3 * lam
         )
         assert TimeConstants(h=4e-3, lam=math.inf).max_dt == 2e-3
+
+
+class TestMomentum:
+    def test_the_default_is_no_inertia(self):
+        assert TimeConstants(h=4e-3, lam=8e-3).momentum == 0.0
+
+    @pytest.mark.parametrize("momentum", [-1e-3, math.inf, math.nan])
+    def test_momentum_must_be_finite_and_not_negative(self, momentum: float):
+        with pytest.raises(ValueError, match="TimeConstants.momentum"):
+            TimeConstants(h=4e-3, lam=8e-3, momentum=momentum)
+
+    def test_momentum_does_not_change_the_period_or_max_dt(self):
+        tau = TimeConstants(h=4e-3, lam=8e-3, momentum=2e-3)
+        assert tau.period == pytest.approx(1e-3)
+        assert tau.max_dt == pytest.approx(2e-3)

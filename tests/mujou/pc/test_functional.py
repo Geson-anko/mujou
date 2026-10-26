@@ -263,14 +263,14 @@ class TestRelax:
     TAU = TimeConstants(h=4e-3, lam=8e-3)
 
     @staticmethod
-    def _state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """``h``, ``lam``, ``mu`` and ``g``."""
         return tuple(_randn(B, 5, seed=seed) for seed in range(1, 5))  # pyright: ignore[reportReturnType]
 
     @pytest.mark.parametrize("dt", [1e-3, 4e-3])
     def test_one_euler_step(self, dt: float):
         # h first, then lam with the r of the moved h; a long dt is one step.
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h0, lam0 = h.clone(), lam.clone()
         relax_(h, lam, mu, g, dt, self.TAU)
         h1 = h0 - dt / self.TAU.h * (h0 - mu + lam0 + g)
@@ -281,18 +281,109 @@ class TestRelax:
 
     def test_infinite_lam_time_constant_keeps_the_dual(self):
         # Even when r is not finite: 0 * inf would make NaN.
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h[0, 0] = math.inf
         lam0 = lam.clone()
         relax_(h, lam, mu, g, 1e-3, TimeConstants(h=4e-3, lam=math.inf))
         assert torch.equal(lam, lam0)
 
     def test_zero_dt_changes_nothing(self):
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h0, lam0 = h.clone(), lam.clone()
         relax_(h, lam, mu, g, 0.0, self.TAU)
         assert torch.equal(h, h0)
         assert torch.equal(lam, lam0)
+
+
+class TestRelaxWithMomentum:
+    TAU = TimeConstants(h=4e-3, lam=8e-3, momentum=2e-3)
+
+    def test_one_heavy_ball_step(self):
+        # v <- e^(-dt/m) v + force, then h <- h - dt/tau_h v, lam as before.
+        h, lam, mu, g = TestRelax.state()
+        v = _randn(B, 5, seed=9)
+        h0, lam0, v0 = h.clone(), lam.clone(), v.clone()
+        dt = 1e-3
+        relax_(h, lam, mu, g, dt, self.TAU, v)
+        v1 = math.exp(-dt / self.TAU.momentum) * v0 + (h0 - mu + lam0 + g)
+        h1 = h0 - dt / self.TAU.h * v1
+        torch.testing.assert_close(v, v1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(
+            lam, lam0 + dt / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
+        )
+
+    def test_without_a_velocity_the_step_is_the_plain_one(self):
+        # The momentum of tau is the node's business: only a velocity moves h.
+        h, lam, mu, g = TestRelax.state()
+        plain = (h.clone(), lam.clone())
+        relax_(h, lam, mu, g, 1e-3, self.TAU)
+        relax_(plain[0], plain[1], mu, g, 1e-3, TimeConstants(h=4e-3, lam=8e-3))
+        assert torch.equal(h, plain[0]) and torch.equal(lam, plain[1])
+
+    def test_a_velocity_needs_a_momentum(self):
+        h, lam, mu, g = TestRelax.state()
+        with pytest.raises(ValueError, match="momentum"):
+            relax_(
+                h,
+                lam,
+                mu,
+                g,
+                1e-3,
+                TimeConstants(h=4e-3, lam=8e-3),
+                torch.zeros_like(h),
+            )
+
+    def test_an_update_of_no_time_changes_nothing(self):
+        h, lam, mu, g = TestRelax.state()
+        v = _randn(B, 5, seed=9)
+        before = (h.clone(), lam.clone(), v.clone())
+        relax_(h, lam, mu, g, 0.0, self.TAU, v)
+        assert torch.equal(h, before[0]) and torch.equal(lam, before[1])
+        assert torch.equal(v, before[2])
+
+    def test_a_tiny_momentum_is_the_plain_relaxation(self):
+        # e^(-dt/m) -> 0: the velocity is the force, and h takes the plain step.
+        h, lam, mu, g = TestRelax.state()
+        plain = (h.clone(), lam.clone())
+        relax_(
+            h,
+            lam,
+            mu,
+            g,
+            1e-3,
+            TimeConstants(h=4e-3, lam=8e-3, momentum=1e-9),
+            _randn(B, 5, seed=9),
+        )
+        relax_(plain[0], plain[1], mu, g, 1e-3, TimeConstants(h=4e-3, lam=8e-3))
+        torch.testing.assert_close(h, plain[0], rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(lam, plain[1], rtol=1e-15, atol=1e-15)
+
+    def test_at_the_fixed_point_nothing_moves(self):
+        # r = 0 and lam = -g: no force, and with no velocity there is none after.
+        h, lam, mu, g = TestRelax.state()
+        h.copy_(mu)
+        lam.copy_(-g)
+        h0, lam0 = h.clone(), lam.clone()
+        v = torch.zeros_like(h)
+        relax_(h, lam, mu, g, 1e-3, self.TAU, v)
+        assert torch.equal(h, h0) and torch.equal(lam, lam0) and not v.any()
+
+    def test_a_constant_force_gives_up_to_the_geometric_series_of_the_velocity(self):
+        # With a force held at 1, v -> 1 / (1 - e^(-dt/m)): h moves that much faster.
+        h = torch.zeros(1, dtype=torch.float64)
+        lam = torch.zeros_like(h)
+        mu = h.clone()
+        g = torch.ones_like(h)  # force = r + lam + g = 1 while h = mu = 0
+        v = torch.zeros_like(h)
+        tau = TimeConstants(h=4e-3, lam=math.inf, momentum=2e-3)
+        for _ in range(200):
+            h.zero_()  # hold the force at g = 1
+            relax_(h, lam, mu, g, 1e-3, tau, v)
+        beta = math.exp(-1e-3 / 2e-3)
+        torch.testing.assert_close(
+            v, torch.tensor([1 / (1 - beta)], dtype=torch.float64), rtol=1e-12, atol=0
+        )
 
 
 def _pair(*shape: int) -> tuple[torch.Tensor, torch.Tensor]:
