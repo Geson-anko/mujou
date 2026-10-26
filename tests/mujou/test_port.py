@@ -616,11 +616,10 @@ class TestInitial:
             start_manual(Group(node=node))
 
 
-# Steps a node on argv[1] that sends to a node on argv[2] under torch.profiler,
-# and prints the name of each copy on a GPU.
+# Steps a node on argv[1] (or the host, "host:<device>") that sends to a node
+# on argv[2] under torch.profiler, and prints the name of each copy on a GPU.
 _PROFILED = """
 import sys
-import threading
 from typing import override
 
 import torch
@@ -630,16 +629,22 @@ import mujou.testing
 from mujou import Group, Node, Port, TensorSpec
 
 SPEC = TensorSpec((1024,))
+source, _, current = sys.argv[1].partition("@")
 
 
 class Source(Node):
     def __init__(self) -> None:
-        super().__init__(device=sys.argv[1])
+        super().__init__(device=source)
         self.out = Port(send=SPEC)
 
     @override
     def on_update(self, dt: float) -> None:
-        self.out.send(torch.ones(1024, device=self.device))
+        x = torch.ones(1024, device=self.device)
+        if current:
+            with torch.cuda.device(int(current)):
+                self.out.send(x)
+        else:
+            self.out.send(x)
 
 
 class Sink(Node):
@@ -652,13 +657,28 @@ class Sink(Node):
         self.inp.recv()
 
 
-source, sink = Source(), Sink()
-source.out.connect(sink.inp)
-run = mujou.testing.run(Group(source=source, sink=sink))
-run.step(0.001, source, sink)
+sink = Sink()
+if source.startswith("host:"):
+    on = source.removeprefix("host:")
+    run = mujou.testing.run(sink)
+
+    def step() -> None:
+        run.write({sink.inp: torch.ones(1024, device=on)})
+        run.step(0.001, sink)
+
+else:
+    node = Source()
+    node.out.connect(sink.inp)
+    run = mujou.testing.run(Group(source=node, sink=sink))
+
+    def step() -> None:
+        run.step(0.001, node, sink)
+
+
+step()
 with profile(activities=[ProfilerActivity.CUDA]) as prof:
     for _ in range(3):
-        run.step(0.001, source, sink)
+        step()
 run.shutdown()
 for event in prof.events():
     if event.name.startswith("Memcpy"):
@@ -668,7 +688,9 @@ for event in prof.events():
 
 def profiled_copies(source: str, sink: str) -> list[str]:
     """The copies on a GPU while a node on ``source`` sends to one on ``sink``,
-    in a new interpreter: the profiler loads modules that enable the GIL."""
+    in a new interpreter: the profiler loads modules that enable the GIL.
+    ``"cuda:0@1"`` sends while ``cuda:1`` is current, and ``"host:cuda:0"`` is
+    the host writing tensors on ``cuda:0``."""
     done = subprocess.run(
         [sys.executable, "-c", _PROFILED, source, sink],
         capture_output=True,
@@ -838,6 +860,18 @@ class SendsOnAnotherCurrentDevice(Node):
             self.out.send(x)
 
 
+def via_host_memory(source: str, sink: str) -> bool:
+    """Whether a copy from or to host memory shows while ``source`` sends to
+    ``sink`` (as ``profiled_copies`` takes them)."""
+    copies = profiled_copies(source, sink)
+    assert copies, "the profiler saw no copy"
+    # "Memcpy HtoD (Pageable -> Device)": the ends are in the parentheses. A
+    # copy between GPUs without peer access is "Memcpy DtoH (Device ->
+    # Device)", which the driver may stage through the host by itself.
+    ends = {end for name in copies for end in re.findall(r"\w+", name.split("(")[-1])}
+    return bool(ends & {"Pageable", "Pinned"})
+
+
 @pytest.mark.cuda
 class TestCuda:
     def test_receives_on_the_device_and_sends_to_the_host(
@@ -972,20 +1006,16 @@ class TestCuda:
             ("cpu", "cuda:0", True),
             # Read by nodes on the CPU only: sent to host memory once.
             ("cuda:0", "cpu", True),
+            # The host writes to a node on the device of the tensor, or not.
+            ("host:cuda:0", "cuda:0", False),
+            ("host:cuda:0", "cpu", True),
+            pytest.param("host:cuda:1", "cuda:0", True, marks=pytest.mark.cuda(2)),
         ],
     )
     def test_a_message_between_cuda_nodes_skips_host_memory(
         self, source: str, sink: str, via_the_host: bool
     ):
-        copies = profiled_copies(source, sink)
-        assert copies, "the profiler saw no copy"
-        # "Memcpy HtoD (Pageable -> Device)": the ends are in the parentheses. A
-        # copy between GPUs without peer access is "Memcpy DtoH (Device ->
-        # Device)", which the driver may stage through the host by itself.
-        ends = {
-            end for name in copies for end in re.findall(r"\w+", name.split("(")[-1])
-        }
-        assert bool(ends & {"Pageable", "Pinned"}) == via_the_host, copies
+        assert via_host_memory(source, sink) == via_the_host
 
     @pytest.mark.slow
     def test_a_reader_gets_what_a_late_stream_wrote(
@@ -1073,6 +1103,8 @@ class TestCuda:
         ones = torch.ones(BIG.shape)
         assert torch.equal(cast(torch.Tensor, sink.results[0]).cpu(), ones)
         assert torch.equal(run.read(source.out), ones)
+        # The message stays on the device all the same.
+        assert not via_host_memory("cuda:0@1", "cuda:0")
 
     def test_takes_an_initial_value_on_the_device(self, start_manual: StartManual):
         out = Port(send=h(), initial=torch.ones(2, 3, device="cuda:0"))
