@@ -6,9 +6,10 @@ Only the structure of a value (the kind of each field, and a dict's keys) is
 checked here; the core checks each tensor's shape and dtype and each int's range
 when it copies the value in, and names the slot and the field.
 
-Values cross in host memory, except that a node on a CUDA device sends a tensor
-on that device as a clone on the device, which the core holds as it is
-(``to_core``), and which readers copy device to device (``from_core``).
+Values cross in host memory, except that a tensor on the device of a node on
+CUDA that a node on CUDA reads stays there as a clone, which the core holds as it
+is (``to_core``) and readers copy on the device (``from_core``): what such a
+node sends to a node on CUDA, and what the host writes to such a node's port.
 """
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -71,10 +72,9 @@ def to_core(
     message in the errors.
 
     ``device`` is the CUDA device where the dense tensors on it stay, or
-    ``None``. It is the device of the node that reads the values when the
-    sender knows it, and that node is on CUDA: a node that sends to a node on
-    CUDA (``Wire.cuda``), or the host writing to the port of such a node
-    (``Wiring.write``). The core holds a contiguous clone of each such tensor.
+    ``None``: the device of a node on CUDA that sends to a node on CUDA
+    (``Wire.cuda``), or that of a node on CUDA whose port the host writes, its
+    only reader (``Wiring.input_devices``). The core holds a contiguous clone of each such tensor.
     The clones queue on the calling thread's current stream of the device (a
     node's own, in its hooks), which this waits for once, so that no reader
     sees a clone unfinished; with ``wait=False`` the caller waits with
