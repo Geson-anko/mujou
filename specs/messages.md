@@ -19,13 +19,15 @@
 - ホストのメモリの不変なバッファ: 連続した row-major の配置。スカラーと、CPU にあるテンソルと、下の場合以外の CUDA のテンソルはこちら
 - 書き手が渡した不透明な値（コアの `Held`）: 次の密なテンソルは、codec が device の上で作ったコピーを bindings がそのまま持つ。コアは中身を読まず、device・stream・event も知らない
     - CUDA のノードが hook の `send` / `send_to` で送った、そのノードの device の上のテンソル。ただしそのポートの接続先に CUDA のノードが 1 つ以上あるときだけ（2026-10-24、接続先の条件は 2026-10-25）。読み手が CPU のノードだけか、接続先が無い（ホストだけが読む）ポートは、send でホストのメモリへ移す。配線のときに `Wire.cuda` で決める
-    - ホストの `write`（と `inputs=`）で渡した CUDA のテンソル。そのテンソルの device の上に置く（2026-10-25）
+    - ホストの `write`（と `inputs=`）で渡した、そのポートを持つノード（読み手はこの 1 つ）の CUDA device の上のテンソル（2026-10-25、ユーザーの決定）。持ち主が CPU のノードのとき、持ち主と別の device のテンソルは、ホストのメモリを通す。配線のときに `Wiring.input_devices` で決める
 
 バッファは `_native` の内部の型で、利用者には見せない。どちらの値も不変なので、複数の読み手が同じ値を同時に読んでも、書き手との間でデータ競合が起きない。
 
 device の上に置くのは、CUDA のノードの間でメッセージが device → host → device と往復する無駄を無くすためである。往復は送るたびに同期の D2H を、読むたびに H2D を払い、100 万要素で 1 回の send に 0.5〜1.6 ms かかっていた（[research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）。CPU のノードとホストしか読まないポートを device に置かないのは、置くと D2H が送り手から読み手へ移り、小さいメッセージでは送り手の stream の待ちと読み手の D2H の同期の 2 回になって遅くなるからである（[research/benchmarks.md](research/benchmarks.md) の同じ節）。`initial` と復元はホストのメモリに置く。
 
-torch の `__dlpack__` は、呼ぶスレッドの current device がテンソルの device であることを要求する。ホストのスレッドの current device は保証できず、1 回の write に複数の device のテンソルが混ざりうるので、ホストの write の clone は codec の `_OnItsDevice` に包み、`__dlpack__` の間だけ自分の device を current にさせる。読み手の codec は包みを外してから読む。ノードの send では包まない。hook の中で別の device を current にしている間（`torch.cuda.device(...)`）は、device に置かずホストのメモリへ移す。
+ホストの write を持ち主の device に限るのは、ほかの読み手は値を、自分で設定していない stream でコピーするからである。どの device に書かれるかは write まで分からず、副 stream を用意できない。ワーカーのその device の current stream は、何も設定されていなければ legacy default stream で、ホストが stream を設定せずに計算していればホストの仕事もそこに積まれる。CPU の読み手の `.to("cpu")` は stream 全体を同期し、別の device の読み手も `on_update` の後の待ちを通じて、ホストが write の後に積んだ GPU の仕事を待った（読み手が書き手を待つ。2026-10-25 の監査で、書き手が約 0.5 s の仕事を積むと recv が 0.47〜0.48 s かかった）。持ち主の device なら、読み手は自分の stream でコピーする。失うのは持ち主と別の device のテンソルの D2D だけで、P2P の無い組ではもともとドライバがホストを中継する。
+
+torch の `__dlpack__` は、呼ぶスレッドの current device がテンソルの device であることを要求する。ホストのスレッドの current device は保証できず、ノードの hook も別の device を current にしうる（`torch.cuda.device(...)`）。そのため、current device が値の device と違うときは、clone を codec の `_OnItsDevice` に包み、`__dlpack__` の間だけその device を current にさせる（2026-10-25 から、ノードの send もこの形で device に置いたまま渡す。それまではホストのメモリへ移していた）。読み手の codec は包みを外してから読む。
 
 torch とコアの間は DLPack で受け渡す。DLPack はデータの場所・dtype・shape・strides を表す標準の形式で、torch は `__dlpack__` と `torch.from_dlpack` で対応している。コアは独自の dtype を持たず、DLPack の dtype の表現をそのまま使う。NumPy の配列を経由すると bfloat16 を受け渡せない。
 
@@ -56,7 +58,7 @@ torch とコアの間は DLPack で受け渡す。DLPack はデータの場所�
 - 同じ device の読み手: 自分の stream でコピーする
 - 別の CUDA device の読み手: ATen は、コピーを「呼んだスレッドの、元の device の current stream」に積み、読み手の device の stream と event で前後を揃える。ワーカーには直前に走った別のノードの stream が残っているので、Driver がノードごとに元の device の副 stream を持ち、hook のたびに current にする（[ノード](nodes.md#cuda)）
 - CPU のノードとホスト: 副 stream（ホストはそのスレッドの current stream）の上で `.to("cpu")` する。同期のコピーなので、終わってから返る
-- ホストが書いた値の読み手: どの device に書かれるかは write まで分からないので、副 stream は作らない（`Wiring.read_devices` に入れない）。読み手の device と違う device に書かれた値は、読み手のスレッドの元の device の current stream でコピーする。値は出来上がっているので正しいが、その stream がワーカーで直前に走った別のノードのものなら、そのノードの GPU の仕事の後ろに並ぶ（性能だけの問題。2026-10-25 の判断。全 device に副 stream を作ると、使わない GPU にも CUDA の context を作る）
+- ホストが書いた値の読み手: 持ち主のノードだけで、値はその device にあるので、自分の stream でコピーする（副 stream は要らない）
 
 P2P の無い GPU の組（計測した機械の例は [research/benchmarks.md](research/benchmarks.md) の「CUDA のメッセージを device に置いた後」）では、device の間のコピーをドライバが内部でホストを中継する。コードはホストのメモリを経由しない。
 
@@ -69,7 +71,7 @@ torch とコアの変換は `codec.py` の 1 か所だけが行う。spec の公
 - int の範囲の検査も Rust が書き込むときに 1 回だけ行う（K9 の範囲、`OverflowError`）。丸めも折り返しもしない
 - Tensor の dtype は変換しない。spec と違う dtype の値は断る。スカラーはフィールドの注釈が Python の型付けで受け付ける値を受け付ける（`bool` は `int`、`int` は `float` として受け付け、読み出すと宣言した型になる）
 - `initial`、inputs、復元する値も、段 2 で Outlet や Slot に書くときに同じ経路で検査され、ポートの label で名指しされる。`Port.__init__` の時点では label も Schema もまだ無い
-- `to_core(spec, msg, label, *, device=None)` の `device` は、CUDA のノードが読むポートなら送るノードの CUDA device、ホストの write なら `THEIR_DEVICES`（各テンソルが自分の device に残る）、それ以外（CPU のノード、CUDA のノードが読まないポート、`initial`、復元）は `None`。ノードの値は `Wire.cuda` が段 2 で決めるので、send のたびに `device.type` や読み手を見ない（`device.type` は 1 回 約 0.1 µs、CPU の hot path の予算の大半になる）
+- `to_core(spec, msg, label, *, device=None, wait=True)` の `device` は、読み手が CUDA のノードと分かっているときの device。ノードの send なら送るノードの CUDA device（CUDA のノードが読むポートだけ、`Wire.cuda`）、ホストの write なら持ち主の CUDA device（`Wiring.input_devices`）、それ以外（CPU のノード、CUDA のノードが読まないポート、CPU のノードのポートへの write、`initial`、復元）は `None`。ホストの write は `wait=False` で clone を積み、`wait_for_clones` が device ごとに 1 回待つ。ノードの値は `Wire.cuda` が段 2 で決めるので、send のたびに `device.type` や読み手を見ない（`device.type` は 1 回 約 0.1 µs、CPU の hot path の予算の大半になる）
 - `from_core(spec, views, device)` は、ホストのバッファを `torch.from_dlpack` で、device に置いた値を `.to(device, copy=True)` で読む。区別は `type(view) is BufferView`（`isinstance(view, torch.Tensor)` は hot path で 0.1 µs 余計にかかる）
 - `peek(spec, views)` は、device に置いた値をコピーせずに返す（ホストのバッファは CPU のテンソルにコピーする）。状態の取得の停止中だけに使い、呼び手が再開の後に CPU へ移す（`state.cpu`）
 
