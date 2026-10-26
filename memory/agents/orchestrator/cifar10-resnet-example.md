@@ -37,3 +37,15 @@
 - 10 epoch: J(stage3∘head) は 2.2（9 epoch で 2.65）、ステージは 12 まで。倍率 0.4 の 10 epoch の実行は発散せず、prequential PC 74.32% / BP 73.16%、test 71.97% / 74.34%（epoch ごとに数 pt 揺れる）
 - 最終の既定値の実行: prequential PC 55.00% / BP 55.76%、test 55.98% / 58.23%
 - nit: data.py の float32 変換の重複を除いた、bp.py の不要な model.to を消した。shown の式の重複は docs の snippet のために残した
+
+## main の device 上の受け渡しへの追従（2026-10-26）
+
+ユーザー: 「ノード間で GPU 上でやり取りできるようになりました。ノード分割の構造など修正」（/merge-main）。
+
+- main（PR #107 ほか）を merge。CUDA のノード間のメッセージは device に置いたまま。HtoD / DtoH は 0 µs に（DtoH 3 µs は予測をホストが読む分）
+- ノードの切り方は 2 ノードのまま。理由は緩和の安定条件（次のノードの σ）で、転送の仕組みとは無関係。ステージ単位では遅延のない手動実行でも発散する（前回の測定）。分割を細かくするには src の pc の変更（陰的・前処理つきの緩和、ノードごとの周期と max_dt）が要る → ユーザーに確認
+- 変えたこと: layer0 の 1 更新は B=64 で 3.60 ms、B=128 で 3.69 ms、B=256 で 5.28 ms（手動実行で単体）。CPU 側が律速なので B=128 に。lr は 1.6e-2（B=128 で 1e-2 より良い）。倍率 0.3 で layer0 の dt の 99% 点 2 周期（0.4 で 2.75、0.6 で 3）
+- 1 epoch 84.6 s → 42.7 s。3 epoch 約 3 分、10 epoch 約 9 分
+- 結果（seed 0）: 3 epoch 目 prequential PC 55.11% / BP 54.45%、test 57.82% / 59.02%。10 epoch 目 74.00% / 73.27%、73.12% / 72.61%
+- J(stage3∘head)（lr 1.6e-2、B=128 の BP）: 3 epoch で 1.23、10 epoch で 2.02。stage3 単体は 11 まで
+- docs: threads-and-devices.md の「メッセージはホストのメモリ」の段落を削除（main の説明と矛盾）。pc.md の GPU の項を書き直し

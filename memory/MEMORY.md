@@ -44,7 +44,7 @@
 - [`__dict__` が唯一のレジストリ](project_port_registry.md) — 子とポートはインスタンスの属性に代入するだけ。run の段 1 で tree.walk が代入の順に読む（R7）
 - [M:N スケジューリング](project_mn_scheduler.md) — Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True)、mujou.run(workers=None)。既定は available_parallelism（GIL ありは半分、確認待ち）で、実効の数は 0 もありうる。ノードはワーカー間を移ってよい
 - [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。hook は通常の PyTorch と同じく勾配を記録、ノードをまたぐグラフは Port の detach コピーで作れない
-- [pc の緩和の安定とヤコビアン](project_pc_jacobian_stability.md) — 周期 τ_h/4 の緩和は次のノードの σ(J) ≲ 2.6 でだけ安定。ResNet のステージは学習で 5〜12 に育つので CIFAR-10 の例は 2 ノード。GPU のノードは境界のコピーが律速（2026-10-24）
+- [pc の緩和の安定とヤコビアン](project_pc_jacobian_stability.md) — 周期 τ_h/4 の緩和は次のノードの σ(J) ≲ 2.6 でだけ安定。ResNet のステージは学習で 5〜12 に育つので CIFAR-10 の例は 2 ノード。切れない理由は転送ではなく安定条件（2026-10-24、2026-10-26 に device 上の受け渡しで再確認）
 - [グラフの可視化](project_viz.md) — `mujou.viz.to_html(root)` で自己完結の HTML。CDN なし、JS は目視で確かめる（2026-10-21）
 - [未決定事項](project_open_decisions.md) — 一覧の正本は specs/open-decisions.md
 
