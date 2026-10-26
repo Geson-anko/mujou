@@ -120,3 +120,60 @@
 
 5. **ホストが書いた値の読み手の経路。** `_read` → `held = view.tensor` → `held.to(device, copy=True)`。device が違えば、ATen の `copy_device_to_device`（CUDA の読み手）と `memcpy_and_sync`（CPU の読み手）は、`getCurrentCUDAStream(src)` に積む。それは呼んだスレッド（ワーカー）の thread-local な current stream である。Driver の `_use` が設定するのは、ノード自身の device と `read_devices` の device だけなので、ホストが書いた値の device はワーカーに残っている状態のまま使われる。何も設定されていなければ legacy default stream になる。PyTorch のプールの stream は non-blocking なので、legacy default stream との暗黙の同期は無い。一方、ホストのスレッドが stream を設定していなければ、ホストの仕事も legacy default stream に載るので、読み手のコピーはその後ろに並ぶ。続く `record_stream(current_stream(held.device))` は、コピーした stream と同じ stream を指すので、アロケータについては正しい
 6. **A の正しさの確かめ（`state_probe.py`）。** CPU のノードの 2 つの受信ポートに、cuda:0 の値（`requires_grad=True` のテンソルから作った値）と cuda:1 の値を 1 回の write で書いた。ホストの current device は `torch.cuda.set_device(1)` で cuda:1 にした。write の直後に cuda:1 の元のテンソルを `fill_(9.0)` で書き換えた。受け取った値は `[1, 2]` と `[3, 4]` で、どちらも CPU にあり、時刻は同じ（`Timestamp(ns=0)`）だった。`state_dict` の `ports.{a,b}.in.value` は CPU のテンソルで、値も一致した
+
+---
+
+# 再々監査（2026-10-26）: ホストの write を持ち主の device に狭めた（決定 (i)）、別の device が current の send も device に置く
+
+対象: `a3c1e08..HEAD`（`f1f7208` wiring、`2b71a47` port、`b500abb` docs、`50569f8` memory）と、未コミットの `CLAUDE.md`・`.claude/skills/locality-and-async/SKILL.md` の文言。基準は前回と同じ。`just run` は orchestrator が回すので実行していない。
+
+## verdict
+
+**approve**（確信度: 高）。前回の must-fix 1 は直った。実機で再現スクリプトを流し直し、CPU と cuda:1 の読み手が、ホストが write の後に積んだ GPU の仕事を待たなくなったことを確かめた。別の device が current のときのノードの send（`_OnItsDevice`）も、S2 が成り立つ。clone は値の device のノード自身の stream に積まれ、待つのもその stream の event で、読み手は書き手の公開後の仕事を待たない（実測）。一斉の write の原子性と時刻、計算グラフ、グローバル同期にも問題は無い。should-fix は 2 つある。1 つは、別の device が current のときの待ちの stream を取り違えても落ちるテストが無いこと（変異を入れても 42 件すべて通った）。もう 1 つは、CLAUDE.md と skill の要約が条件を広く書きすぎていること。
+
+- must-fix 1（前回）: **直った**。`Wiring.input_devices` は配線時に、ホストが書くポート（接続の無い受信 `Port`）ごとに持ち主の CUDA device か `None` を決める。読み手は持ち主のノードだけなので（`_sources` がそのスロットを持ち主にだけ渡す）、device に置いた値はいつも読み手自身の stream で同じ device の中でコピーされる。それ以外の値は、ホストが自分の stream の上で D2H してからホストのメモリに置く
+- 一斉の write の原子性と時刻: 保たれる。全ポートの `_item`（clone と D2H）を list の中で終えてから、`wait_for_clones` が device ごとに 1 回待ち、そのあと `group.write` を 1 回だけ呼ぶ。途中で例外が出れば何も公開しない。時刻はコアが公開のときに付けるので、意味は「値が device の上で出来上がった後」のまま。2 つのノード（cuda:0 / cuda:1、cuda:0 / cpu、cuda:1 / cuda:0）への 1 回の write を、ホストの current device をもう一方の device にした状態で試した。値はどちらも遅れて埋めたもので、両方とも正しく、時刻は 1 つだった（照合メモ 8）
+- `_OnItsDevice` での send の S2: 成り立つ。照合メモ 7 のとおり、clone と待ちは同じ stream（スレッドの値の device の current stream。hook の中ではノード自身の stream）を使う。書き手が送った直後に約 0.1 s の仕事を積んでも、読み手（cuda:0 / cuda:1 / cpu）の recv は 0.3〜2.2 ms で終わり、その時点で書き手の event は未完了だった。遅れて埋めた値を送ると send は約 93〜99 ms 待ち、読み手には正しい値が届いた
+- 読み手は書き手を待たない: ノードの send（別の device が current の場合を含む）でも、ホストの write でも成り立つ。例外は、前回の should-fix 1 で指摘した stream のプールの共有だけで、これは変わっていない（nit 1）
+- グローバル同期: 持ち込んでいない。`wait_for_clones` が待つのは、呼んだスレッドの、clone のある device の current stream の event だけ。`torch.cuda.synchronize()` は増えていない
+- 計算グラフ・不変・コピー: 変わらない（`detach().clone()`、読み手は `.to(copy=True)`、`peek` は `_OnItsDevice` を外す）。core の値を読む所はすべて codec の `from_core` / `peek` を通るので、Outlet のスロットに `_OnItsDevice` が入るようになったことで外し忘れが起きる箇所は無い
+- 更新手法の焼き付け: 無い
+
+## must-fix
+
+なし。
+
+## should-fix
+
+1. **別の device が current のときの S2 の待ちを確かめるテストが無い**（確信度: 高。変異で確かめた）。`wait_for_clones` の `torch.cuda.current_stream(d)` を `torch.cuda.current_stream()`（current device の stream）にする変異を pytest のプラグインで入れ、`test_wiring` / `test_port` / `test_execution` / `test_state` の CUDA のテスト（`-k "Cuda or Devices"`、42 件）を流した。42 件すべて通った。`test_a_reader_gets_what_a_late_stream_wrote` は current device が値の device と同じなので、この変異と区別できない。`torch.cuda.device(1)` の中のテスト（`test_sends_while_the_hook_has_made_another_device_current` と `test_what_the_host_writes_stays_only_on_the_device_of_its_node`）は、遅れて埋める stream を持たない。一方、同じ変異のもとで、遅れて埋めた値を `torch.cuda.device(1)` の中で送るスクリプト（`otherdev.py`）を流すと、読み手は cuda:0 / cuda:1 / cpu のどれでも**未完成の値**を受け取った（`ok=False`）。これは正しさの欠陥なので、回帰テストが要る。案: `Late` と同じ形で `torch.cuda.device(1)` の中で送るノードと、すぐ読む読み手のテスト（`cuda(2)`）。ホストの write にも同じ形のテストを足す（cuda:0 の既定の stream で `_sleep` してから埋め、`torch.cuda.device(1)` の中で write し、持ち主の cuda:0 のノードが読む）
+2. **CLAUDE.md と skill の新しい文言は、device に置く条件を広く書きすぎている**（確信度: 中。要約なので程度の問題）
+    - `CLAUDE.md:85` と skill 47 行の「CUDA のノードが読むテンソル（値）は device の上でコピーし」は、実際より広い。CUDA のノードが読んでもホストのメモリを通る値がある。CPU のノードが送った値、ノードが自分の device 以外の device のテンソルを送った値、ホストが持ち主と違う device のテンソルを write した値の 3 つ。逆に、CUDA のノードが 1 つでも読むポートでは、同じポートの CPU の読み手も device から読む。正確に書くなら次のとおり（どちらもメインがユーザーに確かめて、skill `edit-dot-claude` で直す）。「送ったノード（ホストの write では読むノード）の CUDA device の上のテンソルは、CUDA のノードが読むなら device に置いたまま渡し、読み手が device の上でコピーする」
+    - `CLAUDE.md:86` の「CUDA のノードが CUDA のノードに送ったメッセージ」には、「自分の device の上の」が抜けている。ホストの write の部分（「持ち主のノードの device で書いた値」）は挙動と合っている
+    - 「書き手（ノードの send、ホストの write）は自分の stream を待ってから公開する。読み手は書き手を待たない」は、今回の実測と合っている（例外は nit 1）
+
+## nit
+
+1. 「読み手は書き手を待たない」の例外は、前回の should-fix 1（device ごとに 32 本の stream のプールを超えると、stream が共有される）だけで、これは変わっていない。ただ、ホストが `torch.cuda.Stream()` で stream を作った場合も、同じプールから取る。そのため、ホストの stream が持ち主のノードの stream と重なることがあり、そのとき持ち主のコピーはホストの write の後の仕事の後ろに並ぶ。docs の「Sharing a stream」の段落は、ノード同士の共有しか書いていない。ノードとホストを合わせて 32 本を超えたときだけ起きるので、優先度は低い（確信度: 中。推論で、再現はしていない）
+2. この差分の前からある挙動: CUDA のノードが自分の device ではない device のテンソルを送ると、`_value` の `.to("cpu")` は、ワーカーに残っているその device の current stream（何も設定されていなければ legacy default stream、そうでなければ前にそのワーカーで走ったノードの stream）に積まれ、その stream 全体を同期する。書き手がホストやほかのノードの GPU の仕事を待ちうる。ノードが自分の device 以外で計算するのは普通の使い方ではないので、優先度は低い（確信度: 中）
+
+## 検証結果（再々監査）
+
+- `just run`: 実行していない（orchestrator が実行する）
+- 実機（RTX 4090 + RTX 4060）。スクリプトは `/tmp/claude-1001/-data-geson-mujou--claude-worktrees-feature-2026-10-24-device-tensor-passthrough/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/algo3/` に置いた
+    - `hostwrite.py`（前回と同じスクリプト）で must-fix 1 が直ったことを確かめた。条件は前回と同じで、ホストは write の後に約 0.5 s の `_sleep` を積んだ。表の値は recv にかかった時間（CUDA の読み手は、自分の stream の同期まで含む）
+
+        | 読み手 | ホストが既定の stream（前回 → 今回） | ホストが自分の副 stream |
+        | --- | --- | --- |
+        | cpu | 483 ms → **1.80 ms** | 1.49 ms |
+        | cuda:1 | 467 ms → **1.50 ms** | 1.55 ms |
+        | cuda:0 | 0.13 ms → 0.09 ms | 0.09 ms |
+
+        値はすべて正しい。ホストの stream は、読み手が読み終えた後もさらに約 440〜480 ms 動いていた
+    - `otherdev.py node`: cuda:0 のノードが `torch.cuda.device(1)` の中で送る場合を試した。遅れて埋めた値は、send が 93〜99 ms 待ったうえで正しく届いた。送った後に仕事を積んだ場合は、send が 0.1〜0.4 ms で終わり、読み手が読み終えた時点で書き手の event は未完了だった。読み手は cuda:0 / cuda:1 / cpu の 3 通り
+    - `otherdev.py host`: 2 つのノードへの 1 回の write を、ホストの current device をもう一方の device にして試した。値は正しく、write は約 93〜99 ms 待ち、時刻は 1 つだった
+    - `mutplug.py` と `run_mut.sh`: should-fix 1 の変異。テストは 42 件すべて通り、`otherdev.py node` は 3 通りとも `ok=False` になった
+
+## 照合メモ（再々監査）
+
+7. **`_OnItsDevice` の send の stream。** Driver の `_use` は、ノード自身の stream を `set_stream` で current にする。この設定は device ごと・スレッドごとに持たれ、`torch.cuda.device(1)` は current device を変えるだけで、cuda:0 の current stream はそのまま残る。`detach().clone()` は `empty_like` と `copy_` からなる。確保はキャッシュアロケータが値の device（cuda:0）の current stream で行い、同じ device の中の `copy_` も device guard の下で `getCurrentCUDAStream(0)` に積む。どちらもノード自身の stream になる。`wait_for_clones` は `torch.cuda.current_stream(d)`（d は clone の device）に event を記録して待つので、clone を積んだ stream と一致する。export の間だけ `_OnItsDevice.__dlpack__` が `torch.cuda.device(d)` に切り替え、bindings は `stream` を渡さないので、余計な同期は起きない。読み手の `_read` は包みを外す。同じ device の読み手は自分の stream で、別の device の読み手は副 stream（`Wire.cuda` が値の device なので `read_devices` に入る）でコピーし、`record_stream` も同じ stream を指す
+8. **ホストの write の経路。** `_item` は `to_core(device=input_devices[port], wait=False)` を呼ぶ。clone は、ホストのスレッドの持ち主の device の current stream（設定していなければ legacy default stream）に積まれる。ホストの current device が違うときは `_OnItsDevice` に包む（ポートごとに判定する）。`wait_for_clones` は、生のテンソルと包んだテンソルの両方から device を集め、device ごとに 1 回待つ。持ち主以外の device のテンソルは、`.to("cpu")` がホストの stream を同期する（待つのは書き手のホスト自身）。clone のメモリはホストの stream に属し、読み手の `record_stream` が読み手の stream の event でメモリの再利用を止めるので、ホストが次の確保で同じメモリを使っても安全である

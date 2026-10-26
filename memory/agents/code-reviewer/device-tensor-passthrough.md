@@ -123,3 +123,72 @@ must-fix は無し。前回の must-fix（hook の中で current device を変�
   - 別スレッドからの write（例外なし）
   - 包む値の shape / dtype の違いはスロット名つきの `ValueError`（`slot 'node.inp/in': expected shape (2,), got (3,)` など）
 - 成果物の汚染（`</content>` など）: 変更した全ファイルで無し
+
+---
+
+# 再々レビュー（2026-10-26、ユーザーの 2026-10-25 の 2 回目の決定への対応）
+
+対象: `be790d2..HEAD`（be790d2, 0a9c1ae, c65e0f4, c745a8f, a3c1e08, f1f7208, 2b71a47, b500abb, 50569f8）と、未コミットの `CLAUDE.md`・`.claude/skills/locality-and-async/SKILL.md`。
+
+## verdict: approve
+
+must-fix はありません。決定 1（ホストの write で device に置くのは、ポートを持つノードの CUDA device の上のテンソルだけ。`Wiring.input_devices`）と決定 2（ノードの send で hook が別の device を current にしていても、`_OnItsDevice` で包んで device のまま送る。S2 は保つ）は、仕様どおりに実装されています。algorithm-reviewer の must-fix 1（CPU や別の device の読み手が、ホストが write の後に積んだ GPU の仕事を待つ）は直っており、回帰テストが変異で落ちることも確かめました。下の should-fix 1〜4 は、PR を出す前に片付けるか、orchestrator が採否を決めてください。
+
+確かめたこと（指摘ではなく、判断の根拠）:
+
+- `input_devices` の値は、正規化済みのノードの device（`node.py` の `_device` が `"cuda"` に index を付ける）なので、`to_core` の `torch.cuda.current_device() != device.index` も `value.device == stays_on` も正しく判定できる。`_item` は `inputs` の検査の後で `input_devices[port]` を引くので、KeyError にはならない
+- ホストの write: clone はテンソルの device guard の下で、ホストのスレッドのその device の current stream に積まれ、`wait_for_clones` も同じ stream（`current_stream(d)`）を待つ。ホストの current device が違うときは包まれ、`wait_for_clones` が `_OnItsDevice` からも device を集める
+- ノードの send で current device が違うとき: clone はノードの device の thread-local な current stream、つまり Driver が設定したノードの stream に積まれる（`torch.cuda.device(1)` は cuda:0 の stream を変えない）。`wait_for_clones` はその stream を待つ。読み手の `_read`、`Run.read`、`peek` は包みを外す
+- CPU の読み手が混ざった MultiPort（ノードの send を device に置く場合）: CPU のノードにも `read_devices` から副 stream ができるので、ホストの legacy default stream を待つ形は残っていない
+- 前回の指摘の扱い: should-fix 1（state の e2e）は be790d2、should-fix 2（ホストが書いた値の副 stream）は決定 1 で問題そのものが無くなった。nit 1・4（`Their` と `_on_their_devices`）は削除で解消、nit 2 は c65e0f4、nit 3 は a3c1e08 の範囲、nit 5 は 2b71a47、nit 6 は f1f7208、nit 7 は 0a9c1ae で対応済み。should-fix 3（CHANGELOG）は取り下げる。この worktree の CLAUDE.md にその規約は無く、main にも `CHANGELOG.md` は無い
+
+## must-fix
+
+なし。
+
+## should-fix
+
+1. **包んだ clone の待ち（`wait_for_clones` の `_OnItsDevice` の分岐）を確かめるテストが無い（`src/mujou/codec.py:120-125`）**
+   - 問題: `wait_for_clones` が `_OnItsDevice` を無視する変異 D（`[v for v in m if isinstance(v, torch.Tensor)]` だけを待つ）を入れても、CUDA の関連テスト 42 件がすべて通る。この分岐が要るのは、ホストの current device がノードの device と違う write（docs は「whichever device is current」と約束している）と、hook の中で `torch.cuda.device(...)` を使った send の 2 つ。どちらでも、読み手が出来上がる前の clone を読む。scratch のテスト 2 本（ホストが `with torch.cuda.device(1)` の中で、cuda:0 の遅い stream が埋めるテンソルを cuda:0 のノードへ write する。`Late` の send を `with torch.cuda.device(1)` で包む）は、変異なしでは通り、変異 D では 2 本とも値が違って落ちる
+   - 以前は `_on_their_devices` の中で、包むことと待つことが一体だった。今は包む処理（`to_core`）と待つ処理（`wait_for_clones`）が別の関数に分かれたので、片方だけが壊れても気付けない
+   - 根拠: skill `testing-strategy`（変異で落ちるテスト）。再現: `/tmp/claude-1001/-data-geson-mujou--claude-worktrees-feature-2026-10-24-device-tensor-passthrough/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/mut/test_scratch_wrapped_wait.py`（下の検証結果）。`test_a_write_waits_for_the_hosts_stream` と `test_a_reader_gets_what_a_late_stream_wrote` の `cuda(2)` 版として足すのが素直です
+   - 確信度: 高。深刻度: 中（テストの欠落。今の実装は正しい）
+
+2. **`memory/project_gpu_policy.md` に古い記述が 2 か所残っている（23 行、28 行）**
+   - 問題: 23 行の Why は「ホストからの書き込みを device に置かないのは、torch の `__dlpack__` が current device を…保証できないため」と書いており、11 行・14 行（ホストの write を持ち主の device に置き、`_OnItsDevice` で包む）と矛盾する。28 行の How to apply「device に置く値を増やす（ホストの書き込みなど）ときは、`__dlpack__` の current device の制約と、読み手の副 stream の device が静的に決まらない問題を先に解く」は、この PR で両方とも解いた（`_OnItsDevice` と `input_devices`）ので、解決済みとして書き換えるべき
+   - 根拠: 同じファイルの 11・14 行と `specs/messages.md`「コアの中の値」
+   - 確信度: 高。深刻度: 低〜中（後で読むエージェントの判断を誤らせる）
+
+3. **`to_core` の docstring が、ノードの send の `device` を読み手の device と説明している（`src/mujou/codec.py:73-77`）**
+   - 問題: 「It is the device of the node that reads the values when the sender knows it … a node that sends to a node on CUDA (``Wire.cuda``)」とあるが、ノードの send で渡す `Wire.cuda` は**送るノード**の device です。cuda:0 のノードから cuda:1 や CPU のノードが読む場合も cuda:0 になる。ホストの write の場合だけ、読み手（持ち主）の device と一致する。`specs/messages.md` の codec の節（「ノードの send なら送るノードの CUDA device」）は正しい
+   - 根拠: `src/mujou/wiring.py` の `held`（`device[port] if _held(...)`、port は送る側）
+   - 確信度: 高。深刻度: 低
+
+4. **未コミットの `CLAUDE.md:85` と skill `locality-and-async` 47 行の「CUDA のノードが読むテンソル（値）は device の上でコピー」は範囲が広すぎる**
+   - 問題: CUDA のノードが読んでも、次の場合はホストのメモリを通る。CPU のノードが送った値、送り手の device 以外のテンソル、ホストが持ち主と別の device で書いたテンソル。正しくは「CUDA のノードが自分の device で送り CUDA のノードが読むテンソルと、ホストが持ち主の CUDA device で書いたテンソル」です。`CLAUDE.md:86` の書き方（「CUDA のノードが CUDA のノードに送ったメッセージと、ホストが持ち主のノードの device で書いた値」）はほぼ正確なので、85 行もこちらに揃えるとよい。skill の「値」はスカラーを含むので「テンソル」にする
+   - どちらも未コミットです。CLAUDE.md の変更なので、ユーザーの確認を取ってから別の commit にすること
+   - 根拠: `src/mujou/codec.py` の `_value`（`value.device == stays_on` の場合だけ device に置く）、`src/mujou/wiring.py` の `held` と `input_devices`
+   - 確信度: 中（要約としての許容範囲の判断による）。深刻度: 低
+
+## nit
+
+1. `tests/mujou/test_state.py`（`test_a_cuda_value_the_host_wrote_is_saved_on_the_cpu_and_restored`）のコメント「The core holds what the host writes on CUDA wrapped」は古い。ホストの current device は cuda:0 でノードと同じなので、今は包まれずに置かれる。e2e で包んだ値の状態取得を通したいなら、`cuda(2)` で write を `with torch.cuda.device(1)` の中に入れる。ただし `peek` の包みの分岐が無くても `_read` が CPU へコピーするので、壊れても値は正しい（確信度: 高）
+2. `tests/mujou/test_port.py` の `test_sends_while_the_hook_has_made_another_device_current` は、slow の印が無いまま profiler のサブプロセス（約 1.8 s）を起こすので、`test-fast` が遅くなる。slow の印が付いた `test_a_message_between_cuda_nodes_skips_host_memory` に `pytest.param("cuda:0@1", "cuda:0", False, marks=pytest.mark.cuda(2))` として足すほうが、オラクルの置き場所が 1 つに揃う（確信度: 中）
+3. 同じテストの `("host:cuda:0", "cpu", True)` は、決定 1 を戻す変異 A でも通る（D2H がホストから読み手へ移るだけで、Pageable の端点はどちらでも出る）。対照としての記録にはなるが、決定 1 を守るのは `test_execution.py` の新しいテストです。また、テスト名の「between_cuda_nodes」はホストの write を含む今の範囲と合わない（確信度: 高、優先度: 低）
+4. `src/mujou/port.py:113-116`（`Port.send` の docstring）: 「a peer on CUDA copies it from device to device, also while the hook has made another device current」では、current device の条件が読み手のコピーに掛かって読める。正しくは送り手の側の条件なので、「It stays on the device also while …」のように独立した文にする（確信度: 中）
+5. `src/mujou/codec.py:9-11` のモジュールの docstring は、device に置く場合をノードの send だけと書いており、CUDA の読み手の条件とホストの write が抜けている（確信度: 高、優先度: 低）
+6. `src/mujou/wiring.py`: `input_devices` は `inputs` と同じキーを持つ並行の辞書。`inputs: Mapping[AnyPort, tuple[InputSlot, device | None]]` にまとめる手もある。好みの範囲（確信度: 低）
+7. `docs/{en,ja}/topics/threads-and-devices.md` の最後の段落: 「Any other tensor …」の直後の「Any other node on the CPU …」（ja も「それ以外のテンソル」の直後に「それ以外の CPU のノード」）は、「other」が何を指すのか分かりにくい。以前からある文（確信度: 低）
+
+## 検証結果（再々レビュー）
+
+- just run: 実行していない（orchestrator が並行して実行中のため。指示どおり）
+- 個別の pytest（RTX 4090 + RTX 4060）: `test_execution.py` / `test_port.py` / `test_wiring.py` / `test_state.py` / `test_codec.py` の CUDA 関連 57 件が pass。新しいテスト（`test_a_reader_does_not_wait_for_what_the_host_queues_after_writing` の 3 つ、state の e2e、`test_a_write_waits_for_the_hosts_stream`）は 5 回連続で pass
+- CUDA が無いときの skip: `CUDA_VISIBLE_DEVICES=""` で、対象 14 件がすべて skip（1 枚が要るもの 9 件、2 枚が要るもの 5 件）。`CUDA_VISIBLE_DEVICES=0` では 9 passed / 5 skipped
+- 変異テスト（`/tmp/claude-1001/-data-geson-mujou--claude-worktrees-feature-2026-10-24-device-tensor-passthrough/d2146d35-f3d8-44cf-90d5-5029742d85ef/scratchpad/mut/sitecustomize.py` を `PYTHONPATH` に置き、`MUT=<名前>` で切り替える。profiler のサブプロセスにも効く）
+  - A（ホストの write は、テンソルの CUDA device にそのまま置く。旧来の挙動）→ `test_a_reader_does_not_wait_…[cpu]`・`[cuda:1]`、`skips_host_memory[host:cuda:1-cuda:0-True]`、`test_what_the_host_writes_stays_only_on_the_device_of_its_node` の 4 件が落ちる
+  - B（ノードの send で current device が違えばホストへ回す。旧来の挙動）→ `test_sends_while_the_hook_has_made_another_device_current`（memcpy のオラクル）が落ちる
+  - C1（ホストの write の `wait_for_clones` を外す）→ `test_a_write_waits_for_the_hosts_stream` が落ちる
+  - C2（ノードの send の `wait_for_clones` を外す）→ `test_a_reader_gets_what_a_late_stream_wrote` が落ちる
+  - D（`wait_for_clones` が `_OnItsDevice` を無視する）→ **42 件すべて通る**（should-fix 1）。scratch の `test_scratch_wrapped_wait.py` の 2 本は、変異なしで pass し、変異 D で 2 本とも fail
+- 成果物の汚染（`</content>` など）: 変更した全ファイルで無し。全ファイルが改行で終わる
