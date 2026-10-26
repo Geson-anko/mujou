@@ -13,7 +13,7 @@ singular value of ``J`` is below about 2.6 (``1 + |J|^2 < 8``), and below
 about 1.2 to 1.8 when updates come late (in a linear chain). As the network
 learns, the Jacobian of a stage grows to 5 to 12 and that of a single block to
 3 to 6, while the third stage with the head (where the pooling averages 64
-pixels) is about 1.3 after 3 epochs and 2.2 after 10. As the next node is the
+pixels) is about 1.2 after 3 epochs and 2.0 after 10. As the next node is the
 output, the curvature of the cross entropy (at most 1/2) multiplies its square,
 so the relaxation stays stable. With a node per stage, the relaxation
 diverges; a node per block would be past the bound too.

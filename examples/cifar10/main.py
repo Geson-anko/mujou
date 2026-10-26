@@ -15,21 +15,21 @@ accuracy (the first prediction for each batch, before any node has learned from
 it), the test accuracy after each epoch (the test batches with ``mask`` False,
 so that nothing learns from them) and the real time.
 
-The core keeps the messages in the host's memory: every message a node on the
-GPU sends or receives is copied between the device and the host (a quarter to
-a third of the CPU time of an update here). With batches of 64, an update of
-``layer0`` takes longer than the period of 1 ms of the run's time, so the run's
-timer goes at ``--time-scale`` 0.3 (3.3 ms of real time per period). There, on
-an RTX 4090, 99% of the updates of ``layer0`` came within 2 periods of the one
-before (``max_dt``, beyond which a node drops the time). At 0.4, 1% came later
-than 3.5 periods; on a slower GPU, lower the scale. With the defaults, in the
-3rd epoch, the prequential accuracy was 55.00% (seed 0), against
-55.76% for BP. The test accuracy moves by a few points from epoch to epoch
-(the learning rate does not decay), for both, and the GPU does not compute bit
-for bit the same in every run.
+The messages between the nodes stay on the GPU: a node on CUDA sends to a node
+on CUDA from device to device. An update of ``layer0`` (forward and VJP of the
+stem and 6 blocks) takes about 3.7 ms on an RTX 4090, as long with 128 samples
+as with 64, so the batch is 128. That is longer than the period of 1 ms of the
+run's time, so the run's timer goes at ``--time-scale`` 0.3 (3.3 ms of real
+time per period). There, 99% of the updates of ``layer0`` came within 2
+periods of the one before (``max_dt``, beyond which a node drops the time); at
+0.4, 1% came later than 2.75 periods. On a slower GPU, lower the scale. With
+the defaults, in the 3rd epoch, the prequential accuracy was 55.11% (seed 0),
+against 54.45% for BP. The test accuracy moves by a few points from epoch to
+epoch (the learning rate does not decay), for both, and the GPU does not
+compute bit for bit the same in every run.
 
 Needs a CUDA GPU, and the network once to download CIFAR-10 (about 160 MB)
-into ``--data``. The defaults (3 epochs) take about 5 minutes. Run it from
+into ``--data``. The defaults (3 epochs) take about 3 minutes. Run it from
 the repository::
 
     uv run python examples/cifar10/main.py
@@ -132,10 +132,10 @@ def train_pc(
 def main() -> None:
     parser = argparse.ArgumentParser(description="CIFAR-10 with PC-ALM nodes and BP.")
     parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--batch", type=int, default=64)
+    parser.add_argument("--batch", type=int, default=128)
     parser.add_argument("--steps", type=int, default=32, help="periods per batch (S)")
     parser.add_argument("--tau-h", type=float, default=4e-3, help="seconds")
-    parser.add_argument("--lr", type=float, default=8e-3, help="the lr of AdamW")
+    parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
     parser.add_argument("--time-scale", type=float, default=0.3)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--device", default="cuda", help="a CUDA device")
