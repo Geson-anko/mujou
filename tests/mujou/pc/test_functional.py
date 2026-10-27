@@ -301,6 +301,19 @@ class TestRelax:
         assert torch.equal(h, h0)
         assert torch.equal(lam, lam0)
 
+    def test_the_decay_of_r_pulls_h_towards_mu(self):
+        # tau_h dh/dt = -(r + lam + g) - (tau_h / tau_r) r; lam as before.
+        tau = TimeConstants(h=4e-3, lam=8e-3, r=2e-3)
+        h, lam, mu, g = self.state()
+        h0, lam0 = h.clone(), lam.clone()
+        dt = 1e-3
+        relax_(h, lam, mu, g, dt, tau)
+        h1 = h0 - dt / tau.h * ((1 + tau.h / tau.r) * (h0 - mu) + lam0 + g)
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(
+            lam, lam0 + dt / tau.lam * (h1 - mu), rtol=1e-15, atol=1e-15
+        )
+
 
 class TestRelaxWithRelaxer:
     TAU = TimeConstants(h=4e-3, lam=8e-3)

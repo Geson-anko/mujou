@@ -20,6 +20,14 @@ class TestTimeConstants:
         tau = TimeConstants(h=1e-3, lam=math.inf)
         assert tau.lam == math.inf
 
+    @pytest.mark.parametrize("r", [0.0, -1.0, math.nan])
+    def test_r_must_be_positive(self, r: float):
+        with pytest.raises(ValueError, match="TimeConstants.r"):
+            TimeConstants(h=1e-3, lam=1.0, r=r)
+
+    def test_r_does_not_decay_by_default(self):
+        assert TimeConstants(h=1e-3, lam=1.0).r == math.inf
+
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):
             TimeConstants(1e-3, 1.0)  # pyright: ignore[reportCallIssue]
@@ -32,3 +40,5 @@ class TestTimeConstants:
             1.5e-3  # 3 * lam
         )
         assert TimeConstants(h=4e-3, lam=math.inf).max_dt == 2e-3
+        # The decay of r pulls h by (1 + h / r) / h: here twice as hard.
+        assert TimeConstants(h=4e-3, lam=8e-3, r=4e-3).max_dt == pytest.approx(1e-3)

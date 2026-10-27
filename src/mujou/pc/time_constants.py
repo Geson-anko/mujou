@@ -11,7 +11,7 @@ class TimeConstants:
     A node relaxes its activity ``h`` and its dual ``lam`` with
 
     $$
-    \tau_h \dot h = -(r + \lambda + g),\qquad
+    \tau_h \dot h = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
     \tau_\lambda \dot\lambda = r
     $$
 
@@ -23,21 +23,33 @@ class TimeConstants:
     ``lam=math.inf`` makes the dual stay at zero (``alpha = 0``, plain predictive
     coding). ``h`` must be finite.
 
-    The fields are keyword-only: both are floats, and a swap by position could
+    ``r`` makes the deviation ``r`` decay with its own time constant, an extra
+    pull of ``h`` towards ``mu``. The fixed point stays (``lam`` integrates
+    ``r``, so ``r = 0`` there, and ``lam`` is the credit of backpropagation
+    still), and in a deep chain ``lam`` gets near that credit sooner: in a
+    ResNet of 11 nodes with ``lam = h / 4``, the cosine of the ``lam`` of the
+    first node with the credit after ``24 * h`` was 0.84 without the decay and
+    0.94 with ``r = h / 3`` (``specs/pc.md``). The default ``math.inf`` adds nothing. An analog
+    integrator that holds ``r`` (not ``h``) and leaks is this decay, which is
+    why a leak there is harmless where one of ``h`` towards 0 is not.
+
+    The fields are keyword-only: all are floats, and a swap by position could
     not be caught by the type checker.
 
     Example::
 
         tau = TimeConstants(h=4e-3, lam=8e-3)
         pc_only = TimeConstants(h=4e-3, lam=math.inf)
+        damped = TimeConstants(h=4e-3, lam=1e-3, r=4e-3 / 3)
 
     Raises:
-        ValueError: ``h`` is not finite and > 0, or ``lam`` is not > 0 (NaN is
-            not).
+        ValueError: ``h`` is not finite and > 0, or ``lam`` or ``r`` is not > 0
+            (NaN is not).
     """
 
     h: float
     lam: float
+    r: float = math.inf
 
     @property
     def period(self) -> float:
@@ -49,15 +61,19 @@ class TimeConstants:
 
     @property
     def max_dt(self) -> float:
-        """The default longest ``dt`` an update counts, ``min(h / 2, 3 * lam)``:
-        the explicit Euler step of ``h`` then ``lam`` is stable for
-        ``dt / h <= 1/2`` and ``dt / lam <= 3`` (``specs/pc.md``, "dt の打ち切り").
-        Every node of a chain caps at the same time, so that they weigh their
-        updates of the parameters alike."""
-        return min(self.h / 2, 3 * self.lam)
+        """The default longest ``dt`` an update counts,
+        ``min(h / (2 * (1 + h / r)), 3 * lam)`` (``min(h / 2, 3 * lam)`` without
+        the decay of ``r``): the explicit Euler step of ``h`` then ``lam`` is
+        stable for ``dt / h <= 1/2`` and ``dt / lam <= 3`` (``specs/pc.md``, "dt
+        の打ち切り"), and the decay of ``r`` pulls ``h`` ``1 + h / r`` times as
+        hard. Every node of a chain caps at the same time, so that they weigh
+        their updates of the parameters alike."""
+        return min(self.h / (2 * (1 + self.h / self.r)), 3 * self.lam)
 
     def __post_init__(self) -> None:
         if not 0 < self.h < math.inf:
             raise ValueError(f"TimeConstants.h must be finite and > 0, got {self.h!r}")
         if not self.lam > 0:
             raise ValueError(f"TimeConstants.lam must be > 0, got {self.lam!r}")
+        if not self.r > 0:
+            raise ValueError(f"TimeConstants.r must be > 0, got {self.r!r}")

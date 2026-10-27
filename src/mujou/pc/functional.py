@@ -183,7 +183,7 @@ def relax_(
     seconds of
 
     $$
-    \tau_h \dot h = -(r + \lambda + g),\qquad
+    \tau_h \dot h = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
     \tau_\lambda \dot\lambda = r,\qquad r = h - \mu.
     $$
 
@@ -212,6 +212,8 @@ def relax_(
     """
     with torch.no_grad():
         force = h - mu + lam + g  # tau_h dh/dt = -(r + lam + g)
+        if math.isfinite(tau.r):  # and - (tau_h / tau_r) r, the decay of r
+            force.add_(h - mu, alpha=tau.h / tau.r)
         if relaxer is None:
             h.sub_((dt / tau.h) * force)
         else:
