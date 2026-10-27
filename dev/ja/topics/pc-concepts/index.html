@@ -1978,8 +1978,8 @@
 <li><code>mujou.pc</code> の部品の役割と、利用者が直接使う部品・自分のノードを書くときに使う部品</li>
 <li>ノードの間を流れるメッセージと Port の向き</li>
 <li><code>pc.Layer</code> が 1 回の <code>on_update(dt)</code> で行うこと</li>
-<li><code>pc.LearnClock</code> が返す <code>Tick</code>、<code>jumps</code>、<code>pc.TimeConstants</code> の意味</li>
-<li><code>pc.SGD</code> と <code>pc.AdamW</code> が重みを、<code>pc.Euler</code> と <code>pc.HeavyBall</code> が活動を時間で動かす仕組み</li>
+<li><code>pc.clock.LearnClock</code> が返す <code>Tick</code>、<code>jumps</code>、<code>pc.TimeConstants</code> の意味</li>
+<li><code>pc.optim.SGD</code> と <code>pc.optim.AdamW</code> が重みを、<code>pc.relax.Euler</code> と <code>pc.relax.HeavyBall</code> が活動を時間で動かす仕組み</li>
 </ul>
 <p>前提は PyTorch・誤差逆伝播法（BP）と、<a href="../../concepts/">Mujou の仕組み</a>のノード・Port・<code>dt</code>。predictive coding の知識は要らない。</p>
 </div>
@@ -2078,7 +2078,7 @@
 <td>普段</td>
 </tr>
 <tr>
-<td><code>pc.Sample</code>・<code>pc.Activity</code>・<code>pc.Prediction</code></td>
+<td><code>pc.msg.Sample</code>・<code>pc.msg.Activity</code>・<code>pc.msg.Prediction</code></td>
 <td>メッセージ</td>
 <td>流れるデータの型（<a href="#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE">2 節</a>）</td>
 <td><code>Sample</code> は普段</td>
@@ -2090,19 +2090,19 @@
 <td>普段</td>
 </tr>
 <tr>
-<td><code>pc.SGD</code>・<code>pc.AdamW</code></td>
+<td><code>pc.optim.SGD</code>・<code>pc.optim.AdamW</code></td>
 <td>設定</td>
 <td>optimizer。重みを時間でどう動かすか（<a href="#6-optimizer">6 節</a>）</td>
 <td>普段</td>
 </tr>
 <tr>
-<td><code>pc.MSELoss</code>・<code>pc.CrossEntropyLoss</code></td>
+<td><code>pc.loss.MSELoss</code>・<code>pc.loss.CrossEntropyLoss</code></td>
 <td>損失</td>
 <td>サンプルごとの損失を返す。<code>Output</code> に渡す</td>
 <td>普段</td>
 </tr>
 <tr>
-<td><code>pc.LearnClock</code></td>
+<td><code>pc.clock.LearnClock</code></td>
 <td>部品</td>
 <td>いつ学ぶかを決める（<a href="#4-learnclock-%E3%81%A8-jumps">4 節</a>）</td>
 <td>自分のノード</td>
@@ -2114,7 +2114,7 @@
 <td>自分のノード</td>
 </tr>
 <tr>
-<td><code>pc.activity_spec</code></td>
+<td><code>pc.msg.activity_spec</code></td>
 <td>関数</td>
 <td><code>Activity</code> の spec を作る</td>
 <td>自分のノード</td>
@@ -2147,12 +2147,12 @@
 </thead>
 <tbody>
 <tr>
-<td><code>pc.Sample</code></td>
+<td><code>pc.msg.Sample</code></td>
 <td><code>x</code>、<code>y</code>、<code>mask</code></td>
 <td>ホスト → <code>Input.prev</code></td>
 </tr>
 <tr>
-<td><code>pc.Activity</code></td>
+<td><code>pc.msg.Activity</code></td>
 <td><code>h</code>、<code>jumps</code>、<code>y</code>、<code>mask</code>、<code>time</code></td>
 <td><code>next</code> → 次のノードの <code>prev</code></td>
 </tr>
@@ -2162,7 +2162,7 @@
 <td><code>prev</code> → 前のノードの <code>next</code></td>
 </tr>
 <tr>
-<td><code>pc.Prediction</code></td>
+<td><code>pc.msg.Prediction</code></td>
 <td><code>y_hat</code>、<code>y</code>、<code>mask</code>、<code>time</code></td>
 <td><code>Output.next</code> → ホスト</td>
 </tr>
@@ -2266,7 +2266,7 @@
 <tr>
 <td>4</td>
 <td><code>functional.relax_</code></td>
-<td>跳びがあれば <code>h</code> を付け替え、<span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>（既定の relaxer の <code>pc.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>h</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
+<td>跳びがあれば <code>h</code> を付け替え、<span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>h</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
 </tr>
 <tr>
 <td>5</td>
@@ -2362,7 +2362,7 @@
 <li><code>new</code> が True の更新で学ばないのは、その更新の <code>delta</code> がまだ前の入力のものだから</li>
 <li>だから同じ入力が続く間は <code>learn_interval</code> 秒ごとに学び、<code>elapsed</code> はおよそ <code>learn_interval</code></li>
 <li>学ばないまま入力が変わると、<code>elapsed</code> に溜めた時間は捨てる</li>
-<li>自分のノードでは <code>pc.LearnClock.of(tau, period=..., learn_interval=...)</code> で作り、属性に置く。それだけでノードの状態に入る</li>
+<li>自分のノードでは <code>pc.clock.LearnClock.of(tau, period=..., learn_interval=...)</code> で作り、属性に置く。それだけでノードの状態に入る</li>
 </ul>
 <details class="question">
 <summary>なぜノードが入力を受け取った時刻でなく、ホストの書き込み時刻から数えるの？</summary>
@@ -2454,9 +2454,9 @@
 <p>重みも秒で動く。optimizer は時間に沿った流れで、時定数を秒で持ち、1 歩ごとにその歩みが受け持つ <code>elapsed</code> 秒だけ進む。だから学ぶ頻度を変えても、重みが 1 秒あたりに動く速さは変わらない。</p>
 </div>
 <h3 id="設定を各ノードで束縛する">設定を各ノードで束縛する<a class="headerlink" href="#設定を各ノードで束縛する" title="Permanent link">&para;</a></h3>
-<p><code>pc.SGD(tau=)</code> と <code>pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
+<p><code>pc.optim.SGD(tau=)</code> と <code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
 <pre class="mermaid"><code>flowchart LR
-    S["pc.AdamW(...)&lt;br/&gt;設定、状態なし"] --&gt;|"bind(params)"| B0["Layer 0: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S["pc.optim.AdamW(...)&lt;br/&gt;設定、状態なし"] --&gt;|"bind(params)"| B0["Layer 0: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
     S --&gt;|"bind(params)"| B1["Layer 1: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
     S --&gt;|"bind(params)"| B2["Output: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># in __init__, with only the weights that learn</span>
@@ -2481,12 +2481,12 @@
 </thead>
 <tbody>
 <tr>
-<td><code>pc.SGD</code></td>
+<td><code>pc.optim.SGD</code></td>
 <td><span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span></td>
 <td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>。学習率 <span class="arithmatex">\(\Delta t / \tau_\theta\)</span> の SGD</td>
 </tr>
 <tr>
-<td><code>pc.AdamW</code></td>
+<td><code>pc.optim.AdamW</code></td>
 <td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>、<span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
 <td><span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span> で <span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>、<span class="arithmatex">\(v\)</span> も同様。続けて <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span> で AdamW の 1 歩</td>
 </tr>
@@ -2499,7 +2499,7 @@
 <li>AdamW は勾配の大きさによらず、1 歩で各重みをおよそ <span class="arithmatex">\(\eta\)</span> ずつ動かす。Adam の <code>lr</code> に合わせるなら、2 回の学習の間の時間を <span class="arithmatex">\(\Delta t\)</span> とし（1 入力につき 1 回学ぶなら入力を見せる時間）、<code>tau</code> を <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code> にする</li>
 </ul>
 <h3 id="質量-c-時間で行う-bias-補正">質量 c: 時間で行う bias 補正<a class="headerlink" href="#質量-c-時間で行う-bias-補正" title="Permanent link">&para;</a></h3>
-<p><span class="arithmatex">\(m\)</span> と <span class="arithmatex">\(v\)</span> は 0 から始まるので、はじめは小さすぎる。<code>torch.optim.AdamW</code> はステップ数 <span class="arithmatex">\(t\)</span> で補正し、<span class="arithmatex">\(m\)</span> を <span class="arithmatex">\(1 - \beta_1^t\)</span> で割る。<code>pc.AdamW</code> はステップを数えない。代わりに moment ごとに<strong>質量</strong> <span class="arithmatex">\(c\)</span> を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。</p>
+<p><span class="arithmatex">\(m\)</span> と <span class="arithmatex">\(v\)</span> は 0 から始まるので、はじめは小さすぎる。<code>torch.optim.AdamW</code> はステップ数 <span class="arithmatex">\(t\)</span> で補正し、<span class="arithmatex">\(m\)</span> を <span class="arithmatex">\(1 - \beta_1^t\)</span> で割る。<code>pc.optim.AdamW</code> はステップを数えない。代わりに moment ごとに<strong>質量</strong> <span class="arithmatex">\(c\)</span> を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。</p>
 <div class="arithmatex">\[\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m\]</div>
 <p>1 歩は moment と同じように <span class="arithmatex">\(c_m \leftarrow c_m + a_m(1 - c_m)\)</span> で質量を動かす。<span class="arithmatex">\(t\)</span> 秒ぶんの勾配の後は <span class="arithmatex">\(c_m = 1 - e^{-t/\tau_m}\)</span>。<span class="arithmatex">\(g\)</span> が一定なら <span class="arithmatex">\(m = c_m g\)</span> なので、最初の 1 歩から <span class="arithmatex">\(\hat m = g\)</span>。<span class="arithmatex">\(v\)</span> も自分の質量 <span class="arithmatex">\(c_v\)</span> を同じように持つ。</p>
 <p>1 歩は、<span class="arithmatex">\(g\)</span> が <span class="arithmatex">\(\Delta t\)</span> の間一定だとして流れを厳密に解く。だから moment と質量は歩みの回数ではなく歩みの秒数の合計で決まる。<span class="arithmatex">\(\tau_m = 0.1\)</span> 秒のときは次のとおり。</p>
@@ -2507,7 +2507,7 @@
 <thead>
 <tr>
 <th>歩み</th>
-<th><code>pc.AdamW</code> の <span class="arithmatex">\(c_m\)</span></th>
+<th><code>pc.optim.AdamW</code> の <span class="arithmatex">\(c_m\)</span></th>
 <th>0.05 秒の歩みに合わせて <span class="arithmatex">\(\beta_1 = e^{-0.05/0.1}\)</span> に固定し、ステップを数えると</th>
 </tr>
 </thead>
@@ -2534,13 +2534,13 @@
 </ol>
 </details>
 <h3 id="自分の-optimizer">自分の optimizer<a class="headerlink" href="#自分の-optimizer" title="Permanent link">&para;</a></h3>
-<p>自作の optimizer は 2 つのクラスで書く。設定は <code>pc.Optimizer</code> を継承して <code>bind(params)</code> を実装する。<code>bind</code> が返すものは <code>pc.BoundOptimizer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
+<p>自作の optimizer は 2 つのクラスで書く。設定は <code>pc.optim.Optimizer</code> を継承して <code>bind(params)</code> を実装する。<code>bind</code> が返すものは <code>pc.optim.BoundOptimizer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
 <h2 id="7-relaxer">7. relaxer<a class="headerlink" href="#7-relaxer" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
 <p>活動 <code>h</code> が自分に掛かる力に沿ってどう動くかも設定である。relaxer は <code>h</code> にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、<code>h</code> を <code>dt</code> 秒だけ動かす。</p>
 </div>
-<p><code>pc.Euler()</code> と <code>pc.HeavyBall(tau=)</code> が設定である。<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ取る。既定は <code>pc.Euler()</code> である。<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。設定は状態を持たないので、共有しても安全である。<code>Output</code> は <code>h</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>h</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。bind した relaxer が状態を持ち、<code>h</code> を動かす。</p>
+<p><code>pc.relax.Euler()</code> と <code>pc.relax.HeavyBall(tau=)</code> が設定である。<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ取る。既定は <code>pc.relax.Euler()</code> である。<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。設定は状態を持たないので、共有しても安全である。<code>Output</code> は <code>h</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>h</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。bind した relaxer が状態を持ち、<code>h</code> を動かす。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># __init__ で</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># on_update の functional.relax_ の中で、力 h - mu + lam + g を渡して:</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
@@ -2557,24 +2557,24 @@
 </thead>
 <tbody>
 <tr>
-<td><code>pc.Euler</code></td>
+<td><code>pc.relax.Euler</code></td>
 <td><span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} F\)</span></td>
 </tr>
 <tr>
-<td><code>pc.HeavyBall</code></td>
+<td><code>pc.relax.HeavyBall</code></td>
 <td><span class="arithmatex">\(v \leftarrow e^{-\Delta t/\tau} v + F\)</span>、続けて <span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} v\)</span></td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>relaxer が変えるのは <code>h</code> が不動点に着くまでの道で、不動点ではない。不動点では <span class="arithmatex">\(F = 0\)</span> かつ <span class="arithmatex">\(v = 0\)</span> になる。relaxer は <span class="arithmatex">\(\lambda\)</span> を動かさない。<span class="arithmatex">\(\lambda\)</span> は、どの relaxer が <code>h</code> を動かしても、<code>h</code> が動いたあとにその <code>h</code> の <span class="arithmatex">\(r\)</span> で進む（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）</li>
-<li><code>pc.HeavyBall</code> の速度は 0 から始まるので、最初の 1 歩は <code>pc.Euler</code> の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、<span class="arithmatex">\(F\,\Delta t\)</span> ではない。定常では <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span> なので、周期が短いほど利得が大きい。遅れた更新（長い <code>dt</code>）は速度をより多く忘れるので、安定な側に働く。<code>dt == 0</code> の 1 歩は <code>h</code> も速度もそのままにする</li>
+<li><code>pc.relax.HeavyBall</code> の速度は 0 から始まるので、最初の 1 歩は <code>pc.relax.Euler</code> の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、<span class="arithmatex">\(F\,\Delta t\)</span> ではない。定常では <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span> なので、周期が短いほど利得が大きい。遅れた更新（長い <code>dt</code>）は速度をより多く忘れるので、安定な側に働く。<code>dt == 0</code> の 1 歩は <code>h</code> も速度もそのままにする</li>
 <li>新しいサンプルのとき、また読んでいる <code>h</code> が跳んだときは、<span class="arithmatex">\(r\)</span> と <span class="arithmatex">\(\lambda\)</span> は保たれるが、速度が積んだのは前の入力の力である（<a href="#jumps">jumps</a>）。そこでノードは <code>reset_()</code> を呼び、その速度を捨てる。ノード自身の重みが跳んだときは <code>h</code> と <code>mu</code> が一緒に動き、<span class="arithmatex">\(r\)</span> も力も跳ばないので、<code>reset_</code> は呼ばない</li>
-<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.HeavyBall</code> なら <code>{"velocity": ...}</code>、<code>pc.Euler</code> なら空</li>
+<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.relax.HeavyBall</code> なら <code>{"velocity": ...}</code>、<code>pc.relax.Euler</code> なら空</li>
 <li>relaxer と値の選び方は<a href="../pc/#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</li>
 </ul>
 <h3 id="自分の-relaxer">自分の relaxer<a class="headerlink" href="#自分の-relaxer" title="Permanent link">&para;</a></h3>
-<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.Relaxer</code> を継承して <code>bind(h)</code> を実装し、<code>h</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(h, force, dt, tau_h)</code>・<code>reset_()</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
+<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.relax.Relaxer</code> を継承して <code>bind(h)</code> を実装し、<code>h</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.relax.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(h, force, dt, tau_h)</code>・<code>reset_()</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
 
 
 

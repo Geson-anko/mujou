@@ -1150,10 +1150,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pclearnclock" class="md-nav__link">
+  <a href="#pcclocklearnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pc.LearnClock
+        pc.clock.LearnClock
       
     </span>
   </a>
@@ -1670,10 +1670,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pclearnclock" class="md-nav__link">
+  <a href="#pcclocklearnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pc.LearnClock
+        pc.clock.LearnClock
       
     </span>
   </a>
@@ -1717,7 +1717,7 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">w1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">N_IN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_IN</span><span class="o">**</span><span class="mf">0.5</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_OUT</span><span class="p">,</span> <span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_OUT</span><span class="o">**</span><span class="mf">0.5</span>  <span class="c1"># fixed</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">w1</span><span class="p">])</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            <span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="n">LEARN</span><span class="p">,</span> <span class="n">max_dt</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">PERIOD</span>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="p">)</span>
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">)</span>  <span class="c1"># the host writes it</span>
@@ -1745,7 +1745,7 @@
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">w2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_OUT</span><span class="p">,</span> <span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_HIDDEN</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">w2</span><span class="p">])</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>            <span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="n">LEARN</span><span class="p">,</span> <span class="n">max_dt</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">PERIOD</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="p">)</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">ERROR</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">ACTIVITY</span><span class="p">)</span>  <span class="c1"># two-way</span>
@@ -1770,11 +1770,11 @@
 <h2 id="two-way-ports">Two-way ports<a class="headerlink" href="#two-way-ports" title="Permanent link">&para;</a></h2>
 <p><code>hidden.next</code> is <code>Port(send=ACTIVITY, recv=ERROR)</code> and <code>output.prev</code> is <code>Port(send=ERROR, recv=ACTIVITY)</code>: one connection carries the activity forward and the error back. Connections may form cycles, so the error could as well come back on ports of its own.</p>
 <h2 id="relaying-the-target">Relaying the target<a class="headerlink" href="#relaying-the-target" title="Permanent link">&para;</a></h2>
-<p>The activity carries the target <code>y</code> of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, <code>output</code> always compares a prediction with its own target, and <code>hidden</code> learns only from the error whose <code>time</code> is that of the input it holds. The nodes of <code>mujou.pc</code> carry <code>y</code>, <code>mask</code> and <code>time</code> in their <code>pc.Activity</code> the same way, with <code>jumps</code>, the count of the times the sender's <code>h</code> jumped, which tells the receiver to move its own <code>h</code> with its prediction (<a href="../pc/#the-nodes">PC-ALM</a>).</p>
+<p>The activity carries the target <code>y</code> of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, <code>output</code> always compares a prediction with its own target, and <code>hidden</code> learns only from the error whose <code>time</code> is that of the input it holds. The nodes of <code>mujou.pc</code> carry <code>y</code>, <code>mask</code> and <code>time</code> in their <code>pc.msg.Activity</code> the same way, with <code>jumps</code>, the count of the times the sender's <code>h</code> jumped, which tells the receiver to move its own <code>h</code> with its prediction (<a href="../pc/#the-nodes">PC-ALM</a>).</p>
 <h2 id="telling-what-is-new">Telling what is new<a class="headerlink" href="#telling-what-is-new" title="Permanent link">&para;</a></h2>
 <p><code>recv()</code> returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time <code>recv_with_time()</code> returns, or a time the message carries. Before anyone sends, the time is <code>None</code> (or, for a time in the message, its initial value: <code>Timestamp(ns=0)</code> of a <code>TimestampSpec</code>).</p>
-<h2 id="pclearnclock"><code>pc.LearnClock</code><a class="headerlink" href="#pclearnclock" title="Permanent link">&para;</a></h2>
-<p>Both nodes decide when to learn with a <code>pc.LearnClock</code>, a part of <code>mujou.pc</code> that any rule can use. In each update, <code>tick(dt, time, now)</code> takes the <code>dt</code>, the time the input was written at and the time now, and returns a <code>pc.Tick</code>:</p>
+<h2 id="pcclocklearnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#pcclocklearnclock" title="Permanent link">&para;</a></h2>
+<p>Both nodes decide when to learn with a <code>pc.clock.LearnClock</code>, a part of <code>mujou.pc</code> that any rule can use. In each update, <code>tick(dt, time, now)</code> takes the <code>dt</code>, the time the input was written at and the time now, and returns a <code>pc.clock.Tick</code>:</p>
 <ul>
 <li><code>new</code>: the input is new (its time is not the one seen last)</li>
 <li><code>learn</code>: learn in this update. With <code>learn_interval</code>, that is the first update <code>learn_interval</code> after each write (and every <code>learn_interval</code> while the input stays), but never the update that first sees an input; with <code>learn_interval=None</code>, every update</li>

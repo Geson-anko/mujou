@@ -1732,11 +1732,11 @@
 <li><code>leaky.py</code>: リーク積分器。連続時間で定義し厳密解で進めるので、どんな <code>dt</code> でも安定する。実行すると 2 つ並べた鎖の入力を切り替え、各出力を送られた時刻の厳密解と比べる</li>
 <li><code>test_leaky.py</code>: <code>leaky.py</code> のノードを <code>mujou.testing</code> の仮想タイマーと手動の更新でテストする。厳密解との比較、離散アルゴリズムとのビット単位の一致、再開した実行と止めずに続けた実行の一致。<code>uv run pytest examples/test_leaky.py</code> で実行する</li>
 <li><code>online_learning.py</code>: 教師がホストの書いて変える <code>a</code> で y = a x + b のバッチを送る。学習するノードは新しいバッチごとに、前のバッチからの時間だけ、素の PyTorch の autograd で学ぶ。ホストは損失が下がり、跳ね上がり、また下がるのを追う</li>
-<li><code>feedback_alignment.py</code>: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、<code>pc.LearnClock</code> によるサンプルごとに 1 回の学習</li>
+<li><code>feedback_alignment.py</code>: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、<code>pc.clock.LearnClock</code> によるサンプルごとに 1 回の学習</li>
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> と <code>pc.show</code> で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る</li>
-<li><code>pc_merge.py</code>: 入力を 2 つ持つ PC-ALM のノード <code>Merge</code> を <code>pc.functional</code> と <code>pc.LearnClock</code> で書き、2 本の塔を合流させて回帰を学ぶ</li>
+<li><code>pc_merge.py</code>: 入力を 2 つ持つ PC-ALM のノード <code>Merge</code> を <code>pc.functional</code> と <code>pc.clock.LearnClock</code> で書き、2 本の塔を合流させて回帰を学ぶ</li>
 <li><code>mnist/</code>: 784-256-256-10 のネットワークを <code>pc.Chain</code> で MNIST に学ばせ、同じネットワークを同じ初期重みとバッチで BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読み、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させ、<code>watch.py</code> がノードの <code>dt</code> を数える（<code>--watch</code>）</li>
-<li><code>cifar10/</code>: CUDA のデバイスに載せた ResNet-20 を残差ブロックごとのノードに分け、<code>pc.Chain</code> と <code>pc.AdamW</code> で CIFAR-10 に学ばせる。同じネットワークを同じ初期重み・バッチ・optimizer で、GPU 上の BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読んで拡張し、<code>resnet.py</code> がネットワークを組んでブロックが緩和をどれだけ硬くするかを述べ、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させる</li>
+<li><code>cifar10/</code>: CUDA のデバイスに載せた ResNet-20 を残差ブロックごとのノードに分け、<code>pc.Chain</code> と <code>pc.optim.AdamW</code> で CIFAR-10 に学ばせる。同じネットワークを同じ初期重み・バッチ・optimizer で、GPU 上の BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読んで拡張し、<code>resnet.py</code> がネットワークを組んでブロックが緩和をどれだけ硬くするかを述べ、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させる</li>
 <li><code>save_and_restore.py</code>: <code>run.state_dict()</code> で状態を取得し、<code>torch.save</code> で保存し、新しいインスタンスに <code>mujou.run(..., state=...)</code> で再開する。再開した実行は専用のタイマーで走る</li>
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code> と、ノードのパス（<code>"enc.scale"</code>）の付き方</li>
 <li><code>subscribe.py</code>: <code>run.subscribe</code> がまず最新の出力を、その後は新しい出力を 1 つずつ返す。<code>break</code> で止める</li>

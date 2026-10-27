@@ -1850,7 +1850,7 @@
 <li><strong>入力。</strong> <code>state=</code> と <code>inputs=</code> を両方渡すと、<code>inputs</code> の値が木の値を置き換える</li>
 </ul>
 <h2 id="自分の値を状態に入れる">自分の値を状態に入れる<a class="headerlink" href="#自分の値を状態に入れる" title="Permanent link">&para;</a></h2>
-<p>自動で集まるのは、テンソル、<code>mujou.Stateful</code> のオブジェクト（どの <code>nn.Module</code> も、<code>pc.LearnClock</code> も、<code>mujou.Stateful</code> を継承した自作のクラスも）、<code>self.generator</code> の状態。数値・文字列、テンソルのリストや dict は集まらない。<code>state_dict</code> と <code>load_state_dict</code> という名前のメソッドを持つだけのオブジェクトも集まらないので、<code>mujou.Stateful</code> を継承する。実行中に変わる素の値は、<code>__init__</code> で属性に代入して登録する。</p>
+<p>自動で集まるのは、テンソル、<code>mujou.Stateful</code> のオブジェクト（どの <code>nn.Module</code> も、<code>pc.clock.LearnClock</code> も、<code>mujou.Stateful</code> を継承した自作のクラスも）、<code>self.generator</code> の状態。数値・文字列、テンソルのリストや dict は集まらない。<code>state_dict</code> と <code>load_state_dict</code> という名前のメソッドを持つだけのオブジェクトも集まらないので、<code>mujou.Stateful</code> を継承する。実行中に変わる素の値は、<code>__init__</code> で属性に代入して登録する。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
 </code></pre></div>

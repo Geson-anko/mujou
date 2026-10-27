@@ -3031,7 +3031,7 @@ taking the state is not seen by the other nodes. The framework copies what
 it returns before the node resumes.</p>
 <p>The state of a node is, as for an <code>nn.Module</code>, every attribute that holds
 a <code>torch.Tensor</code> (<code>nn.Parameter</code> included) or a <code>Stateful</code> (an
-<code>nn.Module</code>, a <code>pc.LearnClock</code>; not a class), every attribute
+<code>nn.Module</code>, a <code>pc.clock.LearnClock</code>; not a class), every attribute
 registered with <code>register_state</code>, and the state of <code>generator</code>. What an
 attribute holds when the state is taken or loaded decides. The settings that <code>__init__</code>
 computes from its arguments (a time constant, say) are no state: a node

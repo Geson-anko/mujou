@@ -1152,10 +1152,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pclearnclock" class="md-nav__link">
+  <a href="#pcclocklearnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pc.LearnClock
+        pc.clock.LearnClock
       
     </span>
   </a>
@@ -1672,10 +1672,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pclearnclock" class="md-nav__link">
+  <a href="#pcclocklearnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        pc.LearnClock
+        pc.clock.LearnClock
       
     </span>
   </a>
@@ -1719,7 +1719,7 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">w1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">N_IN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_IN</span><span class="o">**</span><span class="mf">0.5</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_OUT</span><span class="p">,</span> <span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">g</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_OUT</span><span class="o">**</span><span class="mf">0.5</span>  <span class="c1"># fixed</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">w1</span><span class="p">])</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            <span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="n">LEARN</span><span class="p">,</span> <span class="n">max_dt</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">PERIOD</span>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="p">)</span>
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">SAMPLE</span><span class="p">)</span>  <span class="c1"># the host writes it</span>
@@ -1747,7 +1747,7 @@
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">w2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">N_OUT</span><span class="p">,</span> <span class="n">N_HIDDEN</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">)</span> <span class="o">/</span> <span class="n">N_HIDDEN</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">w2</span><span class="p">])</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="p">(</span>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>            <span class="n">period</span><span class="o">=</span><span class="n">PERIOD</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="n">LEARN</span><span class="p">,</span> <span class="n">max_dt</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">PERIOD</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="p">)</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">ERROR</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">ACTIVITY</span><span class="p">)</span>  <span class="c1"># two-way</span>
@@ -1772,11 +1772,11 @@
 <h2 id="両方向の-port">両方向の Port<a class="headerlink" href="#両方向の-port" title="Permanent link">&para;</a></h2>
 <p><code>hidden.next</code> は <code>Port(send=ACTIVITY, recv=ERROR)</code>、<code>output.prev</code> は <code>Port(send=ERROR, recv=ACTIVITY)</code>。1 本の接続で活動を前へ、誤差を後ろへ運ぶ。循環してつないでもよいので、誤差を別の Port で返してもよい。</p>
 <h2 id="目標を中継する">目標を中継する<a class="headerlink" href="#目標を中継する" title="Permanent link">&para;</a></h2>
-<p>活動はそのサンプルの目標 <code>y</code> と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、<code>output</code> はいつも予測を自分の目標と比べ、<code>hidden</code> は持っている入力と同じ <code>time</code> の誤差だけから学ぶ。<code>mujou.pc</code> のノードも同じように、<code>y</code>・<code>mask</code>・<code>time</code> を <code>pc.Activity</code> で運ぶ。一緒に運ぶ <code>jumps</code> は送り手の <code>h</code> が跳んだ回数で、受け手に自分の <code>h</code> を予測と一緒に動かすよう伝える（<a href="../pc/#%E3%83%8E%E3%83%BC%E3%83%89">PC-ALM</a>）。</p>
+<p>活動はそのサンプルの目標 <code>y</code> と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、<code>output</code> はいつも予測を自分の目標と比べ、<code>hidden</code> は持っている入力と同じ <code>time</code> の誤差だけから学ぶ。<code>mujou.pc</code> のノードも同じように、<code>y</code>・<code>mask</code>・<code>time</code> を <code>pc.msg.Activity</code> で運ぶ。一緒に運ぶ <code>jumps</code> は送り手の <code>h</code> が跳んだ回数で、受け手に自分の <code>h</code> を予測と一緒に動かすよう伝える（<a href="../pc/#%E3%83%8E%E3%83%BC%E3%83%89">PC-ALM</a>）。</p>
 <h2 id="新しいかどうかを判定する">新しいかどうかを判定する<a class="headerlink" href="#新しいかどうかを判定する" title="Permanent link">&para;</a></h2>
 <p><code>recv()</code> は新しいかどうかによらず最新の値を返す。各サンプルから 1 回だけ学ぶノードは、時刻で新しいサンプルを見分ける。<code>recv_with_time()</code> が返す時刻か、メッセージが運ぶ時刻を使う。誰も送る前の時刻は <code>None</code>（メッセージが運ぶ時刻なら、その初期値。<code>TimestampSpec</code> なら <code>Timestamp(ns=0)</code>）になる。</p>
-<h2 id="pclearnclock"><code>pc.LearnClock</code><a class="headerlink" href="#pclearnclock" title="Permanent link">&para;</a></h2>
-<p>どちらのノードも、いつ学ぶかを <code>pc.LearnClock</code> で決める。<code>mujou.pc</code> の部品だが、どの則でも使える。更新ごとに <code>tick(dt, time, now)</code> に <code>dt</code>、入力が書かれた時刻、今の時刻を渡すと、<code>pc.Tick</code> が返る。</p>
+<h2 id="pcclocklearnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#pcclocklearnclock" title="Permanent link">&para;</a></h2>
+<p>どちらのノードも、いつ学ぶかを <code>pc.clock.LearnClock</code> で決める。<code>mujou.pc</code> の部品だが、どの則でも使える。更新ごとに <code>tick(dt, time, now)</code> に <code>dt</code>、入力が書かれた時刻、今の時刻を渡すと、<code>pc.clock.Tick</code> が返る。</p>
 <ul>
 <li><code>new</code>: 入力が新しい（時刻が前回見たものと違う）</li>
 <li><code>learn</code>: この更新で学ぶ。<code>learn_interval</code> を渡したなら、各書き込みから <code>learn_interval</code> 後の最初の更新（入力が変わらない間は以後 <code>learn_interval</code> ごと）。ただし入力を初めて見た更新では学ばない。<code>learn_interval=None</code> なら毎回</li>
