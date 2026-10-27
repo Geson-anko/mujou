@@ -34,20 +34,20 @@ PC-ALM では各ノードが自分の**活動** `h` を持ち、前のノード�
 
     利用者が普段使うのは `Chain`・`show`・`TimeConstants`・optimizer・損失・`Sample`。自分のノードを書くときに `LearnClock`・`functional`・`Activity` を使う。
 
-| 部品                                                                   | 種類       | 役割                                                                                                                      | 主に使う場面    |
-| ---------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `pc.Input`                                                             | ノード     | ホストが書いた `x` をそのまま活動 `h` として送る。`h` も重みも持たない                                                    | 手で組む        |
-| `pc.Layer`                                                             | ノード     | `module` を 1 つ持ち、`h` と `lam` を動かし、重みを学ぶ                                                                   | 手で組む        |
-| `pc.Output`                                                            | ノード     | 最後の `module` と損失を持ち、予測 `y_hat` を出し、重みを学ぶ。`h` と `lam` は持たない                                    | 手で組む        |
-| `pc.Chain`                                                             | Network    | `Input → Layer → … → Output` をまとめて作りつなぐ                                                                         | 普段            |
-| `pc.show`                                                              | 関数       | ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す                                                                  | 普段            |
-| `pc.messages.Sample`・`pc.messages.Activity`・`pc.messages.Prediction` | メッセージ | 流れるデータの型（[2 節](#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE)） | `Sample` は普段 |
-| `pc.TimeConstants`                                                     | 設定       | `h` と `lam` の速さを秒で持つ（[5 節](#5-timeconstants)）                                                                 | 普段            |
-| `pc.optim.SGD`・`pc.optim.AdamW`                                       | 設定       | optimizer。重みを時間でどう動かすか（[6 節](#6-optimizer)）                                                               | 普段            |
-| `pc.losses.MSELoss`・`pc.losses.CrossEntropyLoss`                      | 損失       | サンプルごとの損失を返す。`Output` に渡す                                                                                 | 普段            |
-| `pc.clock.LearnClock`                                                  | 部品       | いつ学ぶかを決める（[4 節](#4-learnclock-%E3%81%A8-jumps)）                                                               | 自分のノード    |
-| `pc.functional`                                                        | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`）。`Layer` と `Output` もこれで書く                                         | 自分のノード    |
-| `pc.messages.activity_spec`                                            | 関数       | `Activity` の spec を作る                                                                                                 | 自分のノード    |
+| 部品                                                    | 種類       | 役割                                                                                                                      | 主に使う場面    |
+| ------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `pc.Input`                                              | ノード     | ホストが書いた `x` をそのまま活動 `h` として送る。`h` も重みも持たない                                                    | 手で組む        |
+| `pc.Layer`                                              | ノード     | `module` を 1 つ持ち、`h` と `lam` を動かし、重みを学ぶ                                                                   | 手で組む        |
+| `pc.Output`                                             | ノード     | 最後の `module` と損失を持ち、予測 `y_hat` を出し、重みを学ぶ。`h` と `lam` は持たない                                    | 手で組む        |
+| `pc.Chain`                                              | Network    | `Input → Layer → … → Output` をまとめて作りつなぐ                                                                         | 普段            |
+| `pc.show`                                               | 関数       | ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す                                                                  | 普段            |
+| `pc.msg.Sample`・`pc.msg.Activity`・`pc.msg.Prediction` | メッセージ | 流れるデータの型（[2 節](#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE)） | `Sample` は普段 |
+| `pc.TimeConstants`                                      | 設定       | `h` と `lam` の速さを秒で持つ（[5 節](#5-timeconstants)）                                                                 | 普段            |
+| `pc.optim.SGD`・`pc.optim.AdamW`                        | 設定       | optimizer。重みを時間でどう動かすか（[6 節](#6-optimizer)）                                                               | 普段            |
+| `pc.loss.MSELoss`・`pc.loss.CrossEntropyLoss`           | 損失       | サンプルごとの損失を返す。`Output` に渡す                                                                                 | 普段            |
+| `pc.clock.LearnClock`                                   | 部品       | いつ学ぶかを決める（[4 節](#4-learnclock-%E3%81%A8-jumps)）                                                               | 自分のノード    |
+| `pc.functional`                                         | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`）。`Layer` と `Output` もこれで書く                                         | 自分のノード    |
+| `pc.msg.activity_spec`                                  | 関数       | `Activity` の spec を作る                                                                                                 | 自分のノード    |
 
 `Layer` と `Output` は `LearnClock`・`functional`・optimizer を組み合わせたもの。同じ部品で入力が 2 つのノードのような `Layer` で書けないノードも作れる。
 
@@ -71,12 +71,12 @@ flowchart LR
 
 実線が前向き、点線が後ろ向き。`Input` は届いた `g_in` を読まない（`x` は固定）。
 
-| メッセージ               | フィールド                        | 流れ                         |
-| ------------------------ | --------------------------------- | ---------------------------- |
-| `pc.messages.Sample`     | `x`、`y`、`mask`                  | ホスト → `Input.prev`        |
-| `pc.messages.Activity`   | `h`、`jumps`、`y`、`mask`、`time` | `next` → 次のノードの `prev` |
-| `g_in`                   | テンソル（`h_in` と同じ shape）   | `prev` → 前のノードの `next` |
-| `pc.messages.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
+| メッセージ          | フィールド                        | 流れ                         |
+| ------------------- | --------------------------------- | ---------------------------- |
+| `pc.msg.Sample`     | `x`、`y`、`mask`                  | ホスト → `Input.prev`        |
+| `pc.msg.Activity`   | `h`、`jumps`、`y`、`mask`、`time` | `next` → 次のノードの `prev` |
+| `g_in`              | テンソル（`h_in` と同じ shape）   | `prev` → 前のノードの `next` |
+| `pc.msg.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
 
 - `mask`: サンプルごとに目標があるか。False のサンプルは損失に入らず、`Layer` はその行の `g_in` を 0 にする。`mask` がすべて False の入力でも `h` と `lam` は緩和し、重みだけ学ばない。評価はこれで行う
 - `time`: ホストがその入力を書いた時刻（`Timestamp`）。書き込みの前は `Timestamp(ns=0)`

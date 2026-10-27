@@ -29,7 +29,7 @@ from collections.abc import Callable, Sequence
 import torch
 import torch.nn.functional as F
 
-from mujou.pc.messages import batch_shape, rows
+from mujou.pc.msg import batch_shape, rows
 from mujou.pc.relax import BoundRelaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Size
@@ -143,8 +143,8 @@ def loss_vjp(
             raise ValueError(
                 f"loss must return the loss of each sample, of shape "
                 f"{tuple(mask.shape)}, got {tuple(ell_b.shape)}; a loss that "
-                "averages, such as nn.MSELoss(), does not (use pc.losses.MSELoss or "
-                "pc.losses.CrossEntropyLoss with the batch)"
+                "averages, such as nn.MSELoss(), does not (use pc.loss.MSELoss or "
+                "pc.loss.CrossEntropyLoss with the batch)"
             )
         return torch.where(mask, ell_b, 0.0).sum()
 

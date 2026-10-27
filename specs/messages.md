@@ -94,7 +94,7 @@ torch とコアの変換は `codec.py` の 1 か所だけが行う。spec の公
 
 - メッセージのサイズは固定なので、`IntSpec` は bits を必ず持つ（既定は 64 bit 符号付き）。範囲外の値は送るときにエラーになる
 - `FloatSpec` は 64 bit に固定する。Python の float は f64 で、32 bit を許すと書いた値と読み出した値がずれる
-- `TimestampSpec` は時刻をメッセージで運ぶ（`pc.messages.Activity.time`）。初期値の `Timestamp(ns=0)` は「まだ書かれていない」と時刻 0 の書き込みを区別しない（ユーザーの決定）
+- `TimestampSpec` は時刻をメッセージで運ぶ（`pc.msg.Activity.time`）。初期値の `Timestamp(ns=0)` は「まだ書かれていない」と時刻 0 の書き込みを区別しない（ユーザーの決定）
 - 将来の候補は `ComplexSpec`（DLPack の complex、コード 5）。Python の array は持たない。固定長の列は `TensorSpec` で表せる。種別を足すときの変更は spec のクラス、codec の対応表、bindings の変換の 3 か所に限り、登録の口は作らない
 
 メッセージの型は次のとおり。`FieldSpec` は `TensorSpec | IntSpec | FloatSpec | BoolSpec | TimestampSpec` の別名。

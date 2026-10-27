@@ -60,8 +60,8 @@ class TestPcPublicNames:
             "TimeConstants",
             "clock",
             "functional",
-            "losses",
-            "messages",
+            "loss",
+            "msg",
             "optim",
             "relax",
             "show",
@@ -78,8 +78,8 @@ class TestPcPublicNames:
             "HeavyBall",
             "Relaxer",
         ]
-        assert sorted(mujou.pc.losses.__all__) == ["CrossEntropyLoss", "MSELoss"]
-        assert sorted(mujou.pc.messages.__all__) == [
+        assert sorted(mujou.pc.loss.__all__) == ["CrossEntropyLoss", "MSELoss"]
+        assert sorted(mujou.pc.msg.__all__) == [
             "Activity",
             "Prediction",
             "Sample",

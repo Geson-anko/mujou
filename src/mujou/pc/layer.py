@@ -9,7 +9,7 @@ from torch import nn
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
 from mujou.pc.clock import LearnClock
 from mujou.pc.functional import relax_, vjp
-from mujou.pc.messages import Activity, activity_spec, rows
+from mujou.pc.msg import Activity, activity_spec, rows
 from mujou.pc.optim import Optimizer
 from mujou.pc.relax import Euler, Relaxer
 from mujou.pc.time_constants import TimeConstants

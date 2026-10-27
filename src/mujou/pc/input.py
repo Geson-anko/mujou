@@ -3,7 +3,7 @@
 from typing import override
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
-from mujou.pc.messages import Sample, activity_spec
+from mujou.pc.msg import Sample, activity_spec
 from mujou.time import Timestamp
 from mujou.types import Device, Size
 

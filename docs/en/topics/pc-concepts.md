@@ -34,20 +34,20 @@ In PC-ALM every node holds its own **activity** `h`, and **predicts** it from th
 
     You usually use `Chain`, `show`, `TimeConstants`, an optimizer, a loss and `Sample`. You use `LearnClock`, `functional` and `Activity` to write nodes of your own.
 
-| Part                                                                   | Kind      | What it does                                                                                                            | Mainly used        |
-| ---------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `pc.Input`                                                             | Node      | Sends the `x` the host wrote as it is, as the activity `h`. Holds neither `h` nor weights                               | When built by hand |
-| `pc.Layer`                                                             | Node      | Holds one `module`, moves `h` and `lam`, and learns the weights                                                         | When built by hand |
-| `pc.Output`                                                            | Node      | Holds the last `module` and the loss, gives the prediction `y_hat`, and learns the weights. Holds neither `h` nor `lam` | When built by hand |
-| `pc.Chain`                                                             | Network   | Makes `Input → Layer → … → Output` and connects them                                                                    | Usually            |
-| `pc.show`                                                              | Function  | The host writes a sample, shows it for a while, and gets the prediction made before learning                            | Usually            |
-| `pc.messages.Sample`, `pc.messages.Activity`, `pc.messages.Prediction` | Messages  | The types of the data that flows ([section 2](#2-connections-and-what-flows))                                           | `Sample` usually   |
-| `pc.TimeConstants`                                                     | Settings  | Holds the speeds of `h` and `lam` in seconds ([section 5](#5-timeconstants))                                            | Usually            |
-| `pc.optim.SGD`, `pc.optim.AdamW`                                       | Settings  | The optimizers: how the weights move in time ([section 6](#6-optimizers))                                               | Usually            |
-| `pc.losses.MSELoss`, `pc.losses.CrossEntropyLoss`                      | Losses    | Return the loss of each sample. Given to `Output`                                                                       | Usually            |
-| `pc.clock.LearnClock`                                                  | Part      | Decides when to learn ([section 4](#4-learnclock-and-jumps))                                                            | Nodes of your own  |
-| `pc.functional`                                                        | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`). `Layer` and `Output` are written with them too                    | Nodes of your own  |
-| `pc.messages.activity_spec`                                            | Function  | Makes the spec of an `Activity`                                                                                         | Nodes of your own  |
+| Part                                                    | Kind      | What it does                                                                                                            | Mainly used        |
+| ------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `pc.Input`                                              | Node      | Sends the `x` the host wrote as it is, as the activity `h`. Holds neither `h` nor weights                               | When built by hand |
+| `pc.Layer`                                              | Node      | Holds one `module`, moves `h` and `lam`, and learns the weights                                                         | When built by hand |
+| `pc.Output`                                             | Node      | Holds the last `module` and the loss, gives the prediction `y_hat`, and learns the weights. Holds neither `h` nor `lam` | When built by hand |
+| `pc.Chain`                                              | Network   | Makes `Input → Layer → … → Output` and connects them                                                                    | Usually            |
+| `pc.show`                                               | Function  | The host writes a sample, shows it for a while, and gets the prediction made before learning                            | Usually            |
+| `pc.msg.Sample`, `pc.msg.Activity`, `pc.msg.Prediction` | Messages  | The types of the data that flows ([section 2](#2-connections-and-what-flows))                                           | `Sample` usually   |
+| `pc.TimeConstants`                                      | Settings  | Holds the speeds of `h` and `lam` in seconds ([section 5](#5-timeconstants))                                            | Usually            |
+| `pc.optim.SGD`, `pc.optim.AdamW`                        | Settings  | The optimizers: how the weights move in time ([section 6](#6-optimizers))                                               | Usually            |
+| `pc.loss.MSELoss`, `pc.loss.CrossEntropyLoss`           | Losses    | Return the loss of each sample. Given to `Output`                                                                       | Usually            |
+| `pc.clock.LearnClock`                                   | Part      | Decides when to learn ([section 4](#4-learnclock-and-jumps))                                                            | Nodes of your own  |
+| `pc.functional`                                         | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`). `Layer` and `Output` are written with them too                    | Nodes of your own  |
+| `pc.msg.activity_spec`                                  | Function  | Makes the spec of an `Activity`                                                                                         | Nodes of your own  |
 
 `Layer` and `Output` combine `LearnClock`, `functional` and an optimizer. With the same parts you can also make nodes that `Layer` cannot express, such as a node with two inputs.
 
@@ -71,12 +71,12 @@ flowchart LR
 
 Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it gets (`x` is clamped).
 
-| Message                  | Fields                            | Flow                                |
-| ------------------------ | --------------------------------- | ----------------------------------- |
-| `pc.messages.Sample`     | `x`, `y`, `mask`                  | Host → `Input.prev`                 |
-| `pc.messages.Activity`   | `h`, `jumps`, `y`, `mask`, `time` | `next` → the next node's `prev`     |
-| `g_in`                   | A tensor (the shape of `h_in`)    | `prev` → the previous node's `next` |
-| `pc.messages.Prediction` | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
+| Message             | Fields                            | Flow                                |
+| ------------------- | --------------------------------- | ----------------------------------- |
+| `pc.msg.Sample`     | `x`, `y`, `mask`                  | Host → `Input.prev`                 |
+| `pc.msg.Activity`   | `h`, `jumps`, `y`, `mask`, `time` | `next` → the next node's `prev`     |
+| `g_in`              | A tensor (the shape of `h_in`)    | `prev` → the previous node's `next` |
+| `pc.msg.Prediction` | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
 
 - `mask`: whether each sample has a target. A sample whose `mask` is False adds nothing to the loss, and `Layer` sets the `g_in` of its row to 0. With every `mask` False, `h` and `lam` still relax and only the weights do not learn. Evaluate this way
 - `time`: the `Timestamp` at which the host wrote the input. `Timestamp(ns=0)` before the first write

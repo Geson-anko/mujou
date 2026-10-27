@@ -67,7 +67,7 @@ class HandChain:
                 pc.Layer(module, act_spec=act, relaxer=relaxer, **learning)
             )
             act = self.layers[-1].act_spec
-        self.out = pc.Output(head, act_spec=act, loss=pc.losses.MSELoss(B), **learning)
+        self.out = pc.Output(head, act_spec=act, loss=pc.loss.MSELoss(B), **learning)
         senders = [self.inp, *self.layers]
         for sender, receiver in zip(senders, [*self.layers, self.out], strict=True):
             sender.next.connect(receiver.prev)
@@ -88,8 +88,8 @@ class HandChain:
         return run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
 
 
-def activity(h: TensorSpec) -> DictSpec[pc.messages.Activity]:
-    return pc.messages.activity_spec(h, TensorSpec((B, N_OUT)), batch=B)
+def activity(h: TensorSpec) -> DictSpec[pc.msg.Activity]:
+    return pc.msg.activity_spec(h, TensorSpec((B, N_OUT)), batch=B)
 
 
 def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:

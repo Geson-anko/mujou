@@ -10,7 +10,7 @@ from torch import nn
 from mujou import DictSpec, Node, Port, TensorSpec, TimestampSpec
 from mujou.pc.clock import LearnClock
 from mujou.pc.functional import loss_vjp
-from mujou.pc.messages import Activity, Prediction
+from mujou.pc.msg import Activity, Prediction
 from mujou.pc.optim import Optimizer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device
@@ -68,7 +68,7 @@ class Output(Node):
         out = pc.Output(
             nn.Linear(256, 10),
             act_spec=hidden.act_spec,  # hidden: a pc.Layer
-            loss=pc.losses.CrossEntropyLoss(B),
+            loss=pc.loss.CrossEntropyLoss(B),
             tau=tau,
             optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=24e-3,

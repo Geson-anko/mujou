@@ -33,8 +33,8 @@ class Merge(Node):
     def __init__(
         self,
         module: nn.Module,
-        a: DictSpec[pc.messages.Activity],
-        b: DictSpec[pc.messages.Activity],
+        a: DictSpec[pc.msg.Activity],
+        b: DictSpec[pc.msg.Activity],
     ) -> None:
         super().__init__(period=TAU.period)
         self.module = module
@@ -49,7 +49,7 @@ class Merge(Node):
         self.jumps, self.seen = 0, [0, 0]  # the jumps it sent, and read from a, b
         self.register_state("jumps")
         self.register_state("seen")
-        self.act_spec = pc.messages.activity_spec(h, a.field("y", TensorSpec), B)
+        self.act_spec = pc.msg.activity_spec(h, a.field("y", TensorSpec), B)
         self.a = Port(send=h_a, recv=a)  # sends back g_in of h_a
         self.b = Port(send=h_b, recv=b)
         self.next = MultiPort(send=self.act_spec, recv=h)
@@ -111,7 +111,7 @@ class TwoTowers(Network, pc.Shown):
         self.out = pc.Output(
             nn.Linear(64, 1),
             act_spec=self.merge.act_spec,
-            loss=pc.losses.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             tau=TAU,
             optimizer=OPTIMIZER,
             learn_interval=LEARN,
@@ -137,9 +137,7 @@ if __name__ == "__main__":
         for i in range(300):
             x = 2 * torch.rand(B, 2, generator=g) - 1
             y = torch.sin(2 * x[:, :1]) * torch.cos(x[:, 1:])
-            p = pc.show(
-                run, net, pc.messages.Sample(x=x, y=y, mask=mask), seconds=SHOWN
-            )
+            p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=SHOWN)
             losses.append(nn.functional.mse_loss(p["y_hat"], y).item())
             if (i + 1) % 50 == 0:
                 print(f"batch {i + 1}: loss {sum(losses[-50:]) / 50:.4f}")

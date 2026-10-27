@@ -16,15 +16,15 @@ The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augme
 
 ## The nodes
 
-| Node        | What it holds                                         | Ports                                                                                                                                                                   |
-| ----------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pc.Input`  | Its count of writes                                   | `prev`: the host writes a `pc.messages.Sample` (`x`, `y`, `mask`). `next`: sends `x` as the `h` of a `pc.messages.Activity`, with `y`, `mask` and the time of the write |
-| `pc.Layer`  | A module, its activity `h`, the dual `lam`, its clock | `prev` and `next`. `next` sends `h` as a `pc.messages.Activity`, with its `jumps` and the `y`, `mask` and `time` that came with its input                               |
-| `pc.Output` | The last module, the loss, its clock                  | `prev`. `next` sends a `pc.messages.Prediction` (`y_hat`, `y`, `mask`, `time`) for the host to read                                                                     |
+| Node        | What it holds                                         | Ports                                                                                                                                                         |
+| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.Input`  | Its count of writes                                   | `prev`: the host writes a `pc.msg.Sample` (`x`, `y`, `mask`). `next`: sends `x` as the `h` of a `pc.msg.Activity`, with `y`, `mask` and the time of the write |
+| `pc.Layer`  | A module, its activity `h`, the dual `lam`, its clock | `prev` and `next`. `next` sends `h` as a `pc.msg.Activity`, with its `jumps` and the `y`, `mask` and `time` that came with its input                          |
+| `pc.Output` | The last module, the loss, its clock                  | `prev`. `next` sends a `pc.msg.Prediction` (`y_hat`, `y`, `mask`, `time`) for the host to read                                                                |
 
-A `pc.messages.Activity` carries `h`, `jumps`, `y`, `mask` and `time`. `jumps` counts the times the sender's `h` jumped rather than relaxed: a `pc.Input` counts the host's writes, and a `pc.Layer` its moves with a new sample or with a jump of the `h` it receives, and the jumps that its own weights make when it learns at intervals. A receiver that sees `jumps` change moves its `h` with its prediction once, so that the jump does not enter its deviation `h - mu`.
+A `pc.msg.Activity` carries `h`, `jumps`, `y`, `mask` and `time`. `jumps` counts the times the sender's `h` jumped rather than relaxed: a `pc.Input` counts the host's writes, and a `pc.Layer` its moves with a new sample or with a jump of the `h` it receives, and the jumps that its own weights make when it learns at intervals. A receiver that sees `jumps` change moves its `h` with its prediction once, so that the jump does not enter its deviation `h - mu`.
 
-`pc.Chain(*modules, ...)` connects `Input` → `Layer` → ... → `Output`, with every period `tau.period` (`tau.h / 4`). For other periods or other shapes, build the nodes one by one: give `pc.Input` the specs `x` and `y` and a `period`, give each `pc.Layer` and `pc.Output` the `act_spec` of the node before it (the spec of the `pc.messages.Activity` it receives), and connect `next` to `prev` along the chain. `pc.show` shows samples to such a network too, when it inherits `pc.Shown` as well as `mujou.Network` and exposes the `prev` of its `Input` and the `next` of its `Output` as its own `prev` and `next`.
+`pc.Chain(*modules, ...)` connects `Input` → `Layer` → ... → `Output`, with every period `tau.period` (`tau.h / 4`). For other periods or other shapes, build the nodes one by one: give `pc.Input` the specs `x` and `y` and a `period`, give each `pc.Layer` and `pc.Output` the `act_spec` of the node before it (the spec of the `pc.msg.Activity` it receives), and connect `next` to `prev` along the chain. `pc.show` shows samples to such a network too, when it inherits `pc.Shown` as well as `mujou.Network` and exposes the `prev` of its `Input` and the `next` of its `Output` as its own `prev` and `next`.
 
 Put in a node any `nn.Module` that treats each sample of the batch on its own: one layer, a stack of layers, or a residual block. `Dropout` and `BatchNorm` in training mode mix or drop samples, so do not use them; `LayerNorm` is fine. Initialize the weights when you make the modules: the nodes do not. A parameter with `requires_grad=False` does not learn.
 
@@ -140,7 +140,7 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # twice as long
 
 ## The batch
 
-The batch is the shape that every tensor of the messages starts with. Give it as `batch` to `pc.Chain`, `pc.Input` or `pc.messages.activity_spec`, and start the specs `x` and `y` with it. `pc.Layer` and `pc.Output` take it from the `act_spec` they receive.
+The batch is the shape that every tensor of the messages starts with. Give it as `batch` to `pc.Chain`, `pc.Input` or `pc.msg.activity_spec`, and start the specs `x` and `y` with it. `pc.Layer` and `pc.Output` take it from the `act_spec` they receive.
 
 | `batch`        | `x` (784 inputs) | `y` (one class) | `mask`   | For                                             |
 | -------------- | ---------------- | --------------- | -------- | ----------------------------------------------- |
@@ -150,17 +150,17 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 
 - The samples must be independent: the module must compute each one on its own, along every dimension of the batch. A dimension that the module mixes, such as the time of a sequence, is a dimension of the sample, not of the batch: 64 sequences of `T` steps are `batch=64` with `x` of `(64, T, 784)`
 - A batch of several dimensions learns as the same samples in one dimension: `(8, 4)` as `32`
-- The losses take the batch too: `pc.losses.MSELoss(batch)` and `pc.losses.CrossEntropyLoss(batch)`. For `pc.losses.CrossEntropyLoss`, `y` holds the classes, int64 of the shape of `y_hat` without its class dimension, or the probabilities of the classes, of the shape of `y_hat`. The classes are the dimension of `y_hat` right after the batch, as in `nn.CrossEntropyLoss`, and the dimensions after them, such as the pixels of an image, are averaged
+- The losses take the batch too: `pc.loss.MSELoss(batch)` and `pc.loss.CrossEntropyLoss(batch)`. For `pc.loss.CrossEntropyLoss`, `y` holds the classes, int64 of the shape of `y_hat` without its class dimension, or the probabilities of the classes, of the shape of `y_hat`. The classes are the dimension of `y_hat` right after the batch, as in `nn.CrossEntropyLoss`, and the dimensions after them, such as the pixels of an image, are averaged
 
 ## Pitfalls
 
 !!! warning "Give the batch to the chain and to the loss"
 
-    The default `batch` is `()`, one sample, and the batch is never read from the shapes of the specs. With specs of 64 samples and no `batch` anywhere, the chain takes the 64 samples as one sample and `pc.losses.MSELoss()` averages over them: it still runs, but the credit of each sample is 1/64 of what it should be. Pass the same `batch` to `pc.Chain` (or `pc.Input`) and to the loss. If only one of them has it, `pc.Output` raises an error.
+    The default `batch` is `()`, one sample, and the batch is never read from the shapes of the specs. With specs of 64 samples and no `batch` anywhere, the chain takes the 64 samples as one sample and `pc.loss.MSELoss()` averages over them: it still runs, but the credit of each sample is 1/64 of what it should be. Pass the same `batch` to `pc.Chain` (or `pc.Input`) and to the loss. If only one of them has it, `pc.Output` raises an error.
 
 !!! warning "The loss returns the loss of each sample"
 
-    Pass `pc.losses.MSELoss(batch)`, `pc.losses.CrossEntropyLoss(batch)`, or your own function `(y_hat, y)` that returns the shape of the batch. A loss that averages over the batch, such as `nn.MSELoss()`, makes `pc.Output` raise `ValueError`. `pc.losses.MSELoss` averages over every dimension of each sample (all but the batch), as `nn.MSELoss` does, with no `0.5`: the weights follow the gradient of `nn.MSELoss()` on the batch.
+    Pass `pc.loss.MSELoss(batch)`, `pc.loss.CrossEntropyLoss(batch)`, or your own function `(y_hat, y)` that returns the shape of the batch. A loss that averages over the batch, such as `nn.MSELoss()`, makes `pc.Output` raise `ValueError`. `pc.loss.MSELoss` averages over every dimension of each sample (all but the batch), as `nn.MSELoss` does, with no `0.5`: the weights follow the gradient of `nn.MSELoss()` on the batch.
 
 !!! warning "Read predictions from the output node"
 
@@ -195,12 +195,12 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, given the bound `params` in the same order, and send `g_in` to the node before
 4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
 5. Move the activity with `pc.functional.relax_(..., t.dt, tau, self.relaxer)`. When step 4 re-anchored, call `self.relaxer.reset_()` first: what it remembers are the forces of the input before
-6. Send `h` as a `pc.messages.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
+6. Send `h` as a `pc.msg.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
 7. When `t.learn` is True and the `mask` of some sample is True, learn with `self.optimizer.step_([g / B for g in g_theta], t.elapsed)`, with `B` the number of samples in the batch. The node divides by `B`: the optimizer does not know the batch
 
 Without step 4, the node follows other dynamics than `pc.Layer`: a new sample or a jump below enters its deviation `h - mu` and the credit it sends back. A node that learns at intervals also moves `h` by the jump of `mu` that its update of the weights makes, and adds 1 to its `jumps`; `pc.Layer` does both one update later, as its docstring describes.
 
-To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.messages.activity_spec(h, y, batch)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
+To connect with the nodes of `mujou.pc`, declare the ports with the `act_spec` of the node before, or with `pc.msg.activity_spec(h, y, batch)`. The arguments are in the [API reference](../api/pc.md). A rule other than PC that learns across nodes is in [Update Rules](update-rules.md).
 
 ### Example: a node with two inputs
 

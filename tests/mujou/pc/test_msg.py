@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from mujou import DictSpec, IntSpec, TensorSpec, TimestampSpec
-from mujou.pc.messages import Activity, activity_spec
+from mujou.pc.msg import Activity, activity_spec
 from mujou.types import Size
 
 

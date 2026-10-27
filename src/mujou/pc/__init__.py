@@ -19,9 +19,9 @@ The names that go with a role are in a submodule, which this package imports:
 - ``pc.relax``: ``Euler`` and ``HeavyBall`` set how the activity of a node moves
   (``Relaxer``); each node binds the setting to its own activity
   (``BoundRelaxer``).
-- ``pc.losses``: ``MSELoss`` and ``CrossEntropyLoss`` give the loss of each
+- ``pc.loss``: ``MSELoss`` and ``CrossEntropyLoss`` give the loss of each
   sample.
-- ``pc.messages``: ``Sample``, ``Activity``, ``Prediction`` and
+- ``pc.msg``: ``Sample``, ``Activity``, ``Prediction`` and
   ``activity_spec``, what the nodes send.
 - ``pc.clock``: ``LearnClock`` and ``Tick``.
 - ``pc.functional``: the parts the nodes are made of, for writing nodes of your
@@ -42,7 +42,7 @@ Import it as a submodule::
         x=TensorSpec((B, 784)),
         y=TensorSpec((B,), torch.int64),
         batch=B,
-        loss=pc.losses.CrossEntropyLoss(B),
+        loss=pc.loss.CrossEntropyLoss(B),
         tau=pc.TimeConstants(h=4e-3, lam=8e-3),
         optimizer=pc.optim.SGD(tau=1.28),
         learn_interval=0.15,
@@ -52,8 +52,8 @@ Import it as a submodule::
 from mujou.pc import (
     clock as clock,
     functional as functional,
-    losses as losses,
-    messages as messages,
+    loss as loss,
+    msg as msg,
     optim as optim,
     relax as relax,
 )
@@ -73,8 +73,8 @@ __all__ = [
     "TimeConstants",
     "optim",
     "relax",
-    "losses",
-    "messages",
+    "loss",
+    "msg",
     "clock",
     "functional",
 ]

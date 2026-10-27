@@ -89,7 +89,7 @@ def train_pc(
         x=TensorSpec((args.batch, 784)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
-        loss=pc.losses.CrossEntropyLoss(args.batch),
+        loss=pc.loss.CrossEntropyLoss(args.batch),
         tau=tau,
         optimizer=optimizer,
         learn_interval=0.75 * shown,  # learn once, 3/4 of the way through each batch
@@ -111,9 +111,7 @@ def train_pc(
             for i, (x, y, mask) in enumerate(
                 batches(data.train_x, data.train_y, args.batch, shuffle(epoch))
             ):
-                p = pc.show(
-                    run, net, pc.messages.Sample(x=x, y=y, mask=mask), seconds=shown
-                )
+                p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=shown)
                 if not torch.isfinite(p["y_hat"]).all():
                     raise SystemExit("PC-ALM diverged: lower --time-scale")
                 right += correct(p["y_hat"], y, mask)  # before learning from it
@@ -128,7 +126,7 @@ def train_pc(
                 p = pc.show(
                     run,
                     net,
-                    pc.messages.Sample(x=x, y=y, mask=unlabeled),
+                    pc.msg.Sample(x=x, y=y, mask=unlabeled),
                     seconds=shown,
                 )
                 test_right += correct(p["y_hat"], y, mask)

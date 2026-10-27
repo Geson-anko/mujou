@@ -40,7 +40,7 @@ def chain(
         x=X,
         y=Y,
         batch=B,
-        loss=pc.losses.MSELoss(B),
+        loss=pc.loss.MSELoss(B),
         tau=TAU,
         optimizer=optimizer,
         relaxer=relaxer,
@@ -66,7 +66,7 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     nodes["output"] = pc.Output(
         head,
         act_spec=last.act_spec,
-        loss=pc.losses.MSELoss(B),
+        loss=pc.loss.MSELoss(B),
         tau=TAU,
         optimizer=SGD,
         learn_interval=LEARN_INTERVAL,
@@ -187,7 +187,7 @@ def learned(
     x: torch.Tensor,
     y: torch.Tensor,
     mask: torch.Tensor,
-    loss: type[pc.losses.MSELoss | pc.losses.CrossEntropyLoss] = pc.losses.MSELoss,
+    loss: type[pc.loss.MSELoss | pc.loss.CrossEntropyLoss] = pc.loss.MSELoss,
 ) -> dict[str, dict[str, Any]]:
     """The state of each node of a chain over ``batch`` that learns with
     ``loss`` after 20 steps with the sample ``(x, y, mask)``, written once."""
@@ -268,9 +268,9 @@ class TestBatch:
             x[:1],
             y[:1],
             torch.tensor([True]),
-            pc.losses.CrossEntropyLoss,
+            pc.loss.CrossEntropyLoss,
         )
         states = learned(
-            start_manual, (), x[0], y[0], torch.tensor(True), pc.losses.CrossEntropyLoss
+            start_manual, (), x[0], y[0], torch.tensor(True), pc.loss.CrossEntropyLoss
         )
         assert_learned_alike(states, expected)

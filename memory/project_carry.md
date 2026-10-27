@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-コアは付随データ（carry）を持たない。Port の `send_carry=` / `recv_carry=`、`carried()`、Schema と Message の carry、状態の木の `"carries"` は無い。`mujou.pc` は目標 `y`、`mask`、書き込みの時刻 `time` を `pc.messages.Activity` のフィールドとして運び、各ノードが受け取った値をそのまま次のメッセージに写す（`specs/pc.md` の「メッセージ」）。
+コアは付随データ（carry）を持たない。Port の `send_carry=` / `recv_carry=`、`carried()`、Schema と Message の carry、状態の木の `"carries"` は無い。`mujou.pc` は目標 `y`、`mask`、書き込みの時刻 `time` を `pc.msg.Activity` のフィールドとして運び、各ノードが受け取った値をそのまま次のメッセージに写す（`specs/pc.md` の「メッセージ」）。
 
 R1 として 2026-10-21 にユーザーが承認した（[[project-restructure-2026-10-20]]）。
 

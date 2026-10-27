@@ -38,7 +38,7 @@ class TestShow:
             x=X,
             y=Y,
             batch=B,
-            loss=pc.losses.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             tau=TAU,
             optimizer=SGD,
             learn_interval=0.05,
@@ -48,7 +48,7 @@ class TestShow:
         run = start(net, timer=Timer())
         before = run.timer.now()
         prediction = pc.show(
-            run, net, pc.messages.Sample(x=x, y=y, mask=labeled), seconds=0.15
+            run, net, pc.msg.Sample(x=x, y=y, mask=labeled), seconds=0.15
         )
         assert run.timer.now() - before >= 0.15
         run.shutdown()
@@ -70,7 +70,7 @@ class TestShow:
             x=X,
             y=Y,
             batch=B,
-            loss=pc.losses.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             tau=TAU,
             optimizer=SGD,
             learn_interval=None,
@@ -79,7 +79,7 @@ class TestShow:
         unlabeled = torch.zeros(B, dtype=torch.bool)
         run = start(net, timer=Timer())
         prediction = pc.show(
-            run, net, pc.messages.Sample(x=x, y=y, mask=unlabeled), seconds=0.02
+            run, net, pc.msg.Sample(x=x, y=y, mask=unlabeled), seconds=0.02
         )
         run.shutdown()
         with torch.no_grad():
@@ -97,7 +97,7 @@ class TestShow:
                 self.output = pc.Output(
                     head,
                     act_spec=self.input.act_spec,
-                    loss=pc.losses.MSELoss(B),
+                    loss=pc.loss.MSELoss(B),
                     tau=TAU,
                     optimizer=SGD,
                     learn_interval=None,
@@ -111,7 +111,7 @@ class TestShow:
         unlabeled = torch.zeros(B, dtype=torch.bool)
         run = start(net, timer=Timer())
         prediction = pc.show(
-            run, net, pc.messages.Sample(x=x, y=y, mask=unlabeled), seconds=0.02
+            run, net, pc.msg.Sample(x=x, y=y, mask=unlabeled), seconds=0.02
         )
         run.shutdown()
         with torch.no_grad():

@@ -16,15 +16,15 @@
 
 ## ノード
 
-| ノード      | 持つもの                                       | Port                                                                                                                                                          |
-| ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pc.Input`  | 書き込みの回数                                 | `prev`: ホストが `pc.messages.Sample`（`x`、`y`、`mask`）を書く。`next`: `x` を `pc.messages.Activity` の `h` として、`y`・`mask`・書き込みの時刻と一緒に送る |
-| `pc.Layer`  | モジュール、活動 `h`、双対変数 `lam`、クロック | `prev` と `next`。`next` は `h` を、自分の `jumps` と入力と一緒に届いた `y`・`mask`・`time` と組にして `pc.messages.Activity` で送る                          |
-| `pc.Output` | 最後のモジュール、損失、クロック               | `prev`。`next` はホストが読む `pc.messages.Prediction`（`y_hat`、`y`、`mask`、`time`）を送る                                                                  |
+| ノード      | 持つもの                                       | Port                                                                                                                                                |
+| ----------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.Input`  | 書き込みの回数                                 | `prev`: ホストが `pc.msg.Sample`（`x`、`y`、`mask`）を書く。`next`: `x` を `pc.msg.Activity` の `h` として、`y`・`mask`・書き込みの時刻と一緒に送る |
+| `pc.Layer`  | モジュール、活動 `h`、双対変数 `lam`、クロック | `prev` と `next`。`next` は `h` を、自分の `jumps` と入力と一緒に届いた `y`・`mask`・`time` と組にして `pc.msg.Activity` で送る                     |
+| `pc.Output` | 最後のモジュール、損失、クロック               | `prev`。`next` はホストが読む `pc.msg.Prediction`（`y_hat`、`y`、`mask`、`time`）を送る                                                             |
 
-`pc.messages.Activity` は `h`・`jumps`・`y`・`mask`・`time` を運ぶ。`jumps` は送り手の `h` が緩和でなく跳んだ回数。`pc.Input` はホストの書き込みを数え、`pc.Layer` は新しいサンプルや受け取る `h` の跳びに合わせて動いた回数と、間隔を置いて学ぶときに自分の重みが起こした跳びを数える。受け手は `jumps` の変化を見たら自分の `h` を予測と一緒に 1 回動かし、跳びを偏差 `h - mu` に入れない。
+`pc.msg.Activity` は `h`・`jumps`・`y`・`mask`・`time` を運ぶ。`jumps` は送り手の `h` が緩和でなく跳んだ回数。`pc.Input` はホストの書き込みを数え、`pc.Layer` は新しいサンプルや受け取る `h` の跳びに合わせて動いた回数と、間隔を置いて学ぶときに自分の重みが起こした跳びを数える。受け手は `jumps` の変化を見たら自分の `h` を予測と一緒に 1 回動かし、跳びを偏差 `h - mu` に入れない。
 
-`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.h / 4`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.messages.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`mujou.Network` とあわせて `pc.Shown` を継承し、`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
+`pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.h / 4`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.msg.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`mujou.Network` とあわせて `pc.Shown` を継承し、`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
 
 ノードにはバッチの各サンプルを独立に扱う `nn.Module` なら何でも入れられる。1 層でも、層を重ねたものでも、残差ブロックでもよい。`Dropout` と `BatchNorm` は training mode でサンプルを落としたり混ぜたりするので使わない。`LayerNorm` は使える。重みはモジュールを作るときに初期化しておく。ノードは初期化しない。`requires_grad=False` のパラメータは学習しない。
 
@@ -140,7 +140,7 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 
 ## バッチ
 
-バッチはメッセージのどのテンソルも先頭に持つ shape。`pc.Chain`・`pc.Input`・`pc.messages.activity_spec` に `batch` で渡し、spec の `x` と `y` もこの shape で始める。`pc.Layer` と `pc.Output` は受け取る `act_spec` から読む。
+バッチはメッセージのどのテンソルも先頭に持つ shape。`pc.Chain`・`pc.Input`・`pc.msg.activity_spec` に `batch` で渡し、spec の `x` と `y` もこの shape で始める。`pc.Layer` と `pc.Output` は受け取る `act_spec` から読む。
 
 | `batch`      | `x`（入力 784） | `y`（クラス 1 つ） | `mask`   | 用途                                         |
 | ------------ | --------------- | ------------------ | -------- | -------------------------------------------- |
@@ -150,17 +150,17 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 
 - サンプルは互いに独立であること。module はバッチのどの次元についても、各サンプルを別々に計算する。系列の時間のように module が混ぜる次元はバッチでなくサンプルの次元。`T` ステップの系列 64 本なら `batch=64` で `x` は `(64, T, 784)`
 - 多次元のバッチは同じサンプルを 1 次元に並べたものと同じように学ぶ。`(8, 4)` は `32` と同じ
-- 損失もバッチを受け取る。`pc.losses.MSELoss(batch)` と `pc.losses.CrossEntropyLoss(batch)`。`pc.losses.CrossEntropyLoss` の `y` はクラス（int64 で、`y_hat` からクラスの次元を除いた shape）かクラスごとの確率（`y_hat` と同じ shape）。クラスの次元は `nn.CrossEntropyLoss` と同じく `y_hat` のバッチの直後。その後ろの次元（画像の画素など）は平均する
+- 損失もバッチを受け取る。`pc.loss.MSELoss(batch)` と `pc.loss.CrossEntropyLoss(batch)`。`pc.loss.CrossEntropyLoss` の `y` はクラス（int64 で、`y_hat` からクラスの次元を除いた shape）かクラスごとの確率（`y_hat` と同じ shape）。クラスの次元は `nn.CrossEntropyLoss` と同じく `y_hat` のバッチの直後。その後ろの次元（画像の画素など）は平均する
 
 ## 落とし穴
 
 !!! warning "バッチは鎖と損失の両方に渡す"
 
-    `batch` の既定は `()`（1 サンプル）で、spec の shape からは読まない。64 サンプルの spec でどこにも `batch` を渡さないと、鎖は 64 サンプルを 1 つのサンプルとして扱い `pc.losses.MSELoss()` はそれらを平均する。それでも動くが、各サンプルの credit は本来の 1/64 になる。`pc.Chain`（か `pc.Input`）と損失に同じ `batch` を渡す。片方だけに渡すと `pc.Output` がエラーを送出する。
+    `batch` の既定は `()`（1 サンプル）で、spec の shape からは読まない。64 サンプルの spec でどこにも `batch` を渡さないと、鎖は 64 サンプルを 1 つのサンプルとして扱い `pc.loss.MSELoss()` はそれらを平均する。それでも動くが、各サンプルの credit は本来の 1/64 になる。`pc.Chain`（か `pc.Input`）と損失に同じ `batch` を渡す。片方だけに渡すと `pc.Output` がエラーを送出する。
 
 !!! warning "損失関数はサンプルごとの損失を返す"
 
-    `pc.losses.MSELoss(batch)`、`pc.losses.CrossEntropyLoss(batch)`、またはバッチの shape を返す `(y_hat, y)` の自作の関数を渡す。`nn.MSELoss()` のようにバッチで平均する損失を渡すと、`pc.Output` が `ValueError` を送出する。`pc.losses.MSELoss` は `nn.MSELoss` と同じく各サンプルのすべての次元（バッチ以外）で平均し、`0.5` は付けない。重みはバッチに対する `nn.MSELoss()` の勾配に沿って動く。
+    `pc.loss.MSELoss(batch)`、`pc.loss.CrossEntropyLoss(batch)`、またはバッチの shape を返す `(y_hat, y)` の自作の関数を渡す。`nn.MSELoss()` のようにバッチで平均する損失を渡すと、`pc.Output` が `ValueError` を送出する。`pc.loss.MSELoss` は `nn.MSELoss` と同じく各サンプルのすべての次元（バッチ以外）で平均し、`0.5` は付けない。重みはバッチに対する `nn.MSELoss()` の勾配に沿って動く。
 
 !!! warning "予測は出力ノードから読む"
 
@@ -203,12 +203,12 @@ uv run python examples/cifar10/main.py --steps 128 --momentum 0  # 2 倍かか�
 3. bind した `params` を同じ順で `pc.functional.vjp` に渡し、予測 `mu`、`g_in`、学ぶなら `g_theta` を求めて、`g_in` を前のノードへ送る
 4. `t.new` が True か、活動の `jumps` が前に読んだものと違えば、`h` を予測と一緒に 1 回動かす。前回の更新の `mu_last` で `h <- mu + (h - mu_last)` とし、自分の `jumps` に 1 を足す。`mu`、前に読んだ `jumps`、自分の `jumps` は状態に入れる（素の数は `register_state`）
 5. `pc.functional.relax_(..., t.dt, tau, self.relaxer)` で活動を動かす。手順 4 で付け替えたときは、先に `self.relaxer.reset_()` を呼ぶ。relaxer が覚えているのは前の入力の力だからである
-6. `h` を `pc.messages.Activity` で送る。自分の `jumps` と、受け取った活動の `y`・`mask`・`time` を組にする
+6. `h` を `pc.msg.Activity` で送る。自分の `jumps` と、受け取った活動の `y`・`mask`・`time` を組にする
 7. `t.learn` が True で `mask` が True のサンプルがあれば、`self.optimizer.step_([g / B for g in g_theta], t.elapsed)` で学ぶ。`B` はバッチのサンプルの数。optimizer はバッチを知らないので、`B` で割るのはノード
 
 手順 4 を抜くと、ノードは `pc.Layer` と違うダイナミクスになる。新しいサンプルや下の跳びが偏差 `h - mu` に入り、送り返す credit にも入る。間隔を置いて学ぶノードは、重みの更新が起こした `mu` の跳びの分も `h` を動かし、`jumps` に 1 を足す。`pc.Layer` はどちらも 1 回後の更新で行う（docstring に説明がある）。
 
-`mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act_spec` か `pc.messages.activity_spec(h, y, batch)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。
+`mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act_spec` か `pc.msg.activity_spec(h, y, batch)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。
 
 ### 例: 入力が 2 つのノード
 

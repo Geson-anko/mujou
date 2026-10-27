@@ -89,8 +89,8 @@ def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Ac
 
     Example::
 
-        act = pc.messages.activity_spec(TensorSpec((256,)), TensorSpec((), torch.int64))
-        act = pc.messages.activity_spec(
+        act = pc.msg.activity_spec(TensorSpec((256,)), TensorSpec((), torch.int64))
+        act = pc.msg.activity_spec(
             TensorSpec((64, 256)), TensorSpec((64,), torch.int64), batch=64
         )
 

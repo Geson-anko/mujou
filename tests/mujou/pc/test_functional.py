@@ -9,7 +9,7 @@ from torch import nn
 
 from mujou.pc import TimeConstants
 from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
-from mujou.pc.losses import CrossEntropyLoss, MSELoss
+from mujou.pc.loss import CrossEntropyLoss, MSELoss
 from mujou.pc.relax import BoundRelaxer, Euler, HeavyBall
 
 B = 3

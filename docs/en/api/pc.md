@@ -14,11 +14,11 @@
     options:
       members: [Relaxer, BoundRelaxer, Euler, HeavyBall]
 
-::: mujou.pc.losses
+::: mujou.pc.loss
     options:
       members: [MSELoss, CrossEntropyLoss]
 
-::: mujou.pc.messages
+::: mujou.pc.msg
     options:
       members: [Sample, Activity, Prediction, activity_spec]
 
