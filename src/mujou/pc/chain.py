@@ -48,8 +48,9 @@ class Chain(Network, Shown):
     The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
     in ``layer{i}``, also ``layers[i]``), which are also their paths in
     ``Run.state_dict()``. Every
-    node runs with the period ``tau.period`` (``tau.h / 4``); for other
-    periods, build the nodes one by one (``show`` shows them samples too).
+    node runs with the same ``period``, ``tau.period`` (``tau.h / 4``) unless
+    given; for a period of its own for each node, build the nodes one by one
+    (``show`` shows them samples too).
 
     The host writes a ``Sample`` to ``prev`` and reads a ``Prediction`` from
     ``next``, or does both with ``show``.
@@ -82,10 +83,15 @@ class Chain(Network, Shown):
         relaxer: How ``h`` of every ``Layer`` moves, as in ``Layer``: each binds
             it to its own ``h``. The ``Output`` has no ``h``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
-            credit, ``2 * len(modules) * tau.period``, is recommended.
+            credit, ``2 * len(modules) * period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
+        period: The period of every node, ``tau.period`` if ``None``. A shorter
+            one makes the explicit steps exact for stiffer modules (the step of
+            ``h`` is stable while ``(1 + |J|^2) * period / tau.h < 2``, ``|J|``
+            the largest singular value of the Jacobian of the next module), for
+            more updates.
         device: Where the nodes compute.
 
     Raises:
@@ -104,10 +110,12 @@ class Chain(Network, Shown):
         learn_interval: float | None,
         batch: Size = (),
         max_dt: float | None = None,
+        period: float | None = None,
         device: Device = "cpu",
     ) -> None:
         super().__init__()
-        self.input = Input(x=x, y=y, period=tau.period, batch=batch, device=device)
+        period = tau.period if period is None else period
+        self.input = Input(x=x, y=y, period=period, batch=batch, device=device)
         last: Input | Layer = self.input
         for i, module in enumerate(modules[:-1]):
             layer = Layer(
@@ -117,6 +125,7 @@ class Chain(Network, Shown):
                 optimizer=optimizer,
                 relaxer=relaxer,
                 learn_interval=learn_interval,
+                period=period,
                 max_dt=max_dt,
                 device=device,
             )
@@ -130,6 +139,7 @@ class Chain(Network, Shown):
             tau=tau,
             optimizer=optimizer,
             learn_interval=learn_interval,
+            period=period,
             max_dt=max_dt,
             device=device,
         )
