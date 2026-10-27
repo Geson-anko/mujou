@@ -1294,6 +1294,34 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-relaxers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Relaxers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Relaxers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-relaxer-of-your-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A relaxer of your own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1892,6 +1920,34 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-relaxers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Relaxers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Relaxers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-relaxer-of-your-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A relaxer of your own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1921,7 +1977,7 @@
 <li>The messages that flow between the nodes, and which way the ports face</li>
 <li>What a <code>pc.Layer</code> does in one <code>on_update(dt)</code></li>
 <li>What the <code>Tick</code> that <code>pc.LearnClock</code> returns, <code>jumps</code> and <code>pc.TimeConstants</code> mean</li>
-<li>How <code>pc.SGD</code> and <code>pc.AdamW</code> move the weights in time</li>
+<li>How <code>pc.SGD</code> and <code>pc.AdamW</code> move the weights in time, and <code>pc.Euler</code> and <code>pc.HeavyBall</code> the activity</li>
 </ul>
 <p>You should know PyTorch and backpropagation (BP), and the nodes, ports and <code>dt</code> of <a href="../../concepts/">How Mujou Works</a>. You need not know predictive coding.</p>
 </div>
@@ -2208,7 +2264,7 @@
 <tr>
 <td>4</td>
 <td><code>functional.relax_</code></td>
-<td>Re-anchors <code>h</code> if <code>mu</code> jumped, then <span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>, and then, with the moved <code>h</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
+<td>Re-anchors <code>h</code> if <code>mu</code> jumped, then <span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span> (as <code>pc.Euler</code>, the default relaxer, moves it; <a href="#7-relaxers">section 7</a>), and then, with the moved <code>h</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
 </tr>
 <tr>
 <td>5</td>
@@ -2477,6 +2533,46 @@
 </details>
 <h3 id="an-optimizer-of-your-own">An optimizer of your own<a class="headerlink" href="#an-optimizer-of-your-own" title="Permanent link">&para;</a></h3>
 <p>An optimizer of your own is two classes. The setting inherits <code>pc.Optimizer</code> and implements <code>bind(params)</code>. What <code>bind</code> returns inherits <code>pc.BoundOptimizer</code> (a <code>mujou.Stateful</code>) and implements <code>step_(grads, elapsed)</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>; a class that leaves one out raises <code>TypeError</code> when it is made. Pass <code>bind</code> only the weights that learn. The <a href="../../api/pc/">API reference</a> has an example.</p>
+<h2 id="7-relaxers">7. Relaxers<a class="headerlink" href="#7-relaxers" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>How the activity <code>h</code> moves along the force on it is a setting too. A relaxer is to <code>h</code> what an optimizer is to the weights: a setting without state, bound in each node, that moves <code>h</code> by <code>dt</code> seconds.</p>
+</div>
+<p><code>pc.Euler()</code> and <code>pc.HeavyBall(tau=)</code> are settings. <code>Layer</code> and <code>Chain</code> take one as <code>relaxer=</code>, <code>pc.Euler()</code> by default. A <code>Chain</code> gives the same setting to each of its <code>Layer</code>s, which is safe because the setting holds no state. <code>Output</code> has no <code>h</code> and takes none. Each <code>Layer</code> binds the setting to its own <code>h</code> and keeps the <strong>bound relaxer</strong> as <code>self.relaxer</code>. The bound relaxer holds the state and moves <code>h</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># in __init__</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># in on_update, inside functional.relax_, with the force h - mu + lam + g:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># with a new sample or a jump of the h it reads:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">()</span>
+</code></pre></div>
+<p>With the force <span class="arithmatex">\(F = r + \lambda + g\)</span>:</p>
+<table>
+<thead>
+<tr>
+<th>Relaxer</th>
+<th>One step of <code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> seconds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.Euler</code></td>
+<td><span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} F\)</span></td>
+</tr>
+<tr>
+<td><code>pc.HeavyBall</code></td>
+<td><span class="arithmatex">\(v \leftarrow e^{-\Delta t/\tau} v + F\)</span>, then <span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} v\)</span></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A relaxer changes how <code>h</code> gets to the fixed point, not where it is: at the fixed point <span class="arithmatex">\(F = 0\)</span> and <span class="arithmatex">\(v = 0\)</span>. The relaxer does not move <span class="arithmatex">\(\lambda\)</span>. <span class="arithmatex">\(\lambda\)</span> moves after <code>h</code>, with the <span class="arithmatex">\(r\)</span> of the moved <code>h</code> (<a href="#3-one-update-of-a-layer">section 3</a>), whichever relaxer moves <code>h</code></li>
+<li>The velocity of <code>pc.HeavyBall</code> starts at 0, so its first step is the step of <code>pc.Euler</code>. Each update adds the force <span class="arithmatex">\(F\)</span> once, not <span class="arithmatex">\(F\,\Delta t\)</span>: in a steady state <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span>, so a shorter period gives a larger gain, and a late update (a longer <code>dt</code>) forgets more of the velocity, which is on the stable side. A step with <code>dt == 0</code> leaves <code>h</code> and the velocity as they are</li>
+<li>With a new sample or a jump of the <code>h</code> it reads, <span class="arithmatex">\(r\)</span> and <span class="arithmatex">\(\lambda\)</span> are kept, but the velocity was built from the forces of the input before (<a href="#jumps">jumps</a>), so the node calls <code>reset_()</code> and drops it. A jump of the node's own weights moves <code>h</code> and <code>mu</code> together, <span class="arithmatex">\(r\)</span> and the force do not jump, and <code>reset_</code> is not called</li>
+<li>The bound relaxer is in the node's state under the key <code>"relaxer"</code>: <code>{"velocity": ...}</code> for <code>pc.HeavyBall</code>, empty for <code>pc.Euler</code></li>
+<li>To choose a relaxer and its value, see <a href="../pc/#choosing-the-relaxer">Choosing the relaxer</a></li>
+</ul>
+<h3 id="a-relaxer-of-your-own">A relaxer of your own<a class="headerlink" href="#a-relaxer-of-your-own" title="Permanent link">&para;</a></h3>
+<p>A relaxer of your own is two classes. The setting inherits <code>pc.Relaxer</code> and implements <code>bind(h)</code>, which makes the state with the shape, dtype and device of <code>h</code>. What <code>bind</code> returns inherits <code>pc.BoundRelaxer</code> (a <code>mujou.Stateful</code>) and implements <code>step_(h, force, dt, tau_h)</code>, <code>reset_()</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>; a class that leaves one out raises <code>TypeError</code> when it is made. Its fixed point must be where the force is zero and its own state is at rest, or <code>lam</code> is no longer the credit of BP. The <a href="../../api/pc/">API reference</a> has an example.</p>
 
 
 

@@ -1689,6 +1689,11 @@
 <td><a href="../topics/pc/#mnist">PC-ALM</a></td>
 </tr>
 <tr>
+<td>GPU 上の ResNet で CIFAR-10 を学び、BP と比べる</td>
+<td><code>cifar10/</code></td>
+<td><a href="../topics/pc/#cifar-10">PC-ALM</a></td>
+</tr>
+<tr>
 <td>状態を保存し、その続きから再開する</td>
 <td><code>save_and_restore.py</code></td>
 <td><a href="../tutorial/6-save-and-resume/">6. 保存と再開</a></td>
@@ -1731,6 +1736,7 @@
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> と <code>pc.show</code> で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る</li>
 <li><code>pc_merge.py</code>: 入力を 2 つ持つ PC-ALM のノード <code>Merge</code> を <code>pc.functional</code> と <code>pc.LearnClock</code> で書き、2 本の塔を合流させて回帰を学ぶ</li>
 <li><code>mnist/</code>: 784-256-256-10 のネットワークを <code>pc.Chain</code> で MNIST に学ばせ、同じネットワークを同じ初期重みとバッチで BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読み、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させ、<code>watch.py</code> がノードの <code>dt</code> を数える（<code>--watch</code>）</li>
+<li><code>cifar10/</code>: CUDA のデバイスに載せた ResNet-20 を残差ブロックごとのノードに分け、<code>pc.Chain</code> と <code>pc.AdamW</code> で CIFAR-10 に学ばせる。同じネットワークを同じ初期重み・バッチ・optimizer で、GPU 上の BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読んで拡張し、<code>resnet.py</code> がネットワークを組んでブロックが緩和をどれだけ硬くするかを述べ、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させる</li>
 <li><code>save_and_restore.py</code>: <code>run.state_dict()</code> で状態を取得し、<code>torch.save</code> で保存し、新しいインスタンスに <code>mujou.run(..., state=...)</code> で再開する。再開した実行は専用のタイマーで走る</li>
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code> と、ノードのパス（<code>"enc.scale"</code>）の付き方</li>
 <li><code>subscribe.py</code>: <code>run.subscribe</code> がまず最新の出力を、その後は新しい出力を 1 つずつ返す。<code>break</code> で止める</li>
@@ -1742,8 +1748,9 @@
 <p>ソースからビルドした環境（<a href="../install/">インストール</a>）で、リポジトリのルートから実行する。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py
 </code></pre></div>
-<p>どのプログラムも GPU を使わない。<code>mnist/</code> 以外は 15 秒以内に終わる。<code>mnist/</code> は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。</p>
+<p>GPU を使うのは <code>cifar10/</code> だけで、CUDA が要る。<code>mnist/</code> と <code>cifar10/</code> 以外は 15 秒以内に終わる。<code>mnist/</code> は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。<code>cifar10/</code> は初回に CIFAR-10（約 160 MB）をダウンロードし、既定の 3 epoch で RTX 4090 なら実時間で約 8 分かかる。</p>
 
 
 

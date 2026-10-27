@@ -1687,6 +1687,11 @@
 <td><a href="../topics/pc/#mnist">PC-ALM</a></td>
 </tr>
 <tr>
+<td>Learn CIFAR-10 with a ResNet on the GPU, and compare it with BP</td>
+<td><code>cifar10/</code></td>
+<td><a href="../topics/pc/#cifar-10">PC-ALM</a></td>
+</tr>
+<tr>
 <td>Save the state and resume from it</td>
 <td><code>save_and_restore.py</code></td>
 <td><a href="../tutorial/6-save-and-resume/">6. Save and Resume</a></td>
@@ -1729,6 +1734,7 @@
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> and <code>pc.show</code> learn a regression from a stream of batches, measured before each batch is learned from</li>
 <li><code>pc_merge.py</code>: <code>Merge</code>, a node of PC-ALM with two inputs written with <code>pc.functional</code> and <code>pc.LearnClock</code>, joins two towers that learn a regression</li>
 <li><code>mnist/</code>: a 784-256-256-10 network learns MNIST as a <code>pc.Chain</code>, and the same network learns by BP from the same initial weights on the same batches. <code>main.py</code> is the entry point, <code>data.py</code> loads the data, <code>metrics.py</code> measures, <code>bp.py</code> trains the BP baseline and <code>watch.py</code> counts the <code>dt</code> of the nodes (<code>--watch</code>)</li>
+<li><code>cifar10/</code>: a ResNet-20 on a CUDA device, with a node for each residual block, learns CIFAR-10 as a <code>pc.Chain</code> with <code>pc.AdamW</code>, and the same network learns by BP on the GPU from the same initial weights on the same batches with the same optimizer. <code>main.py</code> is the entry point, <code>data.py</code> loads and augments the data, <code>resnet.py</code> builds the network and says how stiff its blocks make the relaxation, <code>metrics.py</code> measures and <code>bp.py</code> trains the BP baseline</li>
 <li><code>save_and_restore.py</code>: takes the state with <code>run.state_dict()</code>, saves it with <code>torch.save</code>, and resumes it in a new instance with <code>mujou.run(..., state=...)</code>, on a timer of the resumed run's own</li>
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code>, and the paths of the nodes (<code>"enc.scale"</code>)</li>
 <li><code>subscribe.py</code>: <code>run.subscribe</code> yields the latest output, then each newer one, and stops with <code>break</code></li>
@@ -1740,8 +1746,9 @@
 <p>Run them from the root of the repository, in an environment built from source (see <a href="../install/">Installation</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py
 </code></pre></div>
-<p>None of the programs uses a GPU. Each finishes within 15 seconds, except <code>mnist/</code>: it downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes.</p>
+<p>Only <code>cifar10/</code> uses a GPU, and needs CUDA. Each finishes within 15 seconds, except <code>mnist/</code> and <code>cifar10/</code>. <code>mnist/</code> downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. <code>cifar10/</code> downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 8 minutes on an RTX 4090, in real time.</p>
 
 
 

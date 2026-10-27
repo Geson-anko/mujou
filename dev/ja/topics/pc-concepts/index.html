@@ -1296,6 +1296,34 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. relaxer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. relaxer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#自分の-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の relaxer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1894,6 +1922,34 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#7-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. relaxer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. relaxer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#自分の-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の relaxer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1923,7 +1979,7 @@
 <li>ノードの間を流れるメッセージと Port の向き</li>
 <li><code>pc.Layer</code> が 1 回の <code>on_update(dt)</code> で行うこと</li>
 <li><code>pc.LearnClock</code> が返す <code>Tick</code>、<code>jumps</code>、<code>pc.TimeConstants</code> の意味</li>
-<li><code>pc.SGD</code> と <code>pc.AdamW</code> が重みを時間で動かす仕組み</li>
+<li><code>pc.SGD</code> と <code>pc.AdamW</code> が重みを、<code>pc.Euler</code> と <code>pc.HeavyBall</code> が活動を時間で動かす仕組み</li>
 </ul>
 <p>前提は PyTorch・誤差逆伝播法（BP）と、<a href="../../concepts/">Mujou の仕組み</a>のノード・Port・<code>dt</code>。predictive coding の知識は要らない。</p>
 </div>
@@ -2210,7 +2266,7 @@
 <tr>
 <td>4</td>
 <td><code>functional.relax_</code></td>
-<td>跳びがあれば <code>h</code> を付け替え、<span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>、続けて動かした <code>h</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
+<td>跳びがあれば <code>h</code> を付け替え、<span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>（既定の relaxer の <code>pc.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>h</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
 </tr>
 <tr>
 <td>5</td>
@@ -2479,6 +2535,46 @@
 </details>
 <h3 id="自分の-optimizer">自分の optimizer<a class="headerlink" href="#自分の-optimizer" title="Permanent link">&para;</a></h3>
 <p>自作の optimizer は 2 つのクラスで書く。設定は <code>pc.Optimizer</code> を継承して <code>bind(params)</code> を実装する。<code>bind</code> が返すものは <code>pc.BoundOptimizer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
+<h2 id="7-relaxer">7. relaxer<a class="headerlink" href="#7-relaxer" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>活動 <code>h</code> が自分に掛かる力に沿ってどう動くかも設定である。relaxer は <code>h</code> にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、<code>h</code> を <code>dt</code> 秒だけ動かす。</p>
+</div>
+<p><code>pc.Euler()</code> と <code>pc.HeavyBall(tau=)</code> が設定である。<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ取る。既定は <code>pc.Euler()</code> である。<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。設定は状態を持たないので、共有しても安全である。<code>Output</code> は <code>h</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>h</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。bind した relaxer が状態を持ち、<code>h</code> を動かす。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># __init__ で</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># on_update の functional.relax_ の中で、力 h - mu + lam + g を渡して:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># 新しいサンプルのとき、または読んでいる h が跳んだとき:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">()</span>
+</code></pre></div>
+<p>力を <span class="arithmatex">\(F = r + \lambda + g\)</span> とすると、relaxer ごとの 1 回の動きは次の表になる。</p>
+<table>
+<thead>
+<tr>
+<th>relaxer</th>
+<th><code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 回の動き</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.Euler</code></td>
+<td><span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} F\)</span></td>
+</tr>
+<tr>
+<td><code>pc.HeavyBall</code></td>
+<td><span class="arithmatex">\(v \leftarrow e^{-\Delta t/\tau} v + F\)</span>、続けて <span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} v\)</span></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>relaxer が変えるのは <code>h</code> が不動点に着くまでの道で、不動点ではない。不動点では <span class="arithmatex">\(F = 0\)</span> かつ <span class="arithmatex">\(v = 0\)</span> になる。relaxer は <span class="arithmatex">\(\lambda\)</span> を動かさない。<span class="arithmatex">\(\lambda\)</span> は、どの relaxer が <code>h</code> を動かしても、<code>h</code> が動いたあとにその <code>h</code> の <span class="arithmatex">\(r\)</span> で進む（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）</li>
+<li><code>pc.HeavyBall</code> の速度は 0 から始まるので、最初の 1 歩は <code>pc.Euler</code> の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、<span class="arithmatex">\(F\,\Delta t\)</span> ではない。定常では <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span> なので、周期が短いほど利得が大きい。遅れた更新（長い <code>dt</code>）は速度をより多く忘れるので、安定な側に働く。<code>dt == 0</code> の 1 歩は <code>h</code> も速度もそのままにする</li>
+<li>新しいサンプルのとき、また読んでいる <code>h</code> が跳んだときは、<span class="arithmatex">\(r\)</span> と <span class="arithmatex">\(\lambda\)</span> は保たれるが、速度が積んだのは前の入力の力である（<a href="#jumps">jumps</a>）。そこでノードは <code>reset_()</code> を呼び、その速度を捨てる。ノード自身の重みが跳んだときは <code>h</code> と <code>mu</code> が一緒に動き、<span class="arithmatex">\(r\)</span> も力も跳ばないので、<code>reset_</code> は呼ばない</li>
+<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.HeavyBall</code> なら <code>{"velocity": ...}</code>、<code>pc.Euler</code> なら空</li>
+<li>relaxer と値の選び方は<a href="../pc/#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</li>
+</ul>
+<h3 id="自分の-relaxer">自分の relaxer<a class="headerlink" href="#自分の-relaxer" title="Permanent link">&para;</a></h3>
+<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.Relaxer</code> を継承して <code>bind(h)</code> を実装し、<code>h</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(h, force, dt, tau_h)</code>・<code>reset_()</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
 
 
 
