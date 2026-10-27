@@ -18,7 +18,7 @@ class TimeConstants:
     ($r = h - \mu$), and a step of ``dt`` seconds moves them by ``dt / tau`` of
     the right-hand side (the discrete step sizes are ``eta_h = dt / h`` and
     ``alpha = dt / lam``). The parameters ``theta`` move by the optimizer of the
-    node (``pc.SGD`` or ``pc.AdamW``), which holds their time constant.
+    node (``pc.optim.SGD`` or ``pc.optim.AdamW``), which holds their time constant.
 
     ``lam=math.inf`` makes the dual stay at zero (``alpha = 0``, plain predictive
     coding). ``h`` must be finite.

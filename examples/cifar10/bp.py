@@ -19,7 +19,7 @@ def train(
     *,
     epochs: int,
     batch: int,
-    optimizer: pc.Optimizer,
+    optimizer: pc.optim.Optimizer,
     elapsed: float,
     generator: Callable[[int], torch.Generator],
     device: torch.device,

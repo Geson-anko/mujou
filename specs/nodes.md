@@ -156,7 +156,7 @@ pamiq-core の `SleepIntervalAdjustor` は、step の後に「前回の待ちが
 
 状態の規則の正本は `Node` の docstring。ここには理由を書く。
 
-状態に入るのは、テンソルの属性（`nn.Parameter` を含む）、`mujou.Stateful` の属性（`nn.Module`、`pc.LearnClock`、束縛した optimizer など。クラスそのものは除く）、`register_state` した名前、そして乱数生成器の状態である。どれも取得と復元のときに `__dict__` から決め、最後に代入した値で決まる。
+状態に入るのは、テンソルの属性（`nn.Parameter` を含む）、`mujou.Stateful` の属性（`nn.Module`、`pc.clock.LearnClock`、束縛した optimizer など。クラスそのものは除く）、`register_state` した名前、そして乱数生成器の状態である。どれも取得と復元のときに `__dict__` から決め、最後に代入した値で決まる。
 
 - `mujou.Stateful` は `state_dict` と `load_state_dict` を抽象メソッドに持つ ABC。継承で名目上の型にし、メソッドの名前で判定するダックタイピングはしない（2026-10-23、ユーザーの決定）。メソッドを書き忘れたクラスは作った時点で `TypeError` になる。継承できない他のライブラリの型は `Stateful.register(cls)` で登録し、mujou は `nn.Module` を登録する
 - `state_dict` と `load_state_dict` を持つだけで `Stateful` でないオブジェクトは、状態に入らない（黙って落ちる）。検出するには名前を見るダックタイピングに戻るので、ガードは置かない

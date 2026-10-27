@@ -32,15 +32,15 @@ LEARN_INTERVAL = 3 * H
 
 def chain(
     *modules: nn.Module,
-    optimizer: pc.Optimizer = SGD,
-    relaxer: pc.Relaxer = pc.Euler(),
+    optimizer: pc.optim.Optimizer = SGD,
+    relaxer: pc.relax.Relaxer = pc.relax.Euler(),
 ) -> pc.Chain:
     return pc.Chain(
         *modules,
         x=X,
         y=Y,
         batch=B,
-        loss=pc.MSELoss(B),
+        loss=pc.losses.MSELoss(B),
         tau=TAU,
         optimizer=optimizer,
         relaxer=relaxer,
@@ -66,7 +66,7 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
     nodes["output"] = pc.Output(
         head,
         act_spec=last.act_spec,
-        loss=pc.MSELoss(B),
+        loss=pc.losses.MSELoss(B),
         tau=TAU,
         optimizer=SGD,
         learn_interval=LEARN_INTERVAL,
@@ -166,7 +166,7 @@ class TestChain:
         # One HeavyBall for the whole chain: each layer binds it to its own h,
         # so each keeps a velocity of its own; the output holds no h.
         layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head, relaxer=pc.HeavyBall(tau=3e-3))
+        net = chain(*layers, head, relaxer=pc.relax.HeavyBall(tau=3e-3))
         tree = run_states(start_manual, net, net.input)
         for path, width in (("layer0", WIDTHS[1]), ("layer1", WIDTHS[2])):
             velocity = tree["nodes"][path]["state"]["relaxer"]["velocity"]
@@ -187,7 +187,7 @@ def learned(
     x: torch.Tensor,
     y: torch.Tensor,
     mask: torch.Tensor,
-    loss: type[pc.MSELoss | pc.CrossEntropyLoss] = pc.MSELoss,
+    loss: type[pc.losses.MSELoss | pc.losses.CrossEntropyLoss] = pc.losses.MSELoss,
 ) -> dict[str, dict[str, Any]]:
     """The state of each node of a chain over ``batch`` that learns with
     ``loss`` after 20 steps with the sample ``(x, y, mask)``, written once."""
@@ -263,9 +263,14 @@ class TestBatch:
         x, _, _ = self._sample()
         y = torch.tensor([1, 0, 1, 1, 0, 1])
         expected = learned(
-            start_manual, 1, x[:1], y[:1], torch.tensor([True]), pc.CrossEntropyLoss
+            start_manual,
+            1,
+            x[:1],
+            y[:1],
+            torch.tensor([True]),
+            pc.losses.CrossEntropyLoss,
         )
         states = learned(
-            start_manual, (), x[0], y[0], torch.tensor(True), pc.CrossEntropyLoss
+            start_manual, (), x[0], y[0], torch.tensor(True), pc.losses.CrossEntropyLoss
         )
         assert_learned_alike(states, expected)

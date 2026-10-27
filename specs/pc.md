@@ -60,7 +60,7 @@ $\theta_i$ は、平均の勾配 $g_\theta / B$ を受け取るノードの opti
 - バッチは `activity_spec(h, y, batch)`、`Input(batch=)`、`Chain(batch=)` で宣言する。`Layer` と `Output` は受け取る `act_spec` の `mask` の shape から読み、引数を持たない。どの次元がバッチかは shape からは決まらないので、推論しない
 - VJP はバッチの和で取り、$1/B$ は $\theta$ の勾配にだけ掛ける。局所のエネルギーを `.mean()` で作ると $h$ の勾配まで $1/B$ 倍になるので使わない。この規約で $\lambda$ はサンプルごとの credit $-\partial\ell_b/\partial h_b$、$\theta$ の更新は平均の損失の勾配降下になる
 - 出力ノードの損失は**サンプルごとの値** $\ell_b$（shape `batch`）を返す関数とし、和はノードが取る。平均を取る損失（`nn.MSELoss()` の既定など）を渡すと $g_{\mathrm{in}}$ が $1/B$ 倍、$\theta$ には $1/B$ が二重に掛かるので断る（K27）。バッチが `()` のときは損失も `()` なので見分けられないが、平均を取るバッチが無いので $1/B$ の問題は起きない
-- 損失は `pc.MSELoss(batch)` と `pc.CrossEntropyLoss(batch)`。中身は `pc.functional.mse(y_hat, y, batch)` と `pc.functional.cross_entropy(y_hat, y, batch)` で、クラスは `batch` を持つだけ。torch の `F.mse_loss` と `nn.MSELoss` の関係に倣う。どちらもバッチでない次元（1 サンプルの中）で平均を取り、$\tfrac12$ は付けない。$1/B$ と合わせると、$\theta$ の更新は `nn.MSELoss()`・`nn.CrossEntropyLoss()` の既定（全要素の平均）の勾配降下と一致する。交差エントロピーのクラスの次元はバッチの直後（`len(batch)` 番目）。torch の「クラスは dim 1、バッチが無ければ dim 0」を一般化したもの。1 サンプルの目標が構造を持つ（画素ごとのクラス、`(*batch, C, H, W)`）ときに畳む次元もバッチから決まるので、交差エントロピーもバッチを受け取る
+- 損失は `pc.losses.MSELoss(batch)` と `pc.losses.CrossEntropyLoss(batch)`。中身は `pc.functional.mse(y_hat, y, batch)` と `pc.functional.cross_entropy(y_hat, y, batch)` で、クラスは `batch` を持つだけ。torch の `F.mse_loss` と `nn.MSELoss` の関係に倣う。どちらもバッチでない次元（1 サンプルの中）で平均を取り、$\tfrac12$ は付けない。$1/B$ と合わせると、$\theta$ の更新は `nn.MSELoss()`・`nn.CrossEntropyLoss()` の既定（全要素の平均）の勾配降下と一致する。交差エントロピーのクラスの次元はバッチの直後（`len(batch)` 番目）。torch の「クラスは dim 1、バッチが無ければ dim 0」を一般化したもの。1 サンプルの目標が構造を持つ（画素ごとのクラス、`(*batch, C, H, W)`）ときに畳む次元もバッチから決まるので、交差エントロピーもバッチを受け取る
 - 以前の `pc.mse` は $\tfrac12\|y-\hat y\|^2$ を特徴で和にしていた。出力の次元が $d$ なら、今の勾配はその $2/d$ 倍（$d = 2$ で同じ、$d = 1$ で 2 倍）。出力側の結合が強くなる分、陽的 Euler の安定の余裕は減る
 - `f` はサンプルごとに独立であること。学習モードの BatchNorm のようにバッチの中で混ざる演算は使えない。これはバッチのすべての次元にかかる。系列の時間のように module が混ぜる次元はバッチではなく、`h` の次元に置く
 - `f` は決定的で、自分の状態を持たないこと（Dropout や学習モードの BatchNorm は使えない）。学習した更新で $\theta$ の跳びを求めるため、同じ $h_{\mathrm{in}}$ で `f` をもう 1 回計算する
@@ -96,7 +96,7 @@ $\theta_i$ は、平均の勾配 $g_\theta / B$ を受け取るノードの opti
 
 | ノード | 状態 |
 | --- | --- |
-| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`relaxer`（relaxer の束縛。`pc.HeavyBall` なら `velocity`）、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
+| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.optim.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`relaxer`（relaxer の束縛。`pc.relax.HeavyBall` なら `velocity`）、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
 | `Output` | `module`、`optimizer`、`clock` |
 | `Input` | `jumps`、`seen_write`（最後に見た書き込みの時刻、書き込みの前は -1） |
 
@@ -124,7 +124,7 @@ $h$、$\lambda$ は毎回の更新で動かし、$\theta$ は間隔を空けて�
 
 $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\theta}{B}$$
 
-（`pc.SGD` の場合。一般には optimizer の `step_` が $g_\theta / B$ と $\Sigma\Delta t$ で動かす）。時間あたりの学習の速さは optimizer の $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
+（`pc.optim.SGD` の場合。一般には optimizer の `step_` が $g_\theta / B$ と $\Sigma\Delta t$ で動かす）。時間あたりの学習の速さは optimizer の $\tau_\theta$ で決まり、間隔は $g_\theta$ を**どの時点でサンプルするか**と計算量を決める。
 
 学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt`）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time, now)`（どちらも `Timestamp`） は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
 
@@ -158,7 +158,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 `TimeConstants(*, h, lam)` に秒で持つ（K25: h は有限で > 0、lam は > 0。lam の inf は可）。$\tau_\theta$ は optimizer が持つ（「重みの optimizer」）。$h$ の動かし方は relaxer が持つ（「h の relaxer」）。
 
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
-- `pc.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
+- `pc.optim.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
 - ノードの周期の既定は $\tau_h / 4$（$\eta_h = 0.25$）。利用者は時定数だけを決めればよい。記事の公式実装の $\eta_h = 1/\lambda_{\max}$（約 0.2〜0.25）とほぼ同じ
 - 安定な範囲の実測（$\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$、$c \approx 1 + \|J\|^2$）は [PC の比較実験](research/pc-experiments.md#時定数の安定な範囲)。example の既定は $\tau_\lambda = 2\tau_h$（$\alpha = 0.125$）
 
@@ -166,7 +166,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 $\theta$ の時間発展は差し替えられる部品にする（`src/mujou/pc/optim.py`）。
 
-- **設定 + bind**: `pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は値だけを持つ frozen dataclass で、ABC の `pc.Optimizer` を継承する。状態を持たないので `Chain` の全ノードで共有してよい。ノードは `optimizer.bind(params)` で自分の param の束縛（ABC の `pc.BoundOptimizer`）を作り、`self.optimizer` に置く。束縛は `step_(grads, elapsed)` と `state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので `LearnClock` と同じく属性に置くだけでノードの状態に入る（キー `"optimizer"`）。束縛はノードごとに別で、同じ束縛を 2 ノードに置くと `tree.walk` が断る（K24）
+- **設定 + bind**: `pc.optim.SGD(tau=)` と `pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は値だけを持つ frozen dataclass で、ABC の `pc.optim.Optimizer` を継承する。状態を持たないので `Chain` の全ノードで共有してよい。ノードは `optimizer.bind(params)` で自分の param の束縛（ABC の `pc.optim.BoundOptimizer`）を作り、`self.optimizer` に置く。束縛は `step_(grads, elapsed)` と `state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので `LearnClock` と同じく属性に置くだけでノードの状態に入る（キー `"optimizer"`）。束縛はノードごとに別で、同じ束縛を 2 ノードに置くと `tree.walk` が断る（K24）
 - ABC にしたのは、メソッドを書き忘れた自作の optimizer を、最初に学ぶ更新（実行中の hook の例外で全体が止まる）ではなく、作った時点の `TypeError` で知らせるため（2026-10-23、ユーザーの決定。最初は Protocol だった）。mujou はダックタイピングを使わない（[ノード](nodes.md#状態)）
 - `optimizer` は `Layer`・`Output`・`Chain` の必須の引数。時間で表した既定の学習率は無い（`learn_interval` に既定を置かないのと同じ理由）
 - ノードは `requires_grad` の param だけを bind する。frozen な param には weight decay も掛からない
@@ -207,15 +207,15 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 
 $h$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/relax.py`、2026-10-26）。きっかけは、$h$ に慣性（heavy ball）を足せるようにした（ユーザーの「それでも学習できるよう新しい feature の実装（緩和の手法設定など）も考慮して試行」）ところ、ユーザーが「$\theta$ の optimizer のように、$h$ にも更新の仕方を自由に変えられる仕組みが必要」と求めたこと。最初は `TimeConstants.momentum` に置いたが、それは慣性という 1 つの手法を時定数の 1 項目にしただけなので、重みの optimizer と同じ形（設定 + bind）に載せ替えた。
 
-- **設定 + bind**: `pc.Euler()` と `pc.HeavyBall(tau=)` は値だけを持つ frozen dataclass で、ABC の `pc.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(h)` で自分の $h$ の束縛（ABC の `pc.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(h, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`h` と同じ shape・dtype・device の状態を持つ）
-- ABC なのは optimizer と同じ理由（書き忘れを作った時点の `TypeError` で知らせる）。`relaxer` は `Layer` と `Chain` の省略できる引数で、既定は `pc.Euler()`（これまでの挙動）。`Output` は $h$ を持たないので取らない
+- **設定 + bind**: `pc.relax.Euler()` と `pc.relax.HeavyBall(tau=)` は値だけを持つ frozen dataclass で、ABC の `pc.relax.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(h)` で自分の $h$ の束縛（ABC の `pc.relax.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(h, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`h` と同じ shape・dtype・device の状態を持つ）
+- ABC なのは optimizer と同じ理由（書き忘れを作った時点の `TypeError` で知らせる）。`relaxer` は `Layer` と `Chain` の省略できる引数で、既定は `pc.relax.Euler()`（これまでの挙動）。`Output` は $h$ を持たないので取らない
 - **差し替えの範囲は $h$ だけ**: 力 $F = r + \lambda + g$ を作るのは `functional.relax_` で、束縛が $h$ をその力に沿って動かす。$\lambda$ は動かした後の $h$ の $r$ で従来どおり進める。`relax_(h, lam, mu, g, dt, tau, relaxer=None)` の `None` は素の 1 歩
 - **`reset_()`**: 新しいサンプルか $h_{\mathrm{in}}$ の跳び（付け替え）のとき、ノードが呼ぶ。付け替えは $r$ と $\lambda$ を保ち、$g$ は下流の最後の値のままなので、その瞬間に力は連続する。それでも、速度が積んだのは前の入力の力の場で、新しい入力のものではないので捨てる。$\theta$ の跳びは $h$ と $\mu$ を一緒に動かし、$r$ も力も連続で、前の入力の力の場が続くので、呼ばない。記憶の無い relaxer は何もしない
 - **不動点の条件**: 自作の relaxer は、力が 0 で relaxer 自身の状態が静止しているところ（heavy ball なら $F = 0$ かつ $v = 0$）で $h$ を動かさないものでなければならない。そうでないと不動点が動き、$\lambda$ が BP の credit にならない（$h$ に decay や leak を入れると、$\lambda$ の不動点は credit からずれる）
 - **持てる状態の条件**: ノードは `step_` の外でも $h$ を動かす（付け替えの $h \leftarrow \mu^{\mathrm{new}} + (h - \mu^{\mathrm{last}})$ と、$\theta$ の跳びの足し込み）。だから relaxer の状態は $h$ の位置に依らないもの（速度のような力の型）に限る。位置の型の状態（先読みの位置、前回の $h$）は、$\theta$ の跳びで古くなるが、$\theta$ の跳びは relaxer に知らされない。要るようになったら `shift_` のような通知を足す（今は実装しない）
 - 局所性: 状態はノードの内側で、メッセージは増えない
 
-### `pc.HeavyBall(tau)`
+### `pc.relax.HeavyBall(tau)`
 
 速度 $v$ を持ち、1 回の更新（$dt > 0$）で
 
@@ -270,7 +270,7 @@ $dt = 0$ の更新は何もしない（力も蓄えない）。状態は `{"velo
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`（`h` の動かし方を選ぶなら `self.relaxer = relaxer.bind(h)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau, self.relaxer)` で活動を動かし（付け替えたときは先に `self.relaxer.reset_()`）、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.clock.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`（`h` の動かし方を選ぶなら `self.relaxer = relaxer.bind(h)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau, self.relaxer)` で活動を動かし（付け替えたときは先に `self.relaxer.reset_()`）、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -285,7 +285,7 @@ $dt = 0$ の更新は何もしない（力も蓄えない）。状態は `{"velo
 | $\lambda$ の更新 | 更新後の $h$ の $r$ | 同じ |
 | 重みの勾配の $\lambda$ | 最後の dual 更新の前 | VJP を取ったときの更新前の値 |
 | ステップの大きさ | 離散の $\eta_h, \alpha$ | 時定数と実経過の `dt`（`max_dt` で打ち切る） |
-| 重みの最適化 | Adam | 時間で進める SGD か AdamW（`pc.SGD` / `pc.AdamW`） |
+| 重みの最適化 | Adam | 時間で進める SGD か AdamW（`pc.optim.SGD` / `pc.optim.AdamW`） |
 | 出力の損失 | バッチ平均の $\tfrac12\|y-\hat y\|^2$ | サンプルごとの任意の損失の和（`MSELoss` は特徴の平均で $\tfrac12$ なし） |
 
 ## テスト

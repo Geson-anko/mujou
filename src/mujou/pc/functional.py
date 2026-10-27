@@ -11,8 +11,8 @@ previous node, and keeps its activity ``h`` and the dual ``lam`` of the constrai
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
 - ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds (``h`` as a relaxer of
-  ``mujou.pc.relax`` says: ``pc.Euler``, ``pc.HeavyBall``); an optimizer of
-  ``mujou.pc.optim`` (``pc.SGD``, ``pc.AdamW``) moves ``theta``.
+  ``mujou.pc.relax`` says: ``pc.relax.Euler``, ``pc.relax.HeavyBall``); an optimizer of
+  ``mujou.pc.optim`` (``pc.optim.SGD``, ``pc.optim.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
 
@@ -143,8 +143,8 @@ def loss_vjp(
             raise ValueError(
                 f"loss must return the loss of each sample, of shape "
                 f"{tuple(mask.shape)}, got {tuple(ell_b.shape)}; a loss that "
-                "averages, such as nn.MSELoss(), does not (use pc.MSELoss or "
-                "pc.CrossEntropyLoss with the batch)"
+                "averages, such as nn.MSELoss(), does not (use pc.losses.MSELoss or "
+                "pc.losses.CrossEntropyLoss with the batch)"
             )
         return torch.where(mask, ell_b, 0.0).sum()
 
@@ -194,7 +194,7 @@ def relax_(
     instead (``Layer`` caps it at ``max_dt``). ``tau.lam = inf`` leaves ``lam``
     exactly as it is.
 
-    With a ``relaxer`` (``pc.Euler().bind(h)``, ``pc.HeavyBall(...).bind(h)`` or
+    With a ``relaxer`` (``pc.relax.Euler().bind(h)``, ``pc.relax.HeavyBall(...).bind(h)`` or
     one of your own), ``h`` moves as it says along the force
     $F = r + \lambda + g$ instead of by the plain step: ``relaxer.step_(h, F, dt,
     tau.h)``. $\lambda$ follows the moved ``h`` as before. The relaxer is the

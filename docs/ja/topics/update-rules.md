@@ -30,15 +30,15 @@ uv run python examples/feedback_alignment.py
 
 ## 目標を中継する
 
-活動はそのサンプルの目標 `y` と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、`output` はいつも予測を自分の目標と比べ、`hidden` は持っている入力と同じ `time` の誤差だけから学ぶ。`mujou.pc` のノードも同じように、`y`・`mask`・`time` を `pc.Activity` で運ぶ。一緒に運ぶ `jumps` は送り手の `h` が跳んだ回数で、受け手に自分の `h` を予測と一緒に動かすよう伝える（[PC-ALM](pc.md#%E3%83%8E%E3%83%BC%E3%83%89)）。
+活動はそのサンプルの目標 `y` と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、`output` はいつも予測を自分の目標と比べ、`hidden` は持っている入力と同じ `time` の誤差だけから学ぶ。`mujou.pc` のノードも同じように、`y`・`mask`・`time` を `pc.messages.Activity` で運ぶ。一緒に運ぶ `jumps` は送り手の `h` が跳んだ回数で、受け手に自分の `h` を予測と一緒に動かすよう伝える（[PC-ALM](pc.md#%E3%83%8E%E3%83%BC%E3%83%89)）。
 
 ## 新しいかどうかを判定する
 
 `recv()` は新しいかどうかによらず最新の値を返す。各サンプルから 1 回だけ学ぶノードは、時刻で新しいサンプルを見分ける。`recv_with_time()` が返す時刻か、メッセージが運ぶ時刻を使う。誰も送る前の時刻は `None`（メッセージが運ぶ時刻なら、その初期値。`TimestampSpec` なら `Timestamp(ns=0)`）になる。
 
-## `pc.LearnClock`
+## `pc.clock.LearnClock`
 
-どちらのノードも、いつ学ぶかを `pc.LearnClock` で決める。`mujou.pc` の部品だが、どの則でも使える。更新ごとに `tick(dt, time, now)` に `dt`、入力が書かれた時刻、今の時刻を渡すと、`pc.Tick` が返る。
+どちらのノードも、いつ学ぶかを `pc.clock.LearnClock` で決める。`mujou.pc` の部品だが、どの則でも使える。更新ごとに `tick(dt, time, now)` に `dt`、入力が書かれた時刻、今の時刻を渡すと、`pc.clock.Tick` が返る。
 
 - `new`: 入力が新しい（時刻が前回見たものと違う）
 - `learn`: この更新で学ぶ。`learn_interval` を渡したなら、各書き込みから `learn_interval` 後の最初の更新（入力が変わらない間は以後 `learn_interval` ごと）。ただし入力を初めて見た更新では学ばない。`learn_interval=None` なら毎回

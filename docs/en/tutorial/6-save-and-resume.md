@@ -35,7 +35,7 @@ Taking it pauses the run: each node stops between two updates, never in the midd
 
 ## Values of your own in the state
 
-Tensors, `mujou.Stateful` objects (every `nn.Module`, `pc.LearnClock`, or a class of your own that inherits `mujou.Stateful`), and the state of `self.generator` are collected; numbers, strings, and lists or dicts of tensors are not. An object that only has methods named `state_dict` and `load_state_dict` is not collected: inherit `mujou.Stateful`. For a plain value that changes while the node runs, assign the attribute in `__init__` and register it:
+Tensors, `mujou.Stateful` objects (every `nn.Module`, `pc.clock.LearnClock`, or a class of your own that inherits `mujou.Stateful`), and the state of `self.generator` are collected; numbers, strings, and lists or dicts of tensors are not. An object that only has methods named `state_dict` and `load_state_dict` is not collected: inherit `mujou.Stateful`. For a plain value that changes while the node runs, assign the attribute in `__init__` and register it:
 
 ```python
 self.elapsed = 0.0

@@ -10,7 +10,7 @@ mujou の本質は「推論と学習が同時に行われ、知能に『無常�
 
 ノードという実行の基盤と、更新手法の実装を分ける。ノード・スロット・スケジューラは特定の学習則を前提にしない。PC-ALM 固有の状態（双対変数 $\lambda$ など）や、やり取りする値の中身（$W^\top \varepsilon$、目標、mask など）は更新手法の側に閉じ込め、基盤の型や API に書き込まない。ランタイムの契約は `NodeHooks`（hook の呼び出し）だけで、学習則の量を 1 つも持たない。
 
-不変条件はノードの間に課し、ノードの内側の更新手法は自由に選べる。学習則はノードの中に書く。ノードの内側の BP、PC-ALM（`mujou.pc`）、自作の則のどれでもよい。ノードをまたぐ自作の則も、ポートでやり取りする値だけで書ける（双方向のポート、目標の中継、新しさの判定、`pc.LearnClock`。`examples/feedback_alignment.py`）。ノードをまたぐ計算グラフは作れない（ポートはコピーを送る）。
+不変条件はノードの間に課し、ノードの内側の更新手法は自由に選べる。学習則はノードの中に書く。ノードの内側の BP、PC-ALM（`mujou.pc`）、自作の則のどれでもよい。ノードをまたぐ自作の則も、ポートでやり取りする値だけで書ける（双方向のポート、目標の中継、新しさの判定、`pc.clock.LearnClock`。`examples/feedback_alignment.py`）。ノードをまたぐ計算グラフは作れない（ポートはコピーを送る）。
 
 ## mujou.pc は基盤の外の利用者
 
@@ -19,7 +19,7 @@ PC-ALM は `src/mujou/pc/` に実装し、`mujou` の公開名だけに依存す
 - 基盤と更新手法を区別する方針を、物理的な木と一致させる。pc が使っているのは、利用者が使うのと同じ `Node`、`Port`、`MultiPort`、`Network`、`TensorSpec`、`IntSpec`、`TimestampSpec`、`DictSpec`、`Run`、`self.timer` だけ
 - そのため、pc でできることは利用者の更新手法でもできる。pc のために基盤へ特別な口を足す必要が出たら、それは利用者にも要る口として公開 API に足す
 - pc のクラスは `mujou.*` のトップレベルに再公開しない。基盤と更新手法の区別を名前に残すため。別の更新手法を足すときも、手法ごとのモジュールにする
-- 重み $\theta$ の時間発展も `pc.Optimizer`（`pc.SGD`、`pc.AdamW`、利用者の自作）で差し替えられる。optimizer は `LearnClock` と同じく PC 以外の則でも使える部品（[重みの optimizer](pc.md#重みの-optimizer)）
+- 重み $\theta$ の時間発展も `pc.optim.Optimizer`（`pc.optim.SGD`、`pc.optim.AdamW`、利用者の自作）で差し替えられる。optimizer は `LearnClock` と同じく PC 以外の則でも使える部品（[重みの optimizer](pc.md#重みの-optimizer)）
 - モジュール名を `pc`（予測符号化）にしたのは、PC-ALM が双対変数のステップサイズ $\alpha = 0$ で通常の PC に退化し、PC も同じモジュールに収まるからである
 
 ## 既定の更新手法: PC-ALM

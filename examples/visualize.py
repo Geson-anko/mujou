@@ -78,9 +78,9 @@ chain = pc.Chain(
     x=TensorSpec((B, 784)),
     y=TensorSpec((B,), torch.int64),
     batch=B,
-    loss=pc.CrossEntropyLoss(B),
+    loss=pc.losses.CrossEntropyLoss(B),
     tau=pc.TimeConstants(h=4e-3, lam=8e-3),
-    optimizer=pc.SGD(tau=1.28),
+    optimizer=pc.optim.SGD(tau=1.28),
     learn_interval=0.15,
 )
 Path("chain.html").write_text(mujou.viz.to_html(chain), "utf-8")

@@ -82,7 +82,7 @@ class TestInput:
             nn.Linear(4, 5),
             act_spec=inp.act_spec,
             tau=tau,
-            optimizer=pc.SGD(tau=1.0),
+            optimizer=pc.optim.SGD(tau=1.0),
             learn_interval=None,
         )
         channel = inp.next.connect(layer.prev)

@@ -1,5 +1,5 @@
 """The weight optimizers of ``mujou.pc``, which move the parameters by the
-time that passed: ``pc.SGD`` and ``pc.AdamW``. The expected values are the
+time that passed: ``pc.optim.SGD`` and ``pc.optim.AdamW``. The expected values are the
 formulas written out here; ``torch.optim`` runs only in a subprocess, since
 building one re-enables the GIL of the free-threaded build."""
 
@@ -21,7 +21,7 @@ from tests.mujou.nodes import F64, assert_same_tree
 # AdamW whose eps is of the order of sqrt(v_hat) (gradients of 1e-3), so that
 # a wrong place for eps shows.
 TAU, TAU_M, TAU_V, EPS, W = 0.3, 0.02, 0.1, 1e-3, 0.1
-ADAMW = pc.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, eps=EPS, weight_decay=W)
+ADAMW = pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, eps=EPS, weight_decay=W)
 DT = 4e-3
 SCALE = 1e-3  # of the gradients
 
@@ -79,7 +79,7 @@ class TestSGD:
         # tau dtheta/dt = -g: one step of elapsed is SGD at the rate elapsed / tau.
         ps = params()
         p0, gs = clones(ps), grads(0)
-        pc.SGD(tau=0.5).bind(ps).step_(gs, 3e-3)
+        pc.optim.SGD(tau=0.5).bind(ps).step_(gs, 3e-3)
         for p, p_0, g in zip(ps, p0, gs, strict=True):
             torch.testing.assert_close(
                 p, p_0 - (3e-3 / 0.5) * g, rtol=1e-15, atol=1e-15
@@ -95,19 +95,19 @@ class TestSGD:
         ps = params()
         p0 = clones(ps)
         g_sum = [batch * g for g in grads(0)]
-        pc.SGD(tau=tau).bind(ps).step_([g / batch for g in g_sum], elapsed)
+        pc.optim.SGD(tau=tau).bind(ps).step_([g / batch for g in g_sum], elapsed)
         for p, p_0, g in zip(ps, p0, g_sum, strict=True):
             assert torch.equal(p, p_0.sub(g, alpha=elapsed / tau / batch))
 
     def test_zero_elapsed_moves_nothing(self):
         ps = params()
         p0 = clones(ps)
-        pc.SGD(tau=0.5).bind(ps).step_(grads(0), 0.0)
+        pc.optim.SGD(tau=0.5).bind(ps).step_(grads(0), 0.0)
         for p, p_0 in zip(ps, p0, strict=True):
             assert torch.equal(p, p_0)
 
     def test_has_no_state(self):
-        bound = pc.SGD(tau=0.5).bind(params())
+        bound = pc.optim.SGD(tau=0.5).bind(params())
         bound.step_(grads(0), DT)
         assert bound.state_dict() == {}
 
@@ -129,7 +129,9 @@ class TestAdamW:
     ):
         # m_hat = g and v_hat = g^2 after the first step, whatever tau_m and
         # tau_v: theta (1 - eta w) - eta g / (|g| + eps), eta = elapsed / tau.
-        adamw = pc.AdamW(tau=TAU, tau_m=tau_m, tau_v=tau_v, eps=EPS, weight_decay=W)
+        adamw = pc.optim.AdamW(
+            tau=TAU, tau_m=tau_m, tau_v=tau_v, eps=EPS, weight_decay=W
+        )
         ps = params()
         p0, gs = clones(ps), grads(0)
         adamw.bind(ps).step_(gs, DT)
@@ -234,39 +236,39 @@ class TestAdamW:
         assert state["c_v"] == 0.0
 
 
-OPTIMIZERS = [pc.SGD(tau=TAU), ADAMW]
+OPTIMIZERS = [pc.optim.SGD(tau=TAU), ADAMW]
 IDS = ["sgd", "adamw"]
 
 
 class TestBound:
     @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
-    def test_binds_no_parameters(self, optimizer: pc.Optimizer):
+    def test_binds_no_parameters(self, optimizer: pc.optim.Optimizer):
         optimizer.bind([]).step_([], DT)
 
     @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
-    def test_a_gradient_per_parameter(self, optimizer: pc.Optimizer):
+    def test_a_gradient_per_parameter(self, optimizer: pc.optim.Optimizer):
         bound = optimizer.bind(params())
         with pytest.raises(ValueError):
             bound.step_(grads(0)[:1], DT)
 
     @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
-    def test_is_a_bound_optimizer_with_a_state(self, optimizer: pc.Optimizer):
+    def test_is_a_bound_optimizer_with_a_state(self, optimizer: pc.optim.Optimizer):
         # A node holds it as an attribute, so it is in the node's state.
         bound = optimizer.bind([])
-        assert isinstance(bound, pc.BoundOptimizer)
+        assert isinstance(bound, pc.optim.BoundOptimizer)
         assert isinstance(bound, mujou.Stateful)
 
 
 class TestAbstract:
     def test_an_optimizer_needs_bind(self):
-        class NoBind(pc.Optimizer):
+        class NoBind(pc.optim.Optimizer):
             pass
 
         with pytest.raises(TypeError, match="bind"):
             NoBind()  # pyright: ignore[reportAbstractUsage]
 
     def test_a_bound_optimizer_needs_step_and_its_state(self):
-        class NoStep(pc.BoundOptimizer):
+        class NoStep(pc.optim.BoundOptimizer):
             @override
             def state_dict(self) -> dict[str, Any]:
                 return {}
@@ -275,7 +277,7 @@ class TestAbstract:
             def load_state_dict(self, state: Any, /) -> None:
                 pass
 
-        class NoState(pc.BoundOptimizer):
+        class NoState(pc.optim.BoundOptimizer):
             @override
             def step_(self, grads: Any, elapsed: float) -> None:
                 pass
@@ -297,7 +299,7 @@ def saved(state: dict[str, Any]) -> dict[str, Any]:
 class TestState:
     @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
     def test_a_restored_optimizer_goes_on_as_the_same_one(
-        self, optimizer: pc.Optimizer
+        self, optimizer: pc.optim.Optimizer
     ):
         # The parameters belong to the node: the restored one binds a copy of
         # them, and takes the state saved after 3 steps.
@@ -340,7 +342,7 @@ class TestChecks:
     @pytest.mark.parametrize("tau", [0.0, -1.0, math.nan, math.inf])
     def test_sgd_tau_must_be_finite_and_positive(self, tau: float):
         with pytest.raises(ValueError, match="SGD.tau"):
-            pc.SGD(tau=tau)
+            pc.optim.SGD(tau=tau)
 
     @pytest.mark.parametrize("field", ["tau", "tau_m", "tau_v", "eps"])
     @pytest.mark.parametrize("value", [0.0, -1.0, math.nan, math.inf])
@@ -349,22 +351,22 @@ class TestChecks:
     ):
         values = {"tau": TAU, "tau_m": TAU_M, "tau_v": TAU_V, field: value}
         with pytest.raises(ValueError) as exc:
-            pc.AdamW(**values)
+            pc.optim.AdamW(**values)
         assert f"AdamW.{field} must" in str(exc.value)
 
     @pytest.mark.parametrize("value", [-1.0, math.nan, math.inf])
     def test_adamw_weight_decay_must_be_finite_and_not_negative(self, value: float):
         with pytest.raises(ValueError, match="AdamW.weight_decay must"):
-            pc.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=value)
+            pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=value)
 
     def test_adamw_takes_zero_weight_decay(self):
-        pc.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=0.0)
+        pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=0.0)
 
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):
-            pc.SGD(0.5)  # pyright: ignore[reportCallIssue]
+            pc.optim.SGD(0.5)  # pyright: ignore[reportCallIssue]
         with pytest.raises(TypeError):
-            pc.AdamW(TAU, TAU_M, TAU_V)  # pyright: ignore[reportCallIssue]
+            pc.optim.AdamW(TAU, TAU_M, TAU_V)  # pyright: ignore[reportCallIssue]
 
 
 # Runs in a subprocess: building a torch.optim optimizer imports
@@ -383,7 +385,7 @@ p0 = [
 ]
 ours = [p.clone() for p in p0]
 theirs = [p.clone().requires_grad_() for p in p0]
-bound = pc.AdamW(tau=tau, tau_m=tau_m, tau_v=tau_v, eps=eps, weight_decay=w).bind(ours)
+bound = pc.optim.AdamW(tau=tau, tau_m=tau_m, tau_v=tau_v, eps=eps, weight_decay=w).bind(ours)
 optimizer = AdamW(
     theirs,
     lr=dt / tau,
@@ -428,8 +430,8 @@ import torch
 import mujou.pc as pc
 
 for optimizer in (
-    pc.SGD(tau=0.3),
-    pc.AdamW(tau=0.3, tau_m=0.02, tau_v=0.1),
+    pc.optim.SGD(tau=0.3),
+    pc.optim.AdamW(tau=0.3, tau_m=0.02, tau_v=0.1),
 ):
     p = torch.zeros(3, dtype=torch.float64)
     optimizer.bind([p]).step_([torch.ones(3, dtype=torch.float64)], 1e-3)

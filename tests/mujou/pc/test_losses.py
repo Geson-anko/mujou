@@ -1,7 +1,7 @@
 import torch
 
-from mujou.pc import CrossEntropyLoss, MSELoss
 from mujou.pc.functional import cross_entropy, mse
+from mujou.pc.losses import CrossEntropyLoss, MSELoss
 
 
 def _generator() -> torch.Generator:

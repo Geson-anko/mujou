@@ -40,14 +40,14 @@ from mujou import TensorSpec
 
 B = 64
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
-OPTIMIZER = pc.SGD(tau=1.28)
+OPTIMIZER = pc.optim.SGD(tau=1.28)
 PERIOD = TAU.h / 4
 PATHS = ("inp", "l1", "l2", "out")
 
 # The target: its spec, the width of the output and the loss.
 TARGETS: dict[str, tuple[TensorSpec, int, Callable[..., torch.Tensor]]] = {
-    "dense y (B, 256)": (TensorSpec((B, 256)), 256, pc.MSELoss(B)),
-    "labels y (B,)": (TensorSpec((B,), torch.int64), 10, pc.CrossEntropyLoss(B)),
+    "dense y (B, 256)": (TensorSpec((B, 256)), 256, pc.losses.MSELoss(B)),
+    "labels y (B,)": (TensorSpec((B,), torch.int64), 10, pc.losses.CrossEntropyLoss(B)),
 }
 
 
@@ -74,7 +74,7 @@ class CountedOutput(Counted, pc.Output):
 
 def build(
     target: str, period: float, device: str
-) -> tuple[mujou.Group, dict[Any, pc.Sample]]:
+) -> tuple[mujou.Group, dict[Any, pc.messages.Sample]]:
     """The chain for ``target``, with nodes of ``period`` on ``device``, and its
     input."""
     y, width, loss = TARGETS[target]
@@ -108,7 +108,7 @@ def build(
     for node in (inp, l1, l2, out):
         node.updates = 0
         node.register_state("updates")
-    sample: pc.Sample = {
+    sample: pc.messages.Sample = {
         "x": torch.randn(B, 784),
         "y": y.rand() if y.dtype.is_floating_point else torch.randint(10, (B,)),
         "mask": torch.ones(B, dtype=torch.bool),

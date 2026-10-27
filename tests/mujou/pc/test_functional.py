@@ -7,15 +7,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from mujou.pc import (
-    BoundRelaxer,
-    CrossEntropyLoss,
-    Euler,
-    HeavyBall,
-    MSELoss,
-    TimeConstants,
-)
+from mujou.pc import TimeConstants
 from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
+from mujou.pc.losses import CrossEntropyLoss, MSELoss
+from mujou.pc.relax import BoundRelaxer, Euler, HeavyBall
 
 B = 3
 EPS = 1e-6  # central differences: truncation ~EPS^2, rounding ~1e-16 / EPS

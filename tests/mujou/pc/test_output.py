@@ -19,7 +19,7 @@ B, N_IN, N_OUT = 3, 4, 2
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
-ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
+ACT = pc.messages.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
 
 
 def head(seed: int = 0) -> nn.Linear:
@@ -40,7 +40,7 @@ class Direct:
         self.out = pc.Output(
             module,
             act_spec=self.inp.act_spec,
-            loss=pc.MSELoss(B),
+            loss=pc.losses.MSELoss(B),
             tau=TAU,
             **learning,
         )
@@ -96,7 +96,7 @@ def gradients(
 
 class TestConstruction:
     def test_a_loss_that_averages_is_refused(self):
-        with pytest.raises(ValueError, match="pc.MSELoss"):
+        with pytest.raises(ValueError, match="pc.losses.MSELoss"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=nn.MSELoss(),
@@ -107,19 +107,19 @@ class TestConstruction:
             )
 
     def test_the_prediction_has_the_target(self):
-        act = pc.activity_spec(
+        act = pc.messages.activity_spec(
             TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64), batch=B
         )
         out = pc.Output(
             nn.Linear(N_IN, 10),
             act_spec=act,
-            loss=pc.CrossEntropyLoss(B),
+            loss=pc.losses.CrossEntropyLoss(B),
             tau=TAU,
             optimizer=SGD,
             learn_interval=None,
         )
         assert out.next.send_spec == DictSpec(
-            pc.Prediction,
+            pc.messages.Prediction,
             y_hat=TensorSpec((B, 10)),
             y=TensorSpec((B,), torch.int64),
             mask=TensorSpec((B,), torch.bool),
@@ -129,7 +129,7 @@ class TestConstruction:
     def test_the_period_defaults_to_a_quarter_of_tau_h(self):
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
-            loss=pc.MSELoss(B),
+            loss=pc.losses.MSELoss(B),
             act_spec=ACT,
             tau=TAU,
             optimizer=SGD,
@@ -141,7 +141,7 @@ class TestConstruction:
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
-                loss=pc.MSELoss(B),
+                loss=pc.losses.MSELoss(B),
                 act_spec=ACT,
                 tau=TAU,
                 optimizer=SGD,

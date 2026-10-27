@@ -1,7 +1,7 @@
 """The types of mujou that annotations use.
 
 - ``Size`` is a shape: an int ``n`` is ``(n,)``, and ``()`` has no dimension,
-  as the batch of ``mujou.pc`` (``mujou.pc.activity_spec``). Unlike
+  as the batch of ``mujou.pc`` (``mujou.pc.messages.activity_spec``). Unlike
   ``torch.Size``, it takes an int as well.
 - ``Device`` is where a node computes or a tensor is made: a ``torch.device``
   or its name, such as ``"cpu"`` or ``"cuda:0"``.

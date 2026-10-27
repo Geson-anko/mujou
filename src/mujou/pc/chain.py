@@ -63,9 +63,9 @@ class Chain(Network, Shown):
             x=TensorSpec((B, 784)),
             y=TensorSpec((B,), torch.int64),
             batch=B,
-            loss=pc.CrossEntropyLoss(B),
+            loss=pc.losses.CrossEntropyLoss(B),
             tau=pc.TimeConstants(h=4e-3, lam=8e-3),
-            optimizer=pc.SGD(tau=1.28),
+            optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=0.15,
         )
         with mujou.run(net) as run:
@@ -165,7 +165,7 @@ def show(run: Run, chain: Shown, sample: Sample, *, seconds: float) -> Predictio
     Example::
 
         mask = torch.ones(B, dtype=torch.bool)
-        p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=0.2)
+        p = pc.show(run, net, pc.messages.Sample(x=x, y=y, mask=mask), seconds=0.2)
         correct = int((p["y_hat"].argmax(1) == y).sum())
 
     Raises:

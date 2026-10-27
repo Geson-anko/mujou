@@ -19,17 +19,19 @@ def at(ms: int) -> Timestamp:
     return Timestamp(ns=ms * MS)
 
 
-def clock(learn_interval: float | None, max_dt: float = 1.0) -> pc.LearnClock:
-    return pc.LearnClock(period=DT, learn_interval=learn_interval, max_dt=max_dt)
+def clock(learn_interval: float | None, max_dt: float = 1.0) -> pc.clock.LearnClock:
+    return pc.clock.LearnClock(period=DT, learn_interval=learn_interval, max_dt=max_dt)
 
 
-def run(learn: pc.LearnClock, updates: Sequence[tuple[int, int]]) -> dict[int, pc.Tick]:
+def run(
+    learn: pc.clock.LearnClock, updates: Sequence[tuple[int, int]]
+) -> dict[int, pc.clock.Tick]:
     """Tick ``learn`` once per ``(now, time)`` in ms, each update ``DT`` long;
     return the ticks by ``now``."""
     return {now: learn.tick(DT, at(time), at(now)) for now, time in updates}
 
 
-def learned(ticks: dict[int, pc.Tick]) -> dict[int, float]:
+def learned(ticks: dict[int, pc.clock.Tick]) -> dict[int, float]:
     """The updates that learned, with their ``elapsed`` in ms."""
     return {now: round(t.elapsed / DT, 9) for now, t in ticks.items() if t.learn}
 
@@ -76,8 +78,8 @@ class TestElapsed:
 
     def test_dt_is_capped_at_max_dt_in_the_tick_and_the_elapsed_time(self):
         learn = clock(None, max_dt=2e-3)
-        assert learn.tick(5e-3, at(0), at(1)) == pc.Tick(2e-3, True, True, 2e-3)
-        assert learn.tick(1e-3, at(0), at(2)) == pc.Tick(1e-3, False, True, 1e-3)
+        assert learn.tick(5e-3, at(0), at(1)) == pc.clock.Tick(2e-3, True, True, 2e-3)
+        assert learn.tick(1e-3, at(0), at(2)) == pc.clock.Tick(1e-3, False, True, 1e-3)
 
     def test_the_time_beyond_max_dt_is_dropped_from_the_weight(self):
         learn = clock(3e-3, max_dt=2e-3)
@@ -109,10 +111,12 @@ class TestWithoutInterval:
 class TestFromTimeConstants:
     def test_takes_the_default_max_dt_of_tau(self):
         tau = pc.TimeConstants(h=4e-3, lam=0.5e-3)
-        learn = pc.LearnClock.of(tau, period=DT, learn_interval=None)
+        learn = pc.clock.LearnClock.of(tau, period=DT, learn_interval=None)
         # max_dt is min(h / 2, 3 * lam) = 1.5 ms.
         assert learn.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1.5e-3)
-        given = pc.LearnClock.of(tau, period=DT, learn_interval=None, max_dt=1.2e-3)
+        given = pc.clock.LearnClock.of(
+            tau, period=DT, learn_interval=None, max_dt=1.2e-3
+        )
         assert given.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1.2e-3)
 
 
@@ -131,10 +135,10 @@ class TestChecks:
     def test_value_errors(self, kwargs: dict[str, float], match: str):
         args: dict[str, Any] = {"period": DT, "learn_interval": None, "max_dt": 1.0}
         with pytest.raises(ValueError, match=match):
-            pc.LearnClock(**(args | kwargs))
+            pc.clock.LearnClock(**(args | kwargs))
 
     def test_takes_infinite_times(self):
-        pc.LearnClock(period=DT, learn_interval=math.inf, max_dt=math.inf)
+        pc.clock.LearnClock(period=DT, learn_interval=math.inf, max_dt=math.inf)
 
 
 class TestState:

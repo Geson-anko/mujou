@@ -30,7 +30,7 @@ class Layer(Node):
     \tau_\lambda \dot\lambda = r,
     $$
 
-    and ``theta`` moves by ``optimizer`` (such as ``pc.SGD``,
+    and ``theta`` moves by ``optimizer`` (such as ``pc.optim.SGD``,
     $\tau_\theta \dot\theta = -g_\theta / B$) with the mean gradient
     $g_\theta / B$, where $B$ is the number of samples in the batch (1 without
     one), $g_\theta = -J_\theta^\top \delta$ and the node sends
@@ -114,7 +114,7 @@ class Layer(Node):
     ``h`` and ``lam`` stable in the node itself.
 
     ``relaxer`` sets how ``h`` moves along the force on it (``functional.relax_``):
-    the plain step of ``pc.Euler``, or ``pc.HeavyBall``, whose velocity lets a
+    the plain step of ``pc.relax.Euler``, or ``pc.relax.HeavyBall``, whose velocity lets a
     force that lasts move ``h`` faster, so a deep chain relaxes in fewer periods
     with the same fixed point. The node calls the ``reset_`` of the bound relaxer
     with each new sample or jump of ``h_in`` (where the forces it remembers are
@@ -137,8 +137,8 @@ class Layer(Node):
     to ``h`` (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it
     sends and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
     learn (``"clock"``, the state of the ``LearnClock``), the state of
-    ``optimizer`` (``"optimizer"``, such as the moments of ``pc.AdamW``) and
-    that of ``relaxer`` (``"relaxer"``, such as the velocity of ``pc.HeavyBall``). To
+    ``optimizer`` (``"optimizer"``, such as the moments of ``pc.optim.AdamW``) and
+    that of ``relaxer`` (``"relaxer"``, such as the velocity of ``pc.relax.HeavyBall``). To
     watch the node while it runs, read them there: ``Run.state_dict()`` pauses
     the run, whereas reading ``module``, ``h`` or ``lam`` from the host's thread
     races with the node's updates in place. ``act_spec`` is the spec of what the
@@ -158,7 +158,7 @@ class Layer(Node):
             nn.Sequential(nn.Linear(784, 256), nn.ReLU()),
             act_spec=inp.act_spec,
             tau=tau,
-            optimizer=pc.SGD(tau=1.28),
+            optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=24e-3,
         )
         inp.next.connect(hidden.prev)
@@ -170,12 +170,12 @@ class Layer(Node):
         act_spec: The spec of the activity ``h_in`` it receives: the
             ``act_spec`` of the node before, which also gives the batch.
         tau: The time constants of ``h`` and ``lam``.
-        optimizer: How ``theta`` moves (``pc.SGD``, ``pc.AdamW`` or an
+        optimizer: How ``theta`` moves (``pc.optim.SGD``, ``pc.optim.AdamW`` or an
             ``Optimizer`` of your own). The node binds it to its parameters
             that require gradients and holds the bound optimizer as
             ``optimizer``.
-        relaxer: How ``h`` moves along the force on it (``pc.Euler``, the
-            default, ``pc.HeavyBall`` or a ``Relaxer`` of your own). The node
+        relaxer: How ``h`` moves along the force on it (``pc.relax.Euler``, the
+            default, ``pc.relax.HeavyBall`` or a ``Relaxer`` of your own). The node
             binds it to its ``h`` and holds the bound relaxer as ``relaxer``.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;

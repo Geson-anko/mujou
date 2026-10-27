@@ -5,7 +5,7 @@ A relaxer is a setting (``Relaxer``), as an optimizer is: a frozen value that
 holds no state and may be shared by every node. A node binds it to its own
 activity with ``bind(h)``, which returns the ``BoundRelaxer`` that holds the
 state (the velocity of ``HeavyBall``) and moves ``h`` by ``step_(h, force, dt,
-tau_h)``. It is the counterpart of ``pc.SGD`` and ``pc.AdamW`` for ``h``: those
+tau_h)``. It is the counterpart of ``pc.optim.SGD`` and ``pc.optim.AdamW`` for ``h``: those
 move the parameters along their gradient, a relaxer moves the activity along the
 force on it, $F = r + \lambda + g$ (``functional.relax_``). The dual ``lam`` is
 not a relaxer's business: it follows the moved ``h``.
@@ -24,6 +24,13 @@ from typing import Any, override
 import torch
 
 from mujou import Stateful
+
+__all__ = [
+    "Euler",
+    "HeavyBall",
+    "Relaxer",
+    "BoundRelaxer",
+]
 
 
 class BoundRelaxer(Stateful):
@@ -76,13 +83,13 @@ class Relaxer(ABC):
     ``BoundRelaxer``. For example, a step that is capped in size::
 
         @dataclass(frozen=True)
-        class Capped(pc.Relaxer):
+        class Capped(pc.relax.Relaxer):
             limit: float
 
             def bind(self, h):
                 return _BoundCapped(self.limit)
 
-        class _BoundCapped(pc.BoundRelaxer):
+        class _BoundCapped(pc.relax.BoundRelaxer):
             def __init__(self, limit):
                 self._limit = limit
 
@@ -120,7 +127,7 @@ class Euler(Relaxer):
     Example::
 
         hidden = pc.Layer(module, act_spec=..., tau=tau, optimizer=...,
-                          relaxer=pc.Euler(), learn_interval=24e-3)
+                          relaxer=pc.relax.Euler(), learn_interval=24e-3)
     """
 
     @override
@@ -183,7 +190,7 @@ class HeavyBall(Relaxer):
     Example::
 
         hidden = pc.Layer(module, act_spec=..., tau=tau, optimizer=...,
-                          relaxer=pc.HeavyBall(tau=tau.h / 4),
+                          relaxer=pc.relax.HeavyBall(tau=tau.h / 4),
                           learn_interval=24e-3)
 
     Args:
