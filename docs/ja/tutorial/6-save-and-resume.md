@@ -35,7 +35,7 @@
 
 ## 自分の値を状態に入れる
 
-自動で集まるのは、テンソル、`mujou.Stateful` のオブジェクト（どの `nn.Module` も、`pc.LearnClock` も、`mujou.Stateful` を継承した自作のクラスも）、`self.generator` の状態。数値・文字列、テンソルのリストや dict は集まらない。`state_dict` と `load_state_dict` という名前のメソッドを持つだけのオブジェクトも集まらないので、`mujou.Stateful` を継承する。実行中に変わる素の値は、`__init__` で属性に代入して登録する。
+自動で集まるのは、テンソル、`mujou.Stateful` のオブジェクト（どの `nn.Module` も、`pc.clock.LearnClock` も、`mujou.Stateful` を継承した自作のクラスも）、`self.generator` の状態。数値・文字列、テンソルのリストや dict は集まらない。`state_dict` と `load_state_dict` という名前のメソッドを持つだけのオブジェクトも集まらないので、`mujou.Stateful` を継承する。実行中に変わる素の値は、`__init__` で属性に代入して登録する。
 
 ```python
 self.elapsed = 0.0

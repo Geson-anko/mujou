@@ -9,6 +9,11 @@ from mujou import Stateful
 from mujou.pc.time_constants import TimeConstants
 from mujou.time import Timestamp
 
+__all__ = [
+    "LearnClock",
+    "Tick",
+]
+
 
 class Tick(NamedTuple):
     """What ``LearnClock.tick`` tells one update of a node."""
@@ -62,7 +67,7 @@ class LearnClock(Stateful):
 
     Example::
 
-        self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
+        self.clock = pc.clock.LearnClock(period=self.period, learn_interval=24e-3,
                                    max_dt=2e-3)
         # In on_update(dt):
         tick = self.clock.tick(dt, activity["time"], self.timer.now())

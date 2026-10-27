@@ -7,8 +7,8 @@
     - `mujou.pc` の部品の役割と、利用者が直接使う部品・自分のノードを書くときに使う部品
     - ノードの間を流れるメッセージと Port の向き
     - `pc.Layer` が 1 回の `on_update(dt)` で行うこと
-    - `pc.LearnClock` が返す `Tick`、`jumps`、`pc.TimeConstants` の意味
-    - `pc.SGD` と `pc.AdamW` が重みを、`pc.Euler` と `pc.HeavyBall` が活動を時間で動かす仕組み
+    - `pc.clock.LearnClock` が返す `Tick`、`jumps`、`pc.TimeConstants` の意味
+    - `pc.optim.SGD` と `pc.optim.AdamW` が重みを、`pc.relax.Euler` と `pc.relax.HeavyBall` が活動を時間で動かす仕組み
 
     前提は PyTorch・誤差逆伝播法（BP）と、[Mujou の仕組み](../concepts.md)のノード・Port・`dt`。predictive coding の知識は要らない。
 
@@ -34,20 +34,20 @@ PC-ALM では各ノードが自分の**活動** `h` を持ち、前のノード�
 
     利用者が普段使うのは `Chain`・`show`・`TimeConstants`・optimizer・損失・`Sample`。自分のノードを書くときに `LearnClock`・`functional`・`Activity` を使う。
 
-| 部品                                        | 種類       | 役割                                                                                                                      | 主に使う場面    |
-| ------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| `pc.Input`                                  | ノード     | ホストが書いた `x` をそのまま活動 `h` として送る。`h` も重みも持たない                                                    | 手で組む        |
-| `pc.Layer`                                  | ノード     | `module` を 1 つ持ち、`h` と `lam` を動かし、重みを学ぶ                                                                   | 手で組む        |
-| `pc.Output`                                 | ノード     | 最後の `module` と損失を持ち、予測 `y_hat` を出し、重みを学ぶ。`h` と `lam` は持たない                                    | 手で組む        |
-| `pc.Chain`                                  | Network    | `Input → Layer → … → Output` をまとめて作りつなぐ                                                                         | 普段            |
-| `pc.show`                                   | 関数       | ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す                                                                  | 普段            |
-| `pc.Sample`・`pc.Activity`・`pc.Prediction` | メッセージ | 流れるデータの型（[2 節](#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE)） | `Sample` は普段 |
-| `pc.TimeConstants`                          | 設定       | `h` と `lam` の速さを秒で持つ（[5 節](#5-timeconstants)）                                                                 | 普段            |
-| `pc.SGD`・`pc.AdamW`                        | 設定       | optimizer。重みを時間でどう動かすか（[6 節](#6-optimizer)）                                                               | 普段            |
-| `pc.MSELoss`・`pc.CrossEntropyLoss`         | 損失       | サンプルごとの損失を返す。`Output` に渡す                                                                                 | 普段            |
-| `pc.LearnClock`                             | 部品       | いつ学ぶかを決める（[4 節](#4-learnclock-%E3%81%A8-jumps)）                                                               | 自分のノード    |
-| `pc.functional`                             | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`）。`Layer` と `Output` もこれで書く                                         | 自分のノード    |
-| `pc.activity_spec`                          | 関数       | `Activity` の spec を作る                                                                                                 | 自分のノード    |
+| 部品                                                    | 種類       | 役割                                                                                                                      | 主に使う場面    |
+| ------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `pc.Input`                                              | ノード     | ホストが書いた `x` をそのまま活動 `h` として送る。`h` も重みも持たない                                                    | 手で組む        |
+| `pc.Layer`                                              | ノード     | `module` を 1 つ持ち、`h` と `lam` を動かし、重みを学ぶ                                                                   | 手で組む        |
+| `pc.Output`                                             | ノード     | 最後の `module` と損失を持ち、予測 `y_hat` を出し、重みを学ぶ。`h` と `lam` は持たない                                    | 手で組む        |
+| `pc.Chain`                                              | Network    | `Input → Layer → … → Output` をまとめて作りつなぐ                                                                         | 普段            |
+| `pc.show`                                               | 関数       | ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す                                                                  | 普段            |
+| `pc.msg.Sample`・`pc.msg.Activity`・`pc.msg.Prediction` | メッセージ | 流れるデータの型（[2 節](#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE)） | `Sample` は普段 |
+| `pc.TimeConstants`                                      | 設定       | `h` と `lam` の速さを秒で持つ（[5 節](#5-timeconstants)）                                                                 | 普段            |
+| `pc.optim.SGD`・`pc.optim.AdamW`                        | 設定       | optimizer。重みを時間でどう動かすか（[6 節](#6-optimizer)）                                                               | 普段            |
+| `pc.loss.MSELoss`・`pc.loss.CrossEntropyLoss`           | 損失       | サンプルごとの損失を返す。`Output` に渡す                                                                                 | 普段            |
+| `pc.clock.LearnClock`                                   | 部品       | いつ学ぶかを決める（[4 節](#4-learnclock-%E3%81%A8-jumps)）                                                               | 自分のノード    |
+| `pc.functional`                                         | 関数群     | 状態を持たない式（`vjp`・`loss_vjp`・`relax_`）。`Layer` と `Output` もこれで書く                                         | 自分のノード    |
+| `pc.msg.activity_spec`                                  | 関数       | `Activity` の spec を作る                                                                                                 | 自分のノード    |
 
 `Layer` と `Output` は `LearnClock`・`functional`・optimizer を組み合わせたもの。同じ部品で入力が 2 つのノードのような `Layer` で書けないノードも作れる。
 
@@ -71,12 +71,12 @@ flowchart LR
 
 実線が前向き、点線が後ろ向き。`Input` は届いた `g_in` を読まない（`x` は固定）。
 
-| メッセージ      | フィールド                        | 流れ                         |
-| --------------- | --------------------------------- | ---------------------------- |
-| `pc.Sample`     | `x`、`y`、`mask`                  | ホスト → `Input.prev`        |
-| `pc.Activity`   | `h`、`jumps`、`y`、`mask`、`time` | `next` → 次のノードの `prev` |
-| `g_in`          | テンソル（`h_in` と同じ shape）   | `prev` → 前のノードの `next` |
-| `pc.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
+| メッセージ          | フィールド                        | 流れ                         |
+| ------------------- | --------------------------------- | ---------------------------- |
+| `pc.msg.Sample`     | `x`、`y`、`mask`                  | ホスト → `Input.prev`        |
+| `pc.msg.Activity`   | `h`、`jumps`、`y`、`mask`、`time` | `next` → 次のノードの `prev` |
+| `g_in`              | テンソル（`h_in` と同じ shape）   | `prev` → 前のノードの `next` |
+| `pc.msg.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
 
 - `mask`: サンプルごとに目標があるか。False のサンプルは損失に入らず、`Layer` はその行の `g_in` を 0 にする。`mask` がすべて False の入力でも `h` と `lam` は緩和し、重みだけ学ばない。評価はこれで行う
 - `time`: ホストがその入力を書いた時刻（`Timestamp`）。書き込みの前は `Timestamp(ns=0)`
@@ -105,14 +105,14 @@ flowchart LR
 
     `Layer.on_update(dt)` は「読む → `tick` → `vjp` → `g_in` を送る → `relax_` → `Activity` を送る → `optimizer.step_`」の順に進む。
 
-| 段  | 使う部品            | 計算                                                                                                                                                                                                                                           |
-| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る                                                                                                                                                                 |
-| 2   | —                   | 前の更新で自分の重みを学んでいれば、その跳びを `h` に足す（段 4 の付け替えとは別。[jumps](#jumps) の表の 3 行目）                                                                                                                              |
-| 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                                                                                        |
-| 4   | `functional.relax_` | 跳びがあれば `h` を付け替え、$h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$（既定の relaxer の `pc.Euler` が動かす形。[7 節](#7-relaxer)）、続けて動かした `h` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
-| 5   | `Activity`          | 必要なら自分の `jumps` を進め、`h` と `jumps` に受け取った `y`・`mask`・`time` を付けて `next` から送る                                                                                                                                        |
-| 6   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                       |
+| 段  | 使う部品            | 計算                                                                                                                                                                                                                                                 |
+| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る                                                                                                                                                                       |
+| 2   | —                   | 前の更新で自分の重みを学んでいれば、その跳びを `h` に足す（段 4 の付け替えとは別。[jumps](#jumps) の表の 3 行目）                                                                                                                                    |
+| 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                                                                                              |
+| 4   | `functional.relax_` | 跳びがあれば `h` を付け替え、$h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)$（既定の relaxer の `pc.relax.Euler` が動かす形。[7 節](#7-relaxer)）、続けて動かした `h` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)$ |
+| 5   | `Activity`          | 必要なら自分の `jumps` を進め、`h` と `jumps` に受け取った `y`・`mask`・`time` を付けて `next` から送る                                                                                                                                              |
+| 6   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                             |
 
 - 段 3 の `delta` は段 2 の後、段 4 の前の `h`・`lam` で作る
 - 勾配はバッチで和を取り、$B$ で割るのは段 6 だけ。だから `lam` はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る
@@ -159,7 +159,7 @@ flowchart LR
 - `new` が True の更新で学ばないのは、その更新の `delta` がまだ前の入力のものだから
 - だから同じ入力が続く間は `learn_interval` 秒ごとに学び、`elapsed` はおよそ `learn_interval`
 - 学ばないまま入力が変わると、`elapsed` に溜めた時間は捨てる
-- 自分のノードでは `pc.LearnClock.of(tau, period=..., learn_interval=...)` で作り、属性に置く。それだけでノードの状態に入る
+- 自分のノードでは `pc.clock.LearnClock.of(tau, period=..., learn_interval=...)` で作り、属性に置く。それだけでノードの状態に入る
 
 ??? question "なぜノードが入力を受け取った時刻でなく、ホストの書き込み時刻から数えるの？"
 
@@ -221,11 +221,11 @@ optimizer の `tau` は `tau.h` よりずっと大きくする。重みが活動
 
 ### 設定を各ノードで束縛する
 
-`pc.SGD(tau=)` と `pc.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は設定で、状態を持たない frozen な値。`Layer`・`Output`・`Chain` は必須の引数 `optimizer=` で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、**束縛した optimizer** を `self.optimizer` に置く。状態を持ち、重みを動かすのは束縛した optimizer。
+`pc.optim.SGD(tau=)` と `pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` は設定で、状態を持たない frozen な値。`Layer`・`Output`・`Chain` は必須の引数 `optimizer=` で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、**束縛した optimizer** を `self.optimizer` に置く。状態を持ち、重みを動かすのは束縛した optimizer。
 
 ```mermaid
 flowchart LR
-    S["pc.AdamW(...)<br/>設定、状態なし"] -->|"bind(params)"| B0["Layer 0: 束縛した optimizer<br/>m, v, c_m, c_v"]
+    S["pc.optim.AdamW(...)<br/>設定、状態なし"] -->|"bind(params)"| B0["Layer 0: 束縛した optimizer<br/>m, v, c_m, c_v"]
     S -->|"bind(params)"| B1["Layer 1: 束縛した optimizer<br/>m, v, c_m, c_v"]
     S -->|"bind(params)"| B2["Output: 束縛した optimizer<br/>m, v, c_m, c_v"]
 ```
@@ -245,10 +245,10 @@ self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
 
 平均の勾配を $g = g_\theta / B$ とする。
 
-| optimizer  | 時間に沿った流れ                                                                                                                                    | `elapsed` $= \Delta t$ 秒の 1 歩                                                                                                      |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `pc.SGD`   | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$。学習率 $\Delta t / \tau_\theta$ の SGD                                   |
-| `pc.AdamW` | $\tau_m \dot m = g - m$、$\tau_v \dot v = g^2 - v$、$\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $a_m = 1 - e^{-\Delta t/\tau_m}$ で $m \leftarrow m + a_m (g - m)$、$v$ も同様。続けて $\eta = \Delta t/\tau_\theta$ で AdamW の 1 歩 |
+| optimizer        | 時間に沿った流れ                                                                                                                                    | `elapsed` $= \Delta t$ 秒の 1 歩                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.optim.SGD`   | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$。学習率 $\Delta t / \tau_\theta$ の SGD                                   |
+| `pc.optim.AdamW` | $\tau_m \dot m = g - m$、$\tau_v \dot v = g^2 - v$、$\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $a_m = 1 - e^{-\Delta t/\tau_m}$ で $m \leftarrow m + a_m (g - m)$、$v$ も同様。続けて $\eta = \Delta t/\tau_\theta$ で AdamW の 1 歩 |
 
 - `tau` は $\tau_\theta$、`tau_m` は $\tau_m$、`tau_v` は $\tau_v$ で、どれも秒。有限で > 0。学ばないならノードに `learn_interval=math.inf` を渡す
 - `eps`（$\varepsilon$）は > 0。勾配が 0 のままだった重みが `0 / 0` にならないようにするため
@@ -257,7 +257,7 @@ self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
 
 ### 質量 c: 時間で行う bias 補正
 
-$m$ と $v$ は 0 から始まるので、はじめは小さすぎる。`torch.optim.AdamW` はステップ数 $t$ で補正し、$m$ を $1 - \beta_1^t$ で割る。`pc.AdamW` はステップを数えない。代わりに moment ごとに**質量** $c$ を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。
+$m$ と $v$ は 0 から始まるので、はじめは小さすぎる。`torch.optim.AdamW` はステップ数 $t$ で補正し、$m$ を $1 - \beta_1^t$ で割る。`pc.optim.AdamW` はステップを数えない。代わりに moment ごとに**質量** $c$ を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。
 
 $$\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m$$
 
@@ -265,10 +265,10 @@ $$\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m$$
 
 1 歩は、$g$ が $\Delta t$ の間一定だとして流れを厳密に解く。だから moment と質量は歩みの回数ではなく歩みの秒数の合計で決まる。$\tau_m = 0.1$ 秒のときは次のとおり。
 
-| 歩み           | `pc.AdamW` の $c_m$  | 0.05 秒の歩みに合わせて $\beta_1 = e^{-0.05/0.1}$ に固定し、ステップを数えると |
-| -------------- | -------------------- | ------------------------------------------------------------------------------ |
-| 0.05 秒を 2 回 | $1 - e^{-1} = 0.632$ | $1 - \beta_1^2 = 0.632$                                                        |
-| 0.1 秒を 1 回  | $1 - e^{-1} = 0.632$ | $1 - \beta_1^1 = 0.393$                                                        |
+| 歩み           | `pc.optim.AdamW` の $c_m$ | 0.05 秒の歩みに合わせて $\beta_1 = e^{-0.05/0.1}$ に固定し、ステップを数えると |
+| -------------- | ------------------------- | ------------------------------------------------------------------------------ |
+| 0.05 秒を 2 回 | $1 - e^{-1} = 0.632$      | $1 - \beta_1^2 = 0.632$                                                        |
+| 0.1 秒を 1 回  | $1 - e^{-1} = 0.632$      | $1 - \beta_1^1 = 0.393$                                                        |
 
 $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))` と同じになる。だから torch の $\beta$ からは $\tau_m = -\Delta t / \ln\beta_1$ と決まる。$\Delta t$ はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、$\beta_1 = 0.9$ は約 0.30 秒、$\beta_2 = 0.999$ は約 32 秒。SGD と AdamW の選び方と値は [optimizer を選ぶ](pc.md#optimizer-%E3%82%92%E9%81%B8%E3%81%B6) へ。
 
@@ -280,7 +280,7 @@ $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(e
 
 ### 自分の optimizer
 
-自作の optimizer は 2 つのクラスで書く。設定は `pc.Optimizer` を継承して `bind(params)` を実装する。`bind` が返すものは `pc.BoundOptimizer`（`mujou.Stateful` の一種）を継承し、`step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。
+自作の optimizer は 2 つのクラスで書く。設定は `pc.optim.Optimizer` を継承して `bind(params)` を実装する。`bind` が返すものは `pc.optim.BoundOptimizer`（`mujou.Stateful` の一種）を継承し、`step_(grads, elapsed)`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。`bind` には学ぶ重みだけを渡す。例は [API リファレンス](../api/pc.md) にある。
 
 ## 7. relaxer
 
@@ -288,7 +288,7 @@ $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(e
 
     活動 `h` が自分に掛かる力に沿ってどう動くかも設定である。relaxer は `h` にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、`h` を `dt` 秒だけ動かす。
 
-`pc.Euler()` と `pc.HeavyBall(tau=)` が設定である。`Layer` と `Chain` が `relaxer=` で 1 つ取る。既定は `pc.Euler()` である。`Chain` は同じ設定を各 `Layer` に渡す。設定は状態を持たないので、共有しても安全である。`Output` は `h` を持たないので取らない。各 `Layer` は設定を自分の `h` に bind し、**bind した relaxer** を `self.relaxer` に持つ。bind した relaxer が状態を持ち、`h` を動かす。
+`pc.relax.Euler()` と `pc.relax.HeavyBall(tau=)` が設定である。`Layer` と `Chain` が `relaxer=` で 1 つ取る。既定は `pc.relax.Euler()` である。`Chain` は同じ設定を各 `Layer` に渡す。設定は状態を持たないので、共有しても安全である。`Output` は `h` を持たないので取らない。各 `Layer` は設定を自分の `h` に bind し、**bind した relaxer** を `self.relaxer` に持つ。bind した relaxer が状態を持ち、`h` を動かす。
 
 ```python
 self.relaxer = relaxer.bind(self.h)  # __init__ で
@@ -300,17 +300,17 @@ self.relaxer.reset_()
 
 力を $F = r + \lambda + g$ とすると、relaxer ごとの 1 回の動きは次の表になる。
 
-| relaxer        | `dt` $= \Delta t$ 秒の 1 回の動き                                                            |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| `pc.Euler`     | $h \leftarrow h - \frac{\Delta t}{\tau_h} F$                                                 |
-| `pc.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$、続けて $h \leftarrow h - \frac{\Delta t}{\tau_h} v$ |
+| relaxer              | `dt` $= \Delta t$ 秒の 1 回の動き                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| `pc.relax.Euler`     | $h \leftarrow h - \frac{\Delta t}{\tau_h} F$                                                 |
+| `pc.relax.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$、続けて $h \leftarrow h - \frac{\Delta t}{\tau_h} v$ |
 
 - relaxer が変えるのは `h` が不動点に着くまでの道で、不動点ではない。不動点では $F = 0$ かつ $v = 0$ になる。relaxer は $\lambda$ を動かさない。$\lambda$ は、どの relaxer が `h` を動かしても、`h` が動いたあとにその `h` の $r$ で進む（[3 節](#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0)）
-- `pc.HeavyBall` の速度は 0 から始まるので、最初の 1 歩は `pc.Euler` の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、$F\,\Delta t$ ではない。定常では $v = F / (1 - e^{-\Delta t/\tau})$ なので、周期が短いほど利得が大きい。遅れた更新（長い `dt`）は速度をより多く忘れるので、安定な側に働く。`dt == 0` の 1 歩は `h` も速度もそのままにする
+- `pc.relax.HeavyBall` の速度は 0 から始まるので、最初の 1 歩は `pc.relax.Euler` の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、$F\,\Delta t$ ではない。定常では $v = F / (1 - e^{-\Delta t/\tau})$ なので、周期が短いほど利得が大きい。遅れた更新（長い `dt`）は速度をより多く忘れるので、安定な側に働く。`dt == 0` の 1 歩は `h` も速度もそのままにする
 - 新しいサンプルのとき、また読んでいる `h` が跳んだときは、$r$ と $\lambda$ は保たれるが、速度が積んだのは前の入力の力である（[jumps](#jumps)）。そこでノードは `reset_()` を呼び、その速度を捨てる。ノード自身の重みが跳んだときは `h` と `mu` が一緒に動き、$r$ も力も跳ばないので、`reset_` は呼ばない
-- bind した relaxer はノードの状態のキー `"relaxer"` に入る。`pc.HeavyBall` なら `{"velocity": ...}`、`pc.Euler` なら空
+- bind した relaxer はノードの状態のキー `"relaxer"` に入る。`pc.relax.HeavyBall` なら `{"velocity": ...}`、`pc.relax.Euler` なら空
 - relaxer と値の選び方は[relaxer を選ぶ](pc.md#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)を見る
 
 ### 自分の relaxer
 
-自作の relaxer は 2 つのクラスで書く。設定は `pc.Relaxer` を継承して `bind(h)` を実装し、`h` と同じ shape・dtype・device の状態を作る。`bind` が返すものは `pc.BoundRelaxer`（`mujou.Stateful` の一種）を継承し、`step_(h, force, dt, tau_h)`・`reset_()`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと `lam` は BP の credit にならない。例は [API リファレンス](../api/pc.md)にある。
+自作の relaxer は 2 つのクラスで書く。設定は `pc.relax.Relaxer` を継承して `bind(h)` を実装し、`h` と同じ shape・dtype・device の状態を作る。`bind` が返すものは `pc.relax.BoundRelaxer`（`mujou.Stateful` の一種）を継承し、`step_(h, force, dt, tau_h)`・`reset_()`・`state_dict()`・`load_state_dict(state)` を実装する。どれかが欠けたクラスは、作るときに `TypeError` になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと `lam` は BP の credit にならない。例は [API リファレンス](../api/pc.md)にある。

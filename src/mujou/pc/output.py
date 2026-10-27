@@ -10,7 +10,7 @@ from torch import nn
 from mujou import DictSpec, Node, Port, TensorSpec, TimestampSpec
 from mujou.pc.clock import LearnClock
 from mujou.pc.functional import loss_vjp
-from mujou.pc.messages import Activity, Prediction
+from mujou.pc.msg import Activity, Prediction
 from mujou.pc.optim import Optimizer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device
@@ -29,7 +29,7 @@ class Output(Node):
     $$
 
     ``theta`` moves by ``optimizer`` with the mean gradient
-    $\frac{1}{B}\frac{\partial\ell}{\partial\theta}$ (``pc.SGD`` makes it
+    $\frac{1}{B}\frac{\partial\ell}{\partial\theta}$ (``pc.optim.SGD`` makes it
     $\tau_\theta \dot\theta = -\frac{1}{B}\frac{\partial\ell}{\partial\theta}$),
     where $B$ is the number of samples in the batch (1 without one), and it sends
     $g_{\mathrm{in}} = \partial\ell/\partial h_{\mathrm{in}}$ to the
@@ -68,9 +68,9 @@ class Output(Node):
         out = pc.Output(
             nn.Linear(256, 10),
             act_spec=hidden.act_spec,  # hidden: a pc.Layer
-            loss=pc.CrossEntropyLoss(B),
+            loss=pc.loss.CrossEntropyLoss(B),
             tau=tau,
-            optimizer=pc.SGD(tau=1.28),
+            optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=24e-3,
         )
         hidden.next.connect(out.prev)

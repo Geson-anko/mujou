@@ -1,5 +1,5 @@
 """The relaxers of ``mujou.pc``, which move the activity ``h`` of a node along
-the force on it: ``pc.Euler`` and ``pc.HeavyBall``. The expected values are the
+the force on it: ``pc.relax.Euler`` and ``pc.relax.HeavyBall``. The expected values are the
 formulas written out here."""
 
 import io
@@ -15,8 +15,8 @@ from tests.mujou.nodes import F64, assert_same_tree
 
 TAU_H = 4e-3
 TAU_V = 2e-3  # the time constant of the velocity of HeavyBall
-HEAVY_BALL = pc.HeavyBall(tau=TAU_V)
-RELAXERS = [pc.Euler(), HEAVY_BALL]
+HEAVY_BALL = pc.relax.HeavyBall(tau=TAU_V)
+RELAXERS = [pc.relax.Euler(), HEAVY_BALL]
 IDS = ["euler", "heavy-ball"]
 
 
@@ -37,16 +37,16 @@ class TestEuler:
     @pytest.mark.parametrize("dt", [1e-3, 4e-3])
     def test_one_step_is_dt_over_tau_of_the_force(self, dt: float):
         h = h0()
-        pc.Euler().bind(h).step_(h, force(0), dt, TAU_H)
+        pc.relax.Euler().bind(h).step_(h, force(0), dt, TAU_H)
         torch.testing.assert_close(
             h, h0() - dt / TAU_H * force(0), rtol=1e-15, atol=1e-15
         )
 
     def test_has_no_state(self):
-        assert pc.Euler().bind(h0()).state_dict() == {}
+        assert pc.relax.Euler().bind(h0()).state_dict() == {}
 
     def test_reset_changes_nothing(self):
-        h, bound = h0(), pc.Euler().bind(h0())
+        h, bound = h0(), pc.relax.Euler().bind(h0())
         bound.reset_()
         bound.step_(h, force(0), 1e-3, TAU_H)
         torch.testing.assert_close(
@@ -73,7 +73,7 @@ class TestHeavyBall:
         # The velocity starts at zero, so the first force moves h as Euler does.
         h, plain = h0(), h0()
         HEAVY_BALL.bind(h).step_(h, force(0), 1e-3, TAU_H)
-        pc.Euler().bind(plain).step_(plain, force(0), 1e-3, TAU_H)
+        pc.relax.Euler().bind(plain).step_(plain, force(0), 1e-3, TAU_H)
         torch.testing.assert_close(h, plain, rtol=1e-15, atol=1e-15)
 
     def test_a_step_of_no_time_changes_nothing(self):
@@ -98,10 +98,10 @@ class TestHeavyBall:
     def test_a_tiny_time_constant_is_the_plain_relaxation(self):
         # e^(-dt/tau) -> 0: the velocity is the force.
         h, plain = h0(), h0()
-        bound = pc.HeavyBall(tau=1e-9).bind(h)
+        bound = pc.relax.HeavyBall(tau=1e-9).bind(h)
         for k in range(3):
             bound.step_(h, force(k), 1e-3, TAU_H)
-            pc.Euler().bind(plain).step_(plain, force(k), 1e-3, TAU_H)
+            pc.relax.Euler().bind(plain).step_(plain, force(k), 1e-3, TAU_H)
         torch.testing.assert_close(h, plain, rtol=1e-12, atol=1e-12)
 
     def test_no_force_keeps_h_where_it_is(self):
@@ -135,23 +135,23 @@ class TestHeavyBall:
 
 class TestBound:
     @pytest.mark.parametrize("relaxer", RELAXERS, ids=IDS)
-    def test_is_a_bound_relaxer_with_a_state(self, relaxer: pc.Relaxer):
+    def test_is_a_bound_relaxer_with_a_state(self, relaxer: pc.relax.Relaxer):
         # A node holds it as an attribute, so it is in the node's state.
         bound = relaxer.bind(h0())
-        assert isinstance(bound, pc.BoundRelaxer)
+        assert isinstance(bound, pc.relax.BoundRelaxer)
         assert isinstance(bound, mujou.Stateful)
 
 
 class TestAbstract:
     def test_a_relaxer_needs_bind(self):
-        class NoBind(pc.Relaxer):
+        class NoBind(pc.relax.Relaxer):
             pass
 
         with pytest.raises(TypeError, match="bind"):
             NoBind()  # pyright: ignore[reportAbstractUsage]
 
     def test_a_bound_relaxer_needs_step_reset_and_its_state(self):
-        class NoStep(pc.BoundRelaxer):
+        class NoStep(pc.relax.BoundRelaxer):
             @override
             def reset_(self) -> None:
                 pass
@@ -164,7 +164,7 @@ class TestAbstract:
             def load_state_dict(self, state: Any, /) -> None:
                 pass
 
-        class NoReset(pc.BoundRelaxer):
+        class NoReset(pc.relax.BoundRelaxer):
             @override
             def step_(
                 self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
@@ -195,7 +195,9 @@ def saved(state: dict[str, Any]) -> dict[str, Any]:
 
 class TestState:
     @pytest.mark.parametrize("relaxer", RELAXERS, ids=IDS)
-    def test_a_restored_relaxer_goes_on_as_the_same_one(self, relaxer: pc.Relaxer):
+    def test_a_restored_relaxer_goes_on_as_the_same_one(
+        self, relaxer: pc.relax.Relaxer
+    ):
         h = h0()
         first = relaxer.bind(h)
         for k in range(3):
@@ -231,13 +233,13 @@ class TestChecks:
     @pytest.mark.parametrize("tau", [0.0, -1.0, math.nan, math.inf])
     def test_heavy_ball_tau_must_be_finite_and_positive(self, tau: float):
         with pytest.raises(ValueError, match="HeavyBall.tau"):
-            pc.HeavyBall(tau=tau)
+            pc.relax.HeavyBall(tau=tau)
 
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):
-            pc.HeavyBall(1e-3)  # pyright: ignore[reportCallIssue]
+            pc.relax.HeavyBall(1e-3)  # pyright: ignore[reportCallIssue]
 
     def test_settings_are_frozen_values(self):
         with pytest.raises(AttributeError):
             HEAVY_BALL.tau = 1.0  # pyright: ignore[reportAttributeAccessIssue]
-        assert pc.HeavyBall(tau=TAU_V) == HEAVY_BALL
+        assert pc.relax.HeavyBall(tau=TAU_V) == HEAVY_BALL

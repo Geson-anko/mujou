@@ -17,9 +17,9 @@ B = 3
 N_OUT = 2
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
 TAU_THETA = 0.05  # the time constant of theta, in the SGD of every node
-SGD = pc.SGD(tau=TAU_THETA)
+SGD = pc.optim.SGD(tau=TAU_THETA)
 # An AdamW whose first update is far from that of SGD; weight decay on.
-ADAMW = pc.AdamW(tau=TAU_THETA, tau_m=0.02, tau_v=0.5, eps=1e-8, weight_decay=0.1)
+ADAMW = pc.optim.AdamW(tau=TAU_THETA, tau_m=0.02, tau_v=0.5, eps=1e-8, weight_decay=0.1)
 MASK = torch.tensor([True, False, True])
 
 

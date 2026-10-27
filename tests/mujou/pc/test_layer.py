@@ -47,8 +47,8 @@ class HandChain:
         widths: Sequence[int],
         *,
         tau: pc.TimeConstants = TAU,
-        optimizer: pc.Optimizer = SGD,
-        relaxer: pc.Relaxer = pc.Euler(),
+        optimizer: pc.optim.Optimizer = SGD,
+        relaxer: pc.relax.Relaxer = pc.relax.Euler(),
         learn_interval: float | None = None,
         max_dt: float | None = None,
     ) -> None:
@@ -67,7 +67,7 @@ class HandChain:
                 pc.Layer(module, act_spec=act, relaxer=relaxer, **learning)
             )
             act = self.layers[-1].act_spec
-        self.out = pc.Output(head, act_spec=act, loss=pc.MSELoss(B), **learning)
+        self.out = pc.Output(head, act_spec=act, loss=pc.loss.MSELoss(B), **learning)
         senders = [self.inp, *self.layers]
         for sender, receiver in zip(senders, [*self.layers, self.out], strict=True):
             sender.next.connect(receiver.prev)
@@ -88,8 +88,8 @@ class HandChain:
         return run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
 
 
-def activity(h: TensorSpec) -> DictSpec[pc.Activity]:
-    return pc.activity_spec(h, TensorSpec((B, N_OUT)), batch=B)
+def activity(h: TensorSpec) -> DictSpec[pc.msg.Activity]:
+    return pc.msg.activity_spec(h, TensorSpec((B, N_OUT)), batch=B)
 
 
 def run_steps(run: ManualRun, order: Sequence[Any], n: int) -> None:
@@ -322,7 +322,7 @@ class TestDeepChain:
             _, y_hat = forward(layers, head, x)
         y = y_hat + noise
         bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
-        slow = pc.SGD(tau=1e9)
+        slow = pc.optim.SGD(tau=1e9)
         chain = HandChain(
             layers, head, widths, optimizer=slow, learn_interval=learn_interval
         )
@@ -511,7 +511,7 @@ class TestSchedules:
         x, y = sample(widths, 0)
         layers, head = make_modules("linear", "tanh", widths)
         sgd = [copy.deepcopy(m) for m in [*layers, head]]
-        optimizer = pc.SGD(tau=RELAX_STEPS * H / 0.1)
+        optimizer = pc.optim.SGD(tau=RELAX_STEPS * H / 0.1)
         rate = RELAX_STEPS * H / optimizer.tau
         params = [p for m in sgd for p in m.parameters()]
         for _ in range(2):
@@ -626,8 +626,8 @@ class Learning:
         start_manual: StartManual,
         *,
         widths: Sequence[int] = (4, 5),
-        optimizer: pc.Optimizer = SGD,
-        relaxer: pc.Relaxer = pc.Euler(),
+        optimizer: pc.optim.Optimizer = SGD,
+        relaxer: pc.relax.Relaxer = pc.relax.Euler(),
         max_dt: float | None = None,
         seed: int = 0,
         state: dict[str, Any] | None = None,
@@ -1080,7 +1080,7 @@ class TestUnlabeled:
         self,
         start_manual: StartManual,
         learn_interval: float | None,
-        optimizer: pc.Optimizer,
+        optimizer: pc.optim.Optimizer,
     ):
         # The first two inputs have targets, so every node has learned (with
         # AdamW, its moments and masses have left 0, and a call of step_ would
@@ -1182,13 +1182,15 @@ def without_generators(tree: dict[str, Any]) -> dict[str, Any]:
 class TestState:
     @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
     @pytest.mark.parametrize(
-        "relaxer", [pc.Euler(), pc.HeavyBall(tau=3 * H)], ids=["euler", "heavy-ball"]
+        "relaxer",
+        [pc.relax.Euler(), pc.relax.HeavyBall(tau=3 * H)],
+        ids=["euler", "heavy-ball"],
     )
     def test_a_restored_run_goes_on_as_the_same_run(
         self,
         start_manual: StartManual,
-        optimizer: pc.Optimizer,
-        relaxer: pc.Relaxer,
+        optimizer: pc.optim.Optimizer,
+        relaxer: pc.relax.Relaxer,
     ):
         # Taken at step 6, mid-phase, right after the input sent the input it
         # was written (the layer has read the earlier one) and the layer took
@@ -1201,7 +1203,7 @@ class TestState:
         for _ in range(6):
             first.step()
         tree = first.run.state_dict()
-        if isinstance(relaxer, pc.HeavyBall):
+        if isinstance(relaxer, pc.relax.HeavyBall):
             # The test must see the velocity: a run that dropped it differs.
             assert (
                 float(tree["nodes"]["l0"]["state"]["relaxer"]["velocity"].abs().max())
@@ -1276,18 +1278,18 @@ class TestOptimizer:
         assert len(state["optimizer"]["m"]) == 1
 
 
-class SpyRelaxer(pc.Relaxer):
+class SpyRelaxer(pc.relax.Relaxer):
     """A relaxer that counts the resets of the bound ones, and moves ``h`` as
-    ``pc.Euler`` does."""
+    ``pc.relax.Euler`` does."""
 
     def __init__(self) -> None:
         self.resets = 0
 
     @override
-    def bind(self, h: torch.Tensor) -> pc.BoundRelaxer:
+    def bind(self, h: torch.Tensor) -> pc.relax.BoundRelaxer:
         spy = self
 
-        class Bound(pc.BoundRelaxer):
+        class Bound(pc.relax.BoundRelaxer):
             @override
             def step_(
                 self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
@@ -1337,15 +1339,15 @@ class TestDecayOfR:
 
 
 class TestRelaxer:
-    """``relaxer``: how ``h`` moves along the force on it. ``pc.HeavyBall``
+    """``relaxer``: how ``h`` moves along the force on it. ``pc.relax.HeavyBall``
     keeps the fixed point of the plain relaxation and gets there in fewer
     periods."""
 
-    HEAVY_BALL = pc.HeavyBall(tau=3e-3)
+    HEAVY_BALL = pc.relax.HeavyBall(tau=3e-3)
     WIDTHS = [4, 4, 4, 4, 4]
 
     def _lams(
-        self, start_manual: StartManual, relaxer: pc.Relaxer, steps: int
+        self, start_manual: StartManual, relaxer: pc.relax.Relaxer, steps: int
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         layers, head = make_modules("res", "tanh", self.WIDTHS)
         chain = HandChain(
@@ -1386,7 +1388,10 @@ class TestRelaxer:
         # faster, so this looks at the first periods, with random weights.
         steps = 60
         error: dict[str, float] = {}
-        for name, relaxer in (("plain", pc.Euler()), ("heavy ball", self.HEAVY_BALL)):
+        for name, relaxer in (
+            ("plain", pc.relax.Euler()),
+            ("heavy ball", self.HEAVY_BALL),
+        ):
             lams, expected = self._lams(start_manual, relaxer, steps)
             error[name] = max(
                 float((lam - credit).abs().max())
@@ -1408,7 +1413,7 @@ class TestRelaxer:
         assert "velocity" not in state
 
     def _alone(
-        self, relaxer: pc.Relaxer, learn_interval: float
+        self, relaxer: pc.relax.Relaxer, learn_interval: float
     ) -> tuple[pc.Input, pc.Layer, Group]:
         inp = pc.Input(
             x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B

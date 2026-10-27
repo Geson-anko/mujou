@@ -7,7 +7,7 @@ and ``output`` (the head and the cross entropy) relax towards the target and
 update their weights from each other's messages only. Inside each node,
 autograd differentiates its module, as in plain PyTorch; ``resnet.py`` says how
 the network is cut. The same network, with the same initial weights, the same
-batches in the same order and the same ``pc.AdamW``, is then trained by BP on
+batches in the same order and the same ``pc.optim.AdamW``, is then trained by BP on
 the same GPU.
 
 The host shows each batch, shuffled and augmented (random crops and flips), for
@@ -73,10 +73,10 @@ def generator(seed: int) -> Callable[[int], torch.Generator]:
     return lambda epoch: torch.Generator().manual_seed(seed + epoch)
 
 
-def adamw(shown: float, lr: float) -> pc.AdamW:
+def adamw(shown: float, lr: float) -> pc.optim.AdamW:
     """The ``torch.optim.AdamW(lr=lr)`` (``betas`` 0.9 and 0.999) of nodes that
     learn once per batch shown for ``shown`` seconds."""
-    return pc.AdamW(
+    return pc.optim.AdamW(
         tau=shown / lr,
         tau_m=-shown / math.log(0.9),
         tau_v=-shown / math.log(0.999),
@@ -101,7 +101,7 @@ def train_pc(
         x=TensorSpec((args.batch, 3, 32, 32)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
-        loss=pc.CrossEntropyLoss(args.batch),
+        loss=pc.loss.CrossEntropyLoss(args.batch),
         # A fast dual, and a decay of r = h - mu: lam reaches the credit sooner,
         # at the same fixed point.
         tau=pc.TimeConstants(
@@ -125,7 +125,7 @@ def train_pc(
             for x, y, mask in batches(
                 data.train_x, data.train_y, args.batch, shuffle(epoch)
             ):
-                p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=shown)
+                p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=shown)
                 if not torch.isfinite(p["y_hat"]).all():
                     raise SystemExit("PC-ALM diverged: lower --time-scale")
                 right += correct(p["y_hat"], y, mask)  # before learning from it
@@ -136,7 +136,10 @@ def train_pc(
             for x, y, mask in batches(data.test_x, data.test_y, args.batch):
                 unlabeled = torch.zeros_like(mask)  # keep mask to score with
                 p = pc.show(
-                    run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=test_seconds
+                    run,
+                    net,
+                    pc.msg.Sample(x=x, y=y, mask=unlabeled),
+                    seconds=test_seconds,
                 )
                 test_right += correct(p["y_hat"], y, mask)
                 test_total += int(mask.sum())
