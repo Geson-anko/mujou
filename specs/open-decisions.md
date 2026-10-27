@@ -29,7 +29,7 @@
 
 ## mujou.pc
 
-- **h と λ の則の差し替え（段階 2）**: 重みの optimizer と同じく、緩和の則を差し替えられるようにするか。陽的な結合の安定性、跳びでの付け替えとの整合、サンプルごとの状態が課題で、研究から始める（[重みの optimizer](pc.md#段階-2h-と-λ)）
+- **λ の則の差し替え、h と λ を 1 組で差し替える部品**: $h$ だけは relaxer（`pc.Euler`、`pc.HeavyBall`）で差し替えられる（[h の relaxer](pc.md#h-の-relaxer)）。$\lambda$ の更新や、$h$ と $\lambda$ を組で動かす則（陽的な結合の安定性、跳びでの付け替えとの整合、サンプルごとの状態が課題）は、研究から始める
 - **AdamW の推奨の時定数**: `pc.AdamW` の `tau`・`tau_m`・`tau_v` のよい値を MNIST などで測っていない。docs は torch の β からの換算式だけを示す
 - **dual leak**: ストリームのステップ間で $\lambda$ を持ち越す（決定済み）うえで、dual leak で忘却させるか
 - **時定数の比**: $\tau_h, \tau_\lambda, \tau_\theta$ の比をどう選べば安定に学べるか（[PC-ALM の連続時間系](pc-alm-continuous-time.md#時定数の比と未解決の問い)）

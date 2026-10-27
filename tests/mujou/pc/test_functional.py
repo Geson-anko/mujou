@@ -1,13 +1,20 @@
 import math
 from collections.abc import Callable
-from typing import override
+from typing import Any, override
 
 import pytest
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from mujou.pc import CrossEntropyLoss, MSELoss, TimeConstants
+from mujou.pc import (
+    BoundRelaxer,
+    CrossEntropyLoss,
+    Euler,
+    HeavyBall,
+    MSELoss,
+    TimeConstants,
+)
 from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
 
 B = 3
@@ -263,14 +270,14 @@ class TestRelax:
     TAU = TimeConstants(h=4e-3, lam=8e-3)
 
     @staticmethod
-    def _state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def state() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """``h``, ``lam``, ``mu`` and ``g``."""
         return tuple(_randn(B, 5, seed=seed) for seed in range(1, 5))  # pyright: ignore[reportReturnType]
 
     @pytest.mark.parametrize("dt", [1e-3, 4e-3])
     def test_one_euler_step(self, dt: float):
         # h first, then lam with the r of the moved h; a long dt is one step.
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h0, lam0 = h.clone(), lam.clone()
         relax_(h, lam, mu, g, dt, self.TAU)
         h1 = h0 - dt / self.TAU.h * (h0 - mu + lam0 + g)
@@ -281,18 +288,107 @@ class TestRelax:
 
     def test_infinite_lam_time_constant_keeps_the_dual(self):
         # Even when r is not finite: 0 * inf would make NaN.
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h[0, 0] = math.inf
         lam0 = lam.clone()
         relax_(h, lam, mu, g, 1e-3, TimeConstants(h=4e-3, lam=math.inf))
         assert torch.equal(lam, lam0)
 
     def test_zero_dt_changes_nothing(self):
-        h, lam, mu, g = self._state()
+        h, lam, mu, g = self.state()
         h0, lam0 = h.clone(), lam.clone()
         relax_(h, lam, mu, g, 0.0, self.TAU)
         assert torch.equal(h, h0)
         assert torch.equal(lam, lam0)
+
+
+class TestRelaxWithRelaxer:
+    TAU = TimeConstants(h=4e-3, lam=8e-3)
+    HEAVY_BALL = HeavyBall(tau=2e-3)
+
+    def test_one_heavy_ball_step(self):
+        # v <- e^(-dt/m) v + force, then h <- h - dt/tau_h v, lam as before.
+        h, lam, mu, g = TestRelax.state()
+        relaxer = self.HEAVY_BALL.bind(h)
+        v = relaxer.state_dict()["velocity"]
+        v.copy_(_randn(B, 5, seed=9))
+        h0, lam0, v0 = h.clone(), lam.clone(), v.clone()
+        dt = 1e-3
+        relax_(h, lam, mu, g, dt, self.TAU, relaxer)
+        v1 = math.exp(-dt / self.HEAVY_BALL.tau) * v0 + (h0 - mu + lam0 + g)
+        h1 = h0 - dt / self.TAU.h * v1
+        torch.testing.assert_close(v, v1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(
+            lam, lam0 + dt / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
+        )
+
+    def test_euler_is_the_step_without_a_relaxer(self):
+        h, lam, mu, g = TestRelax.state()
+        plain = (h.clone(), lam.clone())
+        # dt / tau.h is not a power of two, so the two must round alike.
+        relax_(h, lam, mu, g, 1.3e-3, self.TAU, Euler().bind(h))
+        relax_(plain[0], plain[1], mu, g, 1.3e-3, self.TAU)
+        assert torch.equal(h, plain[0]) and torch.equal(lam, plain[1])
+
+    def test_a_relaxer_of_your_own_gets_h_the_force_dt_and_tau_h(self):
+        # h is moved in place by the relaxer alone; lam follows with the r of
+        # the moved h.
+        h, lam, mu, g = TestRelax.state()
+        h0, lam0 = h.clone(), lam.clone()
+        calls: list[tuple[torch.Tensor, torch.Tensor, float, float]] = []
+
+        class Halve(BoundRelaxer):
+            @override
+            def step_(
+                self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+            ) -> None:
+                calls.append((h.clone(), force.clone(), dt, tau_h))
+                h.sub_(0.5 * force)
+
+            @override
+            def reset_(self) -> None:
+                pass
+
+            @override
+            def state_dict(self) -> dict[str, Any]:
+                return {}
+
+            @override
+            def load_state_dict(self, state: Any, /) -> None:
+                pass
+
+        relax_(h, lam, mu, g, 1e-3, self.TAU, Halve())
+        ((seen_h, force, dt, tau_h),) = calls
+        assert torch.equal(seen_h, h0)
+        torch.testing.assert_close(force, h0 - mu + lam0 + g, rtol=1e-15, atol=1e-15)
+        assert (dt, tau_h) == (1e-3, self.TAU.h)
+        h1 = h0 - 0.5 * force
+        torch.testing.assert_close(h, h1, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(
+            lam, lam0 + 1e-3 / self.TAU.lam * (h1 - mu), rtol=1e-15, atol=1e-15
+        )
+
+    def test_an_update_of_no_time_changes_nothing(self):
+        h, lam, mu, g = TestRelax.state()
+        relaxer = self.HEAVY_BALL.bind(h)
+        v = relaxer.state_dict()["velocity"]
+        v.copy_(_randn(B, 5, seed=9))
+        before = (h.clone(), lam.clone(), v.clone())
+        relax_(h, lam, mu, g, 0.0, self.TAU, relaxer)
+        assert torch.equal(h, before[0]) and torch.equal(lam, before[1])
+        assert torch.equal(v, before[2])
+
+    def test_at_the_fixed_point_nothing_moves(self):
+        # r = 0 and lam = -g: no force, and with no velocity there is none after.
+        h, lam, mu, g = TestRelax.state()
+        h.copy_(mu)
+        lam.copy_(-g)
+        h0, lam0 = h.clone(), lam.clone()
+        relaxer = self.HEAVY_BALL.bind(h)
+        relax_(h, lam, mu, g, 1e-3, self.TAU, relaxer)
+        assert torch.equal(h, h0) and torch.equal(lam, lam0)
+        assert not relaxer.state_dict()["velocity"].any()
 
 
 def _pair(*shape: int) -> tuple[torch.Tensor, torch.Tensor]:

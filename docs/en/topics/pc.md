@@ -1,6 +1,6 @@
 # 🧠 PC-ALM
 
-The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants and the optimizer, how it differs from BP, the pitfalls, MNIST, and nodes of your own.
+The module `mujou.pc` learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <https://pub.sakana.ai/pc-alm/>). [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md) builds a chain with `pc.Chain` and shows it batches with `pc.show`. This page covers how to choose the time constants, the optimizer and the relaxer, how it differs from BP, the pitfalls, MNIST and CIFAR-10, and nodes of your own.
 
 ## How it differs from BP
 
@@ -37,6 +37,7 @@ Every rate in `mujou.pc` is a time in seconds of the run's timer. Choose them in
 | `tau.h`          | How fast each activity `h` relaxes              | First. The others follow from it                                                                                                                                                   | 4 ms               |
 | The period       | How often each node updates                     | `tau.period` (`tau.h / 4`), the default of `Layer` and `Output` and the period of `pc.Chain`                                                                                       | 1 ms               |
 | `tau.lam`        | How fast the dual `lam` follows                 | `2 * tau.h`                                                                                                                                                                        | 8 ms               |
+| `relaxer`        | How `h` moves along the force on it             | The default `pc.Euler()`. For a deep chain of many nodes, `pc.HeavyBall(tau=tau.h / 4)`. See [Choosing the relaxer](#choosing-the-relaxer)                                         |                    |
 | The showing time | How long the host shows each batch              | `S` periods, with `S = 32`                                                                                                                                                         | 32 ms              |
 | `learn_interval` | When the weights update, counted from the write | Longer than half of the showing time, shorter than the showing time, and longer than the round trip of the credit. MNIST uses 3/4                                                  | 24 ms              |
 | `optimizer`      | How fast the weights learn                      | `pc.SGD(tau=showing time / lr)`, with `lr` the learning rate per batch. See [Choosing the optimizer](#choosing-the-optimizer)                                                      | `pc.SGD(tau=0.32)` |
@@ -76,6 +77,23 @@ optimizer = pc.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0)
 
     Its optimizers count steps, not time, so the time constant that `betas` gives depends on how often a node learns. Making one also brings the GIL back in a free-threaded Python.
 
+## Choosing the relaxer
+
+`pc.Layer` and `pc.Chain` take `relaxer=`. It sets how the activity `h` moves along the force `F = r + lam + g` on it, as the optimizer does for the weights. It is optional, and `pc.Euler()` is the default. A relaxer is a setting without state, so `pc.Chain` gives the same one to every `pc.Layer`. Each binds it to its own `h` and holds the state of its `h` itself. `pc.Output` has no `h`, so it takes none.
+
+| Relaxer                 | One step of `dt` seconds                                   | State      |
+| ----------------------- | ---------------------------------------------------------- | ---------- |
+| `pc.Euler()`            | `h -= (dt / tau.h) * F`                                    | None       |
+| `pc.HeavyBall(tau=...)` | `v = exp(-dt / tau) * v + F`, then `h -= (dt / tau.h) * v` | `velocity` |
+
+- **A relaxer changes how `h` gets to the fixed point, not where it is.** At the fixed point `F = 0`, and `lam` is the credit of BP. `lam` moves after `h`, as before, whichever relaxer moves `h`
+- **HeavyBall for a deep chain.** A velocity remembers the force of the updates before (a heavy ball). A force that lasts moves `h` faster, so the credit crosses a chain of many nodes in fewer periods. It speeds up the front of the credit, not the slow tail of the relaxation, so a long run falls behind the same showing time without it ([CIFAR-10](#cifar-10)). A shallow chain does not need it: MNIST uses the default
+- **Choosing `tau`.** The force weighs one update, not `dt`, so the gain depends on the coefficient `exp(-dt / tau)` per update, and `tau` must follow the period. The tested value is `tau = tau.h / 4` with the period `tau.period` (coefficient 0.37, `tau` equal to the period): with 11 nodes of a ResNet, 64 periods did about what 128 did with `pc.Euler()`, in half the real time. In the ResNet, a coefficient of 0.47 (`tau.h / 3`) collapsed in one run of three, and 0.8 diverged. The limit of about 0.78 is for a linear chain of identities, and the real limit is lower, lower still for late updates. For another period, keep the coefficient near 0.37
+- **The velocity is set to zero with each new sample** and each jump of the `h` a node reads: `r` and `lam` are kept, but the velocity holds the forces of the input before. A jump of the node's own weights does not drop it
+- **Invalid values.** `tau` of `pc.HeavyBall` must be finite and > 0; otherwise it raises `ValueError`
+- **The state** of a node's relaxer is in `run.state_dict()["nodes"][path]["state"]["relaxer"]`: a dict with the key `"velocity"` for `pc.HeavyBall`, empty for `pc.Euler`. It is saved and restored with the rest of the run
+- **A relaxer of your own** inherits `pc.Relaxer` and `pc.BoundRelaxer`, as an optimizer of your own does ([How mujou.pc Works](pc-concepts.md#7-relaxers)). Its fixed point must be where `F = 0`: `lam` is the credit only there
+
 ## MNIST
 
 `examples/mnist/` learns MNIST with a 784-256-256-10 ReLU network in a `pc.Chain`, and trains the same network, from the same initial weights on the same batches, by BP. After 3 epochs, PC-ALM reached a test accuracy of 97.60% and BP 97.54% (seed 0).
@@ -98,6 +116,27 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 - **The last batch.** `data.batches` pads the last batch with zeros whose `mask` is False, so that every batch has the size of the specs. Count only the samples whose original `mask` is True
 - **`--watch`** counts the `dt` of each node (`watch.py`), and warns when the updates come later than 1.5 periods (median) or 2 periods (99%)
 - `data.py`, `metrics.py` and `bp.py` do not depend on `mujou.pc`: the data are plain tensors, and the BP baseline is plain PyTorch
+
+## CIFAR-10
+
+`examples/cifar10/` learns CIFAR-10 with a ResNet-20 on a CUDA device, with a node for each residual block, and trains the same network by BP on the GPU, from the same initial weights on the same batches with the same `pc.AdamW`. The modules become the nodes after the `Input` of a `pc.Chain`: the stem with the first block, each of the other 8 blocks, and the head, eleven nodes in all. The run's time is the real time. In the 3rd epoch, the prequential accuracy was 49.48% for PC-ALM and 54.45% for BP (seed 0), and the test accuracy after it 48.71% and 59.02%; in the 10th, the prequential accuracy was 62.77% and 73.27%, and the test accuracy 62.89% and 72.61%. With 128 periods per batch and no momentum, twice the real time, the 10th epoch was 68.73% and 68.95%. PC-ALM stays behind BP (see the last pitfall below). The test accuracy moves by a few points from epoch to epoch for both, as the learning rate does not decay, and the GPU does not compute bit for bit the same in every run.
+
+```sh
+uv run python examples/cifar10/main.py            # 3 epochs, about 8 minutes on an RTX 4090
+uv run python examples/cifar10/main.py --epochs 10  # about 25 minutes
+uv run python examples/cifar10/main.py --steps 128 --momentum 0  # twice as long, more accurate
+```
+
+```python
+--8<-- "examples/cifar10/main.py:chain"
+```
+
+- **A node for each residual block, with BP inside each.** Inside a node, autograd differentiates its module (the skip connection and the activations of the block included); between the nodes, only the messages of PC-ALM flow. How stiff the blocks make the relaxation is in [the pitfalls](#pitfalls)
+- **On the GPU, in real time.** `device="cuda"` makes every node compute on the GPU, and the messages between them stay there ([Devices](threads-and-devices.md#devices)). An update of a node takes about 1.2 ms on an RTX 4090, with 1 sample as with 128 (the CPU launching the kernels is the limit), so the batch is 128. With `tau.h` 20 ms the period is 5 ms, and with 11 workers 99% of the updates of every node came within 2 periods (`max_dt`) of the one before, so the timer goes at the real time (`--time-scale` 1). With a period of 3 ms and 8 workers they did not keep up
+- **64 periods for each batch, with a momentum.** The sample takes about a period for each node to reach the output, and the credit about as long to come back, so 11 nodes need far more periods than 2 did. Without a momentum, 64 periods left the 3rd epoch about 10 points below BP, and 128 were needed. `relaxer=pc.HeavyBall(tau=tau.h / 4)` ([Choosing the relaxer](#choosing-the-relaxer)) brings 64 to the accuracy of 128 in the 3rd epoch, in half the real time; `tau.h / 3` collapsed in one run of three, and with 32 periods the nodes did not learn
+- **AdamW**, made from the `lr` of Adam as in [Choosing the optimizer](#choosing-the-optimizer). The BP baseline binds the same `pc.AdamW` to its whole model and steps it by the showing time once per batch, so both take about the same steps for the same gradients (the nodes learn for the time since they last learned, which is close to the showing time)
+- **`tau.lam = tau.h`.** With the `tau.lam = 2 * tau.h` of MNIST, the credit settled more slowly, and PC-ALM fell behind BP in a short showing
+- **GroupNorm** instead of BatchNorm: it has no running statistics and no mode to switch, and the samples of a batch, padded ones included, do not affect each other
 
 ## The batch
 
@@ -140,17 +179,22 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 
     `max_dt` does not prevent this. It caps the time each single update counts, and the time beyond it is dropped: from the relaxation and from the next weight update alike.
 
+!!! warning "A module with a large Jacobian makes the relaxation inexact"
+
+    A node relaxes its activity `h` with what the next node sends back, which goes through the Jacobian `J` of the next node's module. With the period `tau.h / 4` of `pc.Chain`, this is stable only while the largest singular value of `J` stays below about 2.6: `h` then relaxes at a rate of up to `(1 + |J|^2) / tau.h`, and a step of `tau.h / 4` must keep it below 2. That is the bound when every update comes on time. A late update takes a longer step, up to `max_dt` (2 periods by default), and a node may read what the next node sent a period before: in a linear chain, the bound then fell to about 1.2 to 1.8. When the next node is the `Output`, the curvature of the loss (at most 1/2 for the cross entropy) multiplies `|J|^2`, which loosens the bound. The blocks of a ResNet go past it: in `examples/cifar10/` their singular values were 2 to 9 after a few epochs of BP, and a stage of three blocks reached 5 to 12. Past the bound, `lam` does not settle on the credit of backpropagation. With the weights that BP learned in one epoch, `lam` of the nodes of single blocks grew without bound; with the weights PC-ALM learned in 3 epochs, the cosine of `lam` with the credit stayed at 0.5 to 0.7 in the first five nodes (0.8 and over in the last four), however long it relaxed. It still learns, because the nodes near the output are accurate, but it stays a few points behind BP. Three things helped, and two did not. Showing a batch for more periods helps: the credit has to cross every node. An inertia of `h` (`pc.HeavyBall`) halves the periods the credit needs to cross it, though it does not make a long run as accurate. Cutting the network into fewer, larger nodes helps most, where the next node of each cut has a small Jacobian (two nodes, cut before the last stage and the head, matched BP in 10 epochs on the GPU with messages that stay on it). Dropping the `lam` and the deviation of a row at each new sample did not learn (its prequential accuracy stayed at 27%). Shortening the step of a node where its next node is stiff (an estimate of the largest curvature by the power iteration) made `lam` right on fixed weights, but slowed learning: the samples of a batch whose relaxation is slowed keep the `lam` of the batch before for longer, and the credit was wrong during learning (46% to 20% in 600 batches as the step shrank). A period and a `max_dt` shorter than `tau.h / 4` (building the nodes one by one) widen the bound at the cost of more updates; this has not been measured.
+
 ## Nodes of your own
 
-`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy) and `relax_` (one step of `h` and `lam`). The optimizer moves the weights. Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
+`mujou.pc.functional` holds the computations the nodes are made of: `vjp` and `loss_vjp` (the gradients of a node's energy) and `relax_` (one step of `h` and `lam`). The optimizer moves the weights, and the relaxer moves `h`. Use them to write a node that `pc.Layer` does not cover, such as one with several inputs. The names here (`mu`, `lam`, `g_in`, `jumps`, `Tick`) are explained in [How mujou.pc Works](pc-concepts.md).
 
-1. In `__init__`, after the module is on its device, hold the clock and the bound optimizer as attributes. Both are then in the node's state by themselves
+1. In `__init__`, after the module is on its device, hold the clock and the bound optimizer (and the bound relaxer, if `h` should move as `pc.HeavyBall` says) as attributes. All are then in the node's state by themselves
     - `self.clock = pc.LearnClock.of(tau, period=self.period, learn_interval=...)`, which takes the default `max_dt` of `tau` as `pc.Layer` does
     - `self.optimizer = optimizer.bind(params)`, with `params` the parameters that learn. Bind in each node: two nodes must not hold the same bound optimizer
+    - `self.relaxer = relaxer.bind(h)`, with the `h` the node holds, in the same way. Without it, `relax_` takes the plain step
 2. In each update, `t = self.clock.tick(dt, act["time"], self.timer.now())`
 3. Find the prediction `mu`, `g_in` and, to learn, `g_theta` with `pc.functional.vjp`, given the bound `params` in the same order, and send `g_in` to the node before
 4. When `t.new` is True or the `jumps` of the activity differ from those read last, move `h` with the prediction once: `h <- mu + (h - mu_last)`, with the `mu_last` of the previous update, and add 1 to the node's own `jumps`. Keep `mu`, the `jumps` read last and your own `jumps` in the state (`register_state` for the plain numbers)
-5. Move the activity with `pc.functional.relax_(..., t.dt, tau)`
+5. Move the activity with `pc.functional.relax_(..., t.dt, tau, self.relaxer)`. When step 4 re-anchored, call `self.relaxer.reset_()` first: what it remembers are the forces of the input before
 6. Send `h` as a `pc.Activity`, with your own `jumps` and the `y`, `mask` and `time` of the activity you received
 7. When `t.learn` is True and the `mask` of some sample is True, learn with `self.optimizer.step_([g / B for g in g_theta], t.elapsed)`, with `B` the number of samples in the batch. The node divides by `B`: the optimizer does not know the batch
 

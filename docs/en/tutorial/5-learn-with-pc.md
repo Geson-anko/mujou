@@ -47,4 +47,5 @@ Inside a node, the module is differentiated by autograd, as in BP. Initialize th
 
 - How the parts connect, and what a node does in one update: [How mujou.pc Works](../topics/pc-concepts.md)
 - A 784-256-256-10 network that learns MNIST with `pc.Chain` and compares itself with BP: `examples/mnist/` (`uv run python examples/mnist/main.py`), explained in [PC-ALM](../topics/pc.md#mnist)
+- A ResNet-20 that learns CIFAR-10 on the GPU with `pc.Chain` and compares itself with BP: `examples/cifar10/` (`uv run python examples/cifar10/main.py`), explained in [PC-ALM](../topics/pc.md#cifar-10)
 - How to choose the time constants, the optimizer and `learn_interval`, the pitfalls, and nodes of your own: [PC-ALM](../topics/pc.md)

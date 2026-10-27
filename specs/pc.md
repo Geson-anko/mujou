@@ -96,7 +96,7 @@ $\theta_i$ は、平均の勾配 $g_\theta / B$ を受け取るノードの opti
 
 | ノード | 状態 |
 | --- | --- |
-| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
+| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`relaxer`（relaxer の束縛。`pc.HeavyBall` なら `velocity`）、`h`、`lam`、`mu`（前回の予測）、`jump`（次の更新で足す $\theta$ の跳び）、`jumped`、`jumps`、`seen_jumps`、`clock`（`LearnClock`） |
 | `Output` | `module`、`optimizer`、`clock` |
 | `Input` | `jumps`、`seen_write`（最後に見た書き込みの時刻、書き込みの前は -1） |
 
@@ -155,7 +155,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ## 時定数
 
-`TimeConstants(*, h, lam)` に秒で持つ（K25: h は有限で > 0、lam は > 0。lam の inf は可）。$\tau_\theta$ は optimizer が持つ（「重みの optimizer」）。
+`TimeConstants(*, h, lam)` に秒で持つ（K25: h は有限で > 0、lam は > 0。lam の inf は可）。$\tau_\theta$ は optimizer が持つ（「重みの optimizer」）。$h$ の動かし方は relaxer が持つ（「h の relaxer」）。
 
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
 - `pc.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
@@ -203,9 +203,38 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 - AdamW の推奨の時定数は未測定（`open-decisions.md`）
 - AdamW は勾配の大きさで歩みを縮めない（成分ごとに約 $\eta$ 動く）。そのため、緩和しきらない $\delta$ の残差が、BP の勾配がほぼ 0 の成分でも sign 程度の歩みになりうる。SGD なら残差 $e$ による $\theta$ の誤差は $\eta e$ で小さい。`learn_interval` を往復より長くする推奨は SGD より強く効く可能性がある（未測定）
 
-### 段階 2（h と λ）
+## h の relaxer
 
-緩和の則として h と λ を 1 組で差し替える。不動点（$r = 0$、$\lambda = -g$）は、勾配の零点だけを停留点に持つ則（SGD、モーメンタム、weight decay の無い Adam）なら保てる（h や λ に decay や leak を入れると、λ の不動点は BP の credit からずれる）が、陽的な結合の安定性、跳びでの付け替え（$r$ を保つこと）との整合、サンプルごとの状態（バッチの各行に別の状態）が課題で、研究から始める。今は実装しない。
+$h$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/relax.py`、2026-10-26）。きっかけは、$h$ に慣性（heavy ball）を足せるようにした（ユーザーの「それでも学習できるよう新しい feature の実装（緩和の手法設定など）も考慮して試行」）ところ、ユーザーが「$\theta$ の optimizer のように、$h$ にも更新の仕方を自由に変えられる仕組みが必要」と求めたこと。最初は `TimeConstants.momentum` に置いたが、それは慣性という 1 つの手法を時定数の 1 項目にしただけなので、重みの optimizer と同じ形（設定 + bind）に載せ替えた。
+
+- **設定 + bind**: `pc.Euler()` と `pc.HeavyBall(tau=)` は値だけを持つ frozen dataclass で、ABC の `pc.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(h)` で自分の $h$ の束縛（ABC の `pc.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(h, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`h` と同じ shape・dtype・device の状態を持つ）
+- ABC なのは optimizer と同じ理由（書き忘れを作った時点の `TypeError` で知らせる）。`relaxer` は `Layer` と `Chain` の省略できる引数で、既定は `pc.Euler()`（これまでの挙動）。`Output` は $h$ を持たないので取らない
+- **差し替えの範囲は $h$ だけ**: 力 $F = r + \lambda + g$ を作るのは `functional.relax_` で、束縛が $h$ をその力に沿って動かす。$\lambda$ は動かした後の $h$ の $r$ で従来どおり進める。`relax_(h, lam, mu, g, dt, tau, relaxer=None)` の `None` は素の 1 歩
+- **`reset_()`**: 新しいサンプルか $h_{\mathrm{in}}$ の跳び（付け替え）のとき、ノードが呼ぶ。付け替えは $r$ と $\lambda$ を保ち、$g$ は下流の最後の値のままなので、その瞬間に力は連続する。それでも、速度が積んだのは前の入力の力の場で、新しい入力のものではないので捨てる。$\theta$ の跳びは $h$ と $\mu$ を一緒に動かし、$r$ も力も連続で、前の入力の力の場が続くので、呼ばない。記憶の無い relaxer は何もしない
+- **不動点の条件**: 自作の relaxer は、力が 0 で relaxer 自身の状態が静止しているところ（heavy ball なら $F = 0$ かつ $v = 0$）で $h$ を動かさないものでなければならない。そうでないと不動点が動き、$\lambda$ が BP の credit にならない（$h$ に decay や leak を入れると、$\lambda$ の不動点は credit からずれる）
+- **持てる状態の条件**: ノードは `step_` の外でも $h$ を動かす（付け替えの $h \leftarrow \mu^{\mathrm{new}} + (h - \mu^{\mathrm{last}})$ と、$\theta$ の跳びの足し込み）。だから relaxer の状態は $h$ の位置に依らないもの（速度のような力の型）に限る。位置の型の状態（先読みの位置、前回の $h$）は、$\theta$ の跳びで古くなるが、$\theta$ の跳びは relaxer に知らされない。要るようになったら `shift_` のような通知を足す（今は実装しない）
+- 局所性: 状態はノードの内側で、メッセージは増えない
+
+### `pc.HeavyBall(tau)`
+
+速度 $v$ を持ち、1 回の更新（$dt > 0$）で
+
+$$
+v \leftarrow e^{-\Delta t/\tau}\,v + F,\qquad
+h \leftarrow h - \frac{\Delta t}{\tau_h}\,v.
+$$
+
+$dt = 0$ の更新は何もしない（力も蓄えない）。状態は `{"velocity": v}`。
+
+- 不動点は変わらない。$F = 0$ では速度も 0 になる。持続する力は $1/(1 - e^{-\Delta t/\tau})$ 倍まで速く $h$ を動かすので、深い鎖で $\lambda$ が credit に届くまでの周期が減る
+- 実測（CIFAR-10、ResNet-20 を残差ブロックごとの 11 ノードにして実時間、周期 $\tau_h/4$、$\tau_\lambda = \tau_h$、$\tau_h$ 20 ms）: $\tau = \tau_h/4$（1 更新あたり $e^{-1} \approx 0.37$）で 1 バッチ 64 周期が、`Euler` の 128 周期と 3 epoch 目の精度で並ぶ（prequential 49.5〜51.7% 対 50.7%）。実時間は半分。ただし 10 epoch 目は `HeavyBall` の 64 周期が 62.8%、`Euler` の 128 周期が 68.7%（BP は 73.3%）。128 周期に `HeavyBall` を足しても 3 epoch 目は変わらない（50.2%）。$\tau = \tau_h/3$（0.47）は 3 回に 1 回、学習が崩れた。$e^{-\Delta t/\tau} = 0.8$ は発散。32 周期では `HeavyBall` があっても学習できない
+- algorithm-reviewer の監査（承認）: 線形のスカラー鎖（恒等写像、10 ノード、$\alpha = \eta = 0.25$）で更新写像のスペクトル半径を調べると、安定な最大の $e^{-\Delta t/\tau}$ は 0.78（ノード数 2〜20 でほぼ同じ）で、実測の境界と合う。$\alpha$ を大きくすると下がる（0.0625 で 0.94、0.5 で 0.60、1.0 で 0.30）。非同期のジッタ（周期の 1〜2 倍）では約 0.75。慣性は高曲率側の境界（$\sigma$）を広げる（0.47 で $\sigma_{crit}$ 1.94 → 2.58）が、ジッタの下では救えない。速くなるのは過渡（credit の先頭）だけで、恒等写像に近い鎖の遅いモードの漸近の速さは良くならない（0.968 → 0.976）。力の重みは 1 更新あたりで $dt$ に比例しないので、利得は周期に依存する（$dt$ に整合させると、ジッタのある非同期で $\tau = 0.5\tau_h$ で発散した）
+
+### 採らなかった案
+
+- 次のノードの曲率から刻みをサンプルごとに縮める `AdaptiveStep`（凍結した重みでは $\lambda$ が credit に合うが、縮めた行が前のバッチの $\lambda$ を長く引きずって学習が悪化した）
+- 新しいサンプルで $\lambda$ と $r$ を捨てる設定（学習が進まなかった）
+- $h$ と $\lambda$ を 1 組で差し替える部品: 不動点（$r = 0$、$\lambda = -g$）は、勾配の零点だけを停留点に持つ則なら保てるが、陽的な結合の安定性、跳びでの付け替え（$r$ を保つこと）との整合、サンプルごとの状態（バッチの各行に別の状態）が課題で、今は実装しない。$\lambda$ の差し替えも同じ
 
 ## dt の打ち切り
 
@@ -218,7 +247,7 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 
 ## Chain と show
 
-`Chain(*modules, x=, y=, loss=, tau=, optimizer=, learn_interval=, max_dt=, device=)` は `Input → Layer → … → Output` の `Network`。`modules[:-1]` が `Layer`、`modules[-1]` が `Output` になる。
+`Chain(*modules, x=, y=, loss=, tau=, optimizer=, relaxer=, learn_interval=, max_dt=, device=)` は `Input → Layer → … → Output` の `Network`。`modules[:-1]` が `Layer`、`modules[-1]` が `Output` になる。
 
 - 子のパスは `"input"`、`"layer0"`、…、`"output"`（`modules[i]` が `layer{i}`）。`*modules` は `nn.Sequential` と同じ形なので、番号も 0 から始める
 - period はすべて $\tau_h / 4$。period を変えたい利用者は個別のノードで組む
@@ -241,7 +270,7 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)` を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau)` で活動を動かし、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`（`h` の動かし方を選ぶなら `self.relaxer = relaxer.bind(h)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力か `jumps` の変化を見たら `h` を予測と一緒に動かして自分の `jumps` を進め、`relax_(..., tick.dt, tau, self.relaxer)` で活動を動かし（付け替えたときは先に `self.relaxer.reset_()`）、`h` を自分の `jumps` と組にして送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -277,3 +306,4 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 12. 時刻 0 に書いた最初の入力を学ぶ
 13. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
 14. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
+15. relaxer（`test_relax.py`）: `Euler` が `h - (dt/τ_h) F` と一致する。`HeavyBall` が $v \leftarrow e^{-\Delta t/\tau}v + F$、$h \leftarrow h - (\Delta t/\tau_h)v$ の式と 1e-14 で一致し、最初の 1 歩は `Euler` と同じ。$dt = 0$ は何も動かさず速度も蓄えない。`reset_` で速度が 0 になる。$\tau$ が小さい極限は `Euler`。一定の力で速度が $1/(1-e^{-\Delta t/\tau})$ に収束する。状態の復元で同じ値になり、状態は束縛とメモリを共有し、読み込みはコピーする。`Layer` では、`HeavyBall` でも $\lambda$ が BP の credit に一致し、credit の先頭が `Euler` より速く届く。新しいサンプルで `reset_` が呼ばれ、$\theta$ の跳びでは呼ばれない。`Chain` は各 `Layer` に別々の束縛を持たせる

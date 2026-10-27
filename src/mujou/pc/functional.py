@@ -10,7 +10,8 @@ previous node, and keeps its activity ``h`` and the dual ``lam`` of the constrai
   vector-Jacobian product inside the node). The node sends the one of ``h_in`` to
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
-- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds; an optimizer of
+- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds (``h`` as a relaxer of
+  ``mujou.pc.relax`` says: ``pc.Euler``, ``pc.HeavyBall``); an optimizer of
   ``mujou.pc.optim`` (``pc.SGD``, ``pc.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
@@ -29,6 +30,7 @@ import torch
 import torch.nn.functional as F
 
 from mujou.pc.messages import batch_shape, rows
+from mujou.pc.relax import BoundRelaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Size
 
@@ -175,6 +177,7 @@ def relax_(
     g: torch.Tensor,
     dt: float,
     tau: TimeConstants,
+    relaxer: BoundRelaxer | None = None,
 ) -> None:
     r"""Move ``h`` and ``lam`` in place by one explicit Euler step of ``dt``
     seconds of
@@ -191,6 +194,13 @@ def relax_(
     instead (``Layer`` caps it at ``max_dt``). ``tau.lam = inf`` leaves ``lam``
     exactly as it is.
 
+    With a ``relaxer`` (``pc.Euler().bind(h)``, ``pc.HeavyBall(...).bind(h)`` or
+    one of your own), ``h`` moves as it says along the force
+    $F = r + \lambda + g$ instead of by the plain step: ``relaxer.step_(h, F, dt,
+    tau.h)``. $\lambda$ follows the moved ``h`` as before. The relaxer is the
+    node's: it holds the state, and the node calls its ``reset_`` where the force
+    jumps.
+
     Args:
         h: The activity of the node, ``(*batch, *out)``.
         lam: The dual of the node's activity, ``(*batch, *out)``.
@@ -198,9 +208,14 @@ def relax_(
         g: The sum of the gradients the next nodes sent, ``(*batch, *out)``.
         dt: The time to move by, in seconds.
         tau: The time constants; ``tau.h`` and ``tau.lam`` are used.
+        relaxer: How ``h`` moves, bound to ``h``; ``None`` is the plain step.
     """
     with torch.no_grad():
-        h.sub_((dt / tau.h) * (h - mu + lam + g))  # tau_h dh/dt = -(r + lam + g)
+        force = h - mu + lam + g  # tau_h dh/dt = -(r + lam + g)
+        if relaxer is None:
+            h.sub_((dt / tau.h) * force)
+        else:
+            relaxer.step_(h, force, dt, tau.h)
         if math.isfinite(tau.lam):  # alpha = 0 (PC): lam stays exactly as it is
             lam.add_(h - mu, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
 

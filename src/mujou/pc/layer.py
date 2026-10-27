@@ -11,6 +11,7 @@ from mujou.pc.clock import LearnClock
 from mujou.pc.functional import relax_, vjp
 from mujou.pc.messages import Activity, activity_spec, rows
 from mujou.pc.optim import Optimizer
+from mujou.pc.relax import Euler, Relaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device
 
@@ -112,6 +113,13 @@ class Layer(Node):
     default ``tau.max_dt``, ``min(tau.h / 2, 3 * tau.lam)``, keeps the step of
     ``h`` and ``lam`` stable in the node itself.
 
+    ``relaxer`` sets how ``h`` moves along the force on it (``functional.relax_``):
+    the plain step of ``pc.Euler``, or ``pc.HeavyBall``, whose velocity lets a
+    force that lasts move ``h`` faster, so a deep chain relaxes in fewer periods
+    with the same fixed point. The node calls the ``reset_`` of the bound relaxer
+    with each new sample or jump of ``h_in`` (where the forces it remembers are
+    those of the input before), and not with a jump of ``theta``.
+
     ``module`` must treat the samples of the batch independently (no
     ``BatchNorm`` in training mode): the gradient of each sample must be its
     own. It must also be deterministic and keep no state of its own (no
@@ -124,12 +132,13 @@ class Layer(Node):
 
     The state (``Run.state_dict()["nodes"][path]["state"]``) holds
     ``"generator"`` (the state of the node's ``generator``), ``"module"`` (its
-    ``state_dict``), ``"h"`` and ``"lam"`` (``(*batch, *out)``), the prediction of
-    the last update (``"mu"``), the jump of ``theta`` still to add to ``h``
-    (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it sends
-    and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
-    learn (``"clock"``, the state of the ``LearnClock``), and the state of
-    ``optimizer`` (``"optimizer"``, such as the moments of ``pc.AdamW``). To
+    ``state_dict``), ``"h"`` and ``"lam"`` (``(*batch, *out)``), the
+    prediction of the last update (``"mu"``), the jump of ``theta`` still to add
+    to ``h`` (``"jump"``, and ``"jumped"`` whether there is one), the ``jumps`` it
+    sends and the last ones it read (``"jumps"``, ``"seen_jumps"``) and when to
+    learn (``"clock"``, the state of the ``LearnClock``), the state of
+    ``optimizer`` (``"optimizer"``, such as the moments of ``pc.AdamW``) and
+    that of ``relaxer`` (``"relaxer"``, such as the velocity of ``pc.HeavyBall``). To
     watch the node while it runs, read them there: ``Run.state_dict()`` pauses
     the run, whereas reading ``module``, ``h`` or ``lam`` from the host's thread
     races with the node's updates in place. ``act_spec`` is the spec of what the
@@ -165,6 +174,9 @@ class Layer(Node):
             ``Optimizer`` of your own). The node binds it to its parameters
             that require gradients and holds the bound optimizer as
             ``optimizer``.
+        relaxer: How ``h`` moves along the force on it (``pc.Euler``, the
+            default, ``pc.HeavyBall`` or a ``Relaxer`` of your own). The node
+            binds it to its ``h`` and holds the bound relaxer as ``relaxer``.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;
             longer than ``2 * hops * period`` is recommended. ``None`` updates
@@ -192,6 +204,7 @@ class Layer(Node):
         act_spec: DictSpec[Activity],
         tau: TimeConstants,
         optimizer: Optimizer,
+        relaxer: Relaxer = Euler(),
         learn_interval: float | None,
         period: float | None = None,
         max_dt: float | None = None,
@@ -212,6 +225,7 @@ class Layer(Node):
         with torch.no_grad():
             mu = module(h_in.zeros(device=self.device))
         self.h = torch.zeros_like(mu)
+        self.relaxer = relaxer.bind(self.h)
         self.lam = torch.zeros_like(mu)
         # The prediction of the last update, from which h moves with a new mu.
         # At zero with h, the first update moves h to the forward pass.
@@ -284,7 +298,13 @@ class Layer(Node):
         if reanchor:
             self.h.sub_(self.mu).add_(mu)  # h <- mu + (h - mu_last)
         g = sum(self.next.recv().values(), torch.zeros_like(self.h))
-        relax_(self.h, self.lam, mu, g, dt, self._tau)
+        if reanchor:
+            # r and lam are kept, but what the relaxer remembers are the forces
+            # of the sample (or the h_in) before, so it is dropped. A jump of
+            # theta moves h and mu together, r and the force are continuous, and
+            # it keeps it.
+            self.relaxer.reset_()
+        relax_(self.h, self.lam, mu, g, dt, self._tau, self.relaxer)
         self.mu.copy_(mu)
 
     def _send(self, act: Activity) -> None:
