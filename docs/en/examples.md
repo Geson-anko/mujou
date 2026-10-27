@@ -34,7 +34,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 - `pc_regression.py`: `pc.Chain` and `pc.show` learn a regression from a stream of batches, measured before each batch is learned from
 - `pc_merge.py`: `Merge`, a node of PC-ALM with two inputs written with `pc.functional` and `pc.clock.LearnClock`, joins two towers that learn a regression
 - `mnist/`: a 784-256-256-10 network learns MNIST as a `pc.Chain`, and the same network learns by BP from the same initial weights on the same batches. `main.py` is the entry point, `data.py` loads the data, `metrics.py` measures, `bp.py` trains the BP baseline and `watch.py` counts the `dt` of the nodes (`--watch`)
-- `cifar10/`: a ResNet-20 on a CUDA device, with a node for each residual block, learns CIFAR-10 as a `pc.Chain` with `pc.optim.AdamW`, and the same network learns by BP on the GPU from the same initial weights on the same batches with the same optimizer. `main.py` is the entry point, `data.py` loads and augments the data, `resnet.py` builds the network and says how stiff its blocks make the relaxation, `metrics.py` measures and `bp.py` trains the BP baseline
+- `cifar10/`: a ResNet-20 on a CUDA device, with a node for each residual block, learns CIFAR-10 as a `pc.Chain` with `pc.optim.AdamW`, and the same network learns by BP on the GPU from the same initial weights on the same batches with the same optimizer. `main.py` is the entry point, `data.py` loads and augments the data, `resnet.py` builds the network and says how stiff its blocks make the relaxation, and why the nodes need a short period, `metrics.py` measures and `bp.py` trains the BP baseline
 - `save_and_restore.py`: takes the state with `run.state_dict()`, saves it with `torch.save`, and resumes it in a new instance with `mujou.run(..., state=...)`, on a timer of the resumed run's own
 - `group.py`: `Group(enc=..., dec=...)`, and the paths of the nodes (`"enc.scale"`)
 - `subscribe.py`: `run.subscribe` yields the latest output, then each newer one, and stops with `break`
@@ -52,4 +52,4 @@ uv run python examples/mnist/main.py
 uv run python examples/cifar10/main.py
 ```
 
-Only `cifar10/` uses a GPU, and needs CUDA. Each finishes within 15 seconds, except `mnist/` and `cifar10/`. `mnist/` downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. `cifar10/` downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 8 minutes on an RTX 4090, in real time.
+Only `cifar10/` uses a GPU, and needs CUDA. Each finishes within 15 seconds, except `mnist/` and `cifar10/`. `mnist/` downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. `cifar10/` downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 40 minutes on an RTX 4090.

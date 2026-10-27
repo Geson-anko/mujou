@@ -1311,6 +1311,33 @@ class SpyRelaxer(pc.relax.Relaxer):
         return Bound()
 
 
+@pytest.mark.slow
+class TestDecayOfR:
+    """``tau.r``: the deviation ``r = h - mu`` decays, which pulls ``h`` towards
+    ``mu`` and keeps the fixed point, where ``r = 0``."""
+
+    @pytest.mark.parametrize(("block", "act"), CASES)
+    def test_lam_is_still_the_credit_of_backpropagation(
+        self, start_manual: StartManual, block: str, act: str
+    ):
+        widths = [4, 4, 4] if block == "res" else [4, 5, 3]
+        layers, head = make_modules(block, act, widths)
+        # r = h doubles the pull of r; max_dt (h / 4) is still the period.
+        tau = pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=TAU.h)
+        chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
+        run = start_manual(chain.net)
+        x, y = sample(widths, 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), RELAX_STEPS)
+        nodes = run.state_dict()["nodes"]
+        expected = credits(layers, head, x, y, MASK)
+        with torch.no_grad():
+            forward_hs, _ = forward(layers, head, x)
+        for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
+            close(nodes[f"l{i}"]["state"]["h"], h, 1e-10)
+            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
+
+
 class TestRelaxer:
     """``relaxer``: how ``h`` moves along the force on it. ``pc.relax.HeavyBall``
     keeps the fixed point of the plain relaxation and gets there in fewer

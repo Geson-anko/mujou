@@ -10,13 +10,13 @@ flow.
 A node relaxes its activity ``h`` with what the next node sends back, through
 the Jacobian ``J`` of the next node's module. The singular values of ``J`` of a
 block grow while the network learns (2 to 9 after a few epochs, measured with
-BP), and with the period ``tau.h / 4`` of ``pc.Chain`` the explicit relaxation
-is stable only below about 2.6. The relaxation is therefore not exact in the
-nodes before the stiff blocks: with the weights of 3 epochs, the ``lam`` of the
-first five nodes had a cosine of 0.5 to 0.7 with the credit of backpropagation
-(0.8 and over in the last four). It still learns, as ``main.py`` shows, but the
-nodes need time to relax, which is why ``main.py`` shows each batch for many
-periods.
+BP and with PC-ALM), and an explicit step of ``h`` of ``period / tau.h`` is
+stable only while ``(1 + |J|^2) * period / tau.h < 2``: below about 2.6 with
+the period ``tau.h / 4`` of ``pc.Chain``, which the blocks go past. With
+``tau.h / 4``, the ``lam`` of the weights BP learned in 3 epochs did not settle
+on the credit of backpropagation (a cosine of 0.1 or less); with ``tau.h / 16``
+it did (0.95 in the first nodes), as with ``tau.h / 64``. This is why
+``main.py`` gives the nodes a period of ``tau.h / 16``.
 
 GroupNorm replaces BatchNorm: it normalizes each sample on its own, so it has no
 running statistics and no train or eval mode to switch, and a batch padded with

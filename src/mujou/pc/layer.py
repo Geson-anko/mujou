@@ -110,8 +110,8 @@ class Layer(Node):
     the coupling makes the network diverge, which no split of the step inside
     the node prevents. The time beyond ``max_dt`` is dropped, from the
     relaxation and from the weight of the next update of ``theta`` alike. The
-    default ``tau.max_dt``, ``min(tau.h / 2, 3 * tau.lam)``, keeps the step of
-    ``h`` and ``lam`` stable in the node itself.
+    default ``tau.max_dt`` (``min(tau.h / 2, 3 * tau.lam)`` without ``tau.r``)
+    keeps the step of ``h`` and ``lam`` stable in the node itself.
 
     ``relaxer`` sets how ``h`` moves along the force on it (``functional.relax_``):
     the plain step of ``pc.relax.Euler``, or ``pc.relax.HeavyBall``, whose velocity lets a
@@ -186,7 +186,7 @@ class Layer(Node):
         period: The period of the node in seconds; ``None`` is ``tau.period``
             (``tau.h / 4``). It must not be longer than ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
-            ``tau.max_dt`` (``min(tau.h / 2, 3 * tau.lam)``).
+            ``tau.max_dt`` (``min(tau.h / 2, 3 * tau.lam)`` without ``tau.r``).
         device: Where the node computes.
 
     Raises:

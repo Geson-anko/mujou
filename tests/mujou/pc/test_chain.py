@@ -145,6 +145,26 @@ class TestChain:
         periods += [net.input.period, net.output.period]
         assert periods == pytest.approx([TAU.h / 4] * 4)
 
+    def test_every_node_runs_at_the_period_given(self):
+        layers, head = make_modules("linear", "tanh", WIDTHS)
+        net = pc.Chain(
+            *layers,
+            head,
+            x=X,
+            y=Y,
+            batch=B,
+            loss=pc.loss.MSELoss(B),
+            tau=TAU,
+            optimizer=SGD,
+            learn_interval=LEARN_INTERVAL,
+            period=TAU.h / 16,
+        )
+        periods = [
+            node.period for node in vars(net).values() if isinstance(node, pc.Layer)
+        ]
+        periods += [net.input.period, net.output.period]
+        assert periods == pytest.approx([TAU.h / 16] * 4)
+
     def test_each_node_binds_the_optimizer_to_its_own_parameters(
         self, start_manual: StartManual
     ):
