@@ -90,6 +90,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K29 | S7 | `vjp` の δ と μ の shape が違う、`mse` の y と ŷ の shape が違う | `functional.vjp` / `functional.mse` | `ValueError` | broadcast が黙って通る | `pc/test_functional.py` の `test_delta_must_have_the_shape_of_mu` と `test_shapes_must_match` |
 | K30 | S1 | `register_state` に、まだ代入していない名前を渡す（綴りの誤り、property） | `Node.register_state` | `AttributeError` | `__dict__` から決めるので、綴りを誤った名前は黙って状態から漏れる | `test_node.py` の `test_rejects_a_name_without_an_attribute` |
 | K31 | S7 | `SGD` の tau、`AdamW` の tau・tau_m・tau_v・eps が有限で > 0 でない、`AdamW` の weight_decay が有限で >= 0 でない | `SGD.__post_init__` / `AdamW.__post_init__` | `ValueError` | NaN になるか、学習しない | `pc/test_optim.py` の `TestChecks` |
+| K32 | S7 | `HeavyBall` の tau が有限で > 0 でない | `HeavyBall.__post_init__` | `ValueError` | NaN になるか、`h` が動かない | `pc/test_relax.py` の `TestChecks` |
 
 テストのパスは `tests/mujou/` からの相対パス。
 

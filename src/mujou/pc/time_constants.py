@@ -23,28 +23,6 @@ class TimeConstants:
     ``lam=math.inf`` makes the dual stay at zero (``alpha = 0``, plain predictive
     coding). ``h`` must be finite.
 
-    ``momentum`` is the time constant of the inertia of ``h`` in seconds (0, the
-    default, has none). With it, a node keeps a velocity of ``h`` that remembers
-    the force of the updates before, and moves ``h`` along it (a heavy ball):
-
-    $$
-    v \leftarrow e^{-\Delta t / \tau_m} v + (r + \lambda + g),\qquad
-    h \leftarrow h - \frac{\Delta t}{\tau_h} v.
-    $$
-
-    The fixed point is that of the plain relaxation ($v = 0$ there). A force that
-    persists moves ``h`` up to $1 / (1 - e^{-\Delta t / \tau_m})$ times faster, so
-    the front of the credit of a deep chain crosses it in fewer periods; the slow
-    mode of a chain near the identity does not relax faster for it (its rate is
-    no better). The force weighs one update, not ``dt``, so the gain depends on
-    the period. With a period of ``tau.h / 4`` and ``lam = tau.h``, a
-    ``momentum`` of ``tau.h / 3`` ($e^{-0.75} \approx 0.47$ per update) halved the
-    periods that 11 nodes of a ResNet needed, and one run in a few of them
-    collapsed; ``tau.h / 4`` is safer. On a linear chain of identities the
-    explicit step is stable up to about $e^{-\Delta t/\tau_m} \approx 0.78$, below
-    it with late updates, and lower for a larger ``alpha = dt / lam``
-    (``examples/cifar10/`` diverged at 0.8).
-
     The fields are keyword-only: both are floats, and a swap by position could
     not be caught by the type checker.
 
@@ -54,13 +32,12 @@ class TimeConstants:
         pc_only = TimeConstants(h=4e-3, lam=math.inf)
 
     Raises:
-        ValueError: ``h`` is not finite and > 0, ``lam`` is not > 0, or ``momentum``
-            is not finite and >= 0 (NaN is not).
+        ValueError: ``h`` is not finite and > 0, or ``lam`` is not > 0 (NaN is
+            not).
     """
 
     h: float
     lam: float
-    momentum: float = 0.0
 
     @property
     def period(self) -> float:
@@ -84,7 +61,3 @@ class TimeConstants:
             raise ValueError(f"TimeConstants.h must be finite and > 0, got {self.h!r}")
         if not self.lam > 0:
             raise ValueError(f"TimeConstants.lam must be > 0, got {self.lam!r}")
-        if not 0 <= self.momentum < math.inf:
-            raise ValueError(
-                f"TimeConstants.momentum must be finite and >= 0, got {self.momentum!r}"
-            )

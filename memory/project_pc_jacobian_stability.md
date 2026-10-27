@@ -23,9 +23,9 @@ metadata:
 - 刻みを縮める方向（AdaptiveStep）は試して悪かった。やるなら前のバッチの λ を捨てる仕組み（行ごとのリセット）と一緒に考える。src の pc の変更はユーザーに確認する
 - 関連: [[project-pc-module]], [[reference-pc-alm]], [[project-gpu-policy]]
 
-**2026-10-26 追記（TimeConstants.momentum を採用）**
+**2026-10-26 追記（h の慣性を採用。のちに `pc.HeavyBall` に載せ替え、[[project-pc-relaxer]]）**
 
-- `TimeConstants.momentum`（秒、既定 0）: h の heavy ball。`v <- exp(-dt/momentum) v + (r+λ+g)`、`h -= dt/τ_h v`、新しいサンプルか h_in の跳びで v を 0 に。不動点は不変、局所、メッセージは増えない。`functional.relax_(..., velocity=)` と `Layer.velocity`
-- 効果: ResNet の 11 ノード・実時間で、64 周期 + `momentum = τ_h/4` が 3 epoch 目で慣性なしの 128 周期と並ぶ（実時間は半分）。10 epoch では 62.8%（128 周期・慣性なしは 68.7%、BP は 73.3%）。128 周期に足しても変わらない。`τ_h/3` は 3 回に 1 回崩れた。1 更新あたりの係数 0.8 は発散、32 周期は学べない
+- 最初は `TimeConstants.momentum`、いまは `Layer(relaxer=pc.HeavyBall(tau=...))`: h の heavy ball。`v <- exp(-dt/tau) v + (r+λ+g)`、`h -= dt/τ_h v`、新しいサンプルか h_in の跳びで v を 0 に（`reset_`）。不動点は不変、局所、メッセージは増えない。状態は `Layer.relaxer` の `velocity`
+- 効果: ResNet の 11 ノード・実時間で、64 周期 + `HeavyBall(tau=τ_h/4)` が 3 epoch 目で慣性なしの 128 周期と並ぶ（実時間は半分）。10 epoch では 62.8%（128 周期・慣性なしは 68.7%、BP は 73.3%）。128 周期に足しても変わらない。`τ_h/3` は 3 回に 1 回崩れた。1 更新あたりの係数 0.8 は発散、32 周期は学べない
 - algorithm-reviewer（承認）: 線形の鎖の安定境界は 0.78（実測と一致）、非同期のジッタで約 0.75。速くなるのは過渡だけで、漸近の速さは良くならない。力の重みは dt に比例しない（周期に依存）
 - 却下: AdaptiveStep、新しいサンプルで λ と r を捨てる設定（prequential が 27% のまま）

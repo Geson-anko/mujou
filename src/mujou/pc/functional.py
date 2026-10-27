@@ -10,7 +10,8 @@ previous node, and keeps its activity ``h`` and the dual ``lam`` of the constrai
   vector-Jacobian product inside the node). The node sends the one of ``h_in`` to
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
-- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds; an optimizer of
+- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds (``h`` as a relaxer of
+  ``mujou.pc.relax`` says: ``pc.Euler``, ``pc.HeavyBall``); an optimizer of
   ``mujou.pc.optim`` (``pc.SGD``, ``pc.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
@@ -29,6 +30,7 @@ import torch
 import torch.nn.functional as F
 
 from mujou.pc.messages import batch_shape, rows
+from mujou.pc.relax import BoundRelaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Size
 
@@ -175,7 +177,7 @@ def relax_(
     g: torch.Tensor,
     dt: float,
     tau: TimeConstants,
-    velocity: torch.Tensor | None = None,
+    relaxer: BoundRelaxer | None = None,
 ) -> None:
     r"""Move ``h`` and ``lam`` in place by one explicit Euler step of ``dt``
     seconds of
@@ -192,14 +194,12 @@ def relax_(
     instead (``Layer`` caps it at ``max_dt``). ``tau.lam = inf`` leaves ``lam``
     exactly as it is.
 
-    With a ``velocity`` (and ``tau.momentum`` > 0), ``h`` moves along the velocity
-    of a heavy ball instead of the force: first
-    $v \leftarrow e^{-\Delta t/\tau_m} v + (r + \lambda + g)$ in place, then
-    $h \leftarrow h - (\Delta t/\tau_h) v$. $\lambda$ follows as before. The force
-    weighs one update, not ``dt``: in a steady state
-    $v = F / (1 - e^{-\Delta t/\tau_m})$, so a shorter period gives a larger gain,
-    and a late update (a longer ``dt``) forgets more of the velocity, which is on
-    the stable side. A ``dt`` of 0 changes nothing, the velocity included.
+    With a ``relaxer`` (``pc.Euler().bind(h)``, ``pc.HeavyBall(...).bind(h)`` or
+    one of your own), ``h`` moves as it says along the force
+    $F = r + \lambda + g$ instead of by the plain step: ``relaxer.step_(h, F, dt,
+    tau.h)``. $\lambda$ follows the moved ``h`` as before. The relaxer is the
+    node's: it holds the state, and the node calls its ``reset_`` where the force
+    jumps.
 
     Args:
         h: The activity of the node, ``(*batch, *out)``.
@@ -207,23 +207,15 @@ def relax_(
         mu: The prediction ``f(h_in)`` of the node, ``(*batch, *out)``.
         g: The sum of the gradients the next nodes sent, ``(*batch, *out)``.
         dt: The time to move by, in seconds.
-        tau: The time constants; ``tau.h`` and ``tau.lam`` are used, and
-            ``tau.momentum`` with a ``velocity``.
-        velocity: The velocity of ``h``, ``(*batch, *out)``, moved in place; ``None``
-            is no inertia.
-
-    Raises:
-        ValueError: A ``velocity`` is given but ``tau.momentum`` is 0.
+        tau: The time constants; ``tau.h`` and ``tau.lam`` are used.
+        relaxer: How ``h`` moves, bound to ``h``; ``None`` is the plain step.
     """
-    if velocity is not None and tau.momentum <= 0:
-        raise ValueError("a velocity needs a tau.momentum > 0")
     with torch.no_grad():
         force = h - mu + lam + g  # tau_h dh/dt = -(r + lam + g)
-        if velocity is not None:
-            if dt > 0:  # an update of no time must not store a force
-                velocity.mul_(math.exp(-dt / tau.momentum)).add_(force)
-            force = velocity
-        h.sub_((dt / tau.h) * force)
+        if relaxer is None:
+            h.sub_((dt / tau.h) * force)
+        else:
+            relaxer.step_(h, force, dt, tau.h)
         if math.isfinite(tau.lam):  # alpha = 0 (PC): lam stays exactly as it is
             lam.add_(h - mu, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
 
