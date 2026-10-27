@@ -1984,6 +1984,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        r
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.TimeConstants.period" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3464,6 +3475,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.TimeConstants.r" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        r
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.TimeConstants.period" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4489,8 +4511,9 @@ net = pc.Chain(
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">learn_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">batch</span><span class="p">:</span> <span class="n">Size</span> <span class="o">=</span> <span class="p">(),</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4507,8 +4530,9 @@ the <code>act_spec</code> of the one before and the nodes are connected in order
 The children are <code>input</code>, <code>layer0</code>, ..., <code>output</code> (<code>modules[i]</code> is
 in <code>layer{i}</code>, also <code>layers[i]</code>), which are also their paths in
 <code>Run.state_dict()</code>. Every
-node runs with the period <code>tau.period</code> (<code>tau.h / 4</code>); for other
-periods, build the nodes one by one (<code>show</code> shows them samples too).</p>
+node runs with the same <code>period</code>, <code>tau.period</code> (<code>tau.h / 4</code>) unless
+given; for a period of its own for each node, build the nodes one by one
+(<code>show</code> shows them samples too).</p>
 <p>The host writes a <code>Sample</code> to <code>prev</code> and reads a <code>Prediction</code> from
 <code>next</code>, or does both with <code>show</code>.</p>
 <p>Example::</p>
@@ -4676,7 +4700,7 @@ it to its own <code>h</code>. The <code>Output</code> has no <code>h</code>.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>As in <code>Layer</code>. Longer than the round trip of the
-credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
+credit, <code>2 * len(modules) * period</code>, is recommended.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4714,6 +4738,30 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>As in <code>Layer</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>period</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The period of every node, <code>tau.period</code> if <code>None</code>. A shorter
+one makes the explicit steps exact for stiffer modules (the step of
+<code>h</code> is stable while <code>(1 + |J|^2) * period / tau.h &lt; 2</code>, <code>|J|</code>
+the largest singular value of the Jacobian of the next module), for
+more updates.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -4805,7 +4853,7 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
   </span>
 
 <a href="#mujou.pc.Chain.input" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">input</span> <span class="o">=</span> <span class="n">Input</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">tau</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">input</span> <span class="o">=</span> <span class="n">Input</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4834,9 +4882,10 @@ credit, <code>2 * len(modules) * tau.period</code>, is recommended.</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="n">learn_interval</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">max_dt</span><span class="o">=</span><span class="n">max_dt</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_dt</span><span class="o">=</span><span class="n">max_dt</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5481,8 +5530,8 @@ from <code>h</code> as it was when the next node last updated. After a long stal
 the coupling makes the network diverge, which no split of the step inside
 the node prevents. The time beyond <code>max_dt</code> is dropped, from the
 relaxation and from the weight of the next update of <code>theta</code> alike. The
-default <code>tau.max_dt</code>, <code>min(tau.h / 2, 3 * tau.lam)</code>, keeps the step of
-<code>h</code> and <code>lam</code> stable in the node itself.</p>
+default <code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code> without <code>tau.r</code>)
+keeps the step of <code>h</code> and <code>lam</code> stable in the node itself.</p>
 <p><code>relaxer</code> sets how <code>h</code> moves along the force on it (<code>functional.relax_</code>):
 the plain step of <code>pc.relax.Euler</code>, or <code>pc.relax.HeavyBall</code>, whose velocity lets a
 force that lasts move <code>h</code> faster, so a deep chain relaxes in fewer periods
@@ -5690,7 +5739,7 @@ frame (good values for it have not been measured yet);
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The longest <code>dt</code> an update counts, in seconds; <code>None</code> is
-<code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code>).</p>
+<code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code> without <code>tau.r</code>).</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6579,7 +6628,7 @@ the target.</p>
   </span>
 
 <a href="#mujou.pc.TimeConstants" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TimeConstants</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">h</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TimeConstants</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">h</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6589,7 +6638,7 @@ the target.</p>
         <p>The time constants of the continuous-time PC-ALM, in seconds.</p>
 <p>A node relaxes its activity <code>h</code> and its dual <code>lam</code> with</p>
 <div class="arithmatex">\[
-\tau_h \dot h = -(r + \lambda + g),\qquad
+\tau_h \dot h = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
 \tau_\lambda \dot\lambda = r
 \]</div>
 <p>(<span class="arithmatex">\(r = h - \mu\)</span>), and a step of <code>dt</code> seconds moves them by <code>dt / tau</code> of
@@ -6598,11 +6647,21 @@ the right-hand side (the discrete step sizes are <code>eta_h = dt / h</code> and
 node (<code>pc.optim.SGD</code> or <code>pc.optim.AdamW</code>), which holds their time constant.</p>
 <p><code>lam=math.inf</code> makes the dual stay at zero (<code>alpha = 0</code>, plain predictive
 coding). <code>h</code> must be finite.</p>
-<p>The fields are keyword-only: both are floats, and a swap by position could
+<p><code>r</code> makes the deviation <code>r</code> decay with its own time constant, an extra
+pull of <code>h</code> towards <code>mu</code>. The fixed point stays (<code>lam</code> integrates
+<code>r</code>, so <code>r = 0</code> there, and <code>lam</code> is the credit of backpropagation
+still), and in a deep chain <code>lam</code> gets near that credit sooner: in a
+ResNet of 11 nodes with <code>lam = h / 4</code>, the cosine of the <code>lam</code> of the
+first node with the credit after <code>24 * h</code> was 0.84 without the decay and
+0.94 with <code>r = h / 3</code> (<code>specs/pc.md</code>). The default <code>math.inf</code> adds nothing. An analog
+integrator that holds <code>r</code> (not <code>h</code>) and leaks is this decay, which is
+why a leak there is harmless where one of <code>h</code> towards 0 is not.</p>
+<p>The fields are keyword-only: all are floats, and a swap by position could
 not be caught by the type checker.</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>tau = TimeConstants(h=4e-3, lam=8e-3)
 pc_only = TimeConstants(h=4e-3, lam=math.inf)
+damped = TimeConstants(h=4e-3, lam=1e-3, r=4e-3 / 3)
 </code></pre></div>
 
 
@@ -6622,8 +6681,8 @@ pc_only = TimeConstants(h=4e-3, lam=math.inf)
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>h</code> is not finite and &gt; 0, or <code>lam</code> is not &gt; 0 (NaN is
-not).</p>
+                <p><code>h</code> is not finite and &gt; 0, or <code>lam</code> or <code>r</code> is not &gt; 0
+(NaN is not).</p>
               </div>
             </td>
           </tr>
@@ -6696,6 +6755,29 @@ not).</p>
 
 
 
+<h4 id="mujou.pc.TimeConstants.r" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">r</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.TimeConstants.r" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">r</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h4 id="mujou.pc.TimeConstants.period" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">period</span>
 
@@ -6737,11 +6819,13 @@ of PC-ALM, and well within the measured stable range <code>eta_h &lt;= 0.5</code
 
     <div class="doc doc-contents ">
 
-        <p>The default longest <code>dt</code> an update counts, <code>min(h / 2, 3 * lam)</code>:
-the explicit Euler step of <code>h</code> then <code>lam</code> is stable for
-<code>dt / h &lt;= 1/2</code> and <code>dt / lam &lt;= 3</code> (<code>specs/pc.md</code>, "dt の打ち切り").
-Every node of a chain caps at the same time, so that they weigh their
-updates of the parameters alike.</p>
+        <p>The default longest <code>dt</code> an update counts,
+<code>min(h / (2 * (1 + h / r)), 3 * lam)</code> (<code>min(h / 2, 3 * lam)</code> without
+the decay of <code>r</code>): the explicit Euler step of <code>h</code> then <code>lam</code> is
+stable for <code>dt / h &lt;= 1/2</code> and <code>dt / lam &lt;= 3</code> (<code>specs/pc.md</code>, "dt
+の打ち切り"), and the decay of <code>r</code> pulls <code>h</code> <code>1 + h / r</code> times as
+hard. Every node of a chain caps at the same time, so that they weigh
+their updates of the parameters alike.</p>
 
     </div>
 
@@ -10121,7 +10205,7 @@ that averages over the batch (<code>nn.MSELoss()</code>) does.</p>
         <p>Move <code>h</code> and <code>lam</code> in place by one explicit Euler step of <code>dt</code>
 seconds of</p>
 <div class="arithmatex">\[
-\tau_h \dot h = -(r + \lambda + g),\qquad
+\tau_h \dot h = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
 \tau_\lambda \dot\lambda = r,\qquad r = h - \mu.
 \]</div>
 <p>The step moves <code>h</code> first and then <code>lam</code> with the <code>r</code> of the moved

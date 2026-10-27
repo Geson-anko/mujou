@@ -2415,7 +2415,7 @@
 <p class="admonition-title">Key idea</p>
 <p>All speeds are set in seconds of the run's timer. Each node moves its equations by the <code>dt</code> that actually passed, so nodes with different periods change at the same speed per second.</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=)</code> holds the two time constants of the activities. The time constant of the weights belongs to the optimizer (<a href="#6-optimizers">section 6</a>).</p>
+<p><code>pc.TimeConstants(h=, lam=, r=)</code> holds the time constants of the activities. The time constant of the weights belongs to the optimizer (<a href="#6-optimizers">section 6</a>).</p>
 <table>
 <thead>
 <tr>
@@ -2438,9 +2438,15 @@
 <td><code>dt / tau.lam</code></td>
 <td><code>lam</code> stays 0. <code>r</code> does not return to 0, and the fixed point does not match BP (plain predictive coding)</td>
 </tr>
+<tr>
+<td><code>tau.r</code></td>
+<td>How fast the deviation <code>r</code> decays</td>
+<td><code>dt / tau.r</code> of <code>r</code> more</td>
+<td>The default: no decay. With a finite <code>tau.r</code>, <code>h</code> is pulled towards <code>mu</code>; the fixed point stays</td>
+</tr>
 </tbody>
 </table>
-<p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / 4</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code>. <code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
+<p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / 4</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code> unless it is given <code>period=</code>. <code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code>, shorter with a decay of <code>r</code>, <code>tau.r</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
 <p>Make the <code>tau</code> of the optimizer much larger than <code>tau.h</code>. When the weights move more slowly than the activities settle, they learn from the settled <code>delta</code> even though inference and learning run at the same time. To choose the values, see <a href="../pc/#choosing-the-time-constants">Choosing the time constants</a>; for the arguments, the <a href="../../api/pc/">API reference</a>.</p>
 <details class="question">
 <summary>Why cap dt at max_dt?</summary>

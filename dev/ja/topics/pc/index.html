@@ -1924,7 +1924,7 @@
 <tr>
 <td>周期</td>
 <td>各ノードが更新する間隔</td>
-<td><code>tau.period</code>（<code>tau.h / 4</code>）。<code>Layer</code>・<code>Output</code> の既定で、<code>pc.Chain</code> の周期</td>
+<td><code>tau.period</code>（<code>tau.h / 4</code>）。<code>Layer</code>・<code>Output</code>・<code>pc.Chain</code>（<code>period=</code>）の既定。硬いモジュールでは短くする（<a href="#%E8%90%BD%E3%81%A8%E3%81%97%E7%A9%B4">落とし穴</a>）</td>
 <td>1 ms</td>
 </tr>
 <tr>
@@ -1934,9 +1934,15 @@
 <td>8 ms</td>
 </tr>
 <tr>
+<td><code>tau.r</code></td>
+<td>ずれ <code>r = h - mu</code> が減衰する速さ</td>
+<td>既定は <code>math.inf</code> で減衰しない。深い鎖では <code>tau.h / 3</code>。<a href="#cifar-10">CIFAR-10</a> を見る</td>
+<td></td>
+</tr>
+<tr>
 <td><code>relaxer</code></td>
 <td><code>h</code> が自分に掛かる力に沿ってどう動くか</td>
-<td>既定は <code>pc.relax.Euler()</code>。ノードが多い深い鎖だけ <code>pc.relax.HeavyBall(tau=tau.h / 4)</code>。<a href="#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</td>
+<td>既定は <code>pc.relax.Euler()</code>。<a href="#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</td>
 <td></td>
 </tr>
 <tr>
@@ -1960,7 +1966,7 @@
 <tr>
 <td><code>max_dt</code></td>
 <td>1 回の更新で数える <code>dt</code> の上限</td>
-<td>既定の <code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>、ここでは 2 周期）。周期より短い <code>max_dt</code> は <code>ValueError</code> になる。<code>tau.lam &lt; tau.h / 12</code> なら既定でもそうなる</td>
+<td>既定の <code>tau.max_dt</code>（<code>tau.r</code> が無ければ <code>min(tau.h / 2, 3 * tau.lam)</code>、ここでは 2 周期）。周期より短い <code>max_dt</code> は <code>ValueError</code> になる。<code>tau.lam &lt; tau.h / 12</code> なら既定でもそうなる</td>
 <td>2 ms</td>
 </tr>
 </tbody>
@@ -1971,6 +1977,7 @@
 <li><strong><code>learn_interval</code> を見せる時間の半分から全体の間にする理由</strong>: <code>learn_interval</code> はホストが書き込んだ時刻（活動の <code>time</code>）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから <code>learn_interval</code> 後に学び、バッチを見せている間は以後 <code>learn_interval</code> ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない</li>
 <li><strong>credit の往復</strong>: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ <code>2 × ホップ数 × 周期</code>（ホップ数は経路上の接続の数。MNIST では <code>Input</code> から <code>Output</code> まで 3 本で 6 周期）。<code>learn_interval</code> はこれより長くすることを勧める。短いと、落ち着く前の credit から重みが学ぶ。設計時の測定では、往復が 18 周期の深い鎖が、16 周期では収束し、4 周期では有界だが約 4 倍ずれ、2 周期と 1 周期では発散した</li>
 <li><strong>入力がフレームごとに変わるストリーム</strong>: <code>learn_interval=None</code> を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は <code>pc.optim.SGD</code> の <code>1 / tau</code> になる。ストリームに適した値はまだ測っていない</li>
+<li><strong><code>r</code> の減衰</strong>: <code>tau.r</code> は <code>tau.h * dh/dt</code> に <code>-(tau.h / tau.r) * r</code> を足し、<code>h</code> を <code>mu</code> へ引き寄せる。<code>lam</code> が <code>r</code> を積分するので、<code>tau.r</code> によらず平衡点では <code>r = 0</code> で、<code>lam</code> は BP の credit のまま。深い鎖では <code>lam</code> が早く credit に近づく（<a href="#cifar-10">CIFAR-10</a>）。短すぎると <code>r</code> が小さくなりすぎ、それを積分する <code>lam</code> が遅くなる（その ResNet では、<code>tau.h / 10</code> だと <code>tau.h / 3</code> より <code>lam</code> が落ち着かなかった）。<code>h</code> を引く力が <code>1 + tau.h / tau.r</code> 倍になるので、<code>tau.max_dt</code> もその倍率で割った長さになる</li>
 <li><strong>安定性</strong>: <code>tau.h</code> に対して周期が短いほど安定する。設計時の測定では、ReLU で <code>period / tau.h</code> が 0.5 までは安定し、<code>period / tau.lam</code> は 0.1〜0.3 が最もよかった。<code>S = 32</code> で BP と同じ精度が出た。それより短い見せる時間は確かめていない</li>
 </ul>
 <h2 id="optimizer-を選ぶ">optimizer を選ぶ<a class="headerlink" href="#optimizer-を選ぶ" title="Permanent link">&para;</a></h2>
@@ -2038,7 +2045,7 @@
 </table>
 <ul>
 <li>relaxer が変えるのは <code>h</code> が不動点に着くまでの道で、不動点ではない。不動点では <code>F = 0</code> で、<code>lam</code> は BP の credit になる。どの relaxer が <code>h</code> を動かしても、<code>lam</code> はこれまでどおり動かした後の <code>h</code> で進む</li>
-<li>深い鎖には HeavyBall を使う。速度が前の更新の力を覚える（heavy ball）。力が続くと <code>h</code> が速く動くので、多くのノードの鎖を credit が少ない周期で渡る。効くのは credit の先頭を速めることで、緩和の遅い裾は速くならない。そのため長く学ぶと、慣性なしで同じ時間見せたときより遅れる（<a href="#cifar-10">CIFAR-10</a>）。浅い鎖には要らない。MNIST は既定のまま使う</li>
+<li>深い鎖には HeavyBall を使う。速度が前の更新の力を覚える（heavy ball）。力が続くと <code>h</code> が速く動くので、多くのノードの鎖を credit が少ない周期で渡る。効くのは credit の先頭を速めることで、緩和の遅い裾は速くならない。<a href="#cifar-10">CIFAR-10</a> の ResNet を周期 <code>tau.h / 4</code> で学ばせると、慣性ありの 64 周期は 3 epoch 目で慣性なしの 128 周期に並んだが、10 epoch 目には遅れた（62.77% と 68.73%）。いまの例は慣性を使わず、短い周期・速い双対・<code>r</code> の減衰で緩和させ、どちらよりもよかった。これらと <code>pc.relax.HeavyBall</code> の組み合わせは測っていない。浅い鎖には要らない。MNIST は既定のまま使う</li>
 <li><code>tau</code> は周期に合わせて選ぶ。力は <code>dt</code> ではなく 1 回の更新ごとに掛かるので、利得は 1 更新あたりの係数 <code>exp(-dt / tau)</code> で決まる。試した値は周期 <code>tau.period</code> に対する <code>tau = tau.h / 4</code> で、係数は 0.37（<code>tau</code> が周期と同じ）になる。ResNet の 11 ノードでは 64 周期が <code>pc.relax.Euler()</code> の 128 周期とほぼ同じ精度になり、実時間は半分で済んだ。ResNet では係数 0.47（<code>tau.h / 3</code>）が 3 回の実行のうち 1 回で崩れ、0.8 は発散した。約 0.78 という限界は恒等写像の線形な鎖のもので、実際の限界はそれより低く、更新が遅れるとさらに低くなる。周期を変えるときは、係数を 0.37 の近くに保つ</li>
 <li>新しいサンプルのとき、また読んでいる <code>h</code> が跳んだときには、速度を 0 に戻す。<code>r</code> と <code>lam</code> は保たれるが、速度が覚えているのは前の入力の力だからである。ノード自身の重みが跳んだときは戻さない</li>
 <li><code>pc.relax.HeavyBall</code> の <code>tau</code> は有限で &gt; 0 でなければ、<code>ValueError</code> を送出する</li>
@@ -2108,39 +2115,40 @@
 <li><code>data.py</code>・<code>metrics.py</code>・<code>bp.py</code> は <code>mujou.pc</code> に依存しない。データは素のテンソルで、BP の基準は素の PyTorch</li>
 </ul>
 <h2 id="cifar-10">CIFAR-10<a class="headerlink" href="#cifar-10" title="Permanent link">&para;</a></h2>
-<p><code>examples/cifar10/</code> は、CUDA のデバイスに載せた ResNet-20 を残差ブロックごとのノードにして CIFAR-10 に学習させる。同じネットワークを、同じ初期重み・同じバッチ・同じ <code>pc.optim.AdamW</code> で、GPU 上の BP でも学習させる。モジュールは <code>pc.Chain</code> の <code>Input</code> の後ろのノードになる。stem と最初のブロック、残り 8 つのブロック、head の 11 ノードである。実行の時間は実時間と同じにした。3 epoch 目の prequential 精度は PC-ALM が 49.48%、BP が 54.45%、その後のテスト精度は 48.71% と 59.02% だった（seed 0）。10 epoch 目は prequential 精度が 62.77% と 73.27%、テスト精度が 62.89% と 72.61% だった。1 バッチを 128 周期見せて慣性を使わないと、実時間は 2 倍になり、10 epoch 目は 68.73% と 68.95% だった。PC-ALM は BP に届かない（理由は下の最後の落とし穴）。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も、実行ごとにビット単位では一致しない。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w">            </span><span class="c1"># 3 epoch、RTX 4090 で約 8 分</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w"> </span>--epochs<span class="w"> </span><span class="m">10</span><span class="w">  </span><span class="c1"># 約 25 分</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w"> </span>--steps<span class="w"> </span><span class="m">128</span><span class="w"> </span>--momentum<span class="w"> </span><span class="m">0</span><span class="w">  </span><span class="c1"># 2 倍かかるが精度は高い</span>
+<p><code>examples/cifar10/</code> は、CUDA のデバイスに載せた ResNet-20 を残差ブロックごとのノードにして CIFAR-10 に学習させる。同じネットワークを、同じ初期重み・同じバッチ・同じ <code>pc.optim.AdamW</code> で、GPU 上の BP でも学習させる。モジュールは <code>pc.Chain</code> の <code>Input</code> の後ろのノードになる。stem と最初のブロック、残り 8 つのブロック、head の 11 ノードである。3 epoch 目の prequential 精度は PC-ALM が 54.83%、BP が 54.45%、その後のテスト精度は 59.05% と 59.02% だった（seed 0）。10 epoch 目は prequential 精度が 73.35% と 73.27%、テスト精度が 73.79% と 72.61% だった。同じ設定の別の実行では 10 epoch 目が 71.56% と 71.41% で、PC-ALM は BP に並ぶか、2 ポイントほど下にとどまる。1 epoch に実時間で約 750 秒かかり、BP は 2.8 秒。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も実行ごとにビット単位では一致しない。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w">            </span><span class="c1"># 3 epoch、RTX 4090 で約 40 分</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w"> </span>--epochs<span class="w"> </span><span class="m">10</span><span class="w">  </span><span class="c1"># 約 2 時間</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">period</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span> <span class="o">/</span> <span class="mi">4</span>  <span class="c1"># the period of every node of pc.Chain</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shown</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">steps</span> <span class="o">*</span> <span class="n">period</span>  <span class="c1"># how long the host shows each batch</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># The inertia of h carries the credit across the 11 nodes in fewer periods.</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">relaxer</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">pc</span><span class="o">.</span><span class="n">relax</span><span class="o">.</span><span class="n">HeavyBall</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">)</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">momentum</span> <span class="o">&gt;</span> <span class="mi">0</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="k">else</span> <span class="n">pc</span><span class="o">.</span><span class="n">relax</span><span class="o">.</span><span class="n">Euler</span><span class="p">()</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>  <span class="c1"># already on the device</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">)),</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="c1"># The dual as fast as h: a slower one needs even more periods to relax.</span>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">TimeConstants</span><span class="p">(</span><span class="n">h</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">),</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># A period of tau.h / 16, not the tau.h / 4 of pc.Chain: the blocks make the</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># relaxation stiff, and the explicit step of h is exact only while</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># (1 + |J|^2) * period / tau.h &lt; 2 for the Jacobian J of the next block.</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">period</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span> <span class="o">/</span> <span class="n">args</span><span class="o">.</span><span class="n">div</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">shown</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">steps</span> <span class="o">*</span> <span class="n">period</span>  <span class="c1"># how long the host shows each batch</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>  <span class="c1"># already on the device</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">)),</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="c1"># A fast dual, and a decay of r = h - mu: lam reaches the credit sooner,</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="c1"># at the same fixed point.</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">TimeConstants</span><span class="p">(</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        <span class="n">h</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_lam</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_r</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">tau_h</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="p">),</span>
 <a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    <span class="n">optimizer</span><span class="o">=</span><span class="n">adamw</span><span class="p">(</span><span class="n">shown</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">),</span>  <span class="c1"># learn once per batch</span>
-<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    <span class="n">relaxer</span><span class="o">=</span><span class="n">relaxer</span><span class="p">,</span>
-<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>
-<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>  <span class="c1"># every node computes on the GPU</span>
-<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="p">)</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.9</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># late in the showing, when lam has settled</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>    <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>    <span class="n">max_dt</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">period</span><span class="p">,</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>  <span class="c1"># every node computes on the GPU</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="p">)</span>
 </code></pre></div>
 <ul>
-<li><strong>残差ブロックごとのノード</strong>: ノードの内側では autograd がモジュール（ブロックのスキップ接続と活性化を含む）を微分し（BP）、ノードの間には PC-ALM のメッセージだけが流れる。ブロックが緩和をどれだけ硬くするかは<a href="#%E8%90%BD%E3%81%A8%E3%81%97%E7%A9%B4">落とし穴</a>の項に書いた</li>
-<li><strong>GPU で実時間</strong>: <code>device="cuda"</code> で、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（<a href="../threads-and-devices/#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9">デバイス</a>）。ノードの 1 回の更新は RTX 4090 で約 1.2 ms かかり、サンプルが 1 でも 128 でも変わらない（カーネルを起動する CPU が限界になる）ので、バッチを 128 にした。<code>tau.h</code> を 20 ms にすると周期は 5 ms になり、ワーカー 11 本ならどのノードも、更新の 99% が前の更新から 2 周期（<code>max_dt</code>）以内に来た。そのためタイマーは実時間のまま進める（<code>--time-scale</code> 1）。周期 3 ms・ワーカー 8 本では追いつかなかった</li>
-<li><strong>1 バッチに 64 周期と慣性</strong>: サンプルが出力まで届くのに 1 ノードあたり約 1 周期、credit が戻るのにも同じだけかかるので、11 ノードには 2 ノードのときよりずっと多くの周期が要る。慣性なしでは、64 周期だと 3 epoch 目が BP より 10 ポイントほど低く、128 周期が要った。<code>relaxer=pc.relax.HeavyBall(tau=tau.h / 4)</code>（<a href="#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>）にすると、64 周期で 3 epoch 目が 128 周期と同じ精度になり、実時間は半分で済む。<code>tau.h / 3</code> は 3 回の実行のうち 1 回で崩れ、32 周期ではノードが学習しなかった</li>
+<li><strong>残差ブロックごとのノード</strong>: ノードの内側では autograd がモジュール（ブロックのスキップ接続と活性化を含む）を微分し（BP）、ノードの間には PC-ALM のメッセージだけが流れる</li>
+<li><strong>周期は <code>tau.h / 16</code></strong>: ブロックが緩和を硬くするので、<code>pc.Chain</code> の既定の <code>tau.h / 4</code> では <code>h</code> の陽的な歩みが BP の credit に届かなかった（<a href="#%E8%90%BD%E3%81%A8%E3%81%97%E7%A9%B4">落とし穴</a>）。<code>tau.h / 16</code> では <code>tau.h / 64</code> と同じ credit に届いた。これより短くしても更新が増えるだけ</li>
+<li><strong>速い双対と <code>r</code> の減衰</strong>: 残る問題は、11 ノードを渡る credit が落ち着くまでの時間。<code>tau.lam = tau.h / 4</code> で <code>lam</code> が <code>r</code> に早く追いつき、<code>tau.r = tau.h / 3</code> でずれが減衰する。どちらも平衡点は変えない。10 epoch 学んだ重みで、最初のノードの <code>lam</code> と credit の cos は、<code>24 * tau.h</code> 緩和したあと、速い双対だけなら 0.84、両方なら 0.94 だった。<code>tau.r = tau.h</code> では、3 epoch 目の prequential 精度が減衰なしの 51.75% から 54.24% に上がった</li>
+<li><strong>1 バッチに <code>24 * tau.h</code></strong>（<code>S = 384</code> 周期）、学ぶのはその 0.9 の時点: <code>16 * tau.h</code>・学習 0.75・<code>tau.r = tau.h</code> でも最初の数 epoch は BP に並んだが、10 epoch 目の prequential 精度は 67.28% だった。ネットワークが学ぶにつれて緩和が遅くなるからである</li>
+<li><strong>GPU で実時間の 4 分の 1</strong>: <code>device="cuda"</code> で、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（<a href="../threads-and-devices/#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9">デバイス</a>）。ノードの 1 回の更新は RTX 4090 で約 1.2 ms かかり、サンプルが 1 でも 128 でも変わらない（カーネルを起動する CPU が限界になる）ので、バッチを 128 にした。ワーカー 11 本なら実時間 5 ms の周期に追いつく。周期はタイマーで 1.25 ms なので、タイマーを実時間の 4 分の 1 で進める（<code>--time-scale</code> 0.25）。最初のノードの更新の 99% が前の更新から 1.01 周期以内に来た</li>
 <li><strong>AdamW</strong>: <a href="#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a>のとおり、Adam の <code>lr</code> から作る。BP の基準も同じ <code>pc.optim.AdamW</code> をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが学ぶ時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は同じ勾配に PC-ALM とほぼ同じステップを踏む</li>
-<li><strong><code>tau.lam = tau.h</code></strong>: MNIST と同じ <code>tau.lam = 2 * tau.h</code> では credit の落ち着きが遅く、短く見せると PC-ALM が BP に遅れた</li>
 <li><strong>GroupNorm</strong>: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない</li>
 </ul>
 <h2 id="バッチ">バッチ<a class="headerlink" href="#バッチ" title="Permanent link">&para;</a></h2>
@@ -2211,12 +2219,11 @@
 <p><code>max_dt</code> ではこれを防げない。<code>max_dt</code> は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。</p>
 </div>
 <div class="admonition warning">
-<p class="admonition-title">ヤコビアンの大きいモジュールでは緩和が正確にならない</p>
-<p>ノードは、次のノードが送り返す値で活動 <code>h</code> を緩和する。この値は次のノードのモジュールのヤコビアン <code>J</code> を通る。<code>pc.Chain</code> の周期 <code>tau.h / 4</code> でこれが安定なのは、<code>J</code> の最大特異値がおよそ 2.6 より小さい間だけである。<code>h</code> の緩和の速さは最大で <code>(1 + |J|^2) / tau.h</code> になり、これに 1 ステップの <code>tau.h / 4</code> を掛けた値を 2 未満に保たなければならない。これは、どの更新も遅れないときの境界である。遅れた更新は <code>max_dt</code>（既定は 2 周期）までの長い 1 歩を進め、ノードは次のノードが 1 周期前に送った値を読むこともある。このとき、線形の鎖では境界が 1.2〜1.8 程度まで下がった。次のノードが <code>Output</code> なら、損失の曲率（交差エントロピーなら 1/2 以下）が <code>|J|^2</code> に掛かり、境界は緩む。</p>
-<p>ResNet のブロックはこの範囲を超える。<code>examples/cifar10/</code> では、BP で数 epoch 学習した後のブロックの最大特異値が 2〜9 で、3 つのブロックのステージでは 5〜12 になった。範囲を超えると、<code>lam</code> は BP の credit に落ち着かない。BP が 1 epoch で学習した重みでは、ブロックごとのノードの <code>lam</code> が際限なく大きくなった。PC-ALM が 3 epoch で学習した重みでは、どれだけ緩和しても <code>lam</code> と credit の cos が、最初の 5 ノードで 0.5〜0.7 にとどまった（最後の 4 ノードは 0.8 以上）。それでも学習できるのは出力に近いノードが正確だからだが、BP には数ポイント届かない。</p>
-<p>効いたものは 3 つある。1 つ目は、1 バッチを見せる周期を増やすことである。credit がすべてのノードを渡らなければならないからである。2 つ目は、<code>h</code> に慣性（<code>pc.relax.HeavyBall</code>）を持たせることで、credit が渡るのに要る周期が半分になる。ただし長く学んだときの精度までは上がらない。3 つ目は、ネットワークを少数の大きなノードに切ることで、最も効く。切れ目ごとに次のノードのヤコビアンが小さいところを選ぶ。最後のステージと head の前で切る 2 ノードは、メッセージを GPU に置いたまま渡す実行で、10 epoch 後に BP と並んだ。</p>
-<p>効かなかったものが 2 つある。1 つ目は、新しいサンプルで行ごとの <code>lam</code> とずれを捨てることで、学習が進まなかった（prequential 精度が 27% のまま）。2 つ目は、次のノードが硬いところで、ノードの刻みを縮める方法である（べき乗法で最大の曲率を見積もった）。固定した重みでは <code>lam</code> が正しくなったが、学習は遅くなった。刻みを縮めたサンプルは前のバッチの <code>lam</code> を長く引きずり、学習中の credit が間違っていたからである。刻みが縮むほど、600 バッチ後のテスト精度は 46% から 20% に下がった。</p>
-<p>ノードを 1 つずつ組み、<code>period</code> と <code>max_dt</code> を <code>tau.h / 4</code> より短くしても範囲は広がるが、更新の回数が増える。こちらは測っていない。</p>
+<p class="admonition-title">ヤコビアンの大きいモジュールには短い周期が要る</p>
+<p>ノードは、次のノードが送り返す値で活動 <code>h</code> を緩和する。この値は次のノードのモジュールのヤコビアン <code>J</code> を通る。<code>h</code> の陽的な歩みが安定なのは <code>(1 + |J|^2) * period / tau.h &lt; 2</code> の間だけで、<code>|J|</code> は <code>J</code> の最大特異値。<code>pc.Chain</code> の周期 <code>tau.h / 4</code> なら、<code>|J|</code> がおよそ 2.6 未満の間になる。これはどの更新も遅れないときの境界である。遅れた更新は <code>max_dt</code> までの長い 1 歩を進め、ノードは次のノードが 1 周期前に送った値を読むこともある（線形の鎖では境界が 1.2〜1.8 程度まで下がった）。次のノードが <code>Output</code> なら、損失の曲率（交差エントロピーなら 1/2 以下）が <code>|J|^2</code> に掛かり、境界は緩む。</p>
+<p>ResNet のブロックはこの範囲を超える。<code>examples/cifar10/</code> では、BP と PC-ALM のどちらで学んでも、数 epoch 後のブロックの最大特異値が 2〜9 になった。範囲を超えると、<code>lam</code> は BP の credit に落ち着かない。BP が 3 epoch で学んだ重みでは、<code>lam</code> と credit の cos は周期 <code>tau.h / 4</code> だと 0.06〜0.3 にとどまり、<code>tau.h / 16</code> だと <code>tau.h / 64</code> と同じ 0.95〜0.99 に届いた。<code>tau.h / 4</code> で学ぶ PC-ALM は、ブロックをほぼ恒等写像のままにして（最大特異値 1.0〜1.7、<code>tau.h / 16</code> では 2〜6）、学ぶ量も少なかった。</p>
+<p><code>pc.Chain</code> に短い <code>period</code> を渡し、<code>max_dt</code> は 2 周期程度にする（既定の <code>tau.max_dt</code> は <code>tau.h / 16</code> の 8 周期になる）。手元の重みで確かめるには、重みを固定して 1 バッチを緩和させ、autograd の勾配と <code>lam</code> を比べる。半分の周期と同じ <code>lam</code> になる周期なら十分に短い。残りは多くのノードを渡る credit が落ち着くまでの時間で、速い <code>tau.lam</code> と <code>r</code> の減衰（<code>tau.r</code>）で縮む（<a href="#cifar-10">CIFAR-10</a>）。</p>
+<p>効かなかったものが 2 つある。1 つ目は残差の枝を小さく始めること（枝の 0.1 倍や 0.25 倍）。AdamW の下で GroupNorm のスケールが育ち、最大特異値は下がらなかった。BP も悪くなった（10 epoch 目のテスト精度が 72.6% から 68.5〜69.2% に下がった）。2 つ目は次のノードが硬いところで刻みを縮めること（最大の曲率をべき乗法で見積もった）。固定した重みでは <code>lam</code> が正しくなったが、学習は遅くなった。</p>
 </div>
 <h2 id="自分のノードを書く">自分のノードを書く<a class="headerlink" href="#自分のノードを書く" title="Permanent link">&para;</a></h2>
 <p><code>mujou.pc.functional</code> にノードを構成する計算がある。<code>vjp</code> と <code>loss_vjp</code>（ノードのエネルギーの勾配）、<code>relax_</code>（<code>h</code> と <code>lam</code> の 1 ステップ）。重みは optimizer が、<code>h</code> は relaxer が動かす。複数の入力を持つノードのように <code>pc.Layer</code> で書けないノードは、これらで書く。ここに出てくる名前（<code>mu</code>・<code>lam</code>・<code>g_in</code>・<code>jumps</code>・<code>Tick</code>）は <a href="../pc-concepts/">mujou.pc の仕組み</a>で説明している。</p>

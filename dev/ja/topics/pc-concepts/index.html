@@ -2417,7 +2417,7 @@
 <p class="admonition-title">要点</p>
 <p>速さはすべて実行のタイマーの秒で決める。各ノードは実際に経った <code>dt</code> だけ式を進めるので、周期の違うノードも時間あたり同じ速さで変化する。</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=)</code> が活動の 2 つの時定数を持つ。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
+<p><code>pc.TimeConstants(h=, lam=, r=)</code> が活動の時定数を持つ。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
 <table>
 <thead>
 <tr>
@@ -2440,9 +2440,15 @@
 <td><code>dt / tau.lam</code></td>
 <td><code>lam</code> は 0 のまま。<code>r</code> が 0 に戻らず、平衡点で BP と一致しない（ただの predictive coding）</td>
 </tr>
+<tr>
+<td><code>tau.r</code></td>
+<td>ずれ <code>r</code> が減衰する速さ</td>
+<td>さらに <code>r</code> の <code>dt / tau.r</code></td>
+<td>既定。減衰しない。有限なら <code>h</code> が <code>mu</code> に引き寄せられる。平衡点は変わらない</td>
+</tr>
 </tbody>
 </table>
-<p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / 4</code>）はノードの更新の間隔で、<code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
+<p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / 4</code>）はノードの更新の間隔で、<code>period=</code> を渡さないときの <code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>。<code>r</code> の減衰 <code>tau.r</code> があれば短くなる）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
 <p>optimizer の <code>tau</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
 <details class="question">
 <summary>なぜ dt を max_dt で打ち切るの？</summary>
