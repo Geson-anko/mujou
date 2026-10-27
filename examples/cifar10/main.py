@@ -7,7 +7,7 @@ and ``output`` (the head and the cross entropy) relax towards the target and
 update their weights from each other's messages only. Inside each node,
 autograd differentiates its module, as in plain PyTorch; ``resnet.py`` says how
 the network is cut. The same network, with the same initial weights, the same
-batches in the same order and the same ``pc.AdamW``, is then trained by BP on
+batches in the same order and the same ``pc.optim.AdamW``, is then trained by BP on
 the same GPU.
 
 The host shows each batch, shuffled and augmented (random crops and flips), for
@@ -27,8 +27,8 @@ the time) with 11 workers. On a machine with fewer cores or a slower GPU, raise
 
 A batch is shown for ``S = 64`` periods, long for 11 nodes: the sample takes
 about one period per node to reach the output and the credit about one per node
-to come back. ``pc.HeavyBall`` (``--momentum`` is its ``tau`` in ``tau.h``; 0 is the
-plain ``pc.Euler``) gives ``h`` the inertia of a heavy ball, which carries the
+to come back. ``pc.relax.HeavyBall`` (``--momentum`` is its ``tau`` in ``tau.h``; 0 is the
+plain ``pc.relax.Euler``) gives ``h`` the inertia of a heavy ball, which carries the
 credit across the chain in fewer periods: without it, 64 periods left the 3rd epoch about 10 points below BP and
 128 were needed (``--steps 128 --momentum 0``), twice the real time. With the
 defaults, in the 3rd epoch the prequential accuracy was 49.48% (seed 0) against
@@ -77,10 +77,10 @@ def generator(seed: int) -> Callable[[int], torch.Generator]:
     return lambda epoch: torch.Generator().manual_seed(seed + epoch)
 
 
-def adamw(shown: float, lr: float) -> pc.AdamW:
+def adamw(shown: float, lr: float) -> pc.optim.AdamW:
     """The ``torch.optim.AdamW(lr=lr)`` (``betas`` 0.9 and 0.999) of nodes that
     learn once per batch shown for ``shown`` seconds."""
-    return pc.AdamW(
+    return pc.optim.AdamW(
         tau=shown / lr,
         tau_m=-shown / math.log(0.9),
         tau_v=-shown / math.log(0.999),
@@ -99,16 +99,16 @@ def train_pc(
     shown = args.steps * period  # how long the host shows each batch
     # The inertia of h carries the credit across the 11 nodes in fewer periods.
     relaxer = (
-        pc.HeavyBall(tau=args.momentum * args.tau_h)
+        pc.relax.HeavyBall(tau=args.momentum * args.tau_h)
         if args.momentum > 0
-        else pc.Euler()
+        else pc.relax.Euler()
     )
     net = pc.Chain(
         *modules,  # already on the device
         x=TensorSpec((args.batch, 3, 32, 32)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
-        loss=pc.CrossEntropyLoss(args.batch),
+        loss=pc.loss.CrossEntropyLoss(args.batch),
         # The dual as fast as h: a slower one needs even more periods to relax.
         tau=pc.TimeConstants(h=args.tau_h, lam=args.tau_h),
         optimizer=adamw(shown, args.lr),  # learn once per batch
@@ -127,7 +127,7 @@ def train_pc(
             for x, y, mask in batches(
                 data.train_x, data.train_y, args.batch, shuffle(epoch)
             ):
-                p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=shown)
+                p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=shown)
                 if not torch.isfinite(p["y_hat"]).all():
                     raise SystemExit("PC-ALM diverged: lower --time-scale")
                 right += correct(p["y_hat"], y, mask)  # before learning from it
@@ -138,7 +138,10 @@ def train_pc(
             for x, y, mask in batches(data.test_x, data.test_y, args.batch):
                 unlabeled = torch.zeros_like(mask)  # keep mask to score with
                 p = pc.show(
-                    run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=shown
+                    run,
+                    net,
+                    pc.msg.Sample(x=x, y=y, mask=unlabeled),
+                    seconds=shown,
                 )
                 test_right += correct(p["y_hat"], y, mask)
                 test_total += int(mask.sum())
@@ -161,7 +164,7 @@ def main() -> None:
         "--momentum",
         type=float,
         default=0.25,
-        help="the tau of pc.HeavyBall in tau.h; 0 is pc.Euler",
+        help="the tau of pc.relax.HeavyBall in tau.h; 0 is pc.relax.Euler",
     )
     parser.add_argument("--time-scale", type=float, default=1.0)
     parser.add_argument("--workers", type=int, default=11)

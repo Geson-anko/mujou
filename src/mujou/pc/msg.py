@@ -9,6 +9,13 @@ from mujou import DictSpec, IntSpec, TensorSpec, TimestampSpec
 from mujou.time import Timestamp
 from mujou.types import Size
 
+__all__ = [
+    "Sample",
+    "Activity",
+    "Prediction",
+    "activity_spec",
+]
+
 
 class Activity(TypedDict):
     """The activity a node sends to the next nodes, with the target of each of
@@ -82,8 +89,8 @@ def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Ac
 
     Example::
 
-        act = pc.activity_spec(TensorSpec((256,)), TensorSpec((), torch.int64))
-        act = pc.activity_spec(
+        act = pc.msg.activity_spec(TensorSpec((256,)), TensorSpec((), torch.int64))
+        act = pc.msg.activity_spec(
             TensorSpec((64, 256)), TensorSpec((64,), torch.int64), batch=64
         )
 

@@ -15,8 +15,8 @@ What a rule across nodes needs, and how this program does it:
   write it came from, so ``output`` pairs each prediction with its own target,
   and ``hidden`` each error with its own input.
 - Telling what is new: each node learns once per sample, a while after its write,
-  as a ``pc.LearnClock`` tells it, by the time since it last learned (a
-  ``pc.SGD`` bound to its weights takes the step); ``hidden`` learns only from
+  as a ``pc.clock.LearnClock`` tells it, by the time since it last learned (a
+  ``pc.optim.SGD`` bound to its weights takes the step); ``hidden`` learns only from
   the error of the sample it holds.
 
 The host shows each batch for 20 ms of the run's timer and prints the loss of
@@ -37,7 +37,7 @@ from mujou.time import Timestamp
 BATCH, N_IN, N_HIDDEN, N_OUT = 32, 8, 64, 2
 SHOWN = 0.02  # seconds of the run's timer each batch is shown
 LEARN = 0.75 * SHOWN  # a node learns this long after each write
-OPTIMIZER = pc.SGD(tau=SHOWN / 0.2)  # the weights move at a rate of 0.2 per batch
+OPTIMIZER = pc.optim.SGD(tau=SHOWN / 0.2)  # the weights move at a rate of 0.2 per batch
 PERIOD = 0.002
 
 
@@ -75,7 +75,7 @@ class Hidden(Node):
         self.w1 = torch.randn(N_HIDDEN, N_IN, generator=g) / N_IN**0.5
         self.b = torch.randn(N_OUT, N_HIDDEN, generator=g) / N_OUT**0.5  # fixed
         self.optimizer = OPTIMIZER.bind([self.w1])
-        self.clock = pc.LearnClock(
+        self.clock = pc.clock.LearnClock(
             period=PERIOD, learn_interval=LEARN, max_dt=2 * PERIOD
         )
         self.prev = Port(recv=SAMPLE)  # the host writes it
@@ -108,7 +108,7 @@ class Output(Node):
         super().__init__(period=PERIOD, seed=2)
         self.w2 = torch.randn(N_OUT, N_HIDDEN, generator=self.generator) / N_HIDDEN
         self.optimizer = OPTIMIZER.bind([self.w2])
-        self.clock = pc.LearnClock(
+        self.clock = pc.clock.LearnClock(
             period=PERIOD, learn_interval=LEARN, max_dt=2 * PERIOD
         )
         self.prev = Port(send=ERROR, recv=ACTIVITY)  # two-way

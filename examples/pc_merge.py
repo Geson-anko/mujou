@@ -1,7 +1,7 @@
 """A node of PC-ALM of your own: ``Merge``, which has two inputs.
 
 ``pc.Layer`` reads one activity, so a node that joins two paths is written with
-``pc.functional`` and ``pc.LearnClock``. Two towers (``pc.Layer``) read one
+``pc.functional`` and ``pc.clock.LearnClock``. Two towers (``pc.Layer``) read one
 ``pc.Input``, and ``Merge`` predicts from both for a ``pc.Output``. ``Merge``
 learns in every update, so it needs none of the handling of the jumps of its
 weights that a node learning at intervals does. The network learns
@@ -22,7 +22,7 @@ from mujou import DictSpec, MultiPort, Network, Node, Port, TensorSpec
 B = 32  # the batch
 SHOWN = 0.032  # seconds of the run's timer each batch is shown
 TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
-OPTIMIZER = pc.SGD(tau=SHOWN / 0.3)  # a rate of 0.3 per batch
+OPTIMIZER = pc.optim.SGD(tau=SHOWN / 0.3)  # a rate of 0.3 per batch
 LEARN = 0.75 * SHOWN  # the towers and the output learn once per batch
 
 
@@ -31,12 +31,17 @@ class Merge(Node):
     """``mu = module(cat(h_a, h_b))``: a node of PC-ALM with two inputs."""
 
     def __init__(
-        self, module: nn.Module, a: DictSpec[pc.Activity], b: DictSpec[pc.Activity]
+        self,
+        module: nn.Module,
+        a: DictSpec[pc.msg.Activity],
+        b: DictSpec[pc.msg.Activity],
     ) -> None:
         super().__init__(period=TAU.period)
         self.module = module
         self.optimizer = OPTIMIZER.bind(self.module.parameters())
-        self.clock = pc.LearnClock.of(TAU, period=self.period, learn_interval=None)
+        self.clock = pc.clock.LearnClock.of(
+            TAU, period=self.period, learn_interval=None
+        )
         h_a, h_b = a.field("h", TensorSpec), b.field("h", TensorSpec)
         self.sizes = [h_a.shape[-1], h_b.shape[-1]]
         h = TensorSpec((B, module(torch.zeros(B, sum(self.sizes))).shape[-1]))
@@ -44,7 +49,7 @@ class Merge(Node):
         self.jumps, self.seen = 0, [0, 0]  # the jumps it sent, and read from a, b
         self.register_state("jumps")
         self.register_state("seen")
-        self.act_spec = pc.activity_spec(h, a.field("y", TensorSpec), B)
+        self.act_spec = pc.msg.activity_spec(h, a.field("y", TensorSpec), B)
         self.a = Port(send=h_a, recv=a)  # sends back g_in of h_a
         self.b = Port(send=h_b, recv=b)
         self.next = MultiPort(send=self.act_spec, recv=h)
@@ -106,7 +111,7 @@ class TwoTowers(Network, pc.Shown):
         self.out = pc.Output(
             nn.Linear(64, 1),
             act_spec=self.merge.act_spec,
-            loss=pc.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             tau=TAU,
             optimizer=OPTIMIZER,
             learn_interval=LEARN,
@@ -132,7 +137,7 @@ if __name__ == "__main__":
         for i in range(300):
             x = 2 * torch.rand(B, 2, generator=g) - 1
             y = torch.sin(2 * x[:, :1]) * torch.cos(x[:, 1:])
-            p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=SHOWN)
+            p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=SHOWN)
             losses.append(nn.functional.mse_loss(p["y_hat"], y).item())
             if (i + 1) % 50 == 0:
                 print(f"batch {i + 1}: loss {sum(losses[-50:]) / 50:.4f}")

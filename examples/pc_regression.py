@@ -26,7 +26,7 @@ SHOWN = 0.032  # seconds of the run's timer each batch is shown
 # and the weights learn once per batch, by SGD at the rate
 # SHOWN / optimizer.tau = 0.3.
 tau = pc.TimeConstants(h=4e-3, lam=8e-3)
-optimizer = pc.SGD(tau=SHOWN / 0.3)
+optimizer = pc.optim.SGD(tau=SHOWN / 0.3)
 torch.manual_seed(0)  # the initial weights, before the run
 net = pc.Chain(
     nn.Sequential(nn.Linear(2, 64), nn.Tanh()),
@@ -35,7 +35,7 @@ net = pc.Chain(
     x=TensorSpec((B, 2)),
     y=TensorSpec((B, 1)),
     batch=B,
-    loss=pc.MSELoss(B),  # the loss of each sample, (B,)
+    loss=pc.loss.MSELoss(B),  # the loss of each sample, (B,)
     tau=tau,
     optimizer=optimizer,
     learn_interval=0.75 * SHOWN,  # learn once, 3/4 of the way through each batch
@@ -51,7 +51,7 @@ with mujou.run(net) as run:
     for i in range(300):
         x = 2 * torch.rand(B, 2, generator=g) - 1
         y = torch.sin(2 * x[:, :1]) * torch.cos(x[:, 1:])
-        p = pc.show(run, net, pc.Sample(x=x, y=y, mask=every), seconds=SHOWN)
+        p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=every), seconds=SHOWN)
         losses.append(nn.functional.mse_loss(p["y_hat"], y).item())  # before learning
         if i == 0 or (i + 1) % 50 == 0:
             recent = losses[-50:]

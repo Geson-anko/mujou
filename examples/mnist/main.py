@@ -83,13 +83,13 @@ def train_pc(
     # The learning rate of one batch is shown / optimizer.tau: the nodes learn
     # once per batch, for the time since they last learned.
     tau = pc.TimeConstants(h=args.tau_h, lam=2 * args.tau_h)
-    optimizer = pc.SGD(tau=shown / args.lr)
+    optimizer = pc.optim.SGD(tau=shown / args.lr)
     net = pc.Chain(
         *modules,
         x=TensorSpec((args.batch, 784)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
-        loss=pc.CrossEntropyLoss(args.batch),
+        loss=pc.loss.CrossEntropyLoss(args.batch),
         tau=tau,
         optimizer=optimizer,
         learn_interval=0.75 * shown,  # learn once, 3/4 of the way through each batch
@@ -111,7 +111,7 @@ def train_pc(
             for i, (x, y, mask) in enumerate(
                 batches(data.train_x, data.train_y, args.batch, shuffle(epoch))
             ):
-                p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=shown)
+                p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=shown)
                 if not torch.isfinite(p["y_hat"]).all():
                     raise SystemExit("PC-ALM diverged: lower --time-scale")
                 right += correct(p["y_hat"], y, mask)  # before learning from it
@@ -124,7 +124,10 @@ def train_pc(
             for x, y, mask in batches(data.test_x, data.test_y, args.batch):
                 unlabeled = torch.zeros_like(mask)  # keep mask to score with
                 p = pc.show(
-                    run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=shown
+                    run,
+                    net,
+                    pc.msg.Sample(x=x, y=y, mask=unlabeled),
+                    seconds=shown,
                 )
                 test_right += correct(p["y_hat"], y, mask)
                 test_total += int(mask.sum())

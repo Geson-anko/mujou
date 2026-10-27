@@ -12,14 +12,19 @@ import torch
 from mujou.pc.functional import cross_entropy, mse
 from mujou.types import Size
 
+__all__ = [
+    "MSELoss",
+    "CrossEntropyLoss",
+]
+
 
 class MSELoss:
     """The mean squared error of each sample: ``functional.mse`` with ``batch``.
 
     Example::
 
-        loss = pc.MSELoss()  # one sample: y_hat (out,) -> ()
-        loss = pc.MSELoss(64)  # y_hat (64, out) -> (64,)
+        loss = pc.loss.MSELoss()  # one sample: y_hat (out,) -> ()
+        loss = pc.loss.MSELoss(64)  # y_hat (64, out) -> (64,)
 
     Args:
         batch: The batch that the shapes start with; ``()`` for one sample.
@@ -38,8 +43,8 @@ class CrossEntropyLoss:
 
     Example::
 
-        loss = pc.CrossEntropyLoss()  # one sample: y_hat (C,), y () -> ()
-        loss = pc.CrossEntropyLoss(64)  # y_hat (64, C), y (64,) -> (64,)
+        loss = pc.loss.CrossEntropyLoss()  # one sample: y_hat (C,), y () -> ()
+        loss = pc.loss.CrossEntropyLoss(64)  # y_hat (64, C), y (64,) -> (64,)
 
     Args:
         batch: The batch that the shapes start with; ``()`` for one sample.
