@@ -19,32 +19,28 @@ so that nothing learns from them) and the real time.
 The messages between the nodes stay on the GPU: a node on CUDA sends to a node
 on CUDA from device to device. An update of a node takes about 1.2 ms on an
 RTX 4090, whatever the batch (the CPU launching the kernels is the limit, so
-the batch is 128). The run's time is the real time (``--time-scale`` 1): with
-``tau.h`` 20 ms the period is 5 ms, and 99% of the updates of every node came
-within 2 periods of the one before (``max_dt`` is 2, beyond which a node drops
-the time) with 11 workers. On a machine with fewer cores or a slower GPU, raise
-``--tau-h`` or lower ``--time-scale``.
+the batch is 128), and with 11 workers the nodes keep up with a period of 5 ms
+of real time.
 
-A batch is shown for ``S = 64`` periods, long for 11 nodes: the sample takes
-about one period per node to reach the output and the credit about one per node
-to come back. ``pc.HeavyBall`` (``--momentum`` is its ``tau`` in ``tau.h``; 0 is the
-plain ``pc.Euler``) gives ``h`` the inertia of a heavy ball, which carries the
-credit across the chain in fewer periods: without it, 64 periods left the 3rd epoch about 10 points below BP and
-128 were needed (``--steps 128 --momentum 0``), twice the real time. With the
-defaults, in the 3rd epoch the prequential accuracy was 49.48% (seed 0) against
-54.45% for BP, and the test accuracy 48.71% against 59.02%; in the 10th, 62.77%
-against 73.27% and 62.89% against 72.61%. Without the momentum and with 128
-periods, the 10th epoch was 68.73% and 68.95%, so the momentum trades some
-accuracy in a long run for half the time. A momentum of 0.8 per update diverged
-and with 32 periods the nodes did not learn. The blocks make the relaxation stiff,
-so it finds the credit less exactly than BP does (``resnet.py``). The test
-accuracy moves by a few points from epoch to epoch (the learning rate does not
-decay), for both, and the GPU does not compute bit for bit the same in every
-run.
+The period is ``tau.h / 16``, a quarter of that of ``pc.Chain``, so the timer
+goes at a quarter of the real time (``--time-scale`` 0.25): with ``tau.h`` 20
+ms the period is 1.25 ms of the timer and 5 ms of real time. The blocks make
+the relaxation stiff (``resnet.py``), and with ``tau.h / 4`` its explicit
+steps did not find the credit of BP. With ``tau.h / 16`` they found it as with
+``tau.h / 64``, and what remains is how long the credit takes to settle: the
+dual is fast (``tau.lam = tau.h / 4``), the deviation ``r = h - mu`` decays
+(``tau.r = tau.h / 3``), each batch is shown for ``24 * tau.h`` (``S = 384``
+periods) and the nodes learn at 0.9 of it. With the defaults, in the 3rd epoch
+the prequential accuracy was 54.83% (seed 0) against 54.45% for BP, and
+the test accuracy 59.05% against 59.02%; in the 10th, 73.35% against 73.27%
+and 73.79% against 72.61% (another run of the same settings reached 71.56% and
+71.41%). The test accuracy
+moves by a few points from epoch to epoch (the learning rate does not decay),
+for both, and the GPU does not compute bit for bit the same in every run.
 
 Needs a CUDA GPU, and the network once to download CIFAR-10 (about 160 MB)
-into ``--data``. The defaults (3 epochs) take about 8 minutes, 10 epochs about
-25. Run it from the repository::
+into ``--data``. The defaults (3 epochs) take about 40 minutes, 10 epochs
+about 2 hours. Run it from the repository::
 
     uv run python examples/cifar10/main.py
     uv run python examples/cifar10/main.py --epochs 10
@@ -95,29 +91,31 @@ def train_pc(
 ) -> list[Epoch]:
     """Train the modules as PC-ALM nodes in a run, and measure each epoch."""
     # --8<-- [start:chain]
-    period = args.tau_h / 4  # the period of every node of pc.Chain
+    # A period of tau.h / 16, not the tau.h / 4 of pc.Chain: the blocks make the
+    # relaxation stiff, and the explicit step of h is exact only while
+    # (1 + |J|^2) * period / tau.h < 2 for the Jacobian J of the next block.
+    period = args.tau_h / args.div
     shown = args.steps * period  # how long the host shows each batch
-    # The inertia of h carries the credit across the 11 nodes in fewer periods.
-    relaxer = (
-        pc.HeavyBall(tau=args.momentum * args.tau_h)
-        if args.momentum > 0
-        else pc.Euler()
-    )
     net = pc.Chain(
         *modules,  # already on the device
         x=TensorSpec((args.batch, 3, 32, 32)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
         loss=pc.CrossEntropyLoss(args.batch),
-        # The dual as fast as h: a slower one needs even more periods to relax.
-        tau=pc.TimeConstants(h=args.tau_h, lam=args.tau_h),
+        # A fast dual, and a decay of r = h - mu: lam reaches the credit sooner,
+        # at the same fixed point.
+        tau=pc.TimeConstants(
+            h=args.tau_h, lam=args.tau_lam * args.tau_h, r=args.tau_r * args.tau_h
+        ),
         optimizer=adamw(shown, args.lr),  # learn once per batch
-        relaxer=relaxer,
-        learn_interval=0.75 * shown,
+        learn_interval=0.9 * shown,  # late in the showing, when lam has settled
+        period=period,
+        max_dt=2 * period,
         device=args.device,  # every node computes on the GPU
     )
     # --8<-- [end:chain]
     timer = mujou.time.Timer(time_scale=args.time_scale)
+    test_seconds = 32 * period  # enough to reach the output; nothing learns
 
     results: list[Epoch] = []
     with mujou.run(net, timer=timer, workers=args.workers) as run:
@@ -138,7 +136,7 @@ def train_pc(
             for x, y, mask in batches(data.test_x, data.test_y, args.batch):
                 unlabeled = torch.zeros_like(mask)  # keep mask to score with
                 p = pc.show(
-                    run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=shown
+                    run, net, pc.Sample(x=x, y=y, mask=unlabeled), seconds=test_seconds
                 )
                 test_right += correct(p["y_hat"], y, mask)
                 test_total += int(mask.sum())
@@ -154,16 +152,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="CIFAR-10 with PC-ALM nodes and BP.")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch", type=int, default=128)
-    parser.add_argument("--steps", type=int, default=64, help="periods per batch (S)")
+    parser.add_argument("--steps", type=int, default=384, help="periods per batch (S)")
     parser.add_argument("--tau-h", type=float, default=20e-3, help="seconds")
-    parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
     parser.add_argument(
-        "--momentum",
-        type=float,
-        default=0.25,
-        help="the tau of pc.HeavyBall in tau.h; 0 is pc.Euler",
+        "--div", type=float, default=16, help="the period is tau.h / div"
     )
-    parser.add_argument("--time-scale", type=float, default=1.0)
+    parser.add_argument("--tau-lam", type=float, default=0.25, help="tau.lam in tau.h")
+    parser.add_argument("--tau-r", type=float, default=1 / 3, help="tau.r in tau.h")
+    parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
+    parser.add_argument("--time-scale", type=float, default=0.25)
     parser.add_argument("--workers", type=int, default=11)
     parser.add_argument("--device", default="cuda", help="a CUDA device")
     parser.add_argument("--seed", type=int, default=0)
@@ -189,7 +186,7 @@ def main() -> None:
         f"GIL {'on' if gil else 'off'}"
     )
     pc_results = train_pc(modules, data, shuffle, args)
-    shown = args.steps * args.tau_h / 4
+    shown = args.steps * args.tau_h / args.div
     bp_results = bp.train(
         model,
         data,

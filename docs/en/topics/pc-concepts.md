@@ -197,14 +197,15 @@ flowchart LR
 
     All speeds are set in seconds of the run's timer. Each node moves its equations by the `dt` that actually passed, so nodes with different periods change at the same speed per second.
 
-`pc.TimeConstants(h=, lam=)` holds the two time constants of the activities. The time constant of the weights belongs to the optimizer ([section 6](#6-optimizers)).
+`pc.TimeConstants(h=, lam=, r=)` holds the time constants of the activities. The time constant of the weights belongs to the optimizer ([section 6](#6-optimizers)).
 
 | Value     | The speed of                       | Share moved in one update | With `math.inf`                                                                                          |
 | --------- | ---------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `tau.h`   | The relaxation of the activity `h` | `dt / tau.h`              | Not allowed (finite and > 0)                                                                             |
 | `tau.lam` | How fast `lam` sums up `r`         | `dt / tau.lam`            | `lam` stays 0. `r` does not return to 0, and the fixed point does not match BP (plain predictive coding) |
+| `tau.r`   | How fast the deviation `r` decays  | `dt / tau.r` of `r` more  | The default: no decay. With a finite `tau.r`, `h` is pulled towards `mu`; the fixed point stays          |
 
-Two values take their defaults from the time constants. `tau.period` (`tau.h / 4`) is the interval between a node's updates, the period of every node of a `Chain`. `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
+Two values take their defaults from the time constants. `tau.period` (`tau.h / 4`) is the interval between a node's updates, the period of every node of a `Chain` unless it is given `period=`. `tau.max_dt` (`min(tau.h / 2, 3 * tau.lam)`, shorter with a decay of `r`, `tau.r`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
 
 Make the `tau` of the optimizer much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
 
