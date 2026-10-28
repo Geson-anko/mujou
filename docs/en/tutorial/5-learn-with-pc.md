@@ -10,9 +10,9 @@ uv run python examples/pc_regression.py
 
 ```text
 batch   1: loss 0.4157 (the mean of the last 1)
-batch  50: loss 0.0476 (the mean of the last 50)
+batch  50: loss 0.0489 (the mean of the last 50)
 ...
-batch 300: loss 0.0059 (the mean of the last 50)
+batch 300: loss 0.0080 (the mean of the last 50)
 ```
 
 ## The chain
@@ -41,7 +41,7 @@ Inside a node, the module is differentiated by autograd, as in BP. Initialize th
 
 - `mask` says which samples have a target. A sample whose `mask` is False adds nothing to the loss: with every `mask` False, no weight moves (the activities still do), which is how to evaluate the same running chain. There is no inference mode to switch to
 - A `pc.msg.Prediction` holds `y_hat` with the `y`, `mask` and `time` of the sample it was made from, so a prediction always pairs with its own target
-- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module, its clock and its optimizer, and what it keeps to move `h` when its prediction jumps (`mu`, `jump`, `jumped`, `jumps` and `seen_jumps`, explained in [How mujou.pc Works](../topics/pc-concepts.md#jumps))
+- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: the deviation `r` of its activity from its prediction, its dual `lam` (the credit of backpropagation at equilibrium), its module, its clock, its optimizer and its relaxer. The activity `h = mu + r` it sends is in the state of its port `next` ([How mujou.pc Works](../topics/pc-concepts.md#what-a-node-holds))
 
 ## Next
 

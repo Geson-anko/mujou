@@ -10,9 +10,9 @@ uv run python examples/pc_regression.py
 
 ```text
 batch   1: loss 0.4157 (the mean of the last 1)
-batch  50: loss 0.0476 (the mean of the last 50)
+batch  50: loss 0.0489 (the mean of the last 50)
 ...
-batch 300: loss 0.0059 (the mean of the last 50)
+batch 300: loss 0.0080 (the mean of the last 50)
 ```
 
 ## 鎖
@@ -41,7 +41,7 @@ batch 300: loss 0.0059 (the mean of the last 50)
 
 - `mask` はどのサンプルに目標があるかを表す。`mask` が False のサンプルは損失に何も足さない。`mask` がすべて False なら重みは動かない（活動は動く）。走っている同じ鎖を評価するにはこれを使う。切り替える推論モードは無い
 - `pc.msg.Prediction` は `y_hat` を、その元になったサンプルの `y`・`mask`・`time` と組にして持つ。予測はいつも自分の目標と対になる
-- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動 `h`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロック、optimizer と、予測が跳んだときに `h` を動かすための値（`mu`・`jump`・`jumped`・`jumps`・`seen_jumps`。説明は [mujou.pc の仕組み](../topics/pc-concepts.md#jumps)）を持つ
+- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動の予測からのずれ `r`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロック、optimizer、relaxer を持つ。送る活動 `h = mu + r` は Port `next` の状態にある（[mujou.pc の仕組み](../topics/pc-concepts.md#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E6%8C%81%E3%81%A4%E9%87%8F)）
 
 ## 次へ
 
