@@ -8,7 +8,7 @@
     - ノードの間を流れるメッセージと Port の向き
     - `pc.Layer` が 1 回の `on_update(dt)` で行うこと
     - `pc.clock.LearnClock` が返す `Tick` と `pc.TimeConstants` の意味
-    - `pc.optim.SGD` と `pc.optim.AdamW` が重みを、`pc.relax.Euler` と `pc.relax.HeavyBall` がずれ `r` を時間で動かす仕組み
+    - `pc.optim.SGD` と `pc.optim.AdamW` が重みを、`pc.relax.Euler` がずれ `r` を時間で動かす仕組み
 
     前提は PyTorch・誤差逆伝播法（BP）と、[Mujou の仕組み](../concepts.md)のノード・Port・`dt`。predictive coding の知識は要らない。
 
@@ -27,7 +27,15 @@ PC-ALM では各ノードに自分の**活動** `h` があり、前のノード�
 | `g_in`  | $g_{\mathrm{in}} = -J_h^\top \delta$ | 前のノードへ送り返す勾配（$J_h$ は `module` の `h_in` についてのヤコビアン） |
 | `g`     |                                      | 次のノードたちから届いた `g_in` の和                                         |
 
-`r` は `delta` と `g` の和を打ち消す向きに動き、時定数 `tau.r` で減衰する。`lam` は `r` が残る間溜まり続ける。両方が止まると `r = 0`（`h` は forward の値）になり、`lam` は BP の credit $-\partial\ell/\partial h$ に一致する。そのとき重みの勾配も BP と一致する。理論の詳細は [PC-ALM の記事](https://pub.sakana.ai/pc-alm/)にある。記事のノードは `h` を持つが、mujou のノードは `r` を持つ。何が予測を動かしても `h` がすぐ追いつくようにするため（[4 節](#4-learnclock)）。
+`r` は `delta` と `g` の和を打ち消す向きに動き、時定数 `tau.r` で減衰する。`lam` は `r` が残る間溜まり続ける。両方が止まると `r = 0`（`h` は forward の値）になり、`lam` は BP の credit $-\partial\ell/\partial h$ に一致する。そのとき重みの勾配も BP と一致する。理論の詳細は [PC-ALM の記事](https://pub.sakana.ai/pc-alm/)にある。記事のノードは `h` を持つが、mujou のノードは `r` を持つ。何が予測を動かしても `h` がすぐ追いつくようにするため（下で述べる）。
+
+### ノードが r を持つ理由
+
+予測 `mu` は、新しいサンプルが来たときや、下のノードか自分が学んだときに一度に跳ぶ。`h` を持つノードは `h` を置いたままにするので、$r = h - \mu$ が急に大きくなり、偽の誤差が `g_in` と重みの勾配に入る。`r` を持つノードはその更新の `mu` で $h = \mu + r$ を送るので、`h` は予測と一緒に跳び、持ち越すのは `r` と `lam` だけになる。新しいサンプルで `r` や `lam` をリセットすることもない。
+
+代わりに安定性が問題になる。`g` は `h` を固定して取った勾配だが、あるノードの `r` を動かすと、上のすべてのノードの `h` が順伝播のヤコビアンの積を通って動く。そのため緩和は勾配流でなくなり、credit がそのヤコビアンを通って戻ってくる。`r` の減衰が無いと深い鎖は発散する。`tau.r` がその減衰（[5 節](#5-timeconstants)）。
+
+減衰には限界がある。順伝播が強く増幅する鎖（ヤコビアンの積が 1 よりずっと大きい鎖）は、どの一定の `tau.r` でも落ち着かない。
 
 ## 1. 部品
 
@@ -114,6 +122,7 @@ flowchart LR
 | 5   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                        |
 
 - 段 2 の `delta` は段 3 の前の `r`・`lam` で作る
+- 新しいサンプルのとき（`tick.new`）、ノードは段 3 の直前に `relaxer.reset_()` を呼ぶ（[7 節](#7-relaxer)）
 - 勾配はバッチで和を取り、$B$ で割るのは段 5 だけ。だから `lam` はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る
 - `vjp` の `delta` は値ではなく、`mu` から `delta` を作る関数（`mu` は `vjp` の中で計算するため）。`r` を持つノードは `lambda mu: r + lam` を渡す
 - `vjp` は `h_in` を detach してから微分するので、計算グラフは前のノードに届かない
@@ -162,12 +171,6 @@ flowchart LR
 
     経路上のノードが深さによらずほぼ同時に学ぶため。受け取った時刻から数えると深いノードほど遅れて学び、下のノードが学んだ重みにまだ応じていない `delta` で学んでしまう。どのノードも同じ実行のタイマーを読むので、バリアは要らない。
 
-### ノードが r を持つ理由
-
-予測 `mu` は、新しいサンプルが来たときや、下のノードか自分が学んだときに一度に跳ぶ。`h` を持つノードは `h` を置いたままにするので、$r = h - \mu$ が急に大きくなり、偽の誤差が `g_in` と重みの勾配に入る。`r` を持つノードはその更新の `mu` で $h = \mu + r$ を送るので、`h` は予測と一緒に跳び、持ち越すのは `r` と `lam` だけになる。新しいサンプルで `r` や `lam` をリセットすることもない。
-
-代わりに安定性が問題になる。ノードの `h` は下のすべての `r` と一緒に動くので、credit が上のノードのヤコビアンを通って戻ってきて、`r` の減衰が無いと深い鎖は発散する。`tau.r` がその減衰（[5 節](#5-timeconstants)）。
-
 ## 5. TimeConstants
 
 !!! abstract "要点"
@@ -176,13 +179,15 @@ flowchart LR
 
 `pc.TimeConstants(h=, lam=, r=)` が `r` と `lam` の時定数を持つ。3 つとも必須。重みの時定数は optimizer が持つ（[6 節](#6-optimizer)）。
 
-| 値        | 何の速さか                | 1 回の更新で動く割合       | `math.inf` にすると                                                                                               |
-| --------- | ------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `tau.h`   | ずれ `r` が緩和する速さ   | `dt / tau.h`               | 不可（有限で正）                                                                                                  |
-| `tau.lam` | `lam` が `r` を溜める速さ | `dt / tau.lam`             | `lam` は 0 のまま。`r` が 0 に戻らず、平衡点で BP と一致しない（`tau.r = math.inf` ならただの predictive coding） |
-| `tau.r`   | ずれ `r` が減衰する速さ   | さらに `r` の `dt / tau.r` | 減衰しない。深い鎖は発散する。ふつうは `tau.h`。平衡点は変わらない                                                |
+| 値        | 何の速さか                | 1 回の更新で動く割合                     | `math.inf` にすると                                            |
+| --------- | ------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| `tau.h`   | ずれ `r` が緩和する速さ   | `dt / tau.h`                             | 不可（有限で正）                                               |
+| `tau.lam` | `lam` が `r` を溜める速さ | `dt / tau.lam`                           | `lam` は 0 のまま。`r` が 0 に戻らず、平衡点で BP と一致しない |
+| `tau.r`   | ずれ `r` が減衰する速さ   | さらに `r` の `dt / tau.r` だけ 0 へ引く | 減衰しない。深い鎖は発散する                                   |
 
-時定数から既定が決まる値が 2 つある。`tau.period`（`tau.h / 4`）はノードの更新の間隔で、`period=` を渡さないときの `Chain` の全ノードの周期。`tau.max_dt`（`min(tau.h / (2 * (1 + tau.h / tau.r)), 3 * tau.lam)`。`tau.r = tau.h` なら `tau.h / 4`）は 1 回の更新で数える `dt` の上限で、超えた分は緩和からも `elapsed` からも捨てる。
+時定数から既定が決まる値が 2 つある。`tau.period`（`tau.h / 4`）はノードの更新の間隔で、`period=` を渡さないときの `Chain` の全ノードの周期。`tau.max_dt`（`min(tau.h / (2 * (1 + tau.h / tau.r)), 3 * tau.lam)`）は 1 回の更新で数える `dt` の上限で、超えた分は緩和からも `elapsed` からも捨てる。
+
+`tau.r` はふつう `tau.h` にする。`tau.r` は平衡点を動かさない。`lam` が `r` を溜めるので、平衡点では `tau.r` によらず `r = 0` になる。`tau.lam` と `tau.r` を両方 `math.inf` にすると、平衡点はただの predictive coding のものになる。ノードの周期は自分の `max_dt` より長くしてはいけない（`ValueError`）。`tau.r = tau.h` なら `tau.max_dt` は `tau.period` に等しい。`tau.r` がそれより短いと `tau.max_dt` は `tau.period` より短くなるので、ノードか `Chain` に `tau.max_dt` 以下の `period=` を渡す。
 
 optimizer の `tau` は `tau.h` よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の `delta` で学ぶ。値の決め方は [時定数を決める](pc.md#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B)、引数の一覧は [API リファレンス](../api/pc.md)。
 
@@ -265,7 +270,7 @@ $\Delta t$ が一定なら、歩みは `torch.optim.AdamW(lr=Δt / tau, betas=(e
 
     ずれ `r` が自分に掛かる力に沿ってどう動くかも設定である。relaxer は `r` にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、`r` を `dt` 秒だけ動かす。
 
-`pc.relax.Euler()` と `pc.relax.HeavyBall(tau=)` が設定である。`Layer` と `Chain` が `relaxer=` で 1 つ取る。既定は `pc.relax.Euler()` である。`Chain` は同じ設定を各 `Layer` に渡す。設定は状態を持たないので、共有しても安全である。`Output` は `r` を持たないので取らない。各 `Layer` は設定を自分の `r` に bind し、**bind した relaxer** を `self.relaxer` に持つ。bind した relaxer が状態を持ち、`r` を動かす。
+mujou の relaxer は `pc.relax.Euler()` の 1 つだけで、ほかに選べるのは自作の relaxer である。どちらも設定である。`Layer` と `Chain` が `relaxer=` で 1 つ取る。既定は `pc.relax.Euler()` である。`Chain` は同じ設定を各 `Layer` に渡す。設定は状態を持たないので、共有しても安全である。`Output` は `r` を持たないので取らない。各 `Layer` は設定を自分の `r` に bind し、**bind した relaxer** を `self.relaxer` に持つ。bind した relaxer が状態を持ち、`r` を動かす。
 
 ```python
 self.relaxer = relaxer.bind(self.r)  # __init__ で
@@ -275,17 +280,11 @@ self.relaxer.step_(r, force, dt, tau.h)
 self.relaxer.reset_()
 ```
 
-力を $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$ とすると、relaxer ごとの 1 回の動きは次の表になる。
+力を $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$ とすると、`pc.relax.Euler` の `dt` $= \Delta t$ 秒の 1 回の動きは $r \leftarrow r - \frac{\Delta t}{\tau_h} F$ である。
 
-| relaxer              | `dt` $= \Delta t$ 秒の 1 回の動き                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------- |
-| `pc.relax.Euler`     | $r \leftarrow r - \frac{\Delta t}{\tau_h} F$                                                 |
-| `pc.relax.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$、続けて $r \leftarrow r - \frac{\Delta t}{\tau_h} v$ |
-
-- relaxer が変えるのは `r` が不動点に着くまでの道で、不動点ではない。不動点では $F = 0$ かつ $v = 0$ になる。relaxer は $\lambda$ を動かさない。$\lambda$ は、どの relaxer が `r` を動かしても、`r` が動いたあとにその `r` で進む（[3 節](#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0)）
-- `pc.relax.HeavyBall` の速度は 0 から始まるので、最初の 1 歩は `pc.relax.Euler` の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、$F\,\Delta t$ ではない。定常では $v = F / (1 - e^{-\Delta t/\tau})$ なので、周期が短いほど利得が大きい。遅れた更新（長い `dt`）は速度をより多く忘れるので、安定な側に働く。`dt == 0` の 1 歩は `r` も速度もそのままにする
-- 新しいサンプルのときは、$r$ と $\lambda$ は保たれるが、速度が積んだのは前のサンプルの力である。そこでノードは `reset_()` を呼び、その速度を捨てる。予測が跳んだとき（自分や下のノードの重みが跳んだとき）は $r$ も力も跳ばないので、`reset_` は呼ばない
-- bind した relaxer はノードの状態のキー `"relaxer"` に入る。`pc.relax.HeavyBall` なら `{"velocity": ...}`、`pc.relax.Euler` なら空
+- relaxer が変えるのは `r` が不動点に着くまでの道で、不動点ではない。不動点では $F = 0$ で、relaxer の状態は静止している。relaxer は $\lambda$ を動かさない。$\lambda$ は、どの relaxer が `r` を動かしても、`r` が動いたあとにその `r` で進む（[3 節](#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0)）
+- 新しいサンプルのときは、$r$ と $\lambda$ は保たれる。しかし、力を覚える relaxer（速度を持つものなど）が覚えているのは前のサンプルの力である。そこでノードは `reset_()` を呼び、relaxer はそれを捨てる。予測が跳んだとき（自分や下のノードの重みが跳んだとき）は $r$ も力も跳ばないので、`reset_` は呼ばない
+- bind した relaxer はノードの状態のキー `"relaxer"` に入る。`pc.relax.Euler` は状態を持たないので空で、その `reset_` は何もしない
 - relaxer と値の選び方は[relaxer を選ぶ](pc.md#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)を見る
 
 ### 自分の relaxer

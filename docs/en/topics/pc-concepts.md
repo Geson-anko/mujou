@@ -8,7 +8,7 @@ This page explains what the parts of `mujou.pc` do, how they connect, and what o
     - The messages that flow between the nodes, and which way the ports face
     - What a `pc.Layer` does in one `on_update(dt)`
     - What the `Tick` that `pc.clock.LearnClock` returns and `pc.TimeConstants` mean
-    - How `pc.optim.SGD` and `pc.optim.AdamW` move the weights in time, and `pc.relax.Euler` and `pc.relax.HeavyBall` the deviation `r`
+    - How `pc.optim.SGD` and `pc.optim.AdamW` move the weights in time, and `pc.relax.Euler` the deviation `r`
 
     You should know PyTorch and backpropagation (BP), and the nodes, ports and `dt` of [How Mujou Works](../concepts.md). You need not know predictive coding.
 
@@ -27,7 +27,15 @@ In PC-ALM every node has its own **activity** `h`, and **predicts** it from the 
 | `g_in`   | $g_{\mathrm{in}} = -J_h^\top \delta$ | The gradient sent back to the node before ($J_h$ is the Jacobian of `module` with respect to `h_in`) |
 | `g`      |                                      | The sum of the `g_in` that came from the next nodes                                                  |
 
-`r` moves to cancel the sum of `delta` and `g`, and decays with the time constant `tau.r`; `lam` keeps growing while `r` remains. When both stop, `r = 0` (`h` is the forward pass) and `lam` equals the credit of BP, $-\partial\ell/\partial h$. The gradients of the weights then equal those of BP too. The theory is in [the PC-ALM article](https://pub.sakana.ai/pc-alm/), whose nodes hold `h`; mujou's hold `r`, so that `h` follows the prediction at once whatever moves it ([section 4](#4-learnclock)).
+`r` moves to cancel the sum of `delta` and `g`, and decays with the time constant `tau.r`; `lam` keeps growing while `r` remains. When both stop, `r = 0` (`h` is the forward pass) and `lam` equals the credit of BP, $-\partial\ell/\partial h$. The gradients of the weights then equal those of BP too. The theory is in [the PC-ALM article](https://pub.sakana.ai/pc-alm/), whose nodes hold `h`; mujou's hold `r`, so that `h` follows the prediction at once whatever moves it (below).
+
+### Why the node holds r
+
+The prediction `mu` jumps at once with a new sample, and when the node below or the node itself learns. A node that held `h` would keep `h` where it was, and $r = h - \mu$ would suddenly grow: a false error would enter `g_in` and the gradients of the weights. A node that holds `r` sends $h = \mu + r$ with the `mu` of the update, so `h` jumps with the prediction and only `r` and `lam` carry over. A new sample does not reset `r` or `lam` either.
+
+The cost is stability. `g` is a gradient taken with `h` held fixed, but a move of `r` in one node moves the `h` of every node above it, through the product of the Jacobians of the forward pass. So the relaxation is not a gradient flow: the credit loops back through those Jacobians, and without a decay of `r` a deep chain diverges. `tau.r` is that decay ([section 5](#5-timeconstants)).
+
+The decay has a limit. A chain whose forward pass strongly amplifies (the product of its Jacobians far above 1) does not settle with any constant `tau.r`.
 
 ## 1. The parts
 
@@ -114,6 +122,7 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 | 5    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True                                                                              |
 
 - The `delta` of step 2 is made from `r` and `lam` before step 3
+- With a new sample (`tick.new`), the node calls `relaxer.reset_()` just before step 3 ([section 7](#7-relaxers))
 - Gradients are summed over the batch, and only step 5 divides by $B$. So `lam` is the credit of each sample, and the optimizer gets the mean gradient of the batch
 - The `delta` of `vjp` is not a value but a function that makes `delta` from `mu` (`mu` is computed inside `vjp`). A node that holds `r` passes `lambda mu: r + lam`
 - `vjp` detaches `h_in` before it differentiates, so the graph does not reach the previous node
@@ -162,12 +171,6 @@ In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer
 
     So that the nodes on a path learn at about the same time, however deep they are. Counted from the time of receipt, deeper nodes would learn later, each from a `delta` that has not yet answered the weights the nodes below have learned. Every node reads the same run's timer, so no barrier is needed.
 
-### Why the node holds r
-
-The prediction `mu` jumps at once with a new sample, and when the node below or the node itself learns. A node that held `h` would keep `h` where it was, and $r = h - \mu$ would suddenly grow: a false error would enter `g_in` and the gradients of the weights. A node that holds `r` sends $h = \mu + r$ with the `mu` of the update, so `h` jumps with the prediction and only `r` and `lam` carry over. A new sample does not reset `r` or `lam` either.
-
-The cost is stability. `h` of a node moves with every `r` below it, so the credit loops back through the Jacobians of the nodes above, and without a decay of `r` a deep chain diverges. `tau.r` is that decay ([section 5](#5-timeconstants)).
-
 ## 5. TimeConstants
 
 !!! abstract "Key idea"
@@ -176,13 +179,15 @@ The cost is stability. `h` of a node moves with every `r` below it, so the credi
 
 `pc.TimeConstants(h=, lam=, r=)` holds the time constants of `r` and `lam`, all required. The time constant of the weights belongs to the optimizer ([section 6](#6-optimizers)).
 
-| Value     | The speed of                        | Share moved in one update | With `math.inf`                                                                                                                  |
-| --------- | ----------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `tau.h`   | The relaxation of the deviation `r` | `dt / tau.h`              | Not allowed (finite and > 0)                                                                                                     |
-| `tau.lam` | How fast `lam` sums up `r`          | `dt / tau.lam`            | `lam` stays 0. `r` does not return to 0, and the fixed point does not match BP (plain predictive coding with `tau.r = math.inf`) |
-| `tau.r`   | How fast the deviation `r` decays   | `dt / tau.r` of `r` more  | No decay. A deep chain then diverges. `tau.h` is the usual choice; the fixed point stays                                         |
+| Value     | The speed of                        | Share moved in one update              | With `math.inf`                                                                |
+| --------- | ----------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
+| `tau.h`   | The relaxation of the deviation `r` | `dt / tau.h`                           | Not allowed (finite and > 0)                                                   |
+| `tau.lam` | How fast `lam` sums up `r`          | `dt / tau.lam`                         | `lam` stays 0. `r` does not return to 0, and the fixed point does not match BP |
+| `tau.r`   | How fast the deviation `r` decays   | A further `dt / tau.r` of `r` toward 0 | No decay. A deep chain then diverges                                           |
 
-Two values take their defaults from the time constants. `tau.period` (`tau.h / 4`) is the interval between a node's updates, the period of every node of a `Chain` unless it is given `period=`. `tau.max_dt` (`min(tau.h / (2 * (1 + tau.h / tau.r)), 3 * tau.lam)`, `tau.h / 4` with `tau.r = tau.h`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
+Two values take their defaults from the time constants. `tau.period` (`tau.h / 4`) is the interval between a node's updates, the period of every node of a `Chain` unless it is given `period=`. `tau.max_dt` (`min(tau.h / (2 * (1 + tau.h / tau.r)), 3 * tau.lam)`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
+
+`tau.h` is the usual value of `tau.r`. `tau.r` does not move the fixed point: `lam` sums up `r`, so `r = 0` there whatever `tau.r` is. With both `tau.lam` and `tau.r` at `math.inf`, the fixed point is that of plain predictive coding. A node's period must not be longer than its `max_dt` (`ValueError`). With `tau.r = tau.h`, `tau.max_dt` equals `tau.period`. With a shorter `tau.r`, `tau.max_dt` is shorter than `tau.period`, so give the node or the `Chain` a `period=` of at most `tau.max_dt`.
 
 Make the `tau` of the optimizer much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
 
@@ -265,7 +270,7 @@ An optimizer of your own is two classes. The setting inherits `pc.optim.Optimize
 
     How the deviation `r` moves along the force on it is a setting too. A relaxer is to `r` what an optimizer is to the weights: a setting without state, bound in each node, that moves `r` by `dt` seconds.
 
-`pc.relax.Euler()` and `pc.relax.HeavyBall(tau=)` are settings. `Layer` and `Chain` take one as `relaxer=`, `pc.relax.Euler()` by default. A `Chain` gives the same setting to each of its `Layer`s, which is safe because the setting holds no state. `Output` has no `r` and takes none. Each `Layer` binds the setting to its own `r` and keeps the **bound relaxer** as `self.relaxer`. The bound relaxer holds the state and moves `r`.
+mujou has one relaxer, `pc.relax.Euler()`; the other choice is a relaxer of your own. Both are settings. `Layer` and `Chain` take one as `relaxer=`, `pc.relax.Euler()` by default. A `Chain` gives the same setting to each of its `Layer`s, which is safe because the setting holds no state. `Output` has no `r` and takes none. Each `Layer` binds the setting to its own `r` and keeps the **bound relaxer** as `self.relaxer`. The bound relaxer holds the state and moves `r`.
 
 ```python
 self.relaxer = relaxer.bind(self.r)  # in __init__
@@ -275,17 +280,11 @@ self.relaxer.step_(r, force, dt, tau.h)
 self.relaxer.reset_()
 ```
 
-With the force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$:
+With the force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$, one step of `pc.relax.Euler` of `dt` $= \Delta t$ seconds is $r \leftarrow r - \frac{\Delta t}{\tau_h} F$.
 
-| Relaxer              | One step of `dt` $= \Delta t$ seconds                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| `pc.relax.Euler`     | $r \leftarrow r - \frac{\Delta t}{\tau_h} F$                                               |
-| `pc.relax.HeavyBall` | $v \leftarrow e^{-\Delta t/\tau} v + F$, then $r \leftarrow r - \frac{\Delta t}{\tau_h} v$ |
-
-- A relaxer changes how `r` gets to the fixed point, not where it is: at the fixed point $F = 0$ and $v = 0$. The relaxer does not move $\lambda$. $\lambda$ moves after `r`, with the moved `r` ([section 3](#3-one-update-of-a-layer)), whichever relaxer moves `r`
-- The velocity of `pc.relax.HeavyBall` starts at 0, so its first step is the step of `pc.relax.Euler`. Each update adds the force $F$ once, not $F\,\Delta t$: in a steady state $v = F / (1 - e^{-\Delta t/\tau})$, so a shorter period gives a larger gain, and a late update (a longer `dt`) forgets more of the velocity, which is on the stable side. A step with `dt == 0` leaves `r` and the velocity as they are
-- With a new sample, $r$ and $\lambda$ are kept, but the velocity was built from the forces of the sample before, so the node calls `reset_()` and drops it. A jump of the prediction (the weights of this node or of a node below) does not move `r` or the force, and `reset_` is not called
-- The bound relaxer is in the node's state under the key `"relaxer"`: `{"velocity": ...}` for `pc.relax.HeavyBall`, empty for `pc.relax.Euler`
+- A relaxer changes how `r` gets to the fixed point, not where it is: at the fixed point $F = 0$, and the state of the relaxer is at rest. The relaxer does not move $\lambda$. $\lambda$ moves after `r`, with the moved `r` ([section 3](#3-one-update-of-a-layer)), whichever relaxer moves `r`
+- With a new sample, $r$ and $\lambda$ are kept, but a relaxer that remembers forces (a velocity, say) built them from the sample before, so the node calls `reset_()` and the relaxer drops them. A jump of the prediction (the weights of this node or of a node below) does not move `r` or the force, and `reset_` is not called
+- The bound relaxer is in the node's state under the key `"relaxer"`: empty for `pc.relax.Euler`, which has no state, and whose `reset_` does nothing
 - To choose a relaxer and its value, see [Choosing the relaxer](pc.md#choosing-the-relaxer)
 
 ### A relaxer of your own
