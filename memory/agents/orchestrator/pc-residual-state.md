@@ -58,3 +58,16 @@ TestDeepChain と同じ ResBlock 8 段（tanh、幅 8、τ_h=4e-3、τ_λ=8e-3�
 - code-reviewer: approve。should-fix（r < h で既定の period が作れない、docstring の h 形の残り、例の数値）を対応。nit も対応
 - algorithm-reviewer: request-changes（軽め）。M1「r = h は safe」は増幅する鎖では成り立たない（線形 w = 1.25 × 16 段で ρ > 1、自分でも再現: τ_r = τ_h で 1.045）。docstring・specs・open-decisions に限界として記録。S1 PC 極限の記述を修正。S2 period と max_dt は文書化し open-decisions へ。S3 HeavyBall は削除を推奨 → ユーザー判断
 - CIFAR-10（例の既定、3 epoch）: prequential 57.22%・テスト 61.36%（h 形 54.83%・59.05%、BP 54.45%・59.02%）
+
+## ユーザーの判断と追加の依頼（2026-10-28、PR #113 の後）
+
+- 1（増幅する鎖の不安定）: ドキュメントにする。doc-teacher-student と yomiyasu で docs を改善
+- 2（HeavyBall）: 削除する → 削除。`Relaxer` の差し替え口は残し、状態を持つ relaxer のテストは `_reference.Inertial` で書いた
+- 3（既定の周期と max_dt）: OK（docstring と specs の記述のまま。open-decisions から外した）
+- 追加: 学習の高速化（CIFAR の周期 τ_h/8、提示時間の短縮）を試す。安定性の強化もこの PR で
+
+## 安定性の強化の調査（scratch rstate/ct*.py、kappa*.py）
+
+- 原因: r 形の流れは $\dot r = -A^\top\nabla_r E$ で降下方向でない。連続時間で不安定（w = 1.25 × 16、τ_λ = τ_h/2: k = 1, 3, 10, 30 で実部の最大 0.72, 0.24, 0.054, 0.012）。周期を縮めても直らない
+- 試した: ドリフトを κ だけ通す形、δ に罰則 (1+k) r を入れる形、h 形 + 減衰。連続時間では「罰則 + κ ≤ 0.5」が安定だが、離散（周期 τ_h/4）では増幅する鎖と ResBlock の両方を安定にする設定は無かった
+- 結論: この PR では r 形の則は変えない。specs/pc.md「減衰が要る理由と限界」と open-decisions に記録。長時間の学習（CIFAR 10 epoch）で崩れないかを実測で確かめる

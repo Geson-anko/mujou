@@ -44,6 +44,12 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 - CIFAR-10 の ResNet（11 ノード、PC で 10 epoch 学んだ重みを固定、同期の緩和、$\tau_\lambda = \tau_h/4$、$\tau_r = \tau_h/3$）で、8 $\tau_h$ 後の cos は周期 $\tau_h/16$ で 0.99〜1.00（h 形は 0.70、32 $\tau_h$ で 0.95）。周期 $\tau_h/8$ でも 0.99〜1.00、$\tau_h/4$ で 0.96〜0.98。h 形では $\tau_h/4$ が 0.06〜0.3 だったので、硬さの問題もかなり緩む
 - 学習（`examples/cifar10/` の既定のまま、非同期、seed 0）: 3 epoch 目の prequential 57.22%・テスト 61.36%（h 形 54.83%・59.05%、BP 54.45%・59.02%）。MNIST の 3 epoch はテスト 97.58%（h 形 97.60%、BP 97.54%）。10 epoch は r 形で未測定
 - **限界**: 一定の $\tau_r$ ではどの鎖も安定にはできない。順伝播が増幅する鎖（スカラーの線形鎖でゲイン $w = 1.25$、16 段）では、1 ステップの写像のスペクトル半径が $\tau_r = \tau_h$ で 1.045、$\tau_h/2$ で 1.021、刻みを $\max\_dt$ に合わせて $\tau_r$ を縮めても 1 をわずかに超える（$\tau_h/3$ で 1.007、$\tau_h/7$ で 1.001）。同じ条件の h 形（減衰なし、周期 $\tau_h/4$）は 0.9999 で安定。非線形の ResBlock でも、既定の初期化（$\prod J$ のゲイン 2.7〜5.7、8〜32 段）では r 形の方が速く credit に着いたが、fc2 を 3 倍にしてゲイン 46 にすると r 形は誤差 3.1 で止まり、h 形は減り続けた（algorithm-reviewer の scratch 計算）。学習で重みが育ちゲインが上がる長時間の学習は未検証（[未決定事項](open-decisions.md)）
+- **限界の原因（2026-10-28 の解析）**: $r = A h$（$A$ は対角が $I$、その 1 つ下が $-J_i$ の下三角）と書くと、$g$ を使う力は $\nabla_h E = A^\top \nabla_r E$ なので、r 形の流れは $\dot r = -A^\top \nabla_r E$ になる。$A^\top$ の対称部分 $I - \tfrac12(S + S^\top)$（$S$ は $J_i$ を 1 つずらして並べたもの）が正定値なら降下方向で、各層が縮小（$\|J_i\| < 1$）なら成り立つが、増幅する層が並ぶと成り立たない。減衰はこれを補うダンピングで、$\lambda$ の積分と組むと補いきれない。スカラーの線形鎖（$w = 1.25$、16 段）の連続時間（メッセージの遅れ無し）の固有値の実部の最大は、$\tau_\lambda = \tau_h/2$ で $k = \tau_h/\tau_r$ が 1, 3, 10, 30 のとき 0.72, 0.24, 0.054, 0.012 と、正のまま 0 に寄るだけで、$\tau_\lambda = \infty$ でだけ 0 になる。連続時間で不安定なので、周期を短くしても直らない
+- **試して採らなかった対処（2026-10-28）**: どれも、増幅する線形鎖と ResBlock 8 ノードの鎖（既定の初期化、ゲイン 1 と 2 倍）の両方を安定にできなかった（scratch、Jacobi、周期 $\tau_h/4$、$\tau_\lambda = 2\tau_h$、6000 ステップ）
+    - 前のノードの緩和による $\mu$ のドリフトを割合 $\kappa$ だけ $h$ に通す（$\kappa = 1$ が r 形、0 が h 形）: 連続時間では、下の罰則と組めば $\kappa \le 0.5$ で $w = 1.25$ も安定になる（$\kappa$ を通した流れの前処理 $(I - \kappa S)^{-1}$ の対称部分が正定値になる）。離散の鎖では、$\kappa = 0.5$ は減衰 $k = 0.25$ で ResBlock（ゲイン 1）を 1143 ステップで credit に届けた（r 形は未収束）が、$w = 1.25$ は 2464 ステップで発散し、ResBlock（ゲイン 2）は届かなかった。新しいサンプルと $\theta$ の跳びを全部通すための仕組み（以前の付け替え）も戻ってくる
+    - 減衰を罰則として送り返す $\delta$ に入れる（$\delta = (1 + k)\,r + \lambda$、拡張ラグランジアンの $\rho = 1 + k$）: h 形では勾配流に戻り、連続時間では $w$ によらず安定になる。r 形では連続時間でかえって不安定になり、離散では h 形も r 形も周期 $\tau_h/4$ で発散した（硬さが $1 + k$ 倍になるため）
+    - h 形に減衰を足す: 減衰が $\delta$ に入らないので勾配流でなくなり、$w = 1.25$ で $k = 1$ でも発散する。h 形が増幅する鎖で落ち着くのは減衰が無いときだけで、そのときも 6000 ステップで相対誤差 0.41 と遅い
+    - 周期を短くする・$\tau_r$ を縮める: 上のとおり、連続時間の不安定は直らない
 
 ### 以前の形（h を状態に持ち、跳びだけ付け替える）
 
@@ -154,7 +160,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
 - `pc.optim.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
 - ノードの周期の既定は $\tau_h / 4$（$\eta_h = 0.25$）。利用者は時定数だけを決めればよい。記事の公式実装の $\eta_h = 1/\lambda_{\max}$（約 0.2〜0.25）とほぼ同じ。$\tau_r = \tau_h$ では `max_dt` の既定がちょうどこの周期になり、$\tau_r < \tau_h$ では周期より短くなるので、ノードに周期を渡す必要がある（遅れた更新の時間は 1 周期を超えた分が捨てられる。MNIST では 3 epoch のテスト精度が h 形の 97.60% に対し 97.58% で、影響は見えなかった）
-- **r の減衰 `tau.r`**（2026-10-27 に既定 inf で追加、2026-10-28 に必須）: $\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r)\,r$。$\lambda$ が $r$ を積分するので、平衡点では $\tau_r$ によらず $r = 0$ で、$\lambda$ は BP の credit のまま。送り返す $\delta = r + \lambda$ と重みの勾配は変えない（$\rho\,r + \lambda$ を送る罰則の重み $\rho$ とは別物。そちらは試していない）。必須にしたのは、r 形では減衰が無いと深い鎖が発散するため（「状態はずれ r で持つ」）。既定値を置かないのは、`lam` と同じく系の振る舞いを決める値で、黙って選ばせないため。推奨は $\tau_h$。`max_dt` の既定は $r$ を引く力が $1 + \tau_h/\tau_r$ 倍になる分だけ短くする（$\min(\tau_h/(2(1+\tau_h/\tau_r)), 3\tau_\lambda)$）。1 ノードの陽的 Euler（$r$ の後に $\lambda$）の Jury 条件は $ak < 2$ かつ $a(2k + b) < 4$（$a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$）で、この既定は 4 倍の余裕がある。鎖の線形モデル（$k = 2$）では $a = 0.375$ で安定、$a = 0.5$ で発散した。$\tau_\lambda = \infty$ でも $\tau_r$ が有限なら不動点は PC のものから外れる（$k\,r_i = J_{i+1}^\top r_{i+1}$ で、ずれが 1 段ごとに $1/k$ 倍になる）。アナログ回路で $r$ を積分器に持てば、その積分器のリークがこの項になる（「アナログ回路での実装」）
+- **r の減衰 `tau.r`**（2026-10-27 に既定 inf で追加、2026-10-28 に必須）: $\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r)\,r$。$\lambda$ が $r$ を積分するので、平衡点では $\tau_r$ によらず $r = 0$ で、$\lambda$ は BP の credit のまま。送り返す $\delta = r + \lambda$ と重みの勾配は変えない（$\rho\,r + \lambda$ を送る罰則の重み $\rho$ とは別物。$\rho = 1 + k$ を送る形は「減衰が要る理由と限界」のとおり、離散では発散した）。必須にしたのは、r 形では減衰が無いと深い鎖が発散するため（「状態はずれ r で持つ」）。既定値を置かないのは、`lam` と同じく系の振る舞いを決める値で、黙って選ばせないため。推奨は $\tau_h$。`max_dt` の既定は $r$ を引く力が $1 + \tau_h/\tau_r$ 倍になる分だけ短くする（$\min(\tau_h/(2(1+\tau_h/\tau_r)), 3\tau_\lambda)$）。1 ノードの陽的 Euler（$r$ の後に $\lambda$）の Jury 条件は $ak < 2$ かつ $a(2k + b) < 4$（$a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$）で、この既定は 4 倍の余裕がある。鎖の線形モデル（$k = 2$）では $a = 0.375$ で安定、$a = 0.5$ で発散した。$\tau_\lambda = \infty$ でも $\tau_r$ が有限なら不動点は PC のものから外れる（$k\,r_i = J_{i+1}^\top r_{i+1}$ で、ずれが 1 段ごとに $1/k$ 倍になる）。アナログ回路で $r$ を積分器に持てば、その積分器のリークがこの項になる（「アナログ回路での実装」）
 - 安定な範囲の実測（$\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$、$c \approx 1 + \|J\|^2$）は [PC の比較実験](research/pc-experiments.md#時定数の安定な範囲)。example の既定は $\tau_\lambda = 2\tau_h$（$\alpha = 0.125$）
 
 ## 重みの optimizer
@@ -202,29 +208,17 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 
 $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/relax.py`、2026-10-26。当時は $h$ を動かした）。きっかけは、$h$ に慣性（heavy ball）を足せるようにした（ユーザーの「それでも学習できるよう新しい feature の実装（緩和の手法設定など）も考慮して試行」）ところ、ユーザーが「$\theta$ の optimizer のように、$h$ にも更新の仕方を自由に変えられる仕組みが必要」と求めたこと。最初は `TimeConstants.momentum` に置いたが、それは慣性という 1 つの手法を時定数の 1 項目にしただけなので、重みの optimizer と同じ形（設定 + bind）に載せ替えた。
 
-- **設定 + bind**: `pc.relax.Euler()` と `pc.relax.HeavyBall(tau=)` は値だけを持つ frozen dataclass で、ABC の `pc.relax.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(r)` で自分の $r$ の束縛（ABC の `pc.relax.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(r, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`r` と同じ shape・dtype・device の状態を持つ）
+- **設定 + bind**: `pc.relax.Euler()` は値だけを持つ frozen dataclass で（自作の relaxer も同じ形）、ABC の `pc.relax.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(r)` で自分の $r$ の束縛（ABC の `pc.relax.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(r, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`r` と同じ shape・dtype・device の状態を持つ）
 - ABC なのは optimizer と同じ理由（書き忘れを作った時点の `TypeError` で知らせる）。`relaxer` は `Layer` と `Chain` の省略できる引数で、既定は `pc.relax.Euler()`（これまでの挙動）。`Output` は $r$ を持たないので取らない
 - **差し替えの範囲は $r$ だけ**: 力 $F = (1 + \tau_h/\tau_r)\,r + \lambda + g$ を作るのは `functional.relax_` で、束縛が $r$ をその力に沿って動かす。$\lambda$ は動かした後の $r$ で進める。`relax_(r, lam, g, dt, tau, relaxer=None)` の `None` は素の 1 歩
-- **`reset_()`**: 新しいサンプルのとき、ノードが呼ぶ。$r$ と $\lambda$ は保たれ、$g$ は下流の最後の値のままなので、その瞬間に力は連続する。それでも、速度が積んだのは前のサンプルの力の場なので捨てる。予測の跳び（自分や下のノードの $\theta$）では $r$ も力も跳ばないので、呼ばない。記憶の無い relaxer は何もしない
+- **`reset_()`**: 新しいサンプルのとき、ノードが呼ぶ。$r$ と $\lambda$ は保たれ、$g$ は下流の最後の値のままなので、その瞬間に力は連続する。それでも、速度のように力を覚える relaxer が覚えているのは前のサンプルの力の場なので捨てる。予測の跳び（自分や下のノードの $\theta$）では $r$ も力も跳ばないので、呼ばない。記憶の無い relaxer は何もしない
 - **不動点の条件**: 自作の relaxer は、力が 0 で relaxer 自身の状態が静止しているところ（heavy ball なら $F = 0$ かつ $v = 0$）で $r$ を動かさないものでなければならない。そうでないと不動点が動き、$\lambda$ が BP の credit にならない
 - **持てる状態**: $r$ を動かすのは `step_` だけなので、位置の型の状態（前回の $r$ など）も持てる（h 形では付け替えと $\theta$ の跳びで $h$ が `step_` の外で動いたので、力の型に限っていた）
 - 局所性: 状態はノードの内側で、メッセージは増えない
 
-### `pc.relax.HeavyBall(tau)`
+### 削除した heavy ball（`pc.relax.HeavyBall`、2026-10-28）
 
-速度 $v$ を持ち、1 回の更新（$dt > 0$）で
-
-$$
-v \leftarrow e^{-\Delta t/\tau}\,v + F,\qquad
-r \leftarrow r - \frac{\Delta t}{\tau_h}\,v.
-$$
-
-$dt = 0$ の更新は何もしない（力も蓄えない）。状態は `{"velocity": v}`。
-
-- 不動点は変わらない。$F = 0$ では速度も 0 になる。持続する力は $1/(1 - e^{-\Delta t/\tau})$ 倍まで速く動かす
-- **r 形での測定（2026-10-28）: 効果は見えない**。r 形では credit の波面が 1 周期に 1 ホップと、メッセージの段数で律速される。ResBlock 4 ノード（$\tau_r = \tau_h$、周期 $\tau_h/4$）の 60 ステップ後の誤差は `Euler` 0.214 に対し `HeavyBall`（$\tau$ = 0.5〜3 ms）0.216〜0.243 で、$\tau = 0.75\tau_h$ は減衰と合わせて発散した。非線形 32 ノードの尾の収束も 1.5e-3 対 1.3〜1.4e-3（algorithm-reviewer）。存続は [未決定事項](open-decisions.md)
-- 以下は h 形での実測。CIFAR-10、ResNet-20 を残差ブロックごとの 11 ノードにして実時間、周期 $\tau_h/4$、$\tau_\lambda = \tau_h$、$\tau_h$ 20 ms）: $\tau = \tau_h/4$（1 更新あたり $e^{-1} \approx 0.37$）で 1 バッチ 64 周期が、`Euler` の 128 周期と 3 epoch 目の精度で並ぶ（prequential 49.5〜51.7% 対 50.7%）。実時間は半分。ただし 10 epoch 目は `HeavyBall` の 64 周期が 62.8%、`Euler` の 128 周期が 68.7%（BP は 73.3%）。128 周期に `HeavyBall` を足しても 3 epoch 目は変わらない（50.2%）。$\tau = \tau_h/3$（0.47）は 3 回に 1 回、学習が崩れた。$e^{-\Delta t/\tau} = 0.8$ は発散。32 周期では `HeavyBall` があっても学習できない
-- algorithm-reviewer の監査（承認）: 線形のスカラー鎖（恒等写像、10 ノード、$\alpha = \eta = 0.25$）で更新写像のスペクトル半径を調べると、安定な最大の $e^{-\Delta t/\tau}$ は 0.78（ノード数 2〜20 でほぼ同じ）で、実測の境界と合う。$\alpha$ を大きくすると下がる（0.0625 で 0.94、0.5 で 0.60、1.0 で 0.30）。非同期のジッタ（周期の 1〜2 倍）では約 0.75。慣性は高曲率側の境界（$\sigma$）を広げる（0.47 で $\sigma_{crit}$ 1.94 → 2.58）が、ジッタの下では救えない。速くなるのは過渡（credit の先頭）だけで、恒等写像に近い鎖の遅いモードの漸近の速さは良くならない（0.968 → 0.976）。力の重みは 1 更新あたりで $dt$ に比例しないので、利得は周期に依存する（$dt$ に整合させると、ジッタのある非同期で $\tau = 0.5\tau_h$ で発散した）
+速度 $v$ を持ち、$v \leftarrow e^{-\Delta t/\tau}\,v + F$、$r \leftarrow r - (\Delta t/\tau_h)\,v$ と動かす relaxer があった。h 形では、CIFAR-10 の ResNet（11 ノード、周期 $\tau_h/4$）で $\tau = \tau_h/4$ にすると 1 バッチ 64 周期が `Euler` の 128 周期と 3 epoch 目で並んだ（10 epoch 目は 62.8% 対 68.7% と劣った）。r 形では credit の波面が 1 周期に 1 ホップと、メッセージの段数で律速されるので効果が見えない。ResBlock 4 ノード（$\tau_r = \tau_h$、周期 $\tau_h/4$）の 60 ステップ後の誤差は `Euler` 0.214 に対し 0.216〜0.243 で、$\tau = 0.75\tau_h$ は減衰と合わせて発散した。そのため、ユーザーの判断で削除した。`Relaxer` の差し替え口は、更新の則を差し替えられるようにする方針のために残す。
 
 ### 採らなかった案
 
@@ -340,4 +334,4 @@ $dt = 0$ の更新は何もしない（力も蓄えない）。状態は `{"velo
 12. 時刻 0 に書いた最初の入力を学ぶ
 13. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
 14. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
-15. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致する。`HeavyBall` が $v \leftarrow e^{-\Delta t/\tau}v + F$、$r \leftarrow r - (\Delta t/\tau_h)v$ の式と 1e-14 で一致し、最初の 1 歩は `Euler` と同じ。$dt = 0$ は何も動かさず速度も蓄えない。`reset_` で速度が 0 になる。$\tau$ が小さい極限は `Euler`。一定の力で速度が $1/(1-e^{-\Delta t/\tau})$ に収束する。状態の復元で同じ値になり、状態は束縛とメモリを共有し、読み込みはコピーする。`Layer` では、`HeavyBall` でも $\lambda$ が BP の credit に一致する。新しいサンプルで `reset_` が呼ばれ、$\theta$ の跳び（自分のものも前のノードのものも）では呼ばれない。`Chain` は各 `Layer` に別々の束縛を持たせる
+15. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。新しいサンプルで `reset_` が呼ばれ、$\theta$ の跳び（自分のものも前のノードのものも）では呼ばれない。`Chain` は各 `Layer` に別々の束縛を持たせる
