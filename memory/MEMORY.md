@@ -22,8 +22,8 @@
 - [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer.pause / resume / is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は秒の float
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor と Python のスカラー（IntSpec(bits) / FloatSpec / BoolSpec / TimestampSpec、2026-10-22）、1 つのフィールド / TypedDict、DictSpec.field、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
-- [pc の重みの optimizer](project_pc_optimizers.md) — τθ を TimeConstants から pc.optim.SGD / pc.optim.AdamW に移した。設定 + bind、時間で進める AdamW（質量 c で bias 補正）、torch.optim は使わない（GIL）、h の差し替えは relaxer（2026-10-26）、λ は研究から（2026-10-22）
-- [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
+- [pc の重みの optimizer](project_pc_optimizers.md) — τθ を TimeConstants から pc.optim.SGD / pc.optim.AdamW に移した。設定 + bind、時間で進める AdamW（質量 c で bias 補正）、torch.optim は使わない（GIL）、r（もとは h）の差し替えは relaxer（2026-10-26）、λ は研究から（2026-10-22）
+- [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。ずれ r と λ で持ち r を減衰させる（τ_r 必須）、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
 - [pc のバッチの shape](project_batch_shape.md) — `batch: mujou.types.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → device の上で複製 → 再開 → CPU へ移して返す。木は素の dict（timer と nodes）。正常終了後も取得できる。保存はユーザー。グローバルなバリア禁止の例外
@@ -45,7 +45,7 @@
 - [M:N スケジューリング](project_mn_scheduler.md) — Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True)、mujou.run(workers=None)。既定は available_parallelism（GIL ありは半分、確認待ち）で、実効の数は 0 もありうる。ノードはワーカー間を移ってよい
 - [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。hook は通常の PyTorch と同じく勾配を記録、ノードをまたぐグラフは Port の detach コピーで作れない
 - [pc の緩和の安定とヤコビアン](project_pc_jacobian_stability.md) — τ_h/4 の陽的 Euler は σ(J) ≲ 2.6 まで（原因は離散化）。ブロックごとの 11 ノードは周期 τ_h/16・τ_λ=τ_h/4・tau.r=τ_h/3 で 10 epoch に BP と 1〜2 pt 差（2026-10-27）。AdaptiveStep・残差の枝を小さく始める案は却下
-- [pc の relaxer](project_pc_relaxer.md) — h の更新手法を重みの optimizer と同じ形（設定 + bind）で差し替える。`pc.relax.Euler`（既定）/ `pc.relax.HeavyBall`。TimeConstants.momentum は載せ替えて削除（2026-10-26、別 PR）
+- [pc の relaxer](project_pc_relaxer.md) — r（もとは h）の更新手法を重みの optimizer と同じ形（設定 + bind）で差し替える。`pc.relax.Euler`（既定）/ `pc.relax.HeavyBall`。TimeConstants.momentum は載せ替えて削除（2026-10-26、別 PR）
 - [グラフの可視化](project_viz.md) — `mujou.viz.to_html(root)` で自己完結の HTML。CDN なし、JS は目視で確かめる（2026-10-21）
 - [未決定事項](project_open_decisions.md) — 一覧の正本は specs/open-decisions.md
 
