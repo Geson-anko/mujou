@@ -16,8 +16,8 @@ The names that go with a role are in a submodule, which this package imports:
 - ``pc.optim``: ``SGD`` and ``AdamW`` set how the parameters of a node move in
   time (``Optimizer``); each node binds the setting to its own parameters
   (``BoundOptimizer``).
-- ``pc.relax``: ``Euler`` and ``HeavyBall`` set how the activity of a node moves
-  (``Relaxer``); each node binds the setting to its own activity
+- ``pc.relax``: ``Euler`` and ``HeavyBall`` set how the deviation ``r = h - mu``
+  of a node moves (``Relaxer``); each node binds the setting to its own ``r``
   (``BoundRelaxer``).
 - ``pc.loss``: ``MSELoss`` and ``CrossEntropyLoss`` give the loss of each
   sample.
@@ -43,7 +43,7 @@ Import it as a submodule::
         y=TensorSpec((B,), torch.int64),
         batch=B,
         loss=pc.loss.CrossEntropyLoss(B),
-        tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+        tau=pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3),
         optimizer=pc.optim.SGD(tau=1.28),
         learn_interval=0.15,
     )

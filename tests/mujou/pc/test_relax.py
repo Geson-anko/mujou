@@ -1,4 +1,4 @@
-"""The relaxers of ``mujou.pc``, which move the activity ``h`` of a node along
+"""The relaxers of ``mujou.pc``, which move the deviation ``r`` of a node along
 the force on it: ``pc.relax.Euler`` and ``pc.relax.HeavyBall``. The expected values are the
 formulas written out here."""
 
@@ -25,7 +25,7 @@ def randn(*shape: int, seed: int) -> torch.Tensor:
     return torch.randn(*shape, dtype=F64, generator=generator)
 
 
-def h0() -> torch.Tensor:
+def r0() -> torch.Tensor:
     return randn(3, 5, seed=0)
 
 
@@ -36,87 +36,87 @@ def force(k: int) -> torch.Tensor:
 class TestEuler:
     @pytest.mark.parametrize("dt", [1e-3, 4e-3])
     def test_one_step_is_dt_over_tau_of_the_force(self, dt: float):
-        h = h0()
-        pc.relax.Euler().bind(h).step_(h, force(0), dt, TAU_H)
+        r = r0()
+        pc.relax.Euler().bind(r).step_(r, force(0), dt, TAU_H)
         torch.testing.assert_close(
-            h, h0() - dt / TAU_H * force(0), rtol=1e-15, atol=1e-15
+            r, r0() - dt / TAU_H * force(0), rtol=1e-15, atol=1e-15
         )
 
     def test_has_no_state(self):
-        assert pc.relax.Euler().bind(h0()).state_dict() == {}
+        assert pc.relax.Euler().bind(r0()).state_dict() == {}
 
     def test_reset_changes_nothing(self):
-        h, bound = h0(), pc.relax.Euler().bind(h0())
+        r, bound = r0(), pc.relax.Euler().bind(r0())
         bound.reset_()
-        bound.step_(h, force(0), 1e-3, TAU_H)
+        bound.step_(r, force(0), 1e-3, TAU_H)
         torch.testing.assert_close(
-            h, h0() - 1e-3 / TAU_H * force(0), rtol=1e-15, atol=1e-15
+            r, r0() - 1e-3 / TAU_H * force(0), rtol=1e-15, atol=1e-15
         )
 
 
 class TestHeavyBall:
-    def test_one_step_moves_the_velocity_then_h_along_it(self):
-        # v <- e^(-dt/tau) v + force, then h <- h - dt/tau_h v.
-        h, bound = h0(), HEAVY_BALL.bind(h0())
+    def test_one_step_moves_the_velocity_then_r_along_it(self):
+        # v <- e^(-dt/tau) v + force, then r <- r - dt/tau_h v.
+        r, bound = r0(), HEAVY_BALL.bind(r0())
         dt = 1e-3
-        expected, v = h0(), torch.zeros_like(h)
+        expected, v = r0(), torch.zeros_like(r)
         for k in range(3):
-            bound.step_(h, force(k), dt, TAU_H)
+            bound.step_(r, force(k), dt, TAU_H)
             v = math.exp(-dt / TAU_V) * v + force(k)
             expected = expected - dt / TAU_H * v
-            torch.testing.assert_close(h, expected, rtol=1e-14, atol=1e-14)
+            torch.testing.assert_close(r, expected, rtol=1e-14, atol=1e-14)
             torch.testing.assert_close(
                 bound.state_dict()["velocity"], v, rtol=1e-15, atol=1e-15
             )
 
     def test_the_first_step_is_the_plain_one(self):
-        # The velocity starts at zero, so the first force moves h as Euler does.
-        h, plain = h0(), h0()
-        HEAVY_BALL.bind(h).step_(h, force(0), 1e-3, TAU_H)
+        # The velocity starts at zero, so the first force moves r as Euler does.
+        r, plain = r0(), r0()
+        HEAVY_BALL.bind(r).step_(r, force(0), 1e-3, TAU_H)
         pc.relax.Euler().bind(plain).step_(plain, force(0), 1e-3, TAU_H)
-        torch.testing.assert_close(h, plain, rtol=1e-15, atol=1e-15)
+        torch.testing.assert_close(r, plain, rtol=1e-15, atol=1e-15)
 
     def test_a_step_of_no_time_changes_nothing(self):
         # A force of no time must not be stored in the velocity.
-        h, bound = h0(), HEAVY_BALL.bind(h0())
-        bound.step_(h, force(0), 0.0, TAU_H)
-        assert torch.equal(h, h0())
+        r, bound = r0(), HEAVY_BALL.bind(r0())
+        bound.step_(r, force(0), 0.0, TAU_H)
+        assert torch.equal(r, r0())
         assert not bound.state_dict()["velocity"].any()
 
     def test_reset_drops_the_velocity(self):
-        h, bound = h0(), HEAVY_BALL.bind(h0())
-        bound.step_(h, force(0), 1e-3, TAU_H)
+        r, bound = r0(), HEAVY_BALL.bind(r0())
+        bound.step_(r, force(0), 1e-3, TAU_H)
         assert bound.state_dict()["velocity"].any()
         bound.reset_()
         assert not bound.state_dict()["velocity"].any()
         # After a reset the next step is the first one again.
-        moved, fresh = h.clone(), h.clone()
+        moved, fresh = r.clone(), r.clone()
         bound.step_(moved, force(1), 1e-3, TAU_H)
         HEAVY_BALL.bind(fresh).step_(fresh, force(1), 1e-3, TAU_H)
         torch.testing.assert_close(moved, fresh, rtol=1e-15, atol=1e-15)
 
     def test_a_tiny_time_constant_is_the_plain_relaxation(self):
         # e^(-dt/tau) -> 0: the velocity is the force.
-        h, plain = h0(), h0()
-        bound = pc.relax.HeavyBall(tau=1e-9).bind(h)
+        r, plain = r0(), r0()
+        bound = pc.relax.HeavyBall(tau=1e-9).bind(r)
         for k in range(3):
-            bound.step_(h, force(k), 1e-3, TAU_H)
+            bound.step_(r, force(k), 1e-3, TAU_H)
             pc.relax.Euler().bind(plain).step_(plain, force(k), 1e-3, TAU_H)
-        torch.testing.assert_close(h, plain, rtol=1e-12, atol=1e-12)
+        torch.testing.assert_close(r, plain, rtol=1e-12, atol=1e-12)
 
-    def test_no_force_keeps_h_where_it_is(self):
-        h, bound = h0(), HEAVY_BALL.bind(h0())
-        bound.step_(h, torch.zeros_like(h), 1e-3, TAU_H)
-        assert torch.equal(h, h0())
+    def test_no_force_keeps_r_where_it_is(self):
+        r, bound = r0(), HEAVY_BALL.bind(r0())
+        bound.step_(r, torch.zeros_like(r), 1e-3, TAU_H)
+        assert torch.equal(r, r0())
 
     def test_a_constant_force_gives_the_geometric_series_of_the_velocity(self):
-        # With a force held at 1, v -> 1 / (1 - e^(-dt/tau)): h moves that much
+        # With a force held at 1, v -> 1 / (1 - e^(-dt/tau)): r moves that much
         # faster than with the plain relaxation.
-        h = torch.zeros(1, dtype=F64)
-        bound = HEAVY_BALL.bind(h)
-        one = torch.ones_like(h)
+        r = torch.zeros(1, dtype=F64)
+        bound = HEAVY_BALL.bind(r)
+        one = torch.ones_like(r)
         for _ in range(200):
-            bound.step_(h, one, 1e-3, TAU_H)
+            bound.step_(r, one, 1e-3, TAU_H)
         beta = math.exp(-1e-3 / TAU_V)
         torch.testing.assert_close(
             bound.state_dict()["velocity"],
@@ -125,19 +125,19 @@ class TestHeavyBall:
             atol=0,
         )
 
-    def test_the_velocity_has_the_shape_dtype_and_device_of_h(self):
-        h = torch.zeros(2, 3, dtype=torch.float32)
-        velocity = HEAVY_BALL.bind(h).state_dict()["velocity"]
-        assert velocity.shape == h.shape
-        assert velocity.dtype == h.dtype
-        assert velocity.device == h.device
+    def test_the_velocity_has_the_shape_dtype_and_device_of_r(self):
+        r = torch.zeros(2, 3, dtype=torch.float32)
+        velocity = HEAVY_BALL.bind(r).state_dict()["velocity"]
+        assert velocity.shape == r.shape
+        assert velocity.dtype == r.dtype
+        assert velocity.device == r.device
 
 
 class TestBound:
     @pytest.mark.parametrize("relaxer", RELAXERS, ids=IDS)
     def test_is_a_bound_relaxer_with_a_state(self, relaxer: pc.relax.Relaxer):
         # A node holds it as an attribute, so it is in the node's state.
-        bound = relaxer.bind(h0())
+        bound = relaxer.bind(r0())
         assert isinstance(bound, pc.relax.BoundRelaxer)
         assert isinstance(bound, mujou.Stateful)
 
@@ -167,7 +167,7 @@ class TestAbstract:
         class NoReset(pc.relax.BoundRelaxer):
             @override
             def step_(
-                self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+                self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
             ) -> None:
                 pass
 
@@ -198,31 +198,31 @@ class TestState:
     def test_a_restored_relaxer_goes_on_as_the_same_one(
         self, relaxer: pc.relax.Relaxer
     ):
-        h = h0()
-        first = relaxer.bind(h)
+        r = r0()
+        first = relaxer.bind(r)
         for k in range(3):
-            first.step_(h, force(k), 1e-3 * (k + 1), TAU_H)
-        h_restored = h.clone()
-        restored = relaxer.bind(h_restored)
+            first.step_(r, force(k), 1e-3 * (k + 1), TAU_H)
+        r_restored = r.clone()
+        restored = relaxer.bind(r_restored)
         restored.load_state_dict(saved(first.state_dict()))
         for k in range(3, 8):
-            first.step_(h, force(k), 1e-3, TAU_H)
-            restored.step_(h_restored, force(k), 1e-3, TAU_H)
-        assert torch.equal(h_restored, h)
+            first.step_(r, force(k), 1e-3, TAU_H)
+            restored.step_(r_restored, force(k), 1e-3, TAU_H)
+        assert torch.equal(r_restored, r)
         assert_same_tree(restored.state_dict(), first.state_dict())
 
     def test_the_state_shares_memory_with_the_relaxer(self):
         # As the state of an optimizer does: the node reads it in place.
-        h, bound = h0(), HEAVY_BALL.bind(h0())
+        r, bound = r0(), HEAVY_BALL.bind(r0())
         velocity = bound.state_dict()["velocity"]
-        bound.step_(h, force(0), 1e-3, TAU_H)
+        bound.step_(r, force(0), 1e-3, TAU_H)
         assert velocity.any()
 
     def test_loading_copies_the_velocity(self):
-        source = HEAVY_BALL.bind(h0())
-        source.step_(h0(), force(0), 1e-3, TAU_H)
+        source = HEAVY_BALL.bind(r0())
+        source.step_(r0(), force(0), 1e-3, TAU_H)
         tree = source.state_dict()
-        bound = HEAVY_BALL.bind(h0())
+        bound = HEAVY_BALL.bind(r0())
         bound.load_state_dict(tree)
         before = bound.state_dict()["velocity"].clone()
         tree["velocity"].add_(1.0)

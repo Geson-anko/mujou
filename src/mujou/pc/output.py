@@ -37,9 +37,7 @@ class Output(Node):
     while its ``y_hat`` is finite. Each ``on_update(dt)`` caps ``dt`` at
     ``max_dt`` as ``Layer`` does, reads the ``Activity``, sends ``g_in``, sends a
     ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
-    paired with) for the host to read, and updates ``theta`` when it learns. It
-    does not read the ``jumps``: a jump of ``h_in`` needs no move here, as the
-    node holds no activity of its own.
+    paired with) for the host to read, and updates ``theta`` when it learns.
 
     It learns as ``Layer`` does, by its ``clock``: once ``learn_interval``
     seconds have passed since the host wrote the input, but not in the update

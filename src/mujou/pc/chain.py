@@ -65,7 +65,7 @@ class Chain(Network, Shown):
             y=TensorSpec((B,), torch.int64),
             batch=B,
             loss=pc.loss.CrossEntropyLoss(B),
-            tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+            tau=pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3),
             optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=0.15,
         )
@@ -80,18 +80,19 @@ class Chain(Network, Shown):
         tau: The time constants of every node.
         optimizer: How the parameters of every node move, as in ``Layer``:
             each node binds it to its own parameters.
-        relaxer: How ``h`` of every ``Layer`` moves, as in ``Layer``: each binds
-            it to its own ``h``. The ``Output`` has no ``h``.
+        relaxer: How ``r`` of every ``Layer`` moves, as in ``Layer``: each binds
+            it to its own ``r``. The ``Output`` has no ``r``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
             credit, ``2 * len(modules) * period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
         period: The period of every node, ``tau.period`` if ``None``. A shorter
-            one makes the explicit steps exact for stiffer modules (the step of
-            ``h`` is stable while ``(1 + |J|^2) * period / tau.h < 2``, ``|J|``
-            the largest singular value of the Jacobian of the next module), for
-            more updates.
+            one makes the explicit steps exact for stiffer modules, such as
+            residual blocks whose Jacobians grow while they learn, for more
+            updates. With ``tau.r`` shorter than ``tau.h``, the default
+            ``tau.max_dt`` is shorter than ``tau.period``: give a period of at
+            most ``tau.max_dt``.
         device: Where the nodes compute.
 
     Raises:

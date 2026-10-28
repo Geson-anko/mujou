@@ -7,16 +7,19 @@ other 8 blocks, and the head. Inside a node, autograd differentiates the
 module as in plain PyTorch; between the nodes, only the messages of PC-ALM
 flow.
 
-A node relaxes its activity ``h`` with what the next node sends back, through
-the Jacobian ``J`` of the next node's module. The singular values of ``J`` of a
-block grow while the network learns (2 to 9 after a few epochs, measured with
-BP and with PC-ALM), and an explicit step of ``h`` of ``period / tau.h`` is
-stable only while ``(1 + |J|^2) * period / tau.h < 2``: below about 2.6 with
-the period ``tau.h / 4`` of ``pc.Chain``, which the blocks go past. With
-``tau.h / 4``, the ``lam`` of the weights BP learned in 3 epochs did not settle
-on the credit of backpropagation (a cosine of 0.1 or less); with ``tau.h / 16``
-it did (0.95 in the first nodes), as with ``tau.h / 64``. This is why
-``main.py`` gives the nodes a period of ``tau.h / 16``.
+A node relaxes its deviation ``r`` with what the next node sends back, through
+the Jacobian ``J`` of the next node's module, and its ``h = mu + r`` moves with
+every ``r`` below it. The singular values of ``J`` of a block grow while the
+network learns (2 to 9 after a few epochs, measured with BP and with PC-ALM),
+and the blocks amplify, which long explicit steps do not follow. With the
+weights PC-ALM learned in 10 epochs, frozen, the cosine of ``lam`` with the
+credit of backpropagation after ``8 * tau.h`` was 0.96 to 0.98 with the period
+``tau.h / 4``, and 0.99 to 1.00 with ``tau.h / 8`` and ``tau.h / 16``. When the
+nodes held ``h`` rather than ``r``, ``tau.h / 4`` gave a cosine of 0.1 or less
+(with the weights BP learned in 3 epochs) and ``tau.h / 16`` 0.95, as with
+``tau.h / 64``. This is why ``main.py`` gives the nodes a period of
+``tau.h / 16``; ``tau.h / 8`` may now be enough, which has not been tried in
+training.
 
 GroupNorm replaces BatchNorm: it normalizes each sample on its own, so it has no
 running statistics and no train or eval mode to switch, and a batch padded with

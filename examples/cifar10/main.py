@@ -25,16 +25,16 @@ of real time.
 The period is ``tau.h / 16``, a quarter of that of ``pc.Chain``, so the timer
 goes at a quarter of the real time (``--time-scale`` 0.25): with ``tau.h`` 20
 ms the period is 1.25 ms of the timer and 5 ms of real time. The blocks make
-the relaxation stiff (``resnet.py``), and with ``tau.h / 4`` its explicit
-steps did not find the credit of BP. With ``tau.h / 16`` they found it as with
-``tau.h / 64``, and what remains is how long the credit takes to settle: the
+the relaxation stiff (``resnet.py``): when the nodes held ``h`` rather than
+``r``, the explicit steps of ``tau.h / 4`` did not find the credit of BP, and
+those of ``tau.h / 16`` found it as with ``tau.h / 64``. What remains is how long the credit takes to settle: the
 dual is fast (``tau.lam = tau.h / 4``), the deviation ``r = h - mu`` decays
 (``tau.r = tau.h / 3``), each batch is shown for ``24 * tau.h`` (``S = 384``
 periods) and the nodes learn at 0.9 of it. With the defaults, in the 3rd epoch
-the prequential accuracy was 54.83% (seed 0) against 54.45% for BP, and
-the test accuracy 59.05% against 59.02%; in the 10th, 73.35% against 73.27%
-and 73.79% against 72.61% (another run of the same settings reached 71.56% and
-71.41%). The test accuracy
+the prequential accuracy was 57.22% (seed 0) against 54.45% for BP, and the
+test accuracy 61.36% against 59.02%. When the nodes held ``h``, the 3rd epoch
+gave 54.83% and 59.05%, and the 10th 73.35% against 73.27% and 73.79% against
+72.61%; the 10th has not been measured since. The test accuracy
 moves by a few points from epoch to epoch (the learning rate does not decay),
 for both, and the GPU does not compute bit for bit the same in every run.
 
@@ -92,8 +92,7 @@ def train_pc(
     """Train the modules as PC-ALM nodes in a run, and measure each epoch."""
     # --8<-- [start:chain]
     # A period of tau.h / 16, not the tau.h / 4 of pc.Chain: the blocks make the
-    # relaxation stiff, and the explicit step of h is exact only while
-    # (1 + |J|^2) * period / tau.h < 2 for the Jacobian J of the next block.
+    # relaxation stiff (resnet.py).
     period = args.tau_h / args.div
     shown = args.steps * period  # how long the host shows each batch
     net = pc.Chain(

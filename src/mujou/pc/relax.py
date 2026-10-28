@@ -1,18 +1,19 @@
-r"""The relaxers that move the activity ``h`` of a node in time: ``Euler`` and
-``HeavyBall``.
+r"""The relaxers that move the deviation ``r = h - mu`` of a node in time:
+``Euler`` and ``HeavyBall``.
 
 A relaxer is a setting (``Relaxer``), as an optimizer is: a frozen value that
 holds no state and may be shared by every node. A node binds it to its own
-activity with ``bind(h)``, which returns the ``BoundRelaxer`` that holds the
-state (the velocity of ``HeavyBall``) and moves ``h`` by ``step_(h, force, dt,
-tau_h)``. It is the counterpart of ``pc.optim.SGD`` and ``pc.optim.AdamW`` for ``h``: those
-move the parameters along their gradient, a relaxer moves the activity along the
-force on it, $F = r + \lambda + g$ (``functional.relax_``). The dual ``lam`` is
-not a relaxer's business: it follows the moved ``h``.
+deviation with ``bind(r)``, which returns the ``BoundRelaxer`` that holds the
+state (the velocity of ``HeavyBall``) and moves ``r`` by ``step_(r, force, dt,
+tau_h)``. It is the counterpart of ``pc.optim.SGD`` and ``pc.optim.AdamW`` for
+``r``: those move the parameters along their gradient, a relaxer moves the
+deviation along the force on it, $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$
+(``functional.relax_``). The dual ``lam`` is not a relaxer's business: it
+follows the moved ``r``.
 
-A relaxer changes how ``h`` gets to its fixed point, not where it is: at the
+A relaxer changes how ``r`` gets to its fixed point, not where it is: at the
 fixed point the force is zero and the state of the relaxer is at rest (the
-velocity of ``HeavyBall`` is zero), and ``h`` stays there.
+velocity of ``HeavyBall`` is zero), and ``r`` stays there.
 """
 
 import math
@@ -34,50 +35,45 @@ __all__ = [
 
 
 class BoundRelaxer(Stateful):
-    """A relaxer bound to the activity of one node, which holds its state.
+    """A relaxer bound to the deviation ``r`` of one node, which holds its
+    state.
 
     The node that bound it owns it and calls it from its own hooks only. It is a
     ``Stateful``, so an attribute of a node that holds it is in the node's state
     by itself: ``state_dict`` returns the state with tensors that share memory
     with the relaxer's, and ``load_state_dict`` copies the tensors of the state
-    into those.
-
-    The node moves ``h`` outside ``step_`` too: it re-anchors ``h`` to a new
-    prediction (with a new sample or a jump of the activity it reads, after
-    ``reset_``) and adds the jump of its own parameters. The state of a relaxer
-    must therefore not depend on where ``h`` is, as a velocity does not. A state
-    that does (a lookahead position, the previous ``h``) goes stale with a jump
-    of the parameters, which no hook tells the relaxer.
+    into those. Only ``step_`` moves ``r``.
     """
 
     @abstractmethod
     def step_(
-        self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+        self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
     ) -> None:
-        r"""Move ``h`` in place by ``dt`` seconds of the flow along ``force``,
+        r"""Move ``r`` in place by ``dt`` seconds of the flow along ``force``,
         without recording gradients.
 
         Args:
-            h: The activity of the node, ``(*batch, *out)``.
-            force: The force $F = r + \lambda + g$ on it, of the shape of ``h``;
-                the plain flow is $\tau_h \dot h = -F$.
+            r: The deviation ``h - mu`` of the node, ``(*batch, *out)``.
+            force: The force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$ on
+                it, of the shape of ``r``; the plain flow is
+                $\tau_h \dot r = -F$.
             dt: The time to move by, in seconds (0 changes nothing).
-            tau_h: The time constant $\tau_h$ of ``h``, in seconds
+            tau_h: The time constant $\tau_h$ of ``r``, in seconds
                 (``TimeConstants.h``).
         """
 
     @abstractmethod
     def reset_(self) -> None:
-        """Forget the forces before: the node calls it with a new sample or a
-        jump of the activity it reads, where what the relaxer remembers is the
-        forces of the input before. A relaxer without memory does nothing."""
+        """Forget the forces before: the node calls it with a new sample, where
+        what the relaxer remembers is the forces of the sample before. A relaxer
+        without memory does nothing."""
 
 
 class Relaxer(ABC):
-    r"""The setting of how the activity ``h`` of a node moves in time.
+    r"""The setting of how the deviation ``r = h - mu`` of a node moves in time.
 
-    It holds values only, no state, so the nodes may share it. ``bind(h)`` makes
-    the ``BoundRelaxer`` of the activity of one node, which holds the state.
+    It holds values only, no state, so the nodes may share it. ``bind(r)`` makes
+    the ``BoundRelaxer`` of the deviation of one node, which holds the state.
 
     A relaxer of your own inherits this class, and its bound relaxer
     ``BoundRelaxer``. For example, a step that is capped in size::
@@ -86,16 +82,16 @@ class Relaxer(ABC):
         class Capped(pc.relax.Relaxer):
             limit: float
 
-            def bind(self, h):
+            def bind(self, r):
                 return _BoundCapped(self.limit)
 
         class _BoundCapped(pc.relax.BoundRelaxer):
             def __init__(self, limit):
                 self._limit = limit
 
-            def step_(self, h, force, dt, tau_h):
+            def step_(self, r, force, dt, tau_h):
                 step = (dt / tau_h) * force
-                h.sub_(step.clamp(-self._limit, self._limit))
+                r.sub_(step.clamp(-self._limit, self._limit))
 
             def reset_(self):
                 pass
@@ -108,19 +104,19 @@ class Relaxer(ABC):
 
     Its fixed point must be a zero of the force (with the state of the relaxer
     at rest), or the node no longer solves PC-ALM: ``lam`` is the credit of
-    backpropagation only where ``h`` stops at $r + \lambda + g = 0$.
+    backpropagation only where ``r`` stops at a zero of the force.
     """
 
     @abstractmethod
-    def bind(self, h: torch.Tensor) -> BoundRelaxer:
-        """Return the relaxer bound to an activity of the shape, dtype and
-        device of ``h``, with a fresh state."""
+    def bind(self, r: torch.Tensor) -> BoundRelaxer:
+        """Return the relaxer bound to a deviation of the shape, dtype and
+        device of ``r``, with a fresh state."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class Euler(Relaxer):
-    r"""The plain gradient flow of ``h``, $\tau_h \dot h = -F$, by one explicit
-    Euler step of ``dt``: ``h -= (dt / tau_h) * force``.
+    r"""The plain gradient flow of ``r``, $\tau_h \dot r = -F$, by one explicit
+    Euler step of ``dt``: ``r -= (dt / tau_h) * force``.
 
     It is the default. The bound relaxer has no state (an empty ``state_dict``).
 
@@ -131,18 +127,18 @@ class Euler(Relaxer):
     """
 
     @override
-    def bind(self, h: torch.Tensor) -> BoundRelaxer:
-        """Return the relaxer bound to ``h``."""
+    def bind(self, r: torch.Tensor) -> BoundRelaxer:
+        """Return the relaxer bound to ``r``."""
         return _BoundEuler()
 
 
 class _BoundEuler(BoundRelaxer):
     @override
     def step_(
-        self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+        self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
     ) -> None:
         with torch.no_grad():
-            h.sub_((dt / tau_h) * force)  # tau_h dh/dt = -F
+            r.sub_((dt / tau_h) * force)  # tau_h dr/dt = -F
 
     @override
     def reset_(self) -> None:
@@ -159,33 +155,29 @@ class _BoundEuler(BoundRelaxer):
 
 @dataclass(frozen=True, kw_only=True)
 class HeavyBall(Relaxer):
-    r"""``h`` as a heavy ball: a velocity $v$ remembers the forces of the updates
-    before, and ``h`` moves along it.
+    r"""``r`` as a heavy ball: a velocity $v$ remembers the forces of the updates
+    before, and ``r`` moves along it.
 
     $$
     v \leftarrow e^{-\Delta t / \tau} v + F,\qquad
-    h \leftarrow h - \frac{\Delta t}{\tau_h} v.
+    r \leftarrow r - \frac{\Delta t}{\tau_h} v.
     $$
 
     The fixed point is that of ``Euler`` ($v = 0$ there). A force that lasts
-    moves ``h`` up to $1 / (1 - e^{-\Delta t / \tau})$ times faster, so the front
-    of the credit of a deep chain crosses it in fewer periods; the slow mode of a
-    chain near the identity does not relax faster for it. The force weighs one
-    update, not ``dt``, so the gain depends on the period. A step of ``dt = 0``
-    changes nothing, the velocity included. The node resets the velocity with
-    each new sample or jump of the activity it reads (``reset_``): the forces it
-    remembers are those of the input before.
+    moves ``r`` up to $1 / (1 - e^{-\Delta t / \tau})$ times faster. The force
+    weighs one update, not ``dt``, so the gain depends on the period. A step of
+    ``dt = 0`` changes nothing, the velocity included. The node resets the
+    velocity with each new sample (``reset_``): the forces it remembers are
+    those of the sample before.
 
-    With a period of ``tau_h / 4`` and ``lam = tau_h``, a ``tau`` of ``tau_h / 3``
-    ($e^{-0.75} \approx 0.47$ per update) halved the periods that 11 nodes of a
-    ResNet needed, and one run in a few of them collapsed; ``tau_h / 4`` is
-    safer. On a linear chain of identities the explicit step is stable up to
-    about $e^{-\Delta t/\tau} \approx 0.78$, below it with late updates, and
-    lower for a larger ``alpha = dt / lam`` (``examples/cifar10/`` diverged at
-    0.8). ``specs/pc.md`` has the measurements.
+    With ``r`` as the state of a node, it has not been seen to help: in a chain
+    of 4 residual nodes (``tau.r = tau.h``, a period of ``tau.h / 4``), the
+    credit crossed the chain no sooner, as each period carries it one node
+    further whatever the step, and a ``tau`` of ``0.75 * tau.h`` diverged where
+    ``tau.h / 2`` did not (``specs/pc.md``).
 
     The state (``state_dict()``) holds the velocity ``"velocity"``, a tensor of
-    the shape, dtype and device of ``h``.
+    the shape, dtype and device of ``r``.
 
     Example::
 
@@ -207,9 +199,9 @@ class HeavyBall(Relaxer):
             raise ValueError(f"HeavyBall.tau must be finite and > 0, got {self.tau!r}")
 
     @override
-    def bind(self, h: torch.Tensor) -> BoundRelaxer:
-        """Return the relaxer bound to ``h``, with the velocity at zero."""
-        return _BoundHeavyBall(torch.zeros_like(h), self.tau)
+    def bind(self, r: torch.Tensor) -> BoundRelaxer:
+        """Return the relaxer bound to ``r``, with the velocity at zero."""
+        return _BoundHeavyBall(torch.zeros_like(r), self.tau)
 
 
 class _BoundHeavyBall(BoundRelaxer):
@@ -219,13 +211,13 @@ class _BoundHeavyBall(BoundRelaxer):
 
     @override
     def step_(
-        self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+        self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
     ) -> None:
         if dt == 0:
             return  # an update of no time must not store a force
         with torch.no_grad():
             self._velocity.mul_(math.exp(-dt / self._tau)).add_(force)
-            h.sub_((dt / tau_h) * self._velocity)
+            r.sub_((dt / tau_h) * self._velocity)
 
     @override
     def reset_(self) -> None:

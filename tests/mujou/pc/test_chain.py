@@ -180,11 +180,11 @@ class TestChain:
             assert [m.shape for m in moments] == [p.shape for p in module.parameters()]
         assert "optimizer" not in tree["nodes"]["input"]["state"]
 
-    def test_each_layer_binds_the_relaxer_to_its_own_activity(
+    def test_each_layer_binds_the_relaxer_to_its_own_deviation(
         self, start_manual: StartManual
     ):
-        # One HeavyBall for the whole chain: each layer binds it to its own h,
-        # so each keeps a velocity of its own; the output holds no h.
+        # One HeavyBall for the whole chain: each layer binds it to its own r,
+        # so each keeps a velocity of its own; the output holds no r.
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head, relaxer=pc.relax.HeavyBall(tau=3e-3))
         tree = run_states(start_manual, net, net.input)
@@ -233,14 +233,14 @@ def learned(
 def assert_learned_alike(
     states: dict[str, dict[str, Any]], expected: dict[str, dict[str, Any]]
 ) -> None:
-    """The weights are equal, and the activities of each sample."""
+    """The weights are equal, and the r and lam of each sample."""
     for path in ["layer0", "layer1", "output"]:
         for name, weight in expected[path]["module"].items():
             torch.testing.assert_close(
                 states[path]["module"][name], weight, rtol=1e-12, atol=1e-14
             )
     for path in ["layer0", "layer1"]:
-        for name in ["h", "lam"]:
+        for name in ["r", "lam"]:
             got, want = states[path][name], expected[path][name]
             torch.testing.assert_close(
                 got, want.reshape(got.shape), rtol=1e-12, atol=1e-14

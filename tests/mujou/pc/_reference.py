@@ -15,7 +15,7 @@ H = 1e-3  # seconds per step
 
 B = 3
 N_OUT = 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 TAU_THETA = 0.05  # the time constant of theta, in the SGD of every node
 SGD = pc.optim.SGD(tau=TAU_THETA)
 # An AdamW whose first update is far from that of SGD; weight decay on.
@@ -142,14 +142,10 @@ class Reference:
     """PC-ALM in plain PyTorch: every node moves at once from the values of the
     previous step (a Jacobi update).
 
-    ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity of layer
-    ``i`` (its state, which it sent), each with the count of jumps, the target, mask and
-    time it carries; all start at zero (mask False, time 0), as the ports do. A layer
-    moves its ``h`` with its prediction, ``h <- mu + (h - mu_last)``, when the
-    carried time or the jumps of ``h_in`` changes, and then advances its jumps.
-    When it learns, it keeps the jump ``f(h_in; theta_new) - f(h_in; theta)``
-    and adds it to ``h`` in its next step, advancing its jumps for it only when
-    it learns at intervals. The input counts the writes as its jumps.
+    ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity that layer
+    ``i`` sent, ``mu + r`` with the ``mu`` of the ``h_in`` it read and its
+    deviation ``r`` after the step, each with the target, mask and time it
+    carries; all start at zero (mask False, time 0), as the ports do.
     """
 
     def __init__(
@@ -163,12 +159,8 @@ class Reference:
         self.head = copy.deepcopy(head)
         interval = None if learn_interval is None else round(learn_interval * 1e9)
         self.clocks = [Clock(interval) for _ in widths]  # the layers, then the head
+        self.r = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
         self.lam = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
-        self.mu_last = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
-        self.jump: list[torch.Tensor | None] = [None for _ in widths[1:]]
-        self.seen_jumps = [0 for _ in widths[1:]]
-        self.input_seen = -1
-        self.jumps = [0 for _ in widths]  # what each sender sent
         self.h = [torch.zeros(B, n, dtype=F64) for n in widths]
         self.carried = [
             (torch.zeros(B, N_OUT, dtype=F64), torch.zeros(B, dtype=torch.bool), 0)
@@ -202,51 +194,32 @@ class Reference:
             self._learn(params, g_theta, mask_c, self.clocks[-1], now)
         # The layers, from the last: each with the g the next one made from the
         # previous values.
-        h_new, jumps_new = list(self.h), list(self.jumps)
+        h_new = list(self.h)
         for i in reversed(range(len(self.layers))):
             _, mask_i, time_i = self.carried[i]
             clock = self.clocks[i]
-            new, learn = clock.tick(dt, time_i, now)
+            _, learn = clock.tick(dt, time_i, now)
             if learn and not mask_i.any():
                 clock.learned(now)
                 learn = False
-            h = self.h[i + 1]
-            jump = self.jump[i]
-            if jump is not None:  # theta moved in the step before
-                h = h + jump
-                self.jump[i] = None
-            reanchor = new or self.jumps[i] != self.seen_jumps[i]
-            self.seen_jumps[i] = self.jumps[i]
             module = self.layers[i]
             h_in = self.h[i].clone().requires_grad_()
             params = list(module.parameters())
             mu = module(h_in)
-            # r = h - mu, which is h - mu_last when h moves with mu below.
-            r = h - (self.mu_last[i] if reanchor else mu.detach())
-            delta = torch.where(mask_i[:, None], r + self.lam[i], 0.0)
+            r, lam = self.r[i], self.lam[i]
+            delta = torch.where(mask_i[:, None], r + lam, 0.0)
             g_in, *g_theta = torch.autograd.grad(mu, [h_in, *params], -delta)
-            mu = mu.detach()
-            if reanchor:
-                h = mu + (h - self.mu_last[i])
-            h = h - (dt / tau.h) * (h - mu + self.lam[i] + g_next)
-            self.lam[i] = self.lam[i] + (dt / tau.lam) * (h - mu)
-            self.mu_last[i] = mu
-            h_new[i + 1] = h
-            if reanchor or (jump is not None and clock.interval is not None):
-                jumps_new[i + 1] = self.jumps[i + 1] + 1
+            # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r
+            r = r - (dt / tau.h) * ((1 + tau.h / tau.r) * r + lam + g_next)
+            self.lam[i] = lam + (dt / tau.lam) * r  # tau_lam dlam/dt = r
+            self.r[i] = r
+            h_new[i + 1] = mu.detach() + r
             if learn:
                 self._learn(params, g_theta, mask_i, clock, now)
-                with torch.no_grad():
-                    moved = module(self.h[i])
-                self.jump[i] = moved - mu
-                self.mu_last[i] = moved
             self.g_in[i] = g_in
             g_next = g_in
         h_new[0] = x
-        if time != self.input_seen:  # a write the input has not seen
-            self.input_seen = time
-            jumps_new[0] = self.jumps[0] + 1
-        self.h, self.jumps = h_new, jumps_new
+        self.h = h_new
         self.carried = [(y, mask, time), *self.carried[:-1]]
 
     def _learn(

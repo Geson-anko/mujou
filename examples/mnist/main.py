@@ -20,13 +20,13 @@ measures:
 The run's timer goes ``--time-scale`` times faster than real time so that the
 nodes update about as fast as they can compute, instead of waiting for their
 period. Too fast, and an update comes later than its period: ``dt`` grows. The
-nodes count at most ``max_dt`` of it (``tau.h / 2``, 2 periods), which keeps the
-relaxation stable but drops the time beyond. ``--watch`` counts the ``dt`` of
+nodes count at most ``max_dt`` of it (``tau.h / 4``, 1 period, with the decay
+``tau.r = tau.h``), which keeps the relaxation stable but drops the time beyond. ``--watch`` counts the ``dt`` of
 the nodes (``watch.py``), prints its distribution and warns when its median
 exceeds 1.5 periods or when more than 1% of the updates come later than 2
 periods. The default 1 keeps ``dt`` at 1 to 1.25 periods on an idle 32-core
 machine, where the first layer (784 inputs) is the slowest node; there, 3
-epochs reach a test accuracy of 97.60% (seed 0), against 97.54% for BP. At 2,
+epochs reach a test accuracy of 97.58% (seed 0), against 97.54% for BP. At 2,
 that node takes most of its period to compute and 1% of its updates come later
 than 2 periods (a warning). To choose the time scale on another machine, run
 one epoch with ``--watch`` and take the highest scale that gives no warning and
@@ -82,7 +82,7 @@ def train_pc(
     shown = args.steps * period  # how long the host shows each batch
     # The learning rate of one batch is shown / optimizer.tau: the nodes learn
     # once per batch, for the time since they last learned.
-    tau = pc.TimeConstants(h=args.tau_h, lam=2 * args.tau_h)
+    tau = pc.TimeConstants(h=args.tau_h, lam=2 * args.tau_h, r=args.tau_h)
     optimizer = pc.optim.SGD(tau=shown / args.lr)
     net = pc.Chain(
         *modules,

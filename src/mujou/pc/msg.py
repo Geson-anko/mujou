@@ -5,7 +5,7 @@ from typing import TypedDict
 
 import torch
 
-from mujou import DictSpec, IntSpec, TensorSpec, TimestampSpec
+from mujou import DictSpec, TensorSpec, TimestampSpec
 from mujou.time import Timestamp
 from mujou.types import Size
 
@@ -25,13 +25,6 @@ class Activity(TypedDict):
     for ``B`` samples, or more dimensions (see ``activity_spec``).
 
     - ``h``: the activity, ``(*batch, *out)``.
-    - ``jumps``: an ``int``, the number of times the sender's ``h`` has jumped
-      rather than relaxed continuously: an ``Input`` counts the writes of the
-      host, and a ``Layer`` counts its moves with a new sample and with a jump
-      of the ``h`` it receives, and the jumps of its own ``theta`` when it
-      learns at intervals (``learn_interval`` not ``None``). A change tells the
-      receiver to move its own ``h`` with its prediction, so that the jump
-      does not enter its deviation ``h - mu`` (``Layer``).
     - ``y``: the target of each sample, ``(*batch, *target)``.
     - ``mask``: ``batch`` bool, whether each sample has a target. A sample whose
       ``mask`` is False adds nothing to the loss, whatever its ``y`` is.
@@ -46,7 +39,6 @@ class Activity(TypedDict):
     """
 
     h: torch.Tensor
-    jumps: int
     y: torch.Tensor
     mask: torch.Tensor
     time: Timestamp
@@ -107,7 +99,6 @@ def activity_spec(h: TensorSpec, y: TensorSpec, batch: Size = ()) -> DictSpec[Ac
     return DictSpec(
         Activity,
         h=h,
-        jumps=IntSpec(),
         y=y,
         mask=TensorSpec(batch, torch.bool),
         time=TimestampSpec(),

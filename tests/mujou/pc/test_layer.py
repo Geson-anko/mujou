@@ -112,7 +112,7 @@ class TestConstruction:
         layer = self._layer(module=nn.Sequential(nn.Linear(4, 6), nn.Tanh()))
         assert layer.next.send_spec == activity(TensorSpec((B, 6)))
         assert layer.prev.recv_spec == activity(TensorSpec((B, 4)))
-        assert layer.h.shape == layer.lam.shape == (B, 6)
+        assert layer.r.shape == layer.lam.shape == (B, 6)
 
     def test_the_dtype_comes_from_the_module(self):
         layer = self._layer(
@@ -122,14 +122,14 @@ class TestConstruction:
 
     def test_the_period_defaults_to_a_quarter_of_tau_h(self):
         assert self._layer().period == pytest.approx(TAU.h / 4)
-        assert self._layer(period=2e-3).period == 2e-3
+        assert self._layer(period=0.5e-3).period == 0.5e-3
 
     @pytest.mark.parametrize(
         ("kwargs", "match"),
         [
             ({"module": nn.Flatten(0)}, "start with the batch"),
-            ({"period": 3e-3}, "max_dt"),  # longer than tau.h / 2
-            ({"period": 2e-3, "max_dt": 1e-3}, "max_dt"),
+            ({"period": 2e-3}, "max_dt"),  # longer than tau.h / 4
+            ({"period": 1e-3, "max_dt": 0.5e-3}, "max_dt"),
         ],
     )
     def test_value_errors(self, kwargs: dict[str, Any], match: str):
@@ -144,9 +144,7 @@ class TestJacobi:
     ):
         # Linear + tanh, then a residual block: the reference moves all nodes at
         # once; stepping from the output to the input reads only values of the
-        # previous step everywhere, so the two agree to rounding. Learning in
-        # every step, the layers move h by the jumps of their own theta; at
-        # intervals, these jumps also go up the chain with the counts of jumps.
+        # previous step everywhere, so the two agree to rounding.
         widths = [4, 5, 5]
         layers = [
             make_modules("linear", "tanh", widths[:2])[0][0],
@@ -168,13 +166,12 @@ class TestJacobi:
             tree = run.state_dict()
             for i, layer in enumerate(reference.layers):
                 state = tree["nodes"][f"l{i}"]["state"]
-                close(state["h"], reference.h[i + 1], 1e-12)
+                close(state["r"], reference.r[i], 1e-12)
                 close(state["lam"], reference.lam[i], 1e-12)
                 for key, value in layer.state_dict().items():
                     close(state["module"][key], value, 1e-12)
                 sent = tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]
                 close(sent["h"], reference.h[i + 1], 1e-12)
-                assert sent["jumps"] == reference.jumps[i + 1]
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
                 assert torch.equal(sent["mask"], reference.carried[i + 1][1])
                 close(
@@ -182,10 +179,6 @@ class TestJacobi:
                     reference.g_in[i],
                     1e-12,
                 )
-            assert (
-                tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]["jumps"]
-                == reference.jumps[0]
-            )
             for key, value in reference.head.state_dict().items():
                 close(tree["nodes"]["out"]["state"]["module"][key], value, 1e-12)
             close(
@@ -197,15 +190,30 @@ class TestJacobi:
             close(prediction["y_hat"], reference.y_hat, 1e-12)
             assert torch.equal(prediction["y"], reference.prediction_carried[0])
             assert torch.equal(prediction["mask"], reference.prediction_carried[1])
-        if learn_interval is not None:  # the chain did jump
-            assert reference.jumps[-1] > reference.jumps[0] + 1
 
 
-# Steps to the fixed point from h = lam = 0, to 1e-10 at TAU and these sizes.
+# Steps to the fixed point from r = lam = 0, to 1e-10 at TAU and these sizes.
 RELAX_STEPS = 3000
 # The same for the chain of eight residual blocks, to 1e-9.
 DEEP_STEPS = 6000
 CASES = [(block, act) for block in ("linear", "res") for act in ("linear", "tanh")]
+
+
+def assert_fixed_point(
+    tree: dict[str, Any],
+    forward_hs: Sequence[torch.Tensor],
+    expected: Sequence[torch.Tensor],
+    tol_h: float,
+    tol_lam: float,
+) -> None:
+    """At the fixed point, each layer ``l{i}`` has ``r = 0``, sends the forward
+    pass and holds the credit ``expected[i]`` in ``lam``."""
+    for i, (h, credit) in enumerate(zip(forward_hs, expected, strict=True)):
+        node = tree["nodes"][f"l{i}"]
+        r = node["state"]["r"]
+        close(r, torch.zeros_like(r), tol_h)
+        close(node["ports"]["next"]["out"]["value"]["h"], h, tol_h)
+        close(node["state"]["lam"], credit, tol_lam)
 
 
 @pytest.mark.slow
@@ -225,9 +233,7 @@ class TestFixedPoint:
         expected = credits(layers, head, x, y, MASK)
         with torch.no_grad():
             forward_hs, _ = forward(layers, head, x)
-        for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
-            close(nodes[f"l{i}"]["state"]["h"], h, 1e-10)
-            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
+        assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-10, 1e-8)
         if block == "linear":
             # skill pc-alm 4: lam_{L-1} = W_L^T e_L,
             # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}), where the mean
@@ -278,12 +284,10 @@ class TestDeepChain:
     def test_eight_residual_nodes_reach_the_fixed_point(
         self, start_manual: StartManual
     ):
-        # Residual blocks have Jacobians near the identity. Holding the
-        # deviation h - mu of each node fixed while mu follows the nodes below
-        # (the previous design) let the credit of the loss loop back through the
-        # product of the Jacobians, and this chain diverged (lam ~ 1e40 in 4000
-        # steps). With h as the state, it reaches the fixed point. The target is
-        # the forward pass plus noise, for credits of order 1.
+        # Residual blocks have Jacobians near the identity. The decay of r
+        # (tau.r = tau.h) keeps the credit of the loss, which loops back through
+        # the product of the Jacobians, from growing. The target is the forward
+        # pass plus noise, for credits of order 1.
         widths = [8] * 9
         layers, head = make_modules("res", "tanh", widths)
         x, noise = sample(widths, 0)
@@ -294,11 +298,26 @@ class TestDeepChain:
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
         run_steps(run, chain.from_next(), DEEP_STEPS)
-        nodes = run.state_dict()["nodes"]
         expected = credits(layers, head, x, y, MASK)
-        for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
-            close(nodes[f"l{i}"]["state"]["h"], h, 1e-9)
-            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
+        assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-9, 1e-8)
+
+    def test_without_the_decay_of_r_it_diverges(self, start_manual: StartManual):
+        # The reason for tau.r: r is held while mu follows the nodes below, so
+        # each h moves with every r below it, and without the decay this chain
+        # diverges (lam ~ 1e6 in about 650 steps).
+        widths = [8] * 9
+        layers, head = make_modules("res", "tanh", widths)
+        x, noise = sample(widths, 0)
+        with torch.no_grad():
+            _, y_hat = forward(layers, head, x)
+        tau = pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=math.inf)
+        chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
+        run = start_manual(chain.net)
+        chain.write(run, x, y_hat + noise, MASK)
+        run_steps(run, chain.from_next(), 1000)
+        nodes = run.state_dict()["nodes"]
+        lams = torch.stack([nodes[f"l{i}"]["state"]["lam"] for i in range(8)])
+        assert not (lams.isfinite().all() and lams.abs().max() < 1e3)
 
     @pytest.mark.parametrize(
         "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
@@ -306,15 +325,9 @@ class TestDeepChain:
     def test_learning_keeps_lam_at_the_credit(
         self, start_manual: StartManual, learn_interval: float | None
     ):
-        # A theta so slow it barely moves: only the jumps theta makes move h,
-        # not the relaxation of the nodes below, so lam goes to the credit and
-        # stays there. (Moving h with every change of mu, the previous design,
-        # made lam grow to 1e5 in 500 steps here with learn_interval=None,
-        # however slow theta was, before it settled elsewhere.) 16 periods is
-        # about the round trip 2 * depth * period of this chain (18 periods); an
-        # interval much shorter advances the jumps in almost every update, the
-        # nodes above move h with every change of mu again, and lam grows
-        # (4 periods: about 4 times the credit; 1 or 2 periods: it diverges).
+        # A theta so slow it barely moves, learning in every update or at
+        # intervals of about the round trip 2 * depth * period of this chain (18
+        # periods): lam goes to the credit and stays there.
         widths = [8] * 9
         layers, head = make_modules("res", "tanh", widths)
         x, noise = sample(widths, 0)
@@ -393,7 +406,8 @@ class TestPcLimit:
         # energy of predictive coding is stationary, away from the forward pass.
         widths = [4, 5, 3]
         layers, head = make_modules("linear", "tanh", widths)
-        tau = pc.TimeConstants(h=TAU.h, lam=math.inf)
+        # Without the decay of r too, which would move the fixed point.
+        tau = pc.TimeConstants(h=TAU.h, lam=math.inf, r=math.inf)
         chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
@@ -413,8 +427,7 @@ class TestPcLimit:
             tree["nodes"]["out"]["ports"]["prev"]["out"]["value"],
         ]
         for i in range(len(layers)):
-            state = tree["nodes"][f"l{i}"]["state"]
-            r = state["h"] - state["mu"]
+            r = tree["nodes"][f"l{i}"]["state"]["r"]
             close(r, -g[i], 1e-10)  # r = -g
             assert r.abs().max() > 1e-3
         # The gradient of the energy of PC with respect to each h is zero.
@@ -434,9 +447,9 @@ class TestPcLimit:
 class TestScalar:
     def test_lam_is_w2_times_the_error(self, start_manual: StartManual):
         # y_hat = w2 h, h = w1 x, loss 0.5 (y - y_hat)^2: at the fixed point
-        # lam = w2 (y - y_hat). With the half, h relaxes with the curvature
-        # 1 + w2^2 = 5; MSELoss would make it 1 + 2 w2^2 = 9, beyond about 8,
-        # where the explicit steps of dt / tau_h = 1/4 diverge.
+        # lam = w2 (y - y_hat). With the half, r relaxes with the curvature
+        # 1 + tau_h / tau_r + w2^2 = 6; MSELoss would make it 10, beyond 8, where
+        # the explicit steps of dt / tau_h = 1/4 diverge.
         w1, w2, x, y = 0.5, 2.0, 1.5, 1.0
         first, head = nn.Linear(1, 1, bias=False), nn.Linear(1, 1, bias=False)
         with torch.no_grad():
@@ -504,9 +517,7 @@ class TestSchedules:
     def test_every_order_learns_as_sgd(self, start_manual: StartManual):
         # Learning at intervals, twice, at the fixed point each time: whatever
         # the order, each update is one step of SGD, the second from the
-        # parameters of the first. The jumps that the first update makes go up
-        # the chain with the counts of jumps, and the chain relaxes to the next fixed
-        # point.
+        # parameters of the first, and the chain relaxes to the next fixed point.
         widths = [4, 5, 3]
         x, y = sample(widths, 0)
         layers, head = make_modules("linear", "tanh", widths)
@@ -547,10 +558,10 @@ class TestSchedules:
 
 class TestWithoutTeacher:
     def test_h_is_the_forward_pass(self, start_manual: StartManual):
-        # Without a target, nothing drives h from mu or lam from zero. Stepped
-        # from the input, each node reads what the previous one sent in the same
-        # step: in the first step, every node moves h with mu = f(h_in) to the
-        # forward pass, and stays there.
+        # Without a target, nothing drives r or lam from zero. Stepped from the
+        # input, each node reads what the previous one sent in the same step: in
+        # the first step, every node sends h = mu + 0, the forward pass, and
+        # stays there.
         widths = [4, 5, 5]
         layers = [
             make_modules("linear", "tanh", widths[:2])[0][0],
@@ -571,9 +582,9 @@ class TestWithoutTeacher:
                 assert torch.equal(
                     tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["h"], h
                 )
-                assert torch.equal(tree["nodes"][f"l{i}"]["state"]["h"], h)
-                lam = tree["nodes"][f"l{i}"]["state"]["lam"]
-                assert torch.equal(lam, torch.zeros_like(lam))
+                for name in ("r", "lam"):
+                    value = tree["nodes"][f"l{i}"]["state"][name]
+                    assert torch.equal(value, torch.zeros_like(value))
         tree = run.state_dict()
         names = [*(f"l{i}" for i in range(len(layers))), "out"]
         for name, state in zip(names, before, strict=True):
@@ -581,7 +592,7 @@ class TestWithoutTeacher:
                 assert torch.equal(tree["nodes"][name]["state"]["module"][key], value)
 
     def test_a_new_input_takes_one_step_per_sender(self, start_manual: StartManual):
-        # At the forward pass of a first input (h - mu = 0), a second one is
+        # At the forward pass of a first input (r = 0), a second one is
         # stepped from the output: each node reads the previous step's values,
         # so the new forward pass reaches l1 in three steps (Input, l0, l1).
         widths = [4, 5, 5]
@@ -658,20 +669,12 @@ class Learning:
         self.run.step(0.0, *self.chain.from_next())
 
 
-def h_before_mu(state: dict[str, Any]) -> torch.Tensor:
-    """The ``h`` of a layer in a step, from its state before the step, once it
-    took the jump of its ``theta`` of the step before (if any)."""
-    return state["h"] + state["jump"] if state["jumped"] else state["h"]
-
-
 def layer_gradients(
-    tree: dict[str, Any], module: nn.Module, *, reanchor: bool = False
+    tree: dict[str, Any], module: nn.Module
 ) -> tuple[nn.Module, list[torch.Tensor]]:
     """A copy of the ``module`` of ``l0`` with the parameters of the state
     ``tree`` taken before a step, and the mean gradients ``g_theta / B`` that
-    the layer hands its optimizer in the step. With ``reanchor``, ``h`` moves
-    with ``mu`` in the step (a new input, or a jump of ``h_in``), so ``h - mu``
-    is ``h - mu_last``.
+    the layer hands its optimizer in the step, from ``delta = r + lam``.
 
     It computes ``g_theta`` with ``functional.vjp``, which its own tests check
     against finite differences: the tests that use it check when the update
@@ -683,22 +686,20 @@ def layer_gradients(
     state = tree["nodes"]["l0"]["state"]
     sent = tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]
     labeled = sent["mask"][:, None]
-    h = h_before_mu(state)
 
     def delta(mu: torch.Tensor) -> torch.Tensor:
-        r = h - (state["mu"] if reanchor else mu)
-        return torch.where(labeled, r + state["lam"], 0.0)
+        return torch.where(labeled, state["r"] + state["lam"], 0.0)
 
     _, _, g_theta = pc.functional.vjp(module, sent["h"], delta, params)
     return module, [g / B for g in g_theta]
 
 
 def layer_update(
-    tree: dict[str, Any], module: nn.Module, elapsed: float, *, reanchor: bool = False
+    tree: dict[str, Any], module: nn.Module, elapsed: float
 ) -> dict[str, torch.Tensor]:
     """The parameters of ``l0`` after one update of SGD from the state ``tree``
     taken before the step: ``theta - (elapsed / tau_theta) g_theta / B``."""
-    module, grads = layer_gradients(tree, module, reanchor=reanchor)
+    module, grads = layer_gradients(tree, module)
     with torch.no_grad():
         for p, g in zip(module.parameters(), grads, strict=True):
             p -= (elapsed / TAU_THETA) * g
@@ -760,9 +761,7 @@ class TestLearnInterval:
         # Its time 0 is also that of the zeros carried before it, so the nodes
         # do not see it as new, and learn 2 K steps after time 0 as for the
         # zeros; before the input arrives, the mask (all False) keeps them from
-        # learning. The layer and the output learn in the same step. (The
-        # input's count of jumps still moves h with it: at step K, the credit would not
-        # have reached the layer yet, delta = 0.)
+        # learning. The layer and the output learn in the same step.
         widths = [4, 5]
         layers, head = make_modules("linear", "tanh", widths)
         chain = HandChain(layers, head, widths, learn_interval=2 * K * H)
@@ -911,166 +910,113 @@ def relaxed(
     module: nn.Module,
     dt: float,
     *,
-    reanchor: bool,
     node: str = "l0",
     h_in: str = "inp",
     g: str = "out",
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """``h`` and ``lam`` of the layer ``node`` after one Euler step of ``dt``
-    from the state ``before``, written out, stepped from the output: the node
-    reads ``h_in`` as the previous node ``h_in`` sent it before the step, and
-    ``g`` as the next node ``g`` sent it in the step. ``h`` first takes the
-    jump of ``theta`` of the step before (if any), then, with ``reanchor``,
-    moves with ``mu``."""
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """``r``, ``lam`` and the ``h`` it sends of the layer ``node`` after one
+    Euler step of ``dt`` from the state ``before``, written out, stepped from
+    the output: the node reads ``h_in`` as the previous node ``h_in`` sent it
+    before the step, and ``g`` as the next node ``g`` sent it in the step, and
+    sends ``mu + r`` with the ``theta`` before the step."""
     state = before["nodes"][node]["state"]
     module = copy.deepcopy(module)
     module.load_state_dict(state["module"])
     with torch.no_grad():
         mu = module(before["nodes"][f"{h_in}"]["ports"]["next"]["out"]["value"]["h"])
-    h, lam = h_before_mu(state), state["lam"]
-    if reanchor:
-        h = mu + (h - state["mu"])
+    r, lam = state["r"], state["lam"]
     g_sent = after["nodes"][f"{g}"]["ports"]["prev"]["out"]["value"]
-    h = h - (dt / TAU.h) * (h - mu + lam + g_sent)  # tau_h dh/dt = -(r + lam + g)
-    lam = lam + (dt / TAU.lam) * (h - mu)  # tau_lam dlam/dt = r
-    return h, lam
+    # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r
+    r = r - (dt / TAU.h) * ((1 + TAU.h / TAU.r) * r + lam + g_sent)
+    lam = lam + (dt / TAU.lam) * r  # tau_lam dlam/dt = r
+    return r, lam, mu + r
+
+
+def assert_relaxed(
+    after: dict[str, Any], node: str, expected: tuple[torch.Tensor, ...]
+) -> None:
+    """The ``r``, ``lam`` and sent ``h`` of ``node`` in ``after`` are those of
+    ``relaxed``."""
+    r, lam, h = expected
+    close(after["nodes"][node]["state"]["r"], r, 1e-14)
+    close(after["nodes"][node]["state"]["lam"], lam, 1e-14)
+    close(after["nodes"][node]["ports"]["next"]["out"]["value"]["h"], h, 1e-14)
 
 
 class TestMaxDt:
-    @pytest.mark.parametrize(("max_dt", "counted"), [(None, 2 * H), (3 * H, 3 * H)])
+    @pytest.mark.parametrize(("max_dt", "counted"), [(None, H), (3 * H, 3 * H)])
     def test_a_long_dt_counts_max_dt(
         self, start_manual: StartManual, max_dt: float | None, counted: float
     ):
         # The layer learns at step 4 (K steps after the write at step 1); dt =
-        # 5 H at step 5, which is past the next time to learn (step 7): h takes
-        # the jump of theta and then h and lam take one step of max_dt
-        # (tau.h / 2 = 2 H by default), and the update of theta is weighted by
-        # max_dt only.
+        # 5 H at step 5, which is past the next time to learn (step 7): r and
+        # lam take one step of max_dt (tau.h / 4 = H by default with tau.r =
+        # tau.h), and the update of theta is weighted by max_dt only.
         learning = Learning(start_manual, max_dt=max_dt)
         module = learning.chain.layers[0].module
         for _ in range(4):
             learning.step()
         before = learning.run.state_dict()
-        assert before["nodes"]["l0"]["state"]["jumped"]
         learning.run.timer.advance(4 * H)
         learning.step()
         after = learning.run.state_dict()
-        h, lam = relaxed(before, after, module, counted, reanchor=False)
-        close(after["nodes"]["l0"]["state"]["h"], h, 1e-14)
-        close(after["nodes"]["l0"]["state"]["lam"], lam, 1e-14)
+        assert_relaxed(after, "l0", relaxed(before, after, module, counted))
         expected = layer_update(before, module, counted)
         for key, value in expected.items():
             close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
 
-    def test_the_default_keeps_the_step_of_lam_stable(self):
+    def test_the_default_keeps_the_steps_stable(self):
         # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
-        # a period must not pass.
+        # a period must not pass; the decay of r halves it here.
         layer = functools.partial(
             pc.Layer,
             act_spec=activity(TensorSpec((B, 4))),
             optimizer=SGD,
             learn_interval=None,
         )
-        fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3)
+        fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, r=math.inf)
         layer(nn.Linear(4, 5), tau=fast_dual, period=1.5e-3)
         with pytest.raises(ValueError, match="max_dt"):
             layer(nn.Linear(4, 5), tau=fast_dual, period=1.6e-3)
-        no_dual = pc.TimeConstants(h=4e-3, lam=math.inf)
+        no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, r=math.inf)
         layer(nn.Linear(4, 5), tau=no_dual, period=2e-3)
         with pytest.raises(ValueError, match="max_dt"):
             layer(nn.Linear(4, 5), tau=no_dual, period=2.1e-3)
+        decay = pc.TimeConstants(h=4e-3, lam=math.inf, r=4e-3)
+        layer(nn.Linear(4, 5), tau=decay, period=1e-3)
+        with pytest.raises(ValueError, match="max_dt"):
+            layer(nn.Linear(4, 5), tau=decay, period=1.1e-3)
 
 
-class TestJumps:
-    def test_h_moves_with_new_inputs_and_with_the_jumps_of_theta(
-        self, start_manual: StartManual
+class TestResidual:
+    @pytest.mark.parametrize(
+        ("node", "h_in", "g", "first"),
+        [("l0", "inp", "l1", 2), ("l1", "l0", "out", 3)],
+    )
+    def test_r_relaxes_and_h_follows_mu(
+        self, start_manual: StartManual, node: str, h_in: str, g: str, first: int
     ):
-        # The layer sees the inputs at steps 2, 7, ... and learns at 4, 9, ...:
-        # h moves with mu at steps 2 and 7 (new inputs); at step 5 it takes the
-        # jump f(h_in; theta_new) - f(h_in; theta) that learning made at step 4,
-        # at the h_in of step 4, and only relaxes otherwise. Each of these
-        # advances the jumps it sends (and the first update, from zeros).
-        learning = Learning(start_manual)
-        module = learning.chain.layers[0].module
-        jumps: list[int] = []
-        for s in range(1, 9):
-            before = learning.run.state_dict()
-            learning.step()
-            after = learning.run.state_dict()
-            jumps.append(after["nodes"]["l0"]["ports"]["next"]["out"]["value"]["jumps"])
-            if s == 1:
-                continue  # the first update moves h from zeros
-            h, lam = relaxed(before, after, module, H, reanchor=s in (2, 7))
-            close(after["nodes"]["l0"]["state"]["h"], h, 1e-14)
-            close(after["nodes"]["l0"]["state"]["lam"], lam, 1e-14)
-            assert after["nodes"]["l0"]["state"]["jumped"] == (s == 4)
-            if s == 4:
-                h_in = before["nodes"]["inp"]["ports"]["next"]["out"]["value"]["h"]
-                old, new = copy.deepcopy(module), copy.deepcopy(module)
-                old.load_state_dict(before["nodes"]["l0"]["state"]["module"])
-                new.load_state_dict(after["nodes"]["l0"]["state"]["module"])
-                with torch.no_grad():
-                    close(after["nodes"]["l0"]["state"]["mu"], new(h_in), 1e-14)
-                    close(
-                        after["nodes"]["l0"]["state"]["jump"],
-                        new(h_in) - old(h_in),
-                        1e-14,
-                    )
-        assert jumps == [1, 2, 2, 2, 3, 3, 4, 4]
-
-    def test_a_jump_below_moves_the_next_h_with_r_unchanged(
-        self, start_manual: StartManual
-    ):
-        # l1 reads the first input at step 3. Both layers learn at step 4 and
-        # take their own jumps at step 5; l0 sends its jump with a new count of jumps,
-        # which l1 reads at step 6 and moves with: h - mu_last before the move
-        # is h - mu after it. At step 8, l1 reads a new input and the count l0
-        # advanced for it at step 7: one move, one new count.
+        # Both layers see the inputs at steps 2, 7, ... (l1 a step later) and
+        # learn at steps 4, 9, ...: whatever moves mu (a new input, the
+        # relaxation or learning of the layer below, the node's own theta), r
+        # and lam only relax, and the node sends mu + r with the mu of the h_in
+        # it read.
         learning = Learning(start_manual, widths=(4, 5, 5))
-        module = learning.chain.layers[1].module
-        jumps: list[int] = []
+        module = learning.chain.layers[int(node[1])].module
+        initial = learning.run.state_dict()["nodes"]
         for s in range(1, 10):
             before = learning.run.state_dict()
             learning.step()
             after = learning.run.state_dict()
-            jumps.append(after["nodes"]["l1"]["ports"]["next"]["out"]["value"]["jumps"])
-            if s < 3:
-                continue  # the moves from zeros and the zeros of l0
-            h, lam = relaxed(
-                before,
-                after,
-                module,
-                H,
-                reanchor=s in (3, 6, 8),
-                node="l1",
-                h_in="l0",
-                g="out",
+            if s < first:
+                continue  # the zeros before the input reaches the node
+            expected = relaxed(before, after, module, H, node=node, h_in=h_in, g=g)
+            assert_relaxed(after, node, expected)
+        final = learning.run.state_dict()["nodes"]
+        for path in ("l0", "l1"):  # both learned in the steps above
+            assert not equal_states(
+                final[path]["state"]["module"], initial[path]["state"]["module"]
             )
-            close(after["nodes"]["l1"]["state"]["h"], h, 1e-14)
-            close(after["nodes"]["l1"]["state"]["lam"], lam, 1e-14)
-        assert jumps == [1, 2, 3, 3, 4, 5, 5, 6, 6]
-
-    def test_learning_in_every_update_moves_no_node_above(
-        self, start_manual: StartManual
-    ):
-        # With learn_interval=None, theta moves by dt in every update: each layer
-        # takes its own jump, but advances its jumps only for the new input.
-        widths = [4, 5, 5]
-        layers, head = make_modules("linear", "tanh", widths)
-        chain = HandChain(layers, head, widths)
-        run = start_manual(chain.net)
-        x, y = sample(widths, 0)
-        chain.write(run, x, y, MASK)
-        run_steps(run, chain.from_next(), 5)
-        for _ in range(10):
-            run.step(H, *chain.from_next())
-            tree = run.state_dict()
-            for i in range(2):
-                assert tree["nodes"][f"l{i}"]["state"]["jumped"]
-                assert (
-                    tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["jumps"]
-                    == 2 + i
-                )
 
 
 class TestUnlabeled:
@@ -1086,7 +1032,7 @@ class TestUnlabeled:
         # AdamW, its moments and masses have left 0, and a call of step_ would
         # move theta by them and by the weight decay even with g = 0). Once
         # mask is False for every sample of every input that the nodes see, no
-        # node learns: h moves, and the theta of every node stays the same to
+        # node learns: r moves, and the theta of every node stays the same to
         # the bit.
         widths = [4, 5, 5]
         layers, head = make_modules("linear", "tanh", widths)
@@ -1116,7 +1062,7 @@ class TestUnlabeled:
             assert_same_tree(
                 after[path]["state"]["module"], before[path]["state"]["module"]
             )
-        assert not torch.equal(after["l1"]["state"]["h"], before["l1"]["state"]["h"])
+        assert not torch.equal(after["l1"]["state"]["r"], before["l1"]["state"]["r"])
 
     def test_no_target_skips_the_update_and_drops_the_time(
         self, start_manual: StartManual
@@ -1163,7 +1109,7 @@ class TestUnlabeled:
         learning.step(masks)  # step 9: learns from the second input
         after = learning.run.state_dict()
         state = before["nodes"]["l0"]["state"]
-        assert (state["h"] - state["mu"] + state["lam"])[1].abs().max() > 1e-6
+        assert (state["r"] + state["lam"])[1].abs().max() > 1e-6
         g_in = after["nodes"]["l0"]["ports"]["prev"]["out"]["value"]
         assert torch.equal(g_in[1], torch.zeros_like(g_in[1]))
         expected = layer_update(before, module, 5 * H)
@@ -1193,9 +1139,9 @@ class TestState:
         relaxer: pc.relax.Relaxer,
     ):
         # Taken at step 6, mid-phase, right after the input sent the input it
-        # was written (the layer has read the earlier one) and the layer took
-        # the jump of its theta. With AdamW, the moments and their masses carry
-        # over too, and with HeavyBall, the velocity.
+        # was written (the layer has read the earlier one) and two steps after
+        # the layer learned. With AdamW, the moments and their masses carry over
+        # too, and with HeavyBall, the velocity.
         whole = Learning(start_manual, optimizer=optimizer, relaxer=relaxer)
         for _ in range(16):
             whole.step()
@@ -1209,20 +1155,15 @@ class TestState:
                 float(tree["nodes"]["l0"]["state"]["relaxer"]["velocity"].abs().max())
                 > 1e-9
             )
-        assert {
+        assert set(tree["nodes"]["l0"]["state"]) == {
+            "generator",
             "clock",
-            "jump",
-            "jumped",
-            "jumps",
-            "seen_jumps",
-            "mu",
             "module",
             "optimizer",
             "relaxer",
-            "h",
+            "r",
             "lam",
-        } <= set(tree["nodes"]["l0"]["state"])
-        assert {"jumps", "seen_write"} <= set(tree["nodes"]["inp"]["state"])
+        }
         first.run.shutdown()
         restored = Learning(
             start_manual,
@@ -1279,22 +1220,22 @@ class TestOptimizer:
 
 
 class SpyRelaxer(pc.relax.Relaxer):
-    """A relaxer that counts the resets of the bound ones, and moves ``h`` as
+    """A relaxer that counts the resets of the bound ones, and moves ``r`` as
     ``pc.relax.Euler`` does."""
 
     def __init__(self) -> None:
         self.resets = 0
 
     @override
-    def bind(self, h: torch.Tensor) -> pc.relax.BoundRelaxer:
+    def bind(self, r: torch.Tensor) -> pc.relax.BoundRelaxer:
         spy = self
 
         class Bound(pc.relax.BoundRelaxer):
             @override
             def step_(
-                self, h: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+                self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
             ) -> None:
-                h.sub_((dt / tau_h) * force)
+                r.sub_((dt / tau_h) * force)
 
             @override
             def reset_(self) -> None:
@@ -1311,39 +1252,11 @@ class SpyRelaxer(pc.relax.Relaxer):
         return Bound()
 
 
-@pytest.mark.slow
-class TestDecayOfR:
-    """``tau.r``: the deviation ``r = h - mu`` decays, which pulls ``h`` towards
-    ``mu`` and keeps the fixed point, where ``r = 0``."""
-
-    @pytest.mark.parametrize(("block", "act"), CASES)
-    def test_lam_is_still_the_credit_of_backpropagation(
-        self, start_manual: StartManual, block: str, act: str
-    ):
-        widths = [4, 4, 4] if block == "res" else [4, 5, 3]
-        layers, head = make_modules(block, act, widths)
-        # r = h doubles the pull of r; max_dt (h / 4) is still the period.
-        tau = pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=TAU.h)
-        chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
-        run = start_manual(chain.net)
-        x, y = sample(widths, 0)
-        chain.write(run, x, y, MASK)
-        run_steps(run, chain.from_next(), RELAX_STEPS)
-        nodes = run.state_dict()["nodes"]
-        expected = credits(layers, head, x, y, MASK)
-        with torch.no_grad():
-            forward_hs, _ = forward(layers, head, x)
-        for i, (credit, h) in enumerate(zip(expected, forward_hs, strict=True)):
-            close(nodes[f"l{i}"]["state"]["h"], h, 1e-10)
-            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
-
-
 class TestRelaxer:
-    """``relaxer``: how ``h`` moves along the force on it. ``pc.relax.HeavyBall``
-    keeps the fixed point of the plain relaxation and gets there in fewer
-    periods."""
+    """``relaxer``: how ``r`` moves along the force on it. ``pc.relax.HeavyBall``
+    keeps the fixed point of the plain relaxation."""
 
-    HEAVY_BALL = pc.relax.HeavyBall(tau=3e-3)
+    HEAVY_BALL = pc.relax.HeavyBall(tau=2e-3)
     WIDTHS = [4, 4, 4, 4, 4]
 
     def _lams(
@@ -1381,24 +1294,6 @@ class TestRelaxer:
         for lam, credit in zip(lams, expected, strict=True):
             close(lam, credit, 1e-8)
 
-    def test_the_front_of_the_credit_crosses_the_chain_in_fewer_periods(
-        self, start_manual: StartManual
-    ):
-        # A transient: the slow mode of a chain near the identity does not relax
-        # faster, so this looks at the first periods, with random weights.
-        steps = 60
-        error: dict[str, float] = {}
-        for name, relaxer in (
-            ("plain", pc.relax.Euler()),
-            ("heavy ball", self.HEAVY_BALL),
-        ):
-            lams, expected = self._lams(start_manual, relaxer, steps)
-            error[name] = max(
-                float((lam - credit).abs().max())
-                for lam, credit in zip(lams, expected, strict=True)
-            )
-        assert error["heavy ball"] < 0.5 * error["plain"]
-
     def test_the_state_of_the_relaxer_is_in_the_state_of_the_node(
         self, start_manual: StartManual
     ):
@@ -1409,7 +1304,7 @@ class TestRelaxer:
         chain.write(run, x, y, MASK)
         run_steps(run, chain.from_next(), 5)
         state = run.state_dict()["nodes"]["l0"]["state"]
-        assert state["relaxer"]["velocity"].shape == state["h"].shape
+        assert state["relaxer"]["velocity"].shape == state["r"].shape
         assert "velocity" not in state
 
     def _alone(
@@ -1432,11 +1327,11 @@ class TestRelaxer:
     def test_a_new_sample_drops_the_velocity_of_the_one_before(
         self, start_manual: StartManual
     ):
-        # A layer alone (g = 0), with h off its prediction so that a force builds
-        # a velocity. The first update with another sample moves h by the force
-        # r + lam of before and nothing of the old velocity.
+        # A layer alone (g = 0), with r off zero so that a force builds a
+        # velocity. The first update with another sample moves r by the force
+        # (1 + tau_h / tau_r) r + lam of before and nothing of the old velocity.
         inp, layer, net = self._alone(self.HEAVY_BALL, math.inf)
-        layer.h.add_(1.0)
+        layer.r.add_(1.0)
         run = start_manual(net)
         x, y = sample([4, 4], 0)
         run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
@@ -1450,19 +1345,19 @@ class TestRelaxer:
         after = run.state_dict()["nodes"]["layer"]["state"]
         close(
             after["relaxer"]["velocity"],
-            before["h"] - before["mu"] + before["lam"],
+            (1 + TAU.h / TAU.r) * before["r"] + before["lam"],
             1e-12,
         )
 
     def test_the_relaxer_is_reset_by_a_new_sample_and_not_by_a_jump_of_theta(
         self, start_manual: StartManual
     ):
-        # theta jumps with every learning (learn_interval = 2 periods); h and mu
-        # move together then, the force does not jump, and the velocity stays.
-        # A new sample jumps the force (g) while r and lam are kept: reset.
+        # theta jumps with every learning (learn_interval = 2 periods); r and the
+        # force do not, and the velocity stays. A new sample jumps the force (g)
+        # while r and lam are kept: reset.
         spy = SpyRelaxer()
         inp, layer, net = self._alone(spy, 2 * H)
-        layer.h.add_(1.0)
+        layer.r.add_(1.0)
         run = start_manual(net)
         linear = cast(nn.Linear, layer.module)
         weight = linear.weight.detach().clone()
@@ -1478,12 +1373,13 @@ class TestRelaxer:
             run.step(H, inp, layer)
         assert spy.resets == 2
 
-    def test_the_relaxer_is_reset_by_a_jump_of_the_activity_it_reads(
+    def test_the_relaxer_is_not_reset_by_a_jump_of_the_activity_it_reads(
         self, start_manual: StartManual
     ):
         # The sample stays; the layer before learns and jumps (learn_interval =
-        # 2 periods), and the layer after, which reads its h, re-anchors with
-        # each jump of it and resets: more than the once the new sample did.
+        # 2 periods), which moves the mu of the layer after but not its r or the
+        # force: only the new sample resets it. The r of the layer after sends
+        # the credit back, for the layer before to learn from.
         inp = pc.Input(
             x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
         )
@@ -1494,6 +1390,7 @@ class TestRelaxer:
             optimizer=SGD,
             learn_interval=2 * H,
         )
+        weight = cast(nn.Linear, before.module).weight.detach().clone()
         spy = SpyRelaxer()
         after = pc.Layer(
             nn.Linear(4, 4).double(),
@@ -1505,9 +1402,11 @@ class TestRelaxer:
         )
         inp.next.connect(before.prev)
         before.next.connect(after.prev)
+        after.r.add_(1.0)
         run = start_manual(Group(inp=inp, before=before, after=after))
         x, y = sample([4, 4], 0)
         run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
         for _ in range(12):
             run.step(H, inp, before, after)
-        assert spy.resets > 2
+        assert not torch.equal(cast(nn.Linear, before.module).weight, weight)
+        assert spy.resets == 1

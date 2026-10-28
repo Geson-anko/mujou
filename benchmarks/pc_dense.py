@@ -39,7 +39,7 @@ import mujou.testing
 from mujou import TensorSpec
 
 B = 64
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 OPTIMIZER = pc.optim.SGD(tau=1.28)
 PERIOD = TAU.h / 4
 PATHS = ("inp", "l1", "l2", "out")

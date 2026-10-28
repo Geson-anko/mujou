@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
 ACT = pc.msg.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
@@ -146,7 +146,7 @@ class TestConstruction:
                 tau=TAU,
                 optimizer=SGD,
                 learn_interval=None,
-                period=TAU.h,  # max_dt is tau.h / 2
+                period=TAU.h,  # max_dt is tau.h / 4
             )
 
 
