@@ -1,10 +1,10 @@
 r"""The relaxers that move the deviation ``r = h - mu`` of a node in time:
-``Euler`` and ``HeavyBall``.
+``Euler``, or one of your own.
 
 A relaxer is a setting (``Relaxer``), as an optimizer is: a frozen value that
 holds no state and may be shared by every node. A node binds it to its own
 deviation with ``bind(r)``, which returns the ``BoundRelaxer`` that holds the
-state (the velocity of ``HeavyBall``) and moves ``r`` by ``step_(r, force, dt,
+state (if the relaxer has one) and moves ``r`` by ``step_(r, force, dt,
 tau_h)``. It is the counterpart of ``pc.optim.SGD`` and ``pc.optim.AdamW`` for
 ``r``: those move the parameters along their gradient, a relaxer moves the
 deviation along the force on it, $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$
@@ -12,11 +12,10 @@ deviation along the force on it, $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$
 follows the moved ``r``.
 
 A relaxer changes how ``r`` gets to its fixed point, not where it is: at the
-fixed point the force is zero and the state of the relaxer is at rest (the
-velocity of ``HeavyBall`` is zero), and ``r`` stays there.
+fixed point the force is zero and the state of the relaxer is at rest, and
+``r`` stays there.
 """
 
-import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -28,7 +27,6 @@ from mujou import Stateful
 
 __all__ = [
     "Euler",
-    "HeavyBall",
     "Relaxer",
     "BoundRelaxer",
 ]
@@ -151,83 +149,3 @@ class _BoundEuler(BoundRelaxer):
     @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class HeavyBall(Relaxer):
-    r"""``r`` as a heavy ball: a velocity $v$ remembers the forces of the updates
-    before, and ``r`` moves along it.
-
-    $$
-    v \leftarrow e^{-\Delta t / \tau} v + F,\qquad
-    r \leftarrow r - \frac{\Delta t}{\tau_h} v.
-    $$
-
-    The fixed point is that of ``Euler`` ($v = 0$ there). A force that lasts
-    moves ``r`` up to $1 / (1 - e^{-\Delta t / \tau})$ times faster. The force
-    weighs one update, not ``dt``, so the gain depends on the period. A step of
-    ``dt = 0`` changes nothing, the velocity included. The node resets the
-    velocity with each new sample (``reset_``): the forces it remembers are
-    those of the sample before.
-
-    With ``r`` as the state of a node, it has not been seen to help: in a chain
-    of 4 residual nodes (``tau.r = tau.h``, a period of ``tau.h / 4``), the
-    credit crossed the chain no sooner, as each period carries it one node
-    further whatever the step, and a ``tau`` of ``0.75 * tau.h`` diverged where
-    ``tau.h / 2`` did not (``specs/pc.md``).
-
-    The state (``state_dict()``) holds the velocity ``"velocity"``, a tensor of
-    the shape, dtype and device of ``r``.
-
-    Example::
-
-        hidden = pc.Layer(module, act_spec=..., tau=tau, optimizer=...,
-                          relaxer=pc.relax.HeavyBall(tau=tau.h / 4),
-                          learn_interval=24e-3)
-
-    Args:
-        tau: The time constant $\tau$ of the velocity, in seconds.
-
-    Raises:
-        ValueError: ``tau`` is not finite and > 0.
-    """
-
-    tau: float
-
-    def __post_init__(self) -> None:
-        if not 0 < self.tau < math.inf:
-            raise ValueError(f"HeavyBall.tau must be finite and > 0, got {self.tau!r}")
-
-    @override
-    def bind(self, r: torch.Tensor) -> BoundRelaxer:
-        """Return the relaxer bound to ``r``, with the velocity at zero."""
-        return _BoundHeavyBall(torch.zeros_like(r), self.tau)
-
-
-class _BoundHeavyBall(BoundRelaxer):
-    def __init__(self, velocity: torch.Tensor, tau: float) -> None:
-        self._velocity = velocity
-        self._tau = tau
-
-    @override
-    def step_(
-        self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
-    ) -> None:
-        if dt == 0:
-            return  # an update of no time must not store a force
-        with torch.no_grad():
-            self._velocity.mul_(math.exp(-dt / self._tau)).add_(force)
-            r.sub_((dt / tau_h) * self._velocity)
-
-    @override
-    def reset_(self) -> None:
-        self._velocity.zero_()
-
-    @override
-    def state_dict(self) -> dict[str, Any]:
-        return {"velocity": self._velocity}
-
-    @override
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        with torch.no_grad():
-            self._velocity.copy_(state["velocity"])

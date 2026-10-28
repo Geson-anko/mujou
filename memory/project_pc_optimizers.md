@@ -12,7 +12,7 @@ metadata:
 - **`optimizer` は `Layer`・`Output`・`Chain` の必須の引数。** 時間で表した既定の学習率は無い
 - **1/B はノードが掛けてから渡す。** optimizer はバッチを知らない
 - **AdamW は時間で進める。** `a = 1 - exp(-Δt/τ)`、`m ← m + a(g - m)`、bias 補正はステップのカウンタの代わりに質量 `c ← c + a(1 - c)`（Python の float）。`elapsed == 0` は何もしない。θ は torch と同じ順（decay を歩みの前の θ に先に掛け、Adam の項は更新後の m・v・c で取る）。`eps` は有限で > 0（`eps=0` は勾配がずっと 0 の要素を 0/0 で NaN にするので K31 で断る。torch とは違う）。`elapsed` は `Tick.elapsed`（時計が捨てた時間を含まない）で、捨てた時間はモーメントも動かさない。Δt 一定なら `torch.optim.AdamW(lr=Δt/τ, betas=(e^{-Δt/τm}, e^{-Δt/τv}))` と一致する。`weight_decay` は無次元で 1/τθ と組む（torch と同じ意味）
-- **h の則の差し替えは relaxer（2026-10-26）。** 重みの optimizer と同じ形（設定 + bind）で、`pc.relax.Euler` / `pc.relax.HeavyBall`。[[project-pc-relaxer]]。λ の差し替えと h・λ を 1 組で差し替える部品は研究から。今は実装しない（`specs/open-decisions.md`）
+- **h の則の差し替えは relaxer（2026-10-26）。** 重みの optimizer と同じ形（設定 + bind）で、`pc.relax.Euler`（`HeavyBall` は 2026-10-28 に削除）。[[project-pc-relaxer]]。λ の差し替えと h・λ を 1 組で差し替える部品は研究から。今は実装しない（`specs/open-decisions.md`）
 
 **Why:** 3.14t では `torch.optim` のコンストラクタが `torch._dynamo` → `triton._C` を import し、プロセス全体の GIL が戻る。torch の β は 1 ステップあたりで、学習の間隔が変わると実効の時定数が変わる。`state["step"]` は float32 で 2^24 回で止まる。
 

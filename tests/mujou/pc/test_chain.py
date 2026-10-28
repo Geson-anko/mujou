@@ -18,6 +18,7 @@ from tests.mujou.pc._reference import (
     TAU,
     B,
     H,
+    Inertial,
     make_modules,
     sample,
 )
@@ -183,10 +184,10 @@ class TestChain:
     def test_each_layer_binds_the_relaxer_to_its_own_deviation(
         self, start_manual: StartManual
     ):
-        # One HeavyBall for the whole chain: each layer binds it to its own r,
-        # so each keeps a velocity of its own; the output holds no r.
+        # One relaxer with a state for the whole chain: each layer binds it to
+        # its own r, so each keeps a velocity of its own; the output holds no r.
         layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head, relaxer=pc.relax.HeavyBall(tau=3e-3))
+        net = chain(*layers, head, relaxer=Inertial(tau=3e-3))
         tree = run_states(start_manual, net, net.input)
         for path, width in (("layer0", WIDTHS[1]), ("layer1", WIDTHS[2])):
             velocity = tree["nodes"][path]["state"]["relaxer"]["velocity"]

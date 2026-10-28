@@ -24,6 +24,7 @@ from tests.mujou.pc._reference import (
     TAU_THETA,
     B,
     H,
+    Inertial,
     Reference,
     credits,
     forward,
@@ -1129,8 +1130,8 @@ class TestState:
     @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
     @pytest.mark.parametrize(
         "relaxer",
-        [pc.relax.Euler(), pc.relax.HeavyBall(tau=3 * H)],
-        ids=["euler", "heavy-ball"],
+        [pc.relax.Euler(), Inertial(tau=3 * H)],
+        ids=["euler", "inertial"],
     )
     def test_a_restored_run_goes_on_as_the_same_run(
         self,
@@ -1141,7 +1142,7 @@ class TestState:
         # Taken at step 6, mid-phase, right after the input sent the input it
         # was written (the layer has read the earlier one) and two steps after
         # the layer learned. With AdamW, the moments and their masses carry over
-        # too, and with HeavyBall, the velocity.
+        # too, and with a relaxer of one's own that has a state, its velocity.
         whole = Learning(start_manual, optimizer=optimizer, relaxer=relaxer)
         for _ in range(16):
             whole.step()
@@ -1149,7 +1150,7 @@ class TestState:
         for _ in range(6):
             first.step()
         tree = first.run.state_dict()
-        if isinstance(relaxer, pc.relax.HeavyBall):
+        if isinstance(relaxer, Inertial):
             # The test must see the velocity: a run that dropped it differs.
             assert (
                 float(tree["nodes"]["l0"]["state"]["relaxer"]["velocity"].abs().max())
@@ -1253,10 +1254,11 @@ class SpyRelaxer(pc.relax.Relaxer):
 
 
 class TestRelaxer:
-    """``relaxer``: how ``r`` moves along the force on it. ``pc.relax.HeavyBall``
-    keeps the fixed point of the plain relaxation."""
+    """``relaxer``: how ``r`` moves along the force on it. A relaxer of one's
+    own with a state (``Inertial``) keeps the fixed point of the plain
+    relaxation, and its state is in the node's."""
 
-    HEAVY_BALL = pc.relax.HeavyBall(tau=2e-3)
+    INERTIAL = Inertial(tau=2e-3)
     WIDTHS = [4, 4, 4, 4, 4]
 
     def _lams(
@@ -1290,7 +1292,7 @@ class TestRelaxer:
     def test_lam_is_still_the_credit_of_backpropagation(
         self, start_manual: StartManual
     ):
-        lams, expected = self._lams(start_manual, self.HEAVY_BALL, RELAX_STEPS)
+        lams, expected = self._lams(start_manual, self.INERTIAL, RELAX_STEPS)
         for lam, credit in zip(lams, expected, strict=True):
             close(lam, credit, 1e-8)
 
@@ -1298,7 +1300,7 @@ class TestRelaxer:
         self, start_manual: StartManual
     ):
         layers, head = make_modules("linear", "tanh", [4, 5, 3])
-        chain = HandChain(layers, head, [4, 5, 3], relaxer=self.HEAVY_BALL)
+        chain = HandChain(layers, head, [4, 5, 3], relaxer=self.INERTIAL)
         run = start_manual(chain.net)
         x, y = sample([4, 5, 3], 0)
         chain.write(run, x, y, MASK)
@@ -1330,7 +1332,7 @@ class TestRelaxer:
         # A layer alone (g = 0), with r off zero so that a force builds a
         # velocity. The first update with another sample moves r by the force
         # (1 + tau_h / tau_r) r + lam of before and nothing of the old velocity.
-        inp, layer, net = self._alone(self.HEAVY_BALL, math.inf)
+        inp, layer, net = self._alone(self.INERTIAL, math.inf)
         layer.r.add_(1.0)
         run = start_manual(net)
         x, y = sample([4, 4], 0)

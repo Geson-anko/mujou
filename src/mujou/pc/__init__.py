@@ -16,8 +16,8 @@ The names that go with a role are in a submodule, which this package imports:
 - ``pc.optim``: ``SGD`` and ``AdamW`` set how the parameters of a node move in
   time (``Optimizer``); each node binds the setting to its own parameters
   (``BoundOptimizer``).
-- ``pc.relax``: ``Euler`` and ``HeavyBall`` set how the deviation ``r = h - mu``
-  of a node moves (``Relaxer``); each node binds the setting to its own ``r``
+- ``pc.relax``: ``Euler`` sets how the deviation ``r = h - mu`` of a node
+  moves (``Relaxer``); each node binds the setting to its own ``r``
   (``BoundRelaxer``).
 - ``pc.loss``: ``MSELoss`` and ``CrossEntropyLoss`` give the loss of each
   sample.

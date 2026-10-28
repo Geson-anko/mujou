@@ -43,11 +43,11 @@ class Layer(Node):
 
     ``h`` follows ``mu`` in the update that computes it: whatever moves ``mu``
     (the relaxation of the nodes below, a new sample, an update of ``theta``
-    here or below), ``r`` and ``lam`` stay and only relax. Without a target, ``r`` decays to 0 and ``h``
-    is the forward pass. As ``h`` moves with every ``r`` below it, the credit
-    loops back through the product of the Jacobians, and a deep chain diverges
-    without the decay of ``r`` (``tau.r``; ``TimeConstants`` has the
-    measurements).
+    here or below), ``r`` and ``lam`` stay and only relax. Without a target,
+    ``r`` decays to 0 and ``h`` is the forward pass. As ``h`` moves with every
+    ``r`` below it, the credit loops back through the product of the Jacobians,
+    and a deep chain diverges without the decay of ``r`` (``tau.r``;
+    ``TimeConstants`` has the measurements).
 
     Each ``on_update(dt)``:
 
@@ -93,10 +93,9 @@ class Layer(Node):
     of ``r`` and ``lam`` stable in the node itself.
 
     ``relaxer`` sets how ``r`` moves along the force on it (``functional.relax_``):
-    the plain step of ``pc.relax.Euler``, or ``pc.relax.HeavyBall``, whose velocity
-    lets a force that lasts move ``r`` faster, with the same fixed point. The
-    node calls the ``reset_`` of the bound relaxer with each new sample (where
-    the forces it remembers are those of the sample before).
+    the plain step of ``pc.relax.Euler``, or a relaxer of your own with the same
+    fixed point. The node calls the ``reset_`` of the bound relaxer with each new
+    sample (where the forces it may remember are those of the sample before).
 
     ``module`` must treat the samples of the batch independently (no
     ``BatchNorm`` in training mode): the gradient of each sample must be its
@@ -110,7 +109,7 @@ class Layer(Node):
     ``state_dict``), ``"r"`` and ``"lam"`` (``(*batch, *out)``), when to learn
     (``"clock"``, the state of the ``LearnClock``), the state of ``optimizer``
     (``"optimizer"``, such as the moments of ``pc.optim.AdamW``) and that of
-    ``relaxer`` (``"relaxer"``, such as the velocity of ``pc.relax.HeavyBall``).
+    ``relaxer`` (``"relaxer"``, empty for ``pc.relax.Euler``).
     The ``h`` it sent last is in the state of its port ``next``. To watch the
     node while it runs, read them there: ``Run.state_dict()`` pauses the run,
     whereas reading ``module``, ``r`` or ``lam`` from the host's thread races
@@ -148,7 +147,7 @@ class Layer(Node):
             that require gradients and holds the bound optimizer as
             ``optimizer``.
         relaxer: How ``r`` moves along the force on it (``pc.relax.Euler``, the
-            default, ``pc.relax.HeavyBall`` or a ``Relaxer`` of your own). The node
+            default, or a ``Relaxer`` of your own). The node
             binds it to its ``r`` and holds the bound relaxer as ``relaxer``.
         learn_interval: The time in seconds from the write of an input to the
             update of ``theta``, and between the updates while the input stays;

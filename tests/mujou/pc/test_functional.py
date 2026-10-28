@@ -10,7 +10,8 @@ from torch import nn
 from mujou.pc import TimeConstants
 from mujou.pc.functional import cross_entropy, loss_vjp, mse, relax_, vjp
 from mujou.pc.loss import CrossEntropyLoss, MSELoss
-from mujou.pc.relax import BoundRelaxer, Euler, HeavyBall
+from mujou.pc.relax import BoundRelaxer, Euler
+from tests.mujou.pc._reference import Inertial
 
 B = 3
 EPS = 1e-6  # central differences: truncation ~EPS^2, rounding ~1e-16 / EPS
@@ -312,25 +313,7 @@ class TestRelax:
 
 class TestRelaxWithRelaxer:
     TAU = TimeConstants(h=4e-3, lam=8e-3, r=2e-3)
-    HEAVY_BALL = HeavyBall(tau=2e-3)
-
-    def test_one_heavy_ball_step(self):
-        # v <- e^(-dt/m) v + force, then r <- r - dt/tau_h v, lam as before.
-        r, lam, g = TestRelax.state()
-        relaxer = self.HEAVY_BALL.bind(r)
-        v = relaxer.state_dict()["velocity"]
-        v.copy_(_randn(B, 5, seed=9))
-        r0, lam0, v0 = r.clone(), lam.clone(), v.clone()
-        dt = 1e-3
-        relax_(r, lam, g, dt, self.TAU, relaxer)
-        force = (1 + self.TAU.h / self.TAU.r) * r0 + lam0 + g
-        v1 = math.exp(-dt / self.HEAVY_BALL.tau) * v0 + force
-        r1 = r0 - dt / self.TAU.h * v1
-        torch.testing.assert_close(v, v1, rtol=1e-15, atol=1e-15)
-        torch.testing.assert_close(r, r1, rtol=1e-15, atol=1e-15)
-        torch.testing.assert_close(
-            lam, lam0 + dt / self.TAU.lam * r1, rtol=1e-15, atol=1e-15
-        )
+    INERTIAL = Inertial(tau=2e-3)
 
     def test_euler_is_the_step_without_a_relaxer(self):
         r, lam, g = TestRelax.state()
@@ -381,7 +364,7 @@ class TestRelaxWithRelaxer:
 
     def test_an_update_of_no_time_changes_nothing(self):
         r, lam, g = TestRelax.state()
-        relaxer = self.HEAVY_BALL.bind(r)
+        relaxer = self.INERTIAL.bind(r)
         v = relaxer.state_dict()["velocity"]
         v.copy_(_randn(B, 5, seed=9))
         before = (r.clone(), lam.clone(), v.clone())
@@ -395,7 +378,7 @@ class TestRelaxWithRelaxer:
         r.zero_()
         lam.copy_(-g)
         r0, lam0 = r.clone(), lam.clone()
-        relaxer = self.HEAVY_BALL.bind(r)
+        relaxer = self.INERTIAL.bind(r)
         relax_(r, lam, g, 1e-3, self.TAU, relaxer)
         assert torch.equal(r, r0) and torch.equal(lam, lam0)
         assert not relaxer.state_dict()["velocity"].any()

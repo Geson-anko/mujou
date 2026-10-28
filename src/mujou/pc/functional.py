@@ -11,7 +11,7 @@ the dual ``lam`` of the constraint ``h = mu``. Its energy is
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
 - ``relax_`` moves ``r`` and ``lam`` by ``dt`` seconds (``r`` as a relaxer of
-  ``mujou.pc.relax`` says: ``pc.relax.Euler``, ``pc.relax.HeavyBall``); an optimizer of
+  ``mujou.pc.relax`` says: ``pc.relax.Euler`` or one of your own); an optimizer of
   ``mujou.pc.optim`` (``pc.optim.SGD``, ``pc.optim.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
@@ -195,8 +195,8 @@ def relax_(
     ``tau.lam = inf`` leaves ``lam`` exactly as it is, and ``tau.r = inf`` adds
     no decay.
 
-    With a ``relaxer`` (``pc.relax.Euler().bind(r)``,
-    ``pc.relax.HeavyBall(...).bind(r)`` or one of your own), ``r`` moves as it
+    With a ``relaxer`` (``pc.relax.Euler().bind(r)`` or one of your own),
+    ``r`` moves as it
     says along the force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$ instead
     of by the plain step: ``relaxer.step_(r, F, dt, tau.h)``. $\lambda$ follows
     the moved ``r`` as before. The relaxer is the node's: it holds the state,

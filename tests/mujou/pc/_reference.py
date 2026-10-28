@@ -2,8 +2,10 @@
 oracles that the tests of the nodes of ``mujou.pc`` compare with."""
 
 import copy
-from collections.abc import Callable, Sequence
-from typing import override
+import math
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, override
 
 import torch
 from torch import nn
@@ -107,6 +109,48 @@ def credits(
     hs, y_hat = forward(layers, head, x)
     grads = torch.autograd.grad(masked_mse(y_hat, y, mask), hs)
     return [-g for g in grads]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Inertial(pc.relax.Relaxer):
+    """A relaxer of one's own with a state: a velocity ``v <- e^(-dt/tau) v +
+    force`` that ``r`` moves along, ``r <- r - dt/tau_h v``. Its fixed point is
+    that of ``pc.relax.Euler`` (no force, no velocity)."""
+
+    tau: float
+
+    @override
+    def bind(self, r: torch.Tensor) -> pc.relax.BoundRelaxer:
+        return _BoundInertial(torch.zeros_like(r), self.tau)
+
+
+class _BoundInertial(pc.relax.BoundRelaxer):
+    def __init__(self, velocity: torch.Tensor, tau: float) -> None:
+        self._velocity = velocity
+        self._tau = tau
+
+    @override
+    def step_(
+        self, r: torch.Tensor, force: torch.Tensor, dt: float, tau_h: float
+    ) -> None:
+        if dt == 0:
+            return
+        with torch.no_grad():
+            self._velocity.mul_(math.exp(-dt / self._tau)).add_(force)
+            r.sub_((dt / tau_h) * self._velocity)
+
+    @override
+    def reset_(self) -> None:
+        self._velocity.zero_()
+
+    @override
+    def state_dict(self) -> dict[str, Any]:
+        return {"velocity": self._velocity}
+
+    @override
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        with torch.no_grad():
+            self._velocity.copy_(state["velocity"])
 
 
 class Clock:
