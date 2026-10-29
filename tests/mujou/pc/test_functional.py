@@ -339,7 +339,7 @@ class TestRelaxWithRelaxer:
                 r.sub_(0.5 * force)
 
             @override
-            def reset_(self) -> None:
+            def reset_(self, samples: torch.Tensor) -> None:
                 pass
 
             @override

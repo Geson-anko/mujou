@@ -112,6 +112,7 @@ def build(
         "x": torch.randn(B, 784),
         "y": y.rand() if y.dtype.is_floating_point else torch.randint(10, (B,)),
         "mask": torch.ones(B, dtype=torch.bool),
+        "reset": torch.ones(B, dtype=torch.bool),
     }
     net = mujou.Group(inp=inp, l1=l1, l2=l2, out=out)
     return net, {inp.prev: sample}

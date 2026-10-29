@@ -1,46 +1,42 @@
 """CIFAR-10 with a ResNet-20 of PC-ALM nodes on the GPU, compared with BP.
 
-A ResNet-20 learns CIFAR-10 as a ``pc.Chain`` of eleven nodes on a CUDA device:
-``input`` takes the batch the host writes, ``layer0`` to ``layer8`` (the stem
-with the first block, then one node for each of the other 8 residual blocks)
-and ``output`` (the head and the cross entropy) relax towards the target and
-update their weights from each other's messages only. Inside each node,
+A ResNet-20 learns CIFAR-10 as a ``pc.Chain`` of five nodes on a CUDA device:
+``input`` takes the batch the host writes, ``layer0`` to ``layer2`` (the three
+stages: the stem with the first stage, then one node for each of the other
+two) and ``output`` (the head and the cross entropy) relax towards the target
+and update their weights from each other's messages only. Inside each node,
 autograd differentiates its module, as in plain PyTorch; ``resnet.py`` says how
 the network is cut. The same network, with the same initial weights, the same
-batches in the same order and the same ``pc.optim.AdamW``, is then trained by BP on
-the same GPU.
+batches in the same order and the same ``pc.optim.AdamW``, is then trained by BP
+on the same GPU.
 
 The host shows each batch, shuffled and augmented (random crops and flips), for
-``S`` periods of the nodes with ``pc.show``, and measures the prequential
-accuracy (the first prediction for each batch, before any node has learned from
-it), the test accuracy after each epoch (the test batches with ``mask`` False,
-so that nothing learns from them) and the real time.
+``S`` periods of the nodes with ``pc.show``, with ``reset`` set: no sample
+continues the one before it. It measures the prequential accuracy (the first
+prediction for each batch, before any node has learned from it), the test
+accuracy after each epoch (the test batches with ``mask`` False, so that
+nothing learns from them) and the real time.
 
 The messages between the nodes stay on the GPU: a node on CUDA sends to a node
-on CUDA from device to device. An update of a node takes about 1.2 ms on an
-RTX 4090, whatever the batch (the CPU launching the kernels is the limit, so
-the batch is 128), and with 11 workers the nodes keep up with a period of 5 ms
-of real time.
+on CUDA from device to device. With the defaults of ``pc.TimeConstants``
+(``tau.lam = tau.h / 2``, ``tau.r = tau.h``) and a period of ``tau.h / 2``, the
+credit moves one node down in each period, so ``S = 12`` periods are enough
+for the 4 connections down the chain and back. ``tau.h`` is 10 ms, so the
+period is 5 ms of the timer, and the timer goes twice as fast as real time
+(``--time-scale`` 2): 2.5 ms of real time, in which a node updates in about
+1.7 ms on an RTX 4090 (launching the kernels from the CPU is the limit, so a
+larger batch costs little more; BP gains more from it, and the batch is 32).
 
-The period is ``tau.h / 16``, a quarter of that of ``pc.Chain``, so the timer
-goes at a quarter of the real time (``--time-scale`` 0.25): with ``tau.h`` 20
-ms the period is 1.25 ms of the timer and 5 ms of real time. The blocks make
-the relaxation stiff (``resnet.py``): when the nodes held ``h`` rather than
-``r``, the explicit steps of ``tau.h / 4`` did not find the credit of BP, and
-those of ``tau.h / 16`` found it as with ``tau.h / 64``. What remains is how long the credit takes to settle: the
-dual is fast (``tau.lam = tau.h / 4``), the deviation ``r = h - mu`` decays
-(``tau.r = tau.h / 3``), each batch is shown for ``24 * tau.h`` (``S = 384``
-periods) and the nodes learn at 0.9 of it. With the defaults, in the 3rd epoch
-the prequential accuracy was 57.22% (seed 0) against 54.45% for BP, and the
-test accuracy 61.36% against 59.02%. When the nodes held ``h``, the 3rd epoch
-gave 54.83% and 59.05%, and the 10th 73.35% against 73.27% and 73.79% against
-72.61%; the 10th has not been measured since. The test accuracy
-moves by a few points from epoch to epoch (the learning rate does not decay),
-for both, and the GPU does not compute bit for bit the same in every run.
+With the defaults (seed 0), in the 3rd epoch the prequential accuracy was
+57.11% against 55.91% for BP, and the test accuracy 59.47% against 61.76%; in
+the 10th, 73.05% against 73.20% and 73.90% against 74.35%. An epoch took 48 s
+against 8 to 9 s for BP. The test accuracy moves by a few points from epoch to
+epoch (the learning rate does not decay), for both, and the GPU does not
+compute bit for bit the same in every run.
 
 Needs a CUDA GPU, and the network once to download CIFAR-10 (about 160 MB)
-into ``--data``. The defaults (3 epochs) take about 40 minutes, 10 epochs
-about 2 hours. Run it from the repository::
+into ``--data``. The defaults (3 epochs) take about 4 minutes, 10 epochs about
+13 minutes. Run it from the repository::
 
     uv run python examples/cifar10/main.py
     uv run python examples/cifar10/main.py --epochs 10
@@ -91,30 +87,24 @@ def train_pc(
 ) -> list[Epoch]:
     """Train the modules as PC-ALM nodes in a run, and measure each epoch."""
     # --8<-- [start:chain]
-    # A period of tau.h / 16, not the tau.h / 4 of pc.Chain: the blocks make the
-    # relaxation stiff (resnet.py).
-    period = args.tau_h / args.div
-    shown = args.steps * period  # how long the host shows each batch
+    # With these, delta follows -g in one update: the credit moves one node
+    # down in each period of tau.h / 2, the default period of pc.Chain.
+    tau = pc.TimeConstants(h=args.tau_h, lam=args.tau_h / 2, r=args.tau_h)
+    shown = args.steps * tau.period  # how long the host shows each batch
     net = pc.Chain(
         *modules,  # already on the device
         x=TensorSpec((args.batch, 3, 32, 32)),
         y=TensorSpec((args.batch,), torch.int64),
         batch=args.batch,
         loss=pc.loss.CrossEntropyLoss(args.batch),
-        # A fast dual, and a decay of r = h - mu: lam reaches the credit sooner,
-        # at the same fixed point.
-        tau=pc.TimeConstants(
-            h=args.tau_h, lam=args.tau_lam * args.tau_h, r=args.tau_r * args.tau_h
-        ),
+        tau=tau,
         optimizer=adamw(shown, args.lr),  # learn once per batch
         learn_interval=0.9 * shown,  # late in the showing, when lam has settled
-        period=period,
-        max_dt=2 * period,
         device=args.device,  # every node computes on the GPU
     )
     # --8<-- [end:chain]
     timer = mujou.time.Timer(time_scale=args.time_scale)
-    test_seconds = 32 * period  # enough to reach the output; nothing learns
+    test_seconds = 32 * tau.period  # enough to reach the output; nothing learns
 
     results: list[Epoch] = []
     with mujou.run(net, timer=timer, workers=args.workers) as run:
@@ -124,7 +114,10 @@ def train_pc(
             for x, y, mask in batches(
                 data.train_x, data.train_y, args.batch, shuffle(epoch)
             ):
-                p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=shown)
+                # Shuffled batches: no sample continues the one before it.
+                new = torch.ones_like(mask)
+                sample = pc.msg.Sample(x=x, y=y, mask=mask, reset=new)
+                p = pc.show(run, net, sample, seconds=shown)
                 if not torch.isfinite(p["y_hat"]).all():
                     raise SystemExit("PC-ALM diverged: lower --time-scale")
                 right += correct(p["y_hat"], y, mask)  # before learning from it
@@ -134,10 +127,11 @@ def train_pc(
             test_right = test_total = 0
             for x, y, mask in batches(data.test_x, data.test_y, args.batch):
                 unlabeled = torch.zeros_like(mask)  # keep mask to score with
+                new = torch.ones_like(mask)
                 p = pc.show(
                     run,
                     net,
-                    pc.msg.Sample(x=x, y=y, mask=unlabeled),
+                    pc.msg.Sample(x=x, y=y, mask=unlabeled, reset=new),
                     seconds=test_seconds,
                 )
                 test_right += correct(p["y_hat"], y, mask)
@@ -153,17 +147,12 @@ def train_pc(
 def main() -> None:
     parser = argparse.ArgumentParser(description="CIFAR-10 with PC-ALM nodes and BP.")
     parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--batch", type=int, default=128)
-    parser.add_argument("--steps", type=int, default=384, help="periods per batch (S)")
-    parser.add_argument("--tau-h", type=float, default=20e-3, help="seconds")
-    parser.add_argument(
-        "--div", type=float, default=16, help="the period is tau.h / div"
-    )
-    parser.add_argument("--tau-lam", type=float, default=0.25, help="tau.lam in tau.h")
-    parser.add_argument("--tau-r", type=float, default=1 / 3, help="tau.r in tau.h")
-    parser.add_argument("--lr", type=float, default=1.6e-2, help="the lr of AdamW")
-    parser.add_argument("--time-scale", type=float, default=0.25)
-    parser.add_argument("--workers", type=int, default=11)
+    parser.add_argument("--batch", type=int, default=32)
+    parser.add_argument("--steps", type=int, default=12, help="periods per batch (S)")
+    parser.add_argument("--tau-h", type=float, default=10e-3, help="seconds")
+    parser.add_argument("--lr", type=float, default=8e-3, help="the lr of AdamW")
+    parser.add_argument("--time-scale", type=float, default=2.0)
+    parser.add_argument("--workers", type=int, default=5)
     parser.add_argument("--device", default="cuda", help="a CUDA device")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -188,7 +177,7 @@ def main() -> None:
         f"GIL {'on' if gil else 'off'}"
     )
     pc_results = train_pc(modules, data, shuffle, args)
-    shown = args.steps * args.tau_h / args.div
+    shown = args.steps * args.tau_h / 2  # the period is tau.h / 2
     bp_results = bp.train(
         model,
         data,

@@ -23,6 +23,9 @@ SGD = pc.optim.SGD(tau=TAU_THETA)
 # An AdamW whose first update is far from that of SGD; weight decay on.
 ADAMW = pc.optim.AdamW(tau=TAU_THETA, tau_m=0.02, tau_v=0.5, eps=1e-8, weight_decay=0.1)
 MASK = torch.tensor([True, False, True])
+# No sample starts anew (the frames of a stream), and some do.
+KEEP = torch.zeros(B, dtype=torch.bool)
+RESET = torch.tensor([True, True, False])
 
 
 class ResBlock(nn.Module):
@@ -140,8 +143,8 @@ class _BoundInertial(pc.relax.BoundRelaxer):
             r.sub_((dt / tau_h) * self._velocity)
 
     @override
-    def reset_(self) -> None:
-        self._velocity.zero_()
+    def reset_(self, samples: torch.Tensor) -> None:
+        self._velocity.masked_fill_(samples[:, None], 0.0)
 
     @override
     def state_dict(self) -> dict[str, Any]:
@@ -187,9 +190,11 @@ class Reference:
     previous step (a Jacobi update).
 
     ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity that layer
-    ``i`` sent, ``mu + r`` with the ``mu`` of the ``h_in`` it read and its
-    deviation ``r`` after the step, each with the target, mask and time it
-    carries; all start at zero (mask False, time 0), as the ports do.
+    ``i`` sent, its prediction ``mu`` of the ``h_in`` it read (the deviation
+    ``r`` stays in the node), each with the target, mask, reset and time it
+    carries; all start at zero (mask and reset False, time 0), as the ports
+    do. A layer that first sees an input sets ``r`` and ``lam`` of the samples
+    whose reset is set to zero before it steps.
     """
 
     def __init__(
@@ -206,10 +211,8 @@ class Reference:
         self.r = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
         self.lam = [torch.zeros(B, n, dtype=F64) for n in widths[1:]]
         self.h = [torch.zeros(B, n, dtype=F64) for n in widths]
-        self.carried = [
-            (torch.zeros(B, N_OUT, dtype=F64), torch.zeros(B, dtype=torch.bool), 0)
-            for _ in widths
-        ]
+        no = torch.zeros(B, dtype=torch.bool)
+        self.carried = [(torch.zeros(B, N_OUT, dtype=F64), no, no, 0) for _ in widths]
         self.g_in: list[torch.Tensor] = [torch.zeros(B, n, dtype=F64) for n in widths]
 
     def step(
@@ -220,10 +223,11 @@ class Reference:
         time: int,
         dt: float,
         now: int,
+        reset: torch.Tensor = KEEP,
     ) -> None:
         tau = TAU
         # The output: the gradient of the masked loss.
-        y_c, mask_c, time_c = self.carried[-1]
+        y_c, mask_c, _, time_c = self.carried[-1]
         _, learn = self.clocks[-1].tick(dt, time_c, now)
         h_in = self.h[-1].clone().requires_grad_()
         params = list(self.head.parameters())
@@ -240,9 +244,13 @@ class Reference:
         # previous values.
         h_new = list(self.h)
         for i in reversed(range(len(self.layers))):
-            _, mask_i, time_i = self.carried[i]
+            _, mask_i, reset_i, time_i = self.carried[i]
             clock = self.clocks[i]
-            _, learn = clock.tick(dt, time_i, now)
+            new, learn = clock.tick(dt, time_i, now)
+            if new:  # the samples that start anew
+                kept = ~reset_i[:, None]
+                self.r[i] = torch.where(kept, self.r[i], 0.0)
+                self.lam[i] = torch.where(kept, self.lam[i], 0.0)
             if learn and not mask_i.any():
                 clock.learned(now)
                 learn = False
@@ -257,14 +265,14 @@ class Reference:
             r = r - (dt / tau.h) * ((1 + tau.h / tau.r) * r + lam + g_next)
             self.lam[i] = lam + (dt / tau.lam) * r  # tau_lam dlam/dt = r
             self.r[i] = r
-            h_new[i + 1] = mu.detach() + r
+            h_new[i + 1] = mu.detach()
             if learn:
                 self._learn(params, g_theta, mask_i, clock, now)
             self.g_in[i] = g_in
             g_next = g_in
         h_new[0] = x
         self.h = h_new
-        self.carried = [(y, mask, time), *self.carried[:-1]]
+        self.carried = [(y, mask, reset, time), *self.carried[:-1]]
 
     def _learn(
         self,

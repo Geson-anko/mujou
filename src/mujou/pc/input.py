@@ -64,7 +64,9 @@ class Input(Node):
         super().__init__(device=device, period=period)
         self.act_spec = activity_spec(x, y, batch)
         mask = self.act_spec.field("mask", TensorSpec)
-        self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
+        self.prev = Port(
+            recv=DictSpec(Sample, x=x, y=y, mask=mask, reset=mask)  # the host
+        )
         self.next = MultiPort(send=self.act_spec, recv=x)
 
     @override
@@ -76,6 +78,7 @@ class Input(Node):
                 "h": sample["x"],
                 "y": sample["y"],
                 "mask": sample["mask"],
+                "reset": sample["reset"],
                 "time": Timestamp(ns=0) if written_at is None else written_at,
             }
         )

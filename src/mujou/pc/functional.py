@@ -186,8 +186,8 @@ def relax_(
     \tau_\lambda \dot\lambda = r.
     $$
 
-    ``r = h - mu`` is the deviation of the node's activity from its prediction:
-    the node sends ``h = mu + r`` with the ``mu`` of the moment. The step moves
+    ``r = h - mu`` is the deviation of the node's activity from its prediction,
+    which stays in the node: the node sends ``mu``. The step moves
     ``r`` first and then ``lam`` with the moved ``r``. ``g`` is held fixed. The
     step is not split: ``g`` comes from the next nodes and stays as it was over
     ``dt``, so the coupling between the nodes is explicit however finely the

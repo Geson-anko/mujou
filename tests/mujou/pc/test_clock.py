@@ -104,8 +104,8 @@ class TestFromTimeConstants:
     def test_takes_the_default_max_dt_of_tau(self):
         tau = pc.TimeConstants(h=4e-3, lam=0.5e-3, r=math.inf)
         learn = pc.clock.LearnClock.of(tau, period=DT, learn_interval=None)
-        # max_dt is min(h / 2, 3 * lam) = 1.5 ms without the decay of r.
-        assert learn.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1.5e-3)
+        # max_dt is min(h, 2 * lam) = 1 ms without the decay of r.
+        assert learn.tick(10 * DT, at(0), at(1)).dt == pytest.approx(1e-3)
         given = pc.clock.LearnClock.of(
             tau, period=DT, learn_interval=None, max_dt=1.2e-3
         )

@@ -13,6 +13,7 @@ class TestActivitySpec:
             "h": h,
             "y": y,
             "mask": TensorSpec((4,), torch.bool),
+            "reset": TensorSpec((4,), torch.bool),
             "time": TimestampSpec(),
         }
 

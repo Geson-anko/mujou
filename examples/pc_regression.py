@@ -22,10 +22,10 @@ B = 32  # the batch: x and y start with it, and so does the loss of each sample
 
 # --8<-- [start:chain]
 SHOWN = 0.032  # seconds of the run's timer each batch is shown
-# tau.h sets how fast the activities relax (and the period of the nodes, h / 4),
+# tau.h sets how fast the credit settles (and the period of the nodes, h / 2),
 # and the weights learn once per batch, by SGD at the rate
 # SHOWN / optimizer.tau = 0.3.
-tau = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
+tau = pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)
 optimizer = pc.optim.SGD(tau=SHOWN / 0.3)
 torch.manual_seed(0)  # the initial weights, before the run
 net = pc.Chain(
@@ -45,13 +45,14 @@ net = pc.Chain(
 # --8<-- [start:run]
 torch.set_num_threads(1)
 g = torch.Generator().manual_seed(1)
-every = torch.ones(B, dtype=torch.bool)  # every sample has a target
+every = torch.ones(B, dtype=torch.bool)  # every sample has a target, and is new
 losses: list[float] = []
 with mujou.run(net) as run:
     for i in range(300):
         x = 2 * torch.rand(B, 2, generator=g) - 1
         y = torch.sin(2 * x[:, :1]) * torch.cos(x[:, 1:])
-        p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=every), seconds=SHOWN)
+        sample = pc.msg.Sample(x=x, y=y, mask=every, reset=every)
+        p = pc.show(run, net, sample, seconds=SHOWN)
         losses.append(nn.functional.mse_loss(p["y_hat"], y).item())  # before learning
         if i == 0 or (i + 1) % 50 == 0:
             recent = losses[-50:]

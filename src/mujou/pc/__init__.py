@@ -4,9 +4,10 @@ Each node holds a part of the model and learns from its neighbors' messages
 only: ``Input`` takes the samples the host writes, each ``Layer`` wraps a module
 as one constraint ``h = f(h_in)``, and ``Output`` holds the last module and the
 loss. Inside a node, the module is differentiated by autograd; between nodes,
-activities (``Activity``) flow to the next node and gradients of the energy to
-the previous one. The target of each sample travels with its input in the
-``Activity``, so the output node pairs every prediction with its own target.
+activities (``Activity``, the predictions of the forward pass) flow to the
+next node and gradients of the energy to the previous one. The target of each
+sample travels with its input in the ``Activity``, so the output node pairs
+every prediction with its own target.
 ``Chain`` connects the nodes for a sequence of modules, and ``show`` shows it a
 sample. Each node gives the spec of what it sends as ``act_spec``, which the
 next node takes, to build other shapes by hand.
@@ -43,7 +44,7 @@ Import it as a submodule::
         y=TensorSpec((B,), torch.int64),
         batch=B,
         loss=pc.loss.CrossEntropyLoss(B),
-        tau=pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3),
+        tau=pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3),
         optimizer=pc.optim.SGD(tau=1.28),
         learn_interval=0.15,
     )

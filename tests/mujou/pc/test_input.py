@@ -23,7 +23,7 @@ class TestInput:
         inp = pc.Input(x=X, y=Y, period=1e-3, batch=B)
         return inp, start_manual(inp)
 
-    def test_sends_x_with_the_target_and_the_time_of_the_write(
+    def test_sends_x_with_the_target_the_reset_and_the_time_of_the_write(
         self, start_manual: StartManual
     ):
         inp, run = self._run(start_manual)
@@ -33,12 +33,16 @@ class TestInput:
             x = torch.randn(B, 4, generator=generator)
             y = torch.randint(10, (B,), generator=generator)
             mask = torch.tensor([True, False, True])
-            written_at = run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
+            reset = torch.tensor([True, True, False])
+            written_at = run.write(
+                {inp.prev: {"x": x, "y": y, "mask": mask, "reset": reset}}
+            )
             run.step(H, inp)
             sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
             assert torch.equal(sent["h"], x)
             assert torch.equal(sent["y"], y)
             assert torch.equal(sent["mask"], mask)
+            assert torch.equal(sent["reset"], reset)
             assert sent["time"] == written_at.ns  # the tree holds a time as its ns
 
     def test_sends_zeros_without_a_target_before_the_host_writes(
@@ -52,6 +56,7 @@ class TestInput:
         assert torch.equal(sent["h"], torch.zeros(B, 4))
         assert torch.equal(sent["y"], torch.zeros(B, dtype=torch.int64))
         assert torch.equal(sent["mask"], torch.zeros(B, dtype=torch.bool))
+        assert torch.equal(sent["reset"], torch.zeros(B, dtype=torch.bool))
         assert sent["time"] == 0
 
     def test_holds_no_state(self, start_manual: StartManual):
@@ -63,6 +68,7 @@ class TestInput:
                     "x": torch.ones(B, 4),
                     "y": torch.zeros(B, dtype=torch.int64),
                     "mask": torch.ones(B, dtype=torch.bool),
+                    "reset": torch.ones(B, dtype=torch.bool),
                 }
             }
         )
@@ -93,7 +99,7 @@ class TestInput:
         run = start_manual(inp)
         x = torch.arange(4.0)
         y, mask = torch.tensor(7), torch.tensor(True)
-        run.write({inp.prev: {"x": x, "y": y, "mask": mask}})
+        run.write({inp.prev: {"x": x, "y": y, "mask": mask, "reset": mask}})
         run.step(H, inp)
         sent = run.state_dict()["nodes"][""]["ports"]["next"]["out"]["value"]
         assert torch.equal(sent["h"], x)

@@ -61,10 +61,11 @@ class BoundRelaxer(Stateful):
         """
 
     @abstractmethod
-    def reset_(self) -> None:
-        """Forget the forces before: the node calls it with a new sample, where
-        what the relaxer remembers is the forces of the sample before. A relaxer
-        without memory does nothing."""
+    def reset_(self, samples: torch.Tensor) -> None:
+        """Forget the state of ``samples`` (``batch`` bool), whose ``r`` the node
+        has just set to zero: the node calls it when it first sees a sample whose
+        ``reset`` is set, where what the relaxer remembers is of the sample
+        before. A relaxer without memory does nothing."""
 
 
 class Relaxer(ABC):
@@ -91,7 +92,7 @@ class Relaxer(ABC):
                 step = (dt / tau_h) * force
                 r.sub_(step.clamp(-self._limit, self._limit))
 
-            def reset_(self):
+            def reset_(self, samples):
                 pass
 
             def state_dict(self):
@@ -139,7 +140,7 @@ class _BoundEuler(BoundRelaxer):
             r.sub_((dt / tau_h) * force)  # tau_h dr/dt = -F
 
     @override
-    def reset_(self) -> None:
+    def reset_(self, samples: torch.Tensor) -> None:
         pass
 
     @override

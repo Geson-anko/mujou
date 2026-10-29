@@ -17,8 +17,10 @@ from mujou.time import VirtualTimer
 from tests.mujou.nodes import F64, assert_same_tree, close
 from tests.mujou.pc._reference import (
     ADAMW,
+    KEEP,
     MASK,
     N_OUT,
+    RESET,
     SGD,
     TAU,
     TAU_THETA,
@@ -84,9 +86,15 @@ class HandChain:
         return [self.inp, *self.layers, self.out]
 
     def write(
-        self, run: ManualRun, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor
+        self,
+        run: ManualRun,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        mask: torch.Tensor,
+        reset: torch.Tensor = KEEP,
     ) -> int:
-        return run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
+        sample = {"x": x, "y": y, "mask": mask, "reset": reset}
+        return run.write({self.inp.prev: sample}).ns
 
 
 def activity(h: TensorSpec) -> DictSpec[pc.msg.Activity]:
@@ -121,15 +129,15 @@ class TestConstruction:
         )
         assert layer.next.send_spec == activity(TensorSpec((B, 5), F64))
 
-    def test_the_period_defaults_to_a_quarter_of_tau_h(self):
-        assert self._layer().period == pytest.approx(TAU.h / 4)
+    def test_the_period_defaults_to_tau_period(self):
+        assert self._layer().period == pytest.approx(TAU.period)
         assert self._layer(period=0.5e-3).period == 0.5e-3
 
     @pytest.mark.parametrize(
         ("kwargs", "match"),
         [
             ({"module": nn.Flatten(0)}, "start with the batch"),
-            ({"period": 2e-3}, "max_dt"),  # longer than tau.h / 4
+            ({"period": 3e-3}, "max_dt"),  # longer than tau.max_dt
             ({"period": 1e-3, "max_dt": 0.5e-3}, "max_dt"),
         ],
     )
@@ -139,13 +147,19 @@ class TestConstruction:
 
 
 class TestJacobi:
+    @pytest.mark.parametrize("reset", [KEEP, RESET], ids=["keep", "reset"])
     @pytest.mark.parametrize("learn_interval", [None, 4 * H])
     def test_stepping_from_the_output_is_the_jacobi_update(
-        self, start_manual: StartManual, learn_interval: float | None
+        self,
+        start_manual: StartManual,
+        learn_interval: float | None,
+        reset: torch.Tensor,
     ):
         # Linear + tanh, then a residual block: the reference moves all nodes at
         # once; stepping from the output to the input reads only values of the
-        # previous step everywhere, so the two agree to rounding.
+        # previous step everywhere, so the two agree to rounding. The second
+        # input continues the first (keep) or starts some samples anew (reset),
+        # once, in the update of each layer that first sees it.
         widths = [4, 5, 5]
         layers = [
             make_modules("linear", "tanh", widths[:2])[0][0],
@@ -158,12 +172,14 @@ class TestJacobi:
         samples = [sample(widths, seed) for seed in (0, 1)]
         x, y = samples[0]
         time = chain.write(run, x, y, MASK)
+        written = KEEP
         for k in range(50):
             if k == 20:  # a new input, and a new target with it
                 x, y = samples[1]
-                time = chain.write(run, x, y, MASK)
+                written = reset
+                time = chain.write(run, x, y, MASK, reset)
             run.step(H, *chain.from_next())
-            reference.step(x, y, MASK, time, H, run.timer.now().ns)
+            reference.step(x, y, MASK, time, H, run.timer.now().ns, written)
             tree = run.state_dict()
             for i, layer in enumerate(reference.layers):
                 state = tree["nodes"][f"l{i}"]["state"]
@@ -175,6 +191,7 @@ class TestJacobi:
                 close(sent["h"], reference.h[i + 1], 1e-12)
                 assert torch.equal(sent["y"], reference.carried[i + 1][0])
                 assert torch.equal(sent["mask"], reference.carried[i + 1][1])
+                assert torch.equal(sent["reset"], reference.carried[i + 1][2])
                 close(
                     tree["nodes"][f"l{i}"]["ports"]["prev"]["out"]["value"],
                     reference.g_in[i],
@@ -285,10 +302,8 @@ class TestDeepChain:
     def test_eight_residual_nodes_reach_the_fixed_point(
         self, start_manual: StartManual
     ):
-        # Residual blocks have Jacobians near the identity. The decay of r
-        # (tau.r = tau.h) keeps the credit of the loss, which loops back through
-        # the product of the Jacobians, from growing. The target is the forward
-        # pass plus noise, for credits of order 1.
+        # Residual blocks have Jacobians near the identity. The target is the
+        # forward pass plus noise, for credits of order 1.
         widths = [8] * 9
         layers, head = make_modules("res", "tanh", widths)
         x, noise = sample(widths, 0)
@@ -302,23 +317,38 @@ class TestDeepChain:
         expected = credits(layers, head, x, y, MASK)
         assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-9, 1e-8)
 
-    def test_without_the_decay_of_r_it_diverges(self, start_manual: StartManual):
-        # The reason for tau.r: r is held while mu follows the nodes below, so
-        # each h moves with every r below it, and without the decay this chain
-        # diverges (lam ~ 1e6 in about 650 steps).
-        widths = [8] * 9
-        layers, head = make_modules("res", "tanh", widths)
-        x, noise = sample(widths, 0)
-        with torch.no_grad():
-            _, y_hat = forward(layers, head, x)
-        tau = pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=math.inf)
+    @pytest.mark.parametrize(
+        ("tau", "steps"),
+        [
+            (pc.TimeConstants(h=2 * H, lam=H, r=2 * H), 200),
+            (pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=math.inf), RELAX_STEPS),
+        ],
+        ids=["delta-in-one-step", "without-the-decay"],
+    )
+    def test_an_amplifying_chain_reaches_the_credit(
+        self, start_manual: StartManual, tau: pc.TimeConstants, steps: int
+    ):
+        # 16 gains of 1.25: the nodes send mu, so the credit only flows down
+        # and no r loops back through the product of the Jacobians, which
+        # would diverge however short the steps or long tau.r. With dt = h / 2,
+        # lam = dt and r = h, delta follows -g in one update.
+        widths = [4] * 17
+        layers: list[nn.Module] = []
+        for _ in range(16):
+            linear = nn.Linear(4, 4, bias=False).double()
+            with torch.no_grad():
+                linear.weight.copy_(1.25 * torch.eye(4, dtype=F64))
+            layers.append(linear)
+        head = make_modules("linear", "linear", widths[-2:])[1]
+        x, y = sample(widths, 0)
         chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
         run = start_manual(chain.net)
-        chain.write(run, x, y_hat + noise, MASK)
-        run_steps(run, chain.from_next(), 1000)
-        nodes = run.state_dict()["nodes"]
-        lams = torch.stack([nodes[f"l{i}"]["state"]["lam"] for i in range(8)])
-        assert not (lams.isfinite().all() and lams.abs().max() < 1e3)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), steps)
+        with torch.no_grad():
+            forward_hs, _ = forward(layers, head, x)
+        expected = credits(layers, head, x, y, MASK)
+        assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-9, 1e-8)
 
     @pytest.mark.parametrize(
         "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
@@ -400,11 +430,12 @@ class TestNodeBoundaries:
 
 @pytest.mark.slow
 class TestPcLimit:
-    def test_without_the_dual_the_fixed_point_is_that_of_pc(
+    def test_without_the_dual_r_is_the_credit_of_backpropagation(
         self, start_manual: StartManual
     ):
-        # alpha = 0: lam stays exactly zero, and the activities settle where the
-        # energy of predictive coding is stationary, away from the forward pass.
+        # alpha = 0: lam stays exactly zero, and the nodes are those of
+        # predictive coding with the fixed prediction assumption: they send the
+        # forward pass, and the error r settles at the credit of BP.
         widths = [4, 5, 3]
         layers, head = make_modules("linear", "tanh", widths)
         # Without the decay of r too, which would move the fixed point.
@@ -419,30 +450,14 @@ class TestPcLimit:
                 lam = run.state_dict()["nodes"][f"l{i}"]["state"]["lam"]
                 assert torch.equal(lam, torch.zeros_like(lam))
         tree = run.state_dict()
-        hs = [
-            tree["nodes"][f"l{i}"]["ports"]["next"]["out"]["value"]["h"]
-            for i in range(len(layers))
-        ]
-        g = [
-            tree["nodes"]["l1"]["ports"]["prev"]["out"]["value"],
-            tree["nodes"]["out"]["ports"]["prev"]["out"]["value"],
-        ]
-        for i in range(len(layers)):
-            r = tree["nodes"][f"l{i}"]["state"]["r"]
-            close(r, -g[i], 1e-10)  # r = -g
-            assert r.abs().max() > 1e-3
-        # The gradient of the energy of PC with respect to each h is zero.
-        free = [h.clone().requires_grad_() for h in hs]
-        inputs = [x, *free]
-        energy = sum(
-            0.5 * ((h - module(h_in)) ** 2).sum()
-            for module, h_in, h in zip(layers, inputs[:-1], free, strict=True)
-        ) + masked_mse(head(free[-1]), y, MASK)
-        assert isinstance(energy, torch.Tensor)
-        for grad in torch.autograd.grad(energy, free):
-            close(grad, torch.zeros_like(grad), 1e-10)
-        forward_hs, _ = forward(layers, head, x)
-        assert (hs[-1] - forward_hs[-1]).abs().max() > 1e-3
+        with torch.no_grad():
+            forward_hs, _ = forward(layers, head, x)
+        expected = credits(layers, head, x, y, MASK)
+        for i, (h, credit) in enumerate(zip(forward_hs, expected, strict=True)):
+            node = tree["nodes"][f"l{i}"]
+            close(node["ports"]["next"]["out"]["value"]["h"], h, 1e-10)
+            close(node["state"]["r"], credit, 1e-10)
+            assert credit.abs().max() > 1e-3
 
 
 class TestScalar:
@@ -482,6 +497,7 @@ class TestScalar:
                     "x": torch.full((1, 1), x, dtype=F64),
                     "y": torch.full((1, 1), y, dtype=F64),
                     "mask": torch.ones(1, dtype=torch.bool),
+                    "reset": torch.ones(1, dtype=torch.bool),
                 }
             }
         )
@@ -561,7 +577,7 @@ class TestWithoutTeacher:
     def test_h_is_the_forward_pass(self, start_manual: StartManual):
         # Without a target, nothing drives r or lam from zero. Stepped from the
         # input, each node reads what the previous one sent in the same step: in
-        # the first step, every node sends h = mu + 0, the forward pass, and
+        # the first step, every node sends mu, the forward pass, and
         # stays there.
         widths = [4, 5, 5]
         layers = [
@@ -919,7 +935,7 @@ def relaxed(
     Euler step of ``dt`` from the state ``before``, written out, stepped from
     the output: the node reads ``h_in`` as the previous node ``h_in`` sent it
     before the step, and ``g`` as the next node ``g`` sent it in the step, and
-    sends ``mu + r`` with the ``theta`` before the step."""
+    sends ``mu`` with the ``theta`` before the step."""
     state = before["nodes"][node]["state"]
     module = copy.deepcopy(module)
     module.load_state_dict(state["module"])
@@ -930,7 +946,7 @@ def relaxed(
     # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r
     r = r - (dt / TAU.h) * ((1 + TAU.h / TAU.r) * r + lam + g_sent)
     lam = lam + (dt / TAU.lam) * r  # tau_lam dlam/dt = r
-    return r, lam, mu + r
+    return r, lam, mu
 
 
 def assert_relaxed(
@@ -945,13 +961,13 @@ def assert_relaxed(
 
 
 class TestMaxDt:
-    @pytest.mark.parametrize(("max_dt", "counted"), [(None, H), (3 * H, 3 * H)])
+    @pytest.mark.parametrize(("max_dt", "counted"), [(None, 2 * H), (3 * H, 3 * H)])
     def test_a_long_dt_counts_max_dt(
         self, start_manual: StartManual, max_dt: float | None, counted: float
     ):
         # The layer learns at step 4 (K steps after the write at step 1); dt =
         # 5 H at step 5, which is past the next time to learn (step 7): r and
-        # lam take one step of max_dt (tau.h / 4 = H by default with tau.r =
+        # lam take one step of max_dt (tau.h / 2 = 2 H by default with tau.r =
         # tau.h), and the update of theta is weighted by max_dt only.
         learning = Learning(start_manual, max_dt=max_dt)
         module = learning.chain.layers[0].module
@@ -967,8 +983,9 @@ class TestMaxDt:
             close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
 
     def test_the_default_keeps_the_steps_stable(self):
-        # dt / tau.lam <= 3 as well as dt / tau.h <= 1/2: max_dt is 1.5e-3, which
-        # a period must not pass; the decay of r halves it here.
+        # dt / tau.lam <= 2 as well as dt (1 + tau.h / tau.r) / tau.h <= 1:
+        # max_dt is 1e-3, which a period must not pass; without the dual, 4e-3,
+        # and the decay of r halves that.
         layer = functools.partial(
             pc.Layer,
             act_spec=activity(TensorSpec((B, 4))),
@@ -976,17 +993,17 @@ class TestMaxDt:
             learn_interval=None,
         )
         fast_dual = pc.TimeConstants(h=4e-3, lam=0.5e-3, r=math.inf)
-        layer(nn.Linear(4, 5), tau=fast_dual, period=1.5e-3)
+        layer(nn.Linear(4, 5), tau=fast_dual, period=1e-3)
         with pytest.raises(ValueError, match="max_dt"):
-            layer(nn.Linear(4, 5), tau=fast_dual, period=1.6e-3)
+            layer(nn.Linear(4, 5), tau=fast_dual, period=1.1e-3)
         no_dual = pc.TimeConstants(h=4e-3, lam=math.inf, r=math.inf)
-        layer(nn.Linear(4, 5), tau=no_dual, period=2e-3)
+        layer(nn.Linear(4, 5), tau=no_dual, period=4e-3)
         with pytest.raises(ValueError, match="max_dt"):
-            layer(nn.Linear(4, 5), tau=no_dual, period=2.1e-3)
+            layer(nn.Linear(4, 5), tau=no_dual, period=4.1e-3)
         decay = pc.TimeConstants(h=4e-3, lam=math.inf, r=4e-3)
-        layer(nn.Linear(4, 5), tau=decay, period=1e-3)
+        layer(nn.Linear(4, 5), tau=decay, period=2e-3)
         with pytest.raises(ValueError, match="max_dt"):
-            layer(nn.Linear(4, 5), tau=decay, period=1.1e-3)
+            layer(nn.Linear(4, 5), tau=decay, period=2.1e-3)
 
 
 class TestResidual:
@@ -1000,7 +1017,7 @@ class TestResidual:
         # Both layers see the inputs at steps 2, 7, ... (l1 a step later) and
         # learn at steps 4, 9, ...: whatever moves mu (a new input, the
         # relaxation or learning of the layer below, the node's own theta), r
-        # and lam only relax, and the node sends mu + r with the mu of the h_in
+        # and lam only relax, and the node sends the mu of the h_in
         # it read.
         learning = Learning(start_manual, widths=(4, 5, 5))
         module = learning.chain.layers[int(node[1])].module
@@ -1221,11 +1238,11 @@ class TestOptimizer:
 
 
 class SpyRelaxer(pc.relax.Relaxer):
-    """A relaxer that counts the resets of the bound ones, and moves ``r`` as
-    ``pc.relax.Euler`` does."""
+    """A relaxer that records the samples each reset of the bound ones was
+    given, and moves ``r`` as ``pc.relax.Euler`` does."""
 
     def __init__(self) -> None:
-        self.resets = 0
+        self.resets: list[torch.Tensor] = []
 
     @override
     def bind(self, r: torch.Tensor) -> pc.relax.BoundRelaxer:
@@ -1239,8 +1256,8 @@ class SpyRelaxer(pc.relax.Relaxer):
                 r.sub_((dt / tau_h) * force)
 
             @override
-            def reset_(self) -> None:
-                spy.resets += 1
+            def reset_(self, samples: torch.Tensor) -> None:
+                spy.resets.append(samples.clone())
 
             @override
             def state_dict(self) -> dict[str, Any]:
@@ -1326,89 +1343,51 @@ class TestRelaxer:
         inp.next.connect(layer.prev)
         return inp, layer, Group(inp=inp, layer=layer)
 
-    def test_a_new_sample_drops_the_velocity_of_the_one_before(
-        self, start_manual: StartManual
+    @pytest.mark.parametrize("reset", [KEEP, RESET], ids=["keep", "reset"])
+    def test_a_reset_drops_the_velocity_of_those_samples(
+        self, start_manual: StartManual, reset: torch.Tensor
     ):
         # A layer alone (g = 0), with r off zero so that a force builds a
-        # velocity. The first update with another sample moves r by the force
-        # (1 + tau_h / tau_r) r + lam of before and nothing of the old velocity.
+        # velocity. The first update with another sample sets r and lam of the
+        # samples it resets to zero, and their velocity: their force is zero.
+        # The others go on: decay the velocity and add the force
+        # (1 + tau_h / tau_r) r + lam of before.
         inp, layer, net = self._alone(self.INERTIAL, math.inf)
         layer.r.add_(1.0)
         run = start_manual(net)
         x, y = sample([4, 4], 0)
-        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+        run.write({inp.prev: {"x": x, "y": y, "mask": MASK, "reset": KEEP}})
         for _ in range(3):
             run.step(H, inp, layer)
         before = run.state_dict()["nodes"]["layer"]["state"]
-        assert float(before["relaxer"]["velocity"].abs().max()) > 1e-6
+        assert float(before["relaxer"]["velocity"].abs().min()) > 1e-6
         x2, y2 = sample([4, 4], 1)
-        run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK}})
+        run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK, "reset": reset}})
         run.step(H, inp, layer)
         after = run.state_dict()["nodes"]["layer"]["state"]
-        close(
-            after["relaxer"]["velocity"],
-            (1 + TAU.h / TAU.r) * before["r"] + before["lam"],
-            1e-12,
-        )
+        decay = math.exp(-H / self.INERTIAL.tau)
+        force = (1 + TAU.h / TAU.r) * before["r"] + before["lam"]
+        kept = ~reset[:, None]
+        expected = torch.where(kept, decay * before["relaxer"]["velocity"] + force, 0)
+        close(after["relaxer"]["velocity"], expected, 1e-12)
+        assert not after["r"][reset].any()
+        assert not after["lam"][reset].any()
 
-    def test_the_relaxer_is_reset_by_a_new_sample_and_not_by_a_jump_of_theta(
+    def test_the_relaxer_is_given_the_reset_of_each_input_once(
         self, start_manual: StartManual
     ):
-        # theta jumps with every learning (learn_interval = 2 periods); r and the
-        # force do not, and the velocity stays. A new sample jumps the force (g)
-        # while r and lam are kept: reset.
+        # Whatever else moves (theta learns every 2 periods), the relaxer is
+        # reset only in the update that first sees an input, with its reset.
         spy = SpyRelaxer()
         inp, layer, net = self._alone(spy, 2 * H)
         layer.r.add_(1.0)
         run = start_manual(net)
         linear = cast(nn.Linear, layer.module)
         weight = linear.weight.detach().clone()
-        x, y = sample([4, 4], 0)
-        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
-        for _ in range(12):
-            run.step(H, inp, layer)
+        for seed, reset in enumerate([RESET, KEEP]):
+            x, y = sample([4, 4], seed)
+            run.write({inp.prev: {"x": x, "y": y, "mask": MASK, "reset": reset}})
+            for _ in range(12):
+                run.step(H, inp, layer)
         assert not torch.equal(linear.weight, weight)  # theta learned
-        assert spy.resets == 1  # the new sample, once
-        x2, y2 = sample([4, 4], 1)
-        run.write({inp.prev: {"x": x2, "y": y2, "mask": MASK}})
-        for _ in range(12):
-            run.step(H, inp, layer)
-        assert spy.resets == 2
-
-    def test_the_relaxer_is_not_reset_by_a_jump_of_the_activity_it_reads(
-        self, start_manual: StartManual
-    ):
-        # The sample stays; the layer before learns and jumps (learn_interval =
-        # 2 periods), which moves the mu of the layer after but not its r or the
-        # force: only the new sample resets it. The r of the layer after sends
-        # the credit back, for the layer before to learn from.
-        inp = pc.Input(
-            x=TensorSpec((B, 4), F64), y=TensorSpec((B, N_OUT), F64), period=H, batch=B
-        )
-        before = pc.Layer(
-            nn.Linear(4, 4).double(),
-            act_spec=inp.act_spec,
-            tau=TAU,
-            optimizer=SGD,
-            learn_interval=2 * H,
-        )
-        weight = cast(nn.Linear, before.module).weight.detach().clone()
-        spy = SpyRelaxer()
-        after = pc.Layer(
-            nn.Linear(4, 4).double(),
-            act_spec=before.act_spec,
-            tau=TAU,
-            optimizer=SGD,
-            relaxer=spy,
-            learn_interval=math.inf,
-        )
-        inp.next.connect(before.prev)
-        before.next.connect(after.prev)
-        after.r.add_(1.0)
-        run = start_manual(Group(inp=inp, before=before, after=after))
-        x, y = sample([4, 4], 0)
-        run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
-        for _ in range(12):
-            run.step(H, inp, before, after)
-        assert not torch.equal(cast(nn.Linear, before.module).weight, weight)
-        assert spy.resets == 1
+        assert [r.tolist() for r in spy.resets] == [RESET.tolist(), KEEP.tolist()]

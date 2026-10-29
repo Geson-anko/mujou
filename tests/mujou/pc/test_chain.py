@@ -14,6 +14,7 @@ from tests.mujou.pc._reference import (
     ADAMW,
     MASK,
     N_OUT,
+    RESET,
     SGD,
     TAU,
     B,
@@ -86,7 +87,7 @@ def run_states(
     for s in range(20):
         if s % 7 == 0:
             x, y = sample(WIDTHS, s)
-            run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+            run.write({inp.prev: {"x": x, "y": y, "mask": MASK, "reset": RESET}})
         run.step(H)
     tree = run.state_dict()
     for node in tree["nodes"].values():
@@ -137,14 +138,14 @@ class TestChain:
         assert net.prev is net.input.prev
         assert net.next is net.output.next
 
-    def test_every_node_runs_at_a_quarter_of_tau_h(self):
+    def test_every_node_runs_at_tau_period(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head)
         periods = [
             node.period for node in vars(net).values() if isinstance(node, pc.Layer)
         ]
         periods += [net.input.period, net.output.period]
-        assert periods == pytest.approx([TAU.h / 4] * 4)
+        assert periods == pytest.approx([TAU.period] * 4)
 
     def test_every_node_runs_at_the_period_given(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
@@ -225,7 +226,7 @@ def learned(
         learn_interval=LEARN_INTERVAL,
     )
     run = start_manual(net, timer=VirtualTimer())
-    run.write({net.prev: {"x": x, "y": y, "mask": mask}})
+    run.write({net.prev: {"x": x, "y": y, "mask": mask, "reset": mask}})
     for _ in range(20):
         run.step(H)
     return {path: node["state"] for path, node in run.state_dict()["nodes"].items()}

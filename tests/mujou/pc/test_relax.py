@@ -41,7 +41,7 @@ class TestEuler:
 
     def test_reset_changes_nothing(self):
         r, bound = r0(), pc.relax.Euler().bind(r0())
-        bound.reset_()
+        bound.reset_(torch.ones(r.shape[0], dtype=torch.bool))
         bound.step_(r, force(0), 1e-3, TAU_H)
         torch.testing.assert_close(
             r, r0() - 1e-3 / TAU_H * force(0), rtol=1e-15, atol=1e-15
@@ -67,7 +67,7 @@ class TestAbstract:
     def test_a_bound_relaxer_needs_step_reset_and_its_state(self):
         class NoStep(pc.relax.BoundRelaxer):
             @override
-            def reset_(self) -> None:
+            def reset_(self, samples: torch.Tensor) -> None:
                 pass
 
             @override

@@ -48,7 +48,8 @@ class Chain(Network, Shown):
     The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
     in ``layer{i}``, also ``layers[i]``), which are also their paths in
     ``Run.state_dict()``. Every
-    node runs with the same ``period``, ``tau.period`` (``tau.h / 4``) unless
+    node runs with the same ``period``, ``tau.period`` (``tau.h / 2`` with
+    ``tau.r = tau.h``) unless
     given; for a period of its own for each node, build the nodes one by one
     (``show`` shows them samples too).
 
@@ -65,7 +66,7 @@ class Chain(Network, Shown):
             y=TensorSpec((B,), torch.int64),
             batch=B,
             loss=pc.loss.CrossEntropyLoss(B),
-            tau=pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3),
+            tau=pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3),
             optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=0.15,
         )
@@ -87,12 +88,10 @@ class Chain(Network, Shown):
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
-        period: The period of every node, ``tau.period`` if ``None``. A shorter
-            one makes the explicit steps exact for stiffer modules, such as
-            residual blocks whose Jacobians grow while they learn, for more
-            updates. With ``tau.r`` shorter than ``tau.h``, the default
-            ``tau.max_dt`` is shorter than ``tau.period``: give a period of at
-            most ``tau.max_dt``.
+        period: The period of every node, ``tau.period`` if ``None``: with the
+            defaults of ``TimeConstants``, the credit moves one node down in
+            each period. A period of your own must not be longer than
+            ``max_dt``.
         device: Where the nodes compute.
 
     Raises:
@@ -176,7 +175,8 @@ def show(run: Run, chain: Shown, sample: Sample, *, seconds: float) -> Predictio
     Example::
 
         mask = torch.ones(B, dtype=torch.bool)
-        p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=0.2)
+        sample = pc.msg.Sample(x=x, y=y, mask=mask, reset=mask)  # shuffled
+        p = pc.show(run, net, sample, seconds=0.2)
         correct = int((p["y_hat"].argmax(1) == y).sum())
 
     Raises:

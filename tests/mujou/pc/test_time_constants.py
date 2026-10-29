@@ -26,7 +26,8 @@ class TestTimeConstants:
             TimeConstants(h=1e-3, lam=1.0, r=r)
 
     def test_r_is_required_and_may_be_infinite(self):
-        # The decay of r keeps deep chains stable, so it is chosen, as lam is.
+        # The decay of r sets the step that settles delta, so it is chosen, as
+        # lam is.
         with pytest.raises(TypeError):
             TimeConstants(h=1e-3, lam=1.0)  # pyright: ignore[reportCallIssue]
         assert TimeConstants(h=1e-3, lam=1.0, r=math.inf).r == math.inf
@@ -36,14 +37,14 @@ class TestTimeConstants:
             TimeConstants(1e-3, 1.0, 1.0)  # pyright: ignore[reportCallIssue]
 
     def test_the_defaults_of_a_node(self):
-        tau = TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
-        assert tau.period == pytest.approx(1e-3)
-        # The decay of r pulls r by (1 + h / r) / h: here twice as hard.
-        assert tau.max_dt == pytest.approx(1e-3)  # h / (2 * (1 + h / r))
-        assert TimeConstants(h=4e-3, lam=8e-3, r=math.inf).max_dt == pytest.approx(
-            2e-3  # h / 2
-        )
-        assert TimeConstants(h=4e-3, lam=0.5e-3, r=math.inf).max_dt == pytest.approx(
-            1.5e-3  # 3 * lam
-        )
-        assert TimeConstants(h=4e-3, lam=math.inf, r=math.inf).max_dt == 2e-3
+        # The decay of r pulls r by (1 + h / r) / h: here twice as hard, and the
+        # step h / (1 + h / r) moves r all the way.
+        tau = TimeConstants(h=4e-3, lam=2e-3, r=4e-3)
+        assert tau.period == pytest.approx(2e-3)
+        assert tau.max_dt == pytest.approx(2e-3)
+        no_decay = TimeConstants(h=4e-3, lam=8e-3, r=math.inf)
+        assert no_decay.period == pytest.approx(4e-3)  # h
+        assert no_decay.max_dt == pytest.approx(4e-3)
+        fast_dual = TimeConstants(h=4e-3, lam=0.5e-3, r=math.inf)
+        assert fast_dual.max_dt == pytest.approx(1e-3)  # 2 * lam
+        assert TimeConstants(h=4e-3, lam=math.inf, r=math.inf).max_dt == 4e-3

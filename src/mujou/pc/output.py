@@ -85,7 +85,8 @@ class Output(Node):
         optimizer: How ``theta`` moves, as in ``Layer``.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.period``
-            (``tau.h / 4``). It must not be longer than ``max_dt``.
+            (``tau.h / 2`` with ``tau.r = tau.h``). It must not be longer than
+            ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
             towards the weight of the update of ``theta``. The default
             ``tau.max_dt`` is that of ``Layer``, so that every node of a chain

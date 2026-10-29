@@ -21,8 +21,9 @@ class Layer(Node):
     PC-ALM.
 
     It predicts ``mu = module(h_in)`` from the activity ``h_in`` of the previous
-    node, and holds the deviation $r = h - \mu$ of its own activity and the
-    dual ``lam`` of the constraint. It sends ``h = mu + r`` to the next nodes.
+    node and sends it on: the activity of every node is the forward pass. It
+    holds the deviation $r = h - \mu$ of its activity and the dual ``lam`` of
+    the constraint, which stay in the node and make the credit it sends back.
     With $\delta = r + \lambda$ and the sum $g$ of what the next nodes send
     back:
 
@@ -37,29 +38,38 @@ class Layer(Node):
     one), $g_\theta = -J_\theta^\top \delta$ and the node sends
     $g_{\mathrm{in}} = -J_h^\top \delta$ to the previous node (both from one
     vector-Jacobian product of ``module``, ``functional.vjp``). At a fixed point,
-    $r = 0$ (``h`` is the forward pass) and ``lam`` is the credit
-    $-\partial\ell/\partial h$ of backpropagation. Inside the node, ``module``
-    is differentiated by autograd; between nodes, only these messages flow.
+    $r = 0$ and ``lam`` is the credit $-\partial\ell/\partial h$ of
+    backpropagation. Inside the node, ``module`` is differentiated by autograd;
+    between nodes, only these messages flow.
 
-    ``h`` follows ``mu`` in the update that computes it: whatever moves ``mu``
-    (the relaxation of the nodes below, a new sample, an update of ``theta``
-    here or below), ``r`` and ``lam`` stay and only relax. Without a target,
-    ``r`` decays to 0 and ``h`` is the forward pass. As ``h`` moves with every
-    ``r`` below it, the credit loops back through the product of the Jacobians,
-    and a deep chain diverges without the decay of ``r`` (``tau.r``;
-    ``TimeConstants`` has the measurements).
+    Sending ``mu`` rather than ``mu + r`` is the fixed prediction assumption of
+    predictive coding: it keeps the fixed point, and the credit flows down the
+    path only. Were ``r`` sent up, it would move the activities of the nodes
+    above and come back as credit through the product of their Jacobians, a
+    loop that diverges in chains whose forward pass amplifies, however short
+    the steps. With the defaults of ``TimeConstants`` (``period = tau.h / 2``,
+    ``tau.lam = tau.h / 2``, ``tau.r = tau.h``), ``delta`` follows ``-g`` in
+    one update, so the credit moves one node down in each period.
+
+    Whatever moves ``mu`` (a new sample, an update of ``theta`` here or
+    below), ``r`` and ``lam`` stay and only relax, unless the sample starts
+    anew: in the update that first sees an input, the node sets ``r`` and
+    ``lam`` of the samples whose ``reset`` is set to zero, so that no credit of
+    an unrelated sample is left (``Sample``). Without a target, ``r`` and
+    ``lam`` decay to 0.
 
     Each ``on_update(dt)``:
 
     1. reads the activity and ticks its ``clock``, which caps ``dt`` at
-       ``max_dt``;
+       ``max_dt``; with a new input, sets ``r`` and ``lam`` of the samples it
+       resets to zero;
     2. computes ``mu``, ``g_in`` and, when it learns, ``g_theta`` with the
        ``delta`` before this update, zero for the samples whose ``mask`` is
        False, and sends ``g_in``;
     3. moves ``r`` and then ``lam`` by ``dt`` with the ``g`` the next nodes
        sent (``functional.relax_``);
-    4. sends ``h = mu + r``, and the ``y``, ``mask`` and ``time`` that came
-       with ``h_in``;
+    4. sends ``h = mu``, and the ``y``, ``mask``, ``reset`` and ``time`` that
+       came with ``h_in``;
     5. when it learns, moves ``theta`` by the time since its last update
        (``optimizer.step_``).
 
@@ -83,25 +93,23 @@ class Layer(Node):
     activity is zeros (``mask`` all False, ``time`` 0), so it does not learn
     then.
 
-    ``dt`` is capped because the nodes are coupled explicitly: ``g`` was made
-    from ``h`` as it was when the next node last updated. After a long stall
-    (a loaded machine), the step ``dt / tau.h`` of every node grows at once and
-    the coupling makes the network diverge, which no split of the step inside
-    the node prevents. The time beyond ``max_dt`` is dropped, from the
-    relaxation and from the weight of the next update of ``theta`` alike. The
-    default ``tau.max_dt`` (``tau.h / 4`` with ``tau.r = tau.h``) keeps the step
-    of ``r`` and ``lam`` stable in the node itself.
+    ``dt`` is capped because the step is explicit: after a long stall (a loaded
+    machine), a long ``dt / tau.h`` would overshoot and make ``r`` and ``lam``
+    diverge. The time beyond ``max_dt`` is dropped, from the relaxation and
+    from the weight of the next update of ``theta`` alike. The default
+    ``tau.max_dt`` is the step that settles ``delta`` (``tau.h / 2`` with
+    ``tau.r = tau.h``).
 
     ``relaxer`` sets how ``r`` moves along the force on it (``functional.relax_``):
     the plain step of ``pc.relax.Euler``, or a relaxer of your own with the same
     fixed point. The node calls the ``reset_`` of the bound relaxer with each new
-    sample (where the forces it may remember are those of the sample before).
+    input, with the samples it resets (whose state the relaxer forgets).
 
     ``module`` must treat the samples of the batch independently (no
     ``BatchNorm`` in training mode): the gradient of each sample must be its
-    own. It must also be deterministic (no ``Dropout``): noise in ``mu`` goes
-    straight into the ``h`` the node sends. Its parameters that require
-    gradients learn; set ``requires_grad`` to False to freeze one. It is called
+    own. It must also be deterministic (no ``Dropout``): ``mu`` is what the node
+    sends. Its parameters that require gradients learn; set ``requires_grad`` to
+    False to freeze one. It is called
     once on zeros when the node is made, to find the shape and dtype of ``h``.
 
     The state (``Run.state_dict()["nodes"][path]["state"]``) holds
@@ -119,7 +127,7 @@ class Layer(Node):
     Example::
 
         B = 64
-        tau = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
+        tau = pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)
         inp = pc.Input(
             x=TensorSpec((B, 784)),
             y=TensorSpec((B,), torch.int64),
@@ -156,7 +164,8 @@ class Layer(Node):
             frame (good values for it have not been measured yet);
             ``math.inf`` never updates.
         period: The period of the node in seconds; ``None`` is ``tau.period``
-            (``tau.h / 4``). It must not be longer than ``max_dt``.
+            (``tau.h / 2`` with ``tau.r = tau.h``). It must not be longer than
+            ``max_dt``.
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
             ``tau.max_dt``.
         device: Where the node computes.
@@ -211,16 +220,23 @@ class Layer(Node):
         tick = self.clock.tick(dt, act["time"], self.timer.now())
         # Nothing to learn from an input without a target: its time is dropped.
         learn = tick.learn and bool(act["mask"].any())
-        mu, g_theta = self._predict(act, learn)
         if tick.new:
-            # What the relaxer remembers are the forces of the sample before.
-            self.relaxer.reset_()
+            self._reset(act["reset"])
+        mu, g_theta = self._predict(act, learn)
         g = sum(self.next.recv().values(), torch.zeros_like(self.r))
         relax_(self.r, self.lam, g, tick.dt, self._tau, self.relaxer)
         self._send(act, mu)
         if learn:
             # theta moves by the mean gradient of the batch, g_theta / B.
             self.optimizer.step_([g / self._samples for g in g_theta], tick.elapsed)
+
+    def _reset(self, reset: torch.Tensor) -> None:
+        """Set ``r`` and ``lam`` of the samples ``reset`` to zero, so that no
+        credit of the sample before is left, and tell the relaxer."""
+        samples = rows(reset, self.r)
+        self.r.masked_fill_(samples, 0.0)
+        self.lam.masked_fill_(samples, 0.0)
+        self.relaxer.reset_(reset)
 
     def _predict(
         self, act: Activity, learn: bool
@@ -239,9 +255,10 @@ class Layer(Node):
     def _send(self, act: Activity, mu: torch.Tensor) -> None:
         self.next.send(
             {
-                "h": mu + self.r,
+                "h": mu,
                 "y": act["y"],
                 "mask": act["mask"],
+                "reset": act["reset"],
                 "time": act["time"],
             }
         )
