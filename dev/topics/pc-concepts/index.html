@@ -1131,6 +1131,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What a node holds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-the-node-holds-r-and-sends-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the node holds r and sends mu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-new-sample-reset-or-keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A new sample: reset or keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1184,41 +1212,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-learnclock-and-jumps" class="md-nav__link">
+  <a href="#4-learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. LearnClock and jumps
+        4. LearnClock
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="4. LearnClock and jumps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#learnclock" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LearnClock
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#jumps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        jumps
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1757,6 +1757,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What a node holds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-the-node-holds-r-and-sends-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the node holds r and sends mu
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-new-sample-reset-or-keep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A new sample: reset or keep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1810,41 +1838,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-learnclock-and-jumps" class="md-nav__link">
+  <a href="#4-learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. LearnClock and jumps
+        4. LearnClock
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="4. LearnClock and jumps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#learnclock" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LearnClock
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#jumps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        jumps
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1976,13 +1976,13 @@
 <li>What each part of <code>mujou.pc</code> does, which parts you use directly and which you use to write nodes of your own</li>
 <li>The messages that flow between the nodes, and which way the ports face</li>
 <li>What a <code>pc.Layer</code> does in one <code>on_update(dt)</code></li>
-<li>What the <code>Tick</code> that <code>pc.clock.LearnClock</code> returns, <code>jumps</code> and <code>pc.TimeConstants</code> mean</li>
-<li>How <code>pc.optim.SGD</code> and <code>pc.optim.AdamW</code> move the weights in time, and <code>pc.relax.Euler</code> and <code>pc.relax.HeavyBall</code> the activity</li>
+<li>What the <code>Tick</code> that <code>pc.clock.LearnClock</code> returns and <code>pc.TimeConstants</code> mean</li>
+<li>How <code>pc.optim.SGD</code> and <code>pc.optim.AdamW</code> move the weights in time, and <code>pc.relax.Euler</code> the deviation <code>r</code></li>
 </ul>
 <p>You should know PyTorch and backpropagation (BP), and the nodes, ports and <code>dt</code> of <a href="../../concepts/">How Mujou Works</a>. You need not know predictive coding.</p>
 </div>
 <h2 id="what-a-node-holds">What a node holds<a class="headerlink" href="#what-a-node-holds" title="Permanent link">&para;</a></h2>
-<p>In PC-ALM every node holds its own <strong>activity</strong> <code>h</code>, and <strong>predicts</strong> it from the activity of the node before. These are all the quantities you need.</p>
+<p>In PC-ALM every node has its own <strong>activity</strong> <code>h</code>, and <strong>predicts</strong> it from the activity of the node before. A <code>pc.Layer</code> holds how far its activity is from the prediction, the <strong>deviation</strong> <code>r</code>, and sends the prediction <code>mu</code> to the next node. These are all the quantities you need.</p>
 <table>
 <thead>
 <tr>
@@ -2003,18 +2003,23 @@
 <td>The prediction: the output of the node's <code>module</code>. <span class="arithmatex">\(\theta\)</span> are the weights of <code>module</code></td>
 </tr>
 <tr>
+<td><code>r</code></td>
+<td><span class="arithmatex">\(r = h - \mu\)</span></td>
+<td>The deviation from the prediction, which the node holds</td>
+</tr>
+<tr>
 <td><code>h</code></td>
-<td></td>
-<td>The node's own activity, which it sends to the next node</td>
+<td><span class="arithmatex">\(h = \mu + r\)</span></td>
+<td>The node's own activity. It stays in the node: the next node reads <code>mu</code></td>
 </tr>
 <tr>
 <td><code>lam</code></td>
-<td><span class="arithmatex">\(\tau_\lambda\dot\lambda = h - \mu\)</span></td>
-<td>The dual: the deviation from the prediction, <span class="arithmatex">\(r = h - \mu\)</span>, summed up over time</td>
+<td><span class="arithmatex">\(\tau_\lambda\dot\lambda = r\)</span></td>
+<td>The dual: the deviation summed up over time</td>
 </tr>
 <tr>
 <td><code>delta</code></td>
-<td><span class="arithmatex">\(\delta = h - \mu + \lambda\)</span></td>
+<td><span class="arithmatex">\(\delta = r + \lambda\)</span></td>
 <td>The node's error</td>
 </tr>
 <tr>
@@ -2029,7 +2034,13 @@
 </tr>
 </tbody>
 </table>
-<p><code>h</code> moves to cancel the sum of <code>delta</code> and <code>g</code>, and <code>lam</code> keeps growing while <code>r</code> remains. When both stop, <code>r = 0</code> (<code>h</code> is the forward pass) and <code>lam</code> equals the credit of BP, <span class="arithmatex">\(-\partial\ell/\partial h\)</span>. The gradients of the weights then equal those of BP too. The theory is in <a href="https://pub.sakana.ai/pc-alm/">the PC-ALM article</a>.</p>
+<p><code>r</code> moves to cancel the sum of <code>delta</code> and <code>g</code>, and decays with the time constant <code>tau.r</code>; <code>lam</code> keeps growing while <code>r</code> remains. When both stop, <code>r = 0</code> (<code>h</code> is the forward pass) and <code>lam</code> equals the credit of BP, <span class="arithmatex">\(-\partial\ell/\partial h\)</span>. The gradients of the weights then equal those of BP too. The theory is in <a href="https://pub.sakana.ai/pc-alm/">the PC-ALM article</a>, whose nodes hold <code>h</code> and send it; mujou's hold <code>r</code> and send <code>mu</code> (below).</p>
+<h3 id="why-the-node-holds-r-and-sends-mu">Why the node holds r and sends mu<a class="headerlink" href="#why-the-node-holds-r-and-sends-mu" title="Permanent link">&para;</a></h3>
+<p>The prediction <code>mu</code> jumps at once with a new sample, and when the node below or the node itself learns. A node that held <code>h</code> would keep <code>h</code> where it was, and <span class="arithmatex">\(r = h - \mu\)</span> would suddenly grow: a false error would enter <code>g_in</code> and the gradients of the weights. A node that holds <code>r</code> keeps the deviation however <code>mu</code> jumps.</p>
+<p>It sends <code>mu</code>, not <span class="arithmatex">\(\mu + r\)</span>: the <strong>fixed prediction assumption</strong> of predictive coding. The activity that flows forward is then the forward pass, and the credit only flows back. Were <span class="arithmatex">\(\mu + r\)</span> sent, a move of <code>r</code> in one node would move the activity of every node above it, through the product of the Jacobians of the forward pass, and come back to it as credit. That loop diverges in a chain whose forward pass amplifies, however short the steps. Sending <code>mu</code> keeps the fixed point and cuts the loop, so the steps that are stable in one node are stable in any chain.</p>
+<p>With the defaults of <code>pc.TimeConstants</code> (<a href="#5-timeconstants">section 5</a>), one update moves <code>delta</code> to <code>-g</code>, so the credit moves one node back in each period.</p>
+<h3 id="a-new-sample-reset-or-keep">A new sample: reset or keep<a class="headerlink" href="#a-new-sample-reset-or-keep" title="Permanent link">&para;</a></h3>
+<p>What <code>r</code> and <code>lam</code> hold is the credit of the sample the node has seen. When the next sample has nothing to do with it, as with shuffled batches, that credit is wrong for it. The host then sets <code>reset</code> of the samples it writes, and each node sets <code>r</code> and <code>lam</code> of those samples to 0 when it first sees the write. A sample that continues the one before, as the next frame of a stream does, keeps them: write it with <code>reset</code> False.</p>
 <h2 id="1-the-parts">1. The parts<a class="headerlink" href="#1-the-parts" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
@@ -2048,19 +2059,19 @@
 <tr>
 <td><code>pc.Input</code></td>
 <td>Node</td>
-<td>Sends the <code>x</code> the host wrote as it is, as the activity <code>h</code>. Holds neither <code>h</code> nor weights</td>
+<td>Sends the <code>x</code> the host wrote as it is, as the activity <code>h</code>. Holds nothing</td>
 <td>When built by hand</td>
 </tr>
 <tr>
 <td><code>pc.Layer</code></td>
 <td>Node</td>
-<td>Holds one <code>module</code>, moves <code>h</code> and <code>lam</code>, and learns the weights</td>
+<td>Holds one <code>module</code>, moves <code>r</code> and <code>lam</code>, and learns the weights</td>
 <td>When built by hand</td>
 </tr>
 <tr>
 <td><code>pc.Output</code></td>
 <td>Node</td>
-<td>Holds the last <code>module</code> and the loss, gives the prediction <code>y_hat</code>, and learns the weights. Holds neither <code>h</code> nor <code>lam</code></td>
+<td>Holds the last <code>module</code> and the loss, gives the prediction <code>y_hat</code>, and learns the weights. Holds neither <code>r</code> nor <code>lam</code></td>
 <td>When built by hand</td>
 </tr>
 <tr>
@@ -2084,7 +2095,7 @@
 <tr>
 <td><code>pc.TimeConstants</code></td>
 <td>Settings</td>
-<td>Holds the speeds of <code>h</code> and <code>lam</code> in seconds (<a href="#5-timeconstants">section 5</a>)</td>
+<td>Holds the speeds of <code>r</code> and <code>lam</code> in seconds (<a href="#5-timeconstants">section 5</a>)</td>
 <td>Usually</td>
 </tr>
 <tr>
@@ -2102,7 +2113,7 @@
 <tr>
 <td><code>pc.clock.LearnClock</code></td>
 <td>Part</td>
-<td>Decides when to learn (<a href="#4-learnclock-and-jumps">section 4</a>)</td>
+<td>Decides when to learn (<a href="#4-learnclock">section 4</a>)</td>
 <td>Nodes of your own</td>
 </tr>
 <tr>
@@ -2123,7 +2134,7 @@
 <h2 id="2-connections-and-what-flows">2. Connections and what flows<a class="headerlink" href="#2-connections-and-what-flows" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p>Activities go forward in an <code>Activity</code>, and gradients <code>g_in</code> go back. The target <code>y</code>, <code>mask</code> and time <code>time</code> ride in the same message as the activity and are passed on.</p>
+<p>Activities (the predictions <code>mu</code>) go forward in an <code>Activity</code>, and gradients <code>g_in</code> go back. The target <code>y</code>, <code>mask</code>, <code>reset</code> and time <code>time</code> ride in the same message as the activity and are passed on.</p>
 </div>
 <pre class="mermaid"><code>flowchart LR
     H1["Host"] --&gt;|"Sample"| I["Input"]
@@ -2146,12 +2157,12 @@
 <tbody>
 <tr>
 <td><code>pc.msg.Sample</code></td>
-<td><code>x</code>, <code>y</code>, <code>mask</code></td>
+<td><code>x</code>, <code>y</code>, <code>mask</code>, <code>reset</code></td>
 <td>Host → <code>Input.prev</code></td>
 </tr>
 <tr>
 <td><code>pc.msg.Activity</code></td>
-<td><code>h</code>, <code>jumps</code>, <code>y</code>, <code>mask</code>, <code>time</code></td>
+<td><code>h</code>, <code>y</code>, <code>mask</code>, <code>reset</code>, <code>time</code></td>
 <td><code>next</code> → the next node's <code>prev</code></td>
 </tr>
 <tr>
@@ -2167,9 +2178,9 @@
 </tbody>
 </table>
 <ul>
-<li><code>mask</code>: whether each sample has a target. A sample whose <code>mask</code> is False adds nothing to the loss, and <code>Layer</code> sets the <code>g_in</code> of its row to 0. With every <code>mask</code> False, <code>h</code> and <code>lam</code> still relax and only the weights do not learn. Evaluate this way</li>
+<li><code>mask</code>: whether each sample has a target. A sample whose <code>mask</code> is False adds nothing to the loss, and <code>Layer</code> sets the <code>g_in</code> of its row to 0. With every <code>mask</code> False, <code>r</code> and <code>lam</code> still relax and only the weights do not learn. Evaluate this way</li>
+<li><code>reset</code>: whether each sample starts anew. A <code>Layer</code> sets <code>r</code> and <code>lam</code> of its row to 0 in the update in which it first sees the write. Set it for shuffled samples; leave it False for a frame that continues the one before</li>
 <li><code>time</code>: the <code>Timestamp</code> at which the host wrote the input. <code>Timestamp(ns=0)</code> before the first write</li>
-<li><code>jumps</code>: an <code>int</code>, the number of times the sender's <code>h</code> jumped (<a href="#4-learnclock-and-jumps">section 4</a>)</li>
 </ul>
 <h3 id="port-directions">Port directions<a class="headerlink" href="#port-directions" title="Permanent link">&para;</a></h3>
 <table>
@@ -2249,58 +2260,53 @@
 <tr>
 <td>1</td>
 <td><code>LearnClock.tick</code></td>
-<td>Reads the <code>Activity</code> from <code>prev</code> and gets the <code>Tick</code> (<code>dt</code>, <code>new</code>, <code>learn</code>, <code>elapsed</code>)</td>
+<td>Reads the <code>Activity</code> from <code>prev</code> and gets the <code>Tick</code> (<code>dt</code>, <code>new</code>, <code>learn</code>, <code>elapsed</code>). With a new input (<code>tick.new</code>), sets <code>r</code> and <code>lam</code> of the samples whose <code>reset</code> is set to 0</td>
 </tr>
 <tr>
 <td>2</td>
-<td>—</td>
-<td>If it learned its own weights in the previous update, adds the jump they made to <code>h</code> (not the re-anchoring of step 4; the third row of the table in <a href="#jumps">jumps</a>)</td>
-</tr>
-<tr>
-<td>3</td>
 <td><code>functional.vjp</code></td>
 <td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>, <span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span> and, to learn, <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span>, in one VJP. Sends <code>g_in</code> from <code>prev</code></td>
 </tr>
 <tr>
-<td>4</td>
+<td>3</td>
 <td><code>functional.relax_</code></td>
-<td>Re-anchors <code>h</code> if <code>mu</code> jumped, then <span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span> (as <code>pc.relax.Euler</code>, the default relaxer, moves it; <a href="#7-relaxers">section 7</a>), and then, with the moved <code>h</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
+<td><span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span> (as <code>pc.relax.Euler</code>, the default relaxer, moves it; <a href="#7-relaxers">section 7</a>), and then, with the moved <code>r</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>Activity</code></td>
+<td>Sends from <code>next</code> the prediction <span class="arithmatex">\(\mu\)</span> as <code>h</code>, with the <code>y</code>, <code>mask</code>, <code>reset</code> and <code>time</code> it received</td>
 </tr>
 <tr>
 <td>5</td>
-<td><code>Activity</code></td>
-<td>Advances its own <code>jumps</code> if needed, and sends from <code>next</code> <code>h</code> and <code>jumps</code>, with the <code>y</code>, <code>mask</code> and <code>time</code> it received</td>
-</tr>
-<tr>
-<td>6</td>
 <td><code>optimizer.step_</code></td>
 <td>Divides <span class="arithmatex">\(g_\theta\)</span> by the number of samples <span class="arithmatex">\(B\)</span> and moves the weights by <code>tick.elapsed</code> seconds (<a href="#6-optimizers">section 6</a>). Only when <code>tick.learn</code> is True and some <code>mask</code> is True</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li>The <code>delta</code> of step 3 is made from <code>h</code> and <code>lam</code> after step 2 and before step 4</li>
-<li>Gradients are summed over the batch, and only step 6 divides by <span class="arithmatex">\(B\)</span>. So <code>lam</code> is the credit of each sample, and the optimizer gets the mean gradient of the batch</li>
-<li>The <code>delta</code> of <code>vjp</code> is not a value but a function that makes <code>delta</code> from <code>mu</code> (<code>mu</code> is computed inside <code>vjp</code>). Usually <code>lambda mu: h - mu + lam</code>. In an update that re-anchors in step 4, pass <code>lambda mu: (h - mu_last) + lam</code>, with the deviation <code>h - mu_last</code> before re-anchoring (<a href="#jumps">jumps</a>)</li>
+<li>The <code>delta</code> of step 2 is made from <code>r</code> and <code>lam</code> before step 3</li>
+<li>With a new input (<code>tick.new</code>), the node also calls <code>relaxer.reset_(reset)</code> in step 1 (<a href="#7-relaxers">section 7</a>)</li>
+<li>Gradients are summed over the batch, and only step 5 divides by <span class="arithmatex">\(B\)</span>. So <code>lam</code> is the credit of each sample, and the optimizer gets the mean gradient of the batch</li>
+<li>The <code>delta</code> of <code>vjp</code> is not a value but a function that makes <code>delta</code> from <code>mu</code> (<code>mu</code> is computed inside <code>vjp</code>). A node that holds <code>r</code> passes <code>lambda mu: r + lam</code></li>
 <li><code>vjp</code> detaches <code>h_in</code> before it differentiates, so the graph does not reach the previous node</li>
 </ul>
-<p><code>Output</code> holds neither <code>h</code> nor <code>lam</code>. In step 3 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>optimizer.step_</code>) are as in <code>Layer</code>. It has no <code>h</code> to re-anchor, so it does not read <code>jumps</code>.</p>
+<p><code>Output</code> holds neither <code>r</code> nor <code>lam</code>. In step 2 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>optimizer.step_</code>) are as in <code>Layer</code>.</p>
 <details class="question">
 <summary>How does sending g_in back differ from backpropagation?</summary>
 <p><code>g_in</code> is computed with the same VJP as one layer of backpropagation (<span class="arithmatex">\(-J_h^\top\delta\)</span>), and at equilibrium <code>lam</code> follows the same recursion as the credit of backpropagation. What differs is what is done with <code>g_in</code>:</p>
 <ol>
-<li>The sender makes <code>g_in</code> from its own <code>delta</code>: <code>delta = h - mu + lam</code> depends on its own state only</li>
-<li>The receiver sums the <code>g_in</code> it receives into <code>g</code>, and uses it in <code>relax_</code> (step 4) as a force that moves its own <code>h</code>. It does not pass <code>g</code> on</li>
-<li>As <code>h</code> and <code>lam</code> move, its own <code>delta</code> changes, and so does the <code>g_in</code> it sends in its next update. The credit travels back through the relaxation of each node, over time, not in one backward sweep</li>
+<li>The sender makes <code>g_in</code> from its own <code>delta</code>: <code>delta = r + lam</code> depends on its own state only</li>
+<li>The receiver sums the <code>g_in</code> it receives into <code>g</code>, and uses it in <code>relax_</code> (step 3) as a force that moves its own <code>r</code>. It does not pass <code>g</code> on</li>
+<li>As <code>r</code> and <code>lam</code> move, its own <code>delta</code> changes, and so does the <code>g_in</code> it sends in its next update. The credit travels back through the relaxation of each node, over time, not in one backward sweep</li>
 </ol>
 <p>There is no forward phase and backward phase, and no node waits for the others: each node updates with the latest <code>g</code> it has, which may be old. <code>vjp</code> detaches <code>h_in</code>, so no computation graph crosses nodes. The gradient equals that of backpropagation only at equilibrium, which is why a node waits <code>learn_interval</code> before it learns.</p>
 </details>
-<h2 id="4-learnclock-and-jumps">4. LearnClock and jumps<a class="headerlink" href="#4-learnclock-and-jumps" title="Permanent link">&para;</a></h2>
+<h2 id="4-learnclock">4. LearnClock<a class="headerlink" href="#4-learnclock" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p><code>h</code> and <code>lam</code> move in every update; the weights move only in the updates <code>LearnClock</code> chooses. <code>jumps</code> is the signal to the next node: "the prediction jumped, so move <code>h</code> with it".</p>
+<p><code>r</code> and <code>lam</code> move in every update; the weights move only in the updates <code>LearnClock</code> chooses. The node sends the <code>mu</code> of each update, so nothing more is needed when the prediction jumps.</p>
 </div>
-<h3 id="learnclock">LearnClock<a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h3>
 <p>In every update a node calls <code>tick = self.clock.tick(dt, act["time"], self.timer.now())</code>. What the returned <code>Tick</code> means:</p>
 <table>
 <thead>
@@ -2319,7 +2325,7 @@
 <tr>
 <td><code>new</code></td>
 <td>The <code>time</code> of the input received differs from last time (a new sample)</td>
-<td>Re-anchor <code>h</code></td>
+<td>Reset the samples that start anew</td>
 </tr>
 <tr>
 <td><code>learn</code></td>
@@ -2364,58 +2370,14 @@
 </ul>
 <details class="question">
 <summary>Why count from the time the host wrote the input, not the time the node received it?</summary>
-<p>So that the nodes on a path learn at about the same time, however deep they are. Counted from the time of receipt, deeper nodes would learn later, from a <code>delta</code> that holds the jump of <code>h</code> that the previous node made by learning (this diverged). Every node reads the same run's timer, so no barrier is needed.</p>
+<p>So that the nodes on a path learn at about the same time, however deep they are. Counted from the time of receipt, deeper nodes would learn later, each from a <code>delta</code> that has not yet answered the weights the nodes below have learned. Every node reads the same run's timer, so no barrier is needed.</p>
 </details>
-<h3 id="jumps">jumps<a class="headerlink" href="#jumps" title="Permanent link">&para;</a></h3>
-<p>Relaxation assumes that <code>mu</code> moves little by little. When <code>mu</code> jumps at once and <code>h</code> stays, <span class="arithmatex">\(r = h - \mu\)</span> suddenly grows, and a false error enters <code>g_in</code> and the gradients of the weights. So in an update where <code>mu</code> jumped, <code>h</code> moves by the same amount once (re-anchoring), keeping <code>r</code> and <code>lam</code>.</p>
-<div class="arithmatex">\[h \leftarrow \mu_{\text{new}} + (h - \mu_{\text{last}})\]</div>
-<p><code>mu_last</code> is the prediction of the previous update. The re-anchored <code>h</code> jumps too, so the node advances its own <code>jumps</code> by 1 to tell the next node.</p>
-<table>
-<thead>
-<tr>
-<th>Why <code>mu</code> jumps</th>
-<th>How the node notices</th>
-<th>How <code>h</code> moves</th>
-<th>Its own <code>jumps</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>A new sample</td>
-<td><code>tick.new</code> is True</td>
-<td>Re-anchor</td>
-<td>+1</td>
-</tr>
-<tr>
-<td>The previous node's <code>h</code> jumped</td>
-<td>The <code>jumps</code> received differ from last time</td>
-<td>Re-anchor</td>
-<td>+1</td>
-</tr>
-<tr>
-<td>It learned its own weights</td>
-<td>It learned</td>
-<td>At the start of the next update, add the jump <span class="arithmatex">\(f(h_{\mathrm{in}};\theta_{\text{new}}) - \mu\)</span></td>
-<td>+1 unless <code>learn_interval</code> is <code>None</code></td>
-</tr>
-</tbody>
-</table>
-<pre class="mermaid"><code>flowchart LR
-    I["Input&lt;br/&gt;jumps +1 on a write"] --&gt;|"jumps change"| L0["Layer&lt;br/&gt;re-anchors, jumps +1"]
-    L0 --&gt;|"jumps change"| L1["Layer&lt;br/&gt;re-anchors, jumps +1"]
-    L1 --&gt; O["Output&lt;br/&gt;does not read jumps"]</code></pre>
-<ul>
-<li>When the causes coincide in one update, the node re-anchors and advances <code>jumps</code> only once</li>
-<li><code>Input</code> advances <code>jumps</code> on every write of the host</li>
-<li>With <code>learn_interval=None</code> the weights move a little in every update, so the node only adds the jump to its own <code>h</code> and does not advance <code>jumps</code>. Advancing it every time would make the next node re-anchor every time, and deep chains diverge</li>
-<li>Because of re-anchoring, a new sample does not reset <code>h</code> or <code>lam</code>. Only <code>r</code> and <code>lam</code> carry over</li>
-</ul>
 <h2 id="5-timeconstants">5. TimeConstants<a class="headerlink" href="#5-timeconstants" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
 <p>All speeds are set in seconds of the run's timer. Each node moves its equations by the <code>dt</code> that actually passed, so nodes with different periods change at the same speed per second.</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=, r=)</code> holds the time constants of the activities. The time constant of the weights belongs to the optimizer (<a href="#6-optimizers">section 6</a>).</p>
+<p><code>pc.TimeConstants(h=, lam=, r=)</code> holds the time constants of <code>r</code> and <code>lam</code>, all required. The time constant of the weights belongs to the optimizer (<a href="#6-optimizers">section 6</a>).</p>
 <table>
 <thead>
 <tr>
@@ -2428,7 +2390,7 @@
 <tbody>
 <tr>
 <td><code>tau.h</code></td>
-<td>The relaxation of the activity <code>h</code></td>
+<td>The relaxation of the deviation <code>r</code></td>
 <td><code>dt / tau.h</code></td>
 <td>Not allowed (finite and &gt; 0)</td>
 </tr>
@@ -2436,21 +2398,22 @@
 <td><code>tau.lam</code></td>
 <td>How fast <code>lam</code> sums up <code>r</code></td>
 <td><code>dt / tau.lam</code></td>
-<td><code>lam</code> stays 0. <code>r</code> does not return to 0, and the fixed point does not match BP (plain predictive coding)</td>
+<td><code>lam</code> stays 0. <code>r</code> does not return to 0, and holds the credit instead</td>
 </tr>
 <tr>
 <td><code>tau.r</code></td>
 <td>How fast the deviation <code>r</code> decays</td>
-<td><code>dt / tau.r</code> of <code>r</code> more</td>
-<td>The default: no decay. With a finite <code>tau.r</code>, <code>h</code> is pulled towards <code>mu</code>; the fixed point stays</td>
+<td>A further <code>dt / tau.r</code> of <code>r</code> toward 0</td>
+<td>No decay. Still stable, but <code>delta</code> takes more than one update to follow <code>-g</code></td>
 </tr>
 </tbody>
 </table>
-<p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / 4</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code> unless it is given <code>period=</code>. <code>tau.max_dt</code> (<code>min(tau.h / 2, 3 * tau.lam)</code>, shorter with a decay of <code>r</code>, <code>tau.r</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
+<p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / (1 + tau.h / tau.r)</code>, <code>tau.h / 2</code> with <code>tau.r = tau.h</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code> unless it is given <code>period=</code>. <code>tau.max_dt</code> (<code>min(tau.period, 2 * tau.lam)</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
+<p>The usual values go together: <code>tau.r = tau.h</code>, <code>tau.lam = tau.h / 2</code> and the default period <code>tau.h / 2</code>. One update then moves <code>delta = r + lam</code> to <code>-g</code> exactly, so the credit moves one node back in each period and does not overshoot. A longer step overshoots, and the overshoot grows at every node it passes. <code>tau.r</code> does not move the fixed point: <code>lam</code> sums up <code>r</code>, so <code>r = 0</code> there whatever <code>tau.r</code> is. With both <code>tau.lam</code> and <code>tau.r</code> at <code>math.inf</code>, the nodes are those of predictive coding with the fixed prediction assumption, whose error <code>r</code> settles at the credit of BP. A node's period must not be longer than its <code>max_dt</code> (<code>ValueError</code>).</p>
 <p>Make the <code>tau</code> of the optimizer much larger than <code>tau.h</code>. When the weights move more slowly than the activities settle, they learn from the settled <code>delta</code> even though inference and learning run at the same time. To choose the values, see <a href="../pc/#choosing-the-time-constants">Choosing the time constants</a>; for the arguments, the <a href="../../api/pc/">API reference</a>.</p>
 <details class="question">
 <summary>Why cap dt at max_dt?</summary>
-<p><code>g</code> is made from <code>h</code> as it was when the next node last updated, so the nodes are coupled one step behind. When a load stalls every node and then <code>dt</code> grows in all of them at once, this coupling makes the network diverge. Splitting the step inside a node does not prevent it, so the time one update counts is capped.</p>
+<p>The steps are explicit: a step much longer than the default overshoots, and <code>r</code> and <code>lam</code> diverge. After a load stalls a node, its <code>dt</code> grows, so the time one update counts is capped, and the time beyond it is dropped.</p>
 </details>
 <h2 id="6-optimizers">6. Optimizers<a class="headerlink" href="#6-optimizers" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
@@ -2542,43 +2505,24 @@
 <h2 id="7-relaxers">7. Relaxers<a class="headerlink" href="#7-relaxers" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p>How the activity <code>h</code> moves along the force on it is a setting too. A relaxer is to <code>h</code> what an optimizer is to the weights: a setting without state, bound in each node, that moves <code>h</code> by <code>dt</code> seconds.</p>
+<p>How the deviation <code>r</code> moves along the force on it is a setting too. A relaxer is to <code>r</code> what an optimizer is to the weights: a setting without state, bound in each node, that moves <code>r</code> by <code>dt</code> seconds.</p>
 </div>
-<p><code>pc.relax.Euler()</code> and <code>pc.relax.HeavyBall(tau=)</code> are settings. <code>Layer</code> and <code>Chain</code> take one as <code>relaxer=</code>, <code>pc.relax.Euler()</code> by default. A <code>Chain</code> gives the same setting to each of its <code>Layer</code>s, which is safe because the setting holds no state. <code>Output</code> has no <code>h</code> and takes none. Each <code>Layer</code> binds the setting to its own <code>h</code> and keeps the <strong>bound relaxer</strong> as <code>self.relaxer</code>. The bound relaxer holds the state and moves <code>h</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># in __init__</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># in on_update, inside functional.relax_, with the force h - mu + lam + g:</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># with a new sample or a jump of the h it reads:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">()</span>
+<p>mujou has one relaxer, <code>pc.relax.Euler()</code>; the other choice is a relaxer of your own. Both are settings. <code>Layer</code> and <code>Chain</code> take one as <code>relaxer=</code>, <code>pc.relax.Euler()</code> by default. A <code>Chain</code> gives the same setting to each of its <code>Layer</code>s, which is safe because the setting holds no state. <code>Output</code> has no <code>r</code> and takes none. Each <code>Layer</code> binds the setting to its own <code>r</code> and keeps the <strong>bound relaxer</strong> as <code>self.relaxer</code>. The bound relaxer holds the state and moves <code>r</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>  <span class="c1"># in __init__</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># in on_update, inside functional.relax_, with the force F:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># with a new input, for the samples whose reset is set:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">(</span><span class="n">act</span><span class="p">[</span><span class="s2">"reset"</span><span class="p">])</span>
 </code></pre></div>
-<p>With the force <span class="arithmatex">\(F = r + \lambda + g\)</span>:</p>
-<table>
-<thead>
-<tr>
-<th>Relaxer</th>
-<th>One step of <code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> seconds</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>pc.relax.Euler</code></td>
-<td><span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} F\)</span></td>
-</tr>
-<tr>
-<td><code>pc.relax.HeavyBall</code></td>
-<td><span class="arithmatex">\(v \leftarrow e^{-\Delta t/\tau} v + F\)</span>, then <span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} v\)</span></td>
-</tr>
-</tbody>
-</table>
+<p>With the force <span class="arithmatex">\(F = (1 + \tau_h / \tau_r)\,r + \lambda + g\)</span>, one step of <code>pc.relax.Euler</code> of <code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> seconds is <span class="arithmatex">\(r \leftarrow r - \frac{\Delta t}{\tau_h} F\)</span>.</p>
 <ul>
-<li>A relaxer changes how <code>h</code> gets to the fixed point, not where it is: at the fixed point <span class="arithmatex">\(F = 0\)</span> and <span class="arithmatex">\(v = 0\)</span>. The relaxer does not move <span class="arithmatex">\(\lambda\)</span>. <span class="arithmatex">\(\lambda\)</span> moves after <code>h</code>, with the <span class="arithmatex">\(r\)</span> of the moved <code>h</code> (<a href="#3-one-update-of-a-layer">section 3</a>), whichever relaxer moves <code>h</code></li>
-<li>The velocity of <code>pc.relax.HeavyBall</code> starts at 0, so its first step is the step of <code>pc.relax.Euler</code>. Each update adds the force <span class="arithmatex">\(F\)</span> once, not <span class="arithmatex">\(F\,\Delta t\)</span>: in a steady state <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span>, so a shorter period gives a larger gain, and a late update (a longer <code>dt</code>) forgets more of the velocity, which is on the stable side. A step with <code>dt == 0</code> leaves <code>h</code> and the velocity as they are</li>
-<li>With a new sample or a jump of the <code>h</code> it reads, <span class="arithmatex">\(r\)</span> and <span class="arithmatex">\(\lambda\)</span> are kept, but the velocity was built from the forces of the input before (<a href="#jumps">jumps</a>), so the node calls <code>reset_()</code> and drops it. A jump of the node's own weights moves <code>h</code> and <code>mu</code> together, <span class="arithmatex">\(r\)</span> and the force do not jump, and <code>reset_</code> is not called</li>
-<li>The bound relaxer is in the node's state under the key <code>"relaxer"</code>: <code>{"velocity": ...}</code> for <code>pc.relax.HeavyBall</code>, empty for <code>pc.relax.Euler</code></li>
+<li>A relaxer changes how <code>r</code> gets to the fixed point, not where it is: at the fixed point <span class="arithmatex">\(F = 0\)</span>, and the state of the relaxer is at rest. The relaxer does not move <span class="arithmatex">\(\lambda\)</span>. <span class="arithmatex">\(\lambda\)</span> moves after <code>r</code>, with the moved <code>r</code> (<a href="#3-one-update-of-a-layer">section 3</a>), whichever relaxer moves <code>r</code></li>
+<li>With a new input, the node sets <span class="arithmatex">\(r\)</span> and <span class="arithmatex">\(\lambda\)</span> of the samples whose <code>reset</code> is set to 0, and calls <code>reset_(reset)</code>: a relaxer that remembers forces (a velocity, say) built them from the sample before, so it drops them for those samples. The samples that continue keep <span class="arithmatex">\(r\)</span>, <span class="arithmatex">\(\lambda\)</span> and the state of the relaxer. A jump of the prediction (the weights of this node or of a node below) does not move <code>r</code> or the force, and <code>reset_</code> is not called</li>
+<li>The bound relaxer is in the node's state under the key <code>"relaxer"</code>: empty for <code>pc.relax.Euler</code>, which has no state, and whose <code>reset_</code> does nothing</li>
 <li>To choose a relaxer and its value, see <a href="../pc/#choosing-the-relaxer">Choosing the relaxer</a></li>
 </ul>
 <h3 id="a-relaxer-of-your-own">A relaxer of your own<a class="headerlink" href="#a-relaxer-of-your-own" title="Permanent link">&para;</a></h3>
-<p>A relaxer of your own is two classes. The setting inherits <code>pc.relax.Relaxer</code> and implements <code>bind(h)</code>, which makes the state with the shape, dtype and device of <code>h</code>. What <code>bind</code> returns inherits <code>pc.relax.BoundRelaxer</code> (a <code>mujou.Stateful</code>) and implements <code>step_(h, force, dt, tau_h)</code>, <code>reset_()</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>; a class that leaves one out raises <code>TypeError</code> when it is made. Its fixed point must be where the force is zero and its own state is at rest, or <code>lam</code> is no longer the credit of BP. The <a href="../../api/pc/">API reference</a> has an example.</p>
+<p>A relaxer of your own is two classes. The setting inherits <code>pc.relax.Relaxer</code> and implements <code>bind(r)</code>, which makes the state with the shape, dtype and device of <code>r</code>. What <code>bind</code> returns inherits <code>pc.relax.BoundRelaxer</code> (a <code>mujou.Stateful</code>) and implements <code>step_(r, force, dt, tau_h)</code>, <code>reset_(samples)</code>, <code>state_dict()</code> and <code>load_state_dict(state)</code>; a class that leaves one out raises <code>TypeError</code> when it is made. Its fixed point must be where the force is zero and its own state is at rest, or <code>lam</code> is no longer the credit of BP. The <a href="../../api/pc/">API reference</a> has an example.</p>
 
 
 

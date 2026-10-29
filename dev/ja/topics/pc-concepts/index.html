@@ -1133,6 +1133,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ノードが持つ量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが r を持ち、mu を送る理由
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#新しいサンプルのリセットと持ち越し" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        新しいサンプルのリセットと持ち越し
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1186,41 +1214,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-learnclock-と-jumps" class="md-nav__link">
+  <a href="#4-learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. LearnClock と jumps
+        4. LearnClock
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="4. LearnClock と jumps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#learnclock" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LearnClock
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#jumps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        jumps
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1759,6 +1759,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ノードが持つ量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが r を持ち、mu を送る理由
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#新しいサンプルのリセットと持ち越し" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        新しいサンプルのリセットと持ち越し
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1812,41 +1840,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-learnclock-と-jumps" class="md-nav__link">
+  <a href="#4-learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. LearnClock と jumps
+        4. LearnClock
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="4. LearnClock と jumps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#learnclock" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LearnClock
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#jumps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        jumps
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1978,13 +1978,13 @@
 <li><code>mujou.pc</code> の部品の役割と、利用者が直接使う部品・自分のノードを書くときに使う部品</li>
 <li>ノードの間を流れるメッセージと Port の向き</li>
 <li><code>pc.Layer</code> が 1 回の <code>on_update(dt)</code> で行うこと</li>
-<li><code>pc.clock.LearnClock</code> が返す <code>Tick</code>、<code>jumps</code>、<code>pc.TimeConstants</code> の意味</li>
-<li><code>pc.optim.SGD</code> と <code>pc.optim.AdamW</code> が重みを、<code>pc.relax.Euler</code> と <code>pc.relax.HeavyBall</code> が活動を時間で動かす仕組み</li>
+<li><code>pc.clock.LearnClock</code> が返す <code>Tick</code> と <code>pc.TimeConstants</code> の意味</li>
+<li><code>pc.optim.SGD</code> と <code>pc.optim.AdamW</code> が重みを、<code>pc.relax.Euler</code> がずれ <code>r</code> を時間で動かす仕組み</li>
 </ul>
 <p>前提は PyTorch・誤差逆伝播法（BP）と、<a href="../../concepts/">Mujou の仕組み</a>のノード・Port・<code>dt</code>。predictive coding の知識は要らない。</p>
 </div>
 <h2 id="ノードが持つ量">ノードが持つ量<a class="headerlink" href="#ノードが持つ量" title="Permanent link">&para;</a></h2>
-<p>PC-ALM では各ノードが自分の<strong>活動</strong> <code>h</code> を持ち、前のノードの活動から自分の活動を<strong>予測</strong>する。理解に要る量はこれだけ。</p>
+<p>PC-ALM では各ノードに自分の<strong>活動</strong> <code>h</code> があり、前のノードの活動から自分の活動を<strong>予測</strong>する。<code>pc.Layer</code> は活動の予測からの<strong>ずれ</strong> <code>r</code> を持ち、予測 <code>mu</code> を次のノードへ送る。理解に要る量は次の表ですべて。</p>
 <table>
 <thead>
 <tr>
@@ -2005,18 +2005,23 @@
 <td>予測。ノードの <code>module</code> の出力。<span class="arithmatex">\(\theta\)</span> は <code>module</code> の重み</td>
 </tr>
 <tr>
+<td><code>r</code></td>
+<td><span class="arithmatex">\(r = h - \mu\)</span></td>
+<td>予測からのずれ。ノードはこれを持つ</td>
+</tr>
+<tr>
 <td><code>h</code></td>
-<td></td>
-<td>自分の活動。次のノードへ送る</td>
+<td><span class="arithmatex">\(h = \mu + r\)</span></td>
+<td>自分の活動。ノードの中にとどまり、次のノードは <code>mu</code> を読む</td>
 </tr>
 <tr>
 <td><code>lam</code></td>
-<td><span class="arithmatex">\(\tau_\lambda\dot\lambda = h - \mu\)</span></td>
-<td>双対変数。予測からのずれ <span class="arithmatex">\(r = h - \mu\)</span> を時間で溜めた値</td>
+<td><span class="arithmatex">\(\tau_\lambda\dot\lambda = r\)</span></td>
+<td>双対変数。ずれを時間で溜めた値</td>
 </tr>
 <tr>
 <td><code>delta</code></td>
-<td><span class="arithmatex">\(\delta = h - \mu + \lambda\)</span></td>
+<td><span class="arithmatex">\(\delta = r + \lambda\)</span></td>
 <td>ノードの誤差</td>
 </tr>
 <tr>
@@ -2031,7 +2036,13 @@
 </tr>
 </tbody>
 </table>
-<p><code>h</code> は <code>delta</code> と <code>g</code> の和を打ち消す向きに動き、<code>lam</code> は <code>r</code> が残る間溜まり続ける。両方が止まると <code>r = 0</code>（<code>h</code> は forward の値）になり、<code>lam</code> は BP の credit <span class="arithmatex">\(-\partial\ell/\partial h\)</span> に一致する。そのとき重みの勾配も BP と一致する。理論の詳細は <a href="https://pub.sakana.ai/pc-alm/">PC-ALM の記事</a>にある。</p>
+<p><code>r</code> は <code>delta</code> と <code>g</code> の和を打ち消す向きに動き、時定数 <code>tau.r</code> で減衰する。<code>lam</code> は <code>r</code> が残る間溜まり続ける。<code>r</code> と <code>lam</code> が両方止まると <code>r = 0</code>（<code>h</code> は forward の値）になり、<code>lam</code> は BP の credit <span class="arithmatex">\(-\partial\ell/\partial h\)</span> に一致する。そのとき重みの勾配も BP と一致する。理論の詳細は <a href="https://pub.sakana.ai/pc-alm/">PC-ALM の記事</a>にある。記事のノードは <code>h</code> を持って送るが、mujou のノードは <code>r</code> を持ち、<code>mu</code> を送る（下で述べる）。</p>
+<h3 id="r-mu">ノードが r を持ち、mu を送る理由<a class="headerlink" href="#r-mu" title="Permanent link">&para;</a></h3>
+<p>予測 <code>mu</code> は新しいサンプルが来たときや、下のノードか自分が学んだときに一度に跳ぶ。<code>h</code> を持つノードでは <code>h</code> がそのまま残るので <span class="arithmatex">\(r = h - \mu\)</span> が急に大きくなり、偽の誤差が <code>g_in</code> と重みの勾配に入る。<code>r</code> を持つノードは、<code>mu</code> がどう跳んでもずれを保つ。</p>
+<p>送るのは <span class="arithmatex">\(\mu + r\)</span> でなく <code>mu</code> で、predictive coding の<strong>固定予測の仮定</strong>（fixed prediction assumption）にあたる。前へ流れる活動は順伝播の値になり、credit は後ろへだけ流れる。<span class="arithmatex">\(\mu + r\)</span> を送ると、あるノードの <code>r</code> の動きは順伝播のヤコビアンの積を通って上のすべてのノードの活動を動かし、credit として自分に戻ってくる。順伝播が増幅する鎖では、このループは刻みをどれだけ短くしても発散する。<code>mu</code> を送れば平衡点を変えずにこのループを切れるので、1 ノードで安定な刻みはどの鎖でも安定になる。</p>
+<p><code>pc.TimeConstants</code> の既定（<a href="#5-timeconstants">5 節</a>）なら、1 回の更新で <code>delta</code> が <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻る。</p>
+<h3 id="新しいサンプルのリセットと持ち越し">新しいサンプルのリセットと持ち越し<a class="headerlink" href="#新しいサンプルのリセットと持ち越し" title="Permanent link">&para;</a></h3>
+<p><code>r</code> と <code>lam</code> が持つのは、ノードが見てきたサンプルの credit である。シャッフルしたバッチのように次のサンプルが無関係なら、その credit は次のサンプルにとって誤り。そこでホストは書くサンプルに <code>reset</code> を立て、各ノードはその書き込みを初めて見たときに、そのサンプルの <code>r</code> と <code>lam</code> を 0 にする。ストリームの次のフレームのように前のサンプルに続くものは、<code>reset</code> を False で書いて持ち越す。</p>
 <h2 id="1-部品">1. 部品<a class="headerlink" href="#1-部品" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
@@ -2050,19 +2061,19 @@
 <tr>
 <td><code>pc.Input</code></td>
 <td>ノード</td>
-<td>ホストが書いた <code>x</code> をそのまま活動 <code>h</code> として送る。<code>h</code> も重みも持たない</td>
+<td>ホストが書いた <code>x</code> をそのまま活動 <code>h</code> として送る。何も持たない</td>
 <td>手で組む</td>
 </tr>
 <tr>
 <td><code>pc.Layer</code></td>
 <td>ノード</td>
-<td><code>module</code> を 1 つ持ち、<code>h</code> と <code>lam</code> を動かし、重みを学ぶ</td>
+<td><code>module</code> を 1 つ持ち、<code>r</code> と <code>lam</code> を動かし、重みを学ぶ</td>
 <td>手で組む</td>
 </tr>
 <tr>
 <td><code>pc.Output</code></td>
 <td>ノード</td>
-<td>最後の <code>module</code> と損失を持ち、予測 <code>y_hat</code> を出し、重みを学ぶ。<code>h</code> と <code>lam</code> は持たない</td>
+<td>最後の <code>module</code> と損失を持ち、予測 <code>y_hat</code> を出し、重みを学ぶ。<code>r</code> と <code>lam</code> は持たない</td>
 <td>手で組む</td>
 </tr>
 <tr>
@@ -2086,7 +2097,7 @@
 <tr>
 <td><code>pc.TimeConstants</code></td>
 <td>設定</td>
-<td><code>h</code> と <code>lam</code> の速さを秒で持つ（<a href="#5-timeconstants">5 節</a>）</td>
+<td><code>r</code> と <code>lam</code> の速さを秒で持つ（<a href="#5-timeconstants">5 節</a>）</td>
 <td>普段</td>
 </tr>
 <tr>
@@ -2104,7 +2115,7 @@
 <tr>
 <td><code>pc.clock.LearnClock</code></td>
 <td>部品</td>
-<td>いつ学ぶかを決める（<a href="#4-learnclock-%E3%81%A8-jumps">4 節</a>）</td>
+<td>いつ学ぶかを決める（<a href="#4-learnclock">4 節</a>）</td>
 <td>自分のノード</td>
 </tr>
 <tr>
@@ -2125,7 +2136,7 @@
 <h2 id="2-つながりと流れるもの">2. つながりと流れるもの<a class="headerlink" href="#2-つながりと流れるもの" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p>前へは活動を <code>Activity</code> で、後ろへは勾配 <code>g_in</code> を送る。目標 <code>y</code>・<code>mask</code>・時刻 <code>time</code> は活動と同じメッセージに載せて中継する。</p>
+<p>前へは活動（予測 <code>mu</code>）を <code>Activity</code> で、後ろへは勾配 <code>g_in</code> を送る。目標 <code>y</code>・<code>mask</code>・<code>reset</code>・時刻 <code>time</code> は活動と同じメッセージに載せて中継する。</p>
 </div>
 <pre class="mermaid"><code>flowchart LR
     H1["ホスト"] --&gt;|"Sample"| I["Input"]
@@ -2148,12 +2159,12 @@
 <tbody>
 <tr>
 <td><code>pc.msg.Sample</code></td>
-<td><code>x</code>、<code>y</code>、<code>mask</code></td>
+<td><code>x</code>、<code>y</code>、<code>mask</code>、<code>reset</code></td>
 <td>ホスト → <code>Input.prev</code></td>
 </tr>
 <tr>
 <td><code>pc.msg.Activity</code></td>
-<td><code>h</code>、<code>jumps</code>、<code>y</code>、<code>mask</code>、<code>time</code></td>
+<td><code>h</code>、<code>y</code>、<code>mask</code>、<code>reset</code>、<code>time</code></td>
 <td><code>next</code> → 次のノードの <code>prev</code></td>
 </tr>
 <tr>
@@ -2169,9 +2180,9 @@
 </tbody>
 </table>
 <ul>
-<li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>g_in</code> を 0 にする。<code>mask</code> がすべて False の入力でも <code>h</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
+<li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>g_in</code> を 0 にする。<code>mask</code> がすべて False の入力でも <code>r</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
+<li><code>reset</code>: サンプルごとに新しく始まるか。<code>Layer</code> はその書き込みを初めて見た更新で、その行の <code>r</code> と <code>lam</code> を 0 にする。シャッフルしたサンプルでは立て、前のフレームに続くフレームでは False にする</li>
 <li><code>time</code>: ホストがその入力を書いた時刻（<code>Timestamp</code>）。書き込みの前は <code>Timestamp(ns=0)</code></li>
-<li><code>jumps</code>: 送り手の <code>h</code> が跳んだ回数（<code>int</code>）（<a href="#4-learnclock-%E3%81%A8-jumps">4 節</a>）</li>
 </ul>
 <h3 id="port-の向き">Port の向き<a class="headerlink" href="#port-の向き" title="Permanent link">&para;</a></h3>
 <table>
@@ -2251,58 +2262,53 @@
 <tr>
 <td>1</td>
 <td><code>LearnClock.tick</code></td>
-<td><code>prev</code> から <code>Activity</code> を読み、<code>Tick</code>（<code>dt</code>・<code>new</code>・<code>learn</code>・<code>elapsed</code>）を得る</td>
+<td><code>prev</code> から <code>Activity</code> を読み、<code>Tick</code>（<code>dt</code>・<code>new</code>・<code>learn</code>・<code>elapsed</code>）を得る。新しい入力なら（<code>tick.new</code>）、<code>reset</code> が立ったサンプルの <code>r</code> と <code>lam</code> を 0 にする</td>
 </tr>
 <tr>
 <td>2</td>
-<td>—</td>
-<td>前の更新で自分の重みを学んでいれば、その跳びを <code>h</code> に足す（段 4 の付け替えとは別。<a href="#jumps">jumps</a> の表の 3 行目）</td>
-</tr>
-<tr>
-<td>3</td>
 <td><code>functional.vjp</code></td>
 <td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>、<span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span>、学ぶなら <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span> を 1 回の VJP で。<code>g_in</code> を <code>prev</code> から送る</td>
 </tr>
 <tr>
-<td>4</td>
+<td>3</td>
 <td><code>functional.relax_</code></td>
-<td>跳びがあれば <code>h</code> を付け替え、<span class="arithmatex">\(h \leftarrow h - \frac{dt}{\tau_h}(h - \mu + \lambda + g)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>h</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda}(h - \mu)\)</span></td>
+<td><span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>r</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>Activity</code></td>
+<td>予測 <span class="arithmatex">\(\mu\)</span> を <code>h</code> として、受け取った <code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> を付けて <code>next</code> から送る</td>
 </tr>
 <tr>
 <td>5</td>
-<td><code>Activity</code></td>
-<td>必要なら自分の <code>jumps</code> を進め、<code>h</code> と <code>jumps</code> に受け取った <code>y</code>・<code>mask</code>・<code>time</code> を付けて <code>next</code> から送る</td>
-</tr>
-<tr>
-<td>6</td>
 <td><code>optimizer.step_</code></td>
 <td><span class="arithmatex">\(g_\theta\)</span> をサンプルの数 <span class="arithmatex">\(B\)</span> で割り、重みを <code>tick.elapsed</code> 秒ぶん動かす（<a href="#6-optimizer">6 節</a>）。<code>tick.learn</code> が True で、<code>mask</code> に True があるときだけ</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li>段 3 の <code>delta</code> は段 2 の後、段 4 の前の <code>h</code>・<code>lam</code> で作る</li>
-<li>勾配はバッチで和を取り、<span class="arithmatex">\(B\)</span> で割るのは段 6 だけ。だから <code>lam</code> はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る</li>
-<li><code>vjp</code> の <code>delta</code> は値ではなく、<code>mu</code> から <code>delta</code> を作る関数（<code>mu</code> は <code>vjp</code> の中で計算するため）。ふだんは <code>lambda mu: h - mu + lam</code>。段 4 で付け替える更新では、付け替え前のずれ <code>h - mu_last</code> を使い <code>lambda mu: (h - mu_last) + lam</code> を渡す（<a href="#jumps">jumps</a>）</li>
+<li>段 2 の <code>delta</code> は段 3 の前の <code>r</code>・<code>lam</code> で作る</li>
+<li>新しい入力のとき（<code>tick.new</code>）、ノードは段 1 で <code>relaxer.reset_(reset)</code> も呼ぶ（<a href="#7-relaxer">7 節</a>）</li>
+<li>勾配はバッチで和を取り、<span class="arithmatex">\(B\)</span> で割るのは段 5 だけ。だから <code>lam</code> はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る</li>
+<li><code>vjp</code> の <code>delta</code> は値ではなく、<code>mu</code> から <code>delta</code> を作る関数（<code>mu</code> は <code>vjp</code> の中で計算するため）。<code>r</code> を持つノードは <code>lambda mu: r + lam</code> を渡す</li>
 <li><code>vjp</code> は <code>h_in</code> を detach してから微分するので、計算グラフは前のノードに届かない</li>
 </ul>
-<p><code>Output</code> は <code>h</code> も <code>lam</code> も持たない。段 3 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。付け替える <code>h</code> が無いので <code>jumps</code> は読まない。</p>
+<p><code>Output</code> は <code>r</code> も <code>lam</code> も持たない。段 2 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。</p>
 <details class="question">
 <summary>g_in を前のノードへ送るのは BP と何が違うの？</summary>
 <p><code>g_in</code> の計算は BP の 1 層分と同じ VJP（<span class="arithmatex">\(-J_h^\top\delta\)</span>）で、平衡点では <code>lam</code> が BP の credit と同じ漸化式を満たす。違うのは <code>g_in</code> の扱い方。</p>
 <ol>
-<li>送る側は自分の <code>delta</code> から <code>g_in</code> を作る。<code>delta = h - mu + lam</code> は自分の状態だけで決まる</li>
-<li>受け取る側は届いた <code>g_in</code> を足して <code>g</code> にし、段 4 の <code>relax_</code> で自分の <code>h</code> を動かす力に使う。<code>g</code> をそのまま前のノードへ流さない</li>
-<li><code>h</code> と <code>lam</code> が動くと自分の <code>delta</code> が変わり、次の更新で送る <code>g_in</code> も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる</li>
+<li>送る側は自分の <code>delta</code> から <code>g_in</code> を作る。<code>delta = r + lam</code> は自分の状態だけで決まる</li>
+<li>受け取る側は届いた <code>g_in</code> を足して <code>g</code> にし、段 3 の <code>relax_</code> で自分の <code>r</code> を動かす力に使う。<code>g</code> をそのまま前のノードへ流さない</li>
+<li><code>r</code> と <code>lam</code> が動くと自分の <code>delta</code> が変わり、次の更新で送る <code>g_in</code> も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる</li>
 </ol>
 <p>forward と backward の段階も、全ノードの待ち合わせも無い。各ノードは手元にある最新の <code>g</code>（古いこともある）で更新する。<code>vjp</code> は <code>h_in</code> を detach するので、計算グラフはノードをまたがない。BP の勾配と一致するのは平衡点だけで、学ぶまで <code>learn_interval</code> だけ待つのはこのため。</p>
 </details>
-<h2 id="4-learnclock-と-jumps">4. LearnClock と jumps<a class="headerlink" href="#4-learnclock-と-jumps" title="Permanent link">&para;</a></h2>
+<h2 id="4-learnclock">4. LearnClock<a class="headerlink" href="#4-learnclock" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p><code>h</code> と <code>lam</code> は毎回の更新で動かし、重みは <code>LearnClock</code> が決めた更新でだけ動かす。<code>jumps</code> は「予測が跳んだので <code>h</code> も一緒に動かせ」という次のノードへの合図。</p>
+<p><code>r</code> と <code>lam</code> は毎回の更新で動かし、重みは <code>LearnClock</code> が決めた更新でだけ動かす。ノードは毎回その更新の <code>mu</code> を送るので、予測が跳んでも追加の処理は要らない。</p>
 </div>
-<h3 id="learnclock">LearnClock<a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h3>
 <p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, act["time"], self.timer.now())</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
 <table>
 <thead>
@@ -2321,7 +2327,7 @@
 <tr>
 <td><code>new</code></td>
 <td>受け取った入力の <code>time</code> が前回と違う（新しいサンプル）</td>
-<td><code>h</code> を付け替える</td>
+<td>新しく始まるサンプルをリセットする</td>
 </tr>
 <tr>
 <td><code>learn</code></td>
@@ -2366,58 +2372,14 @@
 </ul>
 <details class="question">
 <summary>なぜノードが入力を受け取った時刻でなく、ホストの書き込み時刻から数えるの？</summary>
-<p>経路上のノードが深さによらずほぼ同時に学ぶため。受け取った時刻から数えると深いノードほど遅れて学び、前のノードが学んで起きた <code>h</code> の跳びが入った <code>delta</code> で学んでしまう（発散した）。どのノードも同じ実行のタイマーを読むので、バリアは要らない。</p>
+<p>経路上のノードが深さによらずほぼ同時に学ぶため。受け取った時刻から数えると深いノードほど遅れて学び、下のノードが学んだ重みにまだ応じていない <code>delta</code> で学んでしまう。どのノードも同じ実行のタイマーを読むので、バリアは要らない。</p>
 </details>
-<h3 id="jumps">jumps<a class="headerlink" href="#jumps" title="Permanent link">&para;</a></h3>
-<p>緩和は <code>mu</code> が少しずつ動くことを前提にしている。<code>mu</code> が一度に跳ぶと、<code>h</code> を置いたままでは <span class="arithmatex">\(r = h - \mu\)</span> が急に大きくなり、偽の誤差が <code>g_in</code> と重みの勾配に入る。そこで <code>mu</code> が跳んだ更新では <code>h</code> も同じだけ 1 回動かし（付け替え）、<code>r</code> と <code>lam</code> を保つ。</p>
-<div class="arithmatex">\[h \leftarrow \mu_{\text{new}} + (h - \mu_{\text{last}})\]</div>
-<p><code>mu_last</code> は前回の更新の予測。付け替えた <code>h</code> も跳ぶので、自分の <code>jumps</code> を 1 進めて次のノードに知らせる。</p>
-<table>
-<thead>
-<tr>
-<th><code>mu</code> が跳ぶ原因</th>
-<th>ノードの気づき方</th>
-<th><code>h</code> の動かし方</th>
-<th>自分の <code>jumps</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>新しいサンプル</td>
-<td><code>tick.new</code> が True</td>
-<td>付け替え</td>
-<td>+1</td>
-</tr>
-<tr>
-<td>前のノードの <code>h</code> が跳んだ</td>
-<td>受け取った <code>jumps</code> が前回と違う</td>
-<td>付け替え</td>
-<td>+1</td>
-</tr>
-<tr>
-<td>自分の重みを学んだ</td>
-<td>自分で学んだ</td>
-<td>次の更新の最初に跳び <span class="arithmatex">\(f(h_{\mathrm{in}};\theta_{\text{new}}) - \mu\)</span> を足す</td>
-<td><code>learn_interval</code> が <code>None</code> でなければ +1</td>
-</tr>
-</tbody>
-</table>
-<pre class="mermaid"><code>flowchart LR
-    I["Input&lt;br/&gt;書き込みで jumps +1"] --&gt;|"jumps が変わる"| L0["Layer&lt;br/&gt;付け替え、jumps +1"]
-    L0 --&gt;|"jumps が変わる"| L1["Layer&lt;br/&gt;付け替え、jumps +1"]
-    L1 --&gt; O["Output&lt;br/&gt;jumps を読まない"]</code></pre>
-<ul>
-<li>原因が同じ更新で重なっても、付け替えも <code>jumps</code> も 1 回だけ</li>
-<li><code>Input</code> はホストの書き込みのたびに <code>jumps</code> を進める</li>
-<li><code>learn_interval=None</code> では重みは毎回少しずつ動くので、跳びを自分の <code>h</code> に足すだけで <code>jumps</code> は進めない。毎回進めると次のノードが毎回付け替え、深い鎖が発散する</li>
-<li>付け替えるので、新しいサンプルで <code>h</code> や <code>lam</code> をリセットしない。持ち越すのは <code>r</code> と <code>lam</code> だけ</li>
-</ul>
 <h2 id="5-timeconstants">5. TimeConstants<a class="headerlink" href="#5-timeconstants" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
 <p>速さはすべて実行のタイマーの秒で決める。各ノードは実際に経った <code>dt</code> だけ式を進めるので、周期の違うノードも時間あたり同じ速さで変化する。</p>
 </div>
-<p><code>pc.TimeConstants(h=, lam=, r=)</code> が活動の時定数を持つ。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
+<p><code>pc.TimeConstants(h=, lam=, r=)</code> が <code>r</code> と <code>lam</code> の時定数を持つ。3 つとも必須。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
 <table>
 <thead>
 <tr>
@@ -2430,7 +2392,7 @@
 <tbody>
 <tr>
 <td><code>tau.h</code></td>
-<td>活動 <code>h</code> が緩和する速さ</td>
+<td>ずれ <code>r</code> が緩和する速さ</td>
 <td><code>dt / tau.h</code></td>
 <td>不可（有限で正）</td>
 </tr>
@@ -2438,21 +2400,23 @@
 <td><code>tau.lam</code></td>
 <td><code>lam</code> が <code>r</code> を溜める速さ</td>
 <td><code>dt / tau.lam</code></td>
-<td><code>lam</code> は 0 のまま。<code>r</code> が 0 に戻らず、平衡点で BP と一致しない（ただの predictive coding）</td>
+<td><code>lam</code> は 0 のまま。<code>r</code> が 0 に戻らず、代わりに credit を持つ</td>
 </tr>
 <tr>
 <td><code>tau.r</code></td>
 <td>ずれ <code>r</code> が減衰する速さ</td>
-<td>さらに <code>r</code> の <code>dt / tau.r</code></td>
-<td>既定。減衰しない。有限なら <code>h</code> が <code>mu</code> に引き寄せられる。平衡点は変わらない</td>
+<td>さらに <code>r</code> の <code>dt / tau.r</code> だけ 0 へ引く</td>
+<td>減衰しない。安定だが、<code>delta</code> が <code>-g</code> に追いつくのに複数回かかる</td>
 </tr>
 </tbody>
 </table>
-<p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / 4</code>）はノードの更新の間隔で、<code>period=</code> を渡さないときの <code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.h / 2, 3 * tau.lam)</code>。<code>r</code> の減衰 <code>tau.r</code> があれば短くなる）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
+<p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / (1 + tau.h / tau.r)</code>。<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）はノードの更新の間隔で、<code>period=</code> を渡さないときの <code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.period, 2 * tau.lam)</code>）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
+<p>ふつうの値は組で決める。<code>tau.r = tau.h</code>、<code>tau.lam = tau.h / 2</code>、既定の周期 <code>tau.h / 2</code>。このとき 1 回の更新で <code>delta = r + lam</code> がちょうど <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻って行き過ぎない。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。</p>
+<p><code>tau.r</code> は平衡点を動かさない。<code>lam</code> が <code>r</code> を溜めるので、平衡点では <code>tau.r</code> によらず <code>r = 0</code> になる。<code>tau.lam</code> と <code>tau.r</code> を両方 <code>math.inf</code> にすると、ノードは固定予測の仮定を置いた predictive coding になり、誤差 <code>r</code> が BP の credit に落ち着く。ノードの周期は自分の <code>max_dt</code> より長くしてはいけない（<code>ValueError</code>）。</p>
 <p>optimizer の <code>tau</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
 <details class="question">
 <summary>なぜ dt を max_dt で打ち切るの？</summary>
-<p><code>g</code> は次のノードが最後に更新したときの <code>h</code> から作られ、ノード同士は 1 歩遅れで結合している。負荷で全ノードが止まった後に <code>dt</code> が一斉に伸びると、この結合でネットワークが発散する。ノードの内側で刻みを分割しても防げないので 1 回に数える時間を打ち切る。</p>
+<p>歩みは陽的なので、既定よりずっと長い刻みは行き過ぎ、<code>r</code> と <code>lam</code> が発散する。負荷でノードが止まると次の <code>dt</code> が伸びるので、1 回に数える時間を打ち切り、超えた分は捨てる。</p>
 </details>
 <h2 id="6-optimizer">6. optimizer<a class="headerlink" href="#6-optimizer" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
@@ -2544,43 +2508,24 @@
 <h2 id="7-relaxer">7. relaxer<a class="headerlink" href="#7-relaxer" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p>活動 <code>h</code> が自分に掛かる力に沿ってどう動くかも設定である。relaxer は <code>h</code> にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、<code>h</code> を <code>dt</code> 秒だけ動かす。</p>
+<p>ずれ <code>r</code> が自分に掛かる力に沿ってどう動くかも設定である。relaxer は <code>r</code> にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、<code>r</code> を <code>dt</code> 秒だけ動かす。</p>
 </div>
-<p><code>pc.relax.Euler()</code> と <code>pc.relax.HeavyBall(tau=)</code> が設定である。<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ取る。既定は <code>pc.relax.Euler()</code> である。<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。設定は状態を持たないので、共有しても安全である。<code>Output</code> は <code>h</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>h</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。bind した relaxer が状態を持ち、<code>h</code> を動かす。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># __init__ で</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># on_update の functional.relax_ の中で、力 h - mu + lam + g を渡して:</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># 新しいサンプルのとき、または読んでいる h が跳んだとき:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">()</span>
+<p>mujou の relaxer は <code>pc.relax.Euler()</code> の 1 つだけで、ほかに選べるのは自作の relaxer である。どちらも設定で、<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ受け取る。既定は <code>pc.relax.Euler()</code> である。設定は状態を持たないので共有しても安全で、<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。<code>Output</code> は <code>r</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>r</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。状態を持ち <code>r</code> を動かすのは、bind した relaxer である。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>  <span class="c1"># __init__ で</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># on_update の functional.relax_ の中で、力 F を渡して:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># 新しい入力のとき、reset が立ったサンプルについて:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">(</span><span class="n">act</span><span class="p">[</span><span class="s2">"reset"</span><span class="p">])</span>
 </code></pre></div>
-<p>力を <span class="arithmatex">\(F = r + \lambda + g\)</span> とすると、relaxer ごとの 1 回の動きは次の表になる。</p>
-<table>
-<thead>
-<tr>
-<th>relaxer</th>
-<th><code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 回の動き</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>pc.relax.Euler</code></td>
-<td><span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} F\)</span></td>
-</tr>
-<tr>
-<td><code>pc.relax.HeavyBall</code></td>
-<td><span class="arithmatex">\(v \leftarrow e^{-\Delta t/\tau} v + F\)</span>、続けて <span class="arithmatex">\(h \leftarrow h - \frac{\Delta t}{\tau_h} v\)</span></td>
-</tr>
-</tbody>
-</table>
+<p>力を <span class="arithmatex">\(F = (1 + \tau_h / \tau_r)\,r + \lambda + g\)</span> とすると、<code>pc.relax.Euler</code> の <code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 回の動きは <span class="arithmatex">\(r \leftarrow r - \frac{\Delta t}{\tau_h} F\)</span> である。</p>
 <ul>
-<li>relaxer が変えるのは <code>h</code> が不動点に着くまでの道で、不動点ではない。不動点では <span class="arithmatex">\(F = 0\)</span> かつ <span class="arithmatex">\(v = 0\)</span> になる。relaxer は <span class="arithmatex">\(\lambda\)</span> を動かさない。<span class="arithmatex">\(\lambda\)</span> は、どの relaxer が <code>h</code> を動かしても、<code>h</code> が動いたあとにその <code>h</code> の <span class="arithmatex">\(r\)</span> で進む（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）</li>
-<li><code>pc.relax.HeavyBall</code> の速度は 0 から始まるので、最初の 1 歩は <code>pc.relax.Euler</code> の 1 歩と同じである。力は 1 回の更新ごとに 1 度だけ足され、<span class="arithmatex">\(F\,\Delta t\)</span> ではない。定常では <span class="arithmatex">\(v = F / (1 - e^{-\Delta t/\tau})\)</span> なので、周期が短いほど利得が大きい。遅れた更新（長い <code>dt</code>）は速度をより多く忘れるので、安定な側に働く。<code>dt == 0</code> の 1 歩は <code>h</code> も速度もそのままにする</li>
-<li>新しいサンプルのとき、また読んでいる <code>h</code> が跳んだときは、<span class="arithmatex">\(r\)</span> と <span class="arithmatex">\(\lambda\)</span> は保たれるが、速度が積んだのは前の入力の力である（<a href="#jumps">jumps</a>）。そこでノードは <code>reset_()</code> を呼び、その速度を捨てる。ノード自身の重みが跳んだときは <code>h</code> と <code>mu</code> が一緒に動き、<span class="arithmatex">\(r\)</span> も力も跳ばないので、<code>reset_</code> は呼ばない</li>
-<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.relax.HeavyBall</code> なら <code>{"velocity": ...}</code>、<code>pc.relax.Euler</code> なら空</li>
+<li>relaxer が変えるのは <code>r</code> が不動点に着くまでの道で、不動点ではない。不動点では <span class="arithmatex">\(F = 0\)</span> で、relaxer の状態は静止している。relaxer は <span class="arithmatex">\(\lambda\)</span> を動かさない。<span class="arithmatex">\(\lambda\)</span> はどの relaxer が <code>r</code> を動かしても、動いたあとの <code>r</code> で進む（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）</li>
+<li>新しい入力のとき、ノードは <code>reset</code> が立ったサンプルの <span class="arithmatex">\(r\)</span> と <span class="arithmatex">\(\lambda\)</span> を 0 にし、<code>reset_(reset)</code> を呼ぶ。力を覚える relaxer（速度を持つものなど）が覚えているのは前のサンプルの力なので、そのサンプルの分を捨てる。前に続くサンプルでは、<span class="arithmatex">\(r\)</span>・<span class="arithmatex">\(\lambda\)</span>・relaxer の状態を保つ。予測が跳んだとき（自分や下のノードの重みが跳んだとき）は <span class="arithmatex">\(r\)</span> も力も跳ばないので、<code>reset_</code> は呼ばない</li>
+<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.relax.Euler</code> は状態を持たないので空で、その <code>reset_</code> は何もしない</li>
 <li>relaxer と値の選び方は<a href="../pc/#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</li>
 </ul>
 <h3 id="自分の-relaxer">自分の relaxer<a class="headerlink" href="#自分の-relaxer" title="Permanent link">&para;</a></h3>
-<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.relax.Relaxer</code> を継承して <code>bind(h)</code> を実装し、<code>h</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.relax.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(h, force, dt, tau_h)</code>・<code>reset_()</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
+<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.relax.Relaxer</code> を継承して <code>bind(r)</code> を実装し、<code>r</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.relax.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(r, force, dt, tau_h)</code>・<code>reset_(samples)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
 
 
 
