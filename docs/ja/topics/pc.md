@@ -22,7 +22,7 @@
 | `pc.Layer`  | モジュール、ずれ `r`、双対変数 `lam`、クロック | `prev` と `next`。`next` は予測 `mu` を `h` として、入力と一緒に届いた `y`・`mask`・`reset`・`time` と組にして `pc.msg.Activity` で送る                               |
 | `pc.Output` | 最後のモジュール、損失、クロック               | `prev`。`next` はホストが読む `pc.msg.Prediction`（`y_hat`、`y`、`mask`、`time`）を送る                                                                               |
 
-`pc.msg.Activity` は `h`・`y`・`mask`・`reset`・`time` を運ぶ。`pc.Layer` は活動の予測 `mu = module(h_in)` からのずれ `r = h - mu` と双対変数 `lam` を持ち、`mu` を送る。前へ流れるのは順伝播の値で、credit は後ろへだけ流れる。何が `mu` を動かしても（新しいサンプル、下のノードの学習、自分の学習）`r` と `lam` は保たれて緩和する。ただし、新しく始まるサンプルでは消す（[新しく始めるサンプル](#reset)）。
+`pc.msg.Activity` は `h`・`y`・`mask`・`reset`・`time` を運ぶ。`pc.Layer` は活動の予測 `mu = module(h_in)` からのずれ `r = h - mu` と双対変数 `lam` を持ち、`mu` を送る。前へ流れるのは順伝播の値で、credit は後ろへだけ流れる。何が `mu` を動かしても（新しいサンプル、下のノードの学習、自分の学習）、`r` と `lam` は値を保ったまま緩和を続ける。ただし新しく始まるサンプルでは 0 に戻す（[新しく始めるサンプル](#reset)）。
 
 `pc.Chain(*modules, ...)` は `Input` → `Layer` → ... → `Output` をつなぎ、周期はどれも `tau.period`（`tau.r = tau.h` なら `tau.h / 2`）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。`pc.Input` には spec の `x` と `y`、`period` を渡す。各 `pc.Layer` と `pc.Output` には前のノードの `act_spec`（受け取る `pc.msg.Activity` の spec）を渡し、鎖に沿って `next` を `prev` につなぐ。`mujou.Network` とあわせて `pc.Shown` を継承し、`Input` の `prev` と `Output` の `next` を自分の `prev` と `next` として公開すれば、そのネットワークにも `pc.show` でサンプルを見せられる。
 
@@ -38,7 +38,7 @@
 | 各フレームが前に続くストリーム       | False。エピソードの最初のフレームだけ True |
 | テストのバッチ                       | 学習と同じく True                          |
 
-ノードはその書き込みを初めて見た更新で 1 回だけ、そのサンプルの `r` と `lam` を 0 にする。関係のないサンプルの credit は残らず、新しいサンプルの credit は出力から戻ってくるにつれて 0 から育つ。`reset` が False のサンプルは `r` と `lam` を保つので、credit がフレームからフレームへ引き継がれる。ノードが見なかった書き込み（ノードが更新する前にホストが次を書いた）ではリセットされない。
+ノードはその書き込みを初めて見た更新で 1 回だけ、そのサンプルの `r` と `lam` を 0 にする。関係のないサンプルの credit は残らず、新しいサンプルの credit は 0 から始まり、出力から戻ってくるにつれて溜まる。`reset` が False のサンプルは `r` と `lam` を保つので、credit がフレームからフレームへ引き継がれる。ノードが見なかった書き込み（ノードが更新する前にホストが次を書いたもの）では、リセットされない。
 
 ```python
 new = torch.ones_like(mask)  # シャッフルしたデータ: どのサンプルも新しく始まる
@@ -51,12 +51,12 @@ p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask, reset=new), seconds=sho
 
 | 値               | 決めるもの                                   | 決め方                                                                                                                                                     | MNIST                    |
 | ---------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `tau.h`          | 各ずれ `r` が緩和する速さ                    | 最初に決める。ほかはここから決まる                                                                                                                         | 4 ms                     |
+| `tau.h`          | ずれ `r` が緩和する速さ                      | 最初に決める。ほかはここから決まる                                                                                                                         | 4 ms                     |
 | `tau.r`          | ずれ `r = h - mu` が減衰する速さ             | `tau.h`。必須で、既定値は無い。`math.inf` で減衰を切る                                                                                                     | 4 ms                     |
 | `tau.lam`        | 双対変数 `lam` が追従する速さ                | `tau.h / 2`                                                                                                                                                | 2 ms                     |
 | 周期             | 各ノードが更新する間隔                       | `tau.period`（`tau.r = tau.h` なら `tau.h / 2`）。`Layer`・`Output`・`pc.Chain`（`period=`）の既定。上の 2 つと組むと、credit は 1 周期に 1 ノードずつ戻る | 2 ms                     |
 | `relaxer`        | `r` が自分に掛かる力に沿ってどう動くか       | 既定は `pc.relax.Euler()`。[relaxer を選ぶ](#relaxer-%E3%82%92%E9%81%B8%E3%81%B6)を見る                                                                    |                          |
-| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S` は credit の往復 `2 × ホップ数` より数周期長く                                                                                               | 16 周期、32 ms           |
+| 見せる時間       | ホストが各バッチを見せる長さ                 | `S` 周期。`S` は credit の往復 `2 × ホップ数` より数周期長くする                                                                                           | 16 周期、32 ms           |
 | `learn_interval` | ホストの書き込みから重みを更新するまでの時間 | 見せる時間の半分より長く、見せる時間より短く、credit の往復より長くする。MNIST では見せる時間の 3/4                                                        | 24 ms                    |
 | `optimizer`      | 重みが学ぶ速さ                               | `pc.optim.SGD(tau=見せる時間 / lr)`。`lr` は 1 バッチあたりの学習率。[optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)を参照                      | `pc.optim.SGD(tau=0.32)` |
 | `max_dt`         | 1 回の更新で数える `dt` の上限               | 既定の `tau.max_dt`。ここでは 1 周期。下の「周期と `max_dt`」を見る                                                                                        | 2 ms                     |
@@ -68,7 +68,7 @@ p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask, reset=new), seconds=sho
 - **credit の往復**: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。往復はおよそ `2 × ホップ数 × 周期`（ホップ数は経路上の接続の数。MNIST では `Input` から `Output` まで 3 本で 6 周期）。`learn_interval` はこれより長くすることを勧める。credit が戻る前に学ぶと、入力に近いノードは credit の一部からしか学べない。どのノードも 1 周期ごとに forward と VJP を 1 回ずつ計算するので、大きいノードを少なく置くほど 1 バッチに要る周期は少ない
 - **入力がフレームごとに変わるストリーム**: `learn_interval=None` を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は `pc.optim.SGD` の `1 / tau` になる。ストリームに適した値はまだ測っていない
 - **`r` の減衰**: `tau.r` は `tau.h * dr/dt` に `-(tau.h / tau.r) * r` を足す。`lam` が `r` を積分するので、`tau.r` によらず平衡点では `r = 0` で、`lam` は BP の credit のまま。`r` を引く力が `1 + tau.h / tau.r` 倍になるので、既定の周期もその倍率で割った長さになる
-- **この値にする理由**: `tau.r = tau.h`、`tau.lam = tau.h / 2`、周期 `tau.h / 2` なら、1 回の更新で `delta = r + lam` がちょうど `-g` になる。credit は 1 周期に 1 ノードずつ戻り、行き過ぎない。ノードは `mu` を送るので credit は後ろへだけ流れ、モジュールのヤコビアンによらず、深い鎖でも 1 ノードのときと同じ刻みで安定する。長い刻み（`dt = tau.h = tau.lam`、減衰なし）は `delta` が 2 倍に行き過ぎ、その行き過ぎが通るノードごとに大きくなる。短い刻みは安定だが、周期が多く要る
+- **この値にする理由**: `tau.r = tau.h`、`tau.lam = tau.h / 2`、周期 `tau.h / 2` なら、1 回の更新で `delta = r + lam` がちょうど `-g` になる。credit は 1 周期に 1 ノードずつ戻り、行き過ぎない。ノードは `mu` を送るので credit は後ろへだけ流れ、モジュールのヤコビアンによらず、深い鎖でも 1 ノードのときと同じ刻みで安定する。長い刻み（`dt = tau.h = tau.lam`、減衰なし）では `delta` が 2 倍に行き過ぎ、その行き過ぎは通るノードごとに大きくなる。短い刻みは安定だが、多くの周期が要る
 
 ## optimizer を選ぶ
 
@@ -99,13 +99,13 @@ optimizer = pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0)
 
 ## relaxer を選ぶ
 
-`pc.Layer` と `pc.Chain` は `relaxer=` を取る。relaxer は、ずれ `r` が自分に掛かる力 `F = (1 + tau.h / tau.r) * r + lam + g` に沿ってどう動くかを決める。optimizer が重みに対して行うことの、`r` 版である。省略でき、既定は `pc.relax.Euler()`。状態を持たない設定なので、`pc.Chain` は同じものを全 `pc.Layer` に渡す。各 `pc.Layer` はそれを自分の `r` に bind し、`r` の状態を自分で持つ。`pc.Output` は `r` を持たないので、relaxer を取らない。
+`pc.Layer` と `pc.Chain` は `relaxer=` を取る。relaxer は、ずれ `r` が自分に掛かる力 `F = (1 + tau.h / tau.r) * r + lam + g` に沿ってどう動くかを決める。`r` にとっての optimizer にあたる。省略でき、既定は `pc.relax.Euler()`。状態を持たない設定なので、`pc.Chain` は同じものを全 `pc.Layer` に渡す。各 `pc.Layer` はそれを自分の `r` に bind し、`r` の状態を自分で持つ。`pc.Output` は `r` を持たないので、relaxer を取らない。
 
 `dt` 秒の 1 回で、`pc.relax.Euler()` は `r -= (dt / tau.h) * F` と動かす。状態は持たない。
 
 - relaxer が変えるのは `r` が不動点に着くまでの道で、不動点ではない。不動点では `F = 0` で、`lam` は BP の credit になる。どの relaxer が `r` を動かしても、`lam` は動かした後の `r` で進む
-- ノードの relaxer の状態は `run.state_dict()["nodes"][path]["state"]["relaxer"]` にある。`pc.relax.Euler` なら空の dict で、自作の relaxer なら、それが持つもの。実行のほかの状態と一緒に保存・復元される。ノードは新しい入力のたびに `reset_(reset)` を呼ぶ。力を覚える relaxer は、新しく始まるサンプルの分だけそれを忘れる
-- relaxer を自作するには、optimizer を自作するときと同じく、`pc.relax.Relaxer` と `pc.relax.BoundRelaxer` を継承して書く（[mujou.pc の仕組み](pc-concepts.md#7-relaxer)）。不動点は `F = 0` のところでなければならない。`lam` が credit になるのはそこだけだからである
+- ノードの relaxer の状態は `run.state_dict()["nodes"][path]["state"]["relaxer"]` にある。`pc.relax.Euler` なら空の dict で、自作の relaxer ならそれが持つもの。実行のほかの状態と一緒に保存・復元される。ノードは新しい入力のたびに `reset_(reset)` を呼ぶ。力を覚える relaxer は、新しく始まるサンプルの分だけ覚えた力を捨てる
+- relaxer を自作するには、optimizer を自作するときと同じく、`pc.relax.Relaxer` と `pc.relax.BoundRelaxer` を継承して書く（[mujou.pc の仕組み](pc-concepts.md#7-relaxer)）。`lam` が credit になるのは `F = 0` のところだけなので、不動点はそこでなければならない
 
 ## MNIST
 
@@ -132,7 +132,7 @@ uv run python examples/mnist/main.py --epochs 1 --watch
 
 ## CIFAR-10
 
-`examples/cifar10/` は、CUDA のデバイスに載せた ResNet-20 をステージごとのノードにして CIFAR-10 に学習させる。同じネットワークを、同じ初期重み・同じバッチ・同じ `pc.optim.AdamW` で、GPU 上の BP でも学習させる。モジュールは `pc.Chain` の `Input` の後ろのノードになる。stem と最初のステージ、2 つ目のステージ、3 つ目のステージ、head の 5 ノードである。32 サンプルのバッチを 12 周期ずつ見せると、3 epoch 目の prequential 精度は PC-ALM が 57.11%、BP が 55.91%、その後のテスト精度は 59.47% と 61.76% だった（seed 0）。10 epoch 目は 73.05% と 73.20%、73.90% と 74.35%。1 epoch は 48 秒で、BP は 8〜9 秒。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も実行ごとにビット単位では一致しない。
+`examples/cifar10/` は、CUDA のデバイスに載せた ResNet-20 をステージごとのノードにして CIFAR-10 に学習させる。同じネットワークを同じ初期重み・同じバッチ・同じ `pc.optim.AdamW` で、GPU 上の BP でも学習させる。`pc.Chain` の `Input` の後ろには、stem と最初のステージ、2 つ目のステージ、3 つ目のステージ、head の 5 つのモジュールがそれぞれノードとして並ぶ。32 サンプルのバッチを 12 周期ずつ見せると、3 epoch 目の prequential 精度は PC-ALM が 57.11%、BP が 55.91%、その後のテスト精度は 59.47% と 61.76% だった（seed 0）。10 epoch 目は prequential が 73.05% と 73.20%、テストが 73.90% と 74.35%。1 epoch に PC-ALM は 48 秒、BP は 8〜9 秒かかる。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も実行ごとにビット単位では一致しない。
 
 ```sh
 uv run python examples/cifar10/main.py            # 3 epoch、RTX 4090 で約 4 分
@@ -145,10 +145,10 @@ uv run python examples/cifar10/main.py --epochs 10  # 約 13 分
 
 - **ステージごとのノード**: ノードの内側では autograd がモジュール（ブロックとそのスキップ接続・活性化を含む）を微分し（BP）、ノードの間には PC-ALM のメッセージだけが流れる
 - **1 バッチに 12 周期**、学ぶのはその 0.9 の時点: credit は 1 周期に 1 ノードずつ戻る。`Input` から `Output` までの往復は 8 周期
-- **ノードが少ないほど周期も少ない**: GPU 1 枚では、全ノードの 1 周期のコストはネットワークの切り方によらずほぼ同じ。カーネルを起動する CPU が限界で、1 回の更新は約 1.7 ms かかる。残差ブロックごとに切る（11 ノード）と 1 バッチに 24 周期要り、実時間 2.5 ms の周期にノードが追いつかなかった。128 サンプルのバッチと 5 ms の周期なら、3 epoch 目は prequential 53.94%・テスト 57.67% で、時間は BP の 17 倍だった
-- **GPU で実時間の 2 倍**: `device="cuda"` で、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（[デバイス](threads-and-devices.md#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9)）。`tau.h` は 10 ms なので周期はタイマーで 5 ms。タイマーを実時間の 2 倍で進める（`--time-scale` 2）ので、実時間では 2.5 ms。更新の間隔は平均 1.00 周期だった
+- **ノードが少ないほど周期も少ない**: GPU 1 枚では、全ノードの 1 周期のコストはネットワークの切り方によらずほぼ同じ。CPU によるカーネルの起動で律速され、1 回の更新に約 1.7 ms かかる。残差ブロックごとに切る（11 ノード）と 1 バッチに 24 周期要り、実時間 2.5 ms の周期にノードが追いつかなかった。11 ノードで 128 サンプルのバッチと 5 ms の周期にすると、3 epoch 目は prequential 53.94%・テスト 57.67% で、時間は BP の 17 倍だった
+- **GPU で実時間の 2 倍**: `device="cuda"` にすると、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（[デバイス](threads-and-devices.md#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9)）。`tau.h` は 10 ms なので周期はタイマーで 5 ms。タイマーを実時間の 2 倍で進める（`--time-scale` 2）ので、実時間では 2.5 ms。更新の間隔は平均 1.00 周期だった
 - **バッチは 32**: 1 回の更新のコストは 32 サンプルでも 128 サンプルでもほぼ同じ。大きいバッチで得をするのは BP のほう
-- **AdamW**: [optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)のとおり、Adam の `lr` から作る。BP の基準も同じ `pc.optim.AdamW` をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが学ぶ時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は同じ勾配に PC-ALM とほぼ同じステップを踏む
+- **AdamW**: [optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)のとおり、Adam の `lr` から作る。BP の基準も同じ `pc.optim.AdamW` をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが 1 回の学習で進める時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は、同じ勾配なら PC-ALM とほぼ同じ歩みで重みを動かす
 - **GroupNorm**: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない
 
 ## バッチ
@@ -187,14 +187,14 @@ uv run python examples/cifar10/main.py --epochs 10  # 約 13 分
 
     ノードはそれぞれ更新しながらメッセージをやり取りする。あるノードが遅れると、隣のノードはその古いメッセージから学び続け、ネットワークが発散するか精度が落ちる。MNIST は `y_hat` が有限でないと止まる。予測が有限のまま発散したときは、精度の低下としてしか見えない。わかっている原因は 2 つ。
 
-    - **時間の速さが速すぎる**: 例は `--time-scale` で実行のタイマーを速める。速すぎると、最も遅いノードの計算が周期に収まらない。残差ブロックごとに切った CIFAR-10 では、周期を実時間 2 ms にすると、更新の間隔が平均 1.1〜1.3 周期になり、最大 100 周期ほど止まって、精度が約 20 ポイント落ちた。`--watch`（MNIST）で 1 epoch 回し、警告が出ず発散もしない最も速い時間の速さを選ぶ
+    - **時間の速さが速すぎる**: 例は `--time-scale` で実行のタイマーを速める。速すぎると、最も遅いノードの計算が周期に収まらない。残差ブロックごとに切った CIFAR-10 では、周期を実時間 2 ms にすると更新の間隔が平均 1.1〜1.3 周期に延び、最大で 100 周期ほど止まり、精度が約 20 ポイント落ちた。`--watch`（MNIST）で 1 epoch 回し、警告が出ず発散もしない最も速い時間の速さを選ぶ
     - **ほかのプロセスがコアを使っている**: コアを待つノードがあると、隣のノードが先に進む。32 コアの機械で時間の速さ 1 なら、busy loop 26 本と並べて 1 epoch を完走し、32 本では発散した。0.5 なら 32 本でも完走した。ほかに何も動いていない機械で回すか、時間の速さを下げる
 
     `max_dt` ではこれを防げない。`max_dt` は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。
 
 !!! warning "シャッフルしたサンプルには `reset` を立てる"
 
-    `reset` を False で書いたサンプルは、自分の credit が出力から戻るまで、各ノードで前のサンプルの `r` と `lam` を持ち続ける。シャッフルしたバッチでは、それは関係のないサンプルの credit である。それまでの間、入力に近いノードは誤った credit を持ち、早く学べばそこから学ぶ。前に続かないサンプルには、どれも `reset` を True にする。
+    `reset` を False で書くと、各ノードはそのサンプルの credit が出力から戻るまで、前のサンプルの `r` と `lam` を持ち続ける。シャッフルしたバッチでは、それは関係のないサンプルの credit である。その間、入力に近いノードは誤った credit を持ち、早く学べばそこから学ぶ。前に続かないサンプルには、どれも `reset` を True にする。
 
 ## 自分のノードを書く
 
@@ -203,14 +203,14 @@ uv run python examples/cifar10/main.py --epochs 10  # 約 13 分
 1. `__init__` で module を device に載せた後、クロック、bind した optimizer、ずれ `r` と双対変数 `lam`（`mu` と同じ shape のゼロ）、`r` を自作の relaxer で動かすなら bind した relaxer を属性に置く。どれもそれだけでノードの状態に入る
     - `self.clock = pc.clock.LearnClock.of(tau, period=self.period, learn_interval=...)`。`max_dt` は `pc.Layer` と同じく `tau` の既定になる
     - `self.optimizer = optimizer.bind(params)`。`params` は学ぶパラメータ。bind はノードごとに行う。bind した同じ optimizer を 2 つのノードに持たせてはいけない
-    - `self.relaxer = relaxer.bind(self.r)`。同じくノードごとに bind する。置かなければ、`relax_` は素の 1 歩を進める
+    - `self.relaxer = relaxer.bind(self.r)`。同じくノードごとに bind する。置かなければ `relax_` は素の 1 歩を進める
 2. 毎回の更新で `t = self.clock.tick(dt, act["time"], self.timer.now())` を呼ぶ。`t.new` が True なら、`reset` が立ったサンプルの `r` と `lam` を 0 にし（`self.r.masked_fill_(rows, 0.0)`。`rows` は `reset` を `r` の shape に合わせたもの）、relaxer を持つなら `self.relaxer.reset_(act["reset"])` を呼ぶ
 3. `delta = r + lam`（`mask` が False のサンプルは 0）と bind した `params` を同じ順で `pc.functional.vjp` に渡し、予測 `mu`、`g_in`、学ぶなら `g_theta` を求めて、`g_in` を前のノードへ送る
 4. 次のノードたちが送った値の和を `g` として、`pc.functional.relax_(self.r, self.lam, g, t.dt, tau, self.relaxer)` で `r` と `lam` を動かす
 5. `mu` を `h` として `pc.msg.Activity` で送る。受け取った活動の `y`・`mask`・`reset`・`time` を組にする
 6. `t.learn` が True で `mask` が True のサンプルがあれば、`self.optimizer.step_([g / B for g in g_theta], t.elapsed)` で学ぶ。`B` はバッチのサンプルの数。optimizer はバッチを知らないので、`B` で割るのはノード
 
-`pc.Layer` と同じく、`h` ではなく `r` を持ち、`mu + r` ではなく `mu` を送る。そうすれば何が `mu` を動かしても `r` と `lam` は引き継がれ、credit は後ろへだけ流れるので、どの鎖でも刻みが安定する（[mujou.pc の仕組み](pc-concepts.md#r-mu)）。
+`pc.Layer` と同じく `h` ではなく `r` を持ち、`mu + r` ではなく `mu` を送る。こうすると何が `mu` を動かしても `r` と `lam` は引き継がれる。credit は後ろへだけ流れるので、どの鎖でも刻みが安定する（[mujou.pc の仕組み](pc-concepts.md#r-mu)）。
 
 `mujou.pc` のノードとつなぐには、Port の spec に前のノードの `act_spec` か `pc.msg.activity_spec(h, y, batch)` を使う。引数は [API リファレンス](../api/pc.md)にある。PC 以外の、ノードをまたいで学ぶ則は[更新則](update-rules.md)を参照。
 
@@ -222,4 +222,4 @@ uv run python examples/cifar10/main.py --epochs 10  # 約 13 分
 --8<-- "examples/pc_merge.py:merge"
 ```
 
-`pc.Layer` との違いは 1 つだけ。入力ごとに Port を持って `g_in` を分けて送り返すこと。
+`pc.Layer` との違いは、入力ごとに Port を持ち、`g_in` を分けて送り返すことだけ。
