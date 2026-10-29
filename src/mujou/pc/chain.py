@@ -48,7 +48,8 @@ class Chain(Network, Shown):
     The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
     in ``layer{i}``, also ``layers[i]``), which are also their paths in
     ``Run.state_dict()``. Every
-    node runs with the same ``period``, ``tau.period`` (``tau.h / 4``) unless
+    node runs with the same ``period``, ``tau.period`` (``tau.h / 2`` with
+    ``tau.r = tau.h``) unless
     given; for a period of its own for each node, build the nodes one by one
     (``show`` shows them samples too).
 
@@ -65,7 +66,7 @@ class Chain(Network, Shown):
             y=TensorSpec((B,), torch.int64),
             batch=B,
             loss=pc.loss.CrossEntropyLoss(B),
-            tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+            tau=pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3),
             optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=0.15,
         )
@@ -80,18 +81,17 @@ class Chain(Network, Shown):
         tau: The time constants of every node.
         optimizer: How the parameters of every node move, as in ``Layer``:
             each node binds it to its own parameters.
-        relaxer: How ``h`` of every ``Layer`` moves, as in ``Layer``: each binds
-            it to its own ``h``. The ``Output`` has no ``h``.
+        relaxer: How ``r`` of every ``Layer`` moves, as in ``Layer``: each binds
+            it to its own ``r``. The ``Output`` has no ``r``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
             credit, ``2 * len(modules) * period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
-        period: The period of every node, ``tau.period`` if ``None``. A shorter
-            one makes the explicit steps exact for stiffer modules (the step of
-            ``h`` is stable while ``(1 + |J|^2) * period / tau.h < 2``, ``|J|``
-            the largest singular value of the Jacobian of the next module), for
-            more updates.
+        period: The period of every node, ``tau.period`` if ``None``: with the
+            defaults of ``TimeConstants``, the credit moves one node down in
+            each period. A period of your own must not be longer than
+            ``max_dt``.
         device: Where the nodes compute.
 
     Raises:
@@ -175,7 +175,8 @@ def show(run: Run, chain: Shown, sample: Sample, *, seconds: float) -> Predictio
     Example::
 
         mask = torch.ones(B, dtype=torch.bool)
-        p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=0.2)
+        sample = pc.msg.Sample(x=x, y=y, mask=mask, reset=mask)  # shuffled
+        p = pc.show(run, net, sample, seconds=0.2)
         correct = int((p["y_hat"].argmax(1) == y).sum())
 
     Raises:

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
 ACT = pc.msg.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
@@ -60,7 +60,8 @@ class Direct:
         t = timer.now().ns
         if sample is not None:
             x, y, mask = sample
-            t = self.run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
+            written = {"x": x, "y": y, "mask": mask, "reset": mask}
+            t = self.run.write({self.inp.prev: written}).ns
         self.run.step(0.0, self.out, self.inp)
         return t
 
@@ -126,7 +127,7 @@ class TestConstruction:
             time=TimestampSpec(),
         )
 
-    def test_the_period_defaults_to_a_quarter_of_tau_h(self):
+    def test_the_period_defaults_to_tau_period(self):
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
             loss=pc.loss.MSELoss(B),
@@ -135,7 +136,7 @@ class TestConstruction:
             optimizer=SGD,
             learn_interval=None,
         )
-        assert out.period == pytest.approx(TAU.h / 4)
+        assert out.period == pytest.approx(TAU.period)
 
     def test_the_period_must_not_be_longer_than_max_dt(self):
         with pytest.raises(ValueError, match="max_dt"):

@@ -2,16 +2,16 @@ r"""The stateless computations of PC-ALM that the nodes of ``mujou.pc`` are made
 of, for writing nodes of your own (such as one with several inputs).
 
 A node ``i`` predicts ``mu = f(h_in; theta)`` from the activity ``h_in`` of the
-previous node, and keeps its activity ``h`` and the dual ``lam`` of the constraint
-``h = mu``. Its energy is ``E = 0.5 * ||h - mu + lam||^2`` (``r = h - mu``,
-``delta = r + lam``).
+previous node, and keeps the deviation ``r = h - mu`` of its activity ``h`` and
+the dual ``lam`` of the constraint ``h = mu``. Its energy is
+``E = 0.5 * ||r + lam||^2`` (``delta = r + lam``).
 
 - ``vjp`` gives the gradients of ``E`` with respect to ``h_in`` and ``theta`` (one
   vector-Jacobian product inside the node). The node sends the one of ``h_in`` to
   the previous node, which adds the values it receives into its ``g``.
 - ``loss_vjp`` does the same for an output node, whose energy is the loss.
-- ``relax_`` moves ``h`` and ``lam`` by ``dt`` seconds (``h`` as a relaxer of
-  ``mujou.pc.relax`` says: ``pc.relax.Euler``, ``pc.relax.HeavyBall``); an optimizer of
+- ``relax_`` moves ``r`` and ``lam`` by ``dt`` seconds (``r`` as a relaxer of
+  ``mujou.pc.relax`` says: ``pc.relax.Euler`` or one of your own); an optimizer of
   ``mujou.pc.optim`` (``pc.optim.SGD``, ``pc.optim.AdamW``) moves ``theta``.
 - ``mse`` and ``cross_entropy`` are losses of each sample, for ``loss_vjp``
   (``MSELoss`` and ``CrossEntropyLoss`` hold their ``batch``).
@@ -63,7 +63,7 @@ def vjp(
             (*batch, *out)``. It must treat the samples independently.
         h_in: The activity of the previous node, ``(*batch, *in)``.
         delta: Makes $\delta$ of the node, ``(*batch, *out)``, from ``mu`` (detached,
-            without gradients), such as ``lambda mu: h - mu + lam``.
+            without gradients), such as ``lambda mu: r + lam``.
         params: The parameters to get the gradients of, usually those of
             ``module`` that require gradients.
 
@@ -171,55 +171,55 @@ def _grad(
 
 
 def relax_(
-    h: torch.Tensor,
+    r: torch.Tensor,
     lam: torch.Tensor,
-    mu: torch.Tensor,
     g: torch.Tensor,
     dt: float,
     tau: TimeConstants,
     relaxer: BoundRelaxer | None = None,
 ) -> None:
-    r"""Move ``h`` and ``lam`` in place by one explicit Euler step of ``dt``
+    r"""Move ``r`` and ``lam`` in place by one explicit Euler step of ``dt``
     seconds of
 
     $$
-    \tau_h \dot h = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
-    \tau_\lambda \dot\lambda = r,\qquad r = h - \mu.
+    \tau_h \dot r = -(r + \lambda + g) - \frac{\tau_h}{\tau_r}\,r,\qquad
+    \tau_\lambda \dot\lambda = r.
     $$
 
-    The step moves ``h`` first and then ``lam`` with the ``r`` of the moved
-    ``h``. ``mu`` and ``g`` are held fixed. The step is not split: ``g`` comes
-    from the next nodes and stays as it was over ``dt``, so the coupling between
-    the nodes is explicit however finely the step is split. Keep ``dt`` short
-    instead (``Layer`` caps it at ``max_dt``). ``tau.lam = inf`` leaves ``lam``
-    exactly as it is.
+    ``r = h - mu`` is the deviation of the node's activity from its prediction,
+    which stays in the node: the node sends ``mu``. The step moves
+    ``r`` first and then ``lam`` with the moved ``r``. ``g`` is held fixed. The
+    step is not split: ``g`` comes from the next nodes and stays as it was over
+    ``dt``, so the coupling between the nodes is explicit however finely the
+    step is split. Keep ``dt`` short instead (``Layer`` caps it at ``max_dt``).
+    ``tau.lam = inf`` leaves ``lam`` exactly as it is, and ``tau.r = inf`` adds
+    no decay.
 
-    With a ``relaxer`` (``pc.relax.Euler().bind(h)``, ``pc.relax.HeavyBall(...).bind(h)`` or
-    one of your own), ``h`` moves as it says along the force
-    $F = r + \lambda + g$ instead of by the plain step: ``relaxer.step_(h, F, dt,
-    tau.h)``. $\lambda$ follows the moved ``h`` as before. The relaxer is the
-    node's: it holds the state, and the node calls its ``reset_`` where the force
-    jumps.
+    With a ``relaxer`` (``pc.relax.Euler().bind(r)`` or one of your own),
+    ``r`` moves as it
+    says along the force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$ instead
+    of by the plain step: ``relaxer.step_(r, F, dt, tau.h)``. $\lambda$ follows
+    the moved ``r`` as before. The relaxer is the node's: it holds the state,
+    and the node calls its ``reset_`` where the force jumps.
 
     Args:
-        h: The activity of the node, ``(*batch, *out)``.
+        r: The deviation ``h - mu`` of the node, ``(*batch, *out)``.
         lam: The dual of the node's activity, ``(*batch, *out)``.
-        mu: The prediction ``f(h_in)`` of the node, ``(*batch, *out)``.
         g: The sum of the gradients the next nodes sent, ``(*batch, *out)``.
         dt: The time to move by, in seconds.
-        tau: The time constants; ``tau.h`` and ``tau.lam`` are used.
-        relaxer: How ``h`` moves, bound to ``h``; ``None`` is the plain step.
+        tau: The time constants of ``r`` and ``lam``.
+        relaxer: How ``r`` moves, bound to ``r``; ``None`` is the plain step.
     """
     with torch.no_grad():
-        force = h - mu + lam + g  # tau_h dh/dt = -(r + lam + g)
+        force = r + lam + g  # tau_h dr/dt = -(r + lam + g)
         if math.isfinite(tau.r):  # and - (tau_h / tau_r) r, the decay of r
-            force.add_(h - mu, alpha=tau.h / tau.r)
+            force.add_(r, alpha=tau.h / tau.r)
         if relaxer is None:
-            h.sub_((dt / tau.h) * force)
+            r.sub_((dt / tau.h) * force)
         else:
-            relaxer.step_(h, force, dt, tau.h)
+            relaxer.step_(r, force, dt, tau.h)
         if math.isfinite(tau.lam):  # alpha = 0 (PC): lam stays exactly as it is
-            lam.add_(h - mu, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
+            lam.add_(r, alpha=dt / tau.lam)  # tau_lam dlam/dt = r
 
 
 def mse(y_hat: torch.Tensor, y: torch.Tensor, batch: Size = ()) -> torch.Tensor:

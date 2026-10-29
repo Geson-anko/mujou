@@ -14,10 +14,12 @@ from tests.mujou.pc._reference import (
     ADAMW,
     MASK,
     N_OUT,
+    RESET,
     SGD,
     TAU,
     B,
     H,
+    Inertial,
     make_modules,
     sample,
 )
@@ -85,7 +87,7 @@ def run_states(
     for s in range(20):
         if s % 7 == 0:
             x, y = sample(WIDTHS, s)
-            run.write({inp.prev: {"x": x, "y": y, "mask": MASK}})
+            run.write({inp.prev: {"x": x, "y": y, "mask": MASK, "reset": RESET}})
         run.step(H)
     tree = run.state_dict()
     for node in tree["nodes"].values():
@@ -136,14 +138,14 @@ class TestChain:
         assert net.prev is net.input.prev
         assert net.next is net.output.next
 
-    def test_every_node_runs_at_a_quarter_of_tau_h(self):
+    def test_every_node_runs_at_tau_period(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head)
         periods = [
             node.period for node in vars(net).values() if isinstance(node, pc.Layer)
         ]
         periods += [net.input.period, net.output.period]
-        assert periods == pytest.approx([TAU.h / 4] * 4)
+        assert periods == pytest.approx([TAU.period] * 4)
 
     def test_every_node_runs_at_the_period_given(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
@@ -180,13 +182,13 @@ class TestChain:
             assert [m.shape for m in moments] == [p.shape for p in module.parameters()]
         assert "optimizer" not in tree["nodes"]["input"]["state"]
 
-    def test_each_layer_binds_the_relaxer_to_its_own_activity(
+    def test_each_layer_binds_the_relaxer_to_its_own_deviation(
         self, start_manual: StartManual
     ):
-        # One HeavyBall for the whole chain: each layer binds it to its own h,
-        # so each keeps a velocity of its own; the output holds no h.
+        # One relaxer with a state for the whole chain: each layer binds it to
+        # its own r, so each keeps a velocity of its own; the output holds no r.
         layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head, relaxer=pc.relax.HeavyBall(tau=3e-3))
+        net = chain(*layers, head, relaxer=Inertial(tau=3e-3))
         tree = run_states(start_manual, net, net.input)
         for path, width in (("layer0", WIDTHS[1]), ("layer1", WIDTHS[2])):
             velocity = tree["nodes"][path]["state"]["relaxer"]["velocity"]
@@ -224,7 +226,7 @@ def learned(
         learn_interval=LEARN_INTERVAL,
     )
     run = start_manual(net, timer=VirtualTimer())
-    run.write({net.prev: {"x": x, "y": y, "mask": mask}})
+    run.write({net.prev: {"x": x, "y": y, "mask": mask, "reset": mask}})
     for _ in range(20):
         run.step(H)
     return {path: node["state"] for path, node in run.state_dict()["nodes"].items()}
@@ -233,14 +235,14 @@ def learned(
 def assert_learned_alike(
     states: dict[str, dict[str, Any]], expected: dict[str, dict[str, Any]]
 ) -> None:
-    """The weights are equal, and the activities of each sample."""
+    """The weights are equal, and the r and lam of each sample."""
     for path in ["layer0", "layer1", "output"]:
         for name, weight in expected[path]["module"].items():
             torch.testing.assert_close(
                 states[path]["module"][name], weight, rtol=1e-12, atol=1e-14
             )
     for path in ["layer0", "layer1"]:
-        for name in ["h", "lam"]:
+        for name in ["r", "lam"]:
             got, want = states[path][name], expected[path][name]
             torch.testing.assert_close(
                 got, want.reshape(got.shape), rtol=1e-12, atol=1e-14

@@ -1,9 +1,11 @@
 ---
 name: project-pc-jacobian-stability
-description: 周期 τ_h/4 の陽的 Euler は次のノードの σ ≲ 2.6 でしか正確でなく、ResNet のブロック（2〜9）は超える。原因は離散化で、周期 τ_h/16 にすると連続の極限に届く。τ_λ=τ_h/4・tau.r=τ_h/3・24 τ_h で 11 ノードが 10 epoch で BP に 1〜2 pt 差（2026-10-27）
+description: h（のちに μ + r）を送っていた間は、次のノードのヤコビアンが緩和を硬くし、周期 τ_h/16 が要った。2026-10-29 に μ を送る形にしてループが消え、ヤコビアンによらず周期 τ_h/2 で安定。CIFAR はステージごとの 5 ノード・12 周期で BP の 5〜6 倍、10 epoch で BP 以上
 metadata:
   type: project
 ---
+
+**2026-10-29 追記: 送る値を μ にした（固定予測の仮定）ので、以下のヤコビアンの硬さの話は h（μ + r）を送っていた間のもの。** μ を送ると credit は後ろへだけ流れ、局所の刻み（周期 τ_h/2、τ_λ = τ_h/2、τ_r = τ_h）が安定ならどのヤコビアンでも安定。重み固定の ResNet で 20 周期に全層 cos 1.00、増幅する線形の鎖（1.25 × 16）も収束。CIFAR は 1 周期のコストがノード数によらず約 1.5〜2 ms（CPU の起動律速）なので、ホップの少ないステージごとの 5 ノード・B = 32・12 周期・scale 2 にして、BP の 5〜6 倍で 10 epoch 72.96% / 74.58%（BP 72.81% / 72.39%）。詳細は specs/pc.md「上へ μ を送る」
 
 2026-10-24〜26、`examples/cifar10/` で測った（記録は `memory/agents/orchestrator/cifar10-resnet-example.md`）。
 
@@ -23,7 +25,7 @@ metadata:
 - 刻みを縮める方向（AdaptiveStep）は試して悪かった。やるなら前のバッチの λ を捨てる仕組み（行ごとのリセット）と一緒に考える。src の pc の変更はユーザーに確認する
 - 関連: [[project-pc-module]], [[reference-pc-alm]], [[project-gpu-policy]]
 
-**2026-10-26 追記（h の慣性を採用。のちに `pc.relax.HeavyBall` に載せ替え、[[project-pc-relaxer]]）**
+**2026-10-26 追記（h の慣性を採用。のちに `pc.relax.HeavyBall` に載せ替え、r 形で効果が無く 2026-10-28 に削除、[[project-pc-relaxer]]）**
 
 - 最初は `TimeConstants.momentum`、いまは `Layer(relaxer=pc.relax.HeavyBall(tau=...))`: h の heavy ball。`v <- exp(-dt/tau) v + (r+λ+g)`、`h -= dt/τ_h v`、新しいサンプルか h_in の跳びで v を 0 に（`reset_`）。不動点は不変、局所、メッセージは増えない。状態は `Layer.relaxer` の `velocity`
 - 効果: ResNet の 11 ノード・実時間で、64 周期 + `HeavyBall(tau=τ_h/4)` が 3 epoch 目で慣性なしの 128 周期と並ぶ（実時間は半分）。10 epoch では 62.8%（128 周期・慣性なしは 68.7%、BP は 73.3%）。128 周期に足しても変わらない。`τ_h/3` は 3 回に 1 回崩れた。1 更新あたりの係数 0.8 は発散、32 周期は学べない

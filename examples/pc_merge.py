@@ -2,11 +2,9 @@
 
 ``pc.Layer`` reads one activity, so a node that joins two paths is written with
 ``pc.functional`` and ``pc.clock.LearnClock``. Two towers (``pc.Layer``) read one
-``pc.Input``, and ``Merge`` predicts from both for a ``pc.Output``. ``Merge``
-learns in every update, so it needs none of the handling of the jumps of its
-weights that a node learning at intervals does. The network learns
-y = sin(2 x1) cos(x2) as ``pc_regression.py`` does: the loss on each batch before
-learning from it falls to about 0.02 in 10 s.
+``pc.Input``, and ``Merge`` predicts from both for a ``pc.Output``. The network
+learns y = sin(2 x1) cos(x2) as ``pc_regression.py`` does: the loss on each
+batch before learning from it falls below 0.01 in 10 s.
 """
 
 from functools import partial
@@ -21,7 +19,7 @@ from mujou import DictSpec, MultiPort, Network, Node, Port, TensorSpec
 
 B = 32  # the batch
 SHOWN = 0.032  # seconds of the run's timer each batch is shown
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)
 OPTIMIZER = pc.optim.SGD(tau=SHOWN / 0.3)  # a rate of 0.3 per batch
 LEARN = 0.75 * SHOWN  # the towers and the output learn once per batch
 
@@ -45,10 +43,7 @@ class Merge(Node):
         h_a, h_b = a.field("h", TensorSpec), b.field("h", TensorSpec)
         self.sizes = [h_a.shape[-1], h_b.shape[-1]]
         h = TensorSpec((B, module(torch.zeros(B, sum(self.sizes))).shape[-1]))
-        self.h, self.lam, self.mu = h.zeros(), h.zeros(), h.zeros()
-        self.jumps, self.seen = 0, [0, 0]  # the jumps it sent, and read from a, b
-        self.register_state("jumps")
-        self.register_state("seen")
+        self.r, self.lam = h.zeros(), h.zeros()  # r = h - mu
         self.act_spec = pc.msg.activity_spec(h, a.field("y", TensorSpec), B)
         self.a = Port(send=h_a, recv=a)  # sends back g_in of h_a
         self.b = Port(send=h_b, recv=b)
@@ -59,29 +54,23 @@ class Merge(Node):
         super().on_update(dt)
         a, b = self.a.recv(), self.b.recv()
         t = self.clock.tick(dt, a["time"], self.timer.now())
-        # A new sample or a jump of either input: h jumps with mu, keeping r.
-        seen = [a["jumps"], b["jumps"]]
-        jump, self.seen = t.new or seen != self.seen, seen
-        r = self.h - self.mu
+        if t.new:  # the samples that start anew drop the credit of the ones before
+            new = a["reset"].unsqueeze(-1)
+            self.r.masked_fill_(new, 0.0)
+            self.lam.masked_fill_(new, 0.0)
         labeled = a["mask"].unsqueeze(-1)  # a sample without a target sends no credit
+        delta = torch.where(labeled, self.r + self.lam, 0)
         params = list(self.module.parameters())
         mu, g_in, g_theta = pc.functional.vjp(
-            self.module,
-            torch.cat([a["h"], b["h"]], dim=-1),
-            lambda mu: torch.where(labeled, (r if jump else self.h - mu) + self.lam, 0),
-            params,
+            self.module, torch.cat([a["h"], b["h"]], dim=-1), lambda _: delta, params
         )
         g_a, g_b = g_in.split(self.sizes, dim=-1)
         self.a.send(g_a)
         self.b.send(g_b)
-        if jump:
-            self.h = mu + r
-            self.jumps += 1
-        g = sum(self.next.recv().values(), torch.zeros_like(self.h))
-        pc.functional.relax_(self.h, self.lam, mu, g, t.dt, TAU)
-        self.mu = mu
-        # The y, mask and time of a go on with h.
-        self.next.send({**a, "h": self.h, "jumps": self.jumps})
+        g = sum(self.next.recv().values(), torch.zeros_like(self.r))
+        pc.functional.relax_(self.r, self.lam, g, t.dt, TAU)
+        # The prediction goes on, with the y, mask, reset and time of a.
+        self.next.send({**a, "h": mu})
         if a["mask"].any():  # nothing to learn from samples without a target
             self.optimizer.step_([g_p / B for g_p in g_theta], t.elapsed)
 
@@ -131,13 +120,14 @@ if __name__ == "__main__":
     torch.manual_seed(0)  # the initial weights, before the run
     net = TwoTowers()
     g = torch.Generator().manual_seed(1)
-    mask = torch.ones(B, dtype=torch.bool)  # every sample has a target
+    mask = torch.ones(B, dtype=torch.bool)  # every sample has a target, and is new
     losses: list[float] = []
     with mujou.run(net) as run:
         for i in range(300):
             x = 2 * torch.rand(B, 2, generator=g) - 1
             y = torch.sin(2 * x[:, :1]) * torch.cos(x[:, 1:])
-            p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask), seconds=SHOWN)
+            sample = pc.msg.Sample(x=x, y=y, mask=mask, reset=mask)
+            p = pc.show(run, net, sample, seconds=SHOWN)
             losses.append(nn.functional.mse_loss(p["y_hat"], y).item())
             if (i + 1) % 50 == 0:
                 print(f"batch {i + 1}: loss {sum(losses[-50:]) / 50:.4f}")

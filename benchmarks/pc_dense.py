@@ -39,7 +39,7 @@ import mujou.testing
 from mujou import TensorSpec
 
 B = 64
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 OPTIMIZER = pc.optim.SGD(tau=1.28)
 PERIOD = TAU.h / 4
 PATHS = ("inp", "l1", "l2", "out")
@@ -112,6 +112,7 @@ def build(
         "x": torch.randn(B, 784),
         "y": y.rand() if y.dtype.is_floating_point else torch.randint(10, (B,)),
         "mask": torch.ones(B, dtype=torch.bool),
+        "reset": torch.ones(B, dtype=torch.bool),
     }
     net = mujou.Group(inp=inp, l1=l1, l2=l2, out=out)
     return net, {inp.prev: sample}

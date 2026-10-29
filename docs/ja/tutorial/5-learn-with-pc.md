@@ -10,9 +10,9 @@ uv run python examples/pc_regression.py
 
 ```text
 batch   1: loss 0.4157 (the mean of the last 1)
-batch  50: loss 0.0476 (the mean of the last 50)
+batch  50: loss 0.1686 (the mean of the last 50)
 ...
-batch 300: loss 0.0059 (the mean of the last 50)
+batch 300: loss 0.0043 (the mean of the last 50)
 ```
 
 ## 鎖
@@ -25,7 +25,7 @@ batch 300: loss 0.0059 (the mean of the last 50)
 
 - `x` と `y` は入力と目標の spec。`batch` はその先頭の shape で、ここでは `B` 個のサンプル。`batch` を省くと鎖はサンプルを 1 つずつ受け取り、`x` は `TensorSpec((2,))`、`y` は `TensorSpec((1,))` になる
 - `loss` はサンプルごとの損失をバッチの shape で返す。`pc.loss.MSELoss(B)`（サンプルごとの平均二乗誤差。`nn.MSELoss` と同じくサンプルの次元で平均する）か `pc.loss.CrossEntropyLoss(B)`、または同じ shape を返す自作の関数。損失には鎖と同じバッチを渡す（[バッチ](../topics/pc.md#%E3%83%90%E3%83%83%E3%83%81)）
-- `tau` は活動と双対変数の時定数で、実行のタイマーの秒で表す。`h` は活動（鎖のどのノードも `tau.period`、つまり `tau.h / 4` ごとに更新する）、`lam` は双対変数の時定数。重みの時定数は optimizer が持つ
+- `tau` は活動と双対変数の時定数で、実行のタイマーの秒で表す。`h` は活動（鎖のどのノードも `tau.period`、つまり `tau.r = tau.h` なら `tau.h / 2` ごとに更新する）、`lam` は双対変数、`r` はずれの減衰の時定数。この組なら credit は 1 周期に 1 ノードずつ戻る。重みの時定数は optimizer が持つ
 - `optimizer` はノードが学ぶときに重みを動かす。`pc.optim.SGD(tau=...)` は勾配降下で、`tau` は重みの時定数。1 回の学習ではバッチの平均の勾配に（そのノードが前に学んでからの時間）/ `tau` を掛けた分だけ重みを動かす。ここではノードがバッチごとに 1 回学ぶので、1 バッチあたりの学習率は `SHOWN / optimizer.tau` = 0.3 になる（`SHOWN` は各バッチを見せる時間）。もう 1 つの選択肢は `pc.optim.AdamW`（[optimizer を選ぶ](../topics/pc.md#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)）。各ノードは optimizer を自分の重みに結び付けるので、1 つの `pc.optim.SGD` を鎖全体で使える。`optimizer` に既定値は無い
 - `learn_interval` はノードが学ぶ時刻で、各書き込みから数える。ここではバッチごとに 1 回、見せる時間の 3/4 の時点。既定値は無い。`None` は毎回の更新で学ぶモードで、フレームごとに入力が変わるストリーム向け。このモードのよい値はまだ測っていない
 
@@ -40,8 +40,9 @@ batch 300: loss 0.0059 (the mean of the last 50)
 `pc.show(run, net, sample, seconds=SHOWN)` はバッチを書き、鎖がそのバッチに対して出す最初の予測を待つ。そしてバッチを実行のタイマーで `SHOWN` 秒見せ終えたところで、その予測を返す。その間ノードは目標に向かって緩和し、学ぶ。この予測はどのノードもまだそのバッチから学んでいない時点のものなので、その損失は、まだ見ていないデータをどれだけ当てられるかを表す（prequential な損失）。
 
 - `mask` はどのサンプルに目標があるかを表す。`mask` が False のサンプルは損失に何も足さない。`mask` がすべて False なら重みは動かない（活動は動く）。走っている同じ鎖を評価するにはこれを使う。切り替える推論モードは無い
+- `reset` はどのサンプルが新しく始まるかを表す。ここではバッチを毎回新しく引くので、どのサンプルも新しい。ノードは前のバッチについて持っていたものを捨てる（[新しく始めるサンプル](../topics/pc.md#reset)）。フレームが続くストリームなら False にする
 - `pc.msg.Prediction` は `y_hat` を、その元になったサンプルの `y`・`mask`・`time` と組にして持つ。予測はいつも自分の目標と対になる
-- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動 `h`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロック、optimizer と、予測が跳んだときに `h` を動かすための値（`mu`・`jump`・`jumped`・`jumps`・`seen_jumps`。説明は [mujou.pc の仕組み](../topics/pc-concepts.md#jumps)）を持つ
+- `run.state_dict()["nodes"]["layer0"]["state"]` は最初の層の状態。活動の予測からのずれ `r`、双対変数 `lam`（平衡点では誤差逆伝播法の credit）、モジュール、クロック、optimizer、relaxer を持つ。送るもの（予測 `mu`）は Port `next` の状態にある（[mujou.pc の仕組み](../topics/pc-concepts.md#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E6%8C%81%E3%81%A4%E9%87%8F)）
 
 ## 次へ
 

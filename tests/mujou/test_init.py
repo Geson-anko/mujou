@@ -75,7 +75,6 @@ class TestPcPublicNames:
         assert sorted(mujou.pc.relax.__all__) == [
             "BoundRelaxer",
             "Euler",
-            "HeavyBall",
             "Relaxer",
         ]
         assert sorted(mujou.pc.loss.__all__) == ["CrossEntropyLoss", "MSELoss"]

@@ -79,7 +79,7 @@ chain = pc.Chain(
     y=TensorSpec((B,), torch.int64),
     batch=B,
     loss=pc.loss.CrossEntropyLoss(B),
-    tau=pc.TimeConstants(h=4e-3, lam=8e-3),
+    tau=pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3),
     optimizer=pc.optim.SGD(tau=1.28),
     learn_interval=0.15,
 )

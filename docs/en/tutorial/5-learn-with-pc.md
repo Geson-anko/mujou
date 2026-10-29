@@ -10,9 +10,9 @@ uv run python examples/pc_regression.py
 
 ```text
 batch   1: loss 0.4157 (the mean of the last 1)
-batch  50: loss 0.0476 (the mean of the last 50)
+batch  50: loss 0.1686 (the mean of the last 50)
 ...
-batch 300: loss 0.0059 (the mean of the last 50)
+batch 300: loss 0.0043 (the mean of the last 50)
 ```
 
 ## The chain
@@ -25,7 +25,7 @@ batch 300: loss 0.0059 (the mean of the last 50)
 
 - `x` and `y` are the specs of the inputs and targets, and `batch` is the shape they start with: `B` samples here. Without `batch`, the chain takes one sample at a time, and `x` and `y` would be `TensorSpec((2,))` and `TensorSpec((1,))`
 - `loss` returns the loss of each sample, of the shape of the batch: `pc.loss.MSELoss(B)` (the mean squared error of each sample, averaged over its dimensions as `nn.MSELoss` does) or `pc.loss.CrossEntropyLoss(B)`, or a function of your own that returns that shape. Give the loss the same batch as the chain ([the batch](../topics/pc.md#the-batch))
-- `tau` holds the time constants of the activities and the duals, in seconds of the run's timer: `h` for the activities (every node of the chain updates once every `tau.period`, which is `tau.h / 4`) and `lam` for the duals. The time constant of the weights is in the optimizer
+- `tau` holds the time constants of the activities and the duals, in seconds of the run's timer: `h` for the activities (every node of the chain updates once every `tau.period`, which is `tau.h / 2` with `tau.r = tau.h`), `lam` for the duals and `r` for the decay of the deviations. With these, the credit moves one node back in each period. The time constant of the weights is in the optimizer
 - `optimizer` moves the weights when a node learns. `pc.optim.SGD(tau=...)` is gradient descent with the time constant `tau` of the weights: a learning step moves the weights by (the time since the node last learned) / `tau` times the mean gradient of the batch. Here the nodes learn once per batch, so the learning rate per batch is `SHOWN / optimizer.tau` = 0.3, where `SHOWN` is the time each batch is shown. `pc.optim.AdamW` is the other choice ([Choosing the optimizer](../topics/pc.md#choosing-the-optimizer)). Every node binds the optimizer to its own weights, so one `pc.optim.SGD` serves the whole chain. It has no default
 - `learn_interval` is when the nodes learn, counted from each write: here once per batch, three quarters of the way through it. It has no default: `None` learns in every update, for a stream whose input changes at every frame, and good values for that mode have not been measured yet
 
@@ -40,8 +40,9 @@ Inside a node, the module is differentiated by autograd, as in BP. Initialize th
 `pc.show(run, net, sample, seconds=SHOWN)` writes the batch, waits for the first prediction the chain makes for it, and returns that prediction once the batch has been shown for `SHOWN` seconds of the run's timer. Meanwhile the nodes relax towards the target and learn from it. The prediction comes before any node has learned from the batch, so its loss measures how well the model predicts data it has not seen yet (the prequential loss).
 
 - `mask` says which samples have a target. A sample whose `mask` is False adds nothing to the loss: with every `mask` False, no weight moves (the activities still do), which is how to evaluate the same running chain. There is no inference mode to switch to
+- `reset` says which samples start anew. Each batch here is drawn afresh, so every sample is new: the nodes drop what they hold of the batch before ([Starting anew](../topics/pc.md#starting-anew-reset)). For a stream whose frames continue each other, it is False
 - A `pc.msg.Prediction` holds `y_hat` with the `y`, `mask` and `time` of the sample it was made from, so a prediction always pairs with its own target
-- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: its activity `h`, its dual `lam` (the credit of backpropagation at equilibrium), its module, its clock and its optimizer, and what it keeps to move `h` when its prediction jumps (`mu`, `jump`, `jumped`, `jumps` and `seen_jumps`, explained in [How mujou.pc Works](../topics/pc-concepts.md#jumps))
+- `run.state_dict()["nodes"]["layer0"]["state"]` is the state of the first layer: the deviation `r` of its activity from its prediction, its dual `lam` (the credit of backpropagation at equilibrium), its module, its clock, its optimizer and its relaxer. What it sends, its prediction `mu`, is in the state of its port `next` ([How mujou.pc Works](../topics/pc-concepts.md#what-a-node-holds))
 
 ## Next
 

@@ -136,13 +136,6 @@ class LearnClock(Stateful):
             max_dt=tau.max_dt if max_dt is None else max_dt,
         )
 
-    @property
-    def discrete(self) -> bool:
-        """Whether the clock learns at intervals (``learn_interval`` is not
-        ``None``), so that each update of the parameters is a jump rather than
-        a step of a continuous flow."""
-        return self._interval_ns is not None
-
     def tick(self, dt: float, time: Timestamp, now: Timestamp) -> Tick:
         """Count an update of ``dt`` seconds that received an input written at
         ``time``, at ``now`` on the run's timer, and return what the update

@@ -37,9 +37,7 @@ class Output(Node):
     while its ``y_hat`` is finite. Each ``on_update(dt)`` caps ``dt`` at
     ``max_dt`` as ``Layer`` does, reads the ``Activity``, sends ``g_in``, sends a
     ``Prediction`` (``y_hat`` with the ``y``, ``mask`` and ``time`` it was
-    paired with) for the host to read, and updates ``theta`` when it learns. It
-    does not read the ``jumps``: a jump of ``h_in`` needs no move here, as the
-    node holds no activity of its own.
+    paired with) for the host to read, and updates ``theta`` when it learns.
 
     It learns as ``Layer`` does, by its ``clock``: once ``learn_interval``
     seconds have passed since the host wrote the input, but not in the update
@@ -87,7 +85,8 @@ class Output(Node):
         optimizer: How ``theta`` moves, as in ``Layer``.
         learn_interval: As in ``Layer``.
         period: The period of the node in seconds; ``None`` is ``tau.period``
-            (``tau.h / 4``). It must not be longer than ``max_dt``.
+            (``tau.h / 2`` with ``tau.r = tau.h``). It must not be longer than
+            ``max_dt``.
         max_dt: As in ``Layer``: the longest ``dt`` an update counts, here
             towards the weight of the update of ``theta``. The default
             ``tau.max_dt`` is that of ``Layer``, so that every node of a chain

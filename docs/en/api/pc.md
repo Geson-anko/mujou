@@ -12,7 +12,7 @@
 
 ::: mujou.pc.relax
     options:
-      members: [Relaxer, BoundRelaxer, Euler, HeavyBall]
+      members: [Relaxer, BoundRelaxer, Euler]
 
 ::: mujou.pc.loss
     options:
