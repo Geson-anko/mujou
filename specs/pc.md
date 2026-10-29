@@ -26,17 +26,19 @@ $\theta_i$ は、平均の勾配 $g_\theta / B$ を受け取るノードの opti
 
 ## 状態はずれ r で持つ（2026-10-28）
 
-ノードは予測からのずれ $r_i = h_i - \mu_i$ と双対 $\lambda_i$ を自由変数に持ち、毎回の更新でその時点の $\mu_i = f(h_{\mathrm{in}};\theta_i)$ から $h_i = \mu_i + r_i$ を作って送る。
+ノードは予測からのずれ $r_i = h_i - \mu_i$ と双対 $\lambda_i$ を自由変数に持ち、毎回の更新でその時点の $\mu_i = f(h_{\mathrm{in}};\theta_i)$ を計算する。2026-10-28 までは $h_i = \mu_i + r_i$ を送っていた。2026-10-29 からは $\mu_i$ を送る（「上へ μ を送る」）。
 
 $$\tau_h \dot r_i = -(r_i + \lambda_i + g_i) - \frac{\tau_h}{\tau_r} r_i,\qquad \tau_\lambda \dot\lambda_i = r_i$$
 
-- 何が $\mu_i$ を動かしても（前のノードの緩和、新しいサンプル、前のノードや自分の $\theta$ の更新）$r$ と $\lambda$ は保たれ、$h$ はその更新で予測に追いつく。跳びを検出して付け替える仕組み（`jumps`、`mu_last`、$\theta$ の跳びの 1 更新遅延、学習後の 2 度目の forward）はすべて不要になった
+- 何が $\mu_i$ を動かしても（前のノードの緩和、新しいサンプル、前のノードや自分の $\theta$ の更新）$r$ と $\lambda$ は保たれる（`reset` の立ったサンプルを除く）。跳びを検出して付け替える仕組み（`jumps`、`mu_last`、$\theta$ の跳びの 1 更新遅延、学習後の 2 度目の forward）はすべて不要になった
 - 不動点（$r = 0$、$\lambda = -g$）は記事と同じ。減衰の項は $r = 0$ で消えるので、$\tau_r$ によらない
-- 教師が無ければ $r$ は 0 に減衰し、$h$ は forward pass になる。入力が変わってもリセットは要らない（持ち越すのは credit 程度の大きさの $r$、$\lambda$ だけ）
-- 送る $h$ は学習の前の $\theta$ で作る。自分の $\theta$ の更新は、次の更新の $\mu$ から $h$ に入る
+- 教師が無ければ $r$ と $\lambda$ は 0 に減衰する。新しく始まるサンプルは `reset` で消す（「サンプルごとのリセット」）
+- 送る $\mu$ は学習の前の $\theta$ で作る。自分の $\theta$ の更新は、次の更新の $\mu$ に入る
 - $\delta = r + \lambda$ は $\mu$ に依存しない。跳びの直後に学んでも、跳びが $\delta$ に入ることはない
 
-### 減衰が要る理由と限界
+### r を上へ送ったときの不安定（2026-10-28、μ を送って解消）
+
+以下は $h = \mu + r$ を送っていたときの解析と測定。$\mu$ を送ればこのループは無い（「上へ μ を送る」）。
 
 $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積で動く。$g$ は「$h$ を固定したときの」局所の勾配なので、この系は拡張ラグランジアンの勾配流ではなく、credit がヤコビアンの積を通って戻ってくる。減衰が無いと深い鎖は発散する。以前（2026-10-15 頃）にずれ $u = h - \mu$ を状態にする形を採らなかった理由（ResBlock 6 ノード以上の鎖で発散）はこれで、`TimeConstants.r` を必須にしてこれに対処した。
 
@@ -55,6 +57,52 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 
 2026-10-27 までは $h$ を状態に持ち、$\mu$ が離散的に跳ぶ更新（新しいサンプル、前のノードの $h$ の跳び、自分の $\theta$ の更新）でだけ $h \leftarrow \mu^{\mathrm{new}} + (h - \mu^{\mathrm{last}})$ と付け替え、その回数 `jumps` を `Activity` に載せて経路に沿って連鎖させていた。$\theta$ の跳びは次のノードが学習の前に読まないよう 1 更新遅らせて足し、`learn_interval=None` では連鎖させなかった（毎回連鎖させると u 形に戻るため）。$h$ は前のノードの連続的な緩和には緩和で追うだけなので、$\mu$ のドリフトを $\tau_h$ で追う分だけ credit が遅かった（上の CIFAR-10 の比較）。
 
+## 上へ μ を送る（固定予測の仮定、2026-10-29）
+
+ノードが次のノードへ送る活動を $h_i = \mu_i + r_i$ から予測 $\mu_i$ に変えた（ユーザーの判断「FPA だけにする」。切り替えは用意しない）。predictive coding の固定予測の仮定（fixed prediction assumption。Millidge ら 2020、Song ら 2020 の Z-IL）にあたる。$r_i$ と $\lambda_i$ はノードの中にとどまり、$\delta_i = r_i + \lambda_i$ として後ろへ送る credit だけを作る。式（$\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r) r$、$\tau_\lambda\dot\lambda = r$）は変えない。
+
+- **不動点は同じ**: $r = 0$ なら $h = \mu$ なので、平衡点（$r = 0$、$\lambda$ が BP の credit、送る値が forward）は以前と一致する。変わるのは過渡だけ
+- **ループが切れる**: $h = \mu + r$ を送ると、$r_i$ の動きが上のすべての活動をヤコビアンの積で動かし、credit として戻る（「r を上へ送ったときの不安定」）。$\mu$ を送ると前向きは純粋な forward、credit は後ろ向きだけの三角の系になり、各ノードの $(r, \lambda)$ は届いた $g$ に駆動される 2 変数の線形系になる。その局所の陽的 Euler が安定なら（Jury 条件 $ak < 2$、$a(2k + b) < 4$）、ヤコビアンによらず鎖全体が安定
+- **臨界減衰の刻み**: $a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$ として、1 歩後の $\delta' = r' + \lambda' = (1 + b)(1 - ak)\,r + (1 - a(1 + b))\,\lambda - a(1 + b)\,g$。$ak = 1$ かつ $a(1 + b) = 1$ なら $\delta' = -g$ で、$\delta$ は 1 歩で $-g$ に一致し、行き過ぎない。$\tau_r = \tau_h$（$k = 2$）なら $a = 1/2$、$b = 1$、つまり周期 $\tau_h/2$、$\tau_\lambda = \tau_h/2$。これを既定にした（`TimeConstants.period` = $\tau_h/(1 + \tau_h/\tau_r)$、`max_dt` = $\min(\text{period}, 2\tau_\lambda)$）。$\lambda$ は 1 歩ごとに残りの半分ずつ $-g$ に近づき、$r = -(\lambda + g)/2$。credit は 1 周期に 1 ホップ進む
+- **デッドビート（$a = b = 1$、減衰なし）は採らない**: $\lambda$ は 1 歩で $-g$ になるが $\delta' = -\lambda - 2g$ が 2 倍に行き過ぎ、その行き過ぎが層ごとに複利で増える（ResNet 初期の重みで波面のノルムが credit の 768 倍、cos は ±1 で振動）。スカラーの鎖（$J = 1$、10 層、Jacobi）で $(a, b, k)$ を走査すると、全層が 5% 以内に着く最速は $(0.5, 1, 2)$ の 23 周期で、peak は 1.00。デッドビートは 28 周期で peak 7936
+- **古い $g$ を捨てるタグは要らない**: 次のノードがまだ前のサンプルにいる間に送る $g$ を、時刻のタグで捨てる案を Jacobi で試した。デッドビートでは波面の前のごみが消えるが波面の振動は残り、臨界減衰ではタグなしでも波面の前のごみは credit の 0.24〜0.48 倍で増えない。メッセージを増やさない
+- **$\alpha = 0$ の退化**: `lam=inf`、`r=inf` では、ノードは固定予測の仮定の PC になり、誤差 $r$ が BP の credit に落ち着く（$h$ を自由にした PC のエネルギー最小ではない）。テストのオラクルもこれに変えた
+
+測定（scratch `credit/credit.py`、重み固定、Jacobi、CIFAR の ResNet を 11 ノード、初期の重み、B = 8）:
+
+| 形 | 刻み | 全層の cos が 0.9 を超える周期 | 収束先 |
+| --- | --- | --- | --- |
+| r を送る（以前の既定） | $\tau_h/16$、$\tau_\lambda = \tau_h/4$、$\tau_r = \tau_h/3$ | 96（約 8 周期で 1 ホップ） | cos 0.91〜0.94、ノルム比 1.06〜1.1 |
+| μ を送る | 同じ | 64〜96 | cos 1.00 |
+| μ を送る | $\tau_h/4$、同じ時定数 | 32 | cos 1.00 |
+| μ を送る、臨界減衰 | $\tau_h/2$、$\tau_\lambda = \tau_h/2$、$\tau_r = \tau_h$ | 20（ノルム比は 26 周期で 1.00） | cos 1.00 |
+| r を送る | $dt = \tau_h = \tau_\lambda$、減衰なし | 32 周期でも 0.5 以下 | 落ち着かない |
+
+増幅する線形の鎖（ゲイン 1.25 を 16 段）: r を送る形は周期 $\tau_h/4$ でも $\tau_h/16$ でも発散した（2000 歩で相対誤差 1e62）。μ を送る形は臨界減衰で 200 歩、減衰なし・$\tau_\lambda = 2\tau_h$ でも収束した（テスト `test_an_amplifying_chain_reaches_the_credit`）。
+
+CIFAR-10（ResNet-20、AdamW、リセットあり、seed 0、3 epoch 目の prequential / test。上 4 行は B = 128・lr 1.6e-2・11 ノード、FPA は scratch のモンキーパッチ）:
+
+| 構成 | 3 epoch 目 | 1 epoch | BP 比 |
+| --- | --- | --- | --- |
+| r を送る、$\tau_h/16$、96 周期、scale 0.25 | 11.80% / 13.22%（崩れた） | 189 s | |
+| μ を送る、デッドビート、32 周期、scale 1 | 37.16% / 42.42% | 64 s | 23 倍 |
+| μ を送る、臨界減衰、32 周期、scale 1 | 55.04% / 56.04% | 64 s | 23 倍 |
+| μ を送る、臨界減衰、24 周期、scale 1 | 53.94% / 57.67% | 48 s | 17 倍 |
+| μ、11 ノード、B = 32、24 周期、scale 2 | 48.78% / 53.59%（BP 56.74% / 61.47%） | 95 s | 10.6 倍 |
+| μ、5 ノード（ステージごと）、B = 32、12 周期、scale 2 | 56.86% / 61.76%（BP 56.29% / 60.60%） | 48 s | 5.4 倍 |
+
+5 ノードの 10 epoch 目は 72.96% / 74.58%（BP 72.81% / 72.39%）。ライブラリに入れた後の例そのもの（`main.py` の既定、ワーカー 5 本）は、3 epoch 目 57.11% / 59.47%（BP 55.91% / 61.76%）、10 epoch 目 73.05% / 73.90%（BP 73.20% / 74.35%）、48.2 s/epoch（BP 8〜9 s）。別の 3 epoch の実行は 55.35% / 60.79%（BP 57.62% / 61.88%）で、BP も実行ごとに 1 ポイントほど動く。以前の r を送る形・$\tau_h/16$・384 周期・scale 0.25 は 3 epoch 目 56.21% / 59.00%、750 s/epoch（BP の約 270 倍）だった。11 ノードの B = 32 は 1 更新 1.5 ms に対し周期が実時間 2.5 ms で、平均 dt 1.03 周期、最大 10〜34 周期の停止があり、追いつくのがやっとだった。周期を実時間 2 ms にすると追いつかず（平均 1.13〜1.30 周期、最大 106 周期）、34.34% / 37.62% に落ちた。
+
+## サンプルごとのリセット（2026-10-28）
+
+ユーザーの指示: 「バッチごとの h（r）のリセットは、非連続なデータを扱う以上絶対に必要。それが連続系との乖離。stream データではリセットはいらない。リセットは新しいデータがきたら行うのではなく、リセットフラグの有無でやるべき」。
+
+- `Sample` と `Activity` に `reset`（`batch` の形の bool、`mask` と同じ spec）を足した。`Input` が写し、各 `Layer` が次へ写す。`Output` と `Prediction` は持たない（`Output` は状態を持たない）
+- `Layer` は入力を初めて見た更新（`tick.new`）で、`reset` の立った行の $r$ と $\lambda$ を 0 にし、`relaxer.reset_(reset)` を呼ぶ。$\delta$ を取る前に消すので、その更新で前のサンプルの credit を下へ送らない。`reset` が False の行は持ち越す
+- 1 回の書き込みにつき 1 回だけ働く（`time` が変わった更新で）。フラグが立ち続けても毎回は消さない。ノードが見なかった書き込み（ノードの更新の前にホストが次を書いた）のリセットは働かない。ストリームでエピソードの境目を確実に伝えるには、境目の後のフレームが届くまで書き込みの間隔を空ける。エピソードの番号で運ぶ案（変わったら消す）は、ホストの手間が増えるので採らない（必要になったら考える）
+- サンプルごとのフラグにしたのは、並列の環境の 1 つだけがエピソードを終えるような場合を表すため
+- 以前の測定との関係: h 形の非同期ではリセットで学習が遅れた（ResNet 11 ノード、200 バッチで 19% 対 26%、原因は未解明だった）。r を送る形の重み固定の診断では、リセットすると波が来るまで $\lambda$ のノルムがほぼ 0 で、そこで学ぶと実効の学習率が小さくなる。μ を送る臨界減衰では credit が往復の周期数で正しい大きさに着くので、学ぶ時点（往復より後）には影響しない
+
 ## 符号・バッチ・損失の規約
 
 - 前のノードへ送る値は、自分のエネルギーの $h_{\mathrm{in}}$ に対する勾配。複数の相手からの値は足すだけ
@@ -71,12 +119,13 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 
 | 名前 | フィールド | 流れ |
 | --- | --- | --- |
-| `Sample` | `x`、`y`、`mask` | ホスト → `Input.prev` |
-| `Activity` | `h`、`y`、`mask`、`time` | `Input` / `Layer` の `next` → 次のノードの `prev` |
+| `Sample` | `x`、`y`、`mask`、`reset` | ホスト → `Input.prev` |
+| `Activity` | `h`、`y`、`mask`、`reset`、`time` | `Input` / `Layer` の `next` → 次のノードの `prev` |
 | `Prediction` | `y_hat`、`y`、`mask`、`time` | `Output.next` → ホスト |
 
 - `time` は、その入力をホストが書いた時刻（`write` が返した `Timestamp`、`TimestampSpec()`）。書き込みの前は `Timestamp(ns=0)`
 - 目標 `y` と `mask` は入力に付随させ、活動と同じメッセージで運ぶ。各ノードは受け取った `y`、`mask`、`time` をそのまま次のメッセージに写す。読み手は 1 回の読み出しで同じサンプルの組を得るので、`Output` は常に、受け取った活動と同じメッセージの `y` と予測を組む。$y$ は $x$ と同じ経路を同じ遅れで進むので、ホストが伝播より速く次のサンプルを書いても組み違えない。別のポートで運ぶと、読み手は 2 つのスロットを別々の瞬間に読むので、別のサンプルの組になりうる
+- `reset` は、サンプルが新しく始まるか（「サンプルごとのリセット」）。各ノードが写す
 - 教師なしのサンプルは `mask` を False にする。損失は $\sum_b \mathrm{mask}_b\,\ell_b$ で、1 つのバッチにラベルのあるサンプルと無いサンプルが混ざってよい。学習モードと推論モードの区別は持ち込まない
 - 1 ホップごとに `y`、`mask`、`time` をコピーするコストは、分類（`y` が `batch`）では h より小さく、回帰（`y` が `(*batch, d)`）では h と同じ大きさになる（[性能の基準値](research/benchmarks.md)）
 - `act_spec` は、ノードが送る `Activity` の spec。`Input` と `Layer` が公開し、次のノードが `act_spec=` で受け取る。名前を `act` にしないのは、研究者が `act` をまず活性化関数と読むから。バッチは `act_spec` の `mask` の shape から読む。自作のノードは `activity_spec(h, y, batch)` か前のノードの `act_spec` で繋ぐ。h と y がバッチで始まることの照合は `activity_spec` の 1 か所だけで行う（K28）。`Layer` は自分の出力の `act_spec` を `activity_spec` で作るので、module の出力がバッチで始まることの検査も同じ 1 か所を通る
@@ -86,7 +135,7 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 | `Input` | `prev`（`Port`） | `Sample`（ホストが書く） | — |
 | `Input` | `next`（`MultiPort`） | $g$（読まない） | `Activity`（`h = x`） |
 | `Layer` | `prev`（`Port`） | `Activity` | $g_{\mathrm{in}}$ |
-| `Layer` | `next`（`MultiPort`） | $g$（相手ごと、和を取る） | `Activity` |
+| `Layer` | `next`（`MultiPort`） | $g$（相手ごと、和を取る） | `Activity`（`h = μ`） |
 | `Output` | `prev`（`Port`） | `Activity` | $g_{\mathrm{in}}$ |
 | `Output` | `next`（`Port`） | — | `Prediction` |
 
@@ -98,7 +147,7 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 
 | ノード | 状態 |
 | --- | --- |
-| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.optim.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`relaxer`（relaxer の束縛。`pc.relax.HeavyBall` なら `velocity`）、`r`、`lam`、`clock`（`LearnClock`）。送った $h$ は Port `next` の状態にある |
+| `Layer` | `module`、`optimizer`（optimizer の束縛。`pc.optim.AdamW` なら `m`、`v`、`c_m`、`c_v`）、`relaxer`（relaxer の束縛。自作の relaxer なら、その状態）、`r`、`lam`、`clock`（`LearnClock`）。送った $\mu$ は Port `next` の状態にある |
 | `Output` | `module`、`optimizer`、`clock` |
 
 $\delta$ は状態にせず、更新のたびに今の `h_in` から $\mu$ を計算し直して作る。$\sigma'$ をキャッシュで評価しない（skill `pc-alm` の落とし穴 2）ことが、これで自動で守られる。
@@ -107,10 +156,10 @@ $\delta$ は状態にせず、更新のたびに今の `h_in` から $\mu$ を�
 
 `Layer` の 1 回の `on_update(dt)` は、段ごとの private なメソッドに分けてある。
 
-1. 活動を読み、`clock.tick` を呼ぶ（`dt` を `max_dt` で打ち切る）
+1. 活動を読み、`clock.tick` を呼ぶ（`dt` を `max_dt` で打ち切る）。新しい入力なら、`reset` の立った行の $r$ と $\lambda$ を 0 にし、relaxer を `reset_(reset)` する（`_reset`）
 2. $\mu$ と $g_{\mathrm{in}}$、学習するなら $g_\theta$ を、**更新前の** $\delta = r + \lambda$ で取る。`mask` が False の行の $\delta$ は 0。$g_{\mathrm{in}}$ を送る（`_predict`）
-3. 新しい入力なら relaxer を `reset_` し、次のノードから届いた $g$ で $r$ を進め、続けて**更新後の** $r$ で $\lambda$ を進める（`functional.relax_`。1 歩の陽的 Euler、公式実装と同じ順）
-4. $h = \mu + r$ を `Activity` で送る（`_send`）
+3. 次のノードから届いた $g$ で $r$ を進め、続けて**更新後の** $r$ で $\lambda$ を進める（`functional.relax_`。1 歩の陽的 Euler、公式実装と同じ順）
+4. $\mu$ を `Activity` の `h` として送る（`_send`）
 5. 学習するなら $\theta$ を動かす
 
 - `mask` が False の行の $\delta$ を 0 にするのは、その行の $\delta$ が前の入力から持ち越した値かもしれず、そのまま流すと前のノードの credit と $g_\theta$ に雑音が乗るからである。その行の不動点はもともと $\lambda = 0$ なので、不動点は変わらない
@@ -159,8 +208,8 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
 - `pc.optim.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
-- ノードの周期の既定は $\tau_h / 4$（$\eta_h = 0.25$）。利用者は時定数だけを決めればよい。記事の公式実装の $\eta_h = 1/\lambda_{\max}$（約 0.2〜0.25）とほぼ同じ。$\tau_r = \tau_h$ では `max_dt` の既定がちょうどこの周期になり、$\tau_r < \tau_h$ では周期より短くなるので、ノードに周期を渡す必要がある（遅れた更新の時間は 1 周期を超えた分が捨てられる。MNIST では 3 epoch のテスト精度が h 形の 97.60% に対し 97.58% で、影響は見えなかった）
-- **r の減衰 `tau.r`**（2026-10-27 に既定 inf で追加、2026-10-28 に必須）: $\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r)\,r$。$\lambda$ が $r$ を積分するので、平衡点では $\tau_r$ によらず $r = 0$ で、$\lambda$ は BP の credit のまま。送り返す $\delta = r + \lambda$ と重みの勾配は変えない（$\rho\,r + \lambda$ を送る罰則の重み $\rho$ とは別物。$\rho = 1 + k$ を送る形は「減衰が要る理由と限界」のとおり、離散では発散した）。必須にしたのは、r 形では減衰が無いと深い鎖が発散するため（「状態はずれ r で持つ」）。既定値を置かないのは、`lam` と同じく系の振る舞いを決める値で、黙って選ばせないため。推奨は $\tau_h$。`max_dt` の既定は $r$ を引く力が $1 + \tau_h/\tau_r$ 倍になる分だけ短くする（$\min(\tau_h/(2(1+\tau_h/\tau_r)), 3\tau_\lambda)$）。1 ノードの陽的 Euler（$r$ の後に $\lambda$）の Jury 条件は $ak < 2$ かつ $a(2k + b) < 4$（$a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$）で、この既定は 4 倍の余裕がある。鎖の線形モデル（$k = 2$）では $a = 0.375$ で安定、$a = 0.5$ で発散した。$\tau_\lambda = \infty$ でも $\tau_r$ が有限なら不動点は PC のものから外れる（$k\,r_i = J_{i+1}^\top r_{i+1}$ で、ずれが 1 段ごとに $1/k$ 倍になる）。アナログ回路で $r$ を積分器に持てば、その積分器のリークがこの項になる（「アナログ回路での実装」）
+- ノードの周期の既定は $\tau_h / (1 + \tau_h/\tau_r)$（$\tau_r = \tau_h$ なら $\tau_h/2$、2026-10-29。それまでは $\tau_h/4$）。$\tau_\lambda = \tau_h/2$ と組むと $\delta$ が 1 歩で $-g$ になる（「上へ μ を送る」）。`max_dt` の既定は $\min(\text{period}, 2\tau_\lambda)$ で、$\tau_\lambda \ge \text{period}/2$ なら周期と同じ（遅れた更新の時間は 1 周期を超えた分が捨てられる）。MNIST（4 ノード、16 周期、32 ms）の 3 epoch のテスト精度は 97.56%（BP 97.54%）
+- **r の減衰 `tau.r`**（2026-10-27 に既定 inf で追加、2026-10-28 に必須）: $\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r)\,r$。$\lambda$ が $r$ を積分するので、平衡点では $\tau_r$ によらず $r = 0$ で、$\lambda$ は BP の credit のまま。送り返す $\delta = r + \lambda$ と重みの勾配は変えない（$\rho\,r + \lambda$ を送る罰則の重み $\rho$ とは別物。$\rho = 1 + k$ を送る形は「r を上へ送ったときの不安定」のとおり、離散では発散した）。必須にしたのは、$h = \mu + r$ を送っていた間は減衰が無いと深い鎖が発散したため。μ を送る今は安定のためには要らないが、既定の周期を決める（$\delta$ を 1 歩で $-g$ にする刻みが $\tau_h/(1 + \tau_h/\tau_r)$）ので必須のままにした。既定値を置かないのは、`lam` と同じく系の振る舞いを決める値で、黙って選ばせないため。推奨は $\tau_h$。1 ノードの陽的 Euler（$r$ の後に $\lambda$）の Jury 条件は $ak < 2$ かつ $a(2k + b) < 4$（$a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$）。既定（$a = 1/k$、$b \le 2$ 相当の `max_dt`）では $ak = 1$、$a(2k + b) \le 2 + 2/k \le 4$ で満たす。$\tau_\lambda = \infty$ でも $\tau_r$ が有限なら不動点は PC のものから外れる（$k\,r_i = J_{i+1}^\top r_{i+1}$ で、ずれが 1 段ごとに $1/k$ 倍になる）。アナログ回路で $r$ を積分器に持てば、その積分器のリークがこの項になる（「アナログ回路での実装」）
 - 安定な範囲の実測（$\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$、$c \approx 1 + \|J\|^2$）は [PC の比較実験](research/pc-experiments.md#時定数の安定な範囲)。example の既定は $\tau_\lambda = 2\tau_h$（$\alpha = 0.125$）
 
 ## 重みの optimizer
@@ -208,10 +257,10 @@ $\Delta t$ が一定なら $\beta = e^{-\Delta t/\tau}$、$c = 1 - \beta^t$ と�
 
 $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/relax.py`、2026-10-26。当時は $h$ を動かした）。きっかけは、$h$ に慣性（heavy ball）を足せるようにした（ユーザーの「それでも学習できるよう新しい feature の実装（緩和の手法設定など）も考慮して試行」）ところ、ユーザーが「$\theta$ の optimizer のように、$h$ にも更新の仕方を自由に変えられる仕組みが必要」と求めたこと。最初は `TimeConstants.momentum` に置いたが、それは慣性という 1 つの手法を時定数の 1 項目にしただけなので、重みの optimizer と同じ形（設定 + bind）に載せ替えた。
 
-- **設定 + bind**: `pc.relax.Euler()` は値だけを持つ frozen dataclass で（自作の relaxer も同じ形）、ABC の `pc.relax.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(r)` で自分の $r$ の束縛（ABC の `pc.relax.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(r, force, dt, tau_h)`、`reset_()`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`r` と同じ shape・dtype・device の状態を持つ）
+- **設定 + bind**: `pc.relax.Euler()` は値だけを持つ frozen dataclass で（自作の relaxer も同じ形）、ABC の `pc.relax.Relaxer` を継承する。状態を持たないので `Chain` の全 `Layer` で共有してよい。`Layer` は `relaxer.bind(r)` で自分の $r$ の束縛（ABC の `pc.relax.BoundRelaxer`）を作り、`self.relaxer` に置く。束縛は `step_(r, force, dt, tau_h)`、`reset_(samples)`、`state_dict` / `load_state_dict` を実装し、`mujou.Stateful` なので属性に置くだけでノードの状態に入る（キー `"relaxer"`）。束縛はノードごとに別（`r` と同じ shape・dtype・device の状態を持つ）
 - ABC なのは optimizer と同じ理由（書き忘れを作った時点の `TypeError` で知らせる）。`relaxer` は `Layer` と `Chain` の省略できる引数で、既定は `pc.relax.Euler()`（これまでの挙動）。`Output` は $r$ を持たないので取らない
 - **差し替えの範囲は $r$ だけ**: 力 $F = (1 + \tau_h/\tau_r)\,r + \lambda + g$ を作るのは `functional.relax_` で、束縛が $r$ をその力に沿って動かす。$\lambda$ は動かした後の $r$ で進める。`relax_(r, lam, g, dt, tau, relaxer=None)` の `None` は素の 1 歩
-- **`reset_()`**: 新しいサンプルのとき、ノードが呼ぶ。$r$ と $\lambda$ は保たれ、$g$ は下流の最後の値のままなので、その瞬間に力は連続する。それでも、速度のように力を覚える relaxer が覚えているのは前のサンプルの力の場なので捨てる。予測の跳び（自分や下のノードの $\theta$）では $r$ も力も跳ばないので、呼ばない。記憶の無い relaxer は何もしない
+- **`reset_(samples)`**: 新しい入力のとき、ノードが `reset`（`batch` の bool）を渡して呼ぶ。立った行は $r$ と $\lambda$ を 0 にしたので、relaxer もその行の状態を捨てる。立っていない行は $r$、$\lambda$ と力が連続するので保つ。予測の跳び（自分や下のノードの $\theta$）では $r$ も力も跳ばないので、呼ばない。記憶の無い relaxer は何もしない（2026-10-28 までは引数なしで、新しいサンプルのたびに全部を捨てていた）
 - **不動点の条件**: 自作の relaxer は、力が 0 で relaxer 自身の状態が静止しているところ（heavy ball なら $F = 0$ かつ $v = 0$）で $r$ を動かさないものでなければならない。そうでないと不動点が動き、$\lambda$ が BP の credit にならない
 - **持てる状態**: $r$ を動かすのは `step_` だけなので、位置の型の状態（前回の $r$ など）も持てる（h 形では付け替えと $\theta$ の跳びで $h$ が `step_` の外で動いたので、力の型に限っていた）
 - 局所性: 状態はノードの内側で、メッセージは増えない
@@ -223,16 +272,15 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 ### 採らなかった案
 
 - 次のノードの曲率から刻みをサンプルごとに縮める `AdaptiveStep`（凍結した重みでは $\lambda$ が credit に合うが、縮めた行が前のバッチの $\lambda$ を長く引きずって学習が悪化した）
-- 新しいサンプルで $\lambda$ と $r$ を捨てる設定（学習が進まなかった）
+- 新しいサンプルで $\lambda$ と $r$ を必ず捨てる設定（h 形の非同期で学習が進まなかった。2026-10-28 からは `reset` のフラグで捨てる。「サンプルごとのリセット」）
 - $r$ と $\lambda$ を 1 組で差し替える部品: 不動点（$r = 0$、$\lambda = -g$）は、勾配の零点だけを停留点に持つ則なら保てるが、陽的な結合の安定性、サンプルごとの状態（バッチの各行に別の状態）が課題で、今は実装しない。$\lambda$ の差し替えも同じ
 
 ## dt の打ち切り
 
-実時間の実行では `dt` が周期より長くなることがある。PC のノードは 1 回の更新で使う `dt` を `max_dt` で打ち切り、$r$、$\lambda$ の緩和にも $\Sigma\Delta t$ への加算にも打ち切った `dt` を使う。既定は $\min(\tau_h/(2(1+\tau_h/\tau_r)),\ 3\tau_\lambda)$ で、$\tau_r = \tau_h$ なら周期 $\tau_h/4$ と同じ（減衰が無ければ 2 倍）。`period > max_dt` は `LearnClock` が断る（K26。毎回の更新が黙って時間を捨てる）。
+実時間の実行では `dt` が周期より長くなることがある。PC のノードは 1 回の更新で使う `dt` を `max_dt` で打ち切り、$r$、$\lambda$ の緩和にも $\Sigma\Delta t$ への加算にも打ち切った `dt` を使う。既定は $\min(\tau_h/(1+\tau_h/\tau_r),\ 2\tau_\lambda)$ で、既定の周期と同じ（2026-10-29。それまでは $\min(\tau_h/(2(1+\tau_h/\tau_r)),\ 3\tau_\lambda)$）。`period > max_dt` は `LearnClock` が断る（K26。毎回の更新が黙って時間を捨てる）。
 
-- ノード間は陽的に結合している（$g$ は次のノードが最後に更新したときの $h$ から作られる）。負荷で全ノードがそろって止まった直後は全ノードの $\Delta t/\tau_h$ が一度に伸び、その結合でネットワークが発散する。ノードの内側で刻みを分割しても、自分の状態の陽的 Euler が安定になるだけで、ノード間の結合は陽的なまま残るので防げない
-- 既定の値の根拠: 局所の 2 変数系（$r$ を進めてから、進めた $r$ で $\lambda$）の陽的 Euler は、$a = \Delta t/\tau_h$、$b = \Delta t/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$ として $ak < 2$ かつ $a(2k + b) < 4$ で安定。$ak \le 1/2$ なら $b \le 3$ で足りる
-- ノード間の結合の安定の余裕はモデルに依存し、`max_dt` の既定は一般の保証ではない
+- μ を送るので credit は後ろへだけ流れ、ノード間の結合にループは無い。安定は局所の 2 変数系（$r$ を進めてから、進めた $r$ で $\lambda$）の陽的 Euler で決まり、$a = \Delta t/\tau_h$、$b = \Delta t/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$ として $ak < 2$ かつ $a(2k + b) < 4$。既定の `max_dt` は $ak \le 1$ にとどめ、$\delta$ が行き過ぎない刻みを超えさせない
+- 以前（$h = \mu + r$ を送っていたとき）は、ノード間の結合がループを作り、負荷で全ノードの $\Delta t/\tau_h$ が一度に伸びると発散した。ノードの内側で刻みを分割しても防げなかった
 - 打ち切ると経過時間が失われ、連続時間の定式化からずれる。コアは打ち切らず（[ノード](nodes.md#実行の周期)）、打ち切るのは PC のノードの選択で、失われた時間の分だけ学習が遅れる。`max_dt` は `dt` の伸びを抑えるが、読む値の古さは抑えない
 
 ## ResNet のブロックごとのノード（2026-10-27）
@@ -250,6 +298,8 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 - **新しいサンプルで λ を捨てる（リセット）**: 重みを固定してバッチを切り替えると、学習の時点（12 τ_h）の cos は持ち越し 0.50〜0.95、リセット 0.84〜1.00 でリセットがよい（異なるサンプルの credit どうしの cos は 0）。同期のシミュレーションで学習まで回しても、300 バッチで持ち越し 29.8%、リセット 28.3%、BP 28.3% で差は無い。ところが非同期の実行でリセットすると 200 バッチで 19%（持ち越し 26%）に遅れた。リセットは 1 サンプルに 1 回だけ発火していた。原因は未解明（未決定事項）
 
 ### 採った構成
+
+2026-10-29 に置き換えた: μ を送る形（「上へ μ を送る」）で、ステージごとの 5 ノード、B = 32、周期 $\tau_h/2$（$\tau_h$ = 10 ms）、$\tau_\lambda = \tau_h/2$、$\tau_r = \tau_h$、1 バッチ 12 周期、学習は 0.9 の時点、`reset` あり、タイマーは実時間の 2 倍。以下はそれまでの構成。
 
 周期 $\tau_h/16$（`max_dt` は 2 周期）、$\tau_\lambda = \tau_h/4$、$\tau_r = \tau_h/3$、1 バッチ 24 τ_h（384 周期）、学習は 0.9 の時点、λ は持ち越す。タイマーは実時間の 4 分の 1（周期は実時間 5 ms）。例そのもの（`main.py`）の 10 epoch 目は prequential 73.35% / test 73.79%（BP 73.27% / 72.61%）、同じ構成をスクリプトで組んだ別の実行は 71.56% / 71.41%。PR108 の既定（$\tau_h/4$ + HeavyBall、64 周期）は 62.77% / 62.89%、128 周期・慣性なしは 68.73% / 68.95%。1 epoch は実時間約 750 s（BP 2.8 s）。$\tau_r = \tau_h$・16 τ_h・学習 0.75 では 67.28% / 66.07% だった。$\tau_h/16$ で r の減衰がある実行は崩れなかった（10 epoch 2 本、3 epoch 2 本）
 
@@ -298,7 +348,7 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.clock.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`、ずれ `r` と双対 `lam`（`r` の動かし方を選ぶなら `self.relaxer = relaxer.bind(self.r)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、δ = r + λ で `vjp` を取り、`relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)` で動かし（新しい入力なら先に `self.relaxer.reset_()`）、`h = mu + r` を送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.clock.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`、ずれ `r` と双対 `lam`（`r` の動かし方を選ぶなら `self.relaxer = relaxer.bind(self.r)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力なら `reset` の立った行の `r` と `lam` を 0 にし（relaxer があれば `self.relaxer.reset_(act["reset"])` も）、δ = r + λ で `vjp` を取り、`relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)` で動かし、`mu` を `h` として送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -306,8 +356,8 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 | --- | --- | --- |
 | 層 | $\sigma(W h)$ の residual MLP | 任意の微分可能な `nn.Module` |
 | 自由変数 | $h$ | ずれ $r = h - \mu$。減衰 $\tau_r$ を足す |
-| 送る活動 | $h$ | $h = \mu + r$ と目標 `y`・`mask`・`time` |
-| ミニバッチの始め | $h$ を forward の値、$\lambda$ を 0 に初期化 | $r$、$\lambda$ を持ち越す（$h$ は新しい予測に乗る） |
+| 送る活動 | $h$ | 予測 $\mu$（固定予測の仮定）と目標 `y`・`mask`・`reset`・`time` |
+| ミニバッチの始め | $h$ を forward の値、$\lambda$ を 0 に初期化 | `reset` の立ったサンプルは $r$、$\lambda$ を 0 に（$h$ が forward の値になるのと同じ）、立っていなければ持ち越す |
 | 推論と学習 | $T$ ステップ推論してから重みを 1 回更新 | 同時に進む。入力を書いてから `learn_interval` 後に重みを更新 |
 | 重みの更新の後 | 次のミニバッチで $h$ を forward に初期化 | 次の更新の $\mu$ から $h$ に入る |
 | $\lambda$ の更新 | 更新後の $h$ の $r$ | 同じ |
@@ -321,17 +371,17 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 `tests/mujou/pc/` に置き、float64 と `mujou.testing.run` で決定的に回す。損失が下がったかでは判定しない。
 
 1. `functional.vjp` の $g_{\mathrm{in}}$、$g_\theta$ が、$E_i = \tfrac12\|r_i + \lambda_i\|^2$ と $\sum_b \ell_b$ の有限差分と一致する
-2. 出力側から回す同期の step が、純粋な PyTorch で書いた参照実装（`_reference.py`。r 形の緩和・学習の時刻を含む）の Jacobi 更新と 1e-12 で一致する。`learn_interval=None` と、間隔を空けて学習する場合の両方
+2. 出力側から回す同期の step が、純粋な PyTorch で書いた参照実装（`_reference.py`。r 形の緩和、μ を送ること、`reset`、学習の時刻を含む）の Jacobi 更新と 1e-12 で一致する。`learn_interval=None` と、間隔を空けて学習する場合の両方。2 つ目の入力を持ち越す場合と、一部のサンプルをリセットする場合の両方
 3. 入力を固定して回した不動点で、$r_i = 0$ で送る $h_i$ が forward の値、$\lambda_i$ がネットワーク全体を autograd した $-\partial\ell/\partial h_i$ と一致し、$\theta$ の 1 回の更新が SGD と一致する（線形と tanh、Linear と ResBlock）
-4. $\alpha = 0$（`lam=inf`、`r=inf`）で $\lambda \equiv 0$、不動点で $r = -g$、$h$ が forward の値からずれる（PC）
+4. $\alpha = 0$（`lam=inf`、`r=inf`）で $\lambda \equiv 0$、不動点で送る値が forward、$r$ が BP の credit（固定予測の仮定の PC）
 5. 出力側から・入力側から・固定 seed のランダム順で回しても同じ不動点に収束する
 6. 教師が無いとき、$r = 0$ で $h$ は forward の値、$\lambda = 0$、$\theta$ は動かない。mask がすべて False の間は全ノードの $\theta$ がビット一致で動かない
 7. `Output` は常に、受け取った活動と同じメッセージの $y$ を使う。`mask` が False のサンプルは損失に入らず、`Layer` もその行の credit を返さない
 8. `LearnClock` を、仕様の式から書いた期待値で検査する（`test_clock.py`）
 9. 状態から復元すると、同じスケジュールで同じ値になる
-10. ResBlock 8 ノードの鎖が $\tau_r = \tau_h$ で不動点に着き、$\tau_r = \infty$ では発散する。`learn_interval=None` と 16 周期で回すと、$\lambda$ は credit の 2 倍を超えず、credit に収束する
+10. ResBlock 8 ノードの鎖が $\tau_r = \tau_h$ で不動点に着く。増幅する線形の鎖（1.25 × 16）が、臨界減衰の時定数でも減衰なしでも credit に着く。`learn_interval=None` と 16 周期で回すと、$\lambda$ は credit の 2 倍を超えず、credit に収束する
 11. 2 つの制約を 1 ノードにまとめた鎖と、2 ノードに分けた鎖で、不動点での $\theta$ の更新が一致する（ノードの分け方に依らない）
 12. 時刻 0 に書いた最初の入力を学ぶ
 13. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
 14. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
-15. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。新しいサンプルで `reset_` が呼ばれ、$\theta$ の跳び（自分のものも前のノードのものも）では呼ばれない。`Chain` は各 `Layer` に別々の束縛を持たせる
+15. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。`reset_` は入力ごとに 1 回、その入力の `reset` を渡して呼ばれ、$\theta$ の跳びでは呼ばれない。状態を持つ relaxer は、リセットしたサンプルの状態だけを捨てる。`Chain` は各 `Layer` に別々の束縛を持たせる
