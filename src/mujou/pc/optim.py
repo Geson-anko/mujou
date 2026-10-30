@@ -22,6 +22,13 @@ import torch
 
 from mujou import Stateful
 
+__all__ = [
+    "SGD",
+    "AdamW",
+    "Optimizer",
+    "BoundOptimizer",
+]
+
 
 class BoundOptimizer(Stateful):
     """An optimizer bound to the parameters of one node, which holds its state.
@@ -66,13 +73,13 @@ class Optimizer(ABC):
     than per second::
 
         @dataclass(frozen=True)
-        class StepSGD(pc.Optimizer):
+        class StepSGD(pc.optim.Optimizer):
             lr: float
 
             def bind(self, params):
                 return _BoundStepSGD(list(params), self.lr)
 
-        class _BoundStepSGD(pc.BoundOptimizer):
+        class _BoundStepSGD(pc.optim.BoundOptimizer):
             def __init__(self, params, lr):
                 self._params, self._lr = params, lr
 
@@ -111,7 +118,7 @@ class SGD(Optimizer):
     Example::
 
         hidden = pc.Layer(module, act_spec=..., tau=tau,
-                          optimizer=pc.SGD(tau=0.3), learn_interval=24e-3)
+                          optimizer=pc.optim.SGD(tau=0.3), learn_interval=24e-3)
 
     Args:
         tau: The time constant $\tau_\theta$ of the parameters, in seconds.
@@ -214,7 +221,7 @@ class AdamW(Optimizer):
     Example (``lr = 1e-3``, learning once from each input, shown for 32 ms)::
 
         hidden = pc.Layer(module, act_spec=..., tau=tau,
-                          optimizer=pc.AdamW(tau=32e-3 / 1e-3, tau_m=0.3,
+                          optimizer=pc.optim.AdamW(tau=32e-3 / 1e-3, tau_m=0.3,
                                              tau_v=30.0),
                           learn_interval=24e-3)
 

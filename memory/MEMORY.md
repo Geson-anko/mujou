@@ -22,16 +22,16 @@
 - [タイマーの一時停止と now への一本化](project_timer_pause.md) — Timer.pause / resume / is_paused を公開（複数の実行の状態を同時刻で取る）。時刻は now() だけ、Timestamp の差は秒の float
 - [_native のスタブは生成物](project_core_stub.md) — `src/mujou/_native.pyi` は `just stub` で生成してコミット。説明は Rust の doc comment に書く
 - [メッセージの型](project_message_types.md) — 利用者の値は torch.Tensor と Python のスカラー（IntSpec(bits) / FloatSpec / BoolSpec / TimestampSpec、2026-10-22）、1 つのフィールド / TypedDict、DictSpec.field、TensorSpec(shape, dtype=torch.float32)、zeros/empty/rand(generator=)、初期値必須、スロットの書き手は 1 つ、時刻（ns、None はまだ書かれていない）自動付与、バッファプールのみ
-- [pc の重みの optimizer](project_pc_optimizers.md) — τθ を TimeConstants から pc.SGD / pc.AdamW に移した。設定 + bind、時間で進める AdamW（質量 c で bias 補正）、torch.optim は使わない（GIL）、h と λ は段階 2（2026-10-22）
-- [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。h と λ で持ち跳びだけ付け替えて jumps で連鎖、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/4、Chain と show
+- [pc の重みの optimizer](project_pc_optimizers.md) — τθ を TimeConstants から pc.optim.SGD / pc.optim.AdamW に移した。設定 + bind、時間で進める AdamW（質量 c で bias 補正）、torch.optim は使わない（GIL）、r（もとは h）の差し替えは relaxer（2026-10-26）、λ は研究から（2026-10-22）
+- [PC-ALM の実装と公開元](project_pc_module.md) — PyTorch で実装し src/mujou/pc に置く（公開 API だけに依存）。ずれ r と λ で持ち予測 μ を送る（固定予測の仮定、2026-10-29）、reset フラグ、目標は Activity で運ぶ、act で繋ぐ、LearnClock、周期 τ_h/2、Chain と show
 - [pc のバッチの shape](project_batch_shape.md) — `batch: mujou.types.Size = ()`（`type Size = int | tuple[int, ...]`）（既定はバッチなし）、`MSELoss` / `CrossEntropyLoss(batch)`、mse は特徴の平均で ½ なし（2026-10-21）
 - [ノードのライフサイクル](project_node_lifecycle.md) — hook は on_start / on_update(dt) / on_pause / on_resume / on_exception / on_stop、状態は state_dict / load_state_dict。順は on_start → load_state_dict → on_update、on_start では状態に依存する出力をしない。private な処理は Driver
 - [停止と状態の取得・復元](project_pause_and_state.md) — フラグ → すぐタイマー凍結 → 全ノード停止 → device の上で複製 → 再開 → CPU へ移して返す。木は素の dict（timer と nodes）。正常終了後も取得できる。保存はユーザー。グローバルなバリア禁止の例外
 - [例外によるシステム終了](project_shutdown_on_exception.md) — どの hook の例外でも全体を終了。end は失敗を検出した時刻、全ノードの on_exception → on_stop、以後のホストの呼び出しが NetworkError。例外時の状態は取得しない
 - [ネットワークと Port](project_network_ports.md) — 接続点は Port（受け取る相手は高々 1、送るだけなら何本でも）と MultiPort、向きなしの send / recv の spec の組、接続は相手 → Channel の dict、Network の Port は参照、集約は更新手法の責任
 - [コアの carry は廃止](project_carry.md) — 目標 y・mask・time は Activity のフィールドで運ぶ（R1）
-- [ホストの入出力](project_host_io.md) — run はバックグラウンド、Run の write / read / read_with_time / subscribe / wait_for / state_dict。時刻 None はまだ書かれていない、has_received は無い。初期値は initial / inputs= / write。複数 Port の write は版番号で一斉切り替え
-- [GPU の扱い](project_gpu_policy.md) — コアは GPU をサポートしない。GPU のノードは境界で device → host → device、DLPack は CPU 上の受け渡しだけ。ノードのデバイスは CPU と CUDA だけ
+- [ホストの入出力](project_host_io.md) — run はバックグラウンド、Run の write / read / read_with_time / subscribe / wait_for / state_dict。時刻 None はまだ書かれていない、has_received は無い。初期値は initial / inputs= / write。複数 Port の write は版番号で一斉切り替え。write は持ち主のノードの CUDA device のテンソルだけ device に置く
+- [GPU の扱い](project_gpu_policy.md) — CUDA のノードが自分の device で送ったテンソルは、CUDA のノードが読むポートならコアが device に置いたまま持つ。ホストの write は持ち主のノードの device のテンソルだけ（2026-10-24 にユーザーが「コアは GPU をサポートしない」を覆した）。書き手が send で自分の stream を待つ（S2）、読み手は record_stream。ノードのデバイスは CPU と CUDA だけ
 - [PyTorch の採用と mujou.Node](project_torch_module.md) — PyTorch を必須の依存として全面採用、torch に依存させないのは _native と mujou.time だけ。mujou.Node は純 Python で Driver が CUDA と同期を受け持つ（R3）。乱数生成器は super().__init__ で作り状態に入る
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [Windows の CI](project_windows_ci.md) — Test は Ubuntu・macOS・Windows。encoding を明示、SIGINT は raise_signal、.claude/ は Windows 対象外（2026-10-23）
@@ -44,12 +44,16 @@
 - [`__dict__` が唯一のレジストリ](project_port_registry.md) — 子とポートはインスタンスの属性に代入するだけ。run の段 1 で tree.walk が代入の順に読む（R7）
 - [M:N スケジューリング](project_mn_scheduler.md) — Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True)、mujou.run(workers=None)。既定は available_parallelism（GIL ありは半分、確認待ち）で、実効の数は 0 もありうる。ノードはワーカー間を移ってよい
 - [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。hook は通常の PyTorch と同じく勾配を記録、ノードをまたぐグラフは Port の detach コピーで作れない
+- [pc の緩和の安定とヤコビアン](project_pc_jacobian_stability.md) — μ を送る形（2026-10-29）でヤコビアンによらず安定、周期 τ_h/2。CIFAR はステージごとの 5 ノード・12 周期で BP の 5〜6 倍。それ以前の τ_h/16 などの記録も残す
+- [CUDA graph は使わない](project_no_cuda_graph.md) — ノードの更新を CUDA graph にしない（2026-10-29 ユーザー決定）。1 周期約 1.5〜2 ms の CPU 起動律速は受け入れ、ノードを少なく切って周期を減らす
+- [pc の relaxer](project_pc_relaxer.md) — r（もとは h）の更新手法を重みの optimizer と同じ形（設定 + bind）で差し替える。`pc.relax.Euler`（既定）か自作。HeavyBall は r 形で効果が無く削除（2026-10-28）
 - [グラフの可視化](project_viz.md) — `mujou.viz.to_html(root)` で自己完結の HTML。CDN なし、JS は目視で確かめる（2026-10-21）
 - [リリース戦略](project_release_strategy.md) — release/X.Y のタグ vX.Y.Z で Test PyPI → PyPI → GitHub Release（Trusted Publishing）。hotfix は release から切り release → main を merge。ノートは CHANGELOG.md から。最初は 0.1.0（2026-10-23）
 - [未決定事項](project_open_decisions.md) — 一覧の正本は specs/open-decisions.md
 
 ## feedback
 
+- [PC の速度の予算とリセット](feedback_pc_speed_budget.md) — time scale 1 以上（2 まで余裕）、BP の 10 倍まで、小さいバッチでも比べる。バッチごとの r・λ のリセットはフラグで（2026-10-28）
 - [文書の言語](feedback_doc_language.md) — 仕様書（specs/）・計画書・CLAUDE.md・skill・memory は日本語、docs/ の本文は英語と日本語、docstring とコメントは英語。コミットと PR タイトルは英語の規約形式
 - [日本語の文体](feedback_japanese_style.md) — 翻訳調にしない。読点を減らす、主語と補足を削る、短い項目は体言止め。基準はユーザーが直した docs/ja/index.md
 - [解説ページは教材サイト級に](feedback_docs_teaching_quality.md) — 仕組みの解説は節ごとに要点・図・表・コード。基準は docs/{en,ja}/concepts.md（2026-10-21）
@@ -60,8 +64,9 @@
 - [公開前は互換を残さない](feedback_no_compat_before_release.md) — PyPI への正式公開までは、破壊的変更で古い名前の受け付け・移行の案内・deprecation の警告を入れず単に消す
 - [ガードは提供シナリオの中だけ](feedback_guards_within_scenarios.md) — 入力検証・状態の検査は提供するシナリオで起こりうる誤りに止め、1 か所で知らせる。それ以外は YAGNI（2026-10-20）
 - [良いセンスのコード](feedback_good_taste.md) — Linux カーネルメンテナーのように書く。特別扱いはデータ構造の見直しで消す、短い関数、使用者のいない抽象化を作らない（2026-10-20）
-- [ダックタイピングを使わない](feedback_no_duck_typing.md) — Protocol と hasattr をやめ ABC の継承にする。状態は mujou.Stateful（nn.Module は register）、pc.Optimizer / BoundOptimizer、pc.Shown、current.Running（2026-10-23）
+- [ダックタイピングを使わない](feedback_no_duck_typing.md) — Protocol と hasattr をやめ ABC の継承にする。状態は mujou.Stateful（nn.Module は register）、pc.optim.Optimizer / BoundOptimizer、pc.Shown、current.Running（2026-10-23）
 
 ## reference
 
 - [PC-ALM の出典](reference_pc_alm.md) — Sakana AI の記事 URL と、skill pc-alm がどこまで記事に依拠しているか
+- [pc の名前空間](project_pc_namespaces.md) — pc.optim / relax / losses / messages / clock に分けた。直下は Chain とノードだけ

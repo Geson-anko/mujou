@@ -82,8 +82,8 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - タスクランナー: `just`（1.58 以上。`[windows] set shell` 構文を使うため）
 - 型チェッカー: `pyright` を `src/` に対し strict
 - リンター/フォーマッター: `ruff`（line-length 88）。pre-commit: ruff、pyupgrade、mdformat、codespell、uv-lock、cargo fmt、cargo clippy ほか
-- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin で拡張モジュール `mujou._native` にする。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` と Python のスカラー（`int` / `float` / `bool` / `Timestamp`）だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で必ずコピーして受け渡し、スカラーは bindings が直接読み書きする（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
-- モジュールは公開する（`mujou/node.py`、`mujou/pc/layer.py` など）。private なのは Rust の拡張モジュール `mujou._native` だけ。公開 API は各パッケージの `__all__` と docs に載る名前で、利用者は `mujou.*` から import する（[memory/project_public_modules.md](memory/project_public_modules.md)）。PyTorch は必須の依存で（`import mujou` で読み込まれる）、ノード内の計算に全面的に採用する。torch を使わないのは Rust の拡張モジュール `mujou._native` と時刻まわり（`mujou.time` など）だけ。GPU はコアでサポートせず、ノードの内側でだけ使う。利用者が継承するのは純 Python の `mujou.Node`。Rust は `Driver` を介して hook を呼ぶ（[memory/project_torch_module.md](memory/project_torch_module.md)）
+- コアは Rust で実装し、Python はインターフェース（PyO3 + maturin で拡張モジュール `mujou._native` にする。crate は純 Rust の `crates/mujou-core` と bindings の `crates/mujou-python` に分ける。`specs/native-core.md`）。利用者がやり取りする値は `torch.Tensor` と Python のスカラー（`int` / `float` / `bool` / `Timestamp`）だけで、コアの中の値の型と dtype は公開しない。torch とコアの間は DLPack で受け渡して読み書きとも必ずコピーし（送ったノード（ホストの write では読むノード）の CUDA device の上のテンソルは、CUDA のノードが読むなら device の上でコピーし、コアは中身を読まない値として持つ）、スカラーは bindings が直接読み書きする（[memory/project_native_core_rust.md](memory/project_native_core_rust.md)）
+- モジュールは公開する（`mujou/node.py`、`mujou/pc/layer.py` など）。private なのは Rust の拡張モジュール `mujou._native` だけ。公開 API は各パッケージの `__all__` と docs に載る名前で、利用者は `mujou.*` から import する（[memory/project_public_modules.md](memory/project_public_modules.md)）。PyTorch は必須の依存で（`import mujou` で読み込まれる）、ノード内の計算に全面的に採用する。torch を使わないのは Rust の拡張モジュール `mujou._native` と時刻まわり（`mujou.time` など）だけ。コアは device・stream・event を知らず、CUDA のノードが自分の device で CUDA のノードに送ったメッセージと、ホストが持ち主のノードの device で書いた値は device に置いたまま渡す（[memory/project_gpu_policy.md](memory/project_gpu_policy.md)）。利用者が継承するのは純 Python の `mujou.Node`。Rust は `Driver` を介して hook を呼ぶ（[memory/project_torch_module.md](memory/project_torch_module.md)）
 
 ## コマンド
 
@@ -118,7 +118,7 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 - **既定はシングルエージェント**。ユーザーの指定がない限り skill `solo-dev-cycle` で 計画 → テスト → 実装 → リファクタ → ドキュメント を自分で回す
 - 「エージェントチームで」「並列で」と明示されたときだけ skill `agent-team-startup` に従い、自分が `orchestrator` の役割を担う
 - agent 構成（`.claude/agents/`）: `implementation-planner` →（任意 `spec-test-author`）→ `plan-implementer` → `code-reviewer`（＋学習則に触れるなら `algorithm-reviewer`）⇄ `code-simplifier`。文書改善用に `doc-teacher` / `doc-student`（haiku）
-- `doc-student` を除く全 agent が `model: inherit`。深さは `effort` で差別化する（reviewer 2 体は high、他は medium。セッション既定は `settings.json` の `effortLevel: medium`）
+- `plan-implementer` は `model: sonnet`、`doc-student` は haiku、他の agent は `model: inherit`。深さは `effort` で差別化する（reviewer 2 体は high、他は medium。セッション既定は `settings.json` の `effortLevel: medium`）
 - **ユーザーに質問できるのはメインエージェントだけ**。サブエージェントの質問は報告に含めて返し、メインが中継する
 - 中間メモは `memory/agents/<agent-name>/<task-slug>.md`
 

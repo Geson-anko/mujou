@@ -11,9 +11,10 @@ from torch import nn
 from mujou import Network, Port, Run, TensorSpec
 from mujou.pc.input import Input
 from mujou.pc.layer import Layer
-from mujou.pc.messages import Prediction, Sample
+from mujou.pc.msg import Prediction, Sample
 from mujou.pc.optim import Optimizer
 from mujou.pc.output import Output
+from mujou.pc.relax import Euler, Relaxer
 from mujou.pc.time_constants import TimeConstants
 from mujou.types import Device, Size
 
@@ -47,8 +48,10 @@ class Chain(Network, Shown):
     The children are ``input``, ``layer0``, ..., ``output`` (``modules[i]`` is
     in ``layer{i}``, also ``layers[i]``), which are also their paths in
     ``Run.state_dict()``. Every
-    node runs with the period ``tau.period`` (``tau.h / 4``); for other
-    periods, build the nodes one by one (``show`` shows them samples too).
+    node runs with the same ``period``, ``tau.period`` (``tau.h / 2`` with
+    ``tau.r = tau.h``) unless
+    given; for a period of its own for each node, build the nodes one by one
+    (``show`` shows them samples too).
 
     The host writes a ``Sample`` to ``prev`` and reads a ``Prediction`` from
     ``next``, or does both with ``show``.
@@ -62,9 +65,9 @@ class Chain(Network, Shown):
             x=TensorSpec((B, 784)),
             y=TensorSpec((B,), torch.int64),
             batch=B,
-            loss=pc.CrossEntropyLoss(B),
-            tau=pc.TimeConstants(h=4e-3, lam=8e-3),
-            optimizer=pc.SGD(tau=1.28),
+            loss=pc.loss.CrossEntropyLoss(B),
+            tau=pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3),
+            optimizer=pc.optim.SGD(tau=1.28),
             learn_interval=0.15,
         )
         with mujou.run(net) as run:
@@ -78,11 +81,17 @@ class Chain(Network, Shown):
         tau: The time constants of every node.
         optimizer: How the parameters of every node move, as in ``Layer``:
             each node binds it to its own parameters.
+        relaxer: How ``r`` of every ``Layer`` moves, as in ``Layer``: each binds
+            it to its own ``r``. The ``Output`` has no ``r``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
-            credit, ``2 * len(modules) * tau.period``, is recommended.
+            credit, ``2 * len(modules) * period``, is recommended.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
+        period: The period of every node, ``tau.period`` if ``None``: with the
+            defaults of ``TimeConstants``, the credit moves one node down in
+            each period. A period of your own must not be longer than
+            ``max_dt``.
         device: Where the nodes compute.
 
     Raises:
@@ -97,13 +106,16 @@ class Chain(Network, Shown):
         loss: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
         tau: TimeConstants,
         optimizer: Optimizer,
+        relaxer: Relaxer = Euler(),
         learn_interval: float | None,
         batch: Size = (),
         max_dt: float | None = None,
+        period: float | None = None,
         device: Device = "cpu",
     ) -> None:
         super().__init__()
-        self.input = Input(x=x, y=y, period=tau.period, batch=batch, device=device)
+        period = tau.period if period is None else period
+        self.input = Input(x=x, y=y, period=period, batch=batch, device=device)
         last: Input | Layer = self.input
         for i, module in enumerate(modules[:-1]):
             layer = Layer(
@@ -111,7 +123,9 @@ class Chain(Network, Shown):
                 act_spec=last.act_spec,
                 tau=tau,
                 optimizer=optimizer,
+                relaxer=relaxer,
                 learn_interval=learn_interval,
+                period=period,
                 max_dt=max_dt,
                 device=device,
             )
@@ -125,6 +139,7 @@ class Chain(Network, Shown):
             tau=tau,
             optimizer=optimizer,
             learn_interval=learn_interval,
+            period=period,
             max_dt=max_dt,
             device=device,
         )
@@ -160,7 +175,8 @@ def show(run: Run, chain: Shown, sample: Sample, *, seconds: float) -> Predictio
     Example::
 
         mask = torch.ones(B, dtype=torch.bool)
-        p = pc.show(run, net, pc.Sample(x=x, y=y, mask=mask), seconds=0.2)
+        sample = pc.msg.Sample(x=x, y=y, mask=mask, reset=mask)  # shuffled
+        p = pc.show(run, net, sample, seconds=0.2)
         correct = int((p["y_hat"].argmax(1) == y).sum())
 
     Raises:

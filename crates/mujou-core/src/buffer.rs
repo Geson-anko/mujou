@@ -6,7 +6,12 @@
 //! new message. A buffer goes back to its pool when the last message (or lent
 //! tensor) that holds it is dropped, so in a steady state writing does not
 //! allocate.
+//!
+//! A field may instead hold a value of the writer's own ([`Held`]), which the
+//! core keeps without reading it: the bindings hold a copy of a CUDA tensor this
+//! way, so that it stays on its device (`specs/messages.md`).
 
+use std::any::Any;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -120,17 +125,40 @@ impl fmt::Debug for Buffer {
     }
 }
 
-/// An immutable value of a slot: one buffer per field, in schema order, and
+/// A value that a writer keeps outside the pools, such as a copy of a tensor on
+/// a device. The core never reads it: the writer must not change it once it is
+/// handed over, and its readers know what it is.
+pub type Held = Arc<dyn Any + Send + Sync>;
+
+/// The value of one field of a message.
+#[derive(Clone)]
+pub enum Value {
+    /// Compact row-major bytes in a pooled buffer.
+    Bytes(Arc<Buffer>),
+    /// A value of the writer's own.
+    Held(Held),
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bytes(buffer) => buffer.fmt(f),
+            Self::Held(_) => f.write_str("Held(..)"),
+        }
+    }
+}
+
+/// An immutable value of a slot: one value per field, in schema order, and
 /// the time its writer wrote it at on the run's clock.
 #[derive(Debug)]
 pub struct Message {
-    values: Vec<Arc<Buffer>>,
+    values: Vec<Value>,
     time_ns: Option<u64>,
 }
 
 impl Message {
-    /// The buffers of the fields, in schema order.
-    pub fn values(&self) -> &[Arc<Buffer>] {
+    /// The values of the fields, in schema order.
+    pub fn values(&self) -> &[Value] {
         &self.values
     }
 
@@ -141,11 +169,57 @@ impl Message {
     }
 }
 
-/// How a writer fills the buffers of a new message: one compact row-major byte
-/// slice per field, in schema order. The buffers come from the pool with old
-/// contents, so `fill` must overwrite every byte.
-pub trait Fill<E>: FnOnce(&mut [&mut [u8]]) -> Result<(), E> {}
-impl<E, F: FnOnce(&mut [&mut [u8]]) -> Result<(), E>> Fill<E> for F {}
+/// The value of one field of a new message, as its writer has set it so far.
+enum Out {
+    Unset,
+    Bytes(Buffer),
+    Held(Held),
+}
+
+/// Where a writer puts the value of one field of a new message: the bytes of a
+/// buffer from the field's pool, or a value of its own.
+pub struct FieldOut<'a> {
+    pool: &'a Arc<BufferPool>,
+    value: Out,
+}
+
+impl FieldOut<'_> {
+    pub fn spec(&self) -> &FieldSpec {
+        &self.pool.field
+    }
+
+    /// The bytes of a buffer for the field, compact and row-major, taken from
+    /// the pool at the first call. The buffer comes with old contents, so
+    /// overwrite every byte.
+    pub fn bytes(&mut self) -> &mut [u8] {
+        if !matches!(self.value, Out::Bytes(_)) {
+            self.value = Out::Bytes(self.pool.take());
+        }
+        let Out::Bytes(buffer) = &mut self.value else {
+            unreachable!("set above")
+        };
+        buffer.bytes_mut()
+    }
+
+    /// Makes `value` the field's value instead of a buffer (a buffer taken
+    /// before goes back to its pool).
+    pub fn hold(&mut self, value: Held) {
+        self.value = Out::Held(value);
+    }
+
+    fn finish(self) -> Value {
+        match self.value {
+            Out::Bytes(buffer) => Value::Bytes(Arc::new(buffer)),
+            Out::Held(held) => Value::Held(held),
+            Out::Unset => panic!("a fill left the field '{}' unset", self.pool.field.name),
+        }
+    }
+}
+
+/// How a writer fills a new message: one [`FieldOut`] per field, in schema
+/// order, each of which it must set.
+pub trait Fill<E>: FnOnce(&mut [FieldOut<'_>]) -> Result<(), E> {}
+impl<E, F: FnOnce(&mut [FieldOut<'_>]) -> Result<(), E>> Fill<E> for F {}
 
 /// The schema of a slot and the pools of its fields, shared by every slot that
 /// one writer writes.
@@ -169,16 +243,23 @@ impl Messages {
         &self.schema
     }
 
-    /// Fills fresh buffers of every field. Nothing is published if `fill`
-    /// fails, and the buffers go back to the pool.
-    pub(crate) fn fill<E>(&self, fill: impl Fill<E>) -> Result<Vec<Arc<Buffer>>, E> {
-        let mut buffers: Vec<Buffer> = self.pools.iter().map(BufferPool::take).collect();
-        let mut bytes: Vec<&mut [u8]> = buffers.iter_mut().map(Buffer::bytes_mut).collect();
-        fill(&mut bytes)?;
-        Ok(buffers.into_iter().map(Arc::new).collect())
+    /// The values of every field, as `fill` sets them. Nothing is published if
+    /// `fill` fails, and the buffers it took go back to the pool. Panics if
+    /// `fill` returns without setting a field.
+    pub(crate) fn fill<E>(&self, fill: impl Fill<E>) -> Result<Vec<Value>, E> {
+        let mut out: Vec<FieldOut<'_>> = self
+            .pools
+            .iter()
+            .map(|pool| FieldOut {
+                pool,
+                value: Out::Unset,
+            })
+            .collect();
+        fill(&mut out)?;
+        Ok(out.into_iter().map(FieldOut::finish).collect())
     }
 
-    pub(crate) fn message(&self, values: Vec<Arc<Buffer>>, time_ns: Option<u64>) -> Arc<Message> {
+    pub(crate) fn message(&self, values: Vec<Value>, time_ns: Option<u64>) -> Arc<Message> {
         debug_assert_eq!(values.len(), self.schema.fields().len());
         Arc::new(Message { values, time_ns })
     }
@@ -195,8 +276,8 @@ impl Messages {
 
     /// Zeros that no writer wrote.
     pub(crate) fn zeros(&self) -> Arc<Message> {
-        let zero = |bytes: &mut [&mut [u8]]| {
-            bytes.iter_mut().for_each(|b| b.fill(0));
+        let zero = |out: &mut [FieldOut<'_>]| {
+            out.iter_mut().for_each(|field| field.bytes().fill(0));
             Ok::<_, std::convert::Infallible>(())
         };
         let Ok(msg) = self.build(None, zero);

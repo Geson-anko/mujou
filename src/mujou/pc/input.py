@@ -3,7 +3,7 @@
 from typing import override
 
 from mujou import DictSpec, MultiPort, Node, Port, TensorSpec
-from mujou.pc.messages import Sample, activity_spec
+from mujou.pc.msg import Sample, activity_spec
 from mujou.time import Timestamp
 from mujou.types import Device, Size
 
@@ -18,14 +18,11 @@ class Input(Node):
     (ns) at which the host wrote them: the nodes on the path pass them on with
     the activity computed from ``x``, so that the output node pairs each
     prediction with its own target. A new ``time`` tells them the input
-    changed. ``jumps`` counts the writes the node has seen, so that the next
-    node moves its ``h`` with a new ``x`` even when it was written at the same
-    time as the zeros before it (time 0). ``x`` is clamped: what the next node
-    sends back on ``next`` is not read.
+    changed. ``x`` is clamped: what the next node sends back on ``next`` is not
+    read.
 
-    Before the host first writes, the node sends zeros with ``mask`` False,
-    ``jumps`` 0 and ``time`` 0. The state holds ``"jumps"`` and the time (ns)
-    of the last write seen (``"seen_write"``, ``None`` before any).
+    Before the host first writes, the node sends zeros with ``mask`` False and
+    ``time`` 0. It holds no state of its own: what it sends is the last write.
     ``act_spec`` is the spec of what the node sends, for the next node.
 
     Example::
@@ -67,26 +64,21 @@ class Input(Node):
         super().__init__(device=device, period=period)
         self.act_spec = activity_spec(x, y, batch)
         mask = self.act_spec.field("mask", TensorSpec)
-        self.prev = Port(recv=DictSpec(Sample, x=x, y=y, mask=mask))  # the host
+        self.prev = Port(
+            recv=DictSpec(Sample, x=x, y=y, mask=mask, reset=mask)  # the host
+        )
         self.next = MultiPort(send=self.act_spec, recv=x)
-        self.jumps = 0
-        self.seen_write: int | None = None
-        self.register_state("jumps")
-        self.register_state("seen_write")
 
     @override
     def on_update(self, dt: float) -> None:
         super().on_update(dt)
         sample, written_at = self.prev.recv_with_time()
-        if written_at is not None and written_at.ns != self.seen_write:
-            self.seen_write = written_at.ns
-            self.jumps += 1
         self.next.send(
             {
                 "h": sample["x"],
-                "jumps": self.jumps,
                 "y": sample["y"],
                 "mask": sample["mask"],
+                "reset": sample["reset"],
                 "time": Timestamp(ns=0) if written_at is None else written_at,
             }
         )

@@ -89,8 +89,8 @@ def report(nodes: Mapping[str, Any]) -> str:
 
 def check(nodes: Mapping[str, Any]) -> None:
     """Warn when the ``dt`` of a watched node is too often longer than its period:
-    a median over 1.5 periods, or a 99th percentile over 2 (``max_dt`` by default,
-    beyond which the node drops the time)."""
+    a median over 1.5 periods, or a 99th percentile over 2 (twice the default
+    ``max_dt`` of ``tau.r = tau.h``, beyond which the node drops the time)."""
     for path, h in histograms(nodes).items():
         if quantile(h, 0.5) > 1.5 or quantile(h, 0.99) > 2:
             print(

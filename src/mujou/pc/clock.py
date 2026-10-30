@@ -9,6 +9,11 @@ from mujou import Stateful
 from mujou.pc.time_constants import TimeConstants
 from mujou.time import Timestamp
 
+__all__ = [
+    "LearnClock",
+    "Tick",
+]
+
 
 class Tick(NamedTuple):
     """What ``LearnClock.tick`` tells one update of a node."""
@@ -62,7 +67,7 @@ class LearnClock(Stateful):
 
     Example::
 
-        self.clock = pc.LearnClock(period=self.period, learn_interval=24e-3,
+        self.clock = pc.clock.LearnClock(period=self.period, learn_interval=24e-3,
                                    max_dt=2e-3)
         # In on_update(dt):
         tick = self.clock.tick(dt, activity["time"], self.timer.now())
@@ -130,13 +135,6 @@ class LearnClock(Stateful):
             learn_interval=learn_interval,
             max_dt=tau.max_dt if max_dt is None else max_dt,
         )
-
-    @property
-    def discrete(self) -> bool:
-        """Whether the clock learns at intervals (``learn_interval`` is not
-        ``None``), so that each update of the parameters is a jump rather than
-        a step of a continuous flow."""
-        return self._interval_ns is not None
 
     def tick(self, dt: float, time: Timestamp, now: Timestamp) -> Tick:
         """Count an update of ``dt`` seconds that received an input written at

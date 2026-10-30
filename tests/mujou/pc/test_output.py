@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 
 H = 1e-3  # seconds per step
 B, N_IN, N_OUT = 3, 4, 2
-TAU = pc.TimeConstants(h=4e-3, lam=8e-3)
+TAU = pc.TimeConstants(h=4e-3, lam=8e-3, r=4e-3)
 X, Y = TensorSpec((B, N_IN), F64), TensorSpec((B, N_OUT), F64)
 # The activity of float32 h_in, for the nodes that are only made.
-ACT = pc.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
+ACT = pc.msg.activity_spec(TensorSpec((B, N_IN)), TensorSpec((B, N_OUT)), batch=B)
 
 
 def head(seed: int = 0) -> nn.Linear:
@@ -40,7 +40,7 @@ class Direct:
         self.out = pc.Output(
             module,
             act_spec=self.inp.act_spec,
-            loss=pc.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             tau=TAU,
             **learning,
         )
@@ -60,7 +60,8 @@ class Direct:
         t = timer.now().ns
         if sample is not None:
             x, y, mask = sample
-            t = self.run.write({self.inp.prev: {"x": x, "y": y, "mask": mask}}).ns
+            written = {"x": x, "y": y, "mask": mask, "reset": mask}
+            t = self.run.write({self.inp.prev: written}).ns
         self.run.step(0.0, self.out, self.inp)
         return t
 
@@ -96,7 +97,7 @@ def gradients(
 
 class TestConstruction:
     def test_a_loss_that_averages_is_refused(self):
-        with pytest.raises(ValueError, match="pc.MSELoss"):
+        with pytest.raises(ValueError, match="pc.loss.MSELoss"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
                 loss=nn.MSELoss(),
@@ -107,41 +108,41 @@ class TestConstruction:
             )
 
     def test_the_prediction_has_the_target(self):
-        act = pc.activity_spec(
+        act = pc.msg.activity_spec(
             TensorSpec((B, N_IN)), TensorSpec((B,), torch.int64), batch=B
         )
         out = pc.Output(
             nn.Linear(N_IN, 10),
             act_spec=act,
-            loss=pc.CrossEntropyLoss(B),
+            loss=pc.loss.CrossEntropyLoss(B),
             tau=TAU,
             optimizer=SGD,
             learn_interval=None,
         )
         assert out.next.send_spec == DictSpec(
-            pc.Prediction,
+            pc.msg.Prediction,
             y_hat=TensorSpec((B, 10)),
             y=TensorSpec((B,), torch.int64),
             mask=TensorSpec((B,), torch.bool),
             time=TimestampSpec(),
         )
 
-    def test_the_period_defaults_to_a_quarter_of_tau_h(self):
+    def test_the_period_defaults_to_tau_period(self):
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
-            loss=pc.MSELoss(B),
+            loss=pc.loss.MSELoss(B),
             act_spec=ACT,
             tau=TAU,
             optimizer=SGD,
             learn_interval=None,
         )
-        assert out.period == pytest.approx(TAU.h / 4)
+        assert out.period == pytest.approx(TAU.period)
 
     def test_the_period_must_not_be_longer_than_max_dt(self):
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
-                loss=pc.MSELoss(B),
+                loss=pc.loss.MSELoss(B),
                 act_spec=ACT,
                 tau=TAU,
                 optimizer=SGD,

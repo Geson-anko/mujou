@@ -62,7 +62,8 @@ dev = [
     "pytest-cov>=6.1.1",
     "ruff>=0.8.4",
 ]
-# What the programs of examples/ need beyond mujou (examples/mnist reads MNIST).
+# What the programs of examples/ need beyond mujou (examples/mnist and examples/cifar10
+# read their data with numpy).
 examples = [
     "numpy>=2.5.4",
 ]

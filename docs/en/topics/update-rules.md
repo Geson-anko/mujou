@@ -30,15 +30,15 @@ The program prints the loss of `output` on each batch before learning from it, w
 
 ## Relaying the target
 
-The activity carries the target `y` of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, `output` always compares a prediction with its own target, and `hidden` learns only from the error whose `time` is that of the input it holds. The nodes of `mujou.pc` carry `y`, `mask` and `time` in their `pc.Activity` the same way, with `jumps`, the count of the times the sender's `h` jumped, which tells the receiver to move its own `h` with its prediction ([PC-ALM](pc.md#the-nodes)).
+The activity carries the target `y` of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, `output` always compares a prediction with its own target, and `hidden` learns only from the error whose `time` is that of the input it holds. The nodes of `mujou.pc` carry `y`, `mask` and `time` in their `pc.msg.Activity` the same way ([PC-ALM](pc.md#the-nodes)).
 
 ## Telling what is new
 
 `recv()` returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time `recv_with_time()` returns, or a time the message carries. Before anyone sends, the time is `None` (or, for a time in the message, its initial value: `Timestamp(ns=0)` of a `TimestampSpec`).
 
-## `pc.LearnClock`
+## `pc.clock.LearnClock`
 
-Both nodes decide when to learn with a `pc.LearnClock`, a part of `mujou.pc` that any rule can use. In each update, `tick(dt, time, now)` takes the `dt`, the time the input was written at and the time now, and returns a `pc.Tick`:
+Both nodes decide when to learn with a `pc.clock.LearnClock`, a part of `mujou.pc` that any rule can use. In each update, `tick(dt, time, now)` takes the `dt`, the time the input was written at and the time now, and returns a `pc.clock.Tick`:
 
 - `new`: the input is new (its time is not the one seen last)
 - `learn`: learn in this update. With `learn_interval`, that is the first update `learn_interval` after each write (and every `learn_interval` while the input stays), but never the update that first sees an input; with `learn_interval=None`, every update

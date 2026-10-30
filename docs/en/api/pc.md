@@ -2,9 +2,29 @@
 
 ::: mujou.pc
     options:
-      members: [Chain, Shown, show, Input, Layer, Output, TimeConstants, Optimizer, BoundOptimizer, SGD, AdamW, LearnClock, Tick, Sample, Activity, Prediction, activity_spec, MSELoss, CrossEntropyLoss]
+      members: [Chain, Shown, show, Input, Layer, Output, TimeConstants]
       # The nodes would repeat every member of Node.
       inherited_members: false
+
+::: mujou.pc.optim
+    options:
+      members: [Optimizer, BoundOptimizer, SGD, AdamW]
+
+::: mujou.pc.relax
+    options:
+      members: [Relaxer, BoundRelaxer, Euler]
+
+::: mujou.pc.loss
+    options:
+      members: [MSELoss, CrossEntropyLoss]
+
+::: mujou.pc.msg
+    options:
+      members: [Sample, Activity, Prediction, activity_spec]
+
+::: mujou.pc.clock
+    options:
+      members: [LearnClock, Tick]
 
 ::: mujou.pc.functional
     options:

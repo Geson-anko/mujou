@@ -70,7 +70,7 @@ class Node(Component):
 
     The state of a node is, as for an ``nn.Module``, every attribute that holds
     a ``torch.Tensor`` (``nn.Parameter`` included) or a ``Stateful`` (an
-    ``nn.Module``, a ``pc.LearnClock``; not a class), every attribute
+    ``nn.Module``, a ``pc.clock.LearnClock``; not a class), every attribute
     registered with ``register_state``, and the state of ``generator``. What an
     attribute holds when the state is taken or loaded decides. The settings that ``__init__``
     computes from its arguments (a time constant, say) are no state: a node
