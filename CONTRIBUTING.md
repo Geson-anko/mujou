@@ -184,6 +184,7 @@ These were done before the first release; redo them if the repository or the wor
 
 - On [PyPI](https://pypi.org/manage/account/publishing/) and [Test PyPI](https://test.pypi.org/manage/account/publishing/), add a (pending) Trusted Publisher: owner `Geson-anko`, repository `mujou`, workflow `publish.yml`, environment `pypi` (PyPI) or `testpypi` (Test PyPI).
 - In the repository settings, create the environments `pypi` and `testpypi`. Add required reviewers to `pypi`, so that a person approves each upload to PyPI after the one to Test PyPI.
+- In the environment `github-pages`, add the tag rule `v*` under Deployment branches and tags (it allows `main` only at first), so that the Docs workflow can deploy a version from a tag.
 - Protect the branches `release/*`: require pull requests and forbid force pushes and deletion.
 
 `CLAUDE.md`, `.claude/` and `memory/` configure the AI coding agents used in this repository; human contributors can ignore them.
