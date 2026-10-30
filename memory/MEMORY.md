@@ -48,6 +48,7 @@
 - [CUDA graph は使わない](project_no_cuda_graph.md) — ノードの更新を CUDA graph にしない（2026-10-29 ユーザー決定）。1 周期約 1.5〜2 ms の CPU 起動律速は受け入れ、ノードを少なく切って周期を減らす
 - [pc の relaxer](project_pc_relaxer.md) — r（もとは h）の更新手法を重みの optimizer と同じ形（設定 + bind）で差し替える。`pc.relax.Euler`（既定）か自作。HeavyBall は r 形で効果が無く削除（2026-10-28）
 - [グラフの可視化](project_viz.md) — `mujou.viz.to_html(root)` で自己完結の HTML。CDN なし、JS は目視で確かめる（2026-10-21）
+- [リリース戦略](project_release_strategy.md) — release/X.Y のタグ vX.Y.Z で Test PyPI → PyPI → GitHub Release（Trusted Publishing）。hotfix は release から切り release → main を merge。ノートは CHANGELOG.md から。最初は 0.1.0（2026-10-23）
 - [未決定事項](project_open_decisions.md) — 一覧の正本は specs/open-decisions.md
 
 ## feedback
