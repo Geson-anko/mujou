@@ -6,7 +6,7 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 ## [Unreleased](https://github.com/Geson-anko/mujou/compare/v0.1.0...HEAD)
 
-## [0.1.0](https://github.com/Geson-anko/mujou/releases/tag/v0.1.0) - 2026-10-23
+## [0.1.0](https://github.com/Geson-anko/mujou/releases/tag/v0.1.0) - 2026-10-30
 
 The first release. The API works but will still change in breaking ways in the 0.x releases.
 
@@ -20,7 +20,9 @@ The first release. The API works but will still change in breaking ways in the 0
 - State: `Stateful`, and `state_dict` / `load_state_dict` of a run to save it and resume it later.
 - Errors: an exception in any hook stops the whole run and is raised in the host program as `NetworkError`.
 - Testing: `mujou.testing.run` and `ManualRun.step` to step nodes by hand, deterministically.
-- PC-ALM (Augmented Lagrangian Predictive Coding): the nodes of `mujou.pc` (`Input`, `Layer`, `Output`, `Chain`), the losses `MSELoss` and `CrossEntropyLoss`, and the optimizers `SGD` and `AdamW` that advance with time.
+- PC-ALM (Augmented Lagrangian Predictive Coding): the nodes of `mujou.pc` (`Input`, `Layer`, `Output`, `Chain`) and its submodules: the losses `loss.MSELoss` and `loss.CrossEntropyLoss`, the weight optimizers `optim.SGD` and `optim.AdamW` that advance with time, the relaxation `relax.Euler`, and the messages `msg` and the learning clock `clock`. A layer holds its deviation `r` as state, and a `Chain` has a period.
+- CUDA: a node computes on its own device (`Node(device=...)`). A message between CUDA nodes, and a value that the host writes to a CUDA node, stay on the device when the reader is on CUDA; other messages pass through host memory.
+- Examples: programs from `examples/quickstart.py` to MNIST and to CIFAR-10 with a ResNet-20 of PC-ALM nodes on a GPU.
 - Visualization: `mujou.viz.to_html` draws a network as a self-contained HTML page.
 - Wheels for Python 3.14 and the free-threaded 3.14t on Linux (x86_64, aarch64), macOS (arm64) and Windows (x86_64).
 
