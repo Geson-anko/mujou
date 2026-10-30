@@ -417,6 +417,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  変更履歴
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -559,6 +578,17 @@
     <span class="md-ellipsis">
       
         必要なもの
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pypi-からインストールする" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PyPI からインストールする
       
     </span>
   </a>
@@ -1552,6 +1582,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    変更履歴
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1583,6 +1640,17 @@
     <span class="md-ellipsis">
       
         必要なもの
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pypi-からインストールする" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PyPI からインストールする
       
     </span>
   </a>
@@ -1632,10 +1700,6 @@
 
 
 <h1 id="-インストール">📦 インストール<a class="headerlink" href="#-インストール" title="Permanent link">&para;</a></h1>
-<div class="admonition note">
-<p class="admonition-title">PyPI では未公開</p>
-<p>mujou はまだ PyPI に公開していないので、現状はソースからビルドする。</p>
-</div>
 <h2 id="必要なもの">必要なもの<a class="headerlink" href="#必要なもの" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1664,21 +1728,32 @@
 </tbody>
 </table>
 <p>ノードは複数のワーカースレッドで同時に動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。</p>
+<div class="admonition warning">
+<p class="admonition-title">API はまだ変わる</p>
+<p>mujou は 0.x の段階にある。マイナーリリース（0.x.0）では API が壊れることがあり、パッチリリース（0.x.y）はバグの修正だけ。<code>mujou~=0.1.0</code> のようにマイナーバージョンを固定し、上げる前に<a href="../changelog/">変更履歴</a>を読む。</p>
+</div>
+<h2 id="pypi-からインストールする">PyPI からインストールする<a class="headerlink" href="#pypi-からインストールする" title="Permanent link">&para;</a></h2>
+<p>uv のプロジェクトでは:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>add<span class="w"> </span>mujou
+</code></pre></div>
+<p>pip なら、Python 3.14 以上の仮想環境で:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>mujou
+</code></pre></div>
+<p>wheel は Linux（x86_64、aarch64）、macOS（arm64）、Windows（x86_64）向けに、それぞれ 3.14 と 3.14t の分を公開している。ほかのプラットフォームでは pip が sdist からビルドするので、Rust が要る。</p>
+<p>PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は <a href="https://pytorch.org/get-started/locally/">PyTorch のインストール案内</a>を参照。</p>
 <h2 id="ソースからビルドする">ソースからビルドする<a class="headerlink" href="#ソースからビルドする" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync
+<p>サンプルプログラムを動かすときや mujou 自体を開発するときは、リポジトリを clone してビルドする:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>uv<span class="w"> </span>sync
 </code></pre></div>
 <p><code>uv sync</code> は free-threaded 版の Python 3.14t を用意して <code>.venv/</code> を作り、依存（サンプルプログラムが使う numpy なども）をインストールし、Rust で書かれたコアをビルドする。GIL ありの通常版を使うなら、代わりに <code>uv sync --python 3.14</code> を実行する。</p>
-<p>PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は <a href="https://pytorch.org/get-started/locally/">PyTorch のインストール案内</a>を参照。</p>
-<div class="admonition note">
-<p class="admonition-title">PyPI に公開した後</p>
-<p>公開後は、uv のプロジェクトなら <code>uv add mujou</code>、pip なら Python 3.14 以上の仮想環境で <code>pip install mujou</code> でインストールできるようになる。</p>
-</div>
 <h2 id="動作を確かめる">動作を確かめる<a class="headerlink" href="#動作を確かめる" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># 0.0.1 のようなバージョンを表示する</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py<span class="w">  </span><span class="c1"># y = tensor([3., 5., 7.]) at t = 0.017 s のような 1 行を表示する</span>
+<p>clone したリポジトリで:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># 0.1.0 のようなバージョンを表示する</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py<span class="w">  </span><span class="c1"># y = tensor([3., 5., 7.]) at t = 0.017 s のような 1 行を表示する</span>
 </code></pre></div>
+<p><code>pip install mujou</code> でインストールした場合は、1 行目を <code>uv run python</code> ではなく <code>python</code> で実行し、<a href="https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py"><code>examples/quickstart.py</code></a> は手元にコピーして実行する。</p>
 <p>2 つ目のプログラムとその出力は<a href="../tutorial/1-run/">チュートリアルの最初のページ</a>で説明する。</p>
 
 

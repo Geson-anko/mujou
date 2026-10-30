@@ -415,6 +415,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -557,6 +576,17 @@
     <span class="md-ellipsis">
       
         Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-from-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install from PyPI
       
     </span>
   </a>
@@ -1550,6 +1580,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1581,6 +1638,17 @@
     <span class="md-ellipsis">
       
         Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-from-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install from PyPI
       
     </span>
   </a>
@@ -1630,10 +1698,6 @@
 
 
 <h1 id="-installation">📦 Installation<a class="headerlink" href="#-installation" title="Permanent link">&para;</a></h1>
-<div class="admonition note">
-<p class="admonition-title">Not on PyPI yet</p>
-<p>Mujou is not on PyPI yet. For now, build it from source.</p>
-</div>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1662,21 +1726,32 @@
 </tbody>
 </table>
 <p>The free-threaded build is recommended because the nodes run on several worker threads at once. With the GIL, nodes written in Python compete for the GIL and rarely run in parallel.</p>
+<div class="admonition warning">
+<p class="admonition-title">The API still changes</p>
+<p>Mujou is in its 0.x releases: a minor release (0.x.0) may break the API, while a patch release (0.x.y) only fixes bugs. Pin the minor version, such as <code>mujou~=0.1.0</code>, and read the <a href="../changelog/">Changelog</a> before you upgrade.</p>
+</div>
+<h2 id="install-from-pypi">Install from PyPI<a class="headerlink" href="#install-from-pypi" title="Permanent link">&para;</a></h2>
+<p>In a uv project:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>add<span class="w"> </span>mujou
+</code></pre></div>
+<p>Or with pip, in a virtual environment with Python 3.14 or later:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>mujou
+</code></pre></div>
+<p>Wheels are published for Linux (x86_64 and aarch64), macOS (arm64) and Windows (x86_64), each for 3.14 and 3.14t. On other platforms, pip builds Mujou from the sdist, which needs Rust.</p>
+<p>PyTorch is installed from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a>.</p>
 <h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync
+<p>To run the example programs or to work on Mujou itself, build it from a clone of the repository:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>uv<span class="w"> </span>sync
 </code></pre></div>
 <p><code>uv sync</code> sets up the free-threaded Python 3.14t, creates <code>.venv/</code>, installs the dependencies (with what the example programs need, such as numpy), and builds the core, which is written in Rust. For the regular build with the GIL, run <code>uv sync --python 3.14</code> instead.</p>
-<p><code>uv sync</code> installs PyTorch from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a>.</p>
-<div class="admonition note">
-<p class="admonition-title">After the release on PyPI</p>
-<p>These commands will work once Mujou is on PyPI: <code>uv add mujou</code> in a uv project, or <code>pip install mujou</code> in a virtual environment with Python 3.14 or later.</p>
-</div>
 <h2 id="check-the-installation">Check the installation<a class="headerlink" href="#check-the-installation" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># prints a version such as 0.0.1</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py<span class="w">  </span><span class="c1"># prints a line such as: y = tensor([3., 5., 7.]) at t = 0.017 s</span>
+<p>In the clone of the repository:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># prints a version such as 0.1.0</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py<span class="w">  </span><span class="c1"># prints a line such as: y = tensor([3., 5., 7.]) at t = 0.017 s</span>
 </code></pre></div>
+<p>After <code>pip install mujou</code>, run the first line with <code>python</code> instead of <code>uv run python</code>, and copy <a href="https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py"><code>examples/quickstart.py</code></a> to run it.</p>
 <p>The <a href="../tutorial/1-run/">first page of the tutorial</a> explains the second program and its output.</p>
 
 
