@@ -1,0 +1,5668 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+      
+      
+      
+        <link rel="canonical" href="https://geson-anko.github.io/mujou/0.1.0/api/node-and-ports/">
+      
+      
+        <link rel="prev" href="../../examples/">
+      
+      
+        <link rel="next" href="../network/">
+      
+      
+        
+          <link rel="alternate" href="./" hreflang="en">
+        
+          <link rel="alternate" href="../../ja/api/node-and-ports/" hreflang="ja">
+        
+      
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Nodes and Ports - Mujou</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mujou">
+  <meta property="og:title" content="Nodes and Ports - Mujou">
+  <meta property="og:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta property="og:url" content="https://geson-anko.github.io/mujou/0.1.0/api/node-and-ports/">
+  <meta property="og:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="722">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Nodes and Ports - Mujou">
+  <meta name="twitter:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta name="twitter:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#nodes-and-ports" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Mujou" class="md-header__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../assets/icon.jpg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mujou
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Nodes and Ports
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Select language">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../ja/api/node-and-ports/" hreflang="ja" class="md-select__link">
+              日本語
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../install/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  How Mujou Works
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorial/1-run/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorial
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../topics/ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Topics
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Mujou" class="md-nav__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../assets/icon.jpg" alt="logo">
+
+    </a>
+    Mujou
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How Mujou Works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorial
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/1-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Run a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/2-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Write a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/3-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Test a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/4-learn-in-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Learn in a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/5-learn-with-pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. Learn with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/6-save-and-resume/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. Save and Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Topics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Topics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ports and Channels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Groups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/host-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/threads-and-devices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threads and Devices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Errors and Shutdown
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/update-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Update Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How mujou.pc Works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/visualize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualize a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes and Ports
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes and Ports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Node">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        period
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.dedicated_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dedicated_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.timer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        timer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.register_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_pause
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_resume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_resume
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_stop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Stateful" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateful
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stateful">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Port" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Port">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.send_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.initial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        connect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.send" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv_with_time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_with_time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.MultiPort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MultiPort
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MultiPort">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.initial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        connect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv_with_time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_with_time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send_to" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_to
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Channel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Channel.other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        other
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.MessageSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MessageSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.TensorSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TensorSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TensorSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dtypes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shape
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.dtype" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dtype
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.zeros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        zeros
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.empty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        empty
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.rand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.IntSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IntSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IntSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.IntSpec.bits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.IntSpec.signed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        signed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.FloatSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FloatSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.BoolSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoolSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.TimestampSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimestampSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.FieldSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.DictSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DictSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DictSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.zeros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        zeros
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.empty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        empty
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Node">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        device
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        period
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.dedicated_thread" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dedicated_thread
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.timer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        timer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.register_state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_update
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_pause" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_pause
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_resume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_resume
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.on_stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        on_stop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Node.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Stateful" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stateful
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stateful">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Stateful.load_state_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Port" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Port">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.send_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.initial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        connect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.send" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Port.recv_with_time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_with_time
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.MultiPort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MultiPort
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MultiPort">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv_spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_spec
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.initial" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        initial
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        connect
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.recv_with_time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        recv_with_time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.MultiPort.send_to" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        send_to
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.Channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Channel
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Channel">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.Channel.other" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        other
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.MessageSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MessageSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.TensorSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TensorSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TensorSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.dtypes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dtypes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shape
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.dtype" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dtype
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.zeros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        zeros
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.empty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        empty
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.TensorSpec.rand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.IntSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IntSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IntSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.IntSpec.bits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.IntSpec.signed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        signed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.FloatSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FloatSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.BoolSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoolSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.TimestampSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimestampSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.FieldSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FieldSpec
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.DictSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DictSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DictSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.zeros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        zeros
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.DictSpec.empty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        empty
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="nodes-and-ports">Nodes and Ports<a class="headerlink" href="#nodes-and-ports" title="Permanent link">&para;</a></h1>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.Node" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.Node</span>
+
+
+<a href="#mujou.Node" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Node</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">dedicated_thread</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.component.Component">Component</span></code></p>
+
+
+
+        <p>A unit of asynchronous computation: the leaf of a network.</p>
+<p>Call <code>super().__init__(...)</code> first in <code>__init__</code> (<code>mujou.run</code> raises
+<code>TypeError</code> for a node that did not), then declare the node's ports and
+state as attributes of the instance. A run reads the attributes when it
+starts. A node must not hold other nodes or networks as attributes, nor
+ports in a list, a tuple or a dict (the run raises <code>TypeError</code>); put
+nodes side by side in a <code>Network</code> instead.</p>
+<p>Override the lifecycle hooks below; each does nothing by default. As in any
+subclass, call the same hook of <code>super()</code> first in each override. The
+framework calls the hooks on the thread that runs the node (see "Threads"
+below), in this order:</p>
+<ul>
+<li><code>on_start()</code>: once, when the run starts (also when it is restored).
+  Open the node's I/O here. A node with <code>dedicated_thread=True</code> gets it on
+  its own thread, so it can also make its per-thread settings here. Do not
+  send anything that depends on the state here: a restore loads the state
+  after it.</li>
+<li><code>load_state_dict(state)</code>: only when the run was restored, after
+  <code>on_start</code> and before the first <code>on_update</code>.</li>
+<li><code>on_update(dt)</code>: repeatedly, once every <code>period</code> on average (see
+  below). <code>dt</code> is the time in seconds on the run's timer since the
+  node's last update. Read the ports with <code>recv</code>, update in proportion to
+  <code>dt</code>, and write the ports with <code>send</code>. It never waits for other nodes.</li>
+<li><code>on_pause()</code>: when the node has stopped for the run to take its state
+  (<code>Run.state_dict</code>). <code>on_resume()</code>: when that pause ends, before the
+  next <code>on_update</code>. A pause of the timer (<code>Timer.pause</code>) calls neither:
+  the node only sees no time pass.</li>
+<li><code>on_exception()</code>: once on every node, when a hook of any node has raised,
+  before <code>on_stop</code>.</li>
+<li><code>on_stop()</code>: once, when the run stops, also after an exception. It
+  must not change what <code>state_dict</code> returns: the state taken after a normal
+  end is the state at the stop.</li>
+</ul>
+<p><code>state_dict()</code> is called when the run's state is taken, while the node is
+paused (or, after a normal end, on the host's thread that called
+<code>Run.state_dict</code>). Its ports refuse to receive or send there, so that
+taking the state is not seen by the other nodes. The framework copies what
+it returns before the node resumes.</p>
+<p>The state of a node is, as for an <code>nn.Module</code>, every attribute that holds
+a <code>torch.Tensor</code> (<code>nn.Parameter</code> included) or a <code>Stateful</code> (an
+<code>nn.Module</code>, a <code>pc.clock.LearnClock</code>; not a class), every attribute
+registered with <code>register_state</code>, and the state of <code>generator</code>. What an
+attribute holds when the state is taken or loaded decides. The settings that <code>__init__</code>
+computes from its arguments (a time constant, say) are no state: a node
+restored with other arguments keeps its own. Register the plain values that
+change while the node runs (a counter, the time last seen), and the
+containers of tensors (a list as a replay buffer, a dict of tensors): a
+list or a dict is no state by itself, even of tensors. Make the state
+in <code>__init__</code> and update it in place: <code>load_state_dict</code> copies into the
+tensors that the node holds. To choose the state yourself, override both
+<code>state_dict</code> and <code>load_state_dict</code>: extend what <code>super().state_dict()</code>
+returns, and pass <code>super().load_state_dict</code> the state without the keys
+you added.</p>
+<p>If any hook raises, the whole run stops. A hook must not call <code>mujou.run</code>
+or the methods of any <code>Run</code> (<code>write</code>, <code>read</code>, <code>state_dict</code>, ...):
+they raise <code>RuntimeError</code> there, because a node talks only through its own
+ports.</p>
+<p>Threads: by default the node runs on the workers, a pool of threads that
+the run shares among its nodes (<code>mujou.run(..., workers=...)</code>). Each hook
+may then run on a different thread from the previous one, but the hooks of
+a node never run at the same time, and each sees what the previous one
+wrote. Whether the next hook sees what a hook set per thread
+(<code>threading.local</code>, <code>threading.current_thread()</code>, settings of torch
+such as <code>torch.set_grad_enabled</code> or <code>torch.autocast</code>) depends on the
+schedule, and the next node on the same worker may see it too: set such
+settings back before the hook returns (inside a <code>with</code>, say).
+<code>contextvars</code> do persist: each node runs its hooks in a
+<code>contextvars.Context</code> of its own, which starts empty (it does not inherit
+the host's). A hook that blocks (<code>time.sleep</code>, waiting for I/O or a
+lock) holds its worker meanwhile, and the other nodes' <code>dt</code> grows; give
+such a node <code>dedicated_thread=True</code>, so that it runs on a thread of its
+own, with every hook on that thread.</p>
+<p>The framework leaves gradient recording as it is, on by default as in
+plain PyTorch: a hook may call <code>backward</code> directly, and computes without
+a graph inside <code>with torch.no_grad():</code>. No graph crosses nodes: a port
+sends a detached copy. Before each hook, when <code>device</code> is CUDA, the
+framework makes the device and a stream of the node's own current: the
+only per-thread settings it makes, and around <code>state_dict</code> (which may
+run on the host's thread) it sets the thread's own back. On CUDA it also
+waits for the work queued on that stream after <code>on_update</code> (holding its
+worker meanwhile), after <code>load_state_dict</code> and around <code>state_dict</code>. It
+does this around the hooks, so overriding one never skips it.</p>
+<p>The node updates once every <code>period</code> (0.01 s by default) of the run's
+timer on average: the time an update takes counts toward the period, and a
+node that falls a whole <code>period</code> behind does not update several times in
+a row to catch up. A pause does not count. <code>dt</code> is still the time that
+actually passed since the last update, longer than <code>period</code> when the
+node is late, so keep updating in proportion to it and stay stable for the
+longest <code>dt</code> it can get. A manual run (<code>ManualRun.step</code>) ignores the
+period.</p>
+<p><code>period=0.0</code> updates as soon as any time has passed since the last update.
+Set it only when the node must: such a node keeps a CPU core busy, and takes
+time from the other nodes, whose <code>dt</code> it makes irregular.
+<code>period=math.inf</code> never updates by itself: only <code>ManualRun.step</code> updates
+such a node.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Hidden(Node):
+    def __init__(self, n_in: int, n_out: int) -&gt; None:
+        super().__init__(seed=0)
+        x, h = TensorSpec((32, n_in)), TensorSpec((32, n_out))
+        # Send W^T eps back and receive x from the previous side (one peer).
+        self.prev = Port(send=x, recv=x)
+        # Send h forward and receive W^T eps from each next peer (many).
+        self.next = MultiPort(send=h, recv=h)
+
+    @override
+    def on_update(self, dt: float) -&gt; None:
+        super().on_update(dt)
+        x = self.prev.recv()  # torch.Tensor
+        feedback = self.next.recv()  # dict[Channel, torch.Tensor]
+        ...
+        self.next.send(h)
+        self.prev.send(wt_eps)
+
+
+l1, l2 = Hidden(784, 256), Hidden(256, 256)
+l1.next.connect(l2.prev)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>period</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time between two updates on average, in seconds of the
+run's timer. <code>0.0</code> updates as soon as any time has passed.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>0.01</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>seed</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The seed of <code>generator</code>. <code>None</code> seeds it nondeterministically.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Where the node computes: the CPU or a CUDA device (no other
+device type is supported). Received messages arrive on it.
+<code>"cuda"</code> without an index is fixed to the host's current CUDA
+device.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Device (mujou.types.Device)" href="../types/#mujou.types.Device">Device</a></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;cpu&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dedicated_thread</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Run the node on a thread of its own instead of the
+run's workers: for a node whose hooks block, or that relies on
+per-thread state set once (in <code>on_start</code>).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>device</code> is neither the CPU nor a CUDA device, or is CUDA
+while CUDA is not available, or <code>period</code> is negative or NaN.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.device" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">device</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.device" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">device</span><span class="p">:</span> <span class="n">device</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The device the node computes on and receives messages on.</p>
+<p>Allocate with it (<code>torch.zeros(..., device=self.device)</code>): the current
+device in the hooks is this one, but an explicit device states the
+intent.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.period" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">period</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.period" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">period</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The time between two updates on average, in seconds of the run's
+timer. <code>0.0</code> updates as soon as any time has passed.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.dedicated_thread" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">dedicated_thread</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.dedicated_thread" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dedicated_thread</span><span class="p">:</span> <span class="nb">bool</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the node runs on a thread of its own instead of the run's
+workers.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.generator" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">generator</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.generator" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">generator</span><span class="p">:</span> <span class="n">Generator</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The node's own random generator on <code>device</code>, seeded with <code>seed</code>.</p>
+<p><code>seed</code> sets nothing else: use this generator instead of the global
+one, which all nodes share (do not call <code>torch.manual_seed</code> in a
+node), also to initialize modules (<code>nn.init.normal_(w,
+generator=self.generator)</code>). <code>super().__init__</code> creates it, so it can
+be used in <code>__init__</code> already, and the hooks go on with the same
+sequence. Its state is part of the node's state, so a restored node
+goes on with the same sequence too.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Node.timer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">timer</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Node.timer" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">timer</span><span class="p">:</span> <span class="n">ReadOnlyTimer</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The reading side of the timer of the run whose hook runs, which
+measures the <code>dt</code> of its nodes.</p>
+<p>Read the time with <code>self.timer.now()</code> in the hooks (<code>state_dict</code>
+included). The timer is the one given to <code>mujou.run(..., timer=...)</code>,
+the global timer by default, or, for a run restored from a state, a
+new timer that started at the time of the state (<code>Run.timer</code>). A
+<code>ReadOnlyTimer</code> only reads: a node does not change the time of its
+run (<code>Timer.sleep</code>, <code>set_time_scale</code> and <code>VirtualTimer.advance</code>
+raise <code>RuntimeError</code> in a hook). It stops at the time the run ends,
+so the hooks that run after the end (<code>on_exception</code>, <code>on_stop</code>)
+see the time stand still; measure real time there instead. The host
+reads <code>Run.timer</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>This is not read in a hook of this node while it runs
+(but in <code>__init__</code>, by the host, or by another node).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.register_state" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">register_state</span>
+
+
+<a href="#mujou.Node.register_state" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">register_state</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Add the attribute <code>name</code> to the state, whatever value it holds.</p>
+<p>Use it for the plain values that change while the node runs (a
+counter, the time last seen) and for the containers of tensors (a list
+as a replay buffer), which are not state by themselves. The
+attribute is state while it is assigned, whatever it holds. The default
+<code>state_dict</code> returns the value as it is, and the default
+<code>load_state_dict</code> assigns a deep copy of the saved value (or copies
+into a tensor, or loads into a <code>Stateful</code>, that the attribute holds
+then).</p>
+<p>Register in <code>__init__</code>: a restore loads into new instances, which
+must have the same state.</p>
+<p>The state is data: when the run takes it, it detaches every tensor of
+what <code>state_dict</code> returns (in its dicts, lists and tuples) and copies
+the result, so no graph goes with it.</p>
+<p><code>torch.load(..., weights_only=True)</code> reads only basic types (<code>int</code>,
+<code>float</code>, <code>bool</code>, <code>str</code>, <code>None</code>, and lists, tuples and dicts of
+them and of tensors): keep the registered values to those if the state
+is saved with <code>torch.save</code>.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="AttributeError">AttributeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The node has no attribute <code>name</code> (not assigned
+yet, misspelled, or a property); assign it first.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_start" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_start</span>
+
+
+<a href="#mujou.Node.on_start" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_start</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called once when the run starts (also when it is restored), before any
+other hook. Do not send anything that depends on the state here: a
+restore loads it later.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_update" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_update</span>
+
+
+<a href="#mujou.Node.on_update" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called repeatedly with <code>dt</code>, the seconds on the run's timer since the
+node's last update (always &gt; 0). Read the ports, update in proportion to
+<code>dt</code> and send.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_pause" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_pause</span>
+
+
+<a href="#mujou.Node.on_pause" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_pause</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called when the node has stopped for the run to take its state
+(<code>Run.state_dict</code>), at the end of its current <code>on_update</code>. A pause
+of the timer (<code>Timer.pause</code>) does not call it.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_resume" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_resume</span>
+
+
+<a href="#mujou.Node.on_resume" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_resume</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called when the pause for taking the state ends, before the next
+<code>on_update</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_exception" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_exception</span>
+
+
+<a href="#mujou.Node.on_exception" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_exception</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called once on every node when a hook of any node has raised, before
+<code>on_stop</code>. What it raises is logged and ignored.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.on_stop" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">on_stop</span>
+
+
+<a href="#mujou.Node.on_stop" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_stop</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Called once when the run stops, also after an exception. It must not
+change what <code>state_dict</code> returns. What it raises is logged and
+ignored.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">state_dict</span>
+
+
+<a href="#mujou.Node.state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">state_dict</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the node's state: <code>"generator"</code>, the state of
+<code>generator</code>, then each attribute of the state in the order of
+assignment, under its name: a tensor <code>detach</code>-ed, the <code>state_dict()</code>
+of a <code>Stateful</code>, or a registered value as it is.</p>
+<p>The tensors share memory with the attributes (the framework copies the
+tree). <code>requires_grad</code> and <code>.grad</code> are not part of the state, as in
+<code>nn.Module.state_dict</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Node.load_state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_state_dict</span>
+
+
+<a href="#mujou.Node.load_state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Restore <code>state</code>, as the default <code>state_dict</code> returned it, into the
+attributes of the state, without recording gradients: <code>copy_</code> into
+each tensor, <code>load_state_dict</code> into each <code>Stateful</code>, and
+assign a <code>copy.deepcopy</code> of the saved value to any other registered
+attribute, with the tensors in it (in its dicts, lists and tuples)
+moved to <code>device</code>.</p>
+<p>The objects stay the same, so references taken in <code>__init__</code> or
+<code>on_start</code> see the restored values, and a tensor that records
+gradients stays a leaf that does. <code>copy_</code> casts the dtype and moves
+the device. The state of <code>generator</code> is set as it is saved, and a
+generator keeps its state in a format of its device's type: the state
+must come from a node on the same type of device (the CPU or CUDA).</p>
+<p>An override that keeps a tensor of <code>state</code> as it is shares its memory
+with the tree given to <code>mujou.run(..., state=...)</code>: copy it instead.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The keys of <code>state</code> are not those of this node's
+state, or a tensor's shape differs.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.Stateful" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.Stateful</span>
+
+
+<a href="#mujou.Stateful" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>An object with a state of its own, which a node keeps in its state.</p>
+<p>An attribute of a <code>Node</code> that holds a <code>Stateful</code> is in the node's state
+by itself: the default <code>Node.state_dict</code> returns its <code>state_dict()</code>
+under the attribute's name, and <code>Node.load_state_dict</code> passes that back
+to its <code>load_state_dict</code>. An object is one by inheriting this class, not
+by having methods of these names. <code>nn.Module</code> is registered as one;
+register a class of another library with <code>Stateful.register(cls)</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Counter(mujou.Stateful):
+    def __init__(self) -&gt; None:
+        self.n = 0
+
+    def state_dict(self) -&gt; dict[str, int]:
+        return {"n": self.n}
+
+    def load_state_dict(self, state: Mapping[str, int]) -&gt; None:
+        self.n = state["n"]
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Stateful.state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">state_dict</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+<a href="#mujou.Stateful.state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">state_dict</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the state. Its tensors may share memory with the object's: the
+run copies the state it takes.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Stateful.load_state_dict" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">load_state_dict</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+<a href="#mujou.Stateful.load_state_dict" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_state_dict</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Restore the state that <code>state_dict</code> returned, in place.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.Port" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.Port</span>
+
+
+<a href="#mujou.Port" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Port</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">send</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">recv</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">R</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">initial</span><span class="p">:</span> <span class="n">S</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.port._Port">_Port</span>[<span title="mujou.port.Port[S]">S</span>, <span title="mujou.port.Port[R]">R</span>]</code></p>
+
+
+
+        <p>A connection point that sends messages of type <code>S</code> and receives at most
+one peer's messages of type <code>R</code>.</p>
+<p>Declare ports as attributes of a node in <code>__init__</code>. <code>send</code> is the spec of
+what the port sends and <code>recv</code> the spec of what it receives; omit one for a
+one-way port (its message type is then <code>Never</code>). <code>recv()</code> returns one
+message, so a port that receives takes one peer; a port that only sends takes
+any number, and <code>send</code> reaches them all. To receive from several peers of
+one kind, use a <code>MultiPort</code>; for inputs of different roles, use one port
+each.</p>
+<p>Two ports connect when the <code>send</code> of each equals the <code>recv</code> of the other.
+A port may stay unconnected: the host then writes what it receives
+(<code>Run.write</code>).</p>
+<p><code>initial</code> is what the port has sent before its first <code>send</code>: what its
+peers receive and the host reads until then. A run copies it when it
+starts. Without it, that is zeros. A restored run
+takes the values from the state instead.</p>
+<p>A run names the port in its errors by the path of its node and its
+attribute (<code>"body.l1.next"</code>; <code>"Shift.next"</code> for a port of the node run
+as the root).</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Sensor(Node):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        self.next = Port(send=TensorSpec((3,)), initial=torch.ones(3))
+
+
+class Monitor(Node):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        self.prev = Port(recv=TensorSpec((3,)))
+
+    @override
+    def on_update(self, dt: float) -&gt; None:
+        super().on_update(dt)
+        x = self.prev.recv()  # torch.Tensor; ones until the sensor sends
+
+
+sensor, monitor = Sensor(), Monitor()
+sensor.next.connect(monitor.prev)
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Port.send_spec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">send_spec</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Port.send_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">send_spec</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec of the messages this port sends, or <code>None</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Port.recv_spec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">recv_spec</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Port.recv_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">recv_spec</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">R</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec of the messages this port receives, or <code>None</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Port.initial" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">initial</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Port.initial" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">initial</span><span class="p">:</span> <span class="n">S</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>What the port has sent before its first <code>send</code>, or <code>None</code> for
+zeros.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.Port.channels" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">channels</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.Port.channels" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">channels</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Channel</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The channels of this port, in the order they were connected.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Port.connect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">connect</span>
+
+
+<a href="#mujou.Port.connect" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">connect</span><span class="p">(</span><span class="n">other</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="n">MultiPort</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">S</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Channel</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Connect this port to <code>other</code> and return the channel between them.</p>
+<p>The channel is registered at both ports, so each sends to and receives
+from the other. Connecting the same two ports again, in either order,
+returns the same channel. A port may connect to itself.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The specs are not mutually reversed: <code>self.send_spec !=
+other.recv_spec</code> or <code>self.recv_spec != other.send_spec</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A <code>Port</code> that receives would get a second peer (use a
+<code>MultiPort</code> to receive from several).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Port.send" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">send</span>
+
+
+<a href="#mujou.Port.send" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">send</span><span class="p">(</span><span class="n">msg</span><span class="p">:</span> <span class="n">S</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Send <code>msg</code> to every peer and to what the host reads (<code>Run.read</code>).</p>
+<p><code>msg</code> must match the send spec exactly; tensor dtypes are never
+converted (a scalar is taken as Python's typing takes it: an <code>int</code>
+for a <code>float</code>). The
+values are detached and copied, so changing <code>msg</code> afterwards changes
+nothing that was sent. If a node on CUDA reads the port, a tensor on
+the node's CUDA device is copied on the device, on the node's stream,
+and <code>send</code> waits for that stream before the peers can read it; a
+peer on CUDA copies it from device to device. It stays on the device
+also while the hook has made another device current
+(<code>torch.cuda.device(...)</code>). Any other CUDA tensor is copied to the
+host. It never waits for the peers to read.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The caller is not a hook of the node that owns the port,
+while it runs (or is its <code>state_dict</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A value is not of its field's kind (a <code>torch.Tensor</code>
+for a <code>TensorSpec</code>, an <code>int</code> for an <code>IntSpec</code>, ...), or a
+<code>DictSpec</code> message is not a dict with the spec's keys.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A shape or a dtype differs from the spec.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="OverflowError">OverflowError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>An <code>int</code> is out of the range of its <code>IntSpec</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="BufferError">BufferError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A tensor is not dense (<code>torch.strided</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Port.recv" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">recv</span>
+
+
+<a href="#mujou.Port.recv" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">recv</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">R</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the latest message received, without waiting for a new one.</p>
+<p>The message comes from the peer's <code>send</code>; an unconnected port reads
+what the host writes with <code>Run.write</code> instead. Until that writer first
+writes, it is the initial value: the peer port's <code>initial</code>, or else
+zeros. For a port the host writes, it is the value in <code>inputs</code> of
+<code>mujou.run</code>, or else zeros. A restored run takes
+it from <code>state</code>. <code>recv_with_time</code> tells whether the writer has
+written yet.</p>
+<p>Every call copies into new tensors on the owning node's device, without
+gradients, so changing them in place changes nothing else.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The caller is not a hook of the node that owns the port,
+while it runs (or is its <code>state_dict</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Port.recv_with_time" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">recv_with_time</span>
+
+
+<a href="#mujou.Port.recv_with_time" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">recv_with_time</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">_native</span><span class="o">.</span><span class="n">Timestamp</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Like <code>recv</code>, but return <code>(message, time)</code>.</p>
+<p><code>time</code> is the <code>Timestamp</code> on the run's timer at which the writer wrote
+the message, or <code>None</code> while the writer has not written yet (the
+message is then the initial value). The writer is the peer (its <code>send</code>
+or <code>send_to</code>), or the host for an unconnected port (<code>inputs</code> of
+<code>mujou.run</code> or <code>Run.write</code>). A restored run keeps the times of the
+state, <code>None</code> included. Raises as <code>recv</code> does.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.MultiPort" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.MultiPort</span>
+
+
+<a href="#mujou.MultiPort" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">MultiPort</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">send</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">recv</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">R</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">initial</span><span class="p">:</span> <span class="n">S</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.port._Port">_Port</span>[<span title="mujou.port.MultiPort[S]">S</span>, <span title="mujou.port.MultiPort[R]">R</span>]</code></p>
+
+
+
+        <p>A connection point that sends messages of type <code>S</code> and receives
+messages of type <code>R</code> from any number of peers of one kind.</p>
+<p>It is declared and connected as a <code>Port</code> is, but <code>recv()</code> returns
+<code>{channel: message}</code>, one entry per peer in connection order, and
+<code>send_to</code> sends to one peer. Use it to merge or to branch peers that play
+the same role; for inputs of different roles (a prediction and an error,
+say), use one <code>Port</code> each. The host does not write to a <code>MultiPort</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Sum(Node):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        self.prev = MultiPort(recv=TensorSpec((3,)))
+        self.next = Port(send=TensorSpec((3,)))
+
+    @override
+    def on_update(self, dt: float) -&gt; None:
+        super().on_update(dt)
+        self.next.send(sum(self.prev.recv().values(), torch.zeros(3)))
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.MultiPort.send_spec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">send_spec</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.MultiPort.send_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">send_spec</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec of the messages this port sends, or <code>None</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.MultiPort.recv_spec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">recv_spec</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.MultiPort.recv_spec" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">recv_spec</span><span class="p">:</span> <span class="n">MessageSpec</span><span class="p">[</span><span class="n">R</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec of the messages this port receives, or <code>None</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.MultiPort.initial" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">initial</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.MultiPort.initial" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">initial</span><span class="p">:</span> <span class="n">S</span> <span class="o">|</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>What the port has sent before its first <code>send</code>, or <code>None</code> for
+zeros.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.MultiPort.channels" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">channels</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.MultiPort.channels" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">channels</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Channel</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The channels of this port, in the order they were connected.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.MultiPort.connect" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">connect</span>
+
+
+<a href="#mujou.MultiPort.connect" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">connect</span><span class="p">(</span><span class="n">other</span><span class="p">:</span> <span class="n">Port</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">S</span><span class="p">]</span> <span class="o">|</span> <span class="n">MultiPort</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">S</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Channel</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Connect this port to <code>other</code> and return the channel between them.</p>
+<p>The channel is registered at both ports, so each sends to and receives
+from the other. Connecting the same two ports again, in either order,
+returns the same channel. A port may connect to itself.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The specs are not mutually reversed: <code>self.send_spec !=
+other.recv_spec</code> or <code>self.recv_spec != other.send_spec</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A <code>Port</code> that receives would get a second peer (use a
+<code>MultiPort</code> to receive from several).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.MultiPort.send" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">send</span>
+
+
+<a href="#mujou.MultiPort.send" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">send</span><span class="p">(</span><span class="n">msg</span><span class="p">:</span> <span class="n">S</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Send <code>msg</code> to every peer and to what the host reads (<code>Run.read</code>).</p>
+<p><code>msg</code> must match the send spec exactly; tensor dtypes are never
+converted (a scalar is taken as Python's typing takes it: an <code>int</code>
+for a <code>float</code>). The
+values are detached and copied, so changing <code>msg</code> afterwards changes
+nothing that was sent. If a node on CUDA reads the port, a tensor on
+the node's CUDA device is copied on the device, on the node's stream,
+and <code>send</code> waits for that stream before the peers can read it; a
+peer on CUDA copies it from device to device. It stays on the device
+also while the hook has made another device current
+(<code>torch.cuda.device(...)</code>). Any other CUDA tensor is copied to the
+host. It never waits for the peers to read.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The caller is not a hook of the node that owns the port,
+while it runs (or is its <code>state_dict</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A value is not of its field's kind (a <code>torch.Tensor</code>
+for a <code>TensorSpec</code>, an <code>int</code> for an <code>IntSpec</code>, ...), or a
+<code>DictSpec</code> message is not a dict with the spec's keys.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A shape or a dtype differs from the spec.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="OverflowError">OverflowError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>An <code>int</code> is out of the range of its <code>IntSpec</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="BufferError">BufferError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A tensor is not dense (<code>torch.strided</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.MultiPort.recv" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">recv</span>
+
+
+<a href="#mujou.MultiPort.recv" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">recv</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Channel</span><span class="p">,</span> <span class="n">R</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>{channel: message}</code>, the latest message of each peer in
+connection order (<code>{}</code> while unconnected), as <code>Port.recv</code> returns the
+one message of its peer.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>As <code>Port.recv</code> raises.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.MultiPort.recv_with_time" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">recv_with_time</span>
+
+
+<a href="#mujou.MultiPort.recv_with_time" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">recv_with_time</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Channel</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">R</span><span class="p">,</span> <span class="n">_native</span><span class="o">.</span><span class="n">Timestamp</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Like <code>recv</code>, but each message comes as <code>(message, time)</code>, as
+<code>Port.recv_with_time</code> gives it.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.MultiPort.send_to" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">send_to</span>
+
+
+<a href="#mujou.MultiPort.send_to" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">send_to</span><span class="p">(</span><span class="n">channel</span><span class="p">:</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="n">S</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Send <code>msg</code> only to the peer across <code>channel</code>, one of <code>channels</code>
+(a key of <code>recv</code>).</p>
+<p>Unlike <code>send</code>, it leaves what the host reads (<code>Run.read</code>) unchanged:
+before the first <code>send</code>, that is this port's <code>initial</code> (or
+zeros). Copies and raises as <code>send</code> does.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.Channel" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.Channel</span>
+
+
+<a href="#mujou.Channel" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Channel</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">AnyPort</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">AnyPort</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>One connection between two ports, which <code>connect</code> makes.</p>
+<p>A channel is the handle of a peer: a <code>MultiPort</code>'s <code>recv</code> is keyed by
+channel, and <code>send_to</code> takes one. A channel made otherwise connects
+nothing.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>ch = a.next.connect(b.prev)
+ch.other(a.next) is b.prev  # True
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.Channel.other" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">other</span>
+
+
+<a href="#mujou.Channel.other" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">other</span><span class="p">(</span><span class="n">port</span><span class="p">:</span> <span class="n">AnyPort</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AnyPort</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the end of this channel that is not <code>port</code> (<code>port</code> itself
+for a port connected to itself).</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.MessageSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.MessageSpec</span>
+
+
+<a href="#mujou.MessageSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.Generic">Generic</span>[<span title="mujou.spec._M">_M</span>]</code></p>
+
+
+
+        <p>The spec of a message of type <code>_M</code>.</p>
+<p><code>TensorSpec</code> is a <code>MessageSpec[torch.Tensor]</code>, <code>IntSpec</code> a
+<code>MessageSpec[int]</code> and <code>DictSpec(Sample, ...)</code> a <code>MessageSpec[Sample]</code>.
+Annotate with it a function that takes any spec::</p>
+<div class="highlight"><pre><span></span><code>def sender[T](spec: MessageSpec[T]) -&gt; Port[T]:
+    return Port(send=spec)
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.TensorSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.TensorSpec</span>
+
+
+<a href="#mujou.TensorSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TensorSpec</span><span class="p">(</span><span class="n">shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<span title="torch.Tensor">Tensor</span>]</code></p>
+
+
+
+        <p>The shape and the dtype of a message that is one <code>torch.Tensor</code>.</p>
+<p>Every dimension is at least 1, and <code>()</code> is a scalar. A batch dimension is
+just a part of the shape.</p>
+<p>Two specs are equal when their shapes and dtypes are equal. A message whose shape
+or dtype differs from the spec is an error; dtypes are never converted. A spec
+has no device: a message of the spec may be on any device.</p>
+<p><code>zeros</code>, <code>rand</code> and <code>empty</code> make a tensor of the spec, on the CPU unless
+<code>device</code> says otherwise. For any other initial value, fill one of them in
+place (<code>spec.empty().fill_(0.5)</code>).</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>spec = TensorSpec((32, 256))  # float32
+spec = TensorSpec((32, 256), torch.bfloat16)
+x0 = spec.zeros()
+noise = TensorSpec((4,)).rand(generator=torch.Generator().manual_seed(0))
+ones = spec.empty(device="cuda").fill_(1.0)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>dtype</code> is not in <code>dtypes</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.TensorSpec.dtypes" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">dtypes</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+  </span>
+
+<a href="#mujou.TensorSpec.dtypes" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dtypes</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="n">dtype</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">DLPACK</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The dtypes a spec takes.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.TensorSpec.shape" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">shape</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.TensorSpec.shape" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The shape of the tensor.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.TensorSpec.dtype" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">dtype</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.TensorSpec.dtype" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">dtype</span><span class="p">:</span> <span class="n">dtype</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The dtype of the tensor.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.TensorSpec.zeros" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">zeros</span>
+
+
+<a href="#mujou.TensorSpec.zeros" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">zeros</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a tensor of this spec filled with zeros on <code>device</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.TensorSpec.empty" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">empty</span>
+
+
+<a href="#mujou.TensorSpec.empty" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">empty</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a tensor of this spec on <code>device</code> whose values are not set.</p>
+<p>Set them before use, in place: <code>spec.empty().fill_(0.5)</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.TensorSpec.rand" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">rand</span>
+
+
+<a href="#mujou.TensorSpec.rand" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">rand</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">generator</span><span class="p">:</span> <span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a tensor of this spec drawn uniformly from [0, 1) on <code>device</code>.</p>
+<p>Pass a <code>generator</code> on <code>device</code> to make the result deterministic;
+without one, the global torch generator is used.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.IntSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.IntSpec</span>
+
+
+<a href="#mujou.IntSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">IntSpec</span><span class="p">(</span><span class="n">bits</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">]</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span> <span class="n">signed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<span title="int">int</span>]</code></p>
+
+
+
+        <p>A message that is one Python <code>int</code> of <code>bits</code> bits, <code>signed</code> or not.</p>
+<p>A value out of the range of <code>bits</code> and <code>signed</code> is an error when it is
+sent or written (<code>OverflowError</code>); it is never wrapped. A <code>bool</code> is an
+<code>int</code> and is taken as 0 or 1. The initial value is 0.</p>
+<p>Two specs are equal when their <code>bits</code> and <code>signed</code> are equal.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>count = IntSpec()  # int64
+level = IntSpec(8, signed=False)  # 0 to 255
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>bits</code> is not 8, 16, 32 or 64.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.IntSpec.bits" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">bits</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.IntSpec.bits" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">bits</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The number of bits of the integer.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.IntSpec.signed" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">signed</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.IntSpec.signed" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">signed</span><span class="p">:</span> <span class="nb">bool</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the integer is signed.</p>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.FloatSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.FloatSpec</span>
+
+
+<a href="#mujou.FloatSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.spec._Unit">_Unit</span></code>, <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<span title="float">float</span>]</code></p>
+
+
+
+        <p>A message that is one Python <code>float</code> (64 bits).</p>
+<p>An <code>int</code> is taken too, as a <code>float</code> is in Python's typing, and is read
+back as a <code>float</code>. The initial value is 0.0. Every <code>FloatSpec</code> is equal.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.BoolSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.BoolSpec</span>
+
+
+<a href="#mujou.BoolSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.spec._Unit">_Unit</span></code>, <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<span title="bool">bool</span>]</code></p>
+
+
+
+        <p>A message that is one Python <code>bool</code>. The initial value is False. Every
+<code>BoolSpec</code> is equal.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.TimestampSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.TimestampSpec</span>
+
+
+<a href="#mujou.TimestampSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="mujou.spec._Unit">_Unit</span></code>, <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<a class="autorefs autorefs-internal" title="Timestamp (mujou._native.Timestamp)" href="../time/#mujou.time.Timestamp">Timestamp</a>]</code></p>
+
+
+
+        <p>A message that is one <code>mujou.time.Timestamp</code>, such as a time that
+<code>Run.write</code> returned, carried on with what was computed from it.</p>
+<p>The initial value is <code>Timestamp(ns=0)</code>. Every <code>TimestampSpec</code> is equal.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-type_alias">
+
+
+
+<h2 id="mujou.FieldSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-type_alias-name">mujou.FieldSpec</span>
+
+
+<a href="#mujou.FieldSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nc">FieldSpec</span> <span class="o">=</span> <span class="n">TensorSpec</span> <span class="o">|</span> <span class="n">IntSpec</span> <span class="o">|</span> <span class="n">FloatSpec</span> <span class="o">|</span> <span class="n">BoolSpec</span> <span class="o">|</span> <span class="n">TimestampSpec</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.DictSpec" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.DictSpec</span>
+
+
+<a href="#mujou.DictSpec" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">DictSpec</span><span class="p">(</span><span class="n">typed_dict</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">TD</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">specs</span><span class="p">:</span> <span class="n">FieldSpec</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.MessageSpec (mujou.spec.MessageSpec)" href="#mujou.MessageSpec">MessageSpec</a>[<span title="mujou.spec.DictSpec[TD]">TD</span>]</code></p>
+
+
+
+        <p>The spec of a message that is a <code>TypedDict</code> of fields.</p>
+<p>Give the <code>TypedDict</code> class and one <code>FieldSpec</code> per key: a <code>TensorSpec</code>
+for a key annotated as <code>torch.Tensor</code>, <code>IntSpec</code> for <code>int</code>,
+<code>FloatSpec</code> for <code>float</code>, <code>BoolSpec</code> for <code>bool</code> and
+<code>TimestampSpec</code> for <code>Timestamp</code>. Every key of the <code>TypedDict</code> is
+required (no nesting), and the keyword arguments name exactly its keys. The
+keys keep the order in which the <code>TypedDict</code> defines them.</p>
+<p>Two specs are equal when they use the same <code>TypedDict</code> class and equal
+specs for every key.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>class Feedback(TypedDict):
+    error: torch.Tensor
+    count: int
+
+
+spec = DictSpec(Feedback, error=TensorSpec((32, 256)), count=IntSpec())
+msg: Feedback = spec.zeros()
+error = spec.field("error", TensorSpec)  # a TensorSpec, to type checkers too
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The keyword arguments miss a key of the <code>TypedDict</code> or name
+a key it does not have.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.DictSpec.specs" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">specs</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.DictSpec.specs" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">specs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FieldSpec</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec of each key, in the order the <code>TypedDict</code> defines.</p>
+<p>To use the spec of one key as its kind, take it with <code>field</code>.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.DictSpec.field" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">field</span>
+
+
+<a href="#mujou.DictSpec.field" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">field</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">F</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">F</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the spec of <code>key</code>, checked to be a <code>kind</code>.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>h = act_spec.field("h", TensorSpec)
+h.shape
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="KeyError">KeyError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>No such key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="TypeError">TypeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The spec of <code>key</code> is not a <code>kind</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.DictSpec.zeros" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">zeros</span>
+
+
+<a href="#mujou.DictSpec.zeros" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">zeros</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TD</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a message whose tensors are zeros on <code>device</code> and whose
+scalars are zero (<code>0</code>, <code>0.0</code>, <code>False</code>, <code>Timestamp(ns=0)</code>).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.DictSpec.empty" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">empty</span>
+
+
+<a href="#mujou.DictSpec.empty" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">empty</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s1">'cpu'</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TD</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a message whose tensors are on <code>device</code> and not set, and
+whose scalars are zero as in <code>zeros</code>.</p>
+<p>Set the tensors before use, in place: <code>msg["error"].fill_(0.5)</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Images: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Geson-anko/mujou" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.top", "navigation.sections", "navigation.indexes", "search.highlight", "search.share", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

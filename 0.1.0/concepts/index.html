@@ -1,0 +1,3250 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+      
+      
+      
+        <link rel="canonical" href="https://geson-anko.github.io/mujou/0.1.0/concepts/">
+      
+      
+        <link rel="prev" href="../install/">
+      
+      
+        <link rel="next" href="../tutorial/1-run/">
+      
+      
+        
+          <link rel="alternate" href="./" hreflang="en">
+        
+          <link rel="alternate" href="../ja/concepts/" hreflang="ja">
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>How Mujou Works - Mujou</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mujou">
+  <meta property="og:title" content="How Mujou Works - Mujou">
+  <meta property="og:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta property="og:url" content="https://geson-anko.github.io/mujou/0.1.0/concepts/">
+  <meta property="og:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="722">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How Mujou Works - Mujou">
+  <meta name="twitter:description" content="Documentation for Mujou - Asynchronous Distributed Deep Learning Library for Continuous Learning">
+  <meta name="twitter:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#-how-mujou-works" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Mujou" class="md-header__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../assets/icon.jpg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mujou
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              How Mujou Works
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Select language">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../ja/concepts/" hreflang="ja" class="md-select__link">
+              日本語
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../install/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  How Mujou Works
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tutorial/1-run/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tutorial
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../topics/ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Topics
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Examples
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/node-and-ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Mujou" class="md-nav__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../assets/icon.jpg" alt="logo">
+
+    </a>
+    Mujou
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Geson-anko/mujou" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How Mujou Works
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How Mujou Works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-big-picture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The big picture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The big picture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From PyTorch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Nodes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Nodes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-order-of-the-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The order of the hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#synchronous-inside-asynchronous-between" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronous inside, asynchronous between
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-ports-and-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Ports and channels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Ports and channels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nothing-queues-only-the-latest-value-stays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nothing queues: only the latest value stays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#port-and-multiport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port and MultiPort
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-message-types-specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Message types (specs)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-networks-and-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Networks and paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Runs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Time
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Time">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#updating-in-proportion-to-dt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating in proportion to dt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-kinds-of-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two kinds of seconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. State
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. State">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-in-a-nodes-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is in a node's state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-the-whole-run-and-going-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving the whole run and going on
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Testing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-learning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Learning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Learning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-network-that-keeps-learning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A network that keeps learning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#choosing-an-update-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing an update rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules-a-node-keeps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules a node keeps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rules a node keeps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sleeping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sleeping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-again" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running again
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attributes-while-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes while running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sending-in-on_start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending in on_start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-state-in-on_stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The state in on_stop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#registering-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registering state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-extent-of-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The extent of the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-time-after-an-exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The time after an exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#moving-the-time-and-talking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving the time and talking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorial
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/1-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Run a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/2-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Write a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/3-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Test a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/4-learn-in-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Learn in a Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/5-learn-with-pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. Learn with PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/6-save-and-resume/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. Save and Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Topics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Topics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ports and Channels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Groups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/host-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/threads-and-devices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threads and Devices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Errors and Shutdown
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/update-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Update Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/pc-concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How mujou.pc Works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/visualize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualize a Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/node-and-ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Nodes and Ports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Networks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visualization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-big-picture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The big picture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The big picture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-pytorch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From PyTorch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Nodes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Nodes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-order-of-the-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The order of the hooks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#synchronous-inside-asynchronous-between" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronous inside, asynchronous between
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-ports-and-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Ports and channels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Ports and channels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nothing-queues-only-the-latest-value-stays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nothing queues: only the latest value stays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#port-and-multiport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port and MultiPort
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-message-types-specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Message types (specs)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-networks-and-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Networks and paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Runs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Time
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Time">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#updating-in-proportion-to-dt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating in proportion to dt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-kinds-of-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two kinds of seconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. State
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. State">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-in-a-nodes-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is in a node's state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-the-whole-run-and-going-on" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving the whole run and going on
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Testing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-learning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Learning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Learning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-network-that-keeps-learning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A network that keeps learning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#choosing-an-update-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing an update rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules-a-node-keeps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules a node keeps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rules a node keeps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sleeping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sleeping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-again" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running again
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attributes-while-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attributes while running
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sending-in-on_start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending in on_start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-state-in-on_stop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The state in on_stop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#registering-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registering state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-extent-of-the-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The extent of the graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-time-after-an-exception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The time after an exception
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#moving-the-time-and-talking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving the time and talking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="-how-mujou-works">🧠 How Mujou Works<a class="headerlink" href="#-how-mujou-works" title="Permanent link">&para;</a></h1>
+<p>This page explains the nine ideas you need to write programs with Mujou, in the order you meet them, with diagrams and code. It ends with the rules a node keeps. The <a href="../tutorial/1-run/">Tutorial</a> puts them to work.</p>
+<div class="admonition abstract">
+<p class="admonition-title">What you will learn</p>
+<ul>
+<li>How you write only one update of a node, and Mujou calls it over and over</li>
+<li>How nodes talk without waiting for each other, through the latest values only</li>
+<li>How runs, time, state, testing and learning are built on top of that</li>
+</ul>
+<p>You should have used PyTorch's <code>nn.Module</code> and tensors.</p>
+</div>
+<h2 id="the-big-picture">The big picture<a class="headerlink" href="#the-big-picture" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TB
+    H["Host (the Python code that drives the network)"]
+    subgraph N["Network"]
+        direction LR
+        A["Node A"] &lt;--&gt;|Channel| B["Node B"] &lt;--&gt;|Channel| C["Node C"]
+    end
+    T["The run's timer"]
+    H --&gt;|"through the Run that mujou.run(net) returns: write inputs, read outputs, take the state"| N
+    T -.-&gt;|"time and dt"| N</code></pre>
+<p>The parts of the picture, and the sections that explain them:</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>In a line</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Node</td>
+<td>A class that holds one update; Mujou calls it over and over</td>
+<td><a href="#1-nodes">1. Nodes</a></td>
+</tr>
+<tr>
+<td>Port and channel</td>
+<td>A node's connection point, and the line between two of them</td>
+<td><a href="#2-ports-and-channels">2. Ports and channels</a></td>
+</tr>
+<tr>
+<td>Spec</td>
+<td>The shape and dtype of the tensors a port sends and receives</td>
+<td><a href="#3-message-types-specs">3. Message types</a></td>
+</tr>
+<tr>
+<td>Network</td>
+<td>A container to build with; a path names a node inside it</td>
+<td><a href="#4-networks-and-paths">4. Networks and paths</a></td>
+</tr>
+<tr>
+<td>Run</td>
+<td><code>mujou.run</code> starts every node and gives the host a <code>Run</code></td>
+<td><a href="#5-runs">5. Runs</a></td>
+</tr>
+<tr>
+<td>Time</td>
+<td>One timer per run; updates are in proportion to the time <code>dt</code></td>
+<td><a href="#6-time">6. Time</a></td>
+</tr>
+<tr>
+<td>State</td>
+<td>The state of the whole run in one dict, to go on from later</td>
+<td><a href="#7-state">7. State</a></td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>A virtual timer you move by hand, for deterministic runs</td>
+<td><a href="#8-testing">8. Testing</a></td>
+</tr>
+<tr>
+<td>Learning</td>
+<td>Update rules live in nodes; no training mode, no epochs</td>
+<td><a href="#9-learning">9. Learning</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="from-pytorch">From PyTorch<a class="headerlink" href="#from-pytorch" title="Permanent link">&para;</a></h3>
+<p>If you know PyTorch, start from this table.</p>
+<table>
+<thead>
+<tr>
+<th>PyTorch</th>
+<th>Mujou</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>You call the model's <code>forward</code> in your loop</td>
+<td>Mujou calls the node's <code>on_update(dt)</code>; you write no loop</td>
+</tr>
+<tr>
+<td>The arguments and return value of <code>forward</code></td>
+<td>A port's <code>recv()</code> and <code>send()</code></td>
+</tr>
+<tr>
+<td>You assign submodules to a parent module</td>
+<td>You assign nodes to a <code>Network</code></td>
+</tr>
+<tr>
+<td><code>model.train()</code> and <code>model.eval()</code></td>
+<td>None: inference and learning happen at the same time</td>
+</tr>
+<tr>
+<td><code>loss.backward()</code> reaches the whole model</td>
+<td>Gradients stay inside a node; messages pass between nodes</td>
+</tr>
+<tr>
+<td><code>model.state_dict()</code></td>
+<td>Each node's <code>state_dict()</code>, and <code>run.state_dict()</code> for the whole run</td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-nodes">1. Nodes<a class="headerlink" href="#1-nodes" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A node is a class whose <code>on_update(dt)</code> holds one update. You write no loop: Mujou calls it over and over.</p>
+</div>
+<p>A node is the unit of computation, written as a class that inherits from <code>mujou.Node</code>. This one sends <code>a * x + b</code> of what it receives:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Affine</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""Sends ``a * x + b``, where ``x`` is the latest input."""</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span>  <span class="c1"># settings, not state</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># receives from the previous node</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># sends to the next node</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="nd">@override</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># recv() never waits</span>
+</code></pre></div>
+<p><code>__init__</code> makes the ports, and <code>on_update(dt)</code> reads, computes and sends. A node keeps its state in its own attributes.</p>
+<h3 id="the-order-of-the-hooks">The order of the hooks<a class="headerlink" href="#the-order-of-the-hooks" title="Permanent link">&para;</a></h3>
+<p>Mujou calls the other hooks too. In one run, a node goes through them like this:</p>
+<pre class="mermaid"><code>stateDiagram-v2
+    [*] --&gt; on_start
+    on_start --&gt; on_update : a restore loads the state here
+    on_update --&gt; on_update : every period on average
+    on_update --&gt; on_pause : run.state_dict()
+    on_pause --&gt; on_resume : after the state is copied
+    on_resume --&gt; on_update
+    on_update --&gt; on_stop : normal end
+    on_update --&gt; on_exception : a hook of any node raised
+    on_exception --&gt; on_stop
+    on_stop --&gt; [*]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>When it is called</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>on_start()</code></td>
+<td>Once when the run starts (also on a restore). Open I/O here</td>
+</tr>
+<tr>
+<td><code>on_update(dt)</code></td>
+<td>Over and over, every <code>period</code> on average. <code>dt</code> is the seconds since the last update</td>
+</tr>
+<tr>
+<td><code>on_pause()</code>, <code>on_resume()</code></td>
+<td>When <code>run.state_dict()</code> stops the node to take its state, and when it goes on</td>
+</tr>
+<tr>
+<td><code>on_exception()</code></td>
+<td>Once on every node, before <code>on_stop</code>, when a hook of any node has raised</td>
+</tr>
+<tr>
+<td><code>on_stop()</code></td>
+<td>Once when the run stops (also after an exception). Release I/O and other resources</td>
+</tr>
+</tbody>
+</table>
+<p>The exact order and its fine print are in the API reference of <a href="../api/node-and-ports/#mujou.Node"><code>Node</code></a>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Call <code>super()</code> first in what you override</p>
+<p>In <code>__init__</code> and in every hook, call <code>super().__init__(...)</code> or <code>super().on_update(dt)</code> first, as the code above does.</p>
+</div>
+<h3 id="synchronous-inside-asynchronous-between">Synchronous inside, asynchronous between<a class="headerlink" href="#synchronous-inside-asynchronous-between" title="Permanent link">&para;</a></h3>
+<p>The way computation runs changes at the boundary of a node.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Inside a node</th>
+<th>Between nodes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Execution</td>
+<td>Synchronous: ordinary PyTorch code</td>
+<td>Asynchronous: no node waits for another</td>
+</tr>
+<tr>
+<td>Exchange</td>
+<td>Variables and the computation graph</td>
+<td>Messages through ports (copies, detached from the graph)</td>
+</tr>
+<tr>
+<td>Gradients</td>
+<td>Recorded, as plain PyTorch does</td>
+<td>Never cross</td>
+</tr>
+</tbody>
+</table>
+<p>The node class decides how much computation one node holds: one layer, several layers, or a whole model. Put layers that should compute together (or learn together by backpropagation) in one node class.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph N1["Node 1 (two layers learning together by BP)"]
+        direction LR
+        L1["Linear"] --&gt; R["ReLU"] --&gt; L2["Linear"]
+    end
+    subgraph N2["Node 2"]
+        L3["Linear"]
+    end
+    N1 -. "message (asynchronous)" .-&gt; N2</code></pre>
+<p>Solid arrows are synchronous computation inside a node; the dotted one is an asynchronous message between nodes.</p>
+<details class="question">
+<summary>Why does a node hold no loop?</summary>
+<p>Mujou runs many nodes on a few worker threads. When a node holds only one update, Mujou decides when and on which thread to call it. That is also what lets it stop every node to take the state, and lets a test update the nodes one step at a time.</p>
+</details>
+<h2 id="2-ports-and-channels">2. Ports and channels<a class="headerlink" href="#2-ports-and-channels" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A port is a connection point of a node, and a channel is the line between two ports. A reader never waits: it reads the latest value the peer sent.</p>
+</div>
+<p><code>connect</code> joins two ports with one channel, and returns the channel.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># the output of scale to the input of shift</span>
+</code></pre></div>
+<h3 id="nothing-queues-only-the-latest-value-stays">Nothing queues: only the latest value stays<a class="headerlink" href="#nothing-queues-only-the-latest-value-stays" title="Permanent link">&para;</a></h3>
+<p>A channel is not a queue. A value sent replaces the one before it, and <code>recv()</code> returns the latest at that moment.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant A as Node A (sends)
+    participant C as Channel
+    participant B as Node B (reads)
+    B-&gt;&gt;C: recv()
+    C--&gt;&gt;B: the initial value (zeros by default, time None)
+    A-&gt;&gt;C: send(1)
+    A-&gt;&gt;C: send(2)
+    B-&gt;&gt;C: recv()
+    C--&gt;&gt;B: 2 (1 was replaced before anyone read it)
+    B-&gt;&gt;C: recv()
+    C--&gt;&gt;B: 2 (the same value again)
+    A-&gt;&gt;C: send(3)</code></pre>
+<ul>
+<li>Reading never waits: a value comes back at once, even before the peer has sent anything</li>
+<li>Until the peer first sends, it returns the peer's initial value (zeros by default) with the time <code>None</code></li>
+<li>Every value carries the time it was sent. Read it with <code>recv_with_time()</code> to tell a new value from the same one read again</li>
+</ul>
+<details class="question">
+<summary>Why not a queue?</summary>
+<p>In a queue, values pile up when the sender and the reader run at different rates, and the nodes end up in step with the slower one. When nodes only read and write the latest value, each runs at its own rate without waiting for the others.</p>
+</details>
+<h3 id="port-and-multiport">Port and MultiPort<a class="headerlink" href="#port-and-multiport" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    subgraph fan["Port: a sender reaches any number of peers"]
+        direction LR
+        S["sending Port"] --&gt; R1["receiving Port"]
+        S --&gt; R2["receiving Port"]
+    end
+    subgraph gather["MultiPort: gathers peers of one kind"]
+        direction LR
+        X1["sending Port"] --&gt; M["MultiPort&lt;br/&gt;recv() → dict[Channel, value]"]
+        X2["sending Port"] --&gt; M
+    end</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>Port</code></th>
+<th><code>MultiPort</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Peers it receives from</td>
+<td>At most one</td>
+<td>Any number, of one kind</td>
+</tr>
+<tr>
+<td>What <code>recv()</code> returns</td>
+<td>One value</td>
+<td>A <code>dict[Channel, value]</code>, in the order of <code>connect</code></td>
+</tr>
+<tr>
+<td>Use it for</td>
+<td>One-to-one exchange; one-to-many when it only sends</td>
+<td>Gathering inputs of one kind; the node decides how to combine them</td>
+</tr>
+</tbody>
+</table>
+<p>Inputs of different roles (a prediction and an error, say) go to separate <code>Port</code>s, not to one <code>MultiPort</code>. Connections may form cycles. More in <a href="../topics/ports/">Ports and Channels</a>.</p>
+<h2 id="3-message-types-specs">3. Message types (specs)<a class="headerlink" href="#3-message-types-specs" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A port declares the shape and dtype of what it sends and receives with a spec. Only ports whose specs match connect.</p>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">VECTOR</span> <span class="o">=</span> <span class="n">TensorSpec</span><span class="p">((</span><span class="mi">3</span><span class="p">,))</span>      <span class="c1"># a float32 vector of 3</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># receives only</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># sends only</span>
+</code></pre></div>
+<p>Two ports connect only when the spec each sends matches the spec the other receives. The values are <code>torch.Tensor</code>, Python scalars, or a dict of them:</p>
+<table>
+<thead>
+<tr>
+<th>Spec</th>
+<th>What it carries</th>
+<th>Use it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TensorSpec(shape, dtype)</code></td>
+<td>One tensor</td>
+<td>One value, such as an activity or an error</td>
+</tr>
+<tr>
+<td><code>IntSpec(bits)</code>, <code>FloatSpec</code>, <code>BoolSpec</code>, <code>TimestampSpec</code></td>
+<td>One <code>int</code>, <code>float</code>, <code>bool</code> or <code>Timestamp</code></td>
+<td>A count, a flag or a time, without wrapping it in a tensor</td>
+</tr>
+<tr>
+<td><code>DictSpec</code></td>
+<td>A <code>TypedDict</code> of tensors and scalars</td>
+<td>Values that must arrive together, such as an input and its target</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Send values that belong together in one message</p>
+<p>The values of two ports arrive separately: a reader may read a new value of one with an old value of the other. Put an input and its target in a <code>DictSpec</code>, and the whole dict arrives at once.</p>
+</div>
+<p><code>send</code> sends a copy, detached from the computation graph: changing the tensor afterwards does not change what was sent.</p>
+<h2 id="4-networks-and-paths">4. Networks and paths<a class="headerlink" href="#4-networks-and-paths" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A <code>Network</code> is a container for building nodes together; it runs nothing itself. A path, the attribute names from the root joined with dots, names a node inside.</p>
+</div>
+<p>As you give an <code>nn.Module</code> its submodules, you assign nodes to a network's attributes and connect their ports. This network puts two nodes in a row: double, then add 1.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">"""``x -&gt; scale -&gt; shift -&gt;``: y = 2 x + 1."""</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span>  <span class="c1"># exposed as its own</span>
+</code></pre></div>
+<p>The last line exposes the input of the first node and the output of the last as the network's own <code>prev</code> and <code>next</code>, so that the network connects from outside like a node.</p>
+<p>With networks inside networks, a path joins the attribute names from the root:</p>
+<pre class="mermaid"><code>flowchart TB
+    R["root network"] --&gt;|body| B["network"]
+    R --&gt;|head| H["node&lt;br/&gt;path head"]
+    B --&gt;|l1| L1["node&lt;br/&gt;path body.l1"]
+    B --&gt;|l2| L2["node&lt;br/&gt;path body.l2"]</code></pre>
+<p>Paths are the keys of the state (<a href="#7-state">7. State</a>). To only put children side by side under names, use <code>Group(**named)</code>. A network runs nothing itself; while running, the nodes inside it each run on their own.</p>
+<h2 id="5-runs">5. Runs<a class="headerlink" href="#5-runs" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p><code>mujou.run(root)</code> runs every node in the background and gives the host a handle, the <code>Run</code>. Through it, the host writes inputs and reads outputs.</p>
+</div>
+<p>The host is your program. This runs the <code>Pipeline</code> above and waits for its output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">()</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="c1"># the time it was sent (TimeoutError after 5 s of real time).</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> at t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
+</code></pre></div>
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as Host
+    participant R as Run
+    participant N as Nodes (scale, shift)
+    H-&gt;&gt;R: mujou.run(net)
+    Note over R,N: checks the tree and starts every node
+    H-&gt;&gt;R: write({net.prev: x})
+    loop each node, every period on average
+        N-&gt;&gt;N: on_update(dt)
+    end
+    H-&gt;&gt;R: wait_for(net.next, condition)
+    R--&gt;&gt;H: the value that meets it, and the time it was sent
+    H-&gt;&gt;R: leave the with block
+    Note over R,N: calls on_stop on every node, and ends the run</code></pre>
+<p>What the host does with a <code>Run</code>:</p>
+<table>
+<thead>
+<tr>
+<th>To</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Write an input</td>
+<td><code>run.write</code></td>
+</tr>
+<tr>
+<td>Read the latest output</td>
+<td><code>run.read</code>, <code>run.read_with_time</code></td>
+</tr>
+<tr>
+<td>Wait for an output that meets a condition</td>
+<td><code>run.wait_for</code></td>
+</tr>
+<tr>
+<td>Take every value sent, in turn</td>
+<td><code>run.subscribe</code></td>
+</tr>
+<tr>
+<td>Wait on the run's time</td>
+<td><code>run.timer.sleep</code></td>
+</tr>
+<tr>
+<td>Take the state</td>
+<td><code>run.state_dict()</code></td>
+</tr>
+<tr>
+<td>End the run</td>
+<td>Leave the <code>with</code> block, or <code>run.shutdown()</code></td>
+</tr>
+</tbody>
+</table>
+<p>A root runs once: to run again, build new instances. After the run, the nodes' attributes are the host's to read. More in <a href="../topics/host-io/">Host I/O</a>.</p>
+<h2 id="6-time">6. Time<a class="headerlink" href="#6-time" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A run has one time axis, its timer. A node moves its state forward in proportion to <code>dt</code>, the time since its last update.</p>
+</div>
+<p>Each run has one time axis, its timer, used by every node and by the host: <code>mujou.time.global_timer</code> unless the run is given a <code>Timer</code> of its own. The host waits on it and pauses it through <code>run.timer</code>; a node only reads it, with <code>self.timer</code>.</p>
+<h3 id="updating-in-proportion-to-dt">Updating in proportion to <code>dt</code><a class="headerlink" href="#updating-in-proportion-to-dt" title="Permanent link">&para;</a></h3>
+<p>Each node updates once every <code>period</code> on average, but the intervals differ between nodes and vary. So <code>on_update</code> moves the state in proportion to the <code>dt</code> it is given, not to the number of updates.</p>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 170" role="img" aria-label="The update times of two nodes. Node A updates at even intervals, node B at uneven ones, one of them much longer">
+<line class="mujou-axis" x1="90" y1="150" x2="620" y2="150"/>
+<text class="mujou-label" x="620" y="166" text-anchor="end">the run's timer →</text>
+<text class="mujou-label" x="10" y="54">Node A</text>
+<line class="mujou-lane" x1="90" y1="50" x2="620" y2="50"/>
+<g class="mujou-tick-a"><line x1="100" y1="38" x2="100" y2="62"/><line x1="160" y1="38" x2="160" y2="62"/><line x1="220" y1="38" x2="220" y2="62"/><line x1="280" y1="38" x2="280" y2="62"/><line x1="340" y1="38" x2="340" y2="62"/><line x1="400" y1="38" x2="400" y2="62"/><line x1="460" y1="38" x2="460" y2="62"/><line x1="520" y1="38" x2="520" y2="62"/><line x1="580" y1="38" x2="580" y2="62"/></g>
+<text class="mujou-note" x="130" y="30" text-anchor="middle">dt</text>
+<text class="mujou-note" x="190" y="30" text-anchor="middle">dt</text>
+<text class="mujou-label" x="10" y="114">Node B</text>
+<line class="mujou-lane" x1="90" y1="110" x2="620" y2="110"/>
+<g class="mujou-tick-b"><line x1="100" y1="98" x2="100" y2="122"/><line x1="175" y1="98" x2="175" y2="122"/><line x1="235" y1="98" x2="235" y2="122"/><line x1="400" y1="98" x2="400" y2="122"/><line x1="455" y1="98" x2="455" y2="122"/><line x1="530" y1="98" x2="530" y2="122"/><line x1="590" y1="98" x2="590" y2="122"/></g>
+<path class="mujou-brace" d="M 237 92 Q 237 84 245 84 L 390 84 Q 398 84 398 92"/>
+<text class="mujou-note" x="317" y="78" text-anchor="middle">a busy machine only makes dt longer</text>
+</svg>
+<figcaption>Each vertical line is an update. The intervals differ between nodes and vary; every update gets the time since the last one as <code>dt</code></figcaption>
+</figure>
+
+<p>A node that follows its input <span class="arithmatex">\(u\)</span> with the time constant <span class="arithmatex">\(\tau\)</span>, say, obeys this differential equation:</p>
+<div class="arithmatex">\[
+\frac{dx}{dt} = \frac{u - x}{\tau}
+\]</div>
+<p>and <code>on_update(dt)</code> moves it forward by <code>dt</code>:</p>
+<div class="arithmatex">\[
+x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
+\]</div>
+<p>Written this way, nodes updating at different and varying rates follow the same dynamics; a busy machine only makes <code>dt</code> longer, and none of the elapsed time is lost. You build this node, <code>Leaky</code>, in <a href="../tutorial/2-node/">Write a Node</a>.</p>
+<h3 id="two-kinds-of-seconds">Two kinds of seconds<a class="headerlink" href="#two-kinds-of-seconds" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Seconds of</th>
+<th>Used by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The run's timer</td>
+<td><code>dt</code>, <code>period</code>, <code>run.timer.sleep</code>, the times values were sent</td>
+</tr>
+<tr>
+<td>Real time</td>
+<td><code>timeout</code> only</td>
+</tr>
+</tbody>
+</table>
+<p>The host can pause the run's timer or change its speed; <code>dt</code> and <code>period</code> follow the timer, and only <code>timeout</code> is measured in real time. More in <a href="../topics/time/">Time</a>.</p>
+<h2 id="7-state">7. State<a class="headerlink" href="#7-state" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>A node's state is collected from its attributes by itself. <code>run.state_dict()</code> takes the state of the whole run in one dict, and <code>mujou.run(..., state=tree)</code> goes on from there.</p>
+</div>
+<h3 id="what-is-in-a-nodes-state">What is in a node's state<a class="headerlink" href="#what-is-in-a-nodes-state" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart TD
+    A["an attribute of the node"] --&gt; Q1{"a tensor?"}
+    Q1 -- yes --&gt; S["state (by itself)"]
+    Q1 -- no --&gt; Q2{"has state_dict and load_state_dict?&lt;br/&gt;(an nn.Module, say)"}
+    Q2 -- yes --&gt; S
+    Q2 -- no --&gt; Q3{"changes while running?"}
+    Q3 -- yes --&gt; R["add it with register_state"]
+    Q3 -- no --&gt; C["a setting, not state"]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>In the state?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>self.x = SCALAR.zeros()</code></td>
+<td>Yes, by itself: a tensor</td>
+</tr>
+<tr>
+<td><code>self.model = nn.Linear(4, 2)</code></td>
+<td>Yes, by itself: a <code>mujou.Stateful</code></td>
+</tr>
+<tr>
+<td><code>self.count = 0</code></td>
+<td>With <code>self.register_state("count")</code></td>
+</tr>
+<tr>
+<td><code>self.buffer = []</code> (a list of tensors)</td>
+<td>With <code>self.register_state("buffer")</code></td>
+</tr>
+<tr>
+<td><code>self.tau = 0.05</code> (a setting that stays)</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p>The state of the node's random generator is in it too. The rules are in the API reference of <a href="../api/node-and-ports/#mujou.Node"><code>Node</code></a>.</p>
+<h3 id="saving-the-whole-run-and-going-on">Saving the whole run and going on<a class="headerlink" href="#saving-the-whole-run-and-going-on" title="Permanent link">&para;</a></h3>
+<p><code>run.state_dict()</code> takes the state of the whole run at one time, without ending it: the nodes' states, the latest message on each channel and the time, in one plain dict keyed by paths.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">tree</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># {</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1">#     "timer": {"time_ns": ..., "time_scale": ...},</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1">#     "nodes": {</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1">#         "body.l1": {"state": ..., "last_update_ns": ..., "ports": {...}},</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1">#         ...</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1">#     },</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># }</span>
+</code></pre></div>
+<pre class="mermaid"><code>flowchart LR
+    A["a running Run"] --&gt;|"run.state_dict()"| T["the state tree&lt;br/&gt;(a plain dict on the CPU)"]
+    T --&gt;|torch.save| F[("file")]
+    F --&gt;|torch.load| T2["the state tree"]
+    T2 --&gt;|"mujou.run(new_instance, state=tree)"| B["a Run that goes on&lt;br/&gt;on a timer of its own, from the saved time"]</code></pre>
+<p>See <a href="../tutorial/6-save-and-resume/">Save and Resume</a>.</p>
+<h2 id="8-testing">8. Testing<a class="headerlink" href="#8-testing" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p><code>mujou.testing.run</code> runs on a virtual timer that you move by hand, deterministically.</p>
+</div>
+<p>In an ordinary run, when each node updates varies from run to run. In a test, the test decides the time and the order of the updates.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>mujou.run</code></th>
+<th><code>mujou.testing.run</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Timer</td>
+<td>The run's timer (<code>global_timer</code> by default)</td>
+<td>A virtual timer, which moves only with <code>run.step</code></td>
+</tr>
+<tr>
+<td>Updates</td>
+<td>Each node, every <code>period</code> on average</td>
+<td>Once each with <code>run.step(dt, *nodes)</code>; <code>period</code> does not apply</td>
+</tr>
+<tr>
+<td><code>dt</code></td>
+<td>The time that actually passed</td>
+<td>The time <code>step</code> moved</td>
+</tr>
+<tr>
+<td>Results</td>
+<td>Vary from run to run</td>
+<td>The same every time</td>
+</tr>
+</tbody>
+</table>
+<p><code>run.step(dt, *nodes)</code> moves the time <code>dt</code> forward, then updates the given nodes once each, in the given order. Without nodes, it updates every node in the order of the tree.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant T as Test
+    participant R as ManualRun
+    participant A as net.a
+    participant B as net.b
+    T-&gt;&gt;R: run.step(h, net.a, net.b)
+    R-&gt;&gt;R: moves the virtual timer h forward
+    R-&gt;&gt;A: on_update(h)
+    A--&gt;&gt;B: send (b reads this value)
+    R-&gt;&gt;B: on_update(h)
+    R--&gt;&gt;T: returns</code></pre>
+<p>This test compares <code>Leaky</code>, the node of section 6, with the exact solution:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeaky</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_follows_the_exact_solution</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">tau</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mi">100</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">node</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">one</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="n">expected</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># 1 ms later, then every node once (period is ignored)</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>                <span class="n">expected</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">h</span> <span class="o">/</span> <span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>            <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="n">steps</span> <span class="o">*</span> <span class="mi">1_000_000</span>  <span class="c1"># sent at the last step</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+</code></pre></div>
+<p>See <a href="../tutorial/3-test/">Test a Node</a>.</p>
+<h2 id="9-learning">9. Learning<a class="headerlink" href="#9-learning" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">Key idea</p>
+<p>An update rule is written inside the nodes. Only messages pass between nodes, and there is no training mode, no inference mode and there are no epochs.</p>
+</div>
+<h3 id="a-network-that-keeps-learning">A network that keeps learning<a class="headerlink" href="#a-network-that-keeps-learning" title="Permanent link">&para;</a></h3>
+<p>Classical machine learning fixes the weights after training, then infers. A running Mujou network takes input, produces output and learns at the same time.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph old["Classical machine learning"]
+        direction LR
+        T1["train"] --&gt; F["fix the weights"] --&gt; I["infer"]
+    end
+    subgraph new["Mujou"]
+        direction LR
+        IN["input"] --&gt; NW["a running network"] --&gt; OUT["output"]
+        NW --&gt;|"learns meanwhile"| NW
+    end</code></pre>
+<h3 id="choosing-an-update-rule">Choosing an update rule<a class="headerlink" href="#choosing-an-update-rule" title="Permanent link">&para;</a></h3>
+<p>Mujou builds no rule into nodes, ports or the scheduler: the nodes decide how they learn.</p>
+<table>
+<thead>
+<tr>
+<th>Update rule</th>
+<th>Where gradients are taken</th>
+<th>Read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backpropagation in a node</td>
+<td>Inside one node, with an ordinary <code>loss.backward()</code></td>
+<td><a href="../tutorial/4-learn-in-a-node/">Learn in a Node</a></td>
+</tr>
+<tr>
+<td>PC-ALM (<code>mujou.pc</code>)</td>
+<td>Inside each node; neighbors exchange messages</td>
+<td><a href="../tutorial/5-learn-with-pc/">Learn with PC-ALM</a></td>
+</tr>
+<tr>
+<td>A rule of your own</td>
+<td>As the node decides</td>
+<td><a href="../topics/update-rules/">Update Rules</a></td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>flowchart LR
+    subgraph bp["Backpropagation in a node"]
+        direction LR
+        X["input"] --&gt; M["one node&lt;br/&gt;forward → loss → backward → update"]
+    end
+    subgraph pc["PC-ALM"]
+        direction LR
+        P1["node"] -- activity --&gt; P2["node"]
+        P2 -- activity --&gt; P3["node"]
+        P3 -. energy gradient .-&gt; P2
+        P2 -. energy gradient .-&gt; P1
+    end</code></pre>
+<p>No computation graph crosses nodes, because a port sends a detached copy: what passes between nodes is messages, such as activities, errors and targets.</p>
+<h2 id="rules-a-node-keeps">Rules a node keeps<a class="headerlink" href="#rules-a-node-keeps" title="Permanent link">&para;</a></h2>
+<p>The cautions about nodes on the other pages are gathered here.</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>If you break it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#sleeping">Do not block with <code>time.sleep</code></a></td>
+<td>The other nodes' <code>dt</code> grows</td>
+</tr>
+<tr>
+<td><a href="#running-again">A node runs once</a></td>
+<td><code>RuntimeError</code></td>
+</tr>
+<tr>
+<td><a href="#attributes-while-running">Do not read a node's attributes from the host while it runs</a></td>
+<td>It races with the node's updates</td>
+</tr>
+<tr>
+<td><a href="#sending-in-on_start">Send nothing that depends on the state in <code>on_start</code></a></td>
+<td>It sends the state from before the restore</td>
+</tr>
+<tr>
+<td><a href="#the-state-in-on_stop">Do not change the state in <code>on_stop</code></a></td>
+<td>The state taken after a normal end changes</td>
+</tr>
+<tr>
+<td><a href="#registering-state">Register the values that change while running</a></td>
+<td>A restore starts them again</td>
+</tr>
+<tr>
+<td><a href="#the-extent-of-the-graph">Keep the graph inside one update</a></td>
+<td>The graph keeps growing</td>
+</tr>
+<tr>
+<td><a href="#the-time-after-an-exception">After an exception, the time stands still</a></td>
+<td>No time passes on <code>self.timer</code></td>
+</tr>
+<tr>
+<td><a href="#moving-the-time-and-talking">Only the host moves the time, and only through ports does a node talk</a></td>
+<td><code>RuntimeError</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sleeping">Sleeping<a class="headerlink" href="#sleeping" title="Permanent link">&para;</a></h3>
+<p><strong>Do not block with <code>time.sleep</code>.</strong> A node shares its worker thread with others, and a hook that blocks holds the worker: the other nodes' <code>dt</code> grows.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># to update every 0.1 s</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># updates every 0.1 s on average</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Update at intervals with <code>period</code>, and give a node whose hooks must block (on a device, a socket, a lock) <code>dedicated_thread=True</code>. The host waits with <code>run.timer.sleep</code>, which follows the time scale and the pauses of the run; <code>time.sleep</code> follows neither.</p>
+<h3 id="running-again">Running again<a class="headerlink" href="#running-again" title="Permanent link">&para;</a></h3>
+<p><strong>A node runs once.</strong> Running a node or network that has run raises <code>RuntimeError</code>; build new instances to run again. After the run, the attributes stay readable.</p>
+<h3 id="attributes-while-running">Attributes while running<a class="headerlink" href="#attributes-while-running" title="Permanent link">&para;</a></h3>
+<p><strong>Do not read a node's attributes from the host while it runs.</strong> It races with the node's updates. Read the ports with <code>run.read</code>, or take <code>run.state_dict()</code>.</p>
+<h3 id="sending-in-on_start">Sending in on_start<a class="headerlink" href="#sending-in-on_start" title="Permanent link">&para;</a></h3>
+<p><strong>Send nothing that depends on the state in <code>on_start</code>.</strong> A restore loads the state after <code>on_start</code>.</p>
+<h3 id="the-state-in-on_stop">The state in on_stop<a class="headerlink" href="#the-state-in-on_stop" title="Permanent link">&para;</a></h3>
+<p><strong>Do not change the state in <code>on_stop</code>.</strong> The state taken after a normal end is the state the nodes left after <code>on_stop</code>. Release resources such as I/O there.</p>
+<h3 id="registering-state">Registering state<a class="headerlink" href="#registering-state" title="Permanent link">&para;</a></h3>
+<p><strong>Register the values that change while running.</strong> Tensors and modules are collected by themselves; plain values (a counter, the time last seen) and containers of tensors (a list as a replay buffer) need <code>register_state</code>, or a restore starts them again.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Avoid</label><label for="__tabbed_2_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># back to 0 after a restore</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"count"</span><span class="p">)</span>  <span class="c1"># register in __init__</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="the-extent-of-the-graph">The extent of the graph<a class="headerlink" href="#the-extent-of-the-graph" title="Permanent link">&para;</a></h3>
+<p><strong>Keep the graph inside one update.</strong> Hooks record gradients as plain PyTorch does. Update the parameters inside <code>torch.no_grad()</code>, and detach a value computed from the parameters before you carry it to the next update in an attribute, or the graph keeps growing.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Avoid</label><label for="__tabbed_3_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">last_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># carries the graph to the next update</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">last_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>        <span class="n">p</span> <span class="o">-=</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">p</span><span class="o">.</span><span class="n">grad</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="the-time-after-an-exception">The time after an exception<a class="headerlink" href="#the-time-after-an-exception" title="Permanent link">&para;</a></h3>
+<p><strong>After an exception, the time stands still.</strong> The run's time stops when the run ends, so <code>self.timer</code> does not move in <code>on_exception</code> and <code>on_stop</code>: measure real time there (to slow a robot down over a second, say).</p>
+<h3 id="moving-the-time-and-talking">Moving the time and talking<a class="headerlink" href="#moving-the-time-and-talking" title="Permanent link">&para;</a></h3>
+<p><strong>Only the host moves the time, and only through ports does a node talk.</strong> In a hook, <code>Timer.sleep</code>, <code>pause</code>, <code>resume</code>, <code>set_time_scale</code>, <code>VirtualTimer.advance</code> and the methods of <code>Run</code> raise <code>RuntimeError</code>: a node that moved the time would change the <code>dt</code> of every other node of the run. <code>backward()</code> cannot reach another node, since a sent value is a detached copy.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Images: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Geson-anko/mujou" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tracking", "navigation.tabs", "navigation.top", "navigation.sections", "navigation.indexes", "search.highlight", "search.share", "content.code.copy", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

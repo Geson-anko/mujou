@@ -1,0 +1,126 @@
+/* The theme colors come from the deep purple palette (mkdocs.yml); this file only
+   adds what the palette does not cover. */
+
+/* A gradient header, from deep purple to purple. */
+.md-header,
+.md-tabs {
+  background: linear-gradient(90deg, #4527a0 0%, #6a1b9a 100%);
+}
+
+/* Japanese text needs more line spacing than Latin text to stay readable. */
+.md-typeset {
+  line-height: 1.8;
+}
+
+/* The tagline under the title of the home page. */
+.md-typeset .mujou-tagline {
+  font-size: 1.15em;
+  color: var(--md-default-fg-color--light);
+  margin-top: -0.6em;
+}
+
+/* Grid cards: lift on hover, tinted with the accent color. */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border-radius: 0.6rem;
+  transition:
+    border-color 125ms,
+    box-shadow 125ms,
+    transform 125ms;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-2px);
+}
+
+.md-typeset .grid.cards > ul > li > hr,
+.md-typeset .grid > .card > hr {
+  margin: 0.4em 0;
+}
+
+/* The logo in the header: the round icon of Mujou. */
+.md-header__button.md-logo img {
+  height: 1.8rem;
+  border-radius: 50%;
+}
+
+/* The image of Mujou on the home page, and its credit. */
+.md-typeset .mujou-hero {
+  width: 100%;
+  border-radius: 0.8rem;
+  box-shadow: var(--md-shadow-z2);
+}
+
+.md-typeset figure.mujou-figure {
+  margin: 1em 0 1.6em;
+}
+
+.md-typeset figure.mujou-figure figcaption {
+  max-width: none;
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Hand-drawn SVG diagrams (the How Mujou Works page): colors from the theme, so
+   that they follow the light and dark schemes. */
+.md-typeset figure.mujou-diagram {
+  margin: 1em 0 1.6em;
+}
+
+.md-typeset figure.mujou-diagram svg {
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+}
+
+.md-typeset figure.mujou-diagram figcaption {
+  max-width: none;
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.mujou-diagram .mujou-label {
+  fill: var(--md-default-fg-color);
+  font-size: 13px;
+}
+
+.mujou-diagram .mujou-note {
+  fill: var(--md-default-fg-color--light);
+  font-size: 12px;
+}
+
+.mujou-diagram .mujou-axis {
+  stroke: var(--md-default-fg-color--light);
+  stroke-width: 1.5;
+}
+
+.mujou-diagram .mujou-lane {
+  stroke: var(--md-default-fg-color--lighter);
+  stroke-width: 1;
+}
+
+.mujou-diagram .mujou-tick-a line {
+  stroke: var(--md-typeset-a-color);
+  stroke-width: 3;
+}
+
+.mujou-diagram .mujou-tick-b line {
+  stroke: var(--md-accent-fg-color);
+  stroke-width: 3;
+}
+
+.mujou-diagram .mujou-brace {
+  fill: none;
+  stroke: var(--md-default-fg-color--light);
+  stroke-width: 1.2;
+}
+
+/* A page of mujou.viz, embedded in docs/{en,ja}/topics/visualize.md. */
+.md-typeset iframe.mujou-viz {
+  width: 100%;
+  height: 32rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+}

@@ -1,0 +1,2663 @@
+
+<!doctype html>
+<html lang="ja" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+      
+      
+      
+        <link rel="canonical" href="https://geson-anko.github.io/mujou/0.1.0/ja/topics/pc-concepts/">
+      
+      
+        <link rel="prev" href="../update-rules/">
+      
+      
+        <link rel="next" href="../pc/">
+      
+      
+        
+          <link rel="alternate" href="../../../topics/pc-concepts/" hreflang="en">
+        
+          <link rel="alternate" href="./" hreflang="ja">
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>mujou.pc の仕組み - Mujou</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mujou">
+  <meta property="og:title" content="mujou.pc の仕組み - Mujou">
+  <meta property="og:description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+  <meta property="og:url" content="https://geson-anko.github.io/mujou/0.1.0/ja/topics/pc-concepts/">
+  <meta property="og:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="722">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="mujou.pc の仕組み - Mujou">
+  <meta name="twitter:description" content="連続的継続学習のための非同期分散型深層学習フレームワーク">
+  <meta name="twitter:image" content="https://geson-anko.github.io/mujou/0.1.0/assets/hero.jpg">
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#-mujoupc-の仕組み" class="md-skip">
+          コンテンツにスキップ
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="ヘッダー">
+    <a href="../../" title="Mujou" class="md-header__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../../assets/icon.jpg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Mujou
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              mujou.pc の仕組み
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="言語切り替え">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../../topics/pc-concepts/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="ja" class="md-select__link">
+              日本語
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="検索" placeholder="検索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="検索">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="共有" aria-label="共有" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="クリア" aria-label="クリア" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            検索を初期化
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Geson-anko/mujou" title="リポジトリへ" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="タブ" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+  
+    
+  
+  ホーム
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../install/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  インストール
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Mujou の仕組み
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorial/1-run/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  チュートリアル
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  トピック
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../examples/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  サンプル
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/node-and-ports/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API リファレンス
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  変更履歴
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="ナビゲーション" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../" title="Mujou" class="md-nav__button md-logo" aria-label="Mujou" data-md-component="logo">
+      
+  <img src="../../../assets/icon.jpg" alt="logo">
+
+    </a>
+    Mujou
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Geson-anko/mujou" title="リポジトリへ" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Geson-anko/mujou
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ホーム
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    インストール
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mujou の仕組み
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    チュートリアル
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    チュートリアル
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/1-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. ネットワークを走らせる
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/2-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. ノードを書く
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/3-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. ノードをテストする
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/4-learn-in-a-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. ノードの中で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/5-learn-with-pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. PC-ALM で学習する
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/6-save-and-resume/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. 保存と再開
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    トピック
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    トピック
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Port と Channel
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Group
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../host-io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ホストの入出力
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../threads-and-devices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    スレッドとデバイス
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    例外と終了
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../update-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    更新則
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mujou.pc の仕組み
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mujou.pc の仕組み
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目次">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目次
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ノードが持つ量" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが持つ量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ノードが持つ量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが r を持ち、mu を送る理由
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#新しいサンプルのリセットと持ち越し" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        新しいサンプルのリセットと持ち越し
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-部品" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 部品
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-つながりと流れるもの" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. つながりと流れるもの
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. つながりと流れるもの">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#port-の向き" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port の向き
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-layer-の-1-回の更新" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Layer の 1 回の更新
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-learnclock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. LearnClock
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-timeconstants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. TimeConstants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#設定を各ノードで束縛する" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        設定を各ノードで束縛する
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-と-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD と AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#質量-c-時間で行う-bias-補正" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        質量 c: 時間で行う bias 補正
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#自分の-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. relaxer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. relaxer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#自分の-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の relaxer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ネットワークの可視化
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    サンプル
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API リファレンス
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API リファレンス
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/node-and-ports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ノードと Port
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ネットワーク
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    実行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    テスト
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    型
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    可視化
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    変更履歴
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目次">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目次
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ノードが持つ量" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが持つ量
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ノードが持つ量">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-mu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードが r を持ち、mu を送る理由
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#新しいサンプルのリセットと持ち越し" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        新しいサンプルのリセットと持ち越し
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-部品" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. 部品
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-つながりと流れるもの" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. つながりと流れるもの
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. つながりと流れるもの">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#port-の向き" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Port の向き
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-layer-の-1-回の更新" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Layer の 1 回の更新
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-learnclock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. LearnClock
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-timeconstants" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. TimeConstants
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#設定を各ノードで束縛する" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        設定を各ノードで束縛する
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sgd-と-adamw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SGD と AdamW
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#質量-c-時間で行う-bias-補正" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        質量 c: 時間で行う bias 補正
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#自分の-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. relaxer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. relaxer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#自分の-relaxer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        自分の relaxer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="-mujoupc-の仕組み">🔩 mujou.pc の仕組み<a class="headerlink" href="#-mujoupc-の仕組み" title="Permanent link">&para;</a></h1>
+<p><code>mujou.pc</code> の部品が何をし、どうつながり、1 回の更新で何を計算するかを説明する。読み終えれば <a href="../pc/">PC-ALM</a> の「自分のノードを書く」と <code>examples/pc_merge.py</code> に出てくる名前が分かる。使い方は <a href="../../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a> で。</p>
+<div class="admonition abstract">
+<p class="admonition-title">このページで分かること</p>
+<ul>
+<li><code>mujou.pc</code> の部品の役割と、利用者が直接使う部品・自分のノードを書くときに使う部品</li>
+<li>ノードの間を流れるメッセージと Port の向き</li>
+<li><code>pc.Layer</code> が 1 回の <code>on_update(dt)</code> で行うこと</li>
+<li><code>pc.clock.LearnClock</code> が返す <code>Tick</code> と <code>pc.TimeConstants</code> の意味</li>
+<li><code>pc.optim.SGD</code> と <code>pc.optim.AdamW</code> が重みを、<code>pc.relax.Euler</code> がずれ <code>r</code> を時間で動かす仕組み</li>
+</ul>
+<p>前提は PyTorch・誤差逆伝播法（BP）と、<a href="../../concepts/">Mujou の仕組み</a>のノード・Port・<code>dt</code>。predictive coding の知識は要らない。</p>
+</div>
+<h2 id="ノードが持つ量">ノードが持つ量<a class="headerlink" href="#ノードが持つ量" title="Permanent link">&para;</a></h2>
+<p>PC-ALM では各ノードに自分の<strong>活動</strong> <code>h</code> があり、前のノードの活動から自分の活動を<strong>予測</strong>する。<code>pc.Layer</code> は活動の予測からの<strong>ずれ</strong> <code>r</code> を持ち、予測 <code>mu</code> を次のノードへ送る。理解に要る量は次の表ですべて。</p>
+<table>
+<thead>
+<tr>
+<th>量</th>
+<th>式</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>h_in</code></td>
+<td></td>
+<td>前のノードから届いた活動</td>
+</tr>
+<tr>
+<td><code>mu</code></td>
+<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}};\theta)\)</span></td>
+<td>予測。ノードの <code>module</code> の出力。<span class="arithmatex">\(\theta\)</span> は <code>module</code> の重み</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td><span class="arithmatex">\(r = h - \mu\)</span></td>
+<td>予測からのずれ。ノードはこれを持つ</td>
+</tr>
+<tr>
+<td><code>h</code></td>
+<td><span class="arithmatex">\(h = \mu + r\)</span></td>
+<td>自分の活動。ノードの中にとどまり、次のノードは <code>mu</code> を読む</td>
+</tr>
+<tr>
+<td><code>lam</code></td>
+<td><span class="arithmatex">\(\tau_\lambda\dot\lambda = r\)</span></td>
+<td>双対変数。ずれを時間で溜めた値</td>
+</tr>
+<tr>
+<td><code>delta</code></td>
+<td><span class="arithmatex">\(\delta = r + \lambda\)</span></td>
+<td>ノードの誤差</td>
+</tr>
+<tr>
+<td><code>g_in</code></td>
+<td><span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top \delta\)</span></td>
+<td>前のノードへ送り返す勾配（<span class="arithmatex">\(J_h\)</span> は <code>module</code> の <code>h_in</code> についてのヤコビアン）</td>
+</tr>
+<tr>
+<td><code>g</code></td>
+<td></td>
+<td>次のノードたちから届いた <code>g_in</code> の和</td>
+</tr>
+</tbody>
+</table>
+<p><code>r</code> は <code>delta</code> と <code>g</code> の和を打ち消す向きに動き、時定数 <code>tau.r</code> で減衰する。<code>lam</code> は <code>r</code> が残る間溜まり続ける。<code>r</code> と <code>lam</code> が両方止まると <code>r = 0</code>（<code>h</code> は forward の値）になり、<code>lam</code> は BP の credit <span class="arithmatex">\(-\partial\ell/\partial h\)</span> に一致する。そのとき重みの勾配も BP と一致する。理論の詳細は <a href="https://pub.sakana.ai/pc-alm/">PC-ALM の記事</a>にある。記事のノードは <code>h</code> を持って送るが、mujou のノードは <code>r</code> を持ち、<code>mu</code> を送る（下で述べる）。</p>
+<h3 id="r-mu">ノードが r を持ち、mu を送る理由<a class="headerlink" href="#r-mu" title="Permanent link">&para;</a></h3>
+<p>予測 <code>mu</code> は新しいサンプルが来たときや、下のノードか自分が学んだときに一度に跳ぶ。<code>h</code> を持つノードでは <code>h</code> がそのまま残るので <span class="arithmatex">\(r = h - \mu\)</span> が急に大きくなり、偽の誤差が <code>g_in</code> と重みの勾配に入る。<code>r</code> を持つノードは、<code>mu</code> がどう跳んでもずれを保つ。</p>
+<p>送るのは <span class="arithmatex">\(\mu + r\)</span> でなく <code>mu</code> で、predictive coding の<strong>固定予測の仮定</strong>（fixed prediction assumption）にあたる。前へ流れる活動は順伝播の値になり、credit は後ろへだけ流れる。<span class="arithmatex">\(\mu + r\)</span> を送ると、あるノードの <code>r</code> の動きは順伝播のヤコビアンの積を通って上のすべてのノードの活動を動かし、credit として自分に戻ってくる。順伝播が増幅する鎖では、このループは刻みをどれだけ短くしても発散する。<code>mu</code> を送れば平衡点を変えずにこのループを切れるので、1 ノードで安定な刻みはどの鎖でも安定になる。</p>
+<p><code>pc.TimeConstants</code> の既定（<a href="#5-timeconstants">5 節</a>）なら、1 回の更新で <code>delta</code> が <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻る。</p>
+<h3 id="新しいサンプルのリセットと持ち越し">新しいサンプルのリセットと持ち越し<a class="headerlink" href="#新しいサンプルのリセットと持ち越し" title="Permanent link">&para;</a></h3>
+<p><code>r</code> と <code>lam</code> が持つのは、ノードが見てきたサンプルの credit である。シャッフルしたバッチのように次のサンプルが無関係なら、その credit は次のサンプルにとって誤り。そこでホストは書くサンプルに <code>reset</code> を立て、各ノードはその書き込みを初めて見たときに、そのサンプルの <code>r</code> と <code>lam</code> を 0 にする。ストリームの次のフレームのように前のサンプルに続くものは、<code>reset</code> を False で書いて持ち越す。</p>
+<h2 id="1-部品">1. 部品<a class="headerlink" href="#1-部品" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>利用者が普段使うのは <code>Chain</code>・<code>show</code>・<code>TimeConstants</code>・optimizer・損失・<code>Sample</code>。自分のノードを書くときに <code>LearnClock</code>・<code>functional</code>・<code>Activity</code> を使う。</p>
+</div>
+<table>
+<thead>
+<tr>
+<th>部品</th>
+<th>種類</th>
+<th>役割</th>
+<th>主に使う場面</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.Input</code></td>
+<td>ノード</td>
+<td>ホストが書いた <code>x</code> をそのまま活動 <code>h</code> として送る。何も持たない</td>
+<td>手で組む</td>
+</tr>
+<tr>
+<td><code>pc.Layer</code></td>
+<td>ノード</td>
+<td><code>module</code> を 1 つ持ち、<code>r</code> と <code>lam</code> を動かし、重みを学ぶ</td>
+<td>手で組む</td>
+</tr>
+<tr>
+<td><code>pc.Output</code></td>
+<td>ノード</td>
+<td>最後の <code>module</code> と損失を持ち、予測 <code>y_hat</code> を出し、重みを学ぶ。<code>r</code> と <code>lam</code> は持たない</td>
+<td>手で組む</td>
+</tr>
+<tr>
+<td><code>pc.Chain</code></td>
+<td>Network</td>
+<td><code>Input → Layer → … → Output</code> をまとめて作りつなぐ</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.show</code></td>
+<td>関数</td>
+<td>ホストがサンプルを書き、一定時間見せ、学ぶ前の予測を返す</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.msg.Sample</code>・<code>pc.msg.Activity</code>・<code>pc.msg.Prediction</code></td>
+<td>メッセージ</td>
+<td>流れるデータの型（<a href="#2-%E3%81%A4%E3%81%AA%E3%81%8C%E3%82%8A%E3%81%A8%E6%B5%81%E3%82%8C%E3%82%8B%E3%82%82%E3%81%AE">2 節</a>）</td>
+<td><code>Sample</code> は普段</td>
+</tr>
+<tr>
+<td><code>pc.TimeConstants</code></td>
+<td>設定</td>
+<td><code>r</code> と <code>lam</code> の速さを秒で持つ（<a href="#5-timeconstants">5 節</a>）</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.optim.SGD</code>・<code>pc.optim.AdamW</code></td>
+<td>設定</td>
+<td>optimizer。重みを時間でどう動かすか（<a href="#6-optimizer">6 節</a>）</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.loss.MSELoss</code>・<code>pc.loss.CrossEntropyLoss</code></td>
+<td>損失</td>
+<td>サンプルごとの損失を返す。<code>Output</code> に渡す</td>
+<td>普段</td>
+</tr>
+<tr>
+<td><code>pc.clock.LearnClock</code></td>
+<td>部品</td>
+<td>いつ学ぶかを決める（<a href="#4-learnclock">4 節</a>）</td>
+<td>自分のノード</td>
+</tr>
+<tr>
+<td><code>pc.functional</code></td>
+<td>関数群</td>
+<td>状態を持たない式（<code>vjp</code>・<code>loss_vjp</code>・<code>relax_</code>）。<code>Layer</code> と <code>Output</code> もこれで書く</td>
+<td>自分のノード</td>
+</tr>
+<tr>
+<td><code>pc.msg.activity_spec</code></td>
+<td>関数</td>
+<td><code>Activity</code> の spec を作る</td>
+<td>自分のノード</td>
+</tr>
+</tbody>
+</table>
+<p><code>Layer</code> と <code>Output</code> は <code>LearnClock</code>・<code>functional</code>・optimizer を組み合わせたもの。同じ部品で入力が 2 つのノードのような <code>Layer</code> で書けないノードも作れる。</p>
+<h2 id="2-つながりと流れるもの">2. つながりと流れるもの<a class="headerlink" href="#2-つながりと流れるもの" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>前へは活動（予測 <code>mu</code>）を <code>Activity</code> で、後ろへは勾配 <code>g_in</code> を送る。目標 <code>y</code>・<code>mask</code>・<code>reset</code>・時刻 <code>time</code> は活動と同じメッセージに載せて中継する。</p>
+</div>
+<pre class="mermaid"><code>flowchart LR
+    H1["ホスト"] --&gt;|"Sample"| I["Input"]
+    I --&gt;|"Activity"| L0["Layer"]
+    L0 --&gt;|"Activity"| L1["Layer"]
+    L1 --&gt;|"Activity"| O["Output"]
+    O --&gt;|"Prediction"| H2["ホスト"]
+    O -.-&gt;|"g_in"| L1
+    L1 -.-&gt;|"g_in"| L0
+    L0 -.-&gt;|"g_in"| I</code></pre>
+<p>実線が前向き、点線が後ろ向き。<code>Input</code> は届いた <code>g_in</code> を読まない（<code>x</code> は固定）。</p>
+<table>
+<thead>
+<tr>
+<th>メッセージ</th>
+<th>フィールド</th>
+<th>流れ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.msg.Sample</code></td>
+<td><code>x</code>、<code>y</code>、<code>mask</code>、<code>reset</code></td>
+<td>ホスト → <code>Input.prev</code></td>
+</tr>
+<tr>
+<td><code>pc.msg.Activity</code></td>
+<td><code>h</code>、<code>y</code>、<code>mask</code>、<code>reset</code>、<code>time</code></td>
+<td><code>next</code> → 次のノードの <code>prev</code></td>
+</tr>
+<tr>
+<td><code>g_in</code></td>
+<td>テンソル（<code>h_in</code> と同じ shape）</td>
+<td><code>prev</code> → 前のノードの <code>next</code></td>
+</tr>
+<tr>
+<td><code>pc.msg.Prediction</code></td>
+<td><code>y_hat</code>、<code>y</code>、<code>mask</code>、<code>time</code></td>
+<td><code>Output.next</code> → ホスト</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>g_in</code> を 0 にする。<code>mask</code> がすべて False の入力でも <code>r</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
+<li><code>reset</code>: サンプルごとに新しく始まるか。<code>Layer</code> はその書き込みを初めて見た更新で、その行の <code>r</code> と <code>lam</code> を 0 にする。シャッフルしたサンプルでは立て、前のフレームに続くフレームでは False にする</li>
+<li><code>time</code>: ホストがその入力を書いた時刻（<code>Timestamp</code>）。書き込みの前は <code>Timestamp(ns=0)</code></li>
+</ul>
+<h3 id="port-の向き">Port の向き<a class="headerlink" href="#port-の向き" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ノード</th>
+<th>Port</th>
+<th>種類</th>
+<th>受け取る</th>
+<th>送る</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Input</code></td>
+<td><code>prev</code></td>
+<td><code>Port</code></td>
+<td><code>Sample</code>（ホストが書く）</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>Input</code></td>
+<td><code>next</code></td>
+<td><code>MultiPort</code></td>
+<td><code>g_in</code>（読まない）</td>
+<td><code>Activity</code></td>
+</tr>
+<tr>
+<td><code>Layer</code></td>
+<td><code>prev</code></td>
+<td><code>Port</code></td>
+<td><code>Activity</code></td>
+<td><code>g_in</code></td>
+</tr>
+<tr>
+<td><code>Layer</code></td>
+<td><code>next</code></td>
+<td><code>MultiPort</code></td>
+<td>相手ごとの <code>g_in</code>（和を <code>g</code> にする）</td>
+<td><code>Activity</code></td>
+</tr>
+<tr>
+<td><code>Output</code></td>
+<td><code>prev</code></td>
+<td><code>Port</code></td>
+<td><code>Activity</code></td>
+<td><code>g_in</code></td>
+</tr>
+<tr>
+<td><code>Output</code></td>
+<td><code>next</code></td>
+<td><code>Port</code></td>
+<td>—</td>
+<td><code>Prediction</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>next</code> は <code>MultiPort</code> なので 1 つのノードの活動を複数のノードが読める。</p>
+<details class="question">
+<summary>なぜ目標を活動と同じメッセージで運ぶの？</summary>
+<p>ノードは非同期で、Port は最新値だけを持つ。目標を別の Port で送ると、<code>Output</code> は活動と目標を別々の瞬間に読み、別のサンプルの組になりうる。同じメッセージなら <code>y</code> は <code>x</code> と同じ経路を同じ遅れで進む。ホストが伝播より速く次のサンプルを書いても予測はいつも自分の目標と組になる。</p>
+</details>
+<h2 id="3-layer-の-1-回の更新">3. Layer の 1 回の更新<a class="headerlink" href="#3-layer-の-1-回の更新" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p><code>Layer.on_update(dt)</code> は「読む → <code>tick</code> → <code>vjp</code> → <code>g_in</code> を送る → <code>relax_</code> → <code>Activity</code> を送る → <code>optimizer.step_</code>」の順に進む。</p>
+</div>
+<table>
+<thead>
+<tr>
+<th>段</th>
+<th>使う部品</th>
+<th>計算</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>LearnClock.tick</code></td>
+<td><code>prev</code> から <code>Activity</code> を読み、<code>Tick</code>（<code>dt</code>・<code>new</code>・<code>learn</code>・<code>elapsed</code>）を得る。新しい入力なら（<code>tick.new</code>）、<code>reset</code> が立ったサンプルの <code>r</code> と <code>lam</code> を 0 にする</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>functional.vjp</code></td>
+<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>、<span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span>、学ぶなら <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span> を 1 回の VJP で。<code>g_in</code> を <code>prev</code> から送る</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>functional.relax_</code></td>
+<td><span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>r</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>Activity</code></td>
+<td>予測 <span class="arithmatex">\(\mu\)</span> を <code>h</code> として、受け取った <code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> を付けて <code>next</code> から送る</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>optimizer.step_</code></td>
+<td><span class="arithmatex">\(g_\theta\)</span> をサンプルの数 <span class="arithmatex">\(B\)</span> で割り、重みを <code>tick.elapsed</code> 秒ぶん動かす（<a href="#6-optimizer">6 節</a>）。<code>tick.learn</code> が True で、<code>mask</code> に True があるときだけ</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>段 2 の <code>delta</code> は段 3 の前の <code>r</code>・<code>lam</code> で作る</li>
+<li>新しい入力のとき（<code>tick.new</code>）、ノードは段 1 で <code>relaxer.reset_(reset)</code> も呼ぶ（<a href="#7-relaxer">7 節</a>）</li>
+<li>勾配はバッチで和を取り、<span class="arithmatex">\(B\)</span> で割るのは段 5 だけ。だから <code>lam</code> はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る</li>
+<li><code>vjp</code> の <code>delta</code> は値ではなく、<code>mu</code> から <code>delta</code> を作る関数（<code>mu</code> は <code>vjp</code> の中で計算するため）。<code>r</code> を持つノードは <code>lambda mu: r + lam</code> を渡す</li>
+<li><code>vjp</code> は <code>h_in</code> を detach してから微分するので、計算グラフは前のノードに届かない</li>
+</ul>
+<p><code>Output</code> は <code>r</code> も <code>lam</code> も持たない。段 2 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。</p>
+<details class="question">
+<summary>g_in を前のノードへ送るのは BP と何が違うの？</summary>
+<p><code>g_in</code> の計算は BP の 1 層分と同じ VJP（<span class="arithmatex">\(-J_h^\top\delta\)</span>）で、平衡点では <code>lam</code> が BP の credit と同じ漸化式を満たす。違うのは <code>g_in</code> の扱い方。</p>
+<ol>
+<li>送る側は自分の <code>delta</code> から <code>g_in</code> を作る。<code>delta = r + lam</code> は自分の状態だけで決まる</li>
+<li>受け取る側は届いた <code>g_in</code> を足して <code>g</code> にし、段 3 の <code>relax_</code> で自分の <code>r</code> を動かす力に使う。<code>g</code> をそのまま前のノードへ流さない</li>
+<li><code>r</code> と <code>lam</code> が動くと自分の <code>delta</code> が変わり、次の更新で送る <code>g_in</code> も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる</li>
+</ol>
+<p>forward と backward の段階も、全ノードの待ち合わせも無い。各ノードは手元にある最新の <code>g</code>（古いこともある）で更新する。<code>vjp</code> は <code>h_in</code> を detach するので、計算グラフはノードをまたがない。BP の勾配と一致するのは平衡点だけで、学ぶまで <code>learn_interval</code> だけ待つのはこのため。</p>
+</details>
+<h2 id="4-learnclock">4. LearnClock<a class="headerlink" href="#4-learnclock" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p><code>r</code> と <code>lam</code> は毎回の更新で動かし、重みは <code>LearnClock</code> が決めた更新でだけ動かす。ノードは毎回その更新の <code>mu</code> を送るので、予測が跳んでも追加の処理は要らない。</p>
+</div>
+<p>ノードは毎回の更新で <code>tick = self.clock.tick(dt, act["time"], self.timer.now())</code> を呼ぶ。返る <code>Tick</code> の意味。</p>
+<table>
+<thead>
+<tr>
+<th>フィールド</th>
+<th>意味</th>
+<th>使い道</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dt</code></td>
+<td><code>max_dt</code> で打ち切った <code>dt</code></td>
+<td><code>relax_</code> に渡す</td>
+</tr>
+<tr>
+<td><code>new</code></td>
+<td>受け取った入力の <code>time</code> が前回と違う（新しいサンプル）</td>
+<td>新しく始まるサンプルをリセットする</td>
+</tr>
+<tr>
+<td><code>learn</code></td>
+<td>この更新で学ぶか</td>
+<td><code>step_</code> を呼ぶか決める</td>
+</tr>
+<tr>
+<td><code>elapsed</code></td>
+<td>前に学んでからの、打ち切った <code>dt</code> の和。この更新を含む</td>
+<td><code>step_</code> に渡す時間</td>
+</tr>
+</tbody>
+</table>
+<p><code>learn</code> が True になるのは次のとき。<code>learn_interval</code> は <code>Layer</code>・<code>Output</code>・<code>Chain</code>・<code>LearnClock</code> に渡す秒数。</p>
+<table>
+<thead>
+<tr>
+<th><code>learn_interval</code></th>
+<th>学ぶ更新</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>正の秒数</td>
+<td><code>time + learn_interval</code>、<code>time + 2 * learn_interval</code>、… の各時刻（<code>time</code> はホストが入力を書いた時刻）以降の最初の更新。ただし <code>new</code> が True の更新では学ばず、次の更新で学ぶ</td>
+</tr>
+<tr>
+<td><code>None</code></td>
+<td>毎回の更新（入力が新しくても）。入力がフレームごとに変わるストリーム向け</td>
+</tr>
+<tr>
+<td><code>math.inf</code></td>
+<td>学ばない。学ばない方法はこれだけ（optimizer は <code>tau=math.inf</code> を受け付けない）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>new</code> が True の更新で学ばないのは、その更新の <code>delta</code> がまだ前の入力のものだから</li>
+<li>だから同じ入力が続く間は <code>learn_interval</code> 秒ごとに学び、<code>elapsed</code> はおよそ <code>learn_interval</code></li>
+<li>学ばないまま入力が変わると、<code>elapsed</code> に溜めた時間は捨てる</li>
+<li>自分のノードでは <code>pc.clock.LearnClock.of(tau, period=..., learn_interval=...)</code> で作り、属性に置く。それだけでノードの状態に入る</li>
+</ul>
+<details class="question">
+<summary>なぜノードが入力を受け取った時刻でなく、ホストの書き込み時刻から数えるの？</summary>
+<p>経路上のノードが深さによらずほぼ同時に学ぶため。受け取った時刻から数えると深いノードほど遅れて学び、下のノードが学んだ重みにまだ応じていない <code>delta</code> で学んでしまう。どのノードも同じ実行のタイマーを読むので、バリアは要らない。</p>
+</details>
+<h2 id="5-timeconstants">5. TimeConstants<a class="headerlink" href="#5-timeconstants" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>速さはすべて実行のタイマーの秒で決める。各ノードは実際に経った <code>dt</code> だけ式を進めるので、周期の違うノードも時間あたり同じ速さで変化する。</p>
+</div>
+<p><code>pc.TimeConstants(h=, lam=, r=)</code> が <code>r</code> と <code>lam</code> の時定数を持つ。3 つとも必須。重みの時定数は optimizer が持つ（<a href="#6-optimizer">6 節</a>）。</p>
+<table>
+<thead>
+<tr>
+<th>値</th>
+<th>何の速さか</th>
+<th>1 回の更新で動く割合</th>
+<th><code>math.inf</code> にすると</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tau.h</code></td>
+<td>ずれ <code>r</code> が緩和する速さ</td>
+<td><code>dt / tau.h</code></td>
+<td>不可（有限で正）</td>
+</tr>
+<tr>
+<td><code>tau.lam</code></td>
+<td><code>lam</code> が <code>r</code> を溜める速さ</td>
+<td><code>dt / tau.lam</code></td>
+<td><code>lam</code> は 0 のまま。<code>r</code> が 0 に戻らず、代わりに credit を持つ</td>
+</tr>
+<tr>
+<td><code>tau.r</code></td>
+<td>ずれ <code>r</code> が減衰する速さ</td>
+<td>さらに <code>r</code> の <code>dt / tau.r</code> だけ 0 へ引く</td>
+<td>減衰しない。安定だが、<code>delta</code> が <code>-g</code> に追いつくのに複数回かかる</td>
+</tr>
+</tbody>
+</table>
+<p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / (1 + tau.h / tau.r)</code>。<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）はノードの更新の間隔で、<code>period=</code> を渡さないときの <code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.period, 2 * tau.lam)</code>）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
+<p>ふつうの値は組で決める。<code>tau.r = tau.h</code>、<code>tau.lam = tau.h / 2</code>、既定の周期 <code>tau.h / 2</code>。このとき 1 回の更新で <code>delta = r + lam</code> がちょうど <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻って行き過ぎない。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。</p>
+<p><code>tau.r</code> は平衡点を動かさない。<code>lam</code> が <code>r</code> を溜めるので、平衡点では <code>tau.r</code> によらず <code>r = 0</code> になる。<code>tau.lam</code> と <code>tau.r</code> を両方 <code>math.inf</code> にすると、ノードは固定予測の仮定を置いた predictive coding になり、誤差 <code>r</code> が BP の credit に落ち着く。ノードの周期は自分の <code>max_dt</code> より長くしてはいけない（<code>ValueError</code>）。</p>
+<p>optimizer の <code>tau</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
+<details class="question">
+<summary>なぜ dt を max_dt で打ち切るの？</summary>
+<p>歩みは陽的なので、既定よりずっと長い刻みは行き過ぎ、<code>r</code> と <code>lam</code> が発散する。負荷でノードが止まると次の <code>dt</code> が伸びるので、1 回に数える時間を打ち切り、超えた分は捨てる。</p>
+</details>
+<h2 id="6-optimizer">6. optimizer<a class="headerlink" href="#6-optimizer" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>重みも秒で動く。optimizer は時間に沿った流れで、時定数を秒で持ち、1 歩ごとにその歩みが受け持つ <code>elapsed</code> 秒だけ進む。だから学ぶ頻度を変えても、重みが 1 秒あたりに動く速さは変わらない。</p>
+</div>
+<h3 id="設定を各ノードで束縛する">設定を各ノードで束縛する<a class="headerlink" href="#設定を各ノードで束縛する" title="Permanent link">&para;</a></h3>
+<p><code>pc.optim.SGD(tau=)</code> と <code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
+<pre class="mermaid"><code>flowchart LR
+    S["pc.optim.AdamW(...)&lt;br/&gt;設定、状態なし"] --&gt;|"bind(params)"| B0["Layer 0: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B1["Layer 1: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
+    S --&gt;|"bind(params)"| B2["Output: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>  <span class="c1"># in __init__, with only the weights that learn</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># in on_update, when the node learns:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">g</span> <span class="o">/</span> <span class="n">B</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">g_theta</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>1 つの設定を全ノードに渡してよい（<code>Chain</code> はそうする）。状態はノードごとに、束縛した optimizer の中にある</li>
+<li>束縛した optimizer はノードの状態のキー <code>"optimizer"</code> に入る（<code>LearnClock</code> が <code>"clock"</code> に入るのと同じ）</li>
+<li>ノードが <span class="arithmatex">\(g_\theta\)</span> を <span class="arithmatex">\(B\)</span> で割ってから <code>step_</code> に渡す。optimizer はバッチを知らない</li>
+<li><code>elapsed == 0</code> の歩みは重みも状態も動かさない</li>
+</ul>
+<h3 id="sgd-と-adamw">SGD と AdamW<a class="headerlink" href="#sgd-と-adamw" title="Permanent link">&para;</a></h3>
+<p>平均の勾配を <span class="arithmatex">\(g = g_\theta / B\)</span> とする。</p>
+<table>
+<thead>
+<tr>
+<th>optimizer</th>
+<th>時間に沿った流れ</th>
+<th><code>elapsed</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 歩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pc.optim.SGD</code></td>
+<td><span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span></td>
+<td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>。学習率 <span class="arithmatex">\(\Delta t / \tau_\theta\)</span> の SGD</td>
+</tr>
+<tr>
+<td><code>pc.optim.AdamW</code></td>
+<td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>、<span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
+<td><span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span> で <span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>、<span class="arithmatex">\(v\)</span> も同様。続けて <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span> で AdamW の 1 歩</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>tau</code> は <span class="arithmatex">\(\tau_\theta\)</span>、<code>tau_m</code> は <span class="arithmatex">\(\tau_m\)</span>、<code>tau_v</code> は <span class="arithmatex">\(\tau_v\)</span> で、どれも秒。有限で &gt; 0。学ばないならノードに <code>learn_interval=math.inf</code> を渡す</li>
+<li><code>eps</code>（<span class="arithmatex">\(\varepsilon\)</span>）は &gt; 0。勾配が 0 のままだった重みが <code>0 / 0</code> にならないようにするため</li>
+<li><code>weight_decay</code>（<span class="arithmatex">\(w\)</span>）は無次元。<span class="arithmatex">\(\theta\)</span> を時定数 <span class="arithmatex">\(\tau_\theta / w\)</span> で減衰させる。<code>torch.optim.AdamW</code> の <code>weight_decay</code> が <code>lr</code> と組むのと同じ</li>
+<li>AdamW は勾配の大きさによらず、1 歩で各重みをおよそ <span class="arithmatex">\(\eta\)</span> ずつ動かす。Adam の <code>lr</code> に合わせるなら、2 回の学習の間の時間を <span class="arithmatex">\(\Delta t\)</span> とし（1 入力につき 1 回学ぶなら入力を見せる時間）、<code>tau</code> を <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code> にする</li>
+</ul>
+<h3 id="質量-c-時間で行う-bias-補正">質量 c: 時間で行う bias 補正<a class="headerlink" href="#質量-c-時間で行う-bias-補正" title="Permanent link">&para;</a></h3>
+<p><span class="arithmatex">\(m\)</span> と <span class="arithmatex">\(v\)</span> は 0 から始まるので、はじめは小さすぎる。<code>torch.optim.AdamW</code> はステップ数 <span class="arithmatex">\(t\)</span> で補正し、<span class="arithmatex">\(m\)</span> を <span class="arithmatex">\(1 - \beta_1^t\)</span> で割る。<code>pc.optim.AdamW</code> はステップを数えない。代わりに moment ごとに<strong>質量</strong> <span class="arithmatex">\(c\)</span> を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。</p>
+<div class="arithmatex">\[\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m\]</div>
+<p>1 歩は moment と同じように <span class="arithmatex">\(c_m \leftarrow c_m + a_m(1 - c_m)\)</span> で質量を動かす。<span class="arithmatex">\(t\)</span> 秒ぶんの勾配の後は <span class="arithmatex">\(c_m = 1 - e^{-t/\tau_m}\)</span>。<span class="arithmatex">\(g\)</span> が一定なら <span class="arithmatex">\(m = c_m g\)</span> なので、最初の 1 歩から <span class="arithmatex">\(\hat m = g\)</span>。<span class="arithmatex">\(v\)</span> も自分の質量 <span class="arithmatex">\(c_v\)</span> を同じように持つ。</p>
+<p>1 歩は、<span class="arithmatex">\(g\)</span> が <span class="arithmatex">\(\Delta t\)</span> の間一定だとして流れを厳密に解く。だから moment と質量は歩みの回数ではなく歩みの秒数の合計で決まる。<span class="arithmatex">\(\tau_m = 0.1\)</span> 秒のときは次のとおり。</p>
+<table>
+<thead>
+<tr>
+<th>歩み</th>
+<th><code>pc.optim.AdamW</code> の <span class="arithmatex">\(c_m\)</span></th>
+<th>0.05 秒の歩みに合わせて <span class="arithmatex">\(\beta_1 = e^{-0.05/0.1}\)</span> に固定し、ステップを数えると</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.05 秒を 2 回</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^2 = 0.632\)</span></td>
+</tr>
+<tr>
+<td>0.1 秒を 1 回</td>
+<td><span class="arithmatex">\(1 - e^{-1} = 0.632\)</span></td>
+<td><span class="arithmatex">\(1 - \beta_1^1 = 0.393\)</span></td>
+</tr>
+</tbody>
+</table>
+<p><span class="arithmatex">\(\Delta t\)</span> が一定なら、歩みは <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code> と同じになる。だから torch の <span class="arithmatex">\(\beta\)</span> からは <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span> と決まる。<span class="arithmatex">\(\Delta t\)</span> はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、<span class="arithmatex">\(\beta_1 = 0.9\)</span> は約 0.30 秒、<span class="arithmatex">\(\beta_2 = 0.999\)</span> は約 32 秒。SGD と AdamW の選び方と値は <a href="../pc/#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a> へ。</p>
+<details class="question">
+<summary>なぜ torch.optim を使わないの？</summary>
+<ol>
+<li>ステップを数え、時間を数えない。<span class="arithmatex">\(\beta\)</span> と <code>lr</code> が 1 ステップあたりなので、1 秒あたりの速さが <code>learn_interval</code> や歩みごとに異なる <code>elapsed</code> で変わる</li>
+<li>ステップ数が float32 のテンソルで、<span class="arithmatex">\(2^{24}\)</span> 回で増えなくなる（24 ms ごとに学ぶと約 4.7 日）。mujou は学び続ける機械のためのもの</li>
+<li>作るときに <code>torch._dynamo</code> を import し、free-threaded の Python（3.14t）でプロセス全体の GIL を有効に戻す</li>
+</ol>
+</details>
+<h3 id="自分の-optimizer">自分の optimizer<a class="headerlink" href="#自分の-optimizer" title="Permanent link">&para;</a></h3>
+<p>自作の optimizer は 2 つのクラスで書く。設定は <code>pc.optim.Optimizer</code> を継承して <code>bind(params)</code> を実装する。<code>bind</code> が返すものは <code>pc.optim.BoundOptimizer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(grads, elapsed)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。<code>bind</code> には学ぶ重みだけを渡す。例は <a href="../../api/pc/">API リファレンス</a> にある。</p>
+<h2 id="7-relaxer">7. relaxer<a class="headerlink" href="#7-relaxer" title="Permanent link">&para;</a></h2>
+<div class="admonition abstract">
+<p class="admonition-title">要点</p>
+<p>ずれ <code>r</code> が自分に掛かる力に沿ってどう動くかも設定である。relaxer は <code>r</code> にとっての optimizer にあたる。状態を持たない設定をノードごとに bind し、<code>r</code> を <code>dt</code> 秒だけ動かす。</p>
+</div>
+<p>mujou の relaxer は <code>pc.relax.Euler()</code> の 1 つだけで、ほかに選べるのは自作の relaxer である。どちらも設定で、<code>Layer</code> と <code>Chain</code> が <code>relaxer=</code> で 1 つ受け取る。既定は <code>pc.relax.Euler()</code> である。設定は状態を持たないので共有しても安全で、<code>Chain</code> は同じ設定を各 <code>Layer</code> に渡す。<code>Output</code> は <code>r</code> を持たないので取らない。各 <code>Layer</code> は設定を自分の <code>r</code> に bind し、<strong>bind した relaxer</strong> を <code>self.relaxer</code> に持つ。状態を持ち <code>r</code> を動かすのは、bind した relaxer である。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span> <span class="o">=</span> <span class="n">relaxer</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>  <span class="c1"># __init__ で</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># on_update の functional.relax_ の中で、力 F を渡して:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">step_</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">tau</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># 新しい入力のとき、reset が立ったサンプルについて:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="bp">self</span><span class="o">.</span><span class="n">relaxer</span><span class="o">.</span><span class="n">reset_</span><span class="p">(</span><span class="n">act</span><span class="p">[</span><span class="s2">"reset"</span><span class="p">])</span>
+</code></pre></div>
+<p>力を <span class="arithmatex">\(F = (1 + \tau_h / \tau_r)\,r + \lambda + g\)</span> とすると、<code>pc.relax.Euler</code> の <code>dt</code> <span class="arithmatex">\(= \Delta t\)</span> 秒の 1 回の動きは <span class="arithmatex">\(r \leftarrow r - \frac{\Delta t}{\tau_h} F\)</span> である。</p>
+<ul>
+<li>relaxer が変えるのは <code>r</code> が不動点に着くまでの道で、不動点ではない。不動点では <span class="arithmatex">\(F = 0\)</span> で、relaxer の状態は静止している。relaxer は <span class="arithmatex">\(\lambda\)</span> を動かさない。<span class="arithmatex">\(\lambda\)</span> はどの relaxer が <code>r</code> を動かしても、動いたあとの <code>r</code> で進む（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）</li>
+<li>新しい入力のとき、ノードは <code>reset</code> が立ったサンプルの <span class="arithmatex">\(r\)</span> と <span class="arithmatex">\(\lambda\)</span> を 0 にし、<code>reset_(reset)</code> を呼ぶ。力を覚える relaxer（速度を持つものなど）が覚えているのは前のサンプルの力なので、そのサンプルの分を捨てる。前に続くサンプルでは、<span class="arithmatex">\(r\)</span>・<span class="arithmatex">\(\lambda\)</span>・relaxer の状態を保つ。予測が跳んだとき（自分や下のノードの重みが跳んだとき）は <span class="arithmatex">\(r\)</span> も力も跳ばないので、<code>reset_</code> は呼ばない</li>
+<li>bind した relaxer はノードの状態のキー <code>"relaxer"</code> に入る。<code>pc.relax.Euler</code> は状態を持たないので空で、その <code>reset_</code> は何もしない</li>
+<li>relaxer と値の選び方は<a href="../pc/#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</li>
+</ul>
+<h3 id="自分の-relaxer">自分の relaxer<a class="headerlink" href="#自分の-relaxer" title="Permanent link">&para;</a></h3>
+<p>自作の relaxer は 2 つのクラスで書く。設定は <code>pc.relax.Relaxer</code> を継承して <code>bind(r)</code> を実装し、<code>r</code> と同じ shape・dtype・device の状態を作る。<code>bind</code> が返すものは <code>pc.relax.BoundRelaxer</code>（<code>mujou.Stateful</code> の一種）を継承し、<code>step_(r, force, dt, tau_h)</code>・<code>reset_(samples)</code>・<code>state_dict()</code>・<code>load_state_dict(state)</code> を実装する。どれかが欠けたクラスは、作るときに <code>TypeError</code> になる。不動点は力が 0 で、relaxer 自身の状態が静止しているところでなければならない。そうでないと <code>lam</code> は BP の credit にならない。例は <a href="../../api/pc/">API リファレンス</a>にある。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  ページトップへ戻る
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      画像: 落合陽一「リキッドユニバース」をもとに新たに制作
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Geson-anko/mujou" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.top", "navigation.sections", "navigation.indexes", "search.highlight", "search.share", "content.code.copy", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f", "clipboard.copy": "\u30af\u30ea\u30c3\u30d7\u30dc\u30fc\u30c9\u3078\u30b3\u30d4\u30fc", "search.result.more.one": "\u3053\u306e\u30da\u30fc\u30b8\u5185\u306b\u3082\u30461\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.more.other": "\u3053\u306e\u30da\u30fc\u30b8\u5185\u306b\u3042\u3068#\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.none": "\u4f55\u3082\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3067\u3057\u305f", "search.result.one": "1\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.other": "#\u4ef6\u898b\u3064\u304b\u308a\u307e\u3057\u305f", "search.result.placeholder": "\u691c\u7d22\u30ad\u30fc\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044", "search.result.term.missing": "\u691c\u7d22\u306b\u542b\u307e\u308c\u306a\u3044", "select.version": "\u30d0\u30fc\u30b8\u30e7\u30f3\u5207\u308a\u66ff\u3048"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
