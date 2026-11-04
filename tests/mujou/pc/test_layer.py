@@ -13,7 +13,7 @@ import mujou
 import mujou.pc as pc
 from mujou import DictSpec, Group, TensorSpec
 from mujou.testing import ManualRun
-from mujou.time import VirtualTimer
+from mujou.time import Timer, VirtualTimer
 from tests.mujou.nodes import F64, assert_same_tree, close
 from tests.mujou.pc._reference import (
     ADAMW,
@@ -36,7 +36,7 @@ from tests.mujou.pc._reference import (
 )
 
 if TYPE_CHECKING:
-    from tests.mujou.conftest import StartManual
+    from tests.mujou.conftest import Start, StartManual
 
 
 class HandChain:
@@ -54,20 +54,29 @@ class HandChain:
         relaxer: pc.relax.Relaxer = pc.relax.Euler(),
         learn_interval: float | None = None,
         max_dt: float | None = None,
+        device: str = "cpu",
+        cuda_graph: bool = False,
     ) -> None:
         x, y = TensorSpec((B, widths[0]), F64), TensorSpec((B, N_OUT), F64)
-        self.inp = pc.Input(x=x, y=y, period=H, batch=B)
+        self.inp = pc.Input(x=x, y=y, period=H, batch=B, device=device)
         learning: dict[str, Any] = {
             "tau": tau,
             "optimizer": optimizer,
             "learn_interval": learn_interval,
             "max_dt": max_dt,
+            "device": device,
         }
         self.layers: list[pc.Layer] = []
         act = self.inp.act_spec
         for module in layers:
             self.layers.append(
-                pc.Layer(module, act_spec=act, relaxer=relaxer, **learning)
+                pc.Layer(
+                    module,
+                    act_spec=act,
+                    relaxer=relaxer,
+                    cuda_graph=cuda_graph,
+                    **learning,
+                )
             )
             act = self.layers[-1].act_spec
         self.out = pc.Output(head, act_spec=act, loss=pc.loss.MSELoss(B), **learning)
@@ -1391,3 +1400,103 @@ class TestRelaxer:
                 run.step(H, inp, layer)
         assert not torch.equal(linear.weight, weight)  # theta learned
         assert [r.tolist() for r in spy.resets] == [RESET.tolist(), KEEP.tolist()]
+
+
+def _without_generators(state: dict[str, Any]) -> dict[str, Any]:
+    """The nodes of ``state`` without the state of their generators, which each
+    node seeds on its own."""
+    return {
+        path: {
+            **node,
+            "state": {k: v for k, v in node["state"].items() if k != "generator"},
+        }
+        for path, node in state["nodes"].items()
+    }
+
+
+class TestCudaGraph:
+    def test_it_needs_a_node_on_cuda(self):
+        layers, _ = make_modules("res", "tanh", [4, 4])
+        with pytest.raises(ValueError, match="cuda_graph needs a node on CUDA"):
+            pc.Layer(
+                layers[0],
+                act_spec=activity(TensorSpec((B, 4), F64)),
+                tau=TAU,
+                optimizer=SGD,
+                learn_interval=None,
+                cuda_graph=True,
+            )
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
+    @pytest.mark.parametrize("learn_interval", [None, 3 * H], ids=["every", "interval"])
+    def test_the_replayed_update_is_the_eager_one_bit_for_bit(
+        self,
+        start_manual: StartManual,
+        optimizer: pc.optim.Optimizer,
+        learn_interval: float | None,
+    ):
+        # The same kernels on the same inputs: the state of every node (r, lam,
+        # the parameters, the optimizer, what each sent) is the same after
+        # every input, with updates that learn and updates that do not.
+        widths = [4, 5, 3]
+        runs: list[tuple[HandChain, ManualRun]] = []
+        for graph in (False, True):
+            layers, head = make_modules("linear", "tanh", widths)
+            chain = HandChain(
+                [m.cuda() for m in layers],
+                head.cuda(),
+                widths,
+                optimizer=optimizer,
+                learn_interval=learn_interval,
+                device="cuda",
+                cuda_graph=graph,
+            )
+            runs.append((chain, start_manual(chain.net, timer=VirtualTimer())))
+        for k in range(3):
+            x, y = sample(widths, k)
+            for chain, run in runs:
+                chain.write(run, x.cuda(), y.cuda(), MASK.cuda())
+            for _ in range(8):
+                for chain, run in runs:
+                    run.step(H, *chain.from_next())
+            eager, replayed = (_without_generators(run.state_dict()) for _, run in runs)
+            assert_same_tree(replayed, eager)
+        moved = runs[1][1].state_dict()["nodes"]["l0"]["state"]["module"]
+        start = make_modules("linear", "tanh", widths)[0][0].state_dict()
+        assert not torch.equal(moved["0.weight"].cpu(), start["0.weight"])  # it learned
+
+    @pytest.mark.cuda
+    def test_nodes_record_their_graphs_while_others_run(self, start: Start):
+        # A free run on worker threads: each node records while the others
+        # launch work from their threads, and the chain still learns.
+        widths = [4, 4, 4, 4]
+        layers, head = make_modules("res", "tanh", widths)
+        start_weights = copy.deepcopy(layers[0]).state_dict()
+        chain = HandChain(
+            [m.cuda() for m in layers],
+            head.cuda(),
+            widths,
+            learn_interval=None,
+            device="cuda",
+            cuda_graph=True,
+        )
+        run = start(chain.net, timer=Timer(), workers=4)
+        x, y = sample(widths, 0)
+        run.write(
+            {
+                chain.inp.prev: {
+                    "x": x.cuda(),
+                    "y": y.cuda(),
+                    "mask": MASK.cuda(),
+                    "reset": KEEP.cuda(),
+                }
+            }
+        )
+        run.timer.sleep(0.3)
+        nodes = run.state_dict()["nodes"]
+        run.shutdown()
+        for i in range(len(layers)):
+            assert torch.isfinite(nodes[f"l{i}"]["state"]["lam"]).all()
+        moved = nodes["l0"]["state"]["module"]
+        assert not torch.equal(moved["fc1.weight"].cpu(), start_weights["fc1.weight"])

@@ -6,6 +6,10 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 ## [Unreleased](https://github.com/Geson-anko/mujou/compare/v0.1.0...HEAD)
 
+### Added
+
+- `pc.Layer(cuda_graph=True)`: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).
+
 ## [0.1.0](https://github.com/Geson-anko/mujou/releases/tag/v0.1.0) - 2026-10-30
 
 The first release. The API works but will still change in breaking ways in the 0.x releases.
