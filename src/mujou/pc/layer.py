@@ -1,6 +1,8 @@
 """The hidden node of ``mujou.pc``."""
 
 import math
+import threading
+from collections.abc import Sequence
 from typing import override
 
 import torch
@@ -100,6 +102,18 @@ class Layer(Node):
     ``tau.max_dt`` is the step that settles ``delta`` (``tau.h / 2`` with
     ``tau.r = tau.h``).
 
+    With ``cuda_graph``, the node records the vector-Jacobian product of
+    ``module`` in a ``torch.cuda.CUDAGraph`` (one without and one with the
+    gradients of the parameters, each at the first update that needs it) and
+    replays it in every update: it copies ``h_in`` and ``delta`` into the
+    graph's buffers and reads ``mu``, ``g_in`` and ``g_theta`` from them. The
+    update is the same as without it, bit for bit, with far fewer kernels
+    launched from the CPU, which bound an update on a GPU with a small batch.
+    ``module`` must then run the same kernels on every input of the spec: no
+    synchronization with the host (``.item()``, a branch on a tensor's value)
+    and parameters updated in place, as ``pc.optim`` does. The graphs are not
+    part of the state: a node made again from a state dict records them anew.
+
     ``relaxer`` sets how ``r`` moves along the force on it (``functional.relax_``):
     the plain step of ``pc.relax.Euler``, or a relaxer of your own with the same
     fixed point. The node calls the ``reset_`` of the bound relaxer with each new
@@ -169,12 +183,15 @@ class Layer(Node):
         max_dt: The longest ``dt`` an update counts, in seconds; ``None`` is
             ``tau.max_dt``.
         device: Where the node computes.
+        cuda_graph: Replay the vector-Jacobian product of ``module`` from a
+            CUDA graph (above); the node must be on CUDA.
 
     Raises:
         ValueError: The output of ``module`` does not start with the batch of
             ``act_spec``, or ``LearnClock`` raises: ``learn_interval``
             is neither ``None`` nor > 0, ``max_dt`` is not > 0, or ``period``
-            is longer than ``max_dt``. ``module`` raises as PyTorch does when it
+            is longer than ``max_dt``, or ``cuda_graph`` is set for a node
+            that is not on CUDA. ``module`` raises as PyTorch does when it
             does not take the ``h`` of ``act_spec`` on ``device``.
     """
 
@@ -190,8 +207,11 @@ class Layer(Node):
         period: float | None = None,
         max_dt: float | None = None,
         device: Device = "cpu",
+        cuda_graph: bool = False,
     ) -> None:
         super().__init__(device=device, period=tau.period if period is None else period)
+        if cuda_graph and self.device.type != "cuda":
+            raise ValueError(f"cuda_graph needs a node on CUDA, not on {self.device}")
         self._tau = tau
         batch = act_spec.field("mask", TensorSpec).shape
         self._samples = math.prod(batch)  # B
@@ -207,6 +227,7 @@ class Layer(Node):
             mu = module(h_in.zeros(device=self.device))
         self.r = torch.zeros_like(mu)
         self.relaxer = relaxer.bind(self.r)
+        self._graph = _GraphedVjp(module) if cuda_graph else None
         self.lam = torch.zeros_like(mu)
         out = TensorSpec(mu.shape, mu.dtype)
         self.act_spec = activity_spec(out, act_spec.field("y", TensorSpec), batch)
@@ -246,9 +267,11 @@ class Layer(Node):
         # A sample without a target sends back no credit and adds nothing to
         # g_theta: its delta may be left over from an earlier input.
         delta = torch.where(rows(act["mask"], self.r), self.r + self.lam, 0.0)
-        mu, g_in, g_theta = vjp(
-            self.module, act["h"], lambda _: delta, self._params if learn else ()
-        )
+        params = self._params if learn else ()
+        if self._graph is not None:
+            mu, g_in, g_theta = self._graph(act["h"], delta, params)
+        else:
+            mu, g_in, g_theta = vjp(self.module, act["h"], lambda _: delta, params)
         self.prev.send(g_in)
         return mu, g_theta
 
@@ -262,3 +285,61 @@ class Layer(Node):
                 "time": act["time"],
             }
         )
+
+
+class _GraphedVjp:
+    """``functional.vjp`` of ``module`` replayed from a CUDA graph per set of
+    parameters (none, or the node's), recorded at its first call.
+
+    The tensors it returns are the graph's own buffers: the next replay of the
+    same graph overwrites them, so a caller uses them within its update (the
+    node sends copies and steps its optimizer with them there)."""
+
+    _WARMUP = 3  # runs on a side stream before the capture, as torch advises
+    # One recording at a time in the process: ``torch.cuda.graph`` captures
+    # on one stream shared by all graphs and synchronizes the whole device
+    # before it begins, which fails while another node's capture is underway.
+    _RECORDING = threading.Lock()
+
+    def __init__(self, module: nn.Module) -> None:
+        self._module = module
+        self._graphs: dict[
+            bool,
+            tuple[torch.cuda.CUDAGraph, torch.Tensor, torch.Tensor, list[torch.Tensor]],
+        ] = {}
+
+    def __call__(
+        self, h_in: torch.Tensor, delta: torch.Tensor, params: Sequence[torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
+        key = bool(params)
+        if key not in self._graphs:
+            self._graphs[key] = self._record(h_in, delta, params)
+        graph, h, d, out = self._graphs[key]
+        h.copy_(h_in)
+        d.copy_(delta)
+        graph.replay()
+        mu, g_in, *g_theta = out
+        return mu, g_in, g_theta
+
+    def _record(
+        self, h_in: torch.Tensor, delta: torch.Tensor, params: Sequence[torch.Tensor]
+    ) -> tuple[torch.cuda.CUDAGraph, torch.Tensor, torch.Tensor, list[torch.Tensor]]:
+        h, d = h_in.clone(), delta.clone()
+
+        def call() -> list[torch.Tensor]:
+            mu, g_in, g_theta = vjp(self._module, h, lambda _: d, params)
+            return [mu, g_in, *g_theta]
+
+        with self._RECORDING:
+            current = torch.cuda.current_stream(h.device)
+            side = torch.cuda.Stream(h.device)
+            side.wait_stream(current)
+            with torch.cuda.stream(side):
+                for _ in range(self._WARMUP):
+                    call()
+            current.wait_stream(side)
+            graph = torch.cuda.CUDAGraph()
+            # Other nodes launch work from other threads while this one records.
+            with torch.cuda.graph(graph, capture_error_mode="thread_local"):
+                out = call()
+        return graph, h, d, out

@@ -151,6 +151,26 @@ uv run python examples/cifar10/main.py --epochs 10  # 約 13 分
 - **AdamW**: [optimizer を選ぶ](#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)のとおり、Adam の `lr` から作る。BP の基準も同じ `pc.optim.AdamW` をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが 1 回の学習で進める時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は、同じ勾配なら PC-ALM とほぼ同じ歩みで重みを動かす
 - **GroupNorm**: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない
 
+## GPU で更新を速くする: `cuda_graph`
+
+GPU で小さいバッチを扱うと、`pc.Layer` の 1 回の更新は GPU ではなく、vector-Jacobian product のカーネルを CPU から起動するところで律速される。`cuda_graph=True` にすると、ノードは最初の更新でこの積を CUDA graph に記録し、それ以降の更新ではそれを再生する。更新の結果はビット単位で変わらず、起動の手間だけが無くなる。
+
+```python
+layer = pc.Layer(
+    stage,  # CUDA の上
+    act_spec=spec,
+    tau=tau,
+    optimizer=optimizer,
+    learn_interval=learn_interval,
+    device="cuda",
+    cuda_graph=True,
+)
+```
+
+- **どの入力にも同じカーネル**: shape は spec で決まるので固定。module はホストと同期しないこと（`.item()`、テンソルの値による分岐）。パラメータは `pc.optim` のようにその場で変えること
+- **ViT の視覚のステージ、1 サンプル**（RTX 4090）: 積は 2.06 ms から 0.47 ms になった
+- **状態には入らない**: state dict から作り直したノードは、graph を記録し直す
+
 ## バッチ
 
 バッチはメッセージのどのテンソルも先頭に持つ shape。`pc.Chain`・`pc.Input`・`pc.msg.activity_spec` に `batch` で渡し、spec の `x` と `y` もこの shape で始める。`pc.Layer` と `pc.Output` は受け取る `act_spec` から読む。

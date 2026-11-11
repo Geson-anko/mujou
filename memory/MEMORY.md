@@ -45,7 +45,7 @@
 - [M:N スケジューリング](project_mn_scheduler.md) — Python のノードも既定で実行ごとのワーカープールに載せる。専用スレッドは Node(dedicated_thread=True)、mujou.run(workers=None)。既定は available_parallelism（GIL ありは半分、確認待ち）で、実効の数は 0 もありうる。ノードはワーカー間を移ってよい
 - [勾配の記録は切り替えない](project_grad_on_by_default.md) — 2026-10-19 ユーザーの決定。hook は通常の PyTorch と同じく勾配を記録、ノードをまたぐグラフは Port の detach コピーで作れない
 - [pc の緩和の安定とヤコビアン](project_pc_jacobian_stability.md) — μ を送る形（2026-10-29）でヤコビアンによらず安定、周期 τ_h/2。CIFAR はステージごとの 5 ノード・12 周期で BP の 5〜6 倍。それ以前の τ_h/16 などの記録も残す
-- [CUDA graph は使わない](project_no_cuda_graph.md) — ノードの更新を CUDA graph にしない（2026-10-29 ユーザー決定）。1 周期約 1.5〜2 ms の CPU 起動律速は受け入れ、ノードを少なく切って周期を減らす
+- [CUDA graph（2026-11-04 に解禁）](project_no_cuda_graph.md) — 2026-10-29 の「使わない」をユーザーが覆した。`pc.Layer(cuda_graph=True)` で vjp を記録・再生（既定は切り）
 - [pc の relaxer](project_pc_relaxer.md) — r（もとは h）の更新手法を重みの optimizer と同じ形（設定 + bind）で差し替える。`pc.relax.Euler`（既定）か自作。HeavyBall は r 形で効果が無く削除（2026-10-28）
 - [グラフの可視化](project_viz.md) — `mujou.viz.to_html(root)` で自己完結の HTML。CDN なし、JS は目視で確かめる（2026-10-21）
 - [リリース戦略](project_release_strategy.md) — release/X.Y のタグ vX.Y.Z で Test PyPI → PyPI → GitHub Release（Trusted Publishing）。hotfix は release から切り release → main を merge。ノートは CHANGELOG.md から。最初は 0.1.0（2026-10-23）

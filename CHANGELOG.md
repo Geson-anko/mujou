@@ -6,6 +6,10 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 ## [Unreleased](https://github.com/Geson-anko/mujou/compare/v0.1.0...HEAD)
 
+### Added
+
+- `pc.Layer(cuda_graph=True)`: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).
+
 ### Fixed
 
 - The docstring of `pc.TimeConstants.period`: one update of the period moves `delta` to `-g` with `lam = r**2 / (h + r)`, not `h * r / (h + r)` (the two agree only for `r = h`, the default).

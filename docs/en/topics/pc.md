@@ -151,6 +151,26 @@ uv run python examples/cifar10/main.py --epochs 10  # about 13 minutes
 - **AdamW**, made from the `lr` of Adam as in [Choosing the optimizer](#choosing-the-optimizer). The BP baseline binds the same `pc.optim.AdamW` to its whole model and steps it by the showing time once per batch, so both take about the same steps for the same gradients (the nodes learn for the time since they last learned, which is close to the showing time)
 - **GroupNorm** instead of BatchNorm: it has no running statistics and no mode to switch, and the samples of a batch, padded ones included, do not affect each other
 
+## Faster updates on a GPU: `cuda_graph`
+
+With a small batch on a GPU, an update of a `pc.Layer` is bound by the CPU launching the kernels of its vector-Jacobian product, not by the GPU. `cuda_graph=True` records that product in a CUDA graph at the node's first updates and replays it in every update after. The update stays the same bit for bit; only the launches go.
+
+```python
+layer = pc.Layer(
+    stage,  # on CUDA
+    act_spec=spec,
+    tau=tau,
+    optimizer=optimizer,
+    learn_interval=learn_interval,
+    device="cuda",
+    cuda_graph=True,
+)
+```
+
+- **The same kernels on every input.** The shapes come from the spec, so they are fixed; the module must not synchronize with the host (`.item()`, a branch on a tensor's value), and its parameters must change in place, as `pc.optim` changes them
+- **On a vision stage of a ViT with one sample** (an RTX 4090), the product took 0.47 ms instead of 2.06 ms
+- **Not part of the state.** A node made again from a state dict records its graphs anew
+
 ## The batch
 
 The batch is the shape that every tensor of the messages starts with. Give it as `batch` to `pc.Chain`, `pc.Input` or `pc.msg.activity_spec`, and start the specs `x` and `y` with it. `pc.Layer` and `pc.Output` take it from the `act_spec` they receive.
