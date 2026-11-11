@@ -6,6 +6,10 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 ## [Unreleased](https://github.com/Geson-anko/mujou/compare/v0.1.0...HEAD)
 
+### Fixed
+
+- The docstring of `pc.TimeConstants.period`: one update of the period moves `delta` to `-g` with `lam = r**2 / (h + r)`, not `h * r / (h + r)` (the two agree only for `r = h`, the default).
+
 ## [0.1.0](https://github.com/Geson-anko/mujou/releases/tag/v0.1.0) - 2026-10-30
 
 The first release. The API works but will still change in breaking ways in the 0.x releases.
