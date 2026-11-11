@@ -1,6 +1,7 @@
 """The hidden node of ``mujou.pc``."""
 
 import math
+import threading
 from collections.abc import Sequence
 from typing import override
 
@@ -295,6 +296,10 @@ class _GraphedVjp:
     node sends copies and steps its optimizer with them there)."""
 
     _WARMUP = 3  # runs on a side stream before the capture, as torch advises
+    # One recording at a time in the process: ``torch.cuda.graph`` captures
+    # on one stream shared by all graphs and synchronizes the whole device
+    # before it begins, which fails while another node's capture is underway.
+    _RECORDING = threading.Lock()
 
     def __init__(self, module: nn.Module) -> None:
         self._module = module
@@ -325,15 +330,16 @@ class _GraphedVjp:
             mu, g_in, g_theta = vjp(self._module, h, lambda _: d, params)
             return [mu, g_in, *g_theta]
 
-        current = torch.cuda.current_stream(h.device)
-        side = torch.cuda.Stream(h.device)
-        side.wait_stream(current)
-        with torch.cuda.stream(side):
-            for _ in range(self._WARMUP):
-                call()
-        current.wait_stream(side)
-        graph = torch.cuda.CUDAGraph()
-        # Other nodes launch work from other threads while this one records.
-        with torch.cuda.graph(graph, capture_error_mode="thread_local"):
-            out = call()
+        with self._RECORDING:
+            current = torch.cuda.current_stream(h.device)
+            side = torch.cuda.Stream(h.device)
+            side.wait_stream(current)
+            with torch.cuda.stream(side):
+                for _ in range(self._WARMUP):
+                    call()
+            current.wait_stream(side)
+            graph = torch.cuda.CUDAGraph()
+            # Other nodes launch work from other threads while this one records.
+            with torch.cuda.graph(graph, capture_error_mode="thread_local"):
+                out = call()
         return graph, h, d, out
