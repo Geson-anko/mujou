@@ -58,8 +58,10 @@ class TimeConstants:
     def period(self) -> float:
         """The default period of a node, ``h / (1 + h / r)``: the step that
         moves ``r`` all the way along its own pull (``h / 2`` with ``r = h``,
-        ``h`` without the decay). With ``lam = h * r / (h + r)`` (``h / 2``
-        with ``r = h``), it moves ``delta`` to ``-g`` in one update."""
+        ``h`` without the decay). With ``lam = r**2 / (h + r)`` (``h / 2``
+        with ``r = h``) and ``max_dt`` equal to it (``2 r >= h``), one update
+        of this ``dt`` moves ``delta = r + lam`` to ``-g``, whatever ``r`` and
+        ``lam`` were."""
         return self.h / (1 + self.h / self.r)
 
     @property

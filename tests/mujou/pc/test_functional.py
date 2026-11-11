@@ -310,6 +310,23 @@ class TestRelax:
             lam, lam0 + dt / tau.lam * r1, rtol=1e-15, atol=1e-15
         )
 
+    @pytest.mark.parametrize("r", [2e-3, 4e-3, 8e-3])
+    def test_one_update_of_the_period_moves_delta_to_minus_g(self, r: float):
+        # dt = period = h r / (h + r) gives r' = -(lam + g) r / (h + r), and
+        # delta' = lam + (1 + dt / tau_lam) r' is -g for every lam and g iff
+        # tau_lam = dt r / h = r^2 / (h + r).
+        tau = TimeConstants(h=4e-3, lam=r**2 / (4e-3 + r), r=r)
+        assert tau.max_dt == pytest.approx(tau.period)
+        x, lam, g = self.state()
+        relax_(x, lam, g, tau.period, tau)
+        torch.testing.assert_close(x + lam, -g, rtol=1e-12, atol=1e-12)
+
+    def test_lam_of_h_r_over_h_plus_r_is_not_one_step_unless_r_equals_h(self):
+        tau = TimeConstants(h=4e-3, lam=4e-3 * 8e-3 / (4e-3 + 8e-3), r=8e-3)
+        x, lam, g = self.state()
+        relax_(x, lam, g, tau.period, tau)
+        assert not torch.allclose(x + lam, -g, rtol=1e-6, atol=1e-6)
+
 
 class TestRelaxWithRelaxer:
     TAU = TimeConstants(h=4e-3, lam=8e-3, r=2e-3)
