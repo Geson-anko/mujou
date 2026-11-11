@@ -6435,8 +6435,10 @@ pc_only = TimeConstants(h=4e-3, lam=math.inf, r=math.inf)
 
         <p>The default period of a node, <code>h / (1 + h / r)</code>: the step that
 moves <code>r</code> all the way along its own pull (<code>h / 2</code> with <code>r = h</code>,
-<code>h</code> without the decay). With <code>lam = h * r / (h + r)</code> (<code>h / 2</code>
-with <code>r = h</code>), it moves <code>delta</code> to <code>-g</code> in one update.</p>
+<code>h</code> without the decay). With <code>lam = r**2 / (h + r)</code> (<code>h / 2</code>
+with <code>r = h</code>) and <code>max_dt</code> equal to it (<code>2 r &gt;= h</code>), one update
+of this <code>dt</code> moves <code>delta = r + lam</code> to <code>-g</code>, whatever <code>r</code> and
+<code>lam</code> were.</p>
 
     </div>
 
