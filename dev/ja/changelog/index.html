@@ -1568,6 +1568,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1596,7 +1607,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1658,6 +1669,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1686,7 +1708,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1724,13 +1746,17 @@
 <h1 id="-変更履歴">📝 変更履歴<a class="headerlink" href="#-変更履歴" title="Permanent link">&para;</a></h1>
 <p>リリースごとの変更。1.0.0 までは、マイナーリリース（0.x.0）で API が壊れることがあり、パッチリリース（0.x.y）はバグの修正だけ。履歴は英語で書き、同じものを <a href="https://github.com/Geson-anko/mujou/releases">GitHub Releases</a> にも載せている。</p>
 <h2 id="unreleased"><a href="https://github.com/Geson-anko/mujou/compare/v0.1.0...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>pc.Layer(cuda_graph=True)</code>: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).</li>
+</ul>
 <h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
 <ul>
 <li>The docstring of <code>pc.TimeConstants.period</code>: one update of the period moves <code>delta</code> to <code>-g</code> with <code>lam = r**2 / (h + r)</code>, not <code>h * r / (h + r)</code> (the two agree only for <code>r = h</code>, the default).</li>
 </ul>
 <h2 id="010---2026-10-30"><a href="https://github.com/Geson-anko/mujou/releases/tag/v0.1.0">0.1.0</a> - 2026-10-30<a class="headerlink" href="#010---2026-10-30" title="Permanent link">&para;</a></h2>
 <p>The first release. The API works but will still change in breaking ways in the 0.x releases.</p>
-<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Nodes, written in PyTorch: <code>mujou.Node</code> with the lifecycle hooks <code>on_start</code>, <code>on_update(dt)</code>, <code>on_pause</code>, <code>on_resume</code>, <code>on_exception</code> and <code>on_stop</code>, and a per-node period (<code>Node(period=...)</code>).</li>
 <li>Messages between nodes: <code>Port</code> and <code>MultiPort</code>, connected by <code>Channel</code>, with the message specs <code>TensorSpec</code>, <code>DictSpec</code>, <code>IntSpec</code>, <code>FloatSpec</code>, <code>BoolSpec</code> and <code>TimestampSpec</code>. A node reads the latest value its neighbour sent and never waits for it.</li>

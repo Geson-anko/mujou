@@ -5204,7 +5204,8 @@ node.</p>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">max_dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">device</span><span class="p">:</span> <span class="n">Device</span> <span class="o">=</span> <span class="s2">"cpu"</span><span class="p">,</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="p">)</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">cuda_graph</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5288,6 +5289,17 @@ diverge. The time beyond <code>max_dt</code> is dropped, from the relaxation and
 from the weight of the next update of <code>theta</code> alike. The default
 <code>tau.max_dt</code> is the step that settles <code>delta</code> (<code>tau.h / 2</code> with
 <code>tau.r = tau.h</code>).</p>
+<p>With <code>cuda_graph</code>, the node records the vector-Jacobian product of
+<code>module</code> in a <code>torch.cuda.CUDAGraph</code> (one without and one with the
+gradients of the parameters, each at the first update that needs it) and
+replays it in every update: it copies <code>h_in</code> and <code>delta</code> into the
+graph's buffers and reads <code>mu</code>, <code>g_in</code> and <code>g_theta</code> from them. The
+update is the same as without it, bit for bit, with far fewer kernels
+launched from the CPU, which bound an update on a GPU with a small batch.
+<code>module</code> must then run the same kernels on every input of the spec: no
+synchronization with the host (<code>.item()</code>, a branch on a tensor's value)
+and parameters updated in place, as <code>pc.optim</code> does. The graphs are not
+part of the state: a node made again from a state dict records them anew.</p>
 <p><code>relaxer</code> sets how <code>r</code> moves along the force on it (<code>functional.relax_</code>):
 the plain step of <code>pc.relax.Euler</code>, or a relaxer of your own with the same
 fixed point. The node calls the <code>reset_</code> of the bound relaxer with each new
@@ -5523,6 +5535,27 @@ frame (good values for it have not been measured yet);
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cuda_graph</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Replay the vector-Jacobian product of <code>module</code> from a
+CUDA graph (above); the node must be on CUDA.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -5546,7 +5579,8 @@ frame (good values for it have not been measured yet);
                 <p>The output of <code>module</code> does not start with the batch of
 <code>act_spec</code>, or <code>LearnClock</code> raises: <code>learn_interval</code>
 is neither <code>None</code> nor &gt; 0, <code>max_dt</code> is not &gt; 0, or <code>period</code>
-is longer than <code>max_dt</code>. <code>module</code> raises as PyTorch does when it
+is longer than <code>max_dt</code>, or <code>cuda_graph</code> is set for a node
+that is not on CUDA. <code>module</code> raises as PyTorch does when it
 does not take the <code>h</code> of <code>act_spec</code> on <code>device</code>.</p>
               </div>
             </td>
