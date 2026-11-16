@@ -9,7 +9,7 @@ metadata:
 
 - `pc.optim`: `SGD` `AdamW` `Optimizer` `BoundOptimizer`／`pc.relax`: `Euler` `Relaxer` `BoundRelaxer`（`HeavyBall` は 2026-10-28 に削除）／`pc.loss`: `MSELoss` `CrossEntropyLoss`／`pc.msg`: `Sample` `Activity` `Prediction` `activity_spec`／`pc.clock`: `LearnClock` `Tick`
 - `pc` 直下は `Chain` `Shown` `show` `Input` `Layer` `Output` `TimeConstants` と、上のサブモジュール（`functional` を含む）。`import mujou.pc as pc` だけで `pc.optim.SGD` と書ける
-- 各サブモジュールは `__all__` を持つ。`pc.SGD` のような旧名は残していない（pre-release のため互換 alias なし）
+- 各サブモジュールは `__all__` を持つ。`pc.SGD` のような旧名は残していない（0.x の間は互換 alias を残さない、[[feedback-no-compat-in-0x]]）
 
 **Why:** 名前が 20 以上平らに並ぶと、利用者が役割（更新手法・損失・メッセージ）を探しにくい。
 
