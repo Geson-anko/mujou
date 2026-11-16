@@ -35,7 +35,7 @@ PC-ALM では各ノードに自分の**活動** `h` があり、前のノード�
 
 送るのは $\mu + r$ でなく `mu` で、predictive coding の**固定予測の仮定**（fixed prediction assumption）にあたる。前へ流れる活動は順伝播の値になり、credit は後ろへだけ流れる。$\mu + r$ を送ると、あるノードの `r` の動きは順伝播のヤコビアンの積を通って上のすべてのノードの活動を動かし、credit として自分に戻ってくる。順伝播が増幅する鎖では、このループは刻みをどれだけ短くしても発散する。`mu` を送れば平衡点を変えずにこのループを切れるので、1 ノードで安定な刻みはどの鎖でも安定になる。
 
-`pc.TimeConstants` の既定（[5 節](#5-timeconstants)）なら、1 回の更新で `delta` が `-g` になり、credit は 1 周期に 1 ノードずつ戻る。
+`pc.TimeConstants` のふつうの値（[5 節](#5-timeconstants)）なら、1 回の更新で `delta` が `-g` になり、同じ更新のうちに前のノードへ送られる（[3 節](#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0)）。credit は 1 ホップ（ノードの間の接続 1 つ）を最大 1 周期で戻る。
 
 ### 新しいサンプルのリセットと持ち越し
 
@@ -91,7 +91,7 @@ flowchart LR
 | `g_in`              | テンソル（`h_in` と同じ shape）   | `prev` → 前のノードの `next` |
 | `pc.msg.Prediction` | `y_hat`、`y`、`mask`、`time`      | `Output.next` → ホスト       |
 
-- `mask`: サンプルごとに目標があるか。False のサンプルは損失に入らず、`Layer` はその行の `g_in` を 0 にする。`mask` がすべて False の入力でも `r` と `lam` は緩和し、重みだけ学ばない。評価はこれで行う
+- `mask`: サンプルごとに目標があるか。False のサンプルは損失に入らず、`Layer` はその行の `delta` を 0 にするので `g_in` の行も 0 になる。`mask` がすべて False の入力でも `r` と `lam` は緩和し、重みだけ学ばない。評価はこれで行う
 - `reset`: サンプルごとに新しく始まるか。`Layer` はその書き込みを初めて見た更新で、その行の `r` と `lam` を 0 にする。シャッフルしたサンプルでは立て、前のフレームに続くフレームでは False にする
 - `time`: ホストがその入力を書いた時刻（`Timestamp`）。書き込みの前は `Timestamp(ns=0)`
 
@@ -116,31 +116,31 @@ flowchart LR
 
 !!! abstract "要点"
 
-    `Layer.on_update(dt)` は「読む → `tick` → `vjp` → `g_in` を送る → `relax_` → `Activity` を送る → `optimizer.step_`」の順に進む。
+    `Layer.on_update(dt)` は「読む → `tick` → `relax_` → `vjp` → `g_in` を送る → `Activity` を送る → `optimizer.step_`」の順に進む。届いた `g` で緩和し、動かした直後の `delta` から作った `g_in` を送り返す。
 
-| 段  | 使う部品            | 計算                                                                                                                                                                                                                                            |
-| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る。新しい入力なら（`tick.new`）、`reset` が立ったサンプルの `r` と `lam` を 0 にする                                                                               |
-| 2   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を 1 回の VJP で。`g_in` を `prev` から送る                                                                                         |
-| 3   | `functional.relax_` | $r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)$（既定の relaxer の `pc.relax.Euler` が動かす形。[7 節](#7-relaxer)）、続けて動かした `r` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r$ |
-| 4   | `Activity`          | 予測 $\mu$ を `h` として、受け取った `y`・`mask`・`reset`・`time` を付けて `next` から送る                                                                                                                                                      |
-| 5   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                        |
+| 段  | 使う部品            | 計算                                                                                                                                                                                                                                                                                        |
+| --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `LearnClock.tick`   | `prev` から `Activity` を読み、`Tick`（`dt`・`new`・`learn`・`elapsed`）を得る。新しい入力なら（`tick.new`）、`reset` が立ったサンプルの `r` と `lam` を 0 にする                                                                                                                           |
+| 2   | `functional.relax_` | `next` に届いた `g_in` を足して `g` にする。$r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)$（既定の relaxer の `pc.relax.Euler` が動かす形。[7 節](#7-relaxer)）、続けて動かした `r` で $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r$ |
+| 3   | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$、$g_{\mathrm{in}} = -J_h^\top\delta$、学ぶなら $g_\theta = -J_\theta^\top\delta$ を、段 2 の後の $\delta = r + \lambda$（`mask` が False のサンプルは 0）から 1 回の VJP で。`g_in` を `prev` から送る                                                           |
+| 4   | `Activity`          | 予測 $\mu$ を `h` として、受け取った `y`・`mask`・`reset`・`time` を付けて `next` から送る                                                                                                                                                                                                  |
+| 5   | `optimizer.step_`   | $g_\theta$ をサンプルの数 $B$ で割り、重みを `tick.elapsed` 秒ぶん動かす（[6 節](#6-optimizer)）。`tick.learn` が True で、`mask` に True があるときだけ                                                                                                                                    |
 
-- 段 2 の `delta` は段 3 の前の `r`・`lam` で作る
+- 段 3 の `delta` は段 2 でこの更新の `g` を使って動かした後の `r`・`lam` で作る。受け取った credit は同じ更新のうちに前のノードへ渡る。自分のノードでもこの順を守る。`relax_` より前に `g_in` を送ると、受け取った credit を送るのが 1 回の更新ぶん遅れる
 - 新しい入力のとき（`tick.new`）、ノードは段 1 で `relaxer.reset_(reset)` も呼ぶ（[7 節](#7-relaxer)）
 - 勾配はバッチで和を取り、$B$ で割るのは段 5 だけ。だから `lam` はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る
 - `vjp` の `delta` は値ではなく、`mu` から `delta` を作る関数（`mu` は `vjp` の中で計算するため）。`r` を持つノードは `lambda mu: r + lam` を渡す
 - `vjp` は `h_in` を detach してから微分するので、計算グラフは前のノードに届かない
 
-`Output` は `r` も `lam` も持たない。段 2 で `functional.loss_vjp` を使い、損失 $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ の勾配 $\partial\ell/\partial h_{\mathrm{in}}$ を `g_in` として送り、`Prediction` を送る。学ぶ条件と `optimizer.step_` は `Layer` と同じ。
+`Output` は `r` も `lam` も持たないので段 2 が無い。段 3 で `functional.loss_vjp` を使い、損失 $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ の勾配 $\partial\ell/\partial h_{\mathrm{in}}$ を `g_in` として送り、`Prediction` を送る。学ぶ条件と `optimizer.step_` は `Layer` と同じ。
 
 ??? question "g_in を前のノードへ送るのは BP と何が違うの？"
 
     `g_in` の計算は BP の 1 層分と同じ VJP（$-J_h^\top\delta$）で、平衡点では `lam` が BP の credit と同じ漸化式を満たす。違うのは `g_in` の扱い方。
 
-    1. 送る側は自分の `delta` から `g_in` を作る。`delta = r + lam` は自分の状態だけで決まる
-    2. 受け取る側は届いた `g_in` を足して `g` にし、段 3 の `relax_` で自分の `r` を動かす力に使う。`g` をそのまま前のノードへ流さない
-    3. `r` と `lam` が動くと自分の `delta` が変わり、次の更新で送る `g_in` も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる
+    1. 受け取る側は届いた `g_in` を足して `g` にし、段 2 の `relax_` で自分の `r` と `lam` を動かす力に使う。`g` をそのまま前のノードへ流さない
+    2. 続けて、動かしたばかりの自分の `delta = r + lam` から `g_in` を作り、同じ更新のうちに送る（段 3）
+    3. credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて 1 回の更新に 1 ノードずつ入力側へ伝わる
 
     forward と backward の段階も、全ノードの待ち合わせも無い。各ノードは手元にある最新の `g`（古いこともある）で更新する。`vjp` は `h_in` を detach するので、計算グラフはノードをまたがない。BP の勾配と一致するのは平衡点だけで、学ぶまで `learn_interval` だけ待つのはこのため。
 
@@ -167,7 +167,7 @@ flowchart LR
 | `None`           | 毎回の更新（入力が新しくても）。入力がフレームごとに変わるストリーム向け                                                                                                     |
 | `math.inf`       | 学ばない。学ばない方法はこれだけ（optimizer は `tau=math.inf` を受け付けない）                                                                                               |
 
-- `new` が True の更新で学ばないのは、その更新の `delta` がまだ前の入力のものだから
+- `new` が True の更新で学ばないのは、緩和に使う `g` がまだ前の入力のものだから（次のノードは新しい入力をまだ見ていない）
 - だから同じ入力が続く間は `learn_interval` 秒ごとに学び、`elapsed` はおよそ `learn_interval`
 - 学ばないまま入力が変わると、`elapsed` に溜めた時間は捨てる
 - 自分のノードでは `pc.clock.LearnClock.of(tau, period=..., learn_interval=...)` で作り、属性に置く。それだけでノードの状態に入る
@@ -192,7 +192,12 @@ flowchart LR
 
 時定数から既定が決まる値が 2 つある。`tau.period`（`tau.h / (1 + tau.h / tau.r)`。`tau.r = tau.h` なら `tau.h / 2`）はノードの更新の間隔で、`period=` を渡さないときの `Chain` の全ノードの周期。`tau.max_dt`（`min(tau.period, 2 * tau.lam)`）は 1 回の更新で数える `dt` の上限で、超えた分は緩和からも `elapsed` からも捨てる。
 
-ふつうの値は組で決める。`tau.r = tau.h`、`tau.lam = tau.h / 2`、既定の周期 `tau.h / 2`。このとき 1 回の更新で `delta = r + lam` がちょうど `-g` になり、credit は 1 周期に 1 ノードずつ戻って行き過ぎない。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。
+ふつうの値は組で決める。`tau.r = tau.h`、`tau.lam = tau.h / 2`、既定の周期 `tau.h / 2`。このとき 1 周期ぶんの更新で `delta = r + lam` がちょうど `-g` になって行き過ぎず、ノードはその `delta` を同じ更新のうちに送り返す。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。`Input` から `Output` までの接続を `hops` 個とすると、credit の戻る速さは次のとおり。
+
+| 実行の仕方                                          | credit が 1 ホップ戻る時間 | 往復（入力が `Output` まで進み、credit が先頭の `Layer` まで戻る） |
+| --------------------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| `ManualRun.step(dt)`（1 ステップに全ノードが 1 回） | 1 ステップ                 | `2 * hops` ステップ                                                |
+| 自由実行（全ノードの周期が同じ）                    | 最大 1 周期                | 約 `hops` 周期                                                     |
 
 `tau.r` は平衡点を動かさない。`lam` が `r` を溜めるので、平衡点では `tau.r` によらず `r = 0` になる。`tau.lam` と `tau.r` を両方 `math.inf` にすると、ノードは固定予測の仮定を置いた predictive coding になり、誤差 `r` が BP の credit に落ち着く。ノードの周期は自分の `max_dt` より長くしてはいけない（`ValueError`）。
 

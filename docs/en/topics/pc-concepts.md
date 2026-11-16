@@ -35,7 +35,7 @@ The prediction `mu` jumps at once with a new sample, and when the node below or 
 
 It sends `mu`, not $\mu + r$: the **fixed prediction assumption** of predictive coding. The activity that flows forward is then the forward pass, and the credit only flows back. Were $\mu + r$ sent, a move of `r` in one node would move the activity of every node above it, through the product of the Jacobians of the forward pass, and come back to it as credit. That loop diverges in a chain whose forward pass amplifies, however short the steps. Sending `mu` keeps the fixed point and cuts the loop, so the steps that are stable in one node are stable in any chain.
 
-With the defaults of `pc.TimeConstants` ([section 5](#5-timeconstants)), one update moves `delta` to `-g`, so the credit moves one node back in each period.
+With the usual values of `pc.TimeConstants` ([section 5](#5-timeconstants)), one update moves `delta` to `-g` and, in the same update, sends it back to the node before ([section 3](#3-one-update-of-a-layer)). So the credit takes at most one period per hop (one connection between two nodes) back.
 
 ### A new sample: reset or keep
 
@@ -91,7 +91,7 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 | `g_in`              | A tensor (the shape of `h_in`)    | `prev` → the previous node's `next` |
 | `pc.msg.Prediction` | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
 
-- `mask`: whether each sample has a target. A sample whose `mask` is False adds nothing to the loss, and `Layer` sets the `g_in` of its row to 0. With every `mask` False, `r` and `lam` still relax and only the weights do not learn. Evaluate this way
+- `mask`: whether each sample has a target. A sample whose `mask` is False adds nothing to the loss, and `Layer` sets the `delta` of its row to 0, so the `g_in` of its row is 0 too. With every `mask` False, `r` and `lam` still relax and only the weights do not learn. Evaluate this way
 - `reset`: whether each sample starts anew. A `Layer` sets `r` and `lam` of its row to 0 in the update in which it first sees the write. Set it for shuffled samples; leave it False for a frame that continues the one before
 - `time`: the `Timestamp` at which the host wrote the input. `Timestamp(ns=0)` before the first write
 
@@ -116,31 +116,31 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 
 !!! abstract "Key idea"
 
-    `Layer.on_update(dt)` goes "read → `tick` → `vjp` → send `g_in` → `relax_` → send `Activity` → `optimizer.step_`".
+    `Layer.on_update(dt)` goes "read → `tick` → `relax_` → `vjp` → send `g_in` → send `Activity` → `optimizer.step_`". It relaxes with the `g` it has received, then sends back the `g_in` of the `delta` it has just moved.
 
-| Step | Part                | Computation                                                                                                                                                                                                                                                       |
-| ---- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `LearnClock.tick`   | Reads the `Activity` from `prev` and gets the `Tick` (`dt`, `new`, `learn`, `elapsed`). With a new input (`tick.new`), sets `r` and `lam` of the samples whose `reset` is set to 0                                                                                |
-| 2    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP. Sends `g_in` from `prev`                                                                                                            |
-| 3    | `functional.relax_` | $r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)$ (as `pc.relax.Euler`, the default relaxer, moves it; [section 7](#7-relaxers)), and then, with the moved `r`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r$ |
-| 4    | `Activity`          | Sends from `next` the prediction $\mu$ as `h`, with the `y`, `mask`, `reset` and `time` it received                                                                                                                                                               |
-| 5    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True                                                                              |
+| Step | Part                | Computation                                                                                                                                                                                                                                                                                                |
+| ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `LearnClock.tick`   | Reads the `Activity` from `prev` and gets the `Tick` (`dt`, `new`, `learn`, `elapsed`). With a new input (`tick.new`), sets `r` and `lam` of the samples whose `reset` is set to 0                                                                                                                         |
+| 2    | `functional.relax_` | Sums the `g_in` on `next` into `g`. Then $r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)$ (as `pc.relax.Euler`, the default relaxer, moves it; [section 7](#7-relaxers)), and then, with the moved `r`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r$ |
+| 3    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP, with $\delta = r + \lambda$ after step 2 (0 for the samples whose `mask` is False). Sends `g_in` from `prev`                                                                 |
+| 4    | `Activity`          | Sends from `next` the prediction $\mu$ as `h`, with the `y`, `mask`, `reset` and `time` it received                                                                                                                                                                                                        |
+| 5    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True                                                                                                                       |
 
-- The `delta` of step 2 is made from `r` and `lam` before step 3
+- The `delta` of step 3 is made from `r` and `lam` after step 2 has moved them with the `g` of this update. So the credit a node receives goes on to the node before in the same update. Keep this order in a node of your own: a node that sends `g_in` before `relax_` sends the credit it receives one update later
 - With a new input (`tick.new`), the node also calls `relaxer.reset_(reset)` in step 1 ([section 7](#7-relaxers))
 - Gradients are summed over the batch, and only step 5 divides by $B$. So `lam` is the credit of each sample, and the optimizer gets the mean gradient of the batch
 - The `delta` of `vjp` is not a value but a function that makes `delta` from `mu` (`mu` is computed inside `vjp`). A node that holds `r` passes `lambda mu: r + lam`
 - `vjp` detaches `h_in` before it differentiates, so the graph does not reach the previous node
 
-`Output` holds neither `r` nor `lam`. In step 2 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`optimizer.step_`) are as in `Layer`.
+`Output` holds neither `r` nor `lam`, so it has no step 2. In step 3 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`optimizer.step_`) are as in `Layer`.
 
 ??? question "How does sending g_in back differ from backpropagation?"
 
     `g_in` is computed with the same VJP as one layer of backpropagation ($-J_h^\top\delta$), and at equilibrium `lam` follows the same recursion as the credit of backpropagation. What differs is what is done with `g_in`:
 
-    1. The sender makes `g_in` from its own `delta`: `delta = r + lam` depends on its own state only
-    2. The receiver sums the `g_in` it receives into `g`, and uses it in `relax_` (step 3) as a force that moves its own `r`. It does not pass `g` on
-    3. As `r` and `lam` move, its own `delta` changes, and so does the `g_in` it sends in its next update. The credit travels back through the relaxation of each node, over time, not in one backward sweep
+    1. The receiver sums the `g_in` it receives into `g`, and uses it in `relax_` (step 2) as a force that moves its own `r` and `lam`. It does not pass `g` on
+    2. It then makes its own `g_in` from its own `delta = r + lam`, just moved, and sends it in the same update (step 3)
+    3. So the credit travels back through the relaxation of each node, one node per update, not in one backward sweep
 
     There is no forward phase and backward phase, and no node waits for the others: each node updates with the latest `g` it has, which may be old. `vjp` detaches `h_in`, so no computation graph crosses nodes. The gradient equals that of backpropagation only at equilibrium, which is why a node waits `learn_interval` before it learns.
 
@@ -167,7 +167,7 @@ In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer
 | `None`           | Every update (with a new input too). For a stream whose input changes every frame                                                                                                                  |
 | `math.inf`       | Never. This is the only way not to learn: the optimizers reject `tau=math.inf`                                                                                                                     |
 
-- An update where `new` is True does not learn because its `delta` is still that of the input before
+- An update where `new` is True does not learn because the `g` it relaxes with is still that of the input before: the next node has not seen the new input yet
 - So while one input stays, the node learns every `learn_interval` seconds, and `elapsed` is about `learn_interval`
 - When the input changes before the node learned, the time summed in `elapsed` is dropped
 - In a node of your own, make it with `pc.clock.LearnClock.of(tau, period=..., learn_interval=...)` and put it in an attribute. That alone puts it in the node's state
@@ -192,7 +192,14 @@ In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer
 
 Two values take their defaults from the time constants. `tau.period` (`tau.h / (1 + tau.h / tau.r)`, `tau.h / 2` with `tau.r = tau.h`) is the interval between a node's updates, the period of every node of a `Chain` unless it is given `period=`. `tau.max_dt` (`min(tau.period, 2 * tau.lam)`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
 
-The usual values go together: `tau.r = tau.h`, `tau.lam = tau.h / 2` and the default period `tau.h / 2`. One update then moves `delta = r + lam` to `-g` exactly, so the credit moves one node back in each period and does not overshoot. A longer step overshoots, and the overshoot grows at every node it passes. `tau.r` does not move the fixed point: `lam` sums up `r`, so `r = 0` there whatever `tau.r` is. With both `tau.lam` and `tau.r` at `math.inf`, the nodes are those of predictive coding with the fixed prediction assumption, whose error `r` settles at the credit of BP. A node's period must not be longer than its `max_dt` (`ValueError`).
+The usual values go together: `tau.r = tau.h`, `tau.lam = tau.h / 2` and the default period `tau.h / 2`. An update of one period then moves `delta = r + lam` to `-g` exactly and does not overshoot, and the node sends the new `delta` back in that same update. A longer step overshoots, and the overshoot grows at every node it passes. With these values the credit goes back as follows, over a path of `hops` connections from the `Input` to the `Output`:
+
+| How the nodes run                                  | Credit back, per hop | Round trip: the input forward to the `Output`, the credit back to the first `Layer` |
+| -------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `ManualRun.step(dt)`, every node once in each step | 1 step               | `2 * hops` steps                                                                    |
+| A free run, every node with the same period        | At most 1 period     | About `hops` periods                                                                |
+
+`tau.r` does not move the fixed point: `lam` sums up `r`, so `r = 0` there whatever `tau.r` is. With both `tau.lam` and `tau.r` at `math.inf`, the nodes are those of predictive coding with the fixed prediction assumption, whose error `r` settles at the credit of BP. A node's period must not be longer than its `max_dt` (`ValueError`).
 
 Make the `tau` of the optimizer much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
 
