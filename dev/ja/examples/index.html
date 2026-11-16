@@ -831,6 +831,8 @@
       
         
       
+        
+      
     
     
     
@@ -975,6 +977,34 @@
     
   
     時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    シミュレーション
   
 
     
@@ -1293,8 +1323,6 @@
       
         
       
-        
-      
     
     
     
@@ -1439,34 +1467,6 @@
     
   
     時間
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    テスト
   
 
     
@@ -1760,6 +1760,11 @@
 <td><a href="../topics/time/">時間</a></td>
 </tr>
 <tr>
+<td>ネットワークを計算能力いっぱいでシミュレーションする</td>
+<td><code>simulation.py</code></td>
+<td><a href="../topics/simulation/">シミュレーション</a></td>
+</tr>
+<tr>
 <td>ノードが例外を投げたときの動きを知る</td>
 <td><code>errors.py</code></td>
 <td><a href="../topics/errors/">例外と終了</a></td>
@@ -1776,7 +1781,7 @@
 <li><code>quickstart.py</code>: 2 ノードのネットワークを <code>with mujou.run(...)</code> で走らせる。ホストは <code>write</code> で入力を書き、期待した出力が届くまで <code>wait_for</code> で待つ</li>
 <li><code>branching.py</code>: 送るだけの <code>Port</code> を 2 つの枝につなぎ、<code>MultiPort</code> で合流させる。後半は <code>MultiPort</code> が <code>connect</code> の返した Channel で、相手ごとに違う値を <code>send_to</code> で送る</li>
 <li><code>leaky.py</code>: リーク積分器。連続時間で定義し厳密解で進めるので、どんな <code>dt</code> でも安定する。実行すると 2 つ並べた鎖の入力を切り替え、各出力を送られた時刻の厳密解と比べる</li>
-<li><code>test_leaky.py</code>: <code>leaky.py</code> のノードを <code>mujou.testing</code> の仮想タイマーと手動の更新でテストする。厳密解との比較、離散アルゴリズムとのビット単位の一致、再開した実行と止めずに続けた実行の一致。<code>uv run pytest examples/test_leaky.py</code> で実行する</li>
+<li><code>test_leaky.py</code>: <code>leaky.py</code> のノードを <code>mujou.run_manually</code> の仮想タイマーと手動の更新でテストする。厳密解との比較、離散アルゴリズムとのビット単位の一致、再開した実行と止めずに続けた実行の一致。<code>uv run pytest examples/test_leaky.py</code> で実行する</li>
 <li><code>online_learning.py</code>: 教師がホストの書いて変える <code>a</code> で y = a x + b のバッチを送る。学習するノードは新しいバッチごとに、前のバッチからの時間だけ、素の PyTorch の autograd で学ぶ。ホストは損失が下がり、跳ね上がり、また下がるのを追う</li>
 <li><code>feedback_alignment.py</code>: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、<code>pc.clock.LearnClock</code> によるサンプルごとに 1 回の学習</li>
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> と <code>pc.show</code> で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る</li>
@@ -1787,6 +1792,7 @@
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code> と、ノードのパス（<code>"enc.scale"</code>）の付き方</li>
 <li><code>subscribe.py</code>: <code>run.subscribe</code> がまず最新の出力を、その後は新しい出力を 1 つずつ返す。<code>break</code> で止める</li>
 <li><code>timers.py</code>: <code>Timestamp</code>、時間の速さを変えた実行専用の <code>Timer</code>、グローバルタイマーの速さ、グローバルタイマーを止めて 2 つの実行の状態を同じ時刻で取得すること。一方から再開した実行は専用のタイマーで続く</li>
+<li><code>simulation.py</code>: <code>mujou.run_manually</code> で <code>leaky.py</code> の chain に正弦波を入れ、1 ms 刻みでシミュレーションして実時間でかかった時間を表示する。入力はステップの間に書く。ワーカーの数によらず同じ結果になること、<code>step(dt)</code> とノードを渡す 2 通りの順の比較も</li>
 <li><code>errors.py</code>: ホストが受け取る <code>NetworkError</code> とその <code>__cause__</code>、<code>on_exception</code> → <code>on_stop</code> の順、<code>on_start</code> の例外は <code>mujou.run</code> が送出すること</li>
 <li><code>visualize.py</code>: 2 つのネットワークと 1 つのノードからなるネットワークと <code>pc.Chain</code> のページを、走らせずに <code>mujou.viz.to_html</code> で書き出す</li>
 </ul>

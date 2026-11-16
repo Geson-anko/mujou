@@ -818,10 +818,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#8-テスト" class="md-nav__link">
+  <a href="#8-シミュレーションとテスト" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. テスト
+        8. シミュレーションとテスト
       
     </span>
   </a>
@@ -1261,6 +1261,8 @@
       
         
       
+        
+      
     
     
     
@@ -1405,6 +1407,34 @@
     
   
     時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    シミュレーション
   
 
     
@@ -1643,8 +1673,6 @@
       
         
       
-        
-      
     
     
     
@@ -1789,34 +1817,6 @@
     
   
     時間
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    テスト
   
 
     
@@ -2192,10 +2192,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#8-テスト" class="md-nav__link">
+  <a href="#8-シミュレーションとテスト" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. テスト
+        8. シミュレーションとテスト
       
     </span>
   </a>
@@ -2384,7 +2384,7 @@
 <ul>
 <li>ノードに 1 回分の更新だけを書き、mujou がそれを繰り返し呼ぶ仕組み</li>
 <li>ノード同士が互いを待たず、最新の値だけでやり取りする仕組み</li>
-<li>その上に実行・時間・状態・テスト・学習がどう組み立てられているか</li>
+<li>その上に実行・時間・状態・シミュレーション・学習がどう組み立てられているか</li>
 </ul>
 <p>前提は PyTorch の <code>nn.Module</code> とテンソルを使ったことがあること。</p>
 </div>
@@ -2444,9 +2444,9 @@
 <td><a href="#7-%E7%8A%B6%E6%85%8B">7. 状態</a></td>
 </tr>
 <tr>
-<td>テスト</td>
-<td>仮想のタイマーで時間を手で進め、決定的に走らせる</td>
-<td><a href="#8-%E3%83%86%E3%82%B9%E3%83%88">8. テスト</a></td>
+<td>シミュレーション</td>
+<td>仮想時間を手で進め、計算能力いっぱいで決定的に走らせる</td>
+<td><a href="#8-%E3%82%B7%E3%83%9F%E3%83%A5%E3%83%AC%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%81%A8%E3%83%86%E3%82%B9%E3%83%88">8. シミュレーションとテスト</a></td>
 </tr>
 <tr>
 <td>学習</td>
@@ -2928,18 +2928,18 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
     F --&gt;|torch.load| T2["状態の木"]
     T2 --&gt;|"mujou.run(新しいインスタンス, state=tree)"| B["続きから走る Run&lt;br/&gt;保存した時刻から始まる専用のタイマー"]</code></pre>
 <p>手順は<a href="../tutorial/6-save-and-resume/">保存と再開</a>。</p>
-<h2 id="8-テスト">8. テスト<a class="headerlink" href="#8-テスト" title="Permanent link">&para;</a></h2>
+<h2 id="8-シミュレーションとテスト">8. シミュレーションとテスト<a class="headerlink" href="#8-シミュレーションとテスト" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p><code>mujou.testing.run</code> は仮想のタイマーの上で、時間を手で進めて決定的に走らせる。</p>
+<p><code>mujou.run_manually</code> は <code>run.step</code> でだけ進む仮想のタイマーで走る。計算能力いっぱいの速さで、結果は毎回同じ。</p>
 </div>
-<p>ふつうの実行では、各ノードがいつ更新するかは実行ごとに揺らぐ。テストでは時間と更新の順をテストが決める。</p>
+<p><code>mujou.run</code> は現実世界のための実行で、各ノードがいつ更新するかは実行ごとに揺らぐ。シミュレーションやテストでは、代わりに時間を自分で決める。</p>
 <table>
 <thead>
 <tr>
 <th></th>
 <th><code>mujou.run</code></th>
-<th><code>mujou.testing.run</code></th>
+<th><code>mujou.run_manually</code></th>
 </tr>
 </thead>
 <tbody>
@@ -2951,7 +2951,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <tr>
 <td>更新</td>
 <td>各ノードが平均 <code>period</code> ごとに</td>
-<td><code>run.step(dt, *nodes)</code> で 1 回ずつ。<code>period</code> は使わない</td>
+<td><code>run.step(dt)</code> で 1 回ずつ。<code>period</code> は使わない</td>
 </tr>
 <tr>
 <td><code>dt</code></td>
@@ -2965,17 +2965,20 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 </tr>
 </tbody>
 </table>
-<p><code>run.step(dt, *nodes)</code> は時間を <code>dt</code> だけ進めてから、渡したノードを渡した順に 1 回ずつ更新する。ノードを渡さなければ、全ノードを木の順に更新する。</p>
+<p><code>run.step(dt)</code> は時間を <code>dt</code> だけ進めてから、全ノードを並列に 1 回ずつ更新する。どのノードもステップ開始時の値を読み、送った値は全ノードの更新が終わってから見える。<code>run.step(dt, *nodes)</code> なら、渡したノードを渡した順に 1 つずつ更新する。</p>
 <pre class="mermaid"><code>sequenceDiagram
     participant T as テスト
     participant R as ManualRun
     participant A as net.a
     participant B as net.b
-    T-&gt;&gt;R: run.step(h, net.a, net.b)
+    T-&gt;&gt;R: run.step(h)
     R-&gt;&gt;R: 仮想のタイマーを h 進める
-    R-&gt;&gt;A: on_update(h)
-    A--&gt;&gt;B: send（b はこの値を読む）
-    R-&gt;&gt;B: on_update(h)
+    par 並列に
+        R-&gt;&gt;A: on_update(h)
+    and
+        R-&gt;&gt;B: on_update(h)、ステップ開始時の a の値を読む
+    end
+    Note over A,B: a と b が送った値がここで見える
     R--&gt;&gt;T: 戻る</code></pre>
 <p>次は 6 節の <code>Leaky</code> を厳密解と比べるテスト。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeaky</span><span class="p">:</span>
@@ -2984,7 +2987,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">node</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">one</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="n">expected</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># 1 ms later, then every node once (period is ignored)</span>
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>                <span class="n">expected</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">h</span> <span class="o">/</span> <span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span>
@@ -2992,7 +2995,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="n">steps</span> <span class="o">*</span> <span class="mi">1_000_000</span>  <span class="c1"># sent at the last step</span>
 <a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
 </code></pre></div>
-<p>手順は<a href="../tutorial/3-test/">ノードをテストする</a>。</p>
+<p>手順は<a href="../tutorial/3-test/">ノードをテストする</a>、詳しくは<a href="../topics/simulation/">シミュレーション</a>。</p>
 <h2 id="9-学習">9. 学習<a class="headerlink" href="#9-学習" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>

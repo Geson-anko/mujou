@@ -831,6 +831,8 @@
       
         
       
+        
+      
     
     
     
@@ -975,6 +977,34 @@
     
   
     時間
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    シミュレーション
   
 
     
@@ -1200,8 +1230,6 @@
   
     
     
-      
-        
       
         
       
@@ -1515,6 +1543,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#mujou.run_manually" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_manually
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.ManualRun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ManualRun
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ManualRun">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.ManualRun.timer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        timer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.ManualRun.step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        step
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mujou.NetworkError" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1549,34 +1627,6 @@
     
   
     時間
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    テスト
   
 
     
@@ -1850,6 +1900,56 @@
     <span class="md-ellipsis">
       
         join
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.run_manually" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_manually
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujou.ManualRun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ManualRun
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ManualRun">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.ManualRun.timer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        timer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.ManualRun.step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        step
       
     </span>
   </a>
@@ -2178,7 +2278,7 @@ latest, the interpreter's exit: once the non-daemon threads have ended, the
 exit shuts down every run still running and waits for their <code>on_stop</code>. A
 thread that iterates over <code>subscribe</code> keeps the exit waiting until its run
 ends, so shut the run down before the program ends (<code>with</code> does).</p>
-<p><code>mujou.run</code> and <code>mujou.testing.run</code> make it.</p>
+<p><code>mujou.run</code> and <code>mujou.run_manually</code> make it.</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>from typing import override
 
@@ -3134,6 +3234,321 @@ changes: a running run keeps running.</p>
             <td class="doc-raises-details">
               <div class="doc-md-description">
                 <p>The run stopped because a node raised.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="mujou.run_manually" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">mujou.run_manually</span>
+
+
+<a href="#mujou.run_manually" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">run_manually</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">root</span><span class="p">:</span> <span class="n">Node</span> <span class="o">|</span> <span class="n">Network</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">timer</span><span class="p">:</span> <span class="n">VirtualTimer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">inputs</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">Message</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ManualRun</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Run <code>root</code> as <code>mujou.run</code> does, with the nodes updating only when
+<code>ManualRun.step</code> lets them, for simulations and tests.</p>
+<p><code>mujou.run</code> runs in real time, for deploying to the real world;
+<code>mujou.run_manually</code> runs in virtual time, for simulating as fast as the
+machine computes. Each update sees as its <code>dt</code> the time stepped since the
+node's last update, and with deterministic nodes that share no Python
+objects the result is the same, bit for bit, every time.</p>
+<p>The default <code>timer</code> is a new <code>mujou.time.VirtualTimer</code> at time 0 (with
+<code>state</code>, at the time of the state), which <code>ManualRun.timer</code> returns and
+<code>ManualRun.step</code> advances. Pass a <code>VirtualTimer</code> of your own to share it
+between runs: a <code>step</code> of one then moves the time of the others too.</p>
+<p><code>inputs</code>, <code>state</code> and <code>workers</code> are those of <code>mujou.run</code> (the
+workers run the updates of a <code>step</code> in parallel), and so are the errors.</p>
+<p>Example::</p>
+<div class="highlight"><pre><span></span><code>from typing import override
+
+import torch
+
+import mujou
+from mujou import Node, Port, TensorSpec
+
+
+class Double(Node):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        self.prev = Port(recv=TensorSpec((2,)))
+        self.next = Port(send=TensorSpec((2,)))
+
+    @override
+    def on_update(self, dt: float) -&gt; None:
+        super().on_update(dt)
+        self.next.send(2 * self.prev.recv())
+
+
+class Chain(mujou.Network):
+    def __init__(self) -&gt; None:
+        super().__init__()
+        self.a, self.b = Double(), Double()
+        self.a.next.connect(self.b.prev)
+        self.prev, self.next = self.a.prev, self.b.next
+
+
+net = Chain()
+x = torch.ones(2)
+with mujou.run_manually(net, inputs={net.prev: x}) as run:
+    run.step(0.001, net.a, net.b)  # 1 ms later, a, then b reads a's value
+    y, t = run.read_with_time(net.next)
+assert torch.equal(y, 4 * x) and t is not None and t.ns == 1_000_000
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A node of the tree has already run; or this is called
+from a node's hook.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>(<span title="TypeError">TypeError</span>, <span title="ValueError">ValueError</span>)</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The tree is invalid; or <code>inputs</code> or the
+<code>initial</code> value of a port do not match their specs.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>workers</code> is less than 1; <code>timer</code> and <code>state</code> are
+both given; or <code>state</code> does not have the timer, nodes, ports and
+peers of the tree.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A node raised while starting; the run has stopped.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="mujou.ManualRun" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">mujou.ManualRun</span>
+
+
+<a href="#mujou.ManualRun" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ManualRun</span><span class="p">(</span><span class="n">wiring</span><span class="p">:</span> <span class="n">Wiring</span><span class="p">,</span> <span class="n">runtime</span><span class="p">:</span> <span class="n">Runtime</span><span class="p">,</span> <span class="n">timer</span><span class="p">:</span> <span class="n">VirtualTimer</span><span class="p">,</span> <span class="n">clock</span><span class="p">:</span> <span class="n">ReadOnlyTimer</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="mujou.Run (mujou.execution.Run)" href="#mujou.Run">Run</a></code></p>
+
+
+
+        <p>A run whose nodes update only when <code>step</code> lets them, for simulations
+and tests.</p>
+<p><code>mujou.run_manually</code> returns it. The nodes start and stop as in any run,
+but between updates each waits for <code>step</code>, which advances the run's
+<code>VirtualTimer</code> first: every <code>dt</code> is made of the times that were
+stepped, and with deterministic nodes that share no Python objects the
+result is the same, bit for bit, every time. Use it to simulate a network
+as fast as the machine computes, and to test nodes against the discrete
+algorithm of the chosen order.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujou.ManualRun.timer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">timer</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#mujou.ManualRun.timer" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">timer</span><span class="p">:</span> <span class="n">VirtualTimer</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The run's timer: the <code>VirtualTimer</code> that <code>mujou.run_manually</code>
+made, or the one given to it.</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="mujou.ManualRun.step" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">step</span>
+
+
+<a href="#mujou.ManualRun.step" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">step</span><span class="p">(</span><span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">*</span><span class="n">nodes</span><span class="p">:</span> <span class="n">Node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Advance the timer by <code>dt</code> seconds, then update the nodes once each,
+and return when done.</p>
+<p>Without <code>nodes</code>, every node updates at once, in parallel on the
+run's workers and dedicated threads. Each reads the values from the
+start of the step: what the nodes send in this step becomes visible to
+all of them once every update has ended (Jacobi). The result does not
+depend on the number of workers or on which thread runs which node.
+While such a step runs, the host reading a port from another thread
+gets its value from before the step.</p>
+<p>With <code>nodes</code>, only they update, one after another in the given order,
+and a later node reads what an earlier one sent in this step
+(Gauss-Seidel); what each sends becomes visible once its update has
+ended. This is not the same as <code>step(dt)</code> in general, even when every
+node is given. When the messages between different nodes flow without
+a cycle, updating each receiver before its senders (a chain from the
+output side back to the input side, for one) gives the result of
+<code>step(dt)</code>; when values also flow back, no order does in general.</p>
+<p>Either way, a node does not read in its update what it sent there
+itself, through a port connected to its own. The period of the nodes
+does not apply. Each <code>dt</code> a node sees is the time since its last
+update, the first one from the start of the run (or the last update
+restored). A node given twice in one <code>step</code> updates once: the second
+time, its time has not moved. A timer shared with other runs moves for
+them too. Write inputs between steps.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A node is not in this run, or <code>dt</code> is negative or not
+finite.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The run has stopped normally, the timer is paused, or
+this is called from a node's hook.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><a class="autorefs autorefs-internal" title="mujou.NetworkError (mujou.errors.NetworkError)" href="#mujou.NetworkError">NetworkError</a></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A node raised; the run has stopped. Without
+<code>nodes</code>, what the nodes sent in that step is not published.</p>
               </div>
             </td>
           </tr>

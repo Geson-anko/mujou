@@ -816,10 +816,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#8-testing" class="md-nav__link">
+  <a href="#8-simulation-and-testing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. Testing
+        8. Simulation and testing
       
     </span>
   </a>
@@ -1259,6 +1259,8 @@
       
         
       
+        
+      
     
     
     
@@ -1403,6 +1405,34 @@
     
   
     Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
   
 
     
@@ -1641,8 +1671,6 @@
       
         
       
-        
-      
     
     
     
@@ -1787,34 +1815,6 @@
     
   
     Time
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Testing
   
 
     
@@ -2190,10 +2190,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#8-testing" class="md-nav__link">
+  <a href="#8-simulation-and-testing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. Testing
+        8. Simulation and testing
       
     </span>
   </a>
@@ -2382,7 +2382,7 @@
 <ul>
 <li>How you write only one update of a node, and Mujou calls it over and over</li>
 <li>How nodes talk without waiting for each other, through the latest values only</li>
-<li>How runs, time, state, testing and learning are built on top of that</li>
+<li>How runs, time, state, simulation and learning are built on top of that</li>
 </ul>
 <p>You should have used PyTorch's <code>nn.Module</code> and tensors.</p>
 </div>
@@ -2442,9 +2442,9 @@
 <td><a href="#7-state">7. State</a></td>
 </tr>
 <tr>
-<td>Testing</td>
-<td>A virtual timer you move by hand, for deterministic runs</td>
-<td><a href="#8-testing">8. Testing</a></td>
+<td>Simulation</td>
+<td>Virtual time you step by hand, as fast as the machine computes</td>
+<td><a href="#8-simulation-and-testing">8. Simulation and testing</a></td>
 </tr>
 <tr>
 <td>Learning</td>
@@ -2926,18 +2926,18 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
     F --&gt;|torch.load| T2["the state tree"]
     T2 --&gt;|"mujou.run(new_instance, state=tree)"| B["a Run that goes on&lt;br/&gt;on a timer of its own, from the saved time"]</code></pre>
 <p>See <a href="../tutorial/6-save-and-resume/">Save and Resume</a>.</p>
-<h2 id="8-testing">8. Testing<a class="headerlink" href="#8-testing" title="Permanent link">&para;</a></h2>
+<h2 id="8-simulation-and-testing">8. Simulation and testing<a class="headerlink" href="#8-simulation-and-testing" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p><code>mujou.testing.run</code> runs on a virtual timer that you move by hand, deterministically.</p>
+<p><code>mujou.run_manually</code> runs on a virtual timer that only <code>run.step</code> moves: as fast as the machine computes, and the same every time.</p>
 </div>
-<p>In an ordinary run, when each node updates varies from run to run. In a test, the test decides the time and the order of the updates.</p>
+<p><code>mujou.run</code> is for the real world: when each node updates varies from run to run. To simulate, or to test, you decide the time instead.</p>
 <table>
 <thead>
 <tr>
 <th></th>
 <th><code>mujou.run</code></th>
-<th><code>mujou.testing.run</code></th>
+<th><code>mujou.run_manually</code></th>
 </tr>
 </thead>
 <tbody>
@@ -2949,7 +2949,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <tr>
 <td>Updates</td>
 <td>Each node, every <code>period</code> on average</td>
-<td>Once each with <code>run.step(dt, *nodes)</code>; <code>period</code> does not apply</td>
+<td>Once each in <code>run.step(dt)</code>; <code>period</code> does not apply</td>
 </tr>
 <tr>
 <td><code>dt</code></td>
@@ -2963,17 +2963,20 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 </tr>
 </tbody>
 </table>
-<p><code>run.step(dt, *nodes)</code> moves the time <code>dt</code> forward, then updates the given nodes once each, in the given order. Without nodes, it updates every node in the order of the tree.</p>
+<p><code>run.step(dt)</code> moves the time <code>dt</code> forward, then updates every node once, in parallel. Each node reads the values from the start of the step, and what the nodes send becomes visible when every update has ended. <code>run.step(dt, *nodes)</code> instead updates the given nodes one after another, in the given order.</p>
 <pre class="mermaid"><code>sequenceDiagram
     participant T as Test
     participant R as ManualRun
     participant A as net.a
     participant B as net.b
-    T-&gt;&gt;R: run.step(h, net.a, net.b)
+    T-&gt;&gt;R: run.step(h)
     R-&gt;&gt;R: moves the virtual timer h forward
-    R-&gt;&gt;A: on_update(h)
-    A--&gt;&gt;B: send (b reads this value)
-    R-&gt;&gt;B: on_update(h)
+    par in parallel
+        R-&gt;&gt;A: on_update(h)
+    and
+        R-&gt;&gt;B: on_update(h), reading a's value from the start of the step
+    end
+    Note over A,B: what a and b sent becomes visible now
     R--&gt;&gt;T: returns</code></pre>
 <p>This test compares <code>Leaky</code>, the node of section 6, with the exact solution:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeaky</span><span class="p">:</span>
@@ -2982,7 +2985,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">node</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">one</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="n">expected</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>                <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># 1 ms later, then every node once (period is ignored)</span>
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>                <span class="n">expected</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">h</span> <span class="o">/</span> <span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span>
@@ -2990,7 +2993,7 @@ x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 <a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="n">steps</span> <span class="o">*</span> <span class="mi">1_000_000</span>  <span class="c1"># sent at the last step</span>
 <a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
 </code></pre></div>
-<p>See <a href="../tutorial/3-test/">Test a Node</a>.</p>
+<p>See <a href="../tutorial/3-test/">Test a Node</a> and <a href="../topics/simulation/">Simulation</a>.</p>
 <h2 id="9-learning">9. Learning<a class="headerlink" href="#9-learning" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>

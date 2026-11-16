@@ -16,7 +16,7 @@
         <link rel="prev" href="../run/">
       
       
-        <link rel="next" href="../testing/">
+        <link rel="next" href="../types/">
       
       
         
@@ -829,6 +829,8 @@
       
         
       
+        
+      
     
     
     
@@ -973,6 +975,34 @@
     
   
     Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
   
 
     
@@ -1198,8 +1228,6 @@
   
     
     
-      
-        
       
         
       
@@ -1711,34 +1739,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Testing
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -2266,7 +2266,7 @@ the time: <code>sleep</code>, <code>pause</code>, <code>resume</code>, <code>set
   </span>
 
 <a href="#mujou.time.global_timer" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">global_timer</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">Timer</span><span class="p">]</span> <span class="o">=</span> <span class="n">Timer</span><span class="p">(</span><span class="n">now</span><span class="o">=</span><span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">14660496</span><span class="p">))</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">global_timer</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">Timer</span><span class="p">]</span> <span class="o">=</span> <span class="n">Timer</span><span class="p">(</span><span class="n">now</span><span class="o">=</span><span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">14816243</span><span class="p">))</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2693,7 +2693,7 @@ the GIL and checks for signals (Ctrl-C) in between.</p>
         <p>A timer for tests: its time moves only when <code>advance</code> moves it.</p>
 <p>It starts at <code>start</code>. Its time scale does not apply to <code>advance</code>; it is
 kept as a <code>Timer</code> keeps it (<code>time_scale()</code> and the state of a run on it).
-<code>mujou.testing.run</code> runs a network on a new one unless given one, and
+<code>mujou.run_manually</code> runs a network on a new one unless given one, and
 <code>ManualRun.step(dt)</code> advances it.</p>
 
 

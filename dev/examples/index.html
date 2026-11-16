@@ -829,6 +829,8 @@
       
         
       
+        
+      
     
     
     
@@ -973,6 +975,34 @@
     
   
     Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
   
 
     
@@ -1291,8 +1321,6 @@
       
         
       
-        
-      
     
     
     
@@ -1437,34 +1465,6 @@
     
   
     Time
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../api/testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Testing
   
 
     
@@ -1758,6 +1758,11 @@
 <td><a href="../topics/time/">Time</a></td>
 </tr>
 <tr>
+<td>Simulate a network as fast as the machine computes</td>
+<td><code>simulation.py</code></td>
+<td><a href="../topics/simulation/">Simulation</a></td>
+</tr>
+<tr>
 <td>See what happens when a node raises</td>
 <td><code>errors.py</code></td>
 <td><a href="../topics/errors/">Errors and Shutdown</a></td>
@@ -1774,7 +1779,7 @@
 <li><code>quickstart.py</code>: a two-node network, run with <code>with mujou.run(...)</code>. The host writes an input with <code>write</code>, and waits with <code>wait_for</code> until the expected output arrives</li>
 <li><code>branching.py</code>: a <code>Port</code> that only sends, connected to two branches that a <code>MultiPort</code> merges; and a <code>MultiPort</code> that sends a different value to each peer with <code>send_to</code>, on the channels <code>connect</code> returned</li>
 <li><code>leaky.py</code>: the leaky integrator, a node defined in continuous time and advanced by the exact solution, so that it is stable for any <code>dt</code>. Run, it steps the input of two in a row and compares them with the exact solution at the time each output was sent</li>
-<li><code>test_leaky.py</code>: tests of the node of <code>leaky.py</code> with <code>mujou.testing</code>, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with <code>uv run pytest examples/test_leaky.py</code></li>
+<li><code>test_leaky.py</code>: tests of the node of <code>leaky.py</code> with <code>mujou.run_manually</code>, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with <code>uv run pytest examples/test_leaky.py</code></li>
 <li><code>online_learning.py</code>: a teacher sends batches from y = a x + b with the <code>a</code> the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again</li>
 <li><code>feedback_alignment.py</code>: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with <code>pc.clock.LearnClock</code></li>
 <li><code>pc_regression.py</code>: <code>pc.Chain</code> and <code>pc.show</code> learn a regression from a stream of batches, measured before each batch is learned from</li>
@@ -1785,6 +1790,7 @@
 <li><code>group.py</code>: <code>Group(enc=..., dec=...)</code>, and the paths of the nodes (<code>"enc.scale"</code>)</li>
 <li><code>subscribe.py</code>: <code>run.subscribe</code> yields the latest output, then each newer one, and stops with <code>break</code></li>
 <li><code>timers.py</code>: <code>Timestamp</code>, a <code>Timer</code> of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own</li>
+<li><code>simulation.py</code>: <code>mujou.run_manually</code> simulates the chain of <code>leaky.py</code> on a sine input in steps of 1 ms, writing the input between steps, and prints how long it took in real time; the same result with any number of workers; <code>step(dt)</code> against the nodes given in either order</li>
 <li><code>errors.py</code>: the <code>NetworkError</code> the host receives and its <code>__cause__</code>, the order <code>on_exception</code> → <code>on_stop</code>, and <code>mujou.run</code> raising for an exception in <code>on_start</code></li>
 <li><code>visualize.py</code>: <code>mujou.viz.to_html</code> writes the page of a network of two networks and a node, and of a <code>pc.Chain</code>, without running them</li>
 </ul>

@@ -918,6 +918,8 @@
       
         
       
+        
+      
     
     
     
@@ -1062,6 +1064,34 @@
     
   
     Time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="topics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
   
 
     
@@ -1300,8 +1330,6 @@
       
         
       
-        
-      
     
     
     
@@ -1446,34 +1474,6 @@
     
   
     Time
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="api/testing/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Testing
   
 
     
@@ -1761,7 +1761,7 @@
 <li>⏱️ <strong>Continuous time</strong>: nodes update in proportion to <code>dt</code>, the time that really passed</li>
 <li>🧠 <strong>Any update rule</strong>: backpropagation inside a node, PC-ALM across nodes, or a rule of your own</li>
 <li>💾 <strong>State without stopping</strong>: take the state of a running network and resume from it later</li>
-<li>🧪 <strong>Deterministic tests</strong>: a virtual timer and manual updates for testing nodes</li>
+<li>🧪 <strong>Simulation and deterministic tests</strong>: virtual time, stepped by hand as fast as the machine computes</li>
 </ul>
 <h2 id="-how-it-runs">⚙️ How it runs<a class="headerlink" href="#-how-it-runs" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>flowchart LR
@@ -1783,7 +1783,7 @@
 <li>
 <p><strong>🧠 How Mujou Works</strong></p>
 <hr />
-<p>Nodes, ports, networks, runs, time, state, testing and learning, and the rules a node keeps.</p>
+<p>Nodes, ports, networks, runs, time, state, simulation and learning, and the rules a node keeps.</p>
 <p><a href="concepts/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> How Mujou Works</a></p>
 </li>
 <li>
