@@ -17,7 +17,7 @@ metadata:
 - **目標は入力に付随させる（2026-10-20、ユーザーの決定）。** `Activity` は `{h, y, mask, time}` で、各ノードが y・mask・time を次へ写す（コアの carry は廃止した: [[project-carry]]）。`time` は `Timestamp`（`TimestampSpec()`、書き込みの前は `Timestamp(ns=0)`）（2026-10-22）
 - **ノードは `act` で繋ぐ。** `Input` と `Layer` が送る spec を `act` で公開し、次のノードが `act=` で受け取る。バッチの照合は `activity_spec` の 1 か所（K28）。バッチの shape は [[project-batch-shape]]
 - **学習の時刻は、ホストが入力を書いた時刻から `learn_interval` ごと**（plan-implementer の判断をユーザーが承認）。`LearnClock(*, period, learn_interval, max_dt)` と `Tick` に切り出した。`learn_interval=None` は毎回、`math.inf` は学習しない（学ばないノードの表し方はこの 1 通り。`TimeConstants.theta=inf` の規則は τθ を optimizer に移したときに消した、2026-10-22）。目安は 2 × ホップ数 × period より長く（検査はしない）
-- **dt は `max_dt`（既定 min(周期, 2τ_λ)）で打ち切る。** 周期の既定は τ_h/(1+τ_h/τ_r)（τ_r = τ_h で τ_h/2、2026-10-29。それまでは τ_h/4）。τ_λ = τ_h/2 と組むと δ が 1 歩で −g になり、credit は 1 周期に 1 ノード戻る。λ は更新後の r で更新（公式実装と同じ順）
+- **dt は `max_dt`（既定 min(周期, 2τ_λ)）で打ち切る。** 周期の既定は τ_h/(1+τ_h/τ_r)（τ_r = τ_h で τ_h/2、2026-10-29。それまでは τ_h/4）。τ_λ = τ_h/2 と組むと δ が 1 歩で −g になり、credit は 1 ホップに最大 1 周期で戻る（2026-11-16 から g_in を緩和の後に送るので、`ManualRun.step(dt)` でちょうど 1 ステップ、出力側からの逐次では 1 ステップで全層。[[project-pc-g-in-after-relax]]）。λ は更新後の r で更新（公式実装と同じ順）
 - **過負荷で発散するのは許容する**（ユーザー「過負荷では仕方ない」）
 
 **Why:** Rust で書く利点（並行処理の安全性）はノードの間の基盤で効くもので、ノードの内側の行列演算には要らない。pc を公開 API だけで書けば、pc でできることは利用者の更新手法でもできる。
