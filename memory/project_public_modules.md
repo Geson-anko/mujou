@@ -14,4 +14,4 @@ metadata:
 
 **Why:** Python では private かどうかを名前の `_` で示し、パッケージごと隠さない（torch・numpy・標準ライブラリと同じ）。利用者が traceback や「定義へ移動」で辿った先が `_core` や `_layer.py` だと、触ってはいけない場所に見える。「`_core` の中の `_` の無い名前は private」という二重の規約も要らなくなる。
 
-**How to apply:** 新しいモジュールに `_` を付けない。公開 API は各パッケージの `__all__` と docs に載る名前で、複数のモジュールが使う内部の名前は `_` を付けずに `__all__` から外す。1 つのモジュールの中だけで使う名前に `_` を付ける。層の順序は `tests/test_layers.py` が正本で、`mujou.pc` は `mujou`・`mujou.time`・`mujou.testing` だけを import する。
+**How to apply:** 新しいモジュールに `_` を付けない。公開 API は各パッケージの `__all__` と docs に載る名前で、複数のモジュールが使う内部の名前は `_` を付けずに `__all__` から外す。1 つのモジュールの中だけで使う名前に `_` を付ける。層の順序は `tests/test_layers.py` が正本で、`mujou.pc` は `mujou`・`mujou.time` だけを import する（`mujou.testing` は 2026-11-16 に廃止）。

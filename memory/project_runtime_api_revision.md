@@ -7,7 +7,7 @@ metadata:
 
 2026-10-16 のユーザーの回答と、その後の作り直しで決まった形。
 
-- **モジュール構成:** Python のモジュールは `mujou/` の直下に 1 責務 1 ファイルで並べ、公開する（[[project-public-modules]]）。private なのは Rust の拡張モジュール `mujou._native` だけ。公開 API は `mujou`、`mujou.time`、`mujou.testing`、`mujou.pc` の `__all__`（`tests/mujou/test_init.py` が正本）。stub は自動生成する（[[project-core-stub]]）
+- **モジュール構成:** Python のモジュールは `mujou/` の直下に 1 責務 1 ファイルで並べ、公開する（[[project-public-modules]]）。private なのは Rust の拡張モジュール `mujou._native` だけ。公開 API は `mujou`、`mujou.time`、`mujou.pc` の `__all__`（`tests/mujou/test_init.py` が正本）。stub は自動生成する（[[project-core-stub]]）
 - **build と Graph は持たない。** `mujou.run` が検査を兼ね、走った事実は `execution.py` の印だけが持つ。build は「build した後は Group に入れられない」という凍結の罠を生んでいた
 - **run がハンドルを返す。** `mujou.run(root, ...)` が `Run` を返し、`Run` が write / read / read_with_time / subscribe / wait_for / state_dict / shutdown / join と `timer` を持つ（with 文で使える）。初期値と復元は run の引数で渡す
 - **状態:** `state_dict()` は実行中と正常に終わった後に呼べる（作る → 走らせる → 保存する）。例外で終わった後は `NetworkError`（例外時の状態は保存しない）

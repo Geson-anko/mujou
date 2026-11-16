@@ -43,7 +43,7 @@ src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 - `tests/test_layers.py`: `src/mujou` の import の層（DAG）と、`_native` を import してよいモジュールを AST で検査する。層の規則の正本（`specs/architecture.md`）
 - `tests/test_claude_hooks.py`: `.claude/hooks/` を検証する（coverage の対象は `src/mujou` だけなので、同じ pytest で回す）
 - `tests/mujou/nodes.py`: 複数のテストモジュールが使うテスト用のノードと比較の helper（`Leaky`、`Probe` など）。共通のノードはここに 1 回だけ定義する
-- `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.testing` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）
+- `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）
 - `tests/mujou/test_pyright.py`: 利用者のコードを pyright strict にかけて型を検証する横断テスト（`MultiPort.recv()` の dict 型、`Port[Never, T].send` の禁止など）
 - `tests/mujou/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、GIL を有効にしないこと、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
 - `tests/mujou/pc/_reference.py`: 純 PyTorch で仕様から書いた Jacobi の参照実装（`test_layer.py` などのオラクル）
@@ -61,8 +61,8 @@ src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 ## 共通の fixture（`tests/mujou/conftest.py`）
 
 - `virtual`: テストごとの新しい `VirtualTimer`
-- `start_manual` / `start`: `mujou.testing.run` / `mujou.run` で実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
-- 手で回すときは `run.step(dt, *nodes)`（タイマーを `dt` 進めてから、渡した順に 1 回ずつ更新する）
+- `start_manual` / `start`: `mujou.run_manually` / `mujou.run` で実行を始め、テストの終わりに止める（`start_manual` の既定のタイマーは `virtual`）
+- 手で回すときは `run.step(dt)`（タイマーを `dt` 進めてから、全ノードをステップ開始時の値で並列に 1 回ずつ更新する Jacobi）。順が要るときだけ `run.step(dt, *nodes)`（渡した順に逐次、Gauss-Seidel）
 - ノードを入れるだけのネットワークは公開の `Group(node=...)` で作る。専用のクラスを書かない
 
 ## 何をテストするか / しないか

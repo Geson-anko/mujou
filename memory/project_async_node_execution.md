@@ -22,7 +22,7 @@ metadata:
 - 複数のスロットをまとめて読んでも、全体として一貫したスナップショットにはならない。各値が個別に一貫していればよい
 - 書き込みには、その実行の時計の時刻をスロットが自動で添える（[[project-message-types]]）
 - 更新量は経過時間 $\Delta t$ に比例させる。ステップ数で更新量を決めない
-- テストは `mujou.testing.run` の `VirtualTimer` と `ManualRun.step(dt, *nodes)` で、固定スケジュールで決定的に動かす。全ノードを固定の $\Delta t$ で同期的に回すと、元の離散アルゴリズムに一致することをオラクルにする（[[project-testing-api]]）
+- テストとシミュレーションは `mujou.run_manually` の `VirtualTimer` と `ManualRun.step(dt, *nodes)` で、固定スケジュールで決定的に動かす。全ノードを固定の $\Delta t$ で同期的に回すと、元の離散アルゴリズムに一致することをオラクルにする（[[project-manual-run-simulation]]）
 - 既定の PC-ALM の連続時間形は skill `pc-alm` 7 節
 
 関連: [[project-core-message-framework]], [[project-compute-granularity]]
