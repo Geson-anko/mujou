@@ -38,7 +38,7 @@ The program below is such a network: a chain of PC-ALM nodes, three of them lear
 - ⏱️ **Continuous time**: nodes update in proportion to `dt`, the time that really passed
 - 🧠 **Any update rule**: backpropagation inside a node, PC-ALM across nodes, or a rule of your own
 - 💾 **State without stopping**: take the state of a running network and resume from it later
-- 🧪 **Deterministic tests**: a virtual timer and manual updates for testing nodes
+- 🧪 **Simulation and deterministic tests**: virtual time, stepped by hand as fast as the machine computes
 
 ## ⚙️ How it runs
 
@@ -71,7 +71,7 @@ New to Mujou? Install it, read How Mujou Works, then follow the Tutorial from th
 
     ______________________________________________________________________
 
-    Nodes, ports, networks, runs, time, state, testing and learning, and the rules a node keeps.
+    Nodes, ports, networks, runs, time, state, simulation and learning, and the rules a node keeps.
 
     [:octicons-arrow-right-24: How Mujou Works](concepts.md)
 

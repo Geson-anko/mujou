@@ -1,16 +1,15 @@
 # 🧪 3. Test a Node
 
-In a run started with `mujou.run`, `dt` follows the real time that passes, and the order in which the nodes update differs every time, so the results differ slightly from run to run. This page tests the node of [2. Write a Node](2-node.md) with `mujou.testing`, which runs nodes with the same result every time.
+In a run started with `mujou.run`, `dt` follows the real time that passes, and the order in which the nodes update differs every time, so the results differ slightly from run to run. This page tests the node of [2. Write a Node](2-node.md) with `mujou.run_manually`, which runs nodes with the same result every time.
 
 ## The tools
 
-Import it with `import mujou.testing`; `import mujou` alone does not.
-
-| Name                           | Role                                                                                                                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mujou.testing.run(root, ...)` | Runs the tree with the `timer`, `inputs` and `state` of `mujou.run` (no `workers`) and returns a `ManualRun`. No node updates until `step` updates it. It runs on a new `mujou.time.VirtualTimer` by default |
-| `ManualRun.step(dt, *nodes)`   | Moves the timer `dt` seconds forward, then updates the given nodes once each, in the given order                                                                                                             |
-| `ManualRun.timer`              | The run's `VirtualTimer`                                                                                                                                                                                     |
+| Name                            | Role                                                                                                                                                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mujou.run_manually(root, ...)` | Runs the tree with the `timer`, `inputs`, `state` and `workers` of `mujou.run` and returns a `ManualRun`. No node updates until `step` updates it. It runs on a new `mujou.time.VirtualTimer` by default |
+| `ManualRun.step(dt)`            | Moves the timer `dt` seconds forward, then updates every node once, all at once                                                                                                                          |
+| `ManualRun.step(dt, *nodes)`    | Moves the timer `dt` seconds forward, then updates the given nodes once each, one after another in the given order                                                                                       |
+| `ManualRun.timer`               | The run's `VirtualTimer`                                                                                                                                                                                 |
 
 `ManualRun` is a `Run`, so `write`, `read`, `state_dict` and the rest work as with `mujou.run`.
 
@@ -24,7 +23,7 @@ Import it with `import mujou.testing`; `import mujou` alone does not.
 uv run pytest examples/test_leaky.py
 ```
 
-1. `mujou.testing.run(node, inputs=...)` runs the node on a new `VirtualTimer` at time 0. `inputs` are the values of the input ports from the start
+1. `mujou.run_manually(node, inputs=...)` runs the node on a new `VirtualTimer` at time 0. `inputs` are the values of the input ports from the start
 2. Each `run.step(h)` moves the time `h` seconds forward and updates every node once, so the `dt` of the node is exactly `h`
 3. The reference is the exact solution, computed with the same coefficient. Compare it with `torch.testing.assert_close`, or with `torch.equal` when the reference does the same operations in the same order (below)
 4. The time the node sent the output is `steps` milliseconds: no real time enters a manual run
@@ -35,11 +34,11 @@ uv run pytest examples/test_leaky.py
 --8<-- "examples/test_leaky.py:chain"
 ```
 
-- `step(dt)` without nodes updates every node once, in the order of the tree (the order the attributes were assigned)
-- The order changes the result. With `step(h, net.a, net.b)`, `b` reads the value `a` sent in this step; with `step(h, net.b, net.a)`, the one from the step before
+- `step(dt)` without nodes updates every node at the same time, on the run's workers. Every node reads the values from the start of the step: what a node sends in the step reaches the other nodes only in the next step
+- `step(dt, *nodes)` updates the given nodes one after another. A later node reads what an earlier one sent in this step. With `step(h, net.a, net.b)`, `b` reads the value `a` sent in this step; with `step(h, net.b, net.a)`, the one from the step before
+- Passing every node to `step(dt, *nodes)` is not the same as `step(dt)`. Only in a chain whose messages go one way, toward the output, does the order from the output back to the input give the result of `step(dt)`, as `test_a_step_without_nodes_equals_the_order_from_the_output` shows. When messages also go back, in general no order does
 - A node's `dt` is the time since its last update, the first from the start of the run. A node passed twice in one `step` updates once: the second time is skipped, since its time has not moved
 - The period of a node is not used in a manual run
-- A node that raises makes `step` raise `NetworkError` at once
 
 ## Save and restore
 
@@ -53,10 +52,12 @@ A run restored from a state runs on a `VirtualTimer` of its own, which starts at
 
 ## Exceptions
 
-When a node raises, `step` raises `NetworkError`, whose `__cause__` is the node's exception. Every later call of the run raises it again, including the `shutdown` at the end of the `with` block, so put `pytest.raises` around the whole block, in the same `with` statement:
+When a node raises, `step` raises `NetworkError` at once, whose `__cause__` is the node's exception. Every later call of the run raises it again, including the `shutdown` at the end of the `with` block, so put `pytest.raises` around the whole block, in the same `with` statement:
 
 ```python
-with pytest.raises(NetworkError) as info, mujou.testing.run(net) as run:
+from mujou import NetworkError
+
+with pytest.raises(NetworkError) as info, mujou.run_manually(net) as run:
     run.step(0.001)  # a node raises ValueError here
 assert isinstance(info.value.__cause__, ValueError)
 ```
@@ -64,9 +65,11 @@ assert isinstance(info.value.__cause__, ValueError)
 ## Other conditions for determinism
 
 - Give a `seed` to the nodes that draw random numbers, and draw them from `self.generator` (see [Threads and Devices](../topics/threads-and-devices.md#seeds-and-random-numbers))
+- Do not let nodes share a Python object they change: `step(dt)` updates them at the same time, so the result would depend on which ran first. If they must share one, update them in a fixed order with `step(dt, *nodes)`
 - Move the time only with `step`. Nothing is sent unless `step` is called, so `wait_for` and `subscribe` without a `timeout` wait forever on the thread that steps
 - To put several runs on one time axis, pass the same `mujou.time.VirtualTimer()` to each: a `step` of one moves the others too
 
 ## Next
 
 - A node that learns: [4. Learn in a Node](4-learn-in-a-node.md)
+- How a manual run works, and how to run a simulation with it: [Simulation](../topics/simulation.md)

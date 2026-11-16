@@ -6,7 +6,7 @@ This page explains the nine ideas you need to write programs with Mujou, in the 
 
     - How you write only one update of a node, and Mujou calls it over and over
     - How nodes talk without waiting for each other, through the latest values only
-    - How runs, time, state, testing and learning are built on top of that
+    - How runs, time, state, simulation and learning are built on top of that
 
     You should have used PyTorch's `nn.Module` and tensors.
 
@@ -26,17 +26,17 @@ flowchart TB
 
 The parts of the picture, and the sections that explain them:
 
-| Part             | In a line                                                     | Section                                        |
-| ---------------- | ------------------------------------------------------------- | ---------------------------------------------- |
-| Node             | A class that holds one update; Mujou calls it over and over   | [1. Nodes](#1-nodes)                           |
-| Port and channel | A node's connection point, and the line between two of them   | [2. Ports and channels](#2-ports-and-channels) |
-| Spec             | The shape and dtype of the tensors a port sends and receives  | [3. Message types](#3-message-types-specs)     |
-| Network          | A container to build with; a path names a node inside it      | [4. Networks and paths](#4-networks-and-paths) |
-| Run              | `mujou.run` starts every node and gives the host a `Run`      | [5. Runs](#5-runs)                             |
-| Time             | One timer per run; updates are in proportion to the time `dt` | [6. Time](#6-time)                             |
-| State            | The state of the whole run in one dict, to go on from later   | [7. State](#7-state)                           |
-| Testing          | A virtual timer you move by hand, for deterministic runs      | [8. Testing](#8-testing)                       |
-| Learning         | Update rules live in nodes; no training mode, no epochs       | [9. Learning](#9-learning)                     |
+| Part             | In a line                                                      | Section                                                |
+| ---------------- | -------------------------------------------------------------- | ------------------------------------------------------ |
+| Node             | A class that holds one update; Mujou calls it over and over    | [1. Nodes](#1-nodes)                                   |
+| Port and channel | A node's connection point, and the line between two of them    | [2. Ports and channels](#2-ports-and-channels)         |
+| Spec             | The shape and dtype of the tensors a port sends and receives   | [3. Message types](#3-message-types-specs)             |
+| Network          | A container to build with; a path names a node inside it       | [4. Networks and paths](#4-networks-and-paths)         |
+| Run              | `mujou.run` starts every node and gives the host a `Run`       | [5. Runs](#5-runs)                                     |
+| Time             | One timer per run; updates are in proportion to the time `dt`  | [6. Time](#6-time)                                     |
+| State            | The state of the whole run in one dict, to go on from later    | [7. State](#7-state)                                   |
+| Simulation       | Virtual time you step by hand, as fast as the machine computes | [8. Simulation and testing](#8-simulation-and-testing) |
+| Learning         | Update rules live in nodes; no training mode, no epochs        | [9. Learning](#9-learning)                             |
 
 ### From PyTorch
 
@@ -393,22 +393,22 @@ flowchart LR
 
 See [Save and Resume](tutorial/6-save-and-resume.md).
 
-## 8. Testing
+## 8. Simulation and testing
 
 !!! abstract "Key idea"
 
-    `mujou.testing.run` runs on a virtual timer that you move by hand, deterministically.
+    `mujou.run_manually` runs on a virtual timer that only `run.step` moves: as fast as the machine computes, and the same every time.
 
-In an ordinary run, when each node updates varies from run to run. In a test, the test decides the time and the order of the updates.
+`mujou.run` is for the real world: when each node updates varies from run to run. To simulate, or to test, you decide the time instead.
 
-|         | `mujou.run`                                 | `mujou.testing.run`                                            |
-| ------- | ------------------------------------------- | -------------------------------------------------------------- |
-| Timer   | The run's timer (`global_timer` by default) | A virtual timer, which moves only with `run.step`              |
-| Updates | Each node, every `period` on average        | Once each with `run.step(dt, *nodes)`; `period` does not apply |
-| `dt`    | The time that actually passed               | The time `step` moved                                          |
-| Results | Vary from run to run                        | The same every time                                            |
+|         | `mujou.run`                                 | `mujou.run_manually`                                 |
+| ------- | ------------------------------------------- | ---------------------------------------------------- |
+| Timer   | The run's timer (`global_timer` by default) | A virtual timer, which moves only with `run.step`    |
+| Updates | Each node, every `period` on average        | Once each in `run.step(dt)`; `period` does not apply |
+| `dt`    | The time that actually passed               | The time `step` moved                                |
+| Results | Vary from run to run                        | The same every time                                  |
 
-`run.step(dt, *nodes)` moves the time `dt` forward, then updates the given nodes once each, in the given order. Without nodes, it updates every node in the order of the tree.
+`run.step(dt)` moves the time `dt` forward, then updates every node once, in parallel. Each node reads the values from the start of the step, and what the nodes send becomes visible when every update has ended. `run.step(dt, *nodes)` instead updates the given nodes one after another, in the given order.
 
 ```mermaid
 sequenceDiagram
@@ -416,11 +416,14 @@ sequenceDiagram
     participant R as ManualRun
     participant A as net.a
     participant B as net.b
-    T->>R: run.step(h, net.a, net.b)
+    T->>R: run.step(h)
     R->>R: moves the virtual timer h forward
-    R->>A: on_update(h)
-    A-->>B: send (b reads this value)
-    R->>B: on_update(h)
+    par in parallel
+        R->>A: on_update(h)
+    and
+        R->>B: on_update(h), reading a's value from the start of the step
+    end
+    Note over A,B: what a and b sent becomes visible now
     R-->>T: returns
 ```
 
@@ -430,7 +433,7 @@ This test compares `Leaky`, the node of section 6, with the exact solution:
 --8<-- "examples/test_leaky.py:test"
 ```
 
-See [Test a Node](tutorial/3-test.md).
+See [Test a Node](tutorial/3-test.md) and [Simulation](topics/simulation.md).
 
 ## 9. Learning
 

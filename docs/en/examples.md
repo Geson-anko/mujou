@@ -20,6 +20,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 | Run several networks together                                   | `group.py`              | [Groups](topics/groups.md)                                                                         |
 | Follow every new output (values in between may be skipped)      | `subscribe.py`          | [Host I/O](topics/host-io.md#reading)                                                              |
 | Use a timer of a run's own, a time scale, or pause several runs | `timers.py`             | [Time](topics/time.md)                                                                             |
+| Simulate a network as fast as the machine computes              | `simulation.py`         | [Simulation](topics/simulation.md)                                                                 |
 | See what happens when a node raises                             | `errors.py`             | [Errors and Shutdown](topics/errors.md)                                                            |
 | Draw the graph of a network, and open it in a browser           | `visualize.py`          | [Visualize a Network](topics/visualize.md)                                                         |
 
@@ -28,7 +29,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 - `quickstart.py`: a two-node network, run with `with mujou.run(...)`. The host writes an input with `write`, and waits with `wait_for` until the expected output arrives
 - `branching.py`: a `Port` that only sends, connected to two branches that a `MultiPort` merges; and a `MultiPort` that sends a different value to each peer with `send_to`, on the channels `connect` returned
 - `leaky.py`: the leaky integrator, a node defined in continuous time and advanced by the exact solution, so that it is stable for any `dt`. Run, it steps the input of two in a row and compares them with the exact solution at the time each output was sent
-- `test_leaky.py`: tests of the node of `leaky.py` with `mujou.testing`, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with `uv run pytest examples/test_leaky.py`
+- `test_leaky.py`: tests of the node of `leaky.py` with `mujou.run_manually`, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with `uv run pytest examples/test_leaky.py`
 - `online_learning.py`: a teacher sends batches from y = a x + b with the `a` the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again
 - `feedback_alignment.py`: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with `pc.clock.LearnClock`
 - `pc_regression.py`: `pc.Chain` and `pc.show` learn a regression from a stream of batches, measured before each batch is learned from
@@ -39,6 +40,7 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 - `group.py`: `Group(enc=..., dec=...)`, and the paths of the nodes (`"enc.scale"`)
 - `subscribe.py`: `run.subscribe` yields the latest output, then each newer one, and stops with `break`
 - `timers.py`: `Timestamp`, a `Timer` of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own
+- `simulation.py`: `mujou.run_manually` simulates the chain of `leaky.py` on a sine input in steps of 1 ms, writing the input between steps, and prints how long it took in real time; the same result with any number of workers; `step(dt)` against the nodes given in either order
 - `errors.py`: the `NetworkError` the host receives and its `__cause__`, the order `on_exception` → `on_stop`, and `mujou.run` raising for an exception in `on_start`
 - `visualize.py`: `mujou.viz.to_html` writes the page of a network of two networks and a node, and of a `pc.Chain`, without running them
 
