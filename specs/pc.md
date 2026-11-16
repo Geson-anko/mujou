@@ -63,7 +63,7 @@ $r_i$ を動かすと上のすべての $h$ が順伝播のヤコビアンの積
 
 - **不動点は同じ**: $r = 0$ なら $h = \mu$ なので、平衡点（$r = 0$、$\lambda$ が BP の credit、送る値が forward）は以前と一致する。変わるのは過渡だけ
 - **ループが切れる**: $h = \mu + r$ を送ると、$r_i$ の動きが上のすべての活動をヤコビアンの積で動かし、credit として戻る（「r を上へ送ったときの不安定」）。$\mu$ を送ると前向きは純粋な forward、credit は後ろ向きだけの三角の系になり、各ノードの $(r, \lambda)$ は届いた $g$ に駆動される 2 変数の線形系になる。その局所の陽的 Euler が安定なら（Jury 条件 $ak < 2$、$a(2k + b) < 4$）、ヤコビアンによらず鎖全体が安定
-- **臨界減衰の刻み**: $a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$ として、1 歩後の $\delta' = r' + \lambda' = (1 + b)(1 - ak)\,r + (1 - a(1 + b))\,\lambda - a(1 + b)\,g$。$ak = 1$ かつ $a(1 + b) = 1$ なら $\delta' = -g$ で、$\delta$ は 1 歩で $-g$ に一致し、行き過ぎない。$\tau_r = \tau_h$（$k = 2$）なら $a = 1/2$、$b = 1$、つまり周期 $\tau_h/2$、$\tau_\lambda = \tau_h/2$。これを既定にした（`TimeConstants.period` = $\tau_h/(1 + \tau_h/\tau_r)$、`max_dt` = $\min(\text{period}, 2\tau_\lambda)$）。$\lambda$ は 1 歩ごとに残りの半分ずつ $-g$ に近づき、$r = -(\lambda + g)/2$。credit は 1 周期に 1 ホップ進む
+- **臨界減衰の刻み**: $a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$ として、1 歩後の $\delta' = r' + \lambda' = (1 + b)(1 - ak)\,r + (1 - a(1 + b))\,\lambda - a(1 + b)\,g$。$ak = 1$ かつ $a(1 + b) = 1$ なら $\delta' = -g$ で、$\delta$ は 1 歩で $-g$ に一致し、行き過ぎない。$\tau_r = \tau_h$（$k = 2$）なら $a = 1/2$、$b = 1$、つまり周期 $\tau_h/2$、$\tau_\lambda = \tau_h/2$。これを既定にした（`TimeConstants.period` = $\tau_h/(1 + \tau_h/\tau_r)$、`max_dt` = $\min(\text{period}, 2\tau_\lambda)$）。$\lambda$ は 1 歩ごとに残りの半分ずつ $-g$ に近づき、$r = -(\lambda + g)/2$。$\delta$ はその更新のうちに前のノードへ渡すので、credit は 1 ホップあたり最大 1 周期で戻る（「g_in を緩和の後に送る」）
 - **デッドビート（$a = b = 1$、減衰なし）は採らない**: $\lambda$ は 1 歩で $-g$ になるが $\delta' = -\lambda - 2g$ が 2 倍に行き過ぎ、その行き過ぎが層ごとに複利で増える（ResNet 初期の重みで波面のノルムが credit の 768 倍、cos は ±1 で振動）。スカラーの鎖（$J = 1$、10 層、出力側からの逐次）で $(a, b, k)$ を走査すると、全層が 5% 以内に着く最速は $(0.5, 1, 2)$ の 23 周期で、peak は 1.00。デッドビートは 28 周期で peak 7936
 - **古い $g$ を捨てるタグは要らない**: 次のノードがまだ前のサンプルにいる間に送る $g$ を、時刻のタグで捨てる案を出力側からの逐次で試した。デッドビートでは波面の前のごみが消えるが波面の振動は残り、臨界減衰ではタグなしでも波面の前のごみは credit の 0.24〜0.48 倍で増えない。メッセージを増やさない
 - **$\alpha = 0$ の退化**: `lam=inf`、`r=inf` では、ノードは固定予測の仮定の PC になり、誤差 $r$ が BP の credit に落ち着く（$h$ を自由にした PC のエネルギー最小ではない）。テストのオラクルもこれに変えた
@@ -93,12 +93,37 @@ CIFAR-10（ResNet-20、AdamW、リセットあり、seed 0、3 epoch 目の preq
 
 5 ノードの 10 epoch 目は 72.96% / 74.58%（BP 72.81% / 72.39%）。ライブラリに入れた後の例そのもの（`main.py` の既定、ワーカー 5 本）は、3 epoch 目 57.11% / 59.47%（BP 55.91% / 61.76%）、10 epoch 目 73.05% / 73.90%（BP 73.20% / 74.35%）、48.2 s/epoch（BP 8〜9 s）。別の 3 epoch の実行は 55.35% / 60.79%（BP 57.62% / 61.88%）で、BP も実行ごとに 1 ポイントほど動く。以前の r を送る形・$\tau_h/16$・384 周期・scale 0.25 は 3 epoch 目 56.21% / 59.00%、750 s/epoch（BP の約 270 倍）だった。11 ノードの B = 32 は 1 更新 1.5 ms に対し周期が実時間 2.5 ms で、平均 dt 1.03 周期、最大 10〜34 周期の停止があり、追いつくのがやっとだった。周期を実時間 2 ms にすると追いつかず（平均 1.13〜1.30 周期、最大 106 周期）、34.34% / 37.62% に落ちた。
 
+## g_in を緩和の後に送る（2026-11-16）
+
+`Layer.on_update` は、以前は $g_{\mathrm{in}}$ を**更新前の** $\delta$ から作って送り、そのあとで $r$、$\lambda$ を緩和していた。今は緩和してから $\delta' = \mathrm{where}(\mathrm{mask},\, r' + \lambda',\, 0)$ を作り、VJP を 1 回取って $g_{\mathrm{in}} = -J_h^\top\delta'$ を送る。
+
+- **理由**: 受け取った credit をその更新のうちに前のノードへ渡せる。以前は `step(h)`（Jacobi）で credit が 2 ステップに 1 ホップしか戻らず（algorithm-reviewer の S2）、`learn_interval` の目安（2 × ホップ数 × period）を守っても credit が戻りきる前に学んでしまった。目安をスケジュールごとに書き分ける案は、遅い `step(dt)` が既定のまま残るので採らなかった
+- **μ は δ に依らない**: $\mu = f(h_{\mathrm{in}};\theta)$ は $h_{\mathrm{in}}$ と更新前の $\theta$ だけで決まり、1 回の更新の中で $\delta$ に依らない。学ばない間は前向きのメッセージが以前と同じ。学ぶと $\theta$ が以前とずれるので、以後の μ は変わる
+- **$g_\theta$ も $\delta'$ から取る**: 公式実装（重みの勾配の $\lambda$ は最後の dual 更新の前）からずれる。別の $\delta$ を使うと backward が 2 回になるので採らない。VJP は 1 回のままで、1 回の更新の計算量は変わらない。学ぶ $\delta$ がより緩和しているので、ずれはよい方向。不動点では $\delta' = \delta$ で、$\theta$ の 1 回の更新が SGD に一致する性質は保たれる
+- **不動点**: $r = 0$、$\lambda + g = 0$ では `relax_` が $r$、$\lambda$ を動かさない。送る値も学ぶ値も同じで、$\lambda$ が BP の credit になる性質も同じ。$\alpha = 0$ でも不動点 $r = -g$ は同じ
+- **安定性**: $\theta$ を固定すると前向きは $h_{\mathrm{in}}$ だけで決まる feed-forward になる。後ろ向きでは $\delta_i$ の次の値は $\delta_i$ と $g_{i+1} = -J_{i+1}^\top\delta_{i+1}$ だけで決まり、$\delta_{i+1}$ は $\delta_i$ に依らない。$g_{\mathrm{in}}$ を緩和の後に作っても依存は後ろ向きの一方向のままで、ステップ写像はブロック三角になり、固有値は各ノードの局所の 2×2 のものだけになる。「局所の陽的 Euler が安定ならヤコビアンによらず安定」は保たれる。変わるのは遅れが 1 段減ることだけで、臨界減衰の既定では $\delta' = -g$ になる
+- **ノードの局所性**: 読むのは自分の状態と隣のスロットだけで、メッセージの型もスケジューラも変えない。どのスケジュールでも速くなるので、手動の実行やバリアには頼らない
+- **リセットの直後**: 新しい入力を初めて見た更新は、`reset` の行の $r$、$\lambda$ を 0 にした後、まだ前の入力にいる次のノードの $g$ で同じ更新のうちに緩和する。臨界減衰では $\delta' = -g_{\mathrm{old}}$ で、前のサンプルの credit をもう 1 度下へ送る（以前は 1 更新遅れて同じ値を送っていた）。その credit は往復の間に新しい入力の credit に置き換わり、ノードは新しい入力を初めて見た更新では学ばず、`learn_interval` も往復より長くするので、学習には効かない
+
+credit の速さ（全ノードが 1 ステップ（1 周期）に 1 回ずつ更新する場合。ホップ数は L 層の鎖で L + 1）:
+
+| スケジュール | 後ろ向き 1 ホップ（以前） | 後ろ向き 1 ホップ（今） | 往復（以前） | 往復（今） |
+| --- | --- | --- | --- | --- |
+| `step(h)`（Jacobi） | 2 ステップ | 1 ステップ | 約 3 × ホップ数 | 2 × ホップ数 |
+| 出力側からの逐次 | 1 ステップ | 0（同じステップで全層） | 約 2 × ホップ数 | ホップ数 + 1 |
+| 自由実行（周期が等しく位相が固定） | T + φ | φ | 2 × ホップ数 × T | 約 ホップ数 × T |
+
+- 自由実行の φ は後ろ向きの辺で定義する: credit を受け取るノード（前のノード）の位相 − 送るノード（次のノード）の位相、mod T。周期が等しく位相が固定の自由実行は、位相の順に逐次で回す `step(h, *order)` と同じになる。前向き T − φ と後ろ向き φ の和は T なので、往復は位相によらず約 ホップ数 × T になる。ジッタがあるときに言えるのは、1 ホップあたり最大 1 周期という上限だけ
+- 実測（5 層 + Output で 6 ホップ、widths `[4, 5, 5, 5, 5, 5]`。$\lambda$ が初めて 0 でなくなるステップを入力側から並べた）: `step(h)` は以前 [16, 14, 12, 10, 8]、今 [12, 11, 10, 9, 8]。出力側からの逐次は以前 [11, 10, 9, 8, 7]、今 [7, 7, 7, 7, 7]。入力側からの逐次は以前 [10, 8, 6, 4, 2]、今 [6, 5, 4, 3, 2]
+- BP の credit から相対 1% 以内に全層が着くステップ（臨界減衰、dt = H、6 ホップ）は、`step(h)` で 22 から 18、出力側からの逐次で 17 から 13。$\lambda$ は 1 歩ごとに残りの半分ずつ近づくので、波面が届いてから約 7 ステップかかることは変わらない
+- 保存した状態から続けた軌道は以前の版と違う（状態のキーは同じ）。MNIST の精度は「PC の比較実験」に記録した
+
 ## サンプルごとのリセット（2026-10-28）
 
 ユーザーの指示: 「バッチごとの h（r）のリセットは、非連続なデータを扱う以上絶対に必要。それが連続系との乖離。stream データではリセットはいらない。リセットは新しいデータがきたら行うのではなく、リセットフラグの有無でやるべき」。
 
 - `Sample` と `Activity` に `reset`（`batch` の形の bool、`mask` と同じ spec）を足した。`Input` が写し、各 `Layer` が次へ写す。`Output` と `Prediction` は持たない（`Output` は状態を持たない）
-- `Layer` は入力を初めて見た更新（`tick.new`）で、`reset` の立った行の $r$ と $\lambda$ を 0 にし、`relaxer.reset_(reset)` を呼ぶ。$\delta$ を取る前に消すので、その更新で前のサンプルの credit を下へ送らない。`reset` が False の行は持ち越す
+- `Layer` は入力を初めて見た更新（`tick.new`）で、`reset` の立った行の $r$ と $\lambda$ を 0 にし、`relaxer.reset_(reset)` を呼ぶ。`reset` が False の行は持ち越す。消した後、同じ更新のうちに次のノードの $g$ で緩和してから $\delta$ を取る。次のノードはまだ前の入力にいるので、臨界減衰では $\delta' = -g_{\mathrm{old}}$ で前のサンプルの credit をもう 1 度下へ送る。往復の間に消えるので学習には効かない（「g_in を緩和の後に送る」）
 - 1 回の書き込みにつき 1 回だけ働く（`time` が変わった更新で）。フラグが立ち続けても毎回は消さない。ノードが見なかった書き込み（ノードの更新の前にホストが次を書いた）のリセットは働かない。ストリームでエピソードの境目を確実に伝えるには、境目の後のフレームが届くまで書き込みの間隔を空ける。エピソードの番号で運ぶ案（変わったら消す）は、ホストの手間が増えるので採らない（必要になったら考える）
 - サンプルごとのフラグにしたのは、並列の環境の 1 つだけがエピソードを終えるような場合を表すため
 - 以前の測定との関係: h 形の非同期ではリセットで学習が遅れた（ResNet 11 ノード、200 バッチで 19% 対 26%、原因は未解明だった）。r を送る形の重み固定の診断では、リセットすると波が来るまで $\lambda$ のノルムがほぼ 0 で、そこで学ぶと実効の学習率が小さくなる。μ を送る臨界減衰では credit が往復の周期数で正しい大きさに着くので、学ぶ時点（往復より後）には影響しない
@@ -157,8 +182,8 @@ $\delta$ は状態にせず、更新のたびに今の `h_in` から $\mu$ を�
 `Layer` の 1 回の `on_update(dt)` は、段ごとの private なメソッドに分けてある。
 
 1. 活動を読み、`clock.tick` を呼ぶ（`dt` を `max_dt` で打ち切る）。新しい入力なら、`reset` の立った行の $r$ と $\lambda$ を 0 にし、relaxer を `reset_(reset)` する（`_reset`）
-2. $\mu$ と $g_{\mathrm{in}}$、学習するなら $g_\theta$ を、**更新前の** $\delta = r + \lambda$ で取る。`mask` が False の行の $\delta$ は 0。$g_{\mathrm{in}}$ を送る（`_predict`）
-3. 次のノードから届いた $g$ で $r$ を進め、続けて**更新後の** $r$ で $\lambda$ を進める（`functional.relax_`。1 歩の陽的 Euler、公式実装と同じ順）
+2. 次のノードから届いた $g$ で $r$ を進め、続けて**更新後の** $r$ で $\lambda$ を進める（`functional.relax_`。1 歩の陽的 Euler、公式実装と同じ順）
+3. $\mu$ と $g_{\mathrm{in}}$、学習するなら $g_\theta$ を、**緩和した後の** $\delta = r + \lambda$ で取る。`mask` が False の行の $\delta$ は 0。$g_{\mathrm{in}}$ を送る（`_predict`）
 4. $\mu$ を `Activity` の `h` として送る（`_send`）
 5. 学習するなら $\theta$ を動かす
 
@@ -177,7 +202,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 学習の時刻は `LearnClock(*, period, learn_interval, max_dt)` が決める。`Layer` と `Output` の 2 人の使い手がいて、PC 以外の則でも使える（`examples/feedback_alignment.py`）ので、時定数を受け取らない部品として公開した。PC のノードの組み立ては `LearnClock.of(tau, *, period, learn_interval, max_dt=None)` の 1 か所にまとめる（`max_dt` の既定 `tau.max_dt`）。周期の既定 `tau.period` と `max_dt` の既定は、根拠とともに `TimeConstants` の property に置く。`tick(dt, time, now)`（どちらも `Timestamp`） は 1 回の更新を数える純粋な遷移で、`Tick(dt, new, learn, elapsed)` を返す。
 
-- ホストが入力を書いた時刻（`time`）から `learn_interval` ごとの時刻 `time + k * learn_interval`（$k = 1, 2, \dots$）を過ぎた最初の更新で学習する。ただし、その入力を初めて見た更新では学習しない。その更新の $\delta$ は、前の入力の $r + \lambda$ に新しい入力のヤコビアンを掛けたもので、新しい入力の credit ではない
+- ホストが入力を書いた時刻（`time`）から `learn_interval` ごとの時刻 `time + k * learn_interval`（$k = 1, 2, \dots$）を過ぎた最初の更新で学習する。ただし、その入力を初めて見た更新では学習しない。その更新の $\delta$ は、新しい入力をまだ見ていない次のノードが送った $g$ で緩和した値で、新しい入力の credit ではない
 - `learn_interval=None` は毎回学習する（連続時間形そのもの。新しい入力を見た更新でも学習する）。`math.inf` は学習しない（学ばないノードの表し方はこの 1 通り）。格子の点が無限の先にあるので、学習の時刻に達しない
 - `learn` を返した時点で学習したものとして数え直す（$\Sigma\Delta t$ と次の格子）。ノードが mask の無い入力で学習を飛ばしても同じで、その時間は捨てる。前の入力から持ち越した $\delta$ で学習しないため
 - 学習しないまま入力が切り替わったら（入力が `learn_interval` より速く変わる）$\Sigma\Delta t$ を捨てる。溜めたままにすると、入力が止まった最初の学習にまとめて掛かり、学習率が際限なく跳ね上がる
@@ -193,7 +218,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 ### learn_interval の目安
 
-`learn_interval` は、credit が経路を往復する時間（2 × ホップ数 × period。ホップ数は Input から Output までの接続の数）より長くすることを勧める。検査はしない。既定値は置かない（`Layer`・`Output`・`Chain` の必須のキーワード）。毎回学ぶ `None` はストリーム向けで、よい値をまだ測っていないので、省いたときに黙ってそのモードで走らせない。
+`learn_interval` は、credit が経路を往復する時間（2 × ホップ数 × period。ホップ数は Input から Output までの接続の数）より長くすることを勧める。前向きも後ろ向きも 1 ホップあたり最大 1 周期（`step(dt)` ではちょうど 1 ステップ）で、往復は `step(dt)` で 2 × ホップ数 × period、周期の等しい自由実行で約 ホップ数 × period。最も遅い `step(dt)` でも、目安どおりに credit が戻りきる。検査はしない。既定値は置かない（`Layer`・`Output`・`Chain` の必須のキーワード）。毎回学ぶ `None` はストリーム向けで、よい値をまだ測っていないので、省いたときに黙ってそのモードで走らせない。
 
 勧める理由は、ノードが緩和した $\delta$ から学ぶため。h 形では間隔が短いと跳びの連鎖が u 形に戻って発散した（ResBlock 8 ノードの鎖、往復 18 周期で、2 周期と 1 周期が発散）が、r 形ではその仕組みが無い。r 形の `learn_interval=None` は、`examples/pc_merge.py`（Merge だけが毎回学ぶ）で 4 回に 1 回、損失が 0.02 から 0.7 前後に跳ね上がった。h 形でも同じ例で 4 回に 1 回起きたので、r 形に固有の問題ではない（2026-10-28）。2 × ホップ数 × 周期は安定の境界ではないので、それより短い値を断ると安定な設定まで拒むことになる。
 
@@ -208,7 +233,7 @@ $$\theta \leftarrow \theta - \frac{\Sigma\Delta t}{\tau_\theta}\cdot\frac{g_\the
 
 - $\alpha = 0$（PC）は `lam=inf` で表す。`dt / tau.lam` が 0 になるので、レートを別に持たない。`relax_` は lam が inf なら $\lambda$ に触れないので、$\lambda$ はちょうど 0 のまま
 - `pc.optim.SGD` での 1 回の学習は、平均の勾配に対する学習率 $\Sigma\Delta t/\tau_\theta$ の SGD に当たる
-- ノードの周期の既定は $\tau_h / (1 + \tau_h/\tau_r)$（$\tau_r = \tau_h$ なら $\tau_h/2$、2026-10-29。それまでは $\tau_h/4$）。$\tau_\lambda = \tau_h/2$ と組むと $\delta$ が 1 歩で $-g$ になる（「上へ μ を送る」）。`max_dt` の既定は $\min(\text{period}, 2\tau_\lambda)$ で、$\tau_\lambda \ge \text{period}/2$ なら周期と同じ（遅れた更新の時間は 1 周期を超えた分が捨てられる）。MNIST（4 ノード、16 周期、32 ms）の 3 epoch のテスト精度は 97.56%（BP 97.54%）
+- ノードの周期の既定は $\tau_h / (1 + \tau_h/\tau_r)$（$\tau_r = \tau_h$ なら $\tau_h/2$、2026-10-29。それまでは $\tau_h/4$）。$\tau_\lambda = \tau_h/2$ と組むと $\delta$ が 1 歩で $-g$ になる（「上へ μ を送る」）。`max_dt` の既定は $\min(\text{period}, 2\tau_\lambda)$ で、$\tau_\lambda \ge \text{period}/2$ なら周期と同じ（遅れた更新の時間は 1 周期を超えた分が捨てられる）。MNIST（4 ノード、16 周期、32 ms）の 3 epoch のテスト精度は 97.69%（BP 97.53%。$g_{\mathrm{in}}$ を緩和の後に送る前は 97.56%）
 - **r の減衰 `tau.r`**（2026-10-27 に既定 inf で追加、2026-10-28 に必須）: $\tau_h \dot r = -(r + \lambda + g) - (\tau_h/\tau_r)\,r$。$\lambda$ が $r$ を積分するので、平衡点では $\tau_r$ によらず $r = 0$ で、$\lambda$ は BP の credit のまま。送り返す $\delta = r + \lambda$ と重みの勾配は変えない（$\rho\,r + \lambda$ を送る罰則の重み $\rho$ とは別物。$\rho = 1 + k$ を送る形は「r を上へ送ったときの不安定」のとおり、離散では発散した）。必須にしたのは、$h = \mu + r$ を送っていた間は減衰が無いと深い鎖が発散したため。μ を送る今は安定のためには要らないが、既定の周期を決める（$\delta$ を 1 歩で $-g$ にする刻みが $\tau_h/(1 + \tau_h/\tau_r)$）ので必須のままにした。既定値を置かないのは、`lam` と同じく系の振る舞いを決める値で、黙って選ばせないため。推奨は $\tau_h$。1 ノードの陽的 Euler（$r$ の後に $\lambda$）の Jury 条件は $ak < 2$ かつ $a(2k + b) < 4$（$a = dt/\tau_h$、$b = dt/\tau_\lambda$、$k = 1 + \tau_h/\tau_r$）。既定（$a = 1/k$、$b \le 2$ 相当の `max_dt`）では $ak = 1$、$a(2k + b) \le 2 + 2/k \le 4$ で満たす。$\tau_\lambda = \infty$ でも $\tau_r$ が有限なら不動点は PC のものから外れる（$k\,r_i = J_{i+1}^\top r_{i+1}$ で、ずれが 1 段ごとに $1/k$ 倍になる）。アナログ回路で $r$ を積分器に持てば、その積分器のリークがこの項になる（「アナログ回路での実装」）
 - 安定な範囲の実測（$\eta_h \le 0.5$ で安定、臨界減衰は $\alpha \approx c^2\eta_h/4$、$c \approx 1 + \|J\|^2$）は [PC の比較実験](research/pc-experiments.md#時定数の安定な範囲)。example の既定は $\tau_\lambda = 2\tau_h$（$\alpha = 0.125$）
 
@@ -348,7 +373,7 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 - `mse(y_hat, y, batch=())`、`cross_entropy(y_hat, y, batch=())`: サンプルごとの損失
 - `vjp` と `loss_vjp` は骨格 `_grad` を共有し、`torch.autograd.grad` はそこ 1 か所だけにある
 
-手順は、`self.clock = pc.clock.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`、ずれ `r` と双対 `lam`（`r` の動かし方を選ぶなら `self.relaxer = relaxer.bind(self.r)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力なら `reset` の立った行の `r` と `lam` を 0 にし（relaxer があれば `self.relaxer.reset_(act["reset"])` も）、δ = r + λ で `vjp` を取り、`relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)` で動かし、`mu` を `h` として送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
+手順は、`self.clock = pc.clock.LearnClock.of(tau, ...)` と `self.optimizer = optimizer.bind(学ぶ params)`、ずれ `r` と双対 `lam`（`r` の動かし方を選ぶなら `self.relaxer = relaxer.bind(self.r)` も）を属性に置き（それだけで状態に入る。`max_dt` の既定は `Layer`・`Output` と同じ 1 か所から来る）、毎回の更新で `tick = self.clock.tick(dt, act["time"], self.timer.now())` を呼び、新しい入力なら `reset` の立った行の `r` と `lam` を 0 にし（relaxer があれば `self.relaxer.reset_(act["reset"])` も）、`relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)` で動かし、緩和した δ = r + λ で `vjp` を取って `g_in` を送り、`mu` を `h` として送り、`tick.learn` なら `self.optimizer.step_([g / B for g in g_theta], tick.elapsed)` で学ぶ。ほかの pc のノードと繋ぐポートの spec には、前のノードの `act_spec` か `activity_spec(h, y, batch)` を使う。
 
 ## 記事の公式実装との違い
 
@@ -361,7 +386,7 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 | 推論と学習 | $T$ ステップ推論してから重みを 1 回更新 | 同時に進む。入力を書いてから `learn_interval` 後に重みを更新 |
 | 重みの更新の後 | 次のミニバッチで $h$ を forward に初期化 | 次の更新の $\mu$ から $h$ に入る |
 | $\lambda$ の更新 | 更新後の $h$ の $r$ | 同じ |
-| 重みの勾配の $\lambda$ | 最後の dual 更新の前 | VJP を取ったときの更新前の値 |
+| 重みの勾配の $\lambda$ | 最後の dual 更新の前 | その更新で緩和した後の値（最後の dual 更新の後。不動点では同じ） |
 | ステップの大きさ | 離散の $\eta_h, \alpha$ | 時定数と実経過の `dt`（`max_dt` で打ち切る） |
 | 重みの最適化 | Adam | 時間で進める SGD か AdamW（`pc.optim.SGD` / `pc.optim.AdamW`） |
 | 出力の損失 | バッチ平均の $\tfrac12\|y-\hat y\|^2$ | サンプルごとの任意の損失の和（`MSELoss` は特徴の平均で $\tfrac12$ なし） |
@@ -371,7 +396,7 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 `tests/mujou/pc/` に置き、float64 と `mujou.run_manually` で決定的に回す。損失が下がったかでは判定しない。
 
 1. `functional.vjp` の $g_{\mathrm{in}}$、$g_\theta$ が、$E_i = \tfrac12\|r_i + \lambda_i\|^2$ と $\sum_b \ell_b$ の有限差分と一致する
-2. 出力側からの逐次の step（`step(h, *chain.from_next())`）が、純粋な PyTorch で書いた参照実装（`_reference.py`。r 形の緩和、μ を送ること、`reset`、学習の時刻を含む）と 1e-12 で一致する。どちらも前向きの μ は前のステップの値、後ろ向きの $g_{\mathrm{in}}$ は同じステップの値を読む（`step(h)` の Jacobi ではない）。`learn_interval=None` と、間隔を空けて学習する場合の両方。2 つ目の入力を持ち越す場合と、一部のサンプルをリセットする場合の両方
+2. 出力側からの逐次の step（`step(h, *chain.from_next())`）と Jacobi の step（`step(h)`）が、どちらも純粋な PyTorch で書いた参照実装（`_reference.py`。r 形の緩和、μ を送ること、`reset`、学習の時刻を含む）と 1e-12 で一致する。前向きの μ は両方とも前のステップの値、後ろ向きの $g_{\mathrm{in}}$ は、逐次では同じステップの値、Jacobi では前のステップの値を読む。`learn_interval=None` と、間隔を空けて学習する場合の両方。2 つ目の入力を持ち越す場合と、一部のサンプルをリセットする場合の両方
 3. 入力を固定して回した不動点で、$r_i = 0$ で送る $h_i$ が forward の値、$\lambda_i$ がネットワーク全体を autograd した $-\partial\ell/\partial h_i$ と一致し、$\theta$ の 1 回の更新が SGD と一致する（線形と tanh、Linear と ResBlock）
 4. $\alpha = 0$（`lam=inf`、`r=inf`）で $\lambda \equiv 0$、不動点で送る値が forward、$r$ が BP の credit（固定予測の仮定の PC）
 5. 出力側から・入力側から・固定 seed のランダム順で回しても同じ不動点に収束する
@@ -382,6 +407,7 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 10. ResBlock 8 ノードの鎖が $\tau_r = \tau_h$ で不動点に着く。増幅する線形の鎖（1.25 × 16）が、臨界減衰の時定数でも減衰なしでも credit に着く。`learn_interval=None` と 16 周期で回すと、$\lambda$ は credit の 2 倍を超えず、credit に収束する
 11. 2 つの制約を 1 ノードにまとめた鎖と、2 ノードに分けた鎖で、不動点での $\theta$ の更新が一致する（ノードの分け方に依らない）
 12. 時刻 0 に書いた最初の入力を学ぶ
-13. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
-14. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
-15. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。`reset_` は入力ごとに 1 回、その入力の `reset` を渡して呼ばれ、$\theta$ の跳びでは呼ばれない。状態を持つ relaxer は、リセットしたサンプルの状態だけを捨てる。`Chain` は各 `Layer` に別々の束縛を持たせる
+13. credit の波面: $\lambda$ が初めて 0 でなくなるステップが、`step(h)` で層 $i$ に $2 \times \text{hops} - i$、出力側からの逐次で全層 $\text{hops} + 1$、入力側からの逐次で $L + 1 - i$ になる。送った $g_{\mathrm{in}}$ が、更新前でなく緩和した後の $\delta$ から作られている
+14. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
+15. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
+16. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。`reset_` は入力ごとに 1 回、その入力の `reset` を渡して呼ばれ、$\theta$ の跳びでは呼ばれない。状態を持つ relaxer は、リセットしたサンプルの状態だけを捨てる。`Chain` は各 `Layer` に別々の束縛を持たせる
