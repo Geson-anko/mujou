@@ -25,6 +25,10 @@ test: test-rs test-py
 test-rs:
     cargo test --workspace
 
+# Build the Rust doc comments, failing on any warning (a broken intra-doc link, a link to a private item)
+doc-rs:
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+
 # Run pytest (all tests, including slow ones) with coverage
 test-py:
     uv run pytest -v --cov
@@ -37,8 +41,8 @@ test-fast: test-rs
 type:
     uv run pyright
 
-# Run all checks (format, test, type, strict build of the documentation)
-run: format test type docs-build
+# Run all checks (format, test, Rust doc comments, type, strict build of the documentation)
+run: format test doc-rs type docs-build
 
 # Serve the documentation at http://127.0.0.1:8000 with live reload (e.g. `just docs -a 127.0.0.1:8001`)
 [positional-arguments]

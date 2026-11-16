@@ -87,20 +87,21 @@ mujou の存在理由。ノードは自分の状態と隣接ノードからの�
 
 ## コマンド
 
-| レシピ                 | 内容                                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `just setup`           | 開発環境のセットアップ（`uv venv` + `uv sync` + pre-commit install）                                          |
-| `just format`          | pre-commit フックを全ファイルに実行                                                                           |
-| `just test`            | `just test-rs` と `just test-py` の両方を実行する                                                             |
-| `just test-rs`         | Rust の workspace 全体に cargo test                                                                           |
-| `just test-py`         | pytest（slow を含む全テスト、coverage 付き）                                                                  |
-| `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                              |
-| `just type`            | pyright（`src/` は strict、examples も含むほかは standard）                                                   |
-| `just run`             | format → test → type → docs-build。**コミット前の検証はこれ**                                                 |
-| `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                   |
-| `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                  |
-| `just stub`            | `_native.pyi` を Rust の signature と doc comment から生成する。bindings を変えたら実行してコミット           |
-| `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run` |
+| レシピ                 | 内容                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `just setup`           | 開発環境のセットアップ（`uv venv` + `uv sync` + pre-commit install）                                           |
+| `just format`          | pre-commit フックを全ファイルに実行                                                                            |
+| `just test`            | `just test-rs` と `just test-py` の両方を実行する                                                              |
+| `just test-rs`         | Rust の workspace 全体に cargo test                                                                            |
+| `just doc-rs`          | Rust の doc comment を `cargo doc` で検査する（警告で失敗。壊れた intra-doc link や private な項目へのリンク） |
+| `just test-py`         | pytest（slow を含む全テスト、coverage 付き）                                                                   |
+| `just test-fast`       | cargo test と slow を除いた pytest。反復中に使う                                                               |
+| `just type`            | pyright（`src/` は strict、examples も含むほかは standard）                                                    |
+| `just run`             | format → test → doc-rs → type → docs-build。**コミット前の検証はこれ**                                         |
+| `just docs`            | ドキュメントのサイトを http://127.0.0.1:8000 で立ち上げる（ライブリロード）                                    |
+| `just docs-build`      | ドキュメントを厳密にビルドする（警告で失敗）                                                                   |
+| `just stub`            | `_native.pyi` を Rust の signature と doc comment から生成する。bindings を変えたら実行してコミット            |
+| `just container <cmd>` | dev container の中で、今いる checkout（main か worktree）の `<cmd>` を実行する。例: `just container just run`  |
 
 単一テスト: `uv run pytest tests/mujou/test_x.py -v` / キーワード: `uv run pytest -k "<expr>"`
 

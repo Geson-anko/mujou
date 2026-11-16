@@ -44,9 +44,7 @@ jobs:
         run: just test-rs
 
       - name: Check the doc comments (broken intra-doc links fail)
-        run: cargo doc --workspace --no-deps
-        env:
-          RUSTDOCFLAGS: "-D warnings"
+        run: just doc-rs
 
   msrv:
     name: rust / MSRV
