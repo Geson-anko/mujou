@@ -8,7 +8,16 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 ### Added
 
+- `mujou.run_manually` and `mujou.ManualRun` at the top level, for simulations: the network runs on virtual time, stepped by hand as fast as the machine computes. `run_manually` takes `workers=` as `mujou.run` does. See the new topic Simulation.
 - `pc.Layer(cuda_graph=True)`: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).
+
+### Changed
+
+- `ManualRun.step(dt)` without nodes updates every node in parallel from the values at the start of the step (Jacobi), instead of one after another in the order of the tree. Pass the nodes (`step(dt, *nodes)`) to update them in a given order.
+
+### Removed
+
+- `mujou.testing`: use `mujou.run_manually` instead of `mujou.testing.run`, and `mujou.ManualRun`.
 
 ### Fixed
 

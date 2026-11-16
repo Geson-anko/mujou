@@ -94,9 +94,16 @@ class Wiring:
         return slot, to_core(spec, value, label, device=device, wait=False)
 
 
-def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
+def wire(
+    tree: Tree,
+    clock: _native.ReadOnlyTimer,
+    staging: _native.Staging | None = None,
+) -> Wiring:
     """Lay out the slots of ``tree`` on ``clock``, with the ``initial`` value of
     each port that has one, and the wires of its ports.
+
+    With ``staging`` (a manual run's), what the nodes send while a step runs
+    is held back until the step has ended.
 
     Raises:
         TypeError, ValueError: An ``initial`` value does not match the send
@@ -104,7 +111,7 @@ def wire(tree: Tree, clock: _native.ReadOnlyTimer) -> Wiring:
     """
     group = _native.InputGroup(clock=clock)
     outlets = {
-        port: _outlet(tree, port, clock)
+        port: _outlet(tree, port, clock, staging)
         for port in tree.owners
         if port.send_spec is not None
     }
@@ -184,12 +191,19 @@ def written_by_the_host(port: AnyPort) -> bool:
     return isinstance(port, Port) and port.recv_spec is not None and not port.channels
 
 
-def _outlet(tree: Tree, port: AnyPort, clock: _native.ReadOnlyTimer) -> _native.Outlet:
+def _outlet(
+    tree: Tree,
+    port: AnyPort,
+    clock: _native.ReadOnlyTimer,
+    staging: _native.Staging | None,
+) -> _native.Outlet:
     """The outlet of ``port``, a port that sends, holding its ``initial`` value
     (without a time: the port has not sent it) or zeros."""
     spec = cast("MessageSpec[Any]", port.send_spec)
     label = tree.label(port)
-    outlet = _native.Outlet(schema(spec), len(port.channels), label, clock=clock)
+    outlet = _native.Outlet(
+        schema(spec), len(port.channels), label, clock=clock, staging=staging
+    )
     if port.initial is not None:
         values = to_core(spec, port.initial, label)
         for slot in (outlet.outbox, *_channels(outlet, port)):

@@ -123,7 +123,7 @@ $$\tau_h \frac{dh_i}{dt} = -\nabla_{h_i}\mathcal{L}, \qquad \tau_\lambda \frac{d
 
 - 活動は拡張ラグランジアンの勾配流、双対はその上昇流、重みは勾配流。入力 $x(t)$ と教師 $y(t)$ は時間とともに変わるストリームとして与える
 - 各ノードは、前回の更新からその実行のタイマーで測った経過時間 $\Delta t$ で離散化する。陽的 Euler なら $h_i \leftarrow h_i - \frac{\Delta t}{\tau_h}\nabla_{h_i}\mathcal{L}$
-- 3 節の離散パラメータとの対応: $\eta_h = \Delta t/\tau_h$、$\alpha = \Delta t/\tau_\lambda$、$\eta_\theta = \Delta t/\tau_\theta$。全ノードを固定の $\Delta t$ で同期的に回すと、3 節の更新に一致する（テストのオラクル）
+- 3 節の離散パラメータとの対応: $\eta_h = \Delta t/\tau_h$、$\alpha = \Delta t/\tau_\lambda$、$\eta_\theta = \Delta t/\tau_\theta$。全ノードを固定の $\Delta t$ で回すと 3 節の更新に一致する（テストのオラクル）。ただし一致するのは、各ノードが読む値が 3 節の式と同じ時点のものであるときに限る。`ManualRun.step(dt)`（並列の Jacobi）ではどのメッセージも 1 ステップ前の値なので、送る値が送り手の更新前の状態から作られる（`mujou.pc` の $g_{\rm in}$ や中継した $\mu$）と、ホップごとに 1 ステップ遅れる別の離散化になる（不動点は同じ）
 - 記事の「推論 $T$ ステップ → 学習 1 ステップ」は、$\tau_\theta \gg T\,\tau_h$ という時間スケールの分離として近似される。フェーズの切替は持たず、推論と学習は同時に進む
 - 安定性: 陽的 Euler は $\Delta t/\tau$ が大きいと発散する。5 節の $\alpha$ の上限は $\Delta t/\tau_\lambda$ の上限として読み替える。ノードが遅れて $\Delta t$ が大きくなった場合の扱いは `specs/nodes.md` の「実行の周期」と `specs/pc.md` の「dt の打ち切り」
 - 時定数どうしの比、$\Delta t$ の揺らぎや読み取る値の古さに対する収束性は未検証。下の「非同期更新」の問いに含まれる

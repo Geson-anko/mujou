@@ -6,9 +6,7 @@ import pytest
 import torch
 
 import mujou
-import mujou.testing
-from mujou import Network, NetworkError, Node, Port, Run
-from mujou.testing import ManualRun
+from mujou import ManualRun, Network, NetworkError, Node, Port, Run
 from mujou.time import Timer, VirtualTimer
 
 # P: a dict built in a test has a precise key type, which a Mapping keyed by
@@ -33,6 +31,7 @@ class StartManual(Protocol):
         timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
+        workers: int | None = None,
     ) -> ManualRun: ...
 
 
@@ -66,7 +65,7 @@ def started() -> Iterator[list[Run]]:
 
 @pytest.fixture
 def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
-    """``mujou.testing.run`` on the test's ``virtual`` timer unless given another
+    """``mujou.run_manually`` on the test's ``virtual`` timer unless given another
     (or a state, whose run makes its own), shut down at the end of the test."""
 
     def start[P: Port[Any, Any]](
@@ -75,10 +74,13 @@ def start_manual(virtual: VirtualTimer, started: list[Run]) -> StartManual:
         timer: VirtualTimer | None = None,
         inputs: Inputs[P] | None = None,
         state: Mapping[str, Any] | None = None,
+        workers: int | None = None,
     ) -> ManualRun:
         if timer is None and state is None:
             timer = virtual
-        run = mujou.testing.run(root, timer=timer, inputs=inputs, state=state)
+        run = mujou.run_manually(
+            root, timer=timer, inputs=inputs, state=state, workers=workers
+        )
         started.append(run)
         return run
 

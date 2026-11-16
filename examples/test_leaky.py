@@ -1,9 +1,10 @@
-"""Tests of the node of ``leaky.py``, with ``mujou.testing``.
+"""Tests of the node of ``leaky.py``, with ``mujou.run_manually``.
 
-``mujou.testing.run`` runs on a ``VirtualTimer``, whose time moves only when the
-test steps it, and ``ManualRun.step`` updates the nodes in a fixed order. Every
-``dt`` is then exactly the step, and the run can be compared with the discrete
-algorithm. Run them with::
+``mujou.run_manually`` runs on a ``VirtualTimer``, whose time moves only when the
+test steps it. ``ManualRun.step(dt)`` updates every node at once from the values
+at the start of the step, and ``step(dt, *nodes)`` updates the given nodes in
+the given order. Every ``dt`` is then exactly the step, and the run can be
+compared with the discrete algorithm. Run them with::
 
     uv run pytest examples/test_leaky.py
 """
@@ -14,7 +15,7 @@ from typing import Any
 import torch
 from leaky import SCALAR, Leaky, LeakyChain
 
-import mujou.testing
+import mujou
 
 
 # --8<-- [start:test]
@@ -24,7 +25,7 @@ class TestLeaky:
         node = Leaky(tau)
         one = torch.tensor(1.0, dtype=torch.float64)
         expected = 0.0
-        with mujou.testing.run(node, inputs={node.prev: one}) as run:
+        with mujou.run_manually(node, inputs={node.prev: one}) as run:
             for _ in range(steps):
                 run.step(h)  # 1 ms later, then every node once (period is ignored)
                 expected += (1 - math.exp(-h / tau)) * (1.0 - expected)
@@ -48,11 +49,25 @@ class TestLeakyChain:
             b += (1 - math.exp(-h / tau)) * (a - b)  # b reads the new a
 
         net = LeakyChain(tau)
-        with mujou.testing.run(net, inputs={net.prev: u}) as run:
+        with mujou.run_manually(net, inputs={net.prev: u}) as run:
             for _ in range(steps):
                 run.step(h, net.a, net.b)  # a, then b, which reads a's new value
             y = run.read(net.next)
         assert torch.equal(y, b)  # the same operations: equal to the last bit
+
+    def test_a_step_without_nodes_equals_the_order_from_the_output(self) -> None:
+        tau, h, steps = 0.01, 0.001, 50
+        u = torch.tensor(1.0, dtype=torch.float64)
+        by_order, at_once = LeakyChain(tau), LeakyChain(tau)
+        with mujou.run_manually(by_order, inputs={by_order.prev: u}) as run:
+            for _ in range(steps):
+                run.step(h, by_order.b, by_order.a)  # b reads the old a
+            expected = run.read(by_order.next)
+        with mujou.run_manually(at_once, inputs={at_once.prev: u}) as run:
+            for _ in range(steps):
+                run.step(h)  # every node reads the values at the start of the step
+            y = run.read(at_once.next)
+        assert torch.equal(y, expected)
 
 
 # --8<-- [end:chain]
@@ -63,7 +78,7 @@ def run_steps(n: int, state: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run a new ``LeakyChain`` for ``n`` steps of 1 ms and return its state."""
     net = LeakyChain(0.01)
     u = torch.tensor(1.0, dtype=torch.float64)
-    with mujou.testing.run(net, inputs={net.prev: u}, state=state) as run:
+    with mujou.run_manually(net, inputs={net.prev: u}, state=state) as run:
         for _ in range(n):
             run.step(0.001)
     return run.state_dict()

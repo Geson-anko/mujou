@@ -8,7 +8,7 @@
 | --------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `mujou.time.global_timer`   | 自分のタイマーを渡さないすべての実行のタイマー。プロセスで初めて使ったときに 0 から始まる             |
 | `mujou.time.Timer()`        | 1 つの実行専用のタイマー（`mujou.run(net, timer=Timer())`）。`start`（0）から `time_scale`（1）で進む |
-| `mujou.time.VirtualTimer()` | 進めたとき（`advance(seconds)`）だけ進む `Timer`。`mujou.testing.run` が使う                          |
+| `mujou.time.VirtualTimer()` | 進めたとき（`advance(seconds)`）だけ進む `Timer`。`mujou.run_manually` が使う                         |
 | `mujou.time.ReadOnlyTimer`  | タイマーを読むだけのビュー。ノードの `self.timer` がこれで、`now()` と `time_scale()` だけを持つ      |
 | `mujou.time.Timestamp`      | タイマーの上の時刻                                                                                    |
 

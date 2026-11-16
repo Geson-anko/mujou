@@ -153,7 +153,7 @@ fn timer_error(err: TimerError) -> PyErr {
 ///
 /// It starts at `start`. Its time scale does not apply to `advance`; it is
 /// kept as a `Timer` keeps it (`time_scale()` and the state of a run on it).
-/// `mujou.testing.run` runs a network on a new one unless given one, and
+/// `mujou.run_manually` runs a network on a new one unless given one, and
 /// `ManualRun.step(dt)` advances it.
 ///
 /// Raises:

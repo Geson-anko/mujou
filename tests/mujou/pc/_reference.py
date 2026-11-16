@@ -186,8 +186,9 @@ class Clock:
 
 
 class Reference:
-    """PC-ALM in plain PyTorch: every node moves at once from the values of the
-    previous step (a Jacobi update).
+    """PC-ALM in plain PyTorch, stepped from the output to the input: each layer
+    reads the activity sent in the previous step and the credit (``g_in``) the
+    next node sent in this one.
 
     ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity that layer
     ``i`` sent, its prediction ``mu`` of the ``h_in`` it read (the deviation
@@ -240,8 +241,8 @@ class Reference:
         self.g_in[-1] = g_next
         if learn:
             self._learn(params, g_theta, mask_c, self.clocks[-1], now)
-        # The layers, from the last: each with the g the next one made from the
-        # previous values.
+        # The layers, from the last: each with the g the next one sent in this
+        # step, made from its values before the step.
         h_new = list(self.h)
         for i in reversed(range(len(self.layers))):
             _, mask_i, reset_i, time_i = self.carried[i]

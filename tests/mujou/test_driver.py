@@ -460,10 +460,10 @@ class TestCuda:
         # A fresh interpreter, as the tests before have initialized CUDA here.
         script = """
 import torch
-import mujou.testing
+import mujou
 from mujou import Group, Node
 
-run = mujou.testing.run(Group(node=Node()))
+run = mujou.run_manually(Group(node=Node()))
 run.step(0.001)
 run.state_dict()  # paused
 run.shutdown()

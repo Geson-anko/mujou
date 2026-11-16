@@ -13,9 +13,11 @@ regression: ``y`` of ``(B, 256)``, as large as the ``h`` of a hidden layer) and
 with class labels (``y`` of ``(B,)``, as MNIST). The target travels with the
 activity from ``Input`` to ``Output``, so what it costs grows with every hop.
 
-- manual: a ``mujou.testing.run`` whose steps update the four nodes once each,
-  in order, on one thread. The table gives the median and the minimum over
-  ``--repeats`` runs of ``--steps`` steps of the µs per step.
+- manual: a ``mujou.run_manually`` whose steps update the four nodes once each,
+  all at once on the workers (Jacobi). The table gives the median and the
+  minimum over ``--repeats`` runs of ``--steps`` steps of the µs per step. The
+  steps used to update the nodes one after another on one thread, so the
+  numbers do not compare with those of before.
 - free: a ``mujou.run`` on ``--workers`` workers with every period 0, so each
   node updates as fast as it can for ``--seconds`` seconds of real time. The
   table gives the updates per second of each node, the median over
@@ -35,7 +37,6 @@ from torch import nn
 
 import mujou
 import mujou.pc as pc
-import mujou.testing
 from mujou import TensorSpec
 
 B = 64
@@ -121,7 +122,7 @@ def build(
 def manual(target: str, steps: int, device: str) -> float:
     """µs per step of the four nodes in a manual run."""
     net, inputs = build(target, PERIOD, device)
-    with mujou.testing.run(net, inputs=inputs) as run:
+    with mujou.run_manually(net, inputs=inputs) as run:
         for _ in range(steps // 10):
             run.step(PERIOD)
         t0 = time.perf_counter()

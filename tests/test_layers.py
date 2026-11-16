@@ -7,8 +7,8 @@ never on the modules behind them (``mujou.node``, ``mujou.port``, ...). Every im
 ``TYPE_CHECKING`` or in a function, which would hide a dependency. A name is
 imported from the module that defines it, not through another that imported
 it (except the modules in ``REEXPORTING``), which would hide the dependency
-too: the modules of ``mujou`` take the timers from the extension, and
-``mujou.testing`` from ``mujou.time``, which re-exports them.
+too: the modules of ``mujou`` take the timers from the extension, which
+``mujou.time`` re-exports.
 """
 
 import ast
@@ -34,7 +34,7 @@ LAYERS: list[set[str]] = [
     {"mujou.state"},
     {"mujou.execution"},
     {"mujou.time"},
-    {"mujou", "mujou.testing", "mujou.viz"},
+    {"mujou", "mujou.viz"},
     {
         "mujou.pc.msg",
         "mujou.pc.optim",
@@ -61,7 +61,7 @@ NATIVE = {
     "mujou.time",
 }
 
-PUBLIC = {"mujou", "mujou.time", "mujou.testing", "mujou.types"}
+PUBLIC = {"mujou", "mujou.time", "mujou.types"}
 # The modules that re-export names of other modules: those of PUBLIC and the
 # entry of mujou.pc. Every other module is imported only for what it defines.
 REEXPORTING = PUBLIC | {"mujou.pc"}

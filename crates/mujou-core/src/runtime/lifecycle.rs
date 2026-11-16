@@ -110,8 +110,11 @@ pub(super) struct Lifecycle {
     failed: bool,
     /// The nodes may enter their loops (set after every node started).
     go: bool,
-    /// Manual mode: the node allowed to run one step. Cleared by its step.
-    grant: Option<usize>,
+    /// Manual mode: whether each node is allowed to run one step. Cleared by
+    /// its step.
+    granted: Vec<bool>,
+    /// Manual mode: how many nodes are granted and have not ended their step.
+    open_steps: usize,
     /// Every node may call `stop` (set once every node is ready to stop).
     stop_allowed: bool,
     manual: bool,
@@ -131,7 +134,8 @@ impl Lifecycle {
             run_epoch: 0,
             failed: false,
             go: false,
-            grant: None,
+            granted: vec![false; n],
+            open_steps: 0,
             stop_allowed: false,
             manual,
             nodes: (0..n)
@@ -200,14 +204,19 @@ impl Lifecycle {
         self.stop_allowed = true;
     }
 
-    /// Manual mode: allows node `i` one step.
-    pub(super) fn grant(&mut self, i: usize) {
-        self.grant = Some(i);
+    /// Manual mode: allows each of `group` one step, all at once. The nodes of
+    /// a group must be distinct, and none may still have a step open.
+    pub(super) fn grant(&mut self, group: &[usize]) {
+        for &i in group {
+            debug_assert!(!self.granted[i], "node {i} is granted twice");
+            self.granted[i] = true;
+        }
+        self.open_steps += group.len();
     }
 
-    /// The granted step has not ended.
+    /// Some granted step has not ended.
     pub(super) fn granted(&self) -> bool {
-        self.grant.is_some()
+        self.open_steps > 0
     }
 
     /// `start` returned on every node (successfully or not).
@@ -252,14 +261,14 @@ impl Lifecycle {
                     Command::Stop => self.leave_loop(i),
                     Command::Pause => return Next::Hook(Work::Pause(self.epoch)),
                     Command::Run if !self.manual => return Next::Wait(life.target_ns),
-                    Command::Run if self.grant != Some(i) => return Next::Park,
+                    Command::Run if !self.granted[i] => return Next::Park,
                     Command::Run => {
                         let now_ns = now();
                         if now_ns > last_ns {
                             return Next::Hook(Work::Update { now_ns });
                         }
                         // Nothing to do for a step without time passing.
-                        self.end_step();
+                        self.end_step(i);
                         return Next::Park;
                     }
                 },
@@ -298,7 +307,7 @@ impl Lifecycle {
             Work::Update { now_ns } => {
                 life.target_ns = next_target_ns(life.target_ns, now_ns, period_ns);
                 if self.manual {
-                    self.end_step();
+                    self.end_step(i);
                 }
             }
             Work::Pause(epoch) => {
@@ -330,10 +339,15 @@ impl Lifecycle {
         self.changed = true;
     }
 
-    /// Manual mode: the step of the granted node is over.
-    fn end_step(&mut self) {
-        self.grant = None;
-        self.changed = true;
+    /// Manual mode: the step of node `i` is over. The control thread is
+    /// notified when the last granted step ends.
+    fn end_step(&mut self, i: usize) {
+        if std::mem::take(&mut self.granted[i]) {
+            self.open_steps -= 1;
+            if self.open_steps == 0 {
+                self.changed = true;
+            }
+        }
     }
 }
 
@@ -474,7 +488,7 @@ mod tests {
     fn a_manual_step_updates_once_if_the_time_moved() {
         let mut life = in_loop(true);
         assert_eq!(advance(&mut life), Next::Park);
-        life.grant(0);
+        life.grant(&[0]);
         assert_eq!(advance(&mut life), Next::Hook(Work::Update { now_ns: NOW }));
         life.record(0, Work::Update { now_ns: NOW }, true, P);
         assert!(!life.granted());
@@ -485,7 +499,7 @@ mod tests {
     fn a_manual_step_without_time_passing_ends_without_an_update() {
         let mut life = in_loop(true);
         assert_eq!(advance(&mut life), Next::Park);
-        life.grant(0);
+        life.grant(&[0]);
         assert_eq!(life.advance(0, NOW, P, || NOW), Next::Park);
         assert!(!life.granted());
     }
@@ -499,5 +513,34 @@ mod tests {
         life.record_free_run(0, LAST + 4 * P, false);
         life.set_command(Command::Stop);
         assert!(life.ready_to_stop());
+    }
+
+    #[test]
+    fn a_group_grant_is_open_until_the_last_step_ends() {
+        let mut life = Lifecycle::new(2, true);
+        for i in 0..2 {
+            life.record(i, Work::Start, true, P);
+        }
+        life.go();
+        for i in 0..2 {
+            assert_eq!(life.advance(i, LAST, P, || NOW), Next::Park);
+        }
+        life.grant(&[0, 1]);
+        assert!(life.granted());
+        life.take_changed();
+        assert_eq!(
+            life.advance(0, LAST, P, || NOW),
+            Next::Hook(Work::Update { now_ns: NOW })
+        );
+        assert_eq!(
+            life.advance(1, LAST, P, || NOW),
+            Next::Hook(Work::Update { now_ns: NOW })
+        );
+        life.record(0, Work::Update { now_ns: NOW }, true, P);
+        assert!(life.granted());
+        assert!(!life.take_changed());
+        life.record(1, Work::Update { now_ns: NOW }, true, P);
+        assert!(!life.granted());
+        assert!(life.take_changed());
     }
 }

@@ -319,7 +319,7 @@ fn the_manual_mode_ignores_the_period() {
             mode,
             &timer,
             RunConfig {
-                manual: true,
+                manual: Some(Staging::new()),
                 ..config
             },
         );

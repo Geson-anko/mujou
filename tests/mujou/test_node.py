@@ -378,7 +378,7 @@ class TestPeriod:
     def test_the_node_waits_for_its_period_on_the_timer(
         self, virtual: VirtualTimer, start: Start
     ):
-        # Free running: a manual run (mujou.testing.run) ignores the period.
+        # Free running: a manual run (mujou.run_manually) ignores the period.
         node = Ticker(period=0.01)
         start(Group(node=node), timer=virtual)
         virtual.advance(0.005)

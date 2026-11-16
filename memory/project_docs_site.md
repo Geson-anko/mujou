@@ -17,4 +17,4 @@ metadata:
 
 **Why:** 開発者向けの設計判断と利用者向けの使い方は読者が違う。サンプルを snippet で取り込めば、ページのコードと手で実行できるプログラムが同じものになり、`just type` が API の変更による壊れを捕まえる。
 
-**How to apply:** 公開 API を変えたら、`docs/en/api/*.md` の `:::` とガイドのページも直す（skill solo-dev-cycle の段階 5）。利用者向けのページに specs/ のパスを出さない（公開の docstring にも書かない）。言語の規則は [[feedback-doc-language]]、テスト用の API は [[project-testing-api]]。
+**How to apply:** 公開 API を変えたら、`docs/en/api/*.md` の `:::` とガイドのページも直す（skill solo-dev-cycle の段階 5）。利用者向けのページに specs/ のパスを出さない（公開の docstring にも書かない）。言語の規則は [[feedback-doc-language]]、手動の実行（シミュレーションとテスト）の API は [[project-manual-run-simulation]]。

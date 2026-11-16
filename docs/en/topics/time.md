@@ -8,7 +8,7 @@ Each run has one time axis, its timer: every node's `dt`, every message's time a
 | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `mujou.time.global_timer`   | The timer of every run not given one of its own. It starts at 0 when the process first uses it                |
 | `mujou.time.Timer()`        | A timer for a run of its own: `mujou.run(net, timer=Timer())`. It starts at `start` (0) with `time_scale` (1) |
-| `mujou.time.VirtualTimer()` | A `Timer` that moves only when advanced (`advance(seconds)`); `mujou.testing.run` uses one                    |
+| `mujou.time.VirtualTimer()` | A `Timer` that moves only when advanced (`advance(seconds)`); `mujou.run_manually` uses one                   |
 | `mujou.time.ReadOnlyTimer`  | The reading side of a timer: what a node sees as `self.timer`, with only `now()` and `time_scale()`           |
 | `mujou.time.Timestamp`      | A time on a timer                                                                                             |
 

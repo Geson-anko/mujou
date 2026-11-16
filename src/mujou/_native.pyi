@@ -31,6 +31,7 @@ __all__ = [
     "Runtime",
     "Schema",
     "Slot",
+    "Staging",
     "Timer",
     "Timestamp",
     "VirtualTimer",
@@ -191,6 +192,7 @@ class Outlet:
         name: str,
         *,
         clock: ReadOnlyTimer,
+        staging: Staging | None = None,
     ) -> Self:
         """
         Creates the slots `"{name}/out"` and `"{name}/ch{k}"` holding zeros
@@ -201,6 +203,9 @@ class Outlet:
         be on the axis the nodes' Δt is measured on, a pause of the run would
         not stop them, and its end would not bound them, so a state taken at T
         could hold later messages.
+
+        With a `staging` (the manual run's), a message sent while `step` runs
+        the nodes becomes visible when the step has ended.
         """
     def channel(self, /, index: SupportsIndex) -> Slot: ...
     @property
@@ -292,8 +297,10 @@ class Runtime:
         """
     def step(self, /, order: SupportsGetItem[int, SupportsIndex] | None = None) -> None:
         """
-        Manual mode: lets the nodes in `order` (all, in index order, if `None`)
-        update once each, one after another.
+        Manual mode: lets the nodes in `order` update once each, one after
+        another (a later node reads what an earlier one sent in this step), or
+        every node at once on the workers if `None` (every node reads the
+        values from the start of the step).
         """
     @property
     def workers(self, /) -> int:
@@ -368,6 +375,17 @@ class Slot:
         """
         No constructor: calling the class raises `TypeError`.
         """
+
+@final
+class Staging:
+    """
+    The holder of the sends of a step of a manual run: the `Outlet`s made with
+    it hold their messages back while `step` runs the nodes, and `step`
+    publishes them when every node has ended it. Create one for each manual
+    run, and pass it to the `Outlet`s and to `start`. Nothing to call from
+    Python.
+    """
+    def __new__(cls, /) -> Self: ...
 
 @disjoint_base
 class Timer:
@@ -512,7 +530,7 @@ class VirtualTimer(Timer):
 
     It starts at `start`. Its time scale does not apply to `advance`; it is
     kept as a `Timer` keeps it (`time_scale()` and the state of a run on it).
-    `mujou.testing.run` runs a network on a new one unless given one, and
+    `mujou.run_manually` runs a network on a new one unless given one, and
     `ManualRun.step(dt)` advances it.
 
     Raises:
@@ -556,7 +574,7 @@ def start(
     ],
     clock: ReadOnlyTimer,
     *,
-    manual: bool = False,
+    staging: Staging | None = None,
     workers: SupportsIndex | None = None,
 ) -> Runtime:
     """
@@ -587,6 +605,10 @@ def start(
     is later than its end.
 
     `current()` returns the driver while one of its methods runs.
+
+    With a `staging`, the run is manual: the nodes update only when
+    `Runtime.step` allows them, and the messages sent through `Outlet`s made
+    with the same `staging` while a step runs become visible when it has ended.
 
     The nodes not on a thread of their own share a pool of `workers` threads,
     by default as many as the available parallelism (half of it, at least 1,

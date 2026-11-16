@@ -6,8 +6,7 @@ import torch
 from torch import nn
 
 import mujou.pc as pc
-from mujou import DictSpec, Group, TensorSpec, TimestampSpec
-from mujou.testing import ManualRun
+from mujou import DictSpec, Group, ManualRun, TensorSpec, TimestampSpec
 from tests.mujou.nodes import F64, close
 from tests.mujou.pc._reference import ADAMW, SGD, TAU_THETA
 

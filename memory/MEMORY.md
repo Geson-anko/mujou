@@ -36,7 +36,7 @@
 - [free-threaded Python](project_python_free_threaded.md) — 開発は 3.14t。GIL ありの 3.14 もサポートし CI で両方を検証
 - [Windows の CI](project_windows_ci.md) — Test は Ubuntu・macOS・Windows。encoding を明示、SIGINT は raise_signal、.claude/ は Windows 対象外（2026-10-23）
 - [ドキュメントのサイト](project_docs_site.md) — specs/ は開発者向けの設計仕様、docs/ はユーザー向けの mkdocs（英語と日本語、tutorial / topics / api）。サンプルは examples/（snippet で取り込み、テストでは実行しない）。GitHub Pages に mike で版ごと
-- [テスト用の公開の口](project_testing_api.md) — mujou.testing.run と ManualRun.step(dt, *nodes)。mujou 自身と利用者のテストが同じ口を使う。VirtualTimer は mujou.time
+- [手動の実行はシミュレーション用](project_manual_run_simulation.md) — `mujou.run_manually` と `ManualRun` を直下に公開、`mujou.testing` は廃止。`step(dt)` は並列の Jacobi、`step(dt, *nodes)` は逐次。ステップ境界のバリアは ManualRun だけの例外（2026-11-16）
 - [実行の API とモジュール構成](project_runtime_api_revision.md) — モジュールは公開、private は Rust の mujou._native だけ。build と Graph は持たず、mujou.run がハンドル Run を返す。state_dict は実行中と正常終了の後
 - [ノードの実行周期](project_node_period.md) — `Node(period=0.01)` が既定、`0.0` は明示したときだけ、タイマーの秒、待つのはランタイム。目標は前回の目標 + P、P 以上遅れたら数え直す。Δt は実経過。手動モードは周期を無視。シグネチャと復元後の目標は確認待ち
 - [run はルート 1 つ、write は時刻を返す](project_run_node_and_write_time.md) — `mujou.run(root)`（並べるのは Group、R4）。ノード単体もルート（パス ""）。`Run.write` が `Timestamp` を返す

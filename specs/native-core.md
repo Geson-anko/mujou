@@ -28,8 +28,9 @@ mujou のコアには 2 つの責務がある。1 つは各ノードを非同期
 | `start`、`Runtime` | 実行 |
 | `current` | いま hook を走らせている Driver |
 
-- `start(nodes, clock, *, manual, workers) -> Runtime` の 1 回の呼び出しで起動する。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`execution.py`）の列で、並べたリストの長さを照合する引数を表せなくした
-- `Runtime` は `step(order)`、`capture(build, timeout)`、`shutdown(timeout) -> bool`（止める要求を出して待つ。timeout の変換は要求の前に行い、断られた呼び出しは何も変えない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
+- `start(nodes, clock, *, staging, workers) -> Runtime` の 1 回の呼び出しで起動する。`staging` を渡した実行が手動モード（手動なのに保留が無い状態を型で作れなくするため）。「作ったが始まっていない」状態が無い。`nodes` はレコード `_NodeEntry(driver, name, period, dedicated_thread, last_update_ns, state)`（`execution.py`）の列で、並べたリストの長さを照合する引数を表せなくした
+- `Runtime` は `step(order)`（`None` は全ノードを 1 グループとして並列に 1 ステップ、リストは 1 ノードずつのグループの列で渡した順に逐次）、`capture(build, timeout)`、`shutdown(timeout) -> bool`（止める要求を出して待つ。timeout の変換は要求の前に行い、断られた呼び出しは何も変えない）、`join(timeout) -> bool`、`finished`、`check()`（失敗なら `NetworkError`）、`last_update_ns()`、`workers`（実効のワーカー数）を持つ。終了の状態は Rust だけが持ち、Python は聞く
+- `Staging()`（引数なし、Python から呼ぶメソッドは無い）は手動の実行で、ステップ中の送信を保留する箱。コアでは `slot::Staging`（`open` / `commit`）で、`Outlet::new(schema, channels, name, clock, staging)` と `RunConfig.manual: Option<Arc<Staging>>` に同じものを渡す。`Outlet::send` は `Staging` が開いていれば各スロットの `staged`（スロットごとに 1 メッセージ）に置き、閉じていれば今までどおり `publish` する。制御スレッドがグループごとに開き、全ノードの更新が終わってから `commit` で公開する（[実行モデル](execution-model.md#送信の保留と公開)）
 - 正常に終わった後の取得も `Runtime.capture` の同じ口で行う
 - bindings は `Runtime` の hook を、`Hook` から Driver のメソッド名への対応表で呼ぶ。Python を呼ぶ直前に thread-local の `CURRENT` に Driver を付け、戻ったら外す（`current.rs`）。core の `RUNTIME_OF_THREAD`（このスレッドがどのランタイムのものか）は、内部の `Reentrant` の検査のためにあり、「hook の中か」とは別の事実
 - 例外は Python の `mujou.errors.NetworkError` を `import_exception!` で参照する。停止の timeout は組み込みの `TimeoutError`

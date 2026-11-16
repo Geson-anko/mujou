@@ -11,7 +11,11 @@
 //! The nodes never wait for each other; the only barriers are the control
 //! operations (pausing to capture the state, stepping by hand, and stopping),
 //! which `specs/execution-model.md` allows because the time of the runtime's
-//! timer stands still while they hold.
+//! timer stands still while they hold. A step by hand updates all the nodes
+//! at once on the workers, or one after another in a given order; the sends
+//! of an all-at-once step are held back by a [`Staging`] and published when
+//! every node has ended it, so that every node reads the values from the
+//! start of the step.
 //!
 //! All control goes through a single control thread, as in pamiq-core's
 //! `ThreadController`. The host submits requests to it and waits for the reply;
@@ -51,6 +55,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::slot::Staging;
 use crate::time::{RunClock, remaining};
 
 pub use error::{Hook, HookError, NodeFailure, RuntimeError};
@@ -64,8 +69,10 @@ use worker::Worker;
 
 pub struct RunConfig<N> {
     pub nodes: Vec<NodeSpec<N>>,
-    /// Run the nodes only when [`Runtime::step`] allows them, one at a time.
-    pub manual: bool,
+    /// `Some` for the manual mode: the nodes update only when
+    /// [`Runtime::step`] allows them, and the sends of the outlets made with
+    /// the same [`Staging`] during a step are held back until it ends.
+    pub manual: Option<Arc<Staging>>,
     /// The number of worker threads for the nodes in the pool, never more
     /// than the nodes in the pool, so none if every node has a dedicated
     /// thread.
@@ -190,20 +197,26 @@ impl<N: NodeHooks> Runtime<N> {
         Reply { rx, failure }
     }
 
-    /// Manual mode: lets the nodes in `order` (all in index order if `None`)
-    /// run one update each, one after another. A node whose time did not move
+    /// Manual mode: lets the nodes in `order` run one update each, one after
+    /// another (a later node reads what an earlier one sent in this step), or
+    /// every node at once on the workers if `None` (every node reads the
+    /// values from the start of the step). A node whose time did not move
     /// since its last update does not update.
     pub fn step(&self, order: Option<&[usize]>) -> Reply<()> {
         let n = self.shared.nodes.len();
-        let order = order.map_or_else(|| (0..n).collect(), <[usize]>::to_vec);
-        if !self.shared.lock().life.manual() || order.iter().any(|&i| i >= n) {
+        let groups = match order {
+            None => vec![(0..n).collect()],
+            Some(order) => order.iter().map(|&i| vec![i]).collect(),
+        };
+        let in_range = groups.iter().flatten().all(|&i| i < n);
+        if !self.shared.lock().life.manual() || !in_range {
             // A step on a free-running runtime would never end.
             let error = RuntimeError::Internal(format!(
                 "a step needs the manual mode and indices of the {n} nodes, got {order:?}"
             ));
             return Reply::ready(Err(error), Arc::clone(&self.shared.failure));
         }
-        self.submit(move |controller| controller.step(order))
+        self.submit(move |controller| controller.step(groups))
     }
 
     /// Pauses every node, takes their states and passes them to `build` on the

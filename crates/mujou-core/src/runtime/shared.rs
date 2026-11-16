@@ -12,6 +12,7 @@ use super::error::{Hook, HookError, NodeFailure, Panicked, RuntimeError, panic_m
 use super::hooks::{NodeHooks, NodeSpec};
 use super::lifecycle::{self, Command, Lifecycle, Next, Work};
 use super::sched::{Lane, Sched};
+use crate::slot::Staging;
 use crate::time::{PauseHold, RunClock};
 
 thread_local! {
@@ -50,6 +51,9 @@ pub(super) struct Shared<N: NodeHooks> {
     pub(super) lanes: Vec<Lane>,
     /// The number of workers of the pool.
     pub(super) workers: usize,
+    /// The manual mode's holder of the sends of a step, if in the manual
+    /// mode.
+    pub(super) staging: Option<Arc<Staging>>,
     control: Mutex<Control>,
     /// Notified on a change the control thread waits for
     /// ([`Lifecycle::take_changed`], a failure) and at the end.
@@ -70,10 +74,10 @@ impl<N: NodeHooks> Shared<N> {
         nodes: Vec<NodeSpec<N>>,
         lanes: &[usize],
         workers: usize,
-        manual: bool,
+        staging: Option<Arc<Staging>>,
     ) -> Self {
         let n_lanes = lanes.iter().max().map_or(1, |&last| last + 1);
-        let life = Lifecycle::new(nodes.len(), manual);
+        let life = Lifecycle::new(nodes.len(), staging.is_some());
         let members = (nodes.into_iter())
             .map(|spec| Member {
                 name: spec.name,
@@ -88,6 +92,7 @@ impl<N: NodeHooks> Shared<N> {
             nodes: members,
             lanes: (0..n_lanes).map(|_| Lane::default()).collect(),
             workers,
+            staging,
             word: AtomicU64::new(life.word()),
             control: Mutex::new(Control {
                 life,

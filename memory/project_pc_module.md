@@ -8,7 +8,7 @@ metadata:
 設計の正本は `specs/pc.md`、実験の数値は `specs/research/pc-experiments.md`。
 
 - **PC-ALM は PyTorch で実装する（2026-10-15、ユーザーの判断）。** 計算はノードの内側の行列演算なので、Rust では書かない。Rust のコアは学習則を知らない基盤にとどめる
-- **置き場所は `src/mujou/pc/`、公開元は `mujou.pc`。** pc は `mujou`・`mujou.time`・`mujou.testing` の公開名だけを import し、基盤のモジュール（`mujou.node` など）は pc を知らない（`tests/test_layers.py`）。トップレベルに再公開しない（基盤と更新手法の区別を名前に残す）。α=0 で PC に退化するのでモジュール名は `pc`
+- **置き場所は `src/mujou/pc/`、公開元は `mujou.pc`。** pc は `mujou`・`mujou.time` の公開名だけを import し、基盤のモジュール（`mujou.node` など）は pc を知らない（`tests/test_layers.py`）。トップレベルに再公開しない（基盤と更新手法の区別を名前に残す）。α=0 で PC に退化するのでモジュール名は `pc`
 - **公開名:** 正本は `mujou.pc.__all__` と `tests/mujou/test_init.py`。`Layer` / `Output` / `TimeConstants` / `Input` の名前はユーザーが承認（2026-10-20）。重みの optimizer `Optimizer` / `BoundOptimizer` / `SGD` / `AdamW` を足し、`functional.learn_` は消した（2026-10-22、[[project-pc-optimizers]]）
 - **ノードは任意の微分可能な `nn.Module` を包む。** ノードの内側は VJP、ノードの間は PC-ALM。VJP はバッチの和、1/B は θ の勾配にだけ（ユーザーの承認）
 - **状態はずれ r = h − μ と λ で持つ（2026-10-28、ユーザーの指示「pc を h ではなく残差 r 形式に変更し、確認された安定性問題に対処する」）。** 跳びの付け替えと `jumps` は消した。2026-10-27 までは h で持ち跳びだけ付け替えていた

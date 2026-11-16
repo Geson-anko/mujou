@@ -24,6 +24,7 @@ use pyo3::types::{PyDict, PyList, PyString};
 use crate::current;
 use crate::errors::NetworkError;
 use crate::hint::Build;
+use crate::slot::PyStaging;
 use crate::time::PyReadOnlyTimer;
 use crate::wait::{to_duration, to_ns, wait_interruptibly};
 
@@ -286,6 +287,10 @@ type Record<'py> = (
 ///
 /// `current()` returns the driver while one of its methods runs.
 ///
+/// With a `staging`, the run is manual: the nodes update only when
+/// `Runtime.step` allows them, and the messages sent through `Outlet`s made
+/// with the same `staging` while a step runs become visible when it has ended.
+///
 /// The nodes not on a thread of their own share a pool of `workers` threads,
 /// by default as many as the available parallelism (half of it, at least 1,
 /// while the GIL is enabled), never more than the nodes in the pool.
@@ -293,12 +298,12 @@ type Record<'py> = (
 /// If the wait is interrupted (Ctrl-C), stops the network and raises once it
 /// has stopped; interrupting that wait too leaves it stopping in the background.
 #[pyfunction]
-#[pyo3(signature = (nodes, clock, *, manual = false, workers = None))]
+#[pyo3(signature = (nodes, clock, *, staging = None, workers = None))]
 pub fn start(
     py: Python<'_>,
     nodes: Vec<Record<'_>>,
     clock: Bound<'_, PyReadOnlyTimer>,
-    manual: bool,
+    staging: Option<PyRef<'_, PyStaging>>,
     workers: Option<NonZeroUsize>,
 ) -> PyResult<Runtime> {
     let workers = match workers {
@@ -324,7 +329,7 @@ pub fn start(
         .collect::<PyResult<_>>()?;
     let config = RunConfig {
         nodes,
-        manual,
+        manual: staging.map(|staging| Arc::clone(&staging.0)),
         workers,
     };
     let (runtime, started) = core::Runtime::start(config, Arc::clone(&clock.get().0))
@@ -360,8 +365,10 @@ pub struct Runtime(core::Runtime<PyDriver>);
 
 #[pymethods]
 impl Runtime {
-    /// Manual mode: lets the nodes in `order` (all, in index order, if `None`)
-    /// update once each, one after another.
+    /// Manual mode: lets the nodes in `order` update once each, one after
+    /// another (a later node reads what an earlier one sent in this step), or
+    /// every node at once on the workers if `None` (every node reads the
+    /// values from the start of the step).
     #[pyo3(signature = (order = None))]
     fn step(&self, py: Python<'_>, order: Option<Vec<usize>>) -> PyResult<()> {
         wait(py, self.0.step(order.as_deref()))

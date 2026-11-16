@@ -8,7 +8,7 @@ from typing import Protocol, override
 
 import pytest
 
-from mujou._native import ReadOnlyTimer, Runtime, VirtualTimer, current, start
+from mujou._native import ReadOnlyTimer, Runtime, Staging, VirtualTimer, current, start
 from mujou.errors import NetworkError
 
 H_NS = 1_000_000
@@ -116,7 +116,8 @@ def virtual_timer() -> VirtualTimer:
 @pytest.fixture
 def start_runtime(virtual_timer: VirtualTimer) -> Iterator[StartRuntime]:
     """Start runtimes on the test's ``virtual_timer``, each node with a period of
-    0 and named by its ``name``, and stop them at the end of the test."""
+    0 and named by its ``name``, and stop them at the end of the test. A
+    ``manual`` runtime is one started with a ``Staging`` of its own."""
     started: list[Runtime] = []
 
     def start_runtime(
@@ -136,7 +137,8 @@ def start_runtime(virtual_timer: VirtualTimer) -> Iterator[StartRuntime]:
             )
         ]
         clock = ReadOnlyTimer(virtual_timer)
-        runtime = start(records, clock, manual=manual, workers=workers)
+        staging = Staging() if manual else None
+        runtime = start(records, clock, staging=staging, workers=workers)
         started.append(runtime)
         return runtime
 

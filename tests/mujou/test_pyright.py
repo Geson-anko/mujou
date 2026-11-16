@@ -10,7 +10,6 @@ import pytest
 import torch
 
 import mujou
-import mujou.testing
 from mujou import (
     BoolSpec,
     Channel,
@@ -168,11 +167,11 @@ class TestRuns:
             run.write(values)
         other = DictSink()
         others = {other.prev: msg}
-        with mujou.testing.run(other, inputs=others) as manual:
+        with mujou.run_manually(other, inputs=others) as manual:
             manual.write(others)
 
     def test_a_manual_run_gives_back_the_type_of_its_timer(self) -> None:
-        with mujou.testing.run(Layer(2)) as run:
+        with mujou.run_manually(Layer(2)) as run:
             assert_type(run.timer, VirtualTimer)
             run.timer.advance(0.001)  # no cast needed
 
@@ -180,7 +179,7 @@ class TestRuns:
         a, b, fan = Layer(2), Layer(2), Fan()
         a.out.connect(fan.prev)
         b.out.connect(fan.prev)
-        with mujou.testing.run(mujou.Group(a=a, b=b, fan=fan)) as run:
+        with mujou.run_manually(mujou.Group(a=a, b=b, fan=fan)) as run:
             run.step(0.0)
             value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)
@@ -192,4 +191,4 @@ class TestRuns:
         with pytest.raises(TypeError, match="positional argument"):
             mujou.run(a, b)  # pyright: ignore[reportCallIssue]
         with pytest.raises(TypeError, match="positional argument"):
-            mujou.testing.run(a, b)  # pyright: ignore[reportCallIssue]
+            mujou.run_manually(a, b)  # pyright: ignore[reportCallIssue]

@@ -1,13 +1,14 @@
 use std::fmt;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use mujou_core::runtime::{
     Hook, HookError, NodeHooks, NodeSpec, Reply, RunConfig, Runtime, RuntimeError,
 };
+use mujou_core::slot::Staging;
 use mujou_core::time::{RunClock, Source, Timer, Timestamp};
 
 mod capture;
@@ -85,6 +86,49 @@ struct Probe {
     advance: Option<(Arc<Timer>, usize)>,
     /// Tells when it enters an update, then waits there until released.
     gate: Option<(Sender<()>, Receiver<()>)>,
+    /// Waits in each update for the other nodes of the meeting.
+    meeting: Option<Arc<Meeting>>,
+}
+
+/// A meeting of `size` nodes in their updates: each waits for the others to
+/// arrive, for at most [`LONG`]. It succeeds only if all of them are inside an
+/// update at the same time, that is, run in parallel.
+struct Meeting {
+    size: usize,
+    arrived: Mutex<usize>,
+    all_here: Condvar,
+    /// How many arrivals saw everyone arrive in time.
+    met: Mutex<usize>,
+}
+
+impl Meeting {
+    fn new(size: usize) -> Arc<Self> {
+        Arc::new(Self {
+            size,
+            arrived: Mutex::new(0),
+            all_here: Condvar::new(),
+            met: Mutex::new(0),
+        })
+    }
+
+    fn arrive(&self) {
+        let mut arrived = self.arrived.lock().unwrap();
+        *arrived += 1;
+        self.all_here.notify_all();
+        let (arrived, timeout) = self
+            .all_here
+            .wait_timeout_while(arrived, LONG, |n| *n < self.size)
+            .unwrap();
+        drop(arrived);
+        if !timeout.timed_out() {
+            *self.met.lock().unwrap() += 1;
+        }
+    }
+
+    /// How many nodes saw the others arrive in time.
+    fn met(&self) -> usize {
+        *self.met.lock().unwrap()
+    }
 }
 
 impl Probe {
@@ -109,6 +153,9 @@ impl Probe {
                     if self.updates <= *k {
                         timer.advance_ns(H_NS).unwrap();
                     }
+                }
+                if let Some(meeting) = &self.meeting {
+                    meeting.arrive();
                 }
                 if let Some((entered, release)) = &self.gate {
                     let _ = entered.send(());
@@ -191,6 +238,7 @@ fn probes(n: usize) -> Probes {
             ticks: None,
             advance: None,
             gate: None,
+            meeting: None,
         })
         .collect();
     Probes { log, nodes }
@@ -281,7 +329,7 @@ fn config<N>(hooks: Vec<N>) -> RunConfig<N> {
         .collect();
     RunConfig {
         nodes,
-        manual: false,
+        manual: None,
         workers: parallelism(),
     }
 }
@@ -294,7 +342,7 @@ fn parallelism() -> NonZeroUsize {
 /// [`config`] in the manual mode.
 fn manual<N>(hooks: Vec<N>) -> RunConfig<N> {
     RunConfig {
-        manual: true,
+        manual: Some(Staging::new()),
         ..config(hooks)
     }
 }
