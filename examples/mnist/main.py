@@ -25,8 +25,8 @@ relaxation stable but drops the time beyond. ``--watch`` counts the ``dt`` of
 the nodes (``watch.py``), prints its distribution and warns when its median
 exceeds 1.5 periods or when more than 1% of the updates come later than 2
 periods. The default 1 keeps ``dt`` at 1 to 1.25 periods on an idle 32-core
-machine; there, 3 epochs reach a test accuracy of 97.56% (seed 0), against
-97.54% for BP. At 2, 99% of the updates still come within 1.25 periods, with
+machine; there, 3 epochs reach a test accuracy of 97.69% (seed 0), against
+97.53% for BP. At 2, 99% of the updates still come within 1.25 periods, with
 the same accuracy, and an epoch takes 15 s instead of 30 s. To choose the time
 scale on another machine, run one epoch with ``--watch`` and take the highest
 scale that gives no warning and does not diverge.

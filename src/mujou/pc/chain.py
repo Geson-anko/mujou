@@ -89,8 +89,8 @@ class Chain(Network, Shown):
             ``B`` samples.
         max_dt: As in ``Layer``.
         period: The period of every node, ``tau.period`` if ``None``: with the
-            defaults of ``TimeConstants``, the credit moves one node down in
-            each period. A period of your own must not be longer than
+            defaults of ``TimeConstants``, the credit takes at most one period
+            per hop. A period of your own must not be longer than
             ``max_dt``.
         device: Where the nodes compute.
 

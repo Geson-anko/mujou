@@ -59,6 +59,8 @@ class Merge(Node):
             self.r.masked_fill_(new, 0.0)
             self.lam.masked_fill_(new, 0.0)
         labeled = a["mask"].unsqueeze(-1)  # a sample without a target sends no credit
+        g = sum(self.next.recv().values(), torch.zeros_like(self.r))
+        pc.functional.relax_(self.r, self.lam, g, t.dt, TAU)
         delta = torch.where(labeled, self.r + self.lam, 0)
         params = list(self.module.parameters())
         mu, g_in, g_theta = pc.functional.vjp(
@@ -67,8 +69,6 @@ class Merge(Node):
         g_a, g_b = g_in.split(self.sizes, dim=-1)
         self.a.send(g_a)
         self.b.send(g_b)
-        g = sum(self.next.recv().values(), torch.zeros_like(self.r))
-        pc.functional.relax_(self.r, self.lam, g, t.dt, TAU)
         # The prediction goes on, with the y, mask, reset and time of a.
         self.next.send({**a, "h": mu})
         if a["mask"].any():  # nothing to learn from samples without a target

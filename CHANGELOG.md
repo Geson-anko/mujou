@@ -14,6 +14,7 @@ All notable changes to Mujou are documented in this file. The format is based on
 ### Changed
 
 - `ManualRun.step(dt)` without nodes updates every node in parallel from the values at the start of the step (Jacobi), instead of one after another in the order of the tree. Pass the nodes (`step(dt, *nodes)`) to update them in a given order.
+- `pc.Layer` sends the credit `g_in` back, and learns, from the `delta` it has just relaxed in the same update, instead of from the `delta` before it: the credit goes back one hop per step under `ManualRun.step(dt)` (it took two), and a round trip takes about half as long in a free run. The fixed point and the cost of an update are the same; the trajectories differ.
 
 ### Removed
 
