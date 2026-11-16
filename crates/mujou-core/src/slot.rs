@@ -97,7 +97,7 @@ pub struct Slot {
     /// [`Slot::wait_newer`] while it checks the value (it sleeps without it).
     value: Mutex<Pair>,
     /// The message an [`Outlet`] sent while its [`Staging`] was open, not yet
-    /// visible to readers. Only the writer and [`Staging::commit`] take it,
+    /// visible to readers. Only the writer and `Staging::commit` take it,
     /// and readers never look at it.
     staged: Mutex<Option<Arc<Message>>>,
     /// How many readers are in [`Slot::wait_newer`]. A writer notifies only when
@@ -206,7 +206,7 @@ impl Slot {
         drop(old);
     }
 
-    /// Holds `msg` back until [`Staging::commit`], replacing the one held
+    /// Holds `msg` back until `Staging::commit`, replacing the one held
     /// back so far, and lists this slot with `staging` the first time.
     fn stage(self: &Arc<Self>, staging: &Staging, msg: Arc<Message>) {
         let old = lock(&self.staged).replace(msg);
@@ -247,7 +247,7 @@ pub enum Target {
 
 /// The holder of the sends of a step of the manual mode: while it is open, the
 /// [`Outlet`]s made with it hold their messages back instead of publishing
-/// them, and [`Staging::commit`] publishes what was held back, so that a
+/// them, and `Staging::commit` publishes what was held back, so that a
 /// reader sees the values from before the step until the step has ended.
 ///
 /// Each slot holds back at most one message, the last one sent to it in the
