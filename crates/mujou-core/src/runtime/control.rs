@@ -85,21 +85,37 @@ impl<N: NodeHooks> Controller<N> {
         Ok(())
     }
 
-    pub(super) fn step(&mut self, order: Vec<usize>) -> Result<(), RuntimeError> {
+    /// Manual mode: lets the nodes of each group run one update each, all of
+    /// a group at once, and the groups one after another. Each group's sends
+    /// are held back until every node of it has ended its step, then
+    /// published together. A failure ends the system and drops the held-back
+    /// sends.
+    pub(super) fn step(&mut self, groups: Vec<Vec<usize>>) -> Result<(), RuntimeError> {
         self.ensure_running()?;
         let s = Arc::clone(&self.shared);
-        for i in order {
+        for group in groups {
             let mut c = s.lock();
+            if let Some(staging) = &s.staging {
+                staging.open();
+            }
             if !c.life.failed() {
-                c.life.grant(i);
-                s.wake(&mut c, i);
+                c.life.grant(&group);
+                for &i in &group {
+                    s.wake(&mut c, i);
+                }
             }
             while c.life.granted() && !c.life.failed() {
                 c = s.wait(c);
             }
             if c.life.failed() {
                 drop(c);
+                // The staging stays open: what the nodes send while ending is
+                // never published.
                 return Err(self.end());
+            }
+            drop(c);
+            if let Some(staging) = &s.staging {
+                staging.commit();
             }
         }
         Ok(())

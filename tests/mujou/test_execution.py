@@ -1,4 +1,5 @@
 import gc
+import inspect
 import math
 import os
 import queue
@@ -19,13 +20,11 @@ import pytest
 import torch
 
 import mujou
-import mujou.testing
-from mujou import NetworkError, Run
+from mujou import ManualRun, NetworkError, Run
 from mujou.network import Group, Network
 from mujou.node import Node
 from mujou.port import Port
 from mujou.spec import TensorSpec
-from mujou.testing import ManualRun
 from mujou.time import ReadOnlyTimer, Timer, Timestamp, VirtualTimer, global_timer
 from tests.mujou.nodes import (
     F64,
@@ -420,7 +419,7 @@ class TestWith:
 
     def test_raises_what_a_node_raised(self, virtual: VirtualTimer):
         net = Chain(raise_in_b=1)
-        run = mujou.testing.run(net, timer=virtual)
+        run = mujou.run_manually(net, timer=virtual)
         with pytest.raises(NetworkError) as raised, run:
             with pytest.raises(NetworkError):
                 run.step(H)
@@ -429,7 +428,7 @@ class TestWith:
 
     def test_lets_the_exception_of_the_body_through(self, virtual: VirtualTimer):
         net = Chain(raise_in_b=1)
-        run = mujou.testing.run(net, timer=virtual)
+        run = mujou.run_manually(net, timer=virtual)
         with pytest.raises(KeyError), run:
             with pytest.raises(NetworkError):
                 run.step(H)
@@ -673,7 +672,7 @@ class TestPausedTimer:
     def test_a_virtual_timer_cannot_be_stepped_while_paused(self):
         timer = VirtualTimer()
         node = Ticks()
-        with mujou.testing.run(node, timer=timer) as run:
+        with mujou.run_manually(node, timer=timer) as run:
             run.step(H)
             timer.pause()
             with pytest.raises(RuntimeError, match="paused"):
@@ -1205,7 +1204,7 @@ class TestNodeException:
     def test_a_run_that_raised_is_freed_once_the_host_drops_it(self):
         def failed() -> weakref.ref[Chain]:
             net = Chain(raise_in_b=1)
-            run = mujou.testing.run(net)
+            run = mujou.run_manually(net)
             with pytest.raises(NetworkError):
                 run.step(H)
             return weakref.ref(net)
@@ -1323,30 +1322,160 @@ class TestTimeout:
         assert torch.equal(run.read(net.next), net.b.x)
 
 
-class TestManualRun:
-    def test_updates_only_the_nodes_whose_time_advanced(
-        self, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        run.step(0.0)  # the time has not advanced since the start
-        assert (net.a.updates, net.b.updates) == (0, 0)
-        run.step(H, net.a)
-        run.step(0.0)  # only b has not updated since then
-        assert (net.a.updates, net.b.updates) == (1, 1)
+WAIT = 5.0  # Real seconds to wait for what must come; never reached.
 
-    def test_rejects_a_node_of_another_run(self, start_manual: StartManual):
-        run = start_manual(Chain())
-        with pytest.raises(ValueError, match="not a node of this run"):
-            run.step(0.0, Leaky())
 
-    def test_is_what_mujou_testing_run_returns(self, virtual: VirtualTimer):
-        with mujou.testing.run(Chain(), timer=virtual) as run:
+def leaky_chain(n: int) -> list[Leaky]:
+    """``n`` ``Leaky`` nodes with ``tau=0.01`` (a rate of 0.1 per step of ``H``),
+    each sending to the next."""
+    nodes = [Leaky(tau=0.01) for _ in range(n)]
+    for sender, receiver in zip(nodes, nodes[1:]):
+        sender.next.connect(receiver.prev)
+    return nodes
+
+
+def noisy_jacobi(n: int, steps: int, dt: float) -> list[torch.Tensor]:
+    """The states of ``noisy_chain(n)`` after ``steps`` updates of every node at
+    once, each by ``dt``: every node reads what the one before sent in the
+    previous step (Jacobi)."""
+    generators = [torch.Generator().manual_seed(k) for k in range(n)]
+    xs = [torch.zeros(2, dtype=F64) for _ in range(n)]
+    for _ in range(steps):
+        sent = [torch.zeros(2, dtype=F64), *xs[:-1]]
+        xs = [
+            x + dt * (inp + torch.rand(2, dtype=F64, generator=g) - x)
+            for x, inp, g in zip(xs, sent, generators, strict=True)
+        ]
+    return xs
+
+
+class Plus(Node):
+    """Sends what it receives plus ``c``."""
+
+    def __init__(self, c: float) -> None:
+        super().__init__()
+        self.prev = Port(recv=vec())
+        self.next = Port(send=vec())
+        self.c = torch.full((2,), c, dtype=F64)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.next.send(self.prev.recv() + self.c)
+
+
+def loop() -> tuple[Plus, Plus]:
+    """``a <-> b``: ``a`` adds 1 to what ``b`` sends, ``b`` adds 10 to what ``a``
+    sends."""
+    a, b = Plus(1.0), Plus(10.0)
+    a.next.connect(b.prev)
+    b.next.connect(a.prev)
+    return a, b
+
+
+class Gate(Node):
+    """Sends the number of its updates, then holds the update until ``release``
+    is set; ``sent`` tells that it has sent."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.next = Port(send=vec())
+        self.updates = 0
+        self.sent = threading.Event()
+        self.release = threading.Event()
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.updates += 1
+        self.next.send(torch.full((2,), float(self.updates), dtype=F64))
+        self.sent.set()
+        assert self.release.wait(WAIT)
+
+
+class Meet(Node):
+    """Waits in each update until ``barrier`` has as many waiting as it needs:
+    two nodes on one barrier finish an update only if they run at once."""
+
+    def __init__(self, barrier: threading.Barrier, *, dedicated_thread: bool) -> None:
+        super().__init__(dedicated_thread=dedicated_thread)
+        self.barrier = barrier
+        self.dts: list[float] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.barrier.wait(WAIT)
+        self.dts.append(dt)
+
+
+class Hooks(Node):
+    """Records its hooks and sends in each update; with ``raises``, raises in
+    its first update after sending."""
+
+    def __init__(self, *, raises: bool = False) -> None:
+        super().__init__()
+        self.next = Port(send=vec())
+        self.raises = raises
+        self.hooks: list[str] = []
+        self.error: Exception | None = None
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.hooks.append("update")
+        self.next.send(torch.ones(2, dtype=F64))
+        if self.raises:
+            self.error = ValueError("boom")
+            raise self.error
+
+    @override
+    def on_exception(self) -> None:
+        self.hooks.append("exception")
+
+    @override
+    def on_stop(self) -> None:
+        self.hooks.append("stop")
+
+
+class Unhurried(Node):
+    """Records each ``dt``, with an infinite period."""
+
+    def __init__(self) -> None:
+        super().__init__(period=math.inf)
+        self.dts: list[float] = []
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.dts.append(dt)
+
+
+class TestRunManually:
+    def test_takes_the_arguments_of_mujou_run(self):
+        # workers included: the nodes of a step update in parallel.
+        ours = inspect.signature(mujou.run_manually).parameters
+        theirs = inspect.signature(mujou.run).parameters
+        assert list(ours) == list(theirs)
+
+    def test_no_private_parameter_is_shown(self):
+        callables = [
+            mujou.run,
+            mujou.run_manually,
+            mujou.Group.__init__,
+            *(
+                getattr(mujou.Run, n)
+                for n in vars(mujou.Run)
+                if not n.startswith("_") and callable(getattr(mujou.Run, n))
+            ),
+            mujou.ManualRun.step,
+        ]
+        for f in callables:
+            names = inspect.signature(f).parameters
+            assert not [n for n in names if n.startswith("_")], f
+
+    def test_returns_a_manual_run(self, virtual: VirtualTimer):
+        with mujou.run_manually(Chain(), timer=virtual) as run:
             assert isinstance(run, ManualRun) and isinstance(run, Run)
 
     def test_runs_on_a_new_virtual_timer_by_default(self):
         net = Chain()
-        with mujou.testing.run(net, inputs={net.prev: u(1)}) as run:
+        with mujou.run_manually(net, inputs={net.prev: u(1)}) as run:
             timer = run.timer
             assert isinstance(timer, VirtualTimer)
             assert timer.now() == Timestamp(ns=0)
@@ -1361,8 +1490,8 @@ class TestManualRun:
 
     def test_each_run_gets_its_own_timer(self):
         with (
-            mujou.testing.run(Chain()) as first,
-            mujou.testing.run(Chain()) as second,
+            mujou.run_manually(Chain()) as first,
+            mujou.run_manually(Chain()) as second,
         ):
             assert first.timer is not second.timer
 
@@ -1370,6 +1499,278 @@ class TestManualRun:
         timer = VirtualTimer()
         run = start_manual(Chain(), timer=timer)
         assert run.timer is timer
+
+    @pytest.mark.parametrize("workers", [0, -1])
+    def test_rejects_less_than_one_worker_before_starting(
+        self, start_manual: StartManual, workers: int
+    ):
+        net = Chain()
+        with pytest.raises(ValueError, match="^workers must be at least 1"):
+            start_manual(net, workers=workers)
+        assert not (net.a.started or net.b.started)
+
+    def test_runs_on_the_workers_given(self, start_manual: StartManual):
+        run = start_manual(group(noisy_chain(4)), workers=2)
+        assert workers_of(run) == 2
+
+
+class TestManualRunStep:
+    def test_advances_the_timer_by_dt_then_updates_in_the_given_order(
+        self, start_manual: StartManual
+    ):
+        order: list[str] = []
+        a = Calls(lambda: order.append("a"))
+        b = Calls(lambda: order.append("b"))
+        run = start_manual(Group(a=a, b=b))
+        run.step(0.25, b, a)
+        assert run.timer.now() == Timestamp(ns=250_000_000)
+        assert order == ["b", "a"]
+        run.step(0.5)  # every node once, all at once
+        assert sorted(order[2:]) == ["a", "b"]
+        assert a.dts == b.dts == [0.25, 0.5]
+
+    def test_every_node_of_a_step_sees_dt(self, start_manual: StartManual):
+        nodes = [Calls() for _ in range(6)]
+        run = start_manual(group(nodes), workers=3)
+        run.step(H)
+        run.step(2 * H)
+        assert [node.dts for node in nodes] == [[H, 2 * H]] * 6
+
+    def test_every_message_of_a_step_carries_the_time_of_the_step(
+        self, start_manual: StartManual
+    ):
+        nodes = leaky_chain(3)
+        run = start_manual(group(nodes))
+        run.step(H)
+        run.step(H)
+        times = [run.read_with_time(node.next)[1] for node in nodes]
+        assert times == [Timestamp(ns=2 * H_NS)] * 3
+
+    def test_ignores_the_period(self, start_manual: StartManual):
+        node = Calls()  # period 0.01
+        run = start_manual(node)
+        run.step(0.001)
+        run.step(1.0)
+        assert node.dts == [0.001, 1.0]
+
+    def test_updates_a_node_of_an_infinite_period(self, start_manual: StartManual):
+        node = Unhurried()
+        run = start_manual(Group(node=node, other=Calls()))
+        run.step(H)
+        assert node.dts == [H]
+
+    def test_a_node_given_twice_updates_once(self, start_manual: StartManual):
+        node = Calls()
+        run = start_manual(node)
+        run.step(0.001, node, node)
+        assert node.dts == [0.001]
+
+    def test_the_first_dt_is_from_the_start(self):
+        timer = VirtualTimer(start=Timestamp(ns=3_000_000_000))
+        node = Calls()
+        with mujou.run_manually(node, timer=timer) as run:
+            run.step(0.5)
+        assert node.dts == [0.5]
+
+    def test_updates_only_the_nodes_whose_time_advanced(
+        self, start_manual: StartManual
+    ):
+        net = Chain()
+        run = start_manual(net)
+        run.step(0.0)  # the time has not advanced since the start
+        assert (net.a.updates, net.b.updates) == (0, 0)
+        run.step(H, net.a)
+        run.step(0.0)  # only b has not updated since then
+        assert (net.a.updates, net.b.updates) == (1, 1)
+
+    def test_a_node_of_another_run_moves_no_time(self, start_manual: StartManual):
+        run = start_manual(Chain())
+        with pytest.raises(ValueError, match="not a node of this run"):
+            run.step(1.0, Leaky())
+        assert run.timer.now() == Timestamp(ns=0)
+
+    def test_after_a_normal_end_moves_no_time(self, start_manual: StartManual):
+        run = start_manual(Calls())
+        run.shutdown()
+        with pytest.raises(RuntimeError, match="stopped"):
+            run.step(1.0)
+        assert run.timer.now() == Timestamp(ns=0)
+
+    @pytest.mark.parametrize("dt", [-1.0, math.nan, math.inf])
+    def test_a_negative_or_infinite_dt_moves_no_time(
+        self, start_manual: StartManual, dt: float
+    ):
+        node = Calls()
+        run = start_manual(node)
+        with pytest.raises(ValueError):
+            run.step(dt)
+        assert run.timer.now() == Timestamp(ns=0)
+        assert node.dts == []
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_a_chain_steps_as_its_nodes_from_the_output_back(
+        self, start_manual: StartManual, workers: int
+    ):
+        # Updated from the output back, each node reads what the one before
+        # sent in the previous step: the update of every node at once.
+        at_once, by_hand = leaky_chain(3), leaky_chain(3)
+        run = start_manual(group(at_once), timer=VirtualTimer(), workers=workers)
+        reference = start_manual(group(by_hand), timer=VirtualTimer())
+        for k in range(10):
+            run.write({at_once[0].prev: u(k)})
+            reference.write({by_hand[0].prev: u(k)})
+            run.step(H)
+            reference.step(H, *reversed(by_hand))
+        assert_same_tree(run.state_dict(), reference.state_dict())
+
+    def test_a_loop_steps_from_the_values_at_the_start_of_the_step(
+        self, start_manual: StartManual
+    ):
+        # Jacobi: a_k = b_{k-1} + 1 and b_k = a_{k-1} + 10, from a_0 = b_0 = 0.
+        a, b = loop()
+        run = start_manual(Group(a=a, b=b))
+        expected = [(1.0, 10.0), (11.0, 11.0), (12.0, 21.0)]
+        for sent_a, sent_b in expected:
+            run.step(H)
+            assert torch.equal(run.read(a.next), torch.full((2,), sent_a, dtype=F64))
+            assert torch.equal(run.read(b.next), torch.full((2,), sent_b, dtype=F64))
+
+    @pytest.mark.parametrize("b_first", [False, True])
+    def test_no_order_of_a_loop_is_a_step_of_every_node(
+        self, start_manual: StartManual, b_first: bool
+    ):
+        a, b = loop()
+        run = start_manual(Group(a=a, b=b), timer=VirtualTimer())
+        x, y = loop()
+        in_order = start_manual(Group(a=x, b=y), timer=VirtualTimer())
+        run.step(H)
+        in_order.step(H, *((y, x) if b_first else (x, y)))
+        at_once = torch.cat([run.read(a.next), run.read(b.next)])
+        one_by_one = torch.cat([in_order.read(x.next), in_order.read(y.next)])
+        assert not torch.equal(at_once, one_by_one)
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_gives_the_same_bits_on_any_workers_and_threads(
+        self, start_manual: StartManual, workers: int, dedicated_thread: bool
+    ):
+        n, steps = 8, 5
+        nodes = noisy_chain(n, dedicated_thread=dedicated_thread)
+        run = start_manual(group(nodes), workers=workers)
+        for _ in range(steps):
+            run.step(H)
+        for node, x in zip(nodes, noisy_jacobi(n, steps, H), strict=True):
+            assert torch.equal(node.x, x)
+
+    def test_gives_the_same_bits_every_time(self):
+        # Ten runs on four workers: the timing of the threads changes nothing.
+        n, steps = 8, 5
+        expected = noisy_jacobi(n, steps, H)
+        for _ in range(10):
+            nodes = noisy_chain(n)
+            with mujou.run_manually(group(nodes), workers=4) as run:
+                for _ in range(steps):
+                    run.step(H)
+            for node, x in zip(nodes, expected, strict=True):
+                assert torch.equal(node.x, x)
+
+    def test_one_node_steps_as_it_does_by_name(self, start_manual: StartManual):
+        alone, named = Noisy(seed=0), Noisy(seed=0)
+        run = start_manual(alone, timer=VirtualTimer())
+        by_name = start_manual(named, timer=VirtualTimer())
+        for _ in range(3):
+            run.step(H)
+            by_name.step(H, named)
+        assert torch.equal(alone.x, named.x)
+
+    @pytest.mark.parametrize("dedicated_thread", [False, True])
+    def test_updates_the_nodes_at_the_same_time(
+        self, start_manual: StartManual, dedicated_thread: bool
+    ):
+        # Each update waits for the other: one after another, neither ends.
+        barrier = threading.Barrier(2)
+        a = Meet(barrier, dedicated_thread=False)
+        b = Meet(barrier, dedicated_thread=dedicated_thread)
+        run = start_manual(Group(a=a, b=b), workers=2)
+        run.step(H)
+        assert a.dts == b.dts == [H]
+
+    def test_the_host_reads_the_values_before_the_step_until_it_ends(
+        self, start_manual: StartManual
+    ):
+        gate = Gate()
+        run = start_manual(Group(gate=gate, other=Calls()))
+        gate.release.set()
+        run.step(H)
+        gate.release.clear()
+        gate.sent.clear()
+        stepping = threading.Thread(target=run.step, args=(H,))
+        stepping.start()
+        assert gate.sent.wait(WAIT)
+        held, held_at = run.read_with_time(gate.next)
+        gate.release.set()
+        stepping.join(WAIT)
+        after, after_at = run.read_with_time(gate.next)
+        assert torch.equal(held, torch.full((2,), 1.0, dtype=F64))
+        assert held_at == Timestamp(ns=H_NS)
+        assert torch.equal(after, torch.full((2,), 2.0, dtype=F64))
+        assert after_at == Timestamp(ns=2 * H_NS)
+
+    def test_a_subscription_gets_the_value_once_the_step_ends(
+        self, start_manual: StartManual
+    ):
+        gate = Gate()
+        run = start_manual(Group(gate=gate, other=Calls()))
+        values = run.subscribe(gate.next, timeout=WAIT)
+        next(values)  # the value at the time of the call
+        received: queue.Queue[tuple[torch.Tensor, Timestamp | None]] = queue.Queue()
+        follower = threading.Thread(target=lambda: received.put(next(values)))
+        follower.start()
+        stepping = threading.Thread(target=run.step, args=(H,))
+        stepping.start()
+        assert gate.sent.wait(WAIT)
+        with pytest.raises(queue.Empty):
+            received.get(timeout=0.05)  # sent, but held until the step ends
+        gate.release.set()
+        stepping.join(WAIT)
+        value, t = received.get(timeout=WAIT)
+        follower.join(WAIT)
+        assert torch.equal(value, torch.ones(2, dtype=F64))
+        assert t == Timestamp(ns=H_NS)
+
+    def test_a_restored_run_goes_on_with_the_same_bits(self, start_manual: StartManual):
+        n, k, m = 4, 3, 4
+        through = noisy_chain(n)
+        run = start_manual(group(through), timer=VirtualTimer(), workers=4)
+        for _ in range(k):
+            run.step(H)
+        tree = run.state_dict()
+        for _ in range(m):
+            run.step(H)
+        restored = noisy_chain(n)
+        again = start_manual(group(restored), state=tree, workers=4)
+        for _ in range(m):
+            again.step(H)
+        expected = noisy_jacobi(n, k + m, H)
+        for a, b, x in zip(through, restored, expected, strict=True):
+            assert torch.equal(a.x, x)
+            assert torch.equal(b.x, x)
+
+    def test_an_exception_in_a_step_stops_every_node(self, start_manual: StartManual):
+        nodes = [Hooks(), Hooks(raises=True), Hooks()]
+        run = start_manual(group(nodes), workers=3)
+        with pytest.raises(NetworkError) as raised:
+            run.step(H)
+        assert raised.value.__cause__ is nodes[1].error
+        with pytest.raises(NetworkError):
+            run.read(nodes[0].next)
+        assert nodes[1].hooks == ["update", "exception", "stop"]
+        # A node that had not begun its update when the run stopped skips it.
+        for node in (nodes[0], nodes[2]):
+            assert node.hooks in (
+                ["update", "exception", "stop"],
+                ["exception", "stop"],
+            )
 
 
 class TestEndToEnd:
@@ -1510,6 +1911,21 @@ class Net(Network):
         assert done.stdout.strip() == "stopped"
 
 
+class Decay(Node):
+    """``x <- x / 2 + u`` on ``cuda:0``, sending ``x``."""
+
+    def __init__(self, seed: int) -> None:
+        super().__init__(seed=seed, device="cuda:0")
+        self.prev = Port(recv=vec())
+        self.next = Port(send=vec())
+        self.x = torch.zeros(2, dtype=F64, device=self.device)
+
+    @override
+    def on_update(self, dt: float) -> None:
+        self.x = self.x / 2 + self.prev.recv()
+        self.next.send(self.x)
+
+
 @pytest.mark.cuda
 class TestCuda:
     def test_the_host_reads_what_a_cuda_node_sends_on_the_cpu(
@@ -1622,6 +2038,22 @@ class TestCuda:
         assert torch.equal(
             cast(torch.Tensor, node.results[-1]).cpu(), torch.full((n,), value)
         )
+
+    def test_a_cuda_chain_steps_as_its_nodes_from_the_output_back(
+        self, start_manual: StartManual
+    ):
+        at_once = [Decay(seed=k) for k in range(2)]
+        by_hand = [Decay(seed=k) for k in range(2)]
+        for a, b in (at_once, by_hand):
+            a.next.connect(b.prev)
+        run = start_manual(group(at_once), timer=VirtualTimer())
+        reference = start_manual(group(by_hand), timer=VirtualTimer())
+        for k in range(5):
+            run.write({at_once[0].prev: u(k)})
+            reference.write({by_hand[0].prev: u(k)})
+            run.step(H)
+            reference.step(H, *reversed(by_hand))
+        assert_same_tree(run.state_dict(), reference.state_dict())
 
 
 # Large enough that the GPU is still working when the CPU moves on: a missing wait

@@ -15,6 +15,7 @@ from mujou import (
     DictSpec,
     Group,
     IntSpec,
+    ManualRun,
     MultiPort,
     NetworkError,
     Node,
@@ -24,7 +25,6 @@ from mujou import (
     TimestampSpec,
 )
 from mujou.state import capture, cpu
-from mujou.testing import ManualRun
 from mujou.time import ReadOnlyTimer, Timestamp, VirtualTimer, global_timer
 from mujou.tree import walk
 from mujou.wiring import wire
@@ -537,7 +537,7 @@ class TestStateDict:
         script = """
 import sys, threading
 sys.setswitchinterval(1e-6)
-import mujou.testing
+import mujou
 from mujou import Group, Node
 
 class Busy(Node):
@@ -548,7 +548,7 @@ class Busy(Node):
         return {"s": s}
 
 for _ in range(5):
-    run = mujou.testing.run(Group(a=Busy(), b=Busy()))
+    run = mujou.run_manually(Group(a=Busy(), b=Busy()))
     run.step(0.001)
     run.shutdown()
     threads = [threading.Thread(target=run.state_dict) for _ in range(2)]

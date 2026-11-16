@@ -11,8 +11,7 @@ from torch import nn
 
 import mujou
 import mujou.pc as pc
-from mujou import DictSpec, Group, TensorSpec
-from mujou.testing import ManualRun
+from mujou import DictSpec, Group, ManualRun, TensorSpec
 from mujou.time import Timer, VirtualTimer
 from tests.mujou.nodes import F64, assert_same_tree, close
 from tests.mujou.pc._reference import (
@@ -87,8 +86,8 @@ class HandChain:
         self.net = Group(inp=self.inp, out=self.out, **named)
 
     def from_next(self) -> list[Any]:
-        """The nodes from the output to the input: each reads what the others
-        sent in the previous step (a Jacobi update)."""
+        """The nodes from the output to the input: each reads the activity sent
+        in the previous step and the credit (``g_in``) sent in this one."""
         return [self.out, *reversed(self.layers), self.inp]
 
     def from_prev(self) -> list[Any]:
@@ -155,18 +154,18 @@ class TestConstruction:
             self._layer(**kwargs)
 
 
-class TestJacobi:
+class TestFromTheOutput:
     @pytest.mark.parametrize("reset", [KEEP, RESET], ids=["keep", "reset"])
     @pytest.mark.parametrize("learn_interval", [None, 4 * H])
-    def test_stepping_from_the_output_is_the_jacobi_update(
+    def test_stepping_from_the_output_is_the_reference_update(
         self,
         start_manual: StartManual,
         learn_interval: float | None,
         reset: torch.Tensor,
     ):
-        # Linear + tanh, then a residual block: the reference moves all nodes at
-        # once; stepping from the output to the input reads only values of the
-        # previous step everywhere, so the two agree to rounding. The second
+        # Linear + tanh, then a residual block: stepping from the output to the
+        # input reads the activity of the previous step and the credit of this
+        # one, as the reference does, so the two agree to rounding. The second
         # input continues the first (keep) or starts some samples anew (reset),
         # once, in the update of each layer that first sees it.
         widths = [4, 5, 5]

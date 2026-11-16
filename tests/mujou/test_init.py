@@ -1,5 +1,8 @@
+import importlib
 import subprocess
 import sys
+
+import pytest
 
 import mujou
 
@@ -16,6 +19,7 @@ class TestPublicNames:
             "FloatSpec",
             "Group",
             "IntSpec",
+            "ManualRun",
             "MessageSpec",
             "MultiPort",
             "Network",
@@ -28,6 +32,7 @@ class TestPublicNames:
             "TimestampSpec",
             "__version__",
             "run",
+            "run_manually",
         ]
 
     def test_imports_no_submodule(self):
@@ -36,13 +41,18 @@ class TestPublicNames:
         # annotates with its types, so it comes with mujou.
         script = (
             "import sys, mujou; "
-            "print([m for m in ('mujou.time', 'mujou.testing', 'mujou.pc', "
-            "'mujou.viz') if m in sys.modules])"
+            "print([m for m in ('mujou.time', 'mujou.pc', 'mujou.viz') "
+            "if m in sys.modules])"
         )
         done = subprocess.run(
             [sys.executable, "-c", script], capture_output=True, text=True, check=True
         )
         assert done.stdout.strip() == "[]"
+
+    def test_the_manual_run_is_no_longer_in_mujou_testing(self):
+        # mujou.run_manually replaced it, with no name kept for compatibility.
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("mujou.testing")
 
 
 class TestPcPublicNames:

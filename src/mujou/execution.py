@@ -1,4 +1,4 @@
-"""Running a tree of nodes once: ``mujou.run``, ``mujou.testing.run`` and the
+"""Running a tree of nodes once: ``mujou.run``, ``mujou.run_manually`` and the
 ``Run`` they return (``specs/network.md``).
 
 A run starts in three stages:
@@ -11,8 +11,8 @@ A run starts in three stages:
    (checking that the host writes those ports). Only new objects change.
 3. Mark every node as run, and start the nodes.
 
-The kind of run (``Kind``) says what changes between ``mujou.run`` and
-``mujou.testing.run``: the class of the run, whether the nodes update by hand,
+The kind of run (``_Kind``) says what changes between ``mujou.run`` and
+``mujou.run_manually``: the class of the run, whether the nodes update by hand,
 and the timer.
 
 A run refused in the first two stages has changed nothing that the user made:
@@ -103,7 +103,7 @@ class Run:
     thread that iterates over ``subscribe`` keeps the exit waiting until its run
     ends, so shut the run down before the program ends (``with`` does).
 
-    ``mujou.run`` and ``mujou.testing.run`` make it.
+    ``mujou.run`` and ``mujou.run_manually`` make it.
 
     Example::
 
@@ -529,12 +529,16 @@ class Run:
 
 
 class ManualRun(Run):
-    """A run whose nodes update only when ``step`` lets them, for tests.
+    """A run whose nodes update only when ``step`` lets them, for simulations
+    and tests.
 
-    ``mujou.testing.run`` returns it. The nodes start and stop as in any run, but
-    between updates each waits for ``step``, which advances the run's
-    ``VirtualTimer`` first: every ``dt`` is exactly the time the test stepped,
-    and the result follows the discrete algorithm of the chosen order.
+    ``mujou.run_manually`` returns it. The nodes start and stop as in any run,
+    but between updates each waits for ``step``, which advances the run's
+    ``VirtualTimer`` first: every ``dt`` is made of the times that were
+    stepped, and with deterministic nodes that share no Python objects the
+    result is the same, bit for bit, every time. Use it to simulate a network
+    as fast as the machine computes, and to test nodes against the discrete
+    algorithm of the chosen order.
     """
 
     def __init__(
@@ -552,28 +556,46 @@ class ManualRun(Run):
     @property
     @override
     def timer(self) -> VirtualTimer:
-        """The run's timer: the ``VirtualTimer`` that ``mujou.testing.run`` made,
-        or the one given to it."""
+        """The run's timer: the ``VirtualTimer`` that ``mujou.run_manually``
+        made, or the one given to it."""
         return self._virtual
 
     def step(self, dt: float, *nodes: Node) -> None:
-        """Advance the timer by ``dt`` seconds, then update each of ``nodes``
-        once, one after another in the given order, and return when done.
+        """Advance the timer by ``dt`` seconds, then update the nodes once each,
+        and return when done.
 
-        Without ``nodes``, every node updates in the order of the tree (each
-        sees what the earlier ones sent in the same step, as Gauss-Seidel does;
-        give them from the output side back for the order of Jacobi). The
-        period of the nodes does not apply. Each ``dt`` a node sees is the time
-        since its last update, the first one from the start of the run (or the
-        last update restored). A node given twice in one ``step`` updates once:
-        the second time, its time has not moved. A timer shared with other runs
-        moves for them too.
+        Without ``nodes``, every node updates at once, in parallel on the
+        run's workers and dedicated threads. Each reads the values from the
+        start of the step: what the nodes send in this step becomes visible to
+        all of them once every update has ended (Jacobi). The result does not
+        depend on the number of workers or on which thread runs which node.
+        While such a step runs, the host reading a port from another thread
+        gets its value from before the step.
+
+        With ``nodes``, only they update, one after another in the given order,
+        and a later node reads what an earlier one sent in this step
+        (Gauss-Seidel); what each sends becomes visible once its update has
+        ended. This is not the same as ``step(dt)`` in general, even when every
+        node is given. When the messages between different nodes flow without
+        a cycle, updating each receiver before its senders (a chain from the
+        output side back to the input side, for one) gives the result of
+        ``step(dt)``; when values also flow back, no order does in general.
+
+        Either way, a node does not read in its update what it sent there
+        itself, through a port connected to its own. The period of the nodes
+        does not apply. Each ``dt`` a node sees is the time since its last
+        update, the first one from the start of the run (or the last update
+        restored). A node given twice in one ``step`` updates once: the second
+        time, its time has not moved. A timer shared with other runs moves for
+        them too. Write inputs between steps.
 
         Raises:
             ValueError: A node is not in this run, or ``dt`` is negative or not
                 finite.
-            RuntimeError: The run has stopped normally, or the timer is paused.
-            NetworkError: A node raised; the run has stopped.
+            RuntimeError: The run has stopped normally, the timer is paused, or
+                this is called from a node's hook.
+            NetworkError: A node raised; the run has stopped. Without
+                ``nodes``, what the nodes sent in that step is not published.
         """
         _host()
         order = [self._index(node) for node in nodes] if nodes else None
@@ -665,13 +687,91 @@ def run[P: Port[Any, Any]](
             does not have the timer, nodes, ports and peers of the tree.
         NetworkError: A node raised while starting; the run has stopped.
     """
-    return start(RUN, root, timer=timer, inputs=inputs, state=state, workers=workers)
+    return _start(_RUN, root, timer=timer, inputs=inputs, state=state, workers=workers)
+
+
+# P: as in Run.write.
+def run_manually[P: Port[Any, Any]](
+    root: Node | Network,
+    *,
+    timer: VirtualTimer | None = None,
+    inputs: Mapping[P, Message] | None = None,
+    state: Mapping[str, Any] | None = None,
+    workers: int | None = None,
+) -> ManualRun:
+    """Run ``root`` as ``mujou.run`` does, with the nodes updating only when
+    ``ManualRun.step`` lets them, for simulations and tests.
+
+    ``mujou.run`` runs in real time, for deploying to the real world;
+    ``mujou.run_manually`` runs in virtual time, for simulating as fast as the
+    machine computes. Each update sees as its ``dt`` the time stepped since the
+    node's last update, and with deterministic nodes that share no Python
+    objects the result is the same, bit for bit, every time.
+
+    The default ``timer`` is a new ``mujou.time.VirtualTimer`` at time 0 (with
+    ``state``, at the time of the state), which ``ManualRun.timer`` returns and
+    ``ManualRun.step`` advances. Pass a ``VirtualTimer`` of your own to share it
+    between runs: a ``step`` of one then moves the time of the others too.
+
+    ``inputs``, ``state`` and ``workers`` are those of ``mujou.run`` (the
+    workers run the updates of a ``step`` in parallel), and so are the errors.
+
+    Example::
+
+        from typing import override
+
+        import torch
+
+        import mujou
+        from mujou import Node, Port, TensorSpec
+
+
+        class Double(Node):
+            def __init__(self) -> None:
+                super().__init__()
+                self.prev = Port(recv=TensorSpec((2,)))
+                self.next = Port(send=TensorSpec((2,)))
+
+            @override
+            def on_update(self, dt: float) -> None:
+                super().on_update(dt)
+                self.next.send(2 * self.prev.recv())
+
+
+        class Chain(mujou.Network):
+            def __init__(self) -> None:
+                super().__init__()
+                self.a, self.b = Double(), Double()
+                self.a.next.connect(self.b.prev)
+                self.prev, self.next = self.a.prev, self.b.next
+
+
+        net = Chain()
+        x = torch.ones(2)
+        with mujou.run_manually(net, inputs={net.prev: x}) as run:
+            run.step(0.001, net.a, net.b)  # 1 ms later, a, then b reads a's value
+            y, t = run.read_with_time(net.next)
+        assert torch.equal(y, 4 * x) and t is not None and t.ns == 1_000_000
+
+    Raises:
+        RuntimeError: A node of the tree has already run; or this is called
+            from a node's hook.
+        TypeError, ValueError: The tree is invalid; or ``inputs`` or the
+            ``initial`` value of a port do not match their specs.
+        ValueError: ``workers`` is less than 1; ``timer`` and ``state`` are
+            both given; or ``state`` does not have the timer, nodes, ports and
+            peers of the tree.
+        NetworkError: A node raised while starting; the run has stopped.
+    """
+    return _start(
+        _MANUAL_RUN, root, timer=timer, inputs=inputs, state=state, workers=workers
+    )
 
 
 @final
 @dataclass(frozen=True, slots=True)
-class Kind[R: Run, T: Timer]:
-    """A kind of run: the class ``start`` makes, whether its nodes update only
+class _Kind[R: Run, T: Timer]:
+    """A kind of run: the class ``_start`` makes, whether its nodes update only
     by ``ManualRun.step``, and the timer it runs on."""
 
     make: Callable[[Wiring, _native.Runtime, T, ReadOnlyTimer], R]
@@ -695,15 +795,15 @@ class Kind[R: Run, T: Timer]:
 
 
 # mujou.run: the nodes run freely, on global_timer by default.
-RUN: Final = Kind(Run, manual=False, default=lambda: global_timer, restored=Timer)
-# mujou.testing.run: the nodes update by hand, on a new VirtualTimer by default.
-MANUAL_RUN: Final = Kind(
+_RUN: Final = _Kind(Run, manual=False, default=lambda: global_timer, restored=Timer)
+# mujou.run_manually: the nodes update by hand, on a new VirtualTimer by default.
+_MANUAL_RUN: Final = _Kind(
     ManualRun, manual=True, default=VirtualTimer, restored=VirtualTimer
 )
 
 
-def start[R: Run, T: Timer](
-    kind: Kind[R, T],
+def _start[R: Run, T: Timer](
+    kind: _Kind[R, T],
     root: Node | Network,
     *,
     timer: T | None,
@@ -720,7 +820,8 @@ def start[R: Run, T: Timer](
     # layout (a few ms at most) is in its time and in the first dt of its nodes.
     run_timer = kind.timer(timer, state)
     clock = ReadOnlyTimer(run_timer)
-    wiring = wire(tree, clock)
+    staging = _native.Staging() if kind.manual else None
+    wiring = wire(tree, clock, staging)
     restored = None if state is None else restore(wiring, state)
     if inputs:
         wiring.write(inputs)
@@ -730,7 +831,7 @@ def start[R: Run, T: Timer](
     _synchronize(tree)
     # 3. Mark and start.
     _RAN.update(member.node for member in tree.members)
-    runtime = _native.start(nodes, clock, manual=kind.manual, workers=workers)
+    runtime = _native.start(nodes, clock, staging=staging, workers=workers)
     handle = kind.make(wiring, runtime, run_timer, clock)
     _RUNNING.add(handle)
     return handle

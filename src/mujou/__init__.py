@@ -3,7 +3,7 @@
 import importlib.metadata
 
 from mujou.errors import NetworkError
-from mujou.execution import Run, run
+from mujou.execution import ManualRun, Run, run, run_manually
 from mujou.network import Group, Network
 from mujou.node import Node, Stateful
 from mujou.port import Channel, MultiPort, Port
@@ -26,6 +26,7 @@ __all__ = [
     "FloatSpec",
     "Group",
     "IntSpec",
+    "ManualRun",
     "MessageSpec",
     "MultiPort",
     "Network",
@@ -38,6 +39,7 @@ __all__ = [
     "TimestampSpec",
     "__version__",
     "run",
+    "run_manually",
 ]
 
 __version__ = importlib.metadata.version("mujou")

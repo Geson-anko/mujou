@@ -5,8 +5,7 @@ import torch
 from torch import nn
 
 import mujou.pc as pc
-from mujou import TensorSpec
-from mujou.testing import ManualRun
+from mujou import ManualRun, TensorSpec
 from mujou.time import Timestamp, VirtualTimer
 
 if TYPE_CHECKING:

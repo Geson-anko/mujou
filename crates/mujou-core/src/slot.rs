@@ -21,7 +21,7 @@
 //!   (`specs/network.md`)
 
 use std::fmt;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -96,6 +96,10 @@ pub struct Slot {
     /// Held only to read or replace the pair, and by a reader in
     /// [`Slot::wait_newer`] while it checks the value (it sleeps without it).
     value: Mutex<Pair>,
+    /// The message an [`Outlet`] sent while its [`Staging`] was open, not yet
+    /// visible to readers. Only the writer and [`Staging::commit`] take it,
+    /// and readers never look at it.
+    staged: Mutex<Option<Arc<Message>>>,
     /// How many readers are in [`Slot::wait_newer`]. A writer notifies only when
     /// it is not zero.
     waiters: AtomicUsize,
@@ -109,6 +113,7 @@ impl Slot {
             messages,
             source,
             value: Mutex::new(Pair::new(initial)),
+            staged: Mutex::new(None),
             waiters: AtomicUsize::new(0),
             changed: Condvar::new(),
         }
@@ -201,6 +206,25 @@ impl Slot {
         drop(old);
     }
 
+    /// Holds `msg` back until [`Staging::commit`], replacing the one held
+    /// back so far, and lists this slot with `staging` the first time.
+    fn stage(self: &Arc<Self>, staging: &Staging, msg: Arc<Message>) {
+        let old = lock(&self.staged).replace(msg);
+        if old.is_none() {
+            lock(&staging.pending).push(Arc::clone(self));
+        }
+        // Dropped without the lock, as in `publish`.
+        drop(old);
+    }
+
+    /// Makes the message held back the current value, if there is one.
+    fn commit(&self) {
+        let staged = lock(&self.staged).take();
+        if let Some(msg) = staged {
+            self.publish(msg);
+        }
+    }
+
     /// Wakes the readers in [`Slot::wait_newer`] after a group published the
     /// version of a next value. Taking the lock first lets every reader that
     /// checked the older version go to sleep, or see the new one.
@@ -221,6 +245,47 @@ pub enum Target {
     Channel(usize),
 }
 
+/// The holder of the sends of a step of the manual mode: while it is open, the
+/// [`Outlet`]s made with it hold their messages back instead of publishing
+/// them, and [`Staging::commit`] publishes what was held back, so that a
+/// reader sees the values from before the step until the step has ended.
+///
+/// Each slot holds back at most one message, the last one sent to it in the
+/// step. Nobody else reads the held-back messages, and the control side opens
+/// and commits only while no node runs, so the sends of a step cannot mix with
+/// those of another.
+pub struct Staging {
+    open: AtomicBool,
+    /// The slots that hold a message back, each listed once.
+    pending: Mutex<Vec<Arc<Slot>>>,
+}
+
+impl Staging {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            open: AtomicBool::new(false),
+            pending: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Starts holding the sends back.
+    pub(crate) fn open(&self) {
+        self.open.store(true, Ordering::SeqCst);
+    }
+
+    /// Publishes what was held back and stops holding the sends back.
+    pub(crate) fn commit(&self) {
+        for slot in lock(&self.pending).drain(..) {
+            slot.commit();
+        }
+        self.open.store(false, Ordering::SeqCst);
+    }
+
+    fn is_open(&self) -> bool {
+        self.open.load(Ordering::SeqCst)
+    }
+}
+
 /// The sending side of one port and the only writer of its slots: the outward
 /// slot, which the host reads, and one slot per channel, which the peer reads.
 ///
@@ -235,6 +300,7 @@ pub struct Outlet {
     outbox: Arc<Slot>,
     channels: Vec<Arc<Slot>>,
     clock: Arc<RunClock>,
+    staging: Option<Arc<Staging>>,
 }
 
 impl Outlet {
@@ -247,7 +313,16 @@ impl Outlet {
     /// the axis the nodes' Δt is measured on, a pause of the run would not stop
     /// them, and its end would not bound them, so a state taken at T could hold
     /// later messages.
-    pub fn new(schema: Arc<Schema>, channels: usize, name: &str, clock: Arc<RunClock>) -> Self {
+    ///
+    /// With a `staging` (the run's, in the manual mode), a send made while it
+    /// is open is held back until it commits.
+    pub fn new(
+        schema: Arc<Schema>,
+        channels: usize,
+        name: &str,
+        clock: Arc<RunClock>,
+        staging: Option<Arc<Staging>>,
+    ) -> Self {
         let messages = Messages::new(schema);
         let zeros = messages.zeros();
         let slot = |name: String| {
@@ -261,6 +336,7 @@ impl Outlet {
                 .collect(),
             messages,
             clock,
+            staging,
         }
     }
 
@@ -284,17 +360,25 @@ impl Outlet {
     /// Fills a new message and publishes it to `target`, stamped with the time
     /// after `fill` returns. `Target::All` publishes the very same message to every
     /// slot. Panics if a `Target::Channel` does not exist.
+    ///
+    /// While the outlet's [`Staging`] is open, the message is held back until
+    /// it commits (a later send to the same slot replaces it).
     pub fn send<E>(&self, target: Target, fill: impl Fill<E>) -> Result<(), E> {
         let values = self.messages.fill(fill)?;
         let msg = self.messages.message(values, Some(self.clock.now_ns()));
+        let staging = self.staging.as_deref().filter(|staging| staging.is_open());
+        let put = |slot: &Arc<Slot>, msg: Arc<Message>| match staging {
+            Some(staging) => slot.stage(staging, msg),
+            None => slot.publish(msg),
+        };
         match target {
             Target::All => {
                 for slot in &self.channels {
-                    slot.publish(Arc::clone(&msg));
+                    put(slot, Arc::clone(&msg));
                 }
-                self.outbox.publish(msg);
+                put(&self.outbox, msg);
             }
-            Target::Channel(k) => self.channels[k].publish(msg),
+            Target::Channel(k) => put(&self.channels[k], msg),
         }
         Ok(())
     }
@@ -486,7 +570,7 @@ mod tests {
     fn starts_with_zeros_without_a_time() {
         let timer = timer();
         timer.advance_ns(5).unwrap();
-        let outlet = Outlet::new(pair_schema(), 1, "n.p", clock_of(&timer));
+        let outlet = Outlet::new(pair_schema(), 1, "n.p", clock_of(&timer), None);
         let msg = outlet.channel(0).load();
         assert_eq!(values(&msg), [0, 0]);
         assert_eq!(msg.time_ns(), None);
@@ -497,7 +581,7 @@ mod tests {
     #[test]
     fn send_to_all_shares_one_message() {
         let timer = timer();
-        let outlet = Outlet::new(scalar_schema(), 3, "p", clock_of(&timer));
+        let outlet = Outlet::new(scalar_schema(), 3, "p", clock_of(&timer), None);
         timer.advance_ns(42).unwrap();
         outlet.send(Target::All, fill_k(7)).unwrap();
         let out = outlet.outbox().load();
@@ -511,7 +595,7 @@ mod tests {
     #[test]
     fn only_written_messages_have_a_time() {
         let timer = timer();
-        let outlet = Outlet::new(scalar_schema(), 2, "p", clock_of(&timer));
+        let outlet = Outlet::new(scalar_schema(), 2, "p", clock_of(&timer), None);
         assert_eq!(outlet.outbox().load().time_ns(), None);
         timer.advance_ns(3).unwrap();
         outlet.send(Target::Channel(1), fill_k(1)).unwrap();
@@ -544,7 +628,7 @@ mod tests {
 
     #[test]
     fn send_to_one_channel_changes_only_it() {
-        let outlet = Outlet::new(scalar_schema(), 3, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 3, "p", clock(), None);
         outlet.send(Target::Channel(1), fill_k(9)).unwrap();
         assert_eq!(values(&outlet.channel(1).load()), [9]);
         for slot in [outlet.outbox(), outlet.channel(0), outlet.channel(2)] {
@@ -554,7 +638,7 @@ mod tests {
 
     #[test]
     fn failed_fill_publishes_nothing() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock(), None);
         let before = outlet.outbox().load();
         let bad = bad();
         let failed = outlet.send(Target::All, |_| Err(bad.clone()));
@@ -564,7 +648,7 @@ mod tests {
 
     #[test]
     fn held_message_survives_later_writes() {
-        let outlet = Outlet::new(scalar_schema(), 0, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 0, "p", clock(), None);
         outlet.send(Target::All, fill_k(1)).unwrap();
         let held = outlet.outbox().load();
         for k in 2..=100 {
@@ -576,7 +660,7 @@ mod tests {
 
     #[test]
     fn pool_reuses_buffers_in_steady_state() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock(), None);
         let slot = outlet.outbox();
         for k in 0..1000 {
             outlet.send(Target::All, fill_k(k)).unwrap();
@@ -596,7 +680,7 @@ mod tests {
 
     #[test]
     fn a_held_value_takes_no_buffer() {
-        let outlet = Outlet::new(pair_schema(), 1, "p", clock());
+        let outlet = Outlet::new(pair_schema(), 1, "p", clock(), None);
         let slot = outlet.outbox();
         let before = allocations(slot);
         let value: Held = Arc::new(7_i64);
@@ -625,7 +709,7 @@ mod tests {
 
     #[test]
     fn a_held_value_is_dropped_with_the_last_message() {
-        let outlet = Outlet::new(scalar_schema(), 2, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 2, "p", clock(), None);
         let value: Held = Arc::new(0_i64);
         outlet.send(Target::All, hold(&value)).unwrap();
         // One message, shared by the outbox and both channels.
@@ -659,7 +743,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "left the field 'b' unset")]
     fn a_fill_must_set_every_field() {
-        let outlet = Outlet::new(pair_schema(), 0, "p", clock());
+        let outlet = Outlet::new(pair_schema(), 0, "p", clock(), None);
         let _ = outlet.send(Target::All, |out: &mut [FieldOut<'_>]| {
             out[0].bytes().fill(0);
             Ok::<_, SlotError>(())
@@ -669,7 +753,7 @@ mod tests {
     #[test]
     fn readers_see_whole_messages_in_order() {
         const WRITES: i64 = 20_000;
-        let outlet = Outlet::new(pair_schema(), 1, "p", clock());
+        let outlet = Outlet::new(pair_schema(), 1, "p", clock(), None);
         let slot = Arc::clone(outlet.channel(0));
         let readers: Vec<_> = (0..4)
             .map(|_| {
@@ -705,8 +789,8 @@ mod tests {
     #[test]
     fn readers_never_see_a_message_of_another_slot() {
         const WRITES: i64 = 100_000;
-        let pairs = Outlet::new(pair_schema(), 0, "pairs", clock());
-        let scalars = Outlet::new(scalar_schema(), 0, "scalars", clock());
+        let pairs = Outlet::new(pair_schema(), 0, "pairs", clock(), None);
+        let scalars = Outlet::new(scalar_schema(), 0, "scalars", clock(), None);
         let group = InputGroup::new(clock());
         let input = group.input(pair_schema(), "input");
         let done = Arc::new(AtomicBool::new(false));
@@ -746,7 +830,7 @@ mod tests {
 
     #[test]
     fn wait_newer_returns_on_write_or_timeout() {
-        let outlet = Outlet::new(scalar_schema(), 0, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 0, "p", clock(), None);
         let slot = Arc::clone(outlet.outbox());
         let first = slot.load();
         assert!(slot.wait_newer(&first, Duration::from_millis(20)).is_none());
@@ -778,7 +862,7 @@ mod tests {
 
     #[test]
     fn restore_sets_value_and_time() {
-        let outlet = Outlet::new(scalar_schema(), 1, "p", clock());
+        let outlet = Outlet::new(scalar_schema(), 1, "p", clock(), None);
         let slot = outlet.channel(0);
         slot.restore(Some(123), fill_k(4)).unwrap();
         let msg = slot.load();
@@ -875,5 +959,85 @@ mod tests {
         done.store(true, Ordering::Relaxed);
         assert!(ab.join().unwrap() > 0 && ba.join().unwrap() > 0);
         assert_eq!(values(&a.load()), [WRITES]);
+    }
+
+    fn staged_outlet(channels: usize) -> (Outlet, Arc<Staging>) {
+        let staging = Staging::new();
+        let outlet = Outlet::new(
+            scalar_schema(),
+            channels,
+            "p",
+            clock(),
+            Some(Arc::clone(&staging)),
+        );
+        (outlet, staging)
+    }
+
+    #[test]
+    fn a_staged_send_is_visible_only_after_the_commit() {
+        let (outlet, staging) = staged_outlet(2);
+        staging.open();
+        outlet.send(Target::All, fill_k(7)).unwrap();
+        for slot in [outlet.outbox(), outlet.channel(0), outlet.channel(1)] {
+            assert_eq!(values(&slot.load()), [0]);
+        }
+        staging.commit();
+        for slot in [outlet.outbox(), outlet.channel(0), outlet.channel(1)] {
+            assert_eq!(values(&slot.load()), [7]);
+        }
+    }
+
+    #[test]
+    fn a_staged_send_to_a_channel_leaves_the_other_slots() {
+        let (outlet, staging) = staged_outlet(2);
+        staging.open();
+        outlet.send(Target::Channel(1), fill_k(7)).unwrap();
+        assert_eq!(values(&outlet.channel(1).load()), [0]);
+        staging.commit();
+        assert_eq!(values(&outlet.channel(1).load()), [7]);
+        assert_eq!(values(&outlet.channel(0).load()), [0]);
+        assert_eq!(values(&outlet.outbox().load()), [0]);
+    }
+
+    #[test]
+    fn only_the_last_staged_send_to_a_slot_is_published() {
+        let (outlet, staging) = staged_outlet(1);
+        staging.open();
+        outlet.send(Target::All, fill_k(1)).unwrap();
+        outlet.send(Target::All, fill_k(2)).unwrap();
+        staging.commit();
+        assert_eq!(values(&outlet.outbox().load()), [2]);
+        assert_eq!(values(&outlet.channel(0).load()), [2]);
+        // Nothing is left over for the next commit.
+        staging.open();
+        staging.commit();
+        assert_eq!(values(&outlet.outbox().load()), [2]);
+    }
+
+    #[test]
+    fn a_send_with_the_staging_closed_is_visible_at_once() {
+        let (outlet, staging) = staged_outlet(1);
+        outlet.send(Target::All, fill_k(3)).unwrap();
+        assert_eq!(values(&outlet.outbox().load()), [3]);
+        staging.open();
+        staging.commit();
+        outlet.send(Target::All, fill_k(4)).unwrap();
+        assert_eq!(values(&outlet.outbox().load()), [4]);
+    }
+
+    #[test]
+    fn a_waiting_reader_wakes_at_the_commit_not_at_the_send() {
+        let (outlet, staging) = staged_outlet(0);
+        let slot = Arc::clone(outlet.outbox());
+        let last = slot.load();
+        staging.open();
+        let reader = thread::spawn(move || slot.wait_newer(&last, Duration::from_secs(10)));
+        thread::sleep(Duration::from_millis(50));
+        outlet.send(Target::All, fill_k(5)).unwrap();
+        thread::sleep(Duration::from_millis(50));
+        assert!(!reader.is_finished());
+        staging.commit();
+        let msg = reader.join().unwrap().expect("woken by the commit");
+        assert_eq!(values(&msg), [5]);
     }
 }

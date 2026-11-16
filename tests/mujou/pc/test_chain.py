@@ -78,12 +78,15 @@ def by_hand(layers: list[nn.Module], head: nn.Module) -> tuple[Group, pc.Input]:
 
 
 def run_states(
-    start_manual: StartManual, net: Network, inp: pc.Input
+    start_manual: StartManual,
+    net: Network,
+    inp: pc.Input,
+    workers: int | None = None,
 ) -> dict[str, Any]:
-    """The state tree of ``net`` after 20 steps in the order of the tree, with a
+    """The state tree of ``net`` after 20 steps of every node at once, with a
     new labeled sample written to ``inp`` every 7 steps, without the nodes'
     generators (seeded by chance)."""
-    run = start_manual(net, timer=VirtualTimer())
+    run = start_manual(net, timer=VirtualTimer(), workers=workers)
     for s in range(20):
         if s % 7 == 0:
             x, y = sample(WIDTHS, s)
@@ -104,6 +107,19 @@ class TestChain:
         assert_same_tree(run_states(start_manual, net, net.input), expected)
         learned = expected["nodes"]["output"]["state"]["module"]["weight"]
         assert not torch.equal(learned, initial["weight"])  # it did learn
+
+    def test_steps_to_the_same_bits_on_one_worker_and_on_several(
+        self, start_manual: StartManual
+    ):
+        # Credit goes back as activity goes forward: every node reads only the
+        # values of the step before, however many update at once.
+        layers, head = make_modules("linear", "tanh", WIDTHS)
+        several = chain(*copy.deepcopy(layers), copy.deepcopy(head))
+        one = chain(*layers, head)
+        expected = run_states(start_manual, one, one.input, workers=1)
+        assert_same_tree(
+            run_states(start_manual, several, several.input, workers=4), expected
+        )
 
     def test_is_shown_samples(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)

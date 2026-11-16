@@ -475,7 +475,7 @@ class TestSend:
         nodes = {name: Probe(inp.recv, prev=inp) for name, inp in sinks.items()}
         source = Probe(lambda: out.send(torch.ones(2, 3)), next=out)
         run = start_manual(Group(source=source, **nodes))
-        run.step(H)
+        run.step(H, source, *nodes.values())  # the sinks read what source just sent
         for node in nodes.values():
             assert torch.equal(cast(torch.Tensor, node.results[0]), torch.ones(2, 3))
         assert torch.equal(run.read(out), torch.ones(2, 3))
@@ -625,7 +625,7 @@ from typing import override
 import torch
 from torch.profiler import ProfilerActivity, profile
 
-import mujou.testing
+import mujou
 from mujou import Group, Node, Port, TensorSpec
 
 SPEC = TensorSpec((1024,))
@@ -660,7 +660,7 @@ class Sink(Node):
 sink = Sink()
 if source.startswith("host:"):
     on = source.removeprefix("host:")
-    run = mujou.testing.run(sink)
+    run = mujou.run_manually(sink)
 
     def step() -> None:
         run.write({sink.inp: torch.ones(1024, device=on)})
@@ -669,7 +669,7 @@ if source.startswith("host:"):
 else:
     node = Source()
     node.out.connect(sink.inp)
-    run = mujou.testing.run(Group(source=node, sink=sink))
+    run = mujou.run_manually(Group(source=node, sink=sink))
 
     def step() -> None:
         run.step(0.001, node, sink)

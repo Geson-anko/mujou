@@ -404,19 +404,24 @@ impl PyOutlet {
     /// be on the axis the nodes' Δt is measured on, a pause of the run would
     /// not stop them, and its end would not bound them, so a state taken at T
     /// could hold later messages.
+    ///
+    /// With a `staging` (the manual run's), a message sent while `step` runs
+    /// the nodes becomes visible when the step has ended.
     #[new]
-    #[pyo3(signature = (schema, channels, name, *, clock))]
+    #[pyo3(signature = (schema, channels, name, *, clock, staging = None))]
     fn new(
         schema: PyRef<'_, PySchema>,
         channels: usize,
         name: &str,
         clock: PyRef<'_, PyReadOnlyTimer>,
+        staging: Option<PyRef<'_, PyStaging>>,
     ) -> Self {
         Self(core::Outlet::new(
             Arc::clone(&schema.0),
             channels,
             name,
             Arc::clone(&clock.0),
+            staging.map(|staging| Arc::clone(&staging.0)),
         ))
     }
 
@@ -440,6 +445,22 @@ impl PyOutlet {
     fn send_to(&self, index: isize, values: Values<'_>) -> PyResult<()> {
         let k = check_index(index, self.0.channels().len())?;
         self.send_with(Target::Channel(k), &values.0)
+    }
+}
+
+/// The holder of the sends of a step of a manual run: the `Outlet`s made with
+/// it hold their messages back while `step` runs the nodes, and `step`
+/// publishes them when every node has ended it. Create one for each manual
+/// run, and pass it to the `Outlet`s and to `start`. Nothing to call from
+/// Python.
+#[pyclass(frozen, module = "mujou._native", name = "Staging")]
+pub struct PyStaging(pub(crate) Arc<core::Staging>);
+
+#[pymethods]
+impl PyStaging {
+    #[new]
+    fn new() -> Self {
+        Self(core::Staging::new())
     }
 }
 
