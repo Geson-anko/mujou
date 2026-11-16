@@ -26,7 +26,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | S3 | 走らせる | ホストのスレッドで `mujou.run(root)` を呼び、`with` の中で write / read / subscribe / wait_for / state_dict を使う。subscribe を別のスレッドで回し、main から shutdown してよい。段 1 か段 2 で断られた run を直して、同じインスタンスで再実行してよい。終わった後に、ノードの属性を読んでよい |
 | S4 | 時間 | グローバルタイマーか、実行ごとの `Timer` を使う。sleep / pause / time scale |
 | S5 | 保存と再開 | `state_dict` → `torch.save` → 同じ形に作り直した新しいインスタンスで `mujou.run(..., state=tree)`（保存した時刻から始まる専用のタイマーで続く） |
-| S6 | テスト | `mujou.testing.run` と `ManualRun.step(dt, *nodes)` |
+| S6 | シミュレーション・テスト | `mujou.run_manually` と `ManualRun.step(dt, *nodes)`（ノードを渡さなければ全ノードを並列に更新する） |
 | S7 | PC-ALM で学習する | `pc.Chain` / `pc.show`、個別のノード（`act_spec` で繋ぐ）、`pc.clock.LearnClock` と `pc.functional` による自作ノード |
 | S8 | ノードの例外 | 全ノードが止まり（`on_exception` → `on_stop`）、ホストに `NetworkError` が届く |
 | S9 | CUDA | ノードの `device="cuda"` |
@@ -77,7 +77,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K16 | S3/S4 | hook の中から `mujou.run`、`Run` の操作、`Timer` の制御（sleep / pause / resume / set_time_scale / advance）を呼ぶ | Python の `run._host()` と、bindings の `Timer` の制御メソッド（述語はどちらも `current()`） | `RuntimeError` | ワーカーを占有して他のノードの dt を伸ばすか、デッドロックする | `test_execution.py` の `TestHostMethodsFromANode`、`TestOnlyTheHostControlsTheTime` |
 | K17 | S3 | 書けない Port（接続済み、`MultiPort`、送るだけ、この run の外）に `write` / `inputs` する。終了後に `write` する | `Wiring.write`（`Run.write` と、段 2 の inputs）。終了後は `Run.write` | 書けない Port は `ValueError`、終了後は `RuntimeError` | 黙って誰も読まない | `test_execution.py` の `test_rejects_ports_it_cannot_write`、`test_raises_after_a_normal_end` |
 | K18 | S3 | 送らない Port や、ほかの run の Port を read / read_with_time / subscribe / wait_for する | `Run` の outlet の lookup（1 か所） | `ValueError` | 1 回の lookup で済む | `test_execution.py` の `TestRead` |
-| K19 | S6 | run に無いノードを `step` に渡す | `ManualRun.step` | `ValueError` | 黙って飛ばされる | `test_execution.py` の `test_rejects_a_node_of_another_run` |
+| K19 | S6 | run に無いノードを `step` に渡す | `ManualRun.step` | `ValueError` | 黙って飛ばされる | `test_execution.py` の `TestManualRunStep` の `test_a_node_of_another_run_moves_no_time` |
 | K20 | S3 | 明示した `workers` が 1 未満 | `run` の段 1 | `ValueError` | 印を付けた後で native の変換に失敗すると、インスタンスを使い切ってしまう | `test_execution.py` の `test_rejects_less_than_one_before_starting` |
 | K21 | S5 | 形の違うネットワークに木を復元する（`timer` の項目、ノードのパス、ポートの属性、スロットのキーの集合） | `state.saved_time`（段 2 の最初、木の上の段）と `state.restore`（段 2、ノード以下）。足りない項目と余分な項目を列挙する | `ValueError` | S5 で最もありうる誤り | `test_state.py` の `test_lists_what_does_not_match`、`test_lists_what_its_top_does_not_match` |
 | K22 | S5 | クラスを変えた後で、古い状態を読む（キーの過不足、テンソルの shape の違い） | 既定の `Node.load_state_dict`（クラス名とキー） | `ValueError`（`NetworkError` の `__cause__` として届く） | `copy_` は broadcast で黙って通ってしまう | `test_node.py` の `test_rejects_a_state_that_does_not_match` |
@@ -90,6 +90,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K29 | S7 | `vjp` の δ と μ の shape が違う、`mse` の y と ŷ の shape が違う | `functional.vjp` / `functional.mse` | `ValueError` | broadcast が黙って通る | `pc/test_functional.py` の `test_delta_must_have_the_shape_of_mu` と `test_shapes_must_match` |
 | K30 | S1 | `register_state` に、まだ代入していない名前を渡す（綴りの誤り、property） | `Node.register_state` | `AttributeError` | `__dict__` から決めるので、綴りを誤った名前は黙って状態から漏れる | `test_node.py` の `test_rejects_a_name_without_an_attribute` |
 | K31 | S7 | `SGD` の tau、`AdamW` の tau・tau_m・tau_v・eps が有限で > 0 でない、`AdamW` の weight_decay が有限で >= 0 でない | `SGD.__post_init__` / `AdamW.__post_init__` | `ValueError` | NaN になるか、学習しない | `pc/test_optim.py` の `TestChecks` |
+| K32 | S6/S8 | 並列の `step(dt)` の中でノードが例外を出す | `ManualRun.step` と Rust の `Staging`（失敗したステップの保留は公開しない） | `NetworkError`（`__cause__` がその例外）。以後のホストの呼び出しも同じ。全ノードが `on_exception` → `on_stop` | 失敗したステップで一部のノードが送った値だけが見え、状態が食い違う | `test_execution.py` の `TestManualRunStep` の `test_an_exception_in_a_step_stops_every_node` |
 
 テストのパスは `tests/mujou/` からの相対パス。
 
