@@ -1,10 +1,10 @@
-r"""The optimizers that move the parameters of a node in time: ``SGD`` and
-``AdamW``.
+r"""The optimizers that move the parameters of a node in time: ``SGD`` (with
+an optional momentum), ``RMSProp`` and ``AdamW``.
 
 An optimizer here is a setting (``Optimizer``): a frozen value that holds no
 state and may be shared by every node. A node binds it to its own parameters
 with ``bind(params)``, which returns the ``BoundOptimizer`` that holds the state
-(the moments of ``AdamW``) and moves the parameters by ``step_(grads,
+(the moments) and moves the parameters by ``step_(grads,
 elapsed)``. The time constants are in seconds, so the flow does not depend on
 how often the node learns: ``elapsed`` is the time the step weighs.
 
@@ -24,6 +24,7 @@ from mujou import Stateful
 
 __all__ = [
     "SGD",
+    "RMSProp",
     "AdamW",
     "Optimizer",
     "BoundOptimizer",
@@ -107,13 +108,47 @@ def _check_positive(owner: str, name: str, value: float) -> None:
 
 @dataclass(frozen=True, kw_only=True)
 class SGD(Optimizer):
-    r"""Gradient descent in time, $\tau_\theta \dot\theta = -g$.
+    r"""Gradient descent in time, $\tau_\theta \dot\theta = -g$, with an
+    optional momentum.
 
     A step of ``elapsed`` seconds is one step of SGD with the learning rate
     ``elapsed / tau``: ``p -= (elapsed / tau) * g``. With $\Delta t$ seconds
     between two updates of the parameters (the time each input is shown, for a
     node that learns once from each), the step is of the learning rate
-    ``Δt / tau``. The bound optimizer has no state (an empty ``state_dict``).
+    ``Δt / tau``. Without ``tau_m``, the bound optimizer has no state (an empty
+    ``state_dict``).
+
+    With ``tau_m``, the parameters descend along the gradient averaged over
+    about the last $\tau_m$ seconds instead:
+
+    $$
+    \tau_m \dot m = g - m,\qquad
+    \tau_\theta \dot\theta = -\hat m,
+    $$
+
+    where $\hat m = m / c_m$ corrects the bias of the moment that starts at
+    zero, with the mass $\tau_m \dot c_m = 1 - c_m$ from $c_m = 0$, as in
+    ``AdamW``. A step of ``elapsed`` $= \Delta t$ seconds moves $m$ and $c_m$
+    exactly as the flow would with $g$ held over $\Delta t$
+    ($m \leftarrow m + a_m (g - m)$ and $c_m \leftarrow c_m + a_m (1 - c_m)$
+    with $a_m = 1 - e^{-\Delta t/\tau_m}$), then
+    $\theta \leftarrow \theta - (\Delta t / \tau_\theta)\,\hat m$. With a
+    constant $g$, $\hat m = g$, and the step is that of SGD without momentum:
+    the momentum averages the gradient and leaves the learning rate as it is.
+    $\tau_m \to 0$ is SGD without momentum. A step of ``elapsed == 0`` moves
+    nothing.
+
+    With a constant $\Delta t$ and $\beta = e^{-\Delta t/\tau_m}$, the steps
+    are those of ``torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)``
+    (its buffer is then $m \leftarrow \beta m + (1 - \beta) g$) up to the bias
+    correction: torch starts its buffer at the first gradient instead of
+    dividing by $c_m$. The two agree for a constant $g$, and from the same $m$
+    once $c_m = 1$; otherwise their difference decays as $\beta^t$ after $t$
+    steps.
+
+    The state (``state_dict()``) holds the moment ``"m"`` (a list of tensors,
+    of the dtype and device of the parameters) and the mass ``"c_m"`` (a
+    Python float in ``[0, 1]``). There is no count of steps.
 
     Example::
 
@@ -122,21 +157,30 @@ class SGD(Optimizer):
 
     Args:
         tau: The time constant $\tau_\theta$ of the parameters, in seconds.
+        tau_m: The time constant $\tau_m$ of the momentum, in seconds, or
+            ``None`` for none.
 
     Raises:
-        ValueError: ``tau`` is not finite and > 0. Never to learn, give the node
+        ValueError: ``tau`` is not finite and > 0, or ``tau_m`` is given and is
+            not finite and > 0. Never to learn, give the node
             ``learn_interval=math.inf``.
     """
 
     tau: float
+    tau_m: float | None = None
 
     def __post_init__(self) -> None:
         _check_positive("SGD", "tau", self.tau)
+        if self.tau_m is not None:
+            _check_positive("SGD", "tau_m", self.tau_m)
 
     @override
     def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
-        """Return the optimizer bound to ``params``."""
-        return _BoundSGD(list(params), self.tau)
+        """Return the optimizer bound to ``params``, with the momentum and its
+        mass at zero if it has one."""
+        if self.tau_m is None:
+            return _BoundSGD(list(params), self.tau)
+        return _BoundMomentumSGD(list(params), self.tau, self.tau_m)
 
 
 class _BoundSGD(BoundOptimizer):
@@ -157,6 +201,140 @@ class _BoundSGD(BoundOptimizer):
     @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         pass
+
+
+class _BoundMomentumSGD(BoundOptimizer):
+    def __init__(self, params: list[torch.Tensor], tau: float, tau_m: float) -> None:
+        self._params = params
+        self._tau = tau
+        self._tau_m = tau_m
+        self._m = [torch.zeros_like(p) for p in params]
+        self._c_m = 0.0
+
+    @override
+    def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
+        if elapsed == 0:
+            return  # the flow of no time; before the first step, c = 0
+        a_m = -math.expm1(-elapsed / self._tau_m)  # 1 - exp(-dt / tau_m)
+        self._c_m += a_m * (1 - self._c_m)  # tau_m dc_m/dt = 1 - c_m
+        eta = elapsed / self._tau
+        with torch.no_grad():
+            for p, g, m in zip(self._params, grads, self._m, strict=True):
+                m.lerp_(g, a_m)  # tau_m dm/dt = g - m
+                p.add_(m, alpha=-eta / self._c_m)  # theta -= eta * m_hat
+
+    @override
+    def state_dict(self) -> dict[str, Any]:
+        return {"m": list(self._m), "c_m": self._c_m}
+
+    @override
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        with torch.no_grad():
+            for mine, saved in zip(self._m, state["m"], strict=True):
+                mine.copy_(saved)
+        self._c_m = float(state["c_m"])
+
+
+@dataclass(frozen=True, kw_only=True)
+class RMSProp(Optimizer):
+    r"""RMSProp in time: the gradient divided by the root of a mean square that
+    decays with a time constant.
+
+    With the gradient $g$ (averaged over the batch):
+
+    $$
+    \tau_v \dot v = g^2 - v,\qquad
+    \tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon},
+    $$
+
+    where $\hat v = v / c_v$ corrects the bias of the moment that starts at
+    zero, with the mass $\tau_v \dot c_v = 1 - c_v$ from $c_v = 0$, as in
+    ``AdamW``. A step of ``elapsed`` $= \Delta t$ seconds moves $v$ and $c_v$
+    exactly as the flow would with $g$ held over $\Delta t$
+    ($v \leftarrow v + a_v (g^2 - v)$ and $c_v \leftarrow c_v + a_v (1 - c_v)$
+    with $a_v = 1 - e^{-\Delta t/\tau_v}$), then
+    $\theta \leftarrow \theta - \eta\,g / (\sqrt{\hat v} + \varepsilon)$ with
+    $\eta = \Delta t / \tau_\theta$. A step of ``elapsed == 0`` moves nothing.
+    There is no momentum and no weight decay.
+
+    With a constant $\Delta t$, the steps are those of
+    ``torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)`` up
+    to the bias correction: torch starts its mean square at zero and does not
+    divide it by $c_v$, so its first steps are larger. The two agree once
+    $c_v = 1$; their difference decays as $\alpha^t$ after $t$ steps.
+
+    The state (``state_dict()``) holds the moment ``"v"`` (a list of tensors,
+    of the dtype and device of the parameters) and the mass ``"c_v"`` (a
+    Python float in ``[0, 1]``). There is no count of steps.
+
+    Like ``AdamW``, a step moves each element by up to about $\eta$ whatever
+    the size of its gradient.
+
+    Example (``lr = 1e-3`` and ``alpha = 0.99`` of torch, learning once from
+    each input, shown for 32 ms)::
+
+        hidden = pc.Layer(module, act_spec=..., tau=tau,
+                          optimizer=pc.optim.RMSProp(tau=32e-3 / 1e-3, tau_v=3.2),
+                          learn_interval=24e-3)
+
+    Args:
+        tau: The time constant $\tau_\theta$ of the parameters, in seconds.
+        tau_v: The time constant $\tau_v$ of the mean square, in seconds.
+        eps: The $\varepsilon$ added to $\sqrt{\hat v}$. It is > 0, so that an
+            element whose gradient has been 0 does not become ``0 / 0``.
+
+    Raises:
+        ValueError: ``tau``, ``tau_v`` or ``eps`` is not finite and > 0.
+    """
+
+    tau: float
+    tau_v: float
+    eps: float = 1e-8
+
+    def __post_init__(self) -> None:
+        for name in ("tau", "tau_v", "eps"):
+            _check_positive("RMSProp", name, getattr(self, name))
+
+    @override
+    def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
+        """Return the optimizer bound to ``params``, with the mean square and
+        its mass at zero."""
+        return _BoundRMSProp(list(params), self)
+
+
+class _BoundRMSProp(BoundOptimizer):
+    def __init__(self, params: list[torch.Tensor], config: RMSProp) -> None:
+        self._params = params
+        self._config = config
+        self._v = [torch.zeros_like(p) for p in params]
+        self._c_v = 0.0
+
+    @override
+    def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
+        if elapsed == 0:
+            return  # the flow of no time; before the first step, c = 0
+        config = self._config
+        a_v = -math.expm1(-elapsed / config.tau_v)  # 1 - exp(-dt / tau_v)
+        self._c_v += a_v * (1 - self._c_v)  # tau_v dc_v/dt = 1 - c_v
+        eta = elapsed / config.tau
+        sqrt_c_v = math.sqrt(self._c_v)
+        with torch.no_grad():
+            for p, g, v in zip(self._params, grads, self._v, strict=True):
+                v.lerp_(g * g, a_v)  # tau_v dv/dt = g^2 - v
+                # theta -= eta * g / (sqrt(v_hat) + eps)
+                denom = (v.sqrt() / sqrt_c_v).add_(config.eps)
+                p.addcdiv_(g, denom, value=-eta)
+
+    @override
+    def state_dict(self) -> dict[str, Any]:
+        return {"v": list(self._v), "c_v": self._c_v}
+
+    @override
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        with torch.no_grad():
+            for mine, saved in zip(self._v, state["v"], strict=True):
+                mine.copy_(saved)
+        self._c_v = float(state["c_v"])
 
 
 @dataclass(frozen=True, kw_only=True)
