@@ -2084,7 +2084,7 @@
 <h3 id="why-the-node-holds-r-and-sends-mu">Why the node holds r and sends mu<a class="headerlink" href="#why-the-node-holds-r-and-sends-mu" title="Permanent link">&para;</a></h3>
 <p>The prediction <code>mu</code> jumps at once with a new sample, and when the node below or the node itself learns. A node that held <code>h</code> would keep <code>h</code> where it was, and <span class="arithmatex">\(r = h - \mu\)</span> would suddenly grow: a false error would enter <code>g_in</code> and the gradients of the weights. A node that holds <code>r</code> keeps the deviation however <code>mu</code> jumps.</p>
 <p>It sends <code>mu</code>, not <span class="arithmatex">\(\mu + r\)</span>: the <strong>fixed prediction assumption</strong> of predictive coding. The activity that flows forward is then the forward pass, and the credit only flows back. Were <span class="arithmatex">\(\mu + r\)</span> sent, a move of <code>r</code> in one node would move the activity of every node above it, through the product of the Jacobians of the forward pass, and come back to it as credit. That loop diverges in a chain whose forward pass amplifies, however short the steps. Sending <code>mu</code> keeps the fixed point and cuts the loop, so the steps that are stable in one node are stable in any chain.</p>
-<p>With the defaults of <code>pc.TimeConstants</code> (<a href="#5-timeconstants">section 5</a>), one update moves <code>delta</code> to <code>-g</code>, so the credit moves one node back in each period.</p>
+<p>With the usual values of <code>pc.TimeConstants</code> (<a href="#5-timeconstants">section 5</a>), one update moves <code>delta</code> to <code>-g</code> and, in the same update, sends it back to the node before (<a href="#3-one-update-of-a-layer">section 3</a>). So the credit takes at most one period per hop (one connection between two nodes) back.</p>
 <h3 id="a-new-sample-reset-or-keep">A new sample: reset or keep<a class="headerlink" href="#a-new-sample-reset-or-keep" title="Permanent link">&para;</a></h3>
 <p>What <code>r</code> and <code>lam</code> hold is the credit of the sample the node has seen. When the next sample has nothing to do with it, as with shuffled batches, that credit is wrong for it. The host then sets <code>reset</code> of the samples it writes, and each node sets <code>r</code> and <code>lam</code> of those samples to 0 when it first sees the write. A sample that continues the one before, as the next frame of a stream does, keeps them: write it with <code>reset</code> False.</p>
 <h2 id="1-the-parts">1. The parts<a class="headerlink" href="#1-the-parts" title="Permanent link">&para;</a></h2>
@@ -2224,7 +2224,7 @@
 </tbody>
 </table>
 <ul>
-<li><code>mask</code>: whether each sample has a target. A sample whose <code>mask</code> is False adds nothing to the loss, and <code>Layer</code> sets the <code>g_in</code> of its row to 0. With every <code>mask</code> False, <code>r</code> and <code>lam</code> still relax and only the weights do not learn. Evaluate this way</li>
+<li><code>mask</code>: whether each sample has a target. A sample whose <code>mask</code> is False adds nothing to the loss, and <code>Layer</code> sets the <code>delta</code> of its row to 0, so the <code>g_in</code> of its row is 0 too. With every <code>mask</code> False, <code>r</code> and <code>lam</code> still relax and only the weights do not learn. Evaluate this way</li>
 <li><code>reset</code>: whether each sample starts anew. A <code>Layer</code> sets <code>r</code> and <code>lam</code> of its row to 0 in the update in which it first sees the write. Set it for shuffled samples; leave it False for a frame that continues the one before</li>
 <li><code>time</code>: the <code>Timestamp</code> at which the host wrote the input. <code>Timestamp(ns=0)</code> before the first write</li>
 </ul>
@@ -2292,7 +2292,7 @@
 <h2 id="3-one-update-of-a-layer">3. One update of a Layer<a class="headerlink" href="#3-one-update-of-a-layer" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">Key idea</p>
-<p><code>Layer.on_update(dt)</code> goes "read → <code>tick</code> → <code>vjp</code> → send <code>g_in</code> → <code>relax_</code> → send <code>Activity</code> → <code>optimizer.step_</code>".</p>
+<p><code>Layer.on_update(dt)</code> goes "read → <code>tick</code> → <code>relax_</code> → <code>vjp</code> → send <code>g_in</code> → send <code>Activity</code> → <code>optimizer.step_</code>". It relaxes with the <code>g</code> it has received, then sends back the <code>g_in</code> of the <code>delta</code> it has just moved.</p>
 </div>
 <table>
 <thead>
@@ -2310,13 +2310,13 @@
 </tr>
 <tr>
 <td>2</td>
-<td><code>functional.vjp</code></td>
-<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>, <span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span> and, to learn, <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span>, in one VJP. Sends <code>g_in</code> from <code>prev</code></td>
+<td><code>functional.relax_</code></td>
+<td>Sums the <code>g_in</code> on <code>next</code> into <code>g</code>. Then <span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span> (as <code>pc.relax.Euler</code>, the default relaxer, moves it; <a href="#7-relaxers">section 7</a>), and then, with the moved <code>r</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
 </tr>
 <tr>
 <td>3</td>
-<td><code>functional.relax_</code></td>
-<td><span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span> (as <code>pc.relax.Euler</code>, the default relaxer, moves it; <a href="#7-relaxers">section 7</a>), and then, with the moved <code>r</code>, <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
+<td><code>functional.vjp</code></td>
+<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>, <span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span> and, to learn, <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span>, in one VJP, with <span class="arithmatex">\(\delta = r + \lambda\)</span> after step 2 (0 for the samples whose <code>mask</code> is False). Sends <code>g_in</code> from <code>prev</code></td>
 </tr>
 <tr>
 <td>4</td>
@@ -2331,20 +2331,20 @@
 </tbody>
 </table>
 <ul>
-<li>The <code>delta</code> of step 2 is made from <code>r</code> and <code>lam</code> before step 3</li>
+<li>The <code>delta</code> of step 3 is made from <code>r</code> and <code>lam</code> after step 2 has moved them with the <code>g</code> of this update. So the credit a node receives goes on to the node before in the same update. Keep this order in a node of your own: a node that sends <code>g_in</code> before <code>relax_</code> sends the credit it receives one update later</li>
 <li>With a new input (<code>tick.new</code>), the node also calls <code>relaxer.reset_(reset)</code> in step 1 (<a href="#7-relaxers">section 7</a>)</li>
 <li>Gradients are summed over the batch, and only step 5 divides by <span class="arithmatex">\(B\)</span>. So <code>lam</code> is the credit of each sample, and the optimizer gets the mean gradient of the batch</li>
 <li>The <code>delta</code> of <code>vjp</code> is not a value but a function that makes <code>delta</code> from <code>mu</code> (<code>mu</code> is computed inside <code>vjp</code>). A node that holds <code>r</code> passes <code>lambda mu: r + lam</code></li>
 <li><code>vjp</code> detaches <code>h_in</code> before it differentiates, so the graph does not reach the previous node</li>
 </ul>
-<p><code>Output</code> holds neither <code>r</code> nor <code>lam</code>. In step 2 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>optimizer.step_</code>) are as in <code>Layer</code>.</p>
+<p><code>Output</code> holds neither <code>r</code> nor <code>lam</code>, so it has no step 2. In step 3 it uses <code>functional.loss_vjp</code>, sends the gradient <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> of the loss <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> as <code>g_in</code>, and sends a <code>Prediction</code>. When it learns and how (<code>optimizer.step_</code>) are as in <code>Layer</code>.</p>
 <details class="question">
 <summary>How does sending g_in back differ from backpropagation?</summary>
 <p><code>g_in</code> is computed with the same VJP as one layer of backpropagation (<span class="arithmatex">\(-J_h^\top\delta\)</span>), and at equilibrium <code>lam</code> follows the same recursion as the credit of backpropagation. What differs is what is done with <code>g_in</code>:</p>
 <ol>
-<li>The sender makes <code>g_in</code> from its own <code>delta</code>: <code>delta = r + lam</code> depends on its own state only</li>
-<li>The receiver sums the <code>g_in</code> it receives into <code>g</code>, and uses it in <code>relax_</code> (step 3) as a force that moves its own <code>r</code>. It does not pass <code>g</code> on</li>
-<li>As <code>r</code> and <code>lam</code> move, its own <code>delta</code> changes, and so does the <code>g_in</code> it sends in its next update. The credit travels back through the relaxation of each node, over time, not in one backward sweep</li>
+<li>The receiver sums the <code>g_in</code> it receives into <code>g</code>, and uses it in <code>relax_</code> (step 2) as a force that moves its own <code>r</code> and <code>lam</code>. It does not pass <code>g</code> on</li>
+<li>It then makes its own <code>g_in</code> from its own <code>delta = r + lam</code>, just moved, and sends it in the same update (step 3)</li>
+<li>So the credit travels back through the relaxation of each node, one node per update, not in one backward sweep</li>
 </ol>
 <p>There is no forward phase and backward phase, and no node waits for the others: each node updates with the latest <code>g</code> it has, which may be old. <code>vjp</code> detaches <code>h_in</code>, so no computation graph crosses nodes. The gradient equals that of backpropagation only at equilibrium, which is why a node waits <code>learn_interval</code> before it learns.</p>
 </details>
@@ -2409,7 +2409,7 @@
 </tbody>
 </table>
 <ul>
-<li>An update where <code>new</code> is True does not learn because its <code>delta</code> is still that of the input before</li>
+<li>An update where <code>new</code> is True does not learn because the <code>g</code> it relaxes with is still that of the input before: the next node has not seen the new input yet</li>
 <li>So while one input stays, the node learns every <code>learn_interval</code> seconds, and <code>elapsed</code> is about <code>learn_interval</code></li>
 <li>When the input changes before the node learned, the time summed in <code>elapsed</code> is dropped</li>
 <li>In a node of your own, make it with <code>pc.clock.LearnClock.of(tau, period=..., learn_interval=...)</code> and put it in an attribute. That alone puts it in the node's state</li>
@@ -2455,7 +2455,29 @@
 </tbody>
 </table>
 <p>Two values take their defaults from the time constants. <code>tau.period</code> (<code>tau.h / (1 + tau.h / tau.r)</code>, <code>tau.h / 2</code> with <code>tau.r = tau.h</code>) is the interval between a node's updates, the period of every node of a <code>Chain</code> unless it is given <code>period=</code>. <code>tau.max_dt</code> (<code>min(tau.period, 2 * tau.lam)</code>) is the longest <code>dt</code> one update counts; the time beyond it is dropped from both the relaxation and <code>elapsed</code>.</p>
-<p>The usual values go together: <code>tau.r = tau.h</code>, <code>tau.lam = tau.h / 2</code> and the default period <code>tau.h / 2</code>. One update then moves <code>delta = r + lam</code> to <code>-g</code> exactly, so the credit moves one node back in each period and does not overshoot. A longer step overshoots, and the overshoot grows at every node it passes. <code>tau.r</code> does not move the fixed point: <code>lam</code> sums up <code>r</code>, so <code>r = 0</code> there whatever <code>tau.r</code> is. With both <code>tau.lam</code> and <code>tau.r</code> at <code>math.inf</code>, the nodes are those of predictive coding with the fixed prediction assumption, whose error <code>r</code> settles at the credit of BP. A node's period must not be longer than its <code>max_dt</code> (<code>ValueError</code>).</p>
+<p>The usual values go together: <code>tau.r = tau.h</code>, <code>tau.lam = tau.h / 2</code> and the default period <code>tau.h / 2</code>. An update of one period then moves <code>delta = r + lam</code> to <code>-g</code> exactly and does not overshoot, and the node sends the new <code>delta</code> back in that same update. A longer step overshoots, and the overshoot grows at every node it passes. With these values the credit goes back as follows, over a path of <code>hops</code> connections from the <code>Input</code> to the <code>Output</code>:</p>
+<table>
+<thead>
+<tr>
+<th>How the nodes run</th>
+<th>Credit back, per hop</th>
+<th>Round trip: the input forward to the <code>Output</code>, the credit back to the first <code>Layer</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ManualRun.step(dt)</code>, every node once in each step</td>
+<td>1 step</td>
+<td><code>2 * hops</code> steps</td>
+</tr>
+<tr>
+<td>A free run, every node with the same period</td>
+<td>At most 1 period</td>
+<td>About <code>hops</code> periods</td>
+</tr>
+</tbody>
+</table>
+<p><code>tau.r</code> does not move the fixed point: <code>lam</code> sums up <code>r</code>, so <code>r = 0</code> there whatever <code>tau.r</code> is. With both <code>tau.lam</code> and <code>tau.r</code> at <code>math.inf</code>, the nodes are those of predictive coding with the fixed prediction assumption, whose error <code>r</code> settles at the credit of BP. A node's period must not be longer than its <code>max_dt</code> (<code>ValueError</code>).</p>
 <p>Make the <code>tau</code> of the optimizer much larger than <code>tau.h</code>. When the weights move more slowly than the activities settle, they learn from the settled <code>delta</code> even though inference and learning run at the same time. To choose the values, see <a href="../pc/#choosing-the-time-constants">Choosing the time constants</a>; for the arguments, the <a href="../../api/pc/">API reference</a>.</p>
 <details class="question">
 <summary>Why cap dt at max_dt?</summary>

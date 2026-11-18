@@ -1798,6 +1798,7 @@
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>ManualRun.step(dt)</code> without nodes updates every node in parallel from the values at the start of the step (Jacobi), instead of one after another in the order of the tree. Pass the nodes (<code>step(dt, *nodes)</code>) to update them in a given order.</li>
+<li><code>pc.Layer</code> sends the credit <code>g_in</code> back, and learns, from the <code>delta</code> it has just relaxed in the same update, instead of from the <code>delta</code> before it: the credit goes back one hop per step under <code>ManualRun.step(dt)</code> (it took two), and a round trip takes about half as long in a free run. The fixed point and the cost of an update are the same; the trajectories differ.</li>
 </ul>
 <h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">&para;</a></h3>
 <ul>

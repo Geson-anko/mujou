@@ -2086,7 +2086,7 @@
 <h3 id="r-mu">ノードが r を持ち、mu を送る理由<a class="headerlink" href="#r-mu" title="Permanent link">&para;</a></h3>
 <p>予測 <code>mu</code> は新しいサンプルが来たときや、下のノードか自分が学んだときに一度に跳ぶ。<code>h</code> を持つノードでは <code>h</code> がそのまま残るので <span class="arithmatex">\(r = h - \mu\)</span> が急に大きくなり、偽の誤差が <code>g_in</code> と重みの勾配に入る。<code>r</code> を持つノードは、<code>mu</code> がどう跳んでもずれを保つ。</p>
 <p>送るのは <span class="arithmatex">\(\mu + r\)</span> でなく <code>mu</code> で、predictive coding の<strong>固定予測の仮定</strong>（fixed prediction assumption）にあたる。前へ流れる活動は順伝播の値になり、credit は後ろへだけ流れる。<span class="arithmatex">\(\mu + r\)</span> を送ると、あるノードの <code>r</code> の動きは順伝播のヤコビアンの積を通って上のすべてのノードの活動を動かし、credit として自分に戻ってくる。順伝播が増幅する鎖では、このループは刻みをどれだけ短くしても発散する。<code>mu</code> を送れば平衡点を変えずにこのループを切れるので、1 ノードで安定な刻みはどの鎖でも安定になる。</p>
-<p><code>pc.TimeConstants</code> の既定（<a href="#5-timeconstants">5 節</a>）なら、1 回の更新で <code>delta</code> が <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻る。</p>
+<p><code>pc.TimeConstants</code> のふつうの値（<a href="#5-timeconstants">5 節</a>）なら、1 回の更新で <code>delta</code> が <code>-g</code> になり、同じ更新のうちに前のノードへ送られる（<a href="#3-layer-%E3%81%AE-1-%E5%9B%9E%E3%81%AE%E6%9B%B4%E6%96%B0">3 節</a>）。credit は 1 ホップ（ノードの間の接続 1 つ）を最大 1 周期で戻る。</p>
 <h3 id="新しいサンプルのリセットと持ち越し">新しいサンプルのリセットと持ち越し<a class="headerlink" href="#新しいサンプルのリセットと持ち越し" title="Permanent link">&para;</a></h3>
 <p><code>r</code> と <code>lam</code> が持つのは、ノードが見てきたサンプルの credit である。シャッフルしたバッチのように次のサンプルが無関係なら、その credit は次のサンプルにとって誤り。そこでホストは書くサンプルに <code>reset</code> を立て、各ノードはその書き込みを初めて見たときに、そのサンプルの <code>r</code> と <code>lam</code> を 0 にする。ストリームの次のフレームのように前のサンプルに続くものは、<code>reset</code> を False で書いて持ち越す。</p>
 <h2 id="1-部品">1. 部品<a class="headerlink" href="#1-部品" title="Permanent link">&para;</a></h2>
@@ -2226,7 +2226,7 @@
 </tbody>
 </table>
 <ul>
-<li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>g_in</code> を 0 にする。<code>mask</code> がすべて False の入力でも <code>r</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
+<li><code>mask</code>: サンプルごとに目標があるか。False のサンプルは損失に入らず、<code>Layer</code> はその行の <code>delta</code> を 0 にするので <code>g_in</code> の行も 0 になる。<code>mask</code> がすべて False の入力でも <code>r</code> と <code>lam</code> は緩和し、重みだけ学ばない。評価はこれで行う</li>
 <li><code>reset</code>: サンプルごとに新しく始まるか。<code>Layer</code> はその書き込みを初めて見た更新で、その行の <code>r</code> と <code>lam</code> を 0 にする。シャッフルしたサンプルでは立て、前のフレームに続くフレームでは False にする</li>
 <li><code>time</code>: ホストがその入力を書いた時刻（<code>Timestamp</code>）。書き込みの前は <code>Timestamp(ns=0)</code></li>
 </ul>
@@ -2294,7 +2294,7 @@
 <h2 id="3-layer-の-1-回の更新">3. Layer の 1 回の更新<a class="headerlink" href="#3-layer-の-1-回の更新" title="Permanent link">&para;</a></h2>
 <div class="admonition abstract">
 <p class="admonition-title">要点</p>
-<p><code>Layer.on_update(dt)</code> は「読む → <code>tick</code> → <code>vjp</code> → <code>g_in</code> を送る → <code>relax_</code> → <code>Activity</code> を送る → <code>optimizer.step_</code>」の順に進む。</p>
+<p><code>Layer.on_update(dt)</code> は「読む → <code>tick</code> → <code>relax_</code> → <code>vjp</code> → <code>g_in</code> を送る → <code>Activity</code> を送る → <code>optimizer.step_</code>」の順に進む。届いた <code>g</code> で緩和し、動かした直後の <code>delta</code> から作った <code>g_in</code> を送り返す。</p>
 </div>
 <table>
 <thead>
@@ -2312,13 +2312,13 @@
 </tr>
 <tr>
 <td>2</td>
-<td><code>functional.vjp</code></td>
-<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>、<span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span>、学ぶなら <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span> を 1 回の VJP で。<code>g_in</code> を <code>prev</code> から送る</td>
+<td><code>functional.relax_</code></td>
+<td><code>next</code> に届いた <code>g_in</code> を足して <code>g</code> にする。<span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>r</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
 </tr>
 <tr>
 <td>3</td>
-<td><code>functional.relax_</code></td>
-<td><span class="arithmatex">\(r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)\)</span>（既定の relaxer の <code>pc.relax.Euler</code> が動かす形。<a href="#7-relaxer">7 節</a>）、続けて動かした <code>r</code> で <span class="arithmatex">\(\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r\)</span></td>
+<td><code>functional.vjp</code></td>
+<td><span class="arithmatex">\(\mu = f(h_{\mathrm{in}})\)</span>、<span class="arithmatex">\(g_{\mathrm{in}} = -J_h^\top\delta\)</span>、学ぶなら <span class="arithmatex">\(g_\theta = -J_\theta^\top\delta\)</span> を、段 2 の後の <span class="arithmatex">\(\delta = r + \lambda\)</span>（<code>mask</code> が False のサンプルは 0）から 1 回の VJP で。<code>g_in</code> を <code>prev</code> から送る</td>
 </tr>
 <tr>
 <td>4</td>
@@ -2333,20 +2333,20 @@
 </tbody>
 </table>
 <ul>
-<li>段 2 の <code>delta</code> は段 3 の前の <code>r</code>・<code>lam</code> で作る</li>
+<li>段 3 の <code>delta</code> は段 2 でこの更新の <code>g</code> を使って動かした後の <code>r</code>・<code>lam</code> で作る。受け取った credit は同じ更新のうちに前のノードへ渡る。自分のノードでもこの順を守る。<code>relax_</code> より前に <code>g_in</code> を送ると、受け取った credit を送るのが 1 回の更新ぶん遅れる</li>
 <li>新しい入力のとき（<code>tick.new</code>）、ノードは段 1 で <code>relaxer.reset_(reset)</code> も呼ぶ（<a href="#7-relaxer">7 節</a>）</li>
 <li>勾配はバッチで和を取り、<span class="arithmatex">\(B\)</span> で割るのは段 5 だけ。だから <code>lam</code> はサンプルごとの credit になり、optimizer はバッチの平均勾配を受け取る</li>
 <li><code>vjp</code> の <code>delta</code> は値ではなく、<code>mu</code> から <code>delta</code> を作る関数（<code>mu</code> は <code>vjp</code> の中で計算するため）。<code>r</code> を持つノードは <code>lambda mu: r + lam</code> を渡す</li>
 <li><code>vjp</code> は <code>h_in</code> を detach してから微分するので、計算グラフは前のノードに届かない</li>
 </ul>
-<p><code>Output</code> は <code>r</code> も <code>lam</code> も持たない。段 2 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。</p>
+<p><code>Output</code> は <code>r</code> も <code>lam</code> も持たないので段 2 が無い。段 3 で <code>functional.loss_vjp</code> を使い、損失 <span class="arithmatex">\(\ell = \sum_b \mathrm{mask}_b\,\ell_b\)</span> の勾配 <span class="arithmatex">\(\partial\ell/\partial h_{\mathrm{in}}\)</span> を <code>g_in</code> として送り、<code>Prediction</code> を送る。学ぶ条件と <code>optimizer.step_</code> は <code>Layer</code> と同じ。</p>
 <details class="question">
 <summary>g_in を前のノードへ送るのは BP と何が違うの？</summary>
 <p><code>g_in</code> の計算は BP の 1 層分と同じ VJP（<span class="arithmatex">\(-J_h^\top\delta\)</span>）で、平衡点では <code>lam</code> が BP の credit と同じ漸化式を満たす。違うのは <code>g_in</code> の扱い方。</p>
 <ol>
-<li>送る側は自分の <code>delta</code> から <code>g_in</code> を作る。<code>delta = r + lam</code> は自分の状態だけで決まる</li>
-<li>受け取る側は届いた <code>g_in</code> を足して <code>g</code> にし、段 3 の <code>relax_</code> で自分の <code>r</code> を動かす力に使う。<code>g</code> をそのまま前のノードへ流さない</li>
-<li><code>r</code> と <code>lam</code> が動くと自分の <code>delta</code> が変わり、次の更新で送る <code>g_in</code> も変わる。credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて時間をかけて入力側へ伝わる</li>
+<li>受け取る側は届いた <code>g_in</code> を足して <code>g</code> にし、段 2 の <code>relax_</code> で自分の <code>r</code> と <code>lam</code> を動かす力に使う。<code>g</code> をそのまま前のノードへ流さない</li>
+<li>続けて、動かしたばかりの自分の <code>delta = r + lam</code> から <code>g_in</code> を作り、同じ更新のうちに送る（段 3）</li>
+<li>credit は 1 回の逆向きの掃引でなく、各ノードの緩和を通じて 1 回の更新に 1 ノードずつ入力側へ伝わる</li>
 </ol>
 <p>forward と backward の段階も、全ノードの待ち合わせも無い。各ノードは手元にある最新の <code>g</code>（古いこともある）で更新する。<code>vjp</code> は <code>h_in</code> を detach するので、計算グラフはノードをまたがない。BP の勾配と一致するのは平衡点だけで、学ぶまで <code>learn_interval</code> だけ待つのはこのため。</p>
 </details>
@@ -2411,7 +2411,7 @@
 </tbody>
 </table>
 <ul>
-<li><code>new</code> が True の更新で学ばないのは、その更新の <code>delta</code> がまだ前の入力のものだから</li>
+<li><code>new</code> が True の更新で学ばないのは、緩和に使う <code>g</code> がまだ前の入力のものだから（次のノードは新しい入力をまだ見ていない）</li>
 <li>だから同じ入力が続く間は <code>learn_interval</code> 秒ごとに学び、<code>elapsed</code> はおよそ <code>learn_interval</code></li>
 <li>学ばないまま入力が変わると、<code>elapsed</code> に溜めた時間は捨てる</li>
 <li>自分のノードでは <code>pc.clock.LearnClock.of(tau, period=..., learn_interval=...)</code> で作り、属性に置く。それだけでノードの状態に入る</li>
@@ -2457,7 +2457,28 @@
 </tbody>
 </table>
 <p>時定数から既定が決まる値が 2 つある。<code>tau.period</code>（<code>tau.h / (1 + tau.h / tau.r)</code>。<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）はノードの更新の間隔で、<code>period=</code> を渡さないときの <code>Chain</code> の全ノードの周期。<code>tau.max_dt</code>（<code>min(tau.period, 2 * tau.lam)</code>）は 1 回の更新で数える <code>dt</code> の上限で、超えた分は緩和からも <code>elapsed</code> からも捨てる。</p>
-<p>ふつうの値は組で決める。<code>tau.r = tau.h</code>、<code>tau.lam = tau.h / 2</code>、既定の周期 <code>tau.h / 2</code>。このとき 1 回の更新で <code>delta = r + lam</code> がちょうど <code>-g</code> になり、credit は 1 周期に 1 ノードずつ戻って行き過ぎない。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。</p>
+<p>ふつうの値は組で決める。<code>tau.r = tau.h</code>、<code>tau.lam = tau.h / 2</code>、既定の周期 <code>tau.h / 2</code>。このとき 1 周期ぶんの更新で <code>delta = r + lam</code> がちょうど <code>-g</code> になって行き過ぎず、ノードはその <code>delta</code> を同じ更新のうちに送り返す。刻みを長くすると行き過ぎ、その行き過ぎは通るノードごとに大きくなる。<code>Input</code> から <code>Output</code> までの接続を <code>hops</code> 個とすると、credit の戻る速さは次のとおり。</p>
+<table>
+<thead>
+<tr>
+<th>実行の仕方</th>
+<th>credit が 1 ホップ戻る時間</th>
+<th>往復（入力が <code>Output</code> まで進み、credit が先頭の <code>Layer</code> まで戻る）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ManualRun.step(dt)</code>（1 ステップに全ノードが 1 回）</td>
+<td>1 ステップ</td>
+<td><code>2 * hops</code> ステップ</td>
+</tr>
+<tr>
+<td>自由実行（全ノードの周期が同じ）</td>
+<td>最大 1 周期</td>
+<td>約 <code>hops</code> 周期</td>
+</tr>
+</tbody>
+</table>
 <p><code>tau.r</code> は平衡点を動かさない。<code>lam</code> が <code>r</code> を溜めるので、平衡点では <code>tau.r</code> によらず <code>r = 0</code> になる。<code>tau.lam</code> と <code>tau.r</code> を両方 <code>math.inf</code> にすると、ノードは固定予測の仮定を置いた predictive coding になり、誤差 <code>r</code> が BP の credit に落ち着く。ノードの周期は自分の <code>max_dt</code> より長くしてはいけない（<code>ValueError</code>）。</p>
 <p>optimizer の <code>tau</code> は <code>tau.h</code> よりずっと大きくする。重みが活動の落ち着く速さよりゆっくり動けば、推論と学習を同時に回しても重みは落ち着いた後の <code>delta</code> で学ぶ。値の決め方は <a href="../pc/#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>、引数の一覧は <a href="../../api/pc/">API リファレンス</a>。</p>
 <details class="question">

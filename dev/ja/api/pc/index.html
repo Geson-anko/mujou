@@ -4576,8 +4576,8 @@ credit, <code>2 * len(modules) * period</code>, is recommended.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>The period of every node, <code>tau.period</code> if <code>None</code>: with the
-defaults of <code>TimeConstants</code>, the credit moves one node down in
-each period. A period of your own must not be longer than
+defaults of <code>TimeConstants</code>, the credit takes at most one period
+per hop. A period of your own must not be longer than
 <code>max_dt</code>.</p>
               </div>
               <p>
@@ -5242,23 +5242,27 @@ above and come back as credit through the product of their Jacobians, a
 loop that diverges in chains whose forward pass amplifies, however short
 the steps. With the defaults of <code>TimeConstants</code> (<code>period = tau.h / 2</code>,
 <code>tau.lam = tau.h / 2</code>, <code>tau.r = tau.h</code>), <code>delta</code> follows <code>-g</code> in
-one update, so the credit moves one node down in each period.</p>
+one update, which is also when it is passed on to the previous node: the
+credit takes at most one period per hop.</p>
 <p>Whatever moves <code>mu</code> (a new sample, an update of <code>theta</code> here or
 below), <code>r</code> and <code>lam</code> stay and only relax, unless the sample starts
 anew: in the update that first sees an input, the node sets <code>r</code> and
-<code>lam</code> of the samples whose <code>reset</code> is set to zero, so that no credit of
-an unrelated sample is left (<code>Sample</code>). Without a target, <code>r</code> and
+<code>lam</code> of the samples whose <code>reset</code> is set to zero (<code>Sample</code>). The
+same update still relaxes them with the <code>g</code> of the next nodes, which have
+not yet seen the input, so it passes the credit of the sample before down
+once more (<code>delta = -g</code> with the defaults); that credit is gone within
+the round trip, before the node learns. Without a target, <code>r</code> and
 <code>lam</code> decay to 0.</p>
 <p>Each <code>on_update(dt)</code>:</p>
 <ol>
 <li>reads the activity and ticks its <code>clock</code>, which caps <code>dt</code> at
    <code>max_dt</code>; with a new input, sets <code>r</code> and <code>lam</code> of the samples it
    resets to zero;</li>
-<li>computes <code>mu</code>, <code>g_in</code> and, when it learns, <code>g_theta</code> with the
-   <code>delta</code> before this update, zero for the samples whose <code>mask</code> is
-   False, and sends <code>g_in</code>;</li>
 <li>moves <code>r</code> and then <code>lam</code> by <code>dt</code> with the <code>g</code> the next nodes
    sent (<code>functional.relax_</code>);</li>
+<li>computes <code>mu</code>, <code>g_in</code> and, when it learns, <code>g_theta</code> with the
+   <code>delta</code> it has just relaxed, zero for the samples whose <code>mask</code> is
+   False, and sends <code>g_in</code>;</li>
 <li>sends <code>h = mu</code>, and the <code>y</code>, <code>mask</code>, <code>reset</code> and <code>time</code> that
    came with <code>h_in</code>;</li>
 <li>when it learns, moves <code>theta</code> by the time since its last update
@@ -5268,18 +5272,20 @@ an unrelated sample is left (<code>Sample</code>). Without a target, <code>r</co
 once <code>learn_interval</code> seconds have passed since the host wrote the input
 (its <code>time</code>, on the run's time), and then every <code>learn_interval</code>
 seconds while the input stays, but never in the update that first sees an
-input (its <code>delta</code> is still that of the input before); with
+input (the <code>g</code> it relaxes with is still that of the input before); with
 <code>learn_interval=None</code>, in every update; with <code>math.inf</code>, never. The
 nodes read the one timer of the run, so the nodes on a path learn at about
 the same time, however deep they are, and each from the relaxed <code>delta</code>
-of the same input. A <code>learn_interval</code>
-longer than the round trip of the credit down the path and back
-(<code>2 * hops * period</code>, with <code>hops</code> the number of connections from the
-<code>Input</code> to the <code>Output</code>) is recommended, so that the nodes learn from
-the relaxed <code>delta</code>. The node does not learn when no sample of the input
-has a target (every <code>mask</code> is False): that time is dropped from the next
-update, which would otherwise learn from the <code>delta</code> left over from an
-earlier input. Nor does it keep the time of an input that changed before
+of the same input. The input goes forward, and the credit back, at most
+one period per hop (exactly one step per hop under <code>ManualRun.step(dt)</code>).
+A <code>learn_interval</code> longer than the round trip (<code>2 * hops * period</code>,
+with <code>hops</code> the number of connections from the <code>Input</code> to the
+<code>Output</code>) is recommended, so that the nodes learn from the relaxed
+<code>delta</code>. A free run of equal periods without jitter often goes round in
+about <code>hops * period</code>, but only the bound holds in general. The node
+does not learn when no sample of the input has a target (every <code>mask</code> is
+False): that time is dropped from the next update, which would otherwise
+learn from the <code>delta</code> left over from an earlier input. Nor does it keep the time of an input that changed before
 the node learned from it. Until the first sample reaches the node, the
 activity is zeros (<code>mask</code> all False, <code>time</code> 0), so it does not learn
 then.</p>
@@ -6330,7 +6336,7 @@ credit of backpropagation). The nodes send <code>mu</code>, so the credit flows 
 the path only, and the steps are stable in any chain once they are in each
 node. The defaults are chosen together: with <code>r = h</code>, <code>lam = h / 2</code> and
 a period of <code>h / 2</code>, one update moves <code>delta = r + lam</code> to <code>-g</code>
-exactly, so the credit moves one node in each period and does not
+exactly, so the credit takes at most one period per hop and does not
 overshoot (a larger step overshoots, and the overshoot grows at every
 node). An analog integrator that holds <code>r</code> and leaks is this decay.</p>
 <p>The fields are keyword-only and have no defaults: all are floats, and a swap
