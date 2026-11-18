@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from mujou import DictSpec, TensorSpec, TimestampSpec
-from mujou.pc.msg import Activity, activity_spec
+from mujou import TensorSpec, TimestampSpec
+from mujou.pc.msg import activity_spec
 from mujou.types import Size
 
 
@@ -17,19 +17,12 @@ class TestActivitySpec:
             "time": TimestampSpec(),
         }
 
-    def test_equal_arguments_give_equal_specs(self):
-        def make() -> DictSpec[Activity]:
-            return activity_spec(
-                TensorSpec((4, 3)), TensorSpec((4,), torch.int64), batch=4
-            )
-
-        assert make() == make()
-
     def test_without_a_batch_the_mask_is_a_scalar(self):
         act = activity_spec(TensorSpec((3,)), TensorSpec((), torch.int64))
         assert act.specs["mask"] == TensorSpec((), torch.bool)
 
     def test_an_int_is_a_batch_of_one_dimension(self):
+        # Two calls with equal arguments give equal specs.
         h, y = TensorSpec((4, 3)), TensorSpec((4,), torch.int64)
         assert activity_spec(h, y, batch=4) == activity_spec(h, y, batch=(4,))
 

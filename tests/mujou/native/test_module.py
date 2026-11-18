@@ -1,5 +1,6 @@
-"""The extension module ``mujou._native``: its attributes, the GIL, and its
-generated stub (``just stub``) against the module itself.
+"""The extension module ``mujou._native``: its attributes and its generated stub
+(``just stub``) against the module itself. That importing it keeps the GIL
+disabled is checked with ``import mujou`` in ``tests/mujou/test_init.py``.
 
 pyo3 cannot introspect everything, and ``crates/mujou-stubgen`` fixes the types
 it writes too loosely; the stub tests catch the two drifting apart.
@@ -7,10 +8,6 @@ it writes too loosely; the stub tests catch the two drifting apart.
 
 import ast
 import inspect
-import os
-import subprocess
-import sys
-import sysconfig
 from pathlib import Path
 
 import pytest
@@ -56,26 +53,6 @@ class TestStub:
 
 
 class TestCoreModule:
-    @pytest.mark.skipif(
-        not sysconfig.get_config_var("Py_GIL_DISABLED"),
-        reason="requires a free-threaded build",
-    )
-    def test_import_keeps_gil_disabled(self):
-        # A fresh interpreter, so that no other extension has re-enabled the GIL.
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "import sys, mujou._native; print(sys._is_gil_enabled())",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            # PYTHON_GIL=0 would keep the GIL off whatever the module declares.
-            env={k: v for k, v in os.environ.items() if k != "PYTHON_GIL"},
-        )
-        assert result.stdout.strip() == "False"
-
     @pytest.mark.parametrize(
         "name",
         [n for n in _native.__all__ if isinstance(getattr(_native, n), type)],

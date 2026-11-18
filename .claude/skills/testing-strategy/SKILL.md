@@ -43,9 +43,9 @@ src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 - `tests/test_layers.py`: `src/mujou` の import の層（DAG）と、`_native` を import してよいモジュールを AST で検査する。層の規則の正本（`specs/architecture.md`）
 - `tests/test_claude_hooks.py`: `.claude/hooks/` を検証する（coverage の対象は `src/mujou` だけなので、同じ pytest で回す）
 - `tests/mujou/nodes.py`: 複数のテストモジュールが使うテスト用のノードと比較の helper（`Leaky`、`Probe` など）。共通のノードはここに 1 回だけ定義する
-- `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）
+- `tests/mujou/test_init.py`: `mujou` / `mujou.time` / `mujou.pc` の `__all__` を 1 か所で固定する（公開名の一覧の正本）。`import mujou` がサブモジュールを読み込まず、3.14t で GIL を有効にしないことも、1 つのサブプロセスでここが確かめる
 - `tests/mujou/test_pyright.py`: 利用者のコードを pyright strict にかけて型を検証する横断テスト（`MultiPort.recv()` の dict 型、`Port[Never, T].send` の禁止など）
-- `tests/mujou/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、GIL を有効にしないこと、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
+- `tests/mujou/native/`: 拡張モジュール `_native` のテスト。`test_module.py`（モジュールの属性、stub と実行時の一致）、`test_slot.py`（Schema / Outlet / Slot / InputGroup / Message の契約、全 dtype のビット往復）、`test_runtime.py`（`start` と `Runtime`、hook ごとの FFI の回数、`current()`）
 - `tests/mujou/pc/_reference.py`: 純 PyTorch で仕様から書いた参照実装。出力側からの逐次（`step(h, *chain.from_next())`）と `ManualRun.step(h)`（`jacobi=True`）の 2 つのスケジュールを持つ（`test_layer.py` などのオラクル）
 
 ネイティブの振る舞いは 3 層で分担し、同じことを二重に検証しない。意味論は Rust のテスト（`crates/mujou-core/tests/`）、`native/` は bindings 固有のこと（dtype・DLPack の変換、例外の型、GIL とスレッドの状態、pickle、ログ）、公開 API の振る舞いは `test_execution.py` / `test_port.py` などが持つ。
@@ -57,6 +57,7 @@ src/mujou/pc/_<module>.py    ↔ tests/mujou/pc/test_<module>.py
 - `--strict-markers` が有効。登録済みは `slow` と `cuda`。新しいマーカーは `pyproject.toml` の `[tool.pytest.ini_options].markers` に登録してから使う
 - `slow`: 収束・学習を伴う長いテスト。`just test-fast` で除外、`just test` / `just run` では実行する
 - `cuda(n=1)`: CUDA デバイスが `n` 個以上ないと skip する（`tests/mujou/conftest.py` の `pytest_runtest_setup`）。クラスとメソッドの両方に付けたら大きい方の `n` が効く。ノードのデバイスは CPU と CUDA だけなので、GPU のテストはこのマーカーで書く
+- VRAM は 2GB 以内（ユーザーは上限 4GB で走らせる）。`cuda` のテストの前に conftest がキャッシュアロケータを device ごとに `CUDA_BUDGET`（1 GiB）に絞り、テストの後に autouse の `release_cuda` が `empty_cache` する。CUDA のテストは小さなテンソルで、run の数を減らし、同じセットアップのものは 1 本にまとめる
 
 ## 共通の fixture（`tests/mujou/conftest.py`）
 

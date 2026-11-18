@@ -13,6 +13,7 @@ too: the modules of ``mujou`` take the timers from the extension, which
 
 import ast
 from collections.abc import Iterator
+from functools import cache
 from pathlib import Path
 
 SRC = Path(__file__).parents[1] / "src"
@@ -67,6 +68,11 @@ PUBLIC = {"mujou", "mujou.time", "mujou.types"}
 REEXPORTING = PUBLIC | {"mujou.pc"}
 
 
+@cache
+def parse(path: Path) -> ast.Module:
+    return ast.parse(path.read_text("utf-8"), str(path))
+
+
 def module_name(path: Path) -> str:
     parts = path.relative_to(SRC).with_suffix("").parts
     return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
@@ -78,7 +84,7 @@ def sources() -> dict[str, Path]:
 
 def imports(path: Path, modules: set[str]) -> Iterator[str]:
     """The modules of ``modules`` that ``path`` imports."""
-    for node in ast.walk(ast.parse(path.read_text("utf-8"), str(path))):
+    for node in ast.walk(parse(path)):
         if isinstance(node, ast.Import):
             names = [alias.name for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
@@ -94,7 +100,7 @@ def imports(path: Path, modules: set[str]) -> Iterator[str]:
 def defined(path: Path) -> set[str]:
     """The names that the module at ``path`` defines at its top level."""
     names: set[str] = set()
-    for node in ast.parse(path.read_text("utf-8"), str(path)).body:
+    for node in parse(path).body:
         if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.TypeAlias):
             names.add(node.name.id if isinstance(node, ast.TypeAlias) else node.name)
         elif isinstance(node, ast.Assign):
@@ -133,7 +139,7 @@ class TestLayers:
     def test_every_import_is_at_the_top_level(self):
         nested: list[str] = []
         for path in sources().values():
-            module = ast.parse(path.read_text("utf-8"), str(path))
+            module = parse(path)
             nested += [
                 f"{path}:{node.lineno}"
                 for node in ast.walk(module)
@@ -147,7 +153,7 @@ class TestLayers:
         borrowed = [
             f"{importer}: {node.module}.{alias.name}"
             for importer, path in modules.items()
-            for node in ast.walk(ast.parse(path.read_text("utf-8"), str(path)))
+            for node in ast.walk(parse(path))
             if isinstance(node, ast.ImportFrom)
             and node.module in modules
             and node.module not in REEXPORTING

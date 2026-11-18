@@ -103,14 +103,6 @@ class TestVjp:
                 g, numerical_grad(energy, p), rtol=RTOL, atol=ATOL
             )
 
-    def test_without_parameters(self):
-        module = _make("linear-tanh")
-        h_in = _randn(B, 4, seed=1)
-        mu, _, g_theta = vjp(module, h_in, torch.zeros_like)
-        with torch.no_grad():
-            torch.testing.assert_close(mu, module(h_in), rtol=0, atol=0)
-        assert g_theta == []
-
     def test_unused_parameters_get_zeros(self):
         with torch.random.fork_rng(devices=[]):
             torch.manual_seed(0)
@@ -121,29 +113,29 @@ class TestVjp:
         )
         assert torch.equal(g_theta[0], torch.zeros(2, dtype=torch.float64))
 
-    def test_input_is_not_changed_or_attached(self):
+    def test_neither_changes_nor_attaches_the_input_mu_and_g_in(self):
+        # Without parameters: delta is made from mu without gradients, and
+        # there is no g_theta.
         module = _make("linear-tanh")
         h_in = _randn(B, 4, seed=1)
         before = h_in.clone()
         delta = _randn(B, 5, seed=2)
-        mu, g_in, _ = vjp(module, h_in, lambda _: delta)
+        seen: list[torch.Tensor] = []
+
+        def make_delta(mu: torch.Tensor) -> torch.Tensor:
+            seen.append(mu)
+            return delta
+
+        mu, g_in, g_theta = vjp(module, h_in, make_delta)
+        assert g_theta == []
+        assert torch.equal(seen[0], mu)
+        assert not seen[0].requires_grad
+        with torch.no_grad():
+            torch.testing.assert_close(mu, module(h_in), rtol=0, atol=0)
         assert torch.equal(h_in, before)
         assert not h_in.requires_grad
         assert mu.grad_fn is None
         assert g_in.grad_fn is None
-
-    def test_delta_is_made_from_mu_without_gradients(self):
-        module = _make("linear-tanh")
-        h_in = _randn(B, 4, seed=1)
-        seen: list[torch.Tensor] = []
-
-        def delta(mu: torch.Tensor) -> torch.Tensor:
-            seen.append(mu)
-            return torch.zeros_like(mu)
-
-        mu, _, _ = vjp(module, h_in, delta, list(module.parameters()))
-        assert torch.equal(seen[0], mu)
-        assert not seen[0].requires_grad
 
     def test_delta_must_have_the_shape_of_mu(self):
         module = _make("linear-tanh")
@@ -270,16 +262,18 @@ class TestRelax:
         """``r``, ``lam`` and ``g``."""
         return tuple(_randn(B, 5, seed=seed) for seed in range(1, 4))  # pyright: ignore[reportReturnType]
 
-    @pytest.mark.parametrize("dt", [1e-3, 4e-3])
-    def test_one_euler_step(self, dt: float):
-        # r first, then lam with the moved r; a long dt is one step.
+    @pytest.mark.parametrize(("dt", "tau_r"), [(1e-3, 2e-3), (4e-3, math.inf)])
+    def test_one_euler_step(self, dt: float, tau_r: float):
+        # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r, then lam with the
+        # moved r; a long dt is one step.
+        tau = TimeConstants(h=4e-3, lam=8e-3, r=tau_r)
         r, lam, g = self.state()
         r0, lam0 = r.clone(), lam.clone()
-        relax_(r, lam, g, dt, self.TAU)
-        r1 = r0 - dt / self.TAU.h * (r0 + lam0 + g)
+        relax_(r, lam, g, dt, tau)
+        r1 = r0 - dt / tau.h * ((1 + tau.h / tau.r) * r0 + lam0 + g)
         torch.testing.assert_close(r, r1, rtol=1e-15, atol=1e-15)
         torch.testing.assert_close(
-            lam, lam0 + dt / self.TAU.lam * r1, rtol=1e-15, atol=1e-15
+            lam, lam0 + dt / tau.lam * r1, rtol=1e-15, atol=1e-15
         )
 
     def test_infinite_lam_time_constant_keeps_the_dual(self):
@@ -296,19 +290,6 @@ class TestRelax:
         relax_(r, lam, g, 0.0, self.TAU)
         assert torch.equal(r, r0)
         assert torch.equal(lam, lam0)
-
-    def test_the_decay_of_r(self):
-        # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r; lam as before.
-        tau = TimeConstants(h=4e-3, lam=8e-3, r=2e-3)
-        r, lam, g = self.state()
-        r0, lam0 = r.clone(), lam.clone()
-        dt = 1e-3
-        relax_(r, lam, g, dt, tau)
-        r1 = r0 - dt / tau.h * ((1 + tau.h / tau.r) * r0 + lam0 + g)
-        torch.testing.assert_close(r, r1, rtol=1e-15, atol=1e-15)
-        torch.testing.assert_close(
-            lam, lam0 + dt / tau.lam * r1, rtol=1e-15, atol=1e-15
-        )
 
     @pytest.mark.parametrize("r", [2e-3, 4e-3, 8e-3])
     def test_one_update_of_the_period_moves_delta_to_minus_g(self, r: float):
@@ -413,13 +394,10 @@ class TestMse:
         for b in range(B):
             expected = F.mse_loss(y_hat[b], y[b])
             torch.testing.assert_close(ell[b], expected, rtol=1e-14, atol=0)
-
-    def test_mean_is_the_mean_loss_of_torch(self):
         # With the 1 / B that the nodes take before their optimizer, theta
         # follows the gradient of nn.MSELoss().
-        y_hat, y = _pair(B, 5)
         torch.testing.assert_close(
-            mse(y_hat, y, B).mean(), nn.MSELoss()(y_hat, y), rtol=1e-14, atol=0
+            ell.mean(), nn.MSELoss()(y_hat, y), rtol=1e-14, atol=0
         )
 
     def test_without_a_batch_is_one_sample(self):
@@ -432,10 +410,7 @@ class TestMse:
         y_hat, y = _pair(2, 3, 5)
         expected = mse(y_hat.reshape(6, 5), y.reshape(6, 5), 6).reshape(2, 3)
         assert torch.equal(mse(y_hat, y, (2, 3)), expected)
-
-    def test_an_int_is_a_batch_of_one_dimension(self):
-        y_hat, y = _pair(B, 5)
-        assert torch.equal(mse(y_hat, y, B), mse(y_hat, y, (B,)))
+        assert torch.equal(mse(y_hat, y, (2,)), mse(y_hat, y, 2))  # an int
 
     def test_shapes_must_match(self):
         with pytest.raises(ValueError, match="same shape"):
@@ -443,9 +418,13 @@ class TestMse:
 
 
 class TestCrossEntropy:
-    def test_of_each_sample(self):
+    @pytest.mark.parametrize("kind", ["classes", "probabilities"])
+    def test_of_each_sample(self, kind: str):
         y_hat = _randn(B, 4, seed=1)
-        y = torch.tensor([3, 0, 2])
+        if kind == "classes":
+            y = torch.tensor([3, 0, 2])
+        else:
+            y = torch.softmax(_randn(B, 4, seed=2), dim=1)
         assert torch.equal(
             cross_entropy(y_hat, y, B), F.cross_entropy(y_hat, y, reduction="none")
         )
@@ -459,13 +438,6 @@ class TestCrossEntropy:
         assert ell.shape == (B,)
         torch.testing.assert_close(
             ell.mean(), nn.CrossEntropyLoss()(y_hat, y), rtol=1e-14, atol=0
-        )
-
-    def test_probabilities_as_the_target(self):
-        y_hat = _randn(B, 4, seed=1)
-        y = torch.softmax(_randn(B, 4, seed=2), dim=1)
-        assert torch.equal(
-            cross_entropy(y_hat, y, B), F.cross_entropy(y_hat, y, reduction="none")
         )
 
     def test_without_a_batch_is_one_sample(self):

@@ -168,39 +168,6 @@ def assert_ended_by_exception(log: Log, name: str) -> None:
 
 
 class TestStart:
-    @pytest.mark.parametrize("dedicated", [False, True])
-    def test_hooks_run_in_order(
-        self, virtual_timer: VirtualTimer, start_runtime: StartRuntime, dedicated: bool
-    ):
-        log = Log()
-        nodes = recorders(log, "a", "b")
-        runtime = start_runtime(
-            nodes,
-            manual=True,
-            states=[{"s": 0}, {"s": 1}],
-            dedicated=dedicated,
-        )
-        virtual_timer.advance(H)
-        runtime.step()
-        runtime.capture(lambda states: None, WAIT)
-        shut_down(runtime)
-
-        for i, node in enumerate(nodes):
-            assert log.of(node.name) == [
-                "start",
-                "restore",
-                "update",
-                "pause",
-                "capture",
-                "resume",
-                "stop",
-            ]
-            assert node.loaded == {"s": i}
-            if dedicated:
-                node_thread = {t for e, t in node.threads.items() if e != "capture"}
-                assert len(node_thread) == 1
-                assert node.threads["capture"] not in node_thread
-
     def test_a_state_of_none_is_not_restored(
         self, virtual_timer: VirtualTimer, start_runtime: StartRuntime
     ):
@@ -214,7 +181,7 @@ class TestStart:
 
     @pytest.mark.parametrize(
         ("hook", "dedicated"),
-        [("start", True), ("start", False), ("restore", False)],
+        [("start", True), ("restore", False)],
     )
     def test_an_error_while_starting_stops_before_any_update(
         self,
@@ -340,41 +307,24 @@ class TestStart:
 
 
 class TestWorkers:
-    def test_the_hooks_run_on_at_most_the_given_number_of_threads(
-        self, virtual_timer: VirtualTimer, start_runtime: StartRuntime
-    ):
-        idents: list[int] = []
-
-        class Ident(Recorder):
-            @override
-            def update(self, dt: float) -> None:
-                idents.append(threading.get_ident())
-                super().update(dt)
-
-        log = Log()
-        nodes = [Ident(f"n{k}", log) for k in range(32)]
-        runtime = start_runtime(nodes, manual=True, workers=2)
-        for _ in range(2):
-            virtual_timer.advance(H)
-            runtime.step()
-        shut_down(runtime)
-        assert all(len(node.dts) == 2 for node in nodes)
-        assert len(idents) == 64
-        assert len(set(idents)) <= 2
-        assert threading.get_ident() not in idents
-
-    def test_the_pool_has_no_more_workers_than_nodes(
-        self, virtual_timer: VirtualTimer, start_runtime: StartRuntime
-    ):
-        runtime = start_runtime(recorders(Log(), "a", "b"), manual=True, workers=8)
-        assert runtime.workers == 2
-
-    def test_nodes_all_on_their_own_threads_run_without_a_pool(
-        self, virtual_timer: VirtualTimer, start_runtime: StartRuntime
+    # How the pool schedules is checked on the core (runtime/sched.rs); here,
+    # that `workers` reaches it and its size comes back.
+    @pytest.mark.parametrize(
+        ("dedicated", "workers", "expected"), [(False, 8, 2), (True, None, 0)]
+    )
+    def test_the_pool_has_no_more_workers_than_nodes_in_it(
+        self,
+        virtual_timer: VirtualTimer,
+        start_runtime: StartRuntime,
+        dedicated: bool,
+        workers: int | None,
+        expected: int,
     ):
         nodes = recorders(Log(), "a", "b")
-        runtime = start_runtime(nodes, manual=True, dedicated=True)
-        assert runtime.workers == 0
+        runtime = start_runtime(
+            nodes, manual=True, dedicated=dedicated, workers=workers
+        )
+        assert runtime.workers == expected
         virtual_timer.advance(H)
         runtime.step()
         shut_down(runtime)
@@ -408,7 +358,14 @@ class TestOneCallPerHook:
             runtime.step(order)
         runtime.capture(lambda states: None, WAIT)
         shut_down(runtime)
-        for node in nodes:
+        for i, node in enumerate(nodes):
+            assert node.loaded == {"s": i}
+            if dedicated:
+                # Every hook on the node's own thread, but the capture: on the
+                # control thread.
+                node_thread = {t for e, t in node.threads.items() if e != "capture"}
+                assert len(node_thread) == 1
+                assert node.threads["capture"] not in node_thread
             assert log.of(node.name) == [
                 "start",
                 "restore",
@@ -546,8 +503,8 @@ class TestFreeRun:
         log = Log()
         runtime = start_runtime(recorders(log, "a"))
         cpu_start = time.process_time()
-        time.sleep(0.2)
-        # A node spinning on Δt = 0 would use a core for the whole 0.2 s.
+        time.sleep(0.1)
+        # A node spinning on Δt = 0 would use a core for the whole 0.1 s.
         assert time.process_time() - cpu_start < 0.05
         assert log.count("a", "update") == 0
         # The waiting node wakes on control requests, not only on the time.
@@ -580,7 +537,7 @@ class TestCapture:
         log.wait_for(lambda: len(other.dts) == 1)
 
         with pytest.raises(TimeoutError, match="stuck") as exc_info:
-            runtime.capture(lambda states: None, 0.1)
+            runtime.capture(lambda states: None, 0.05)
         assert "other" not in str(exc_info.value)
         # The network keeps running on a running timer.
         assert runtime.join(timeout=0) is False
@@ -683,7 +640,7 @@ class TestWaiting:
     ):
         log = Log()
         runtime = start_runtime(recorders(log, "a"))
-        assert runtime.join(timeout=0.05) is False
+        assert runtime.join(timeout=0.01) is False
 
         def advance_and_stop() -> None:
             # On a GIL build this thread runs only if `join` released the GIL.

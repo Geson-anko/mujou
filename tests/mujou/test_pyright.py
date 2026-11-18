@@ -170,16 +170,14 @@ class TestRuns:
         with mujou.run_manually(other, inputs=others) as manual:
             manual.write(others)
 
-    def test_a_manual_run_gives_back_the_type_of_its_timer(self) -> None:
-        with mujou.run_manually(Layer(2)) as run:
-            assert_type(run.timer, VirtualTimer)
-            run.timer.advance(0.001)  # no cast needed
-
-    def test_annotated_ports_are_read(self) -> None:
+    def test_annotated_ports_are_read_on_the_timer_of_a_manual_run(self) -> None:
         a, b, fan = Layer(2), Layer(2), Fan()
         a.out.connect(fan.prev)
         b.out.connect(fan.prev)
         with mujou.run_manually(mujou.Group(a=a, b=b, fan=fan)) as run:
+            # The manual run gives back the type of its timer: no cast needed.
+            assert_type(run.timer, VirtualTimer)
+            run.timer.advance(0.001)
             run.step(0.0)
             value, _ = run.read_with_time(fan.next)
             assert_type(value, torch.Tensor)

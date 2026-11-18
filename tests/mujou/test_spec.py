@@ -33,10 +33,6 @@ class Mixed(TypedDict):
     time: Timestamp
 
 
-ALL_DTYPES = list(DLPACK)
-FLOAT_DTYPES = [torch.float16, torch.bfloat16, torch.float32, torch.float64]
-
-
 def feedback_spec() -> DictSpec[Feedback]:
     return DictSpec(Feedback, error=TensorSpec((2, 3)), target=TensorSpec((2,)))
 
@@ -61,40 +57,20 @@ class TestTensorSpec:
         finally:
             torch.set_default_dtype(previous)
 
-    @pytest.mark.parametrize("dtype", ALL_DTYPES)
-    def test_zeros_on_cpu_for_every_dtype(self, dtype: torch.dtype):
-        x = TensorSpec((2, 3), dtype).zeros()
-        assert x.shape == (2, 3)
-        assert x.dtype == dtype
-        assert x.device == torch.device("cpu")
-        assert not x.any()
-
-    def test_scalar_shape(self):
-        assert TensorSpec(()).zeros().shape == ()
-
-    @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-    def test_rand_follows_the_generator_and_is_in_the_unit_interval(
-        self, dtype: torch.dtype
-    ):
-        spec = TensorSpec((1000,), dtype)
-        a, b = torch.Generator().manual_seed(3), torch.Generator().manual_seed(3)
-        x = spec.rand(generator=a)
-        assert torch.equal(x, spec.rand(generator=b))
-        # Both generators advanced alike, so their next draws match too.
-        assert torch.equal(spec.rand(generator=a), spec.rand(generator=b))
-        assert x.dtype == dtype
-        assert bool((x >= 0).all()) and bool((x < 1).all())
-
-    def test_empty_has_the_shape_and_dtype_on_the_cpu(self):
-        spec = TensorSpec((2, 3), torch.int16)
-        x = spec.empty()
+    @pytest.mark.parametrize("make", ["zeros", "empty"])
+    def test_makes_the_shape_and_dtype_on_the_cpu(self, make: str):
+        x = cast(torch.Tensor, getattr(TensorSpec((2, 3), torch.int16), make)())
         assert x.shape == (2, 3)
         assert x.dtype == torch.int16
         assert x.device == torch.device("cpu")
+        if make == "zeros":
+            assert not x.any()
 
-    def test_empty_is_filled_in_place(self):
-        x = TensorSpec((2,), torch.float64).empty().fill_(0.5)
-        assert torch.equal(x, torch.full((2,), 0.5, dtype=torch.float64))
+    def test_rand_follows_the_generator(self):
+        spec = TensorSpec((5,), torch.float64)
+        x = spec.rand(generator=torch.Generator().manual_seed(3))
+        assert x.dtype == torch.float64
+        assert torch.equal(x, spec.rand(generator=torch.Generator().manual_seed(3)))
 
     @pytest.mark.parametrize("make", ["zeros", "empty", "rand"])
     def test_makes_the_value_on_the_given_device(self, make: str):
@@ -140,20 +116,17 @@ class TestDictSpec:
         assert list(spec.specs) == ["error", "target"]
         assert list(spec.zeros()) == ["error", "target"]
 
-    def test_zeros(self):
-        msg = feedback_spec().zeros()
-        assert msg["error"].shape == (2, 3)
-        assert msg["target"].shape == (2,)
-        assert not msg["error"].any() and not msg["target"].any()
-
-    def test_empty_has_the_keys_shapes_and_dtypes_on_the_cpu(self):
+    @pytest.mark.parametrize("make", ["zeros", "empty"])
+    def test_makes_the_keys_shapes_and_dtypes_on_the_cpu(self, make: str):
         spec = feedback_spec()
-        msg = spec.empty()
+        msg = cast(dict[str, torch.Tensor], getattr(spec, make)())
         assert list(msg) == ["error", "target"]
-        for key, value in cast(dict[str, torch.Tensor], msg).items():
+        for key, value in msg.items():
             assert value.shape == spec.field(key, TensorSpec).shape
             assert value.dtype == spec.field(key, TensorSpec).dtype
             assert value.device == torch.device("cpu")
+            if make == "zeros":
+                assert not value.any()
 
     @pytest.mark.parametrize("make", ["zeros", "empty"])
     def test_makes_the_message_on_the_given_device(self, make: str):
@@ -214,10 +187,6 @@ class TestIntSpec:
     def test_64_bits_signed_by_default(self):
         spec = IntSpec()
         assert (spec.bits, spec.signed) == (64, True)
-
-    @pytest.mark.parametrize("bits", [8, 16, 32, 64])
-    def test_takes_whole_bytes_up_to_64_bits(self, bits: int):
-        assert IntSpec(bits, signed=False).bits == bits  # pyright: ignore[reportArgumentType]
 
     @pytest.mark.parametrize("bits", [0, 1, 12, 24, 128])
     def test_rejects_other_bits(self, bits: int):

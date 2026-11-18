@@ -1,7 +1,6 @@
 import copy
 import pickle
 import threading
-import time
 
 import pytest
 
@@ -21,22 +20,12 @@ class TestPublicNames:
             "global_timer",
         ]
 
-    def test_the_types_are_named_as_in_mujou_time(self):
-        for kind in (Timer, VirtualTimer, ReadOnlyTimer, Timestamp):
-            assert kind.__module__ == "mujou.time"
-
 
 class TestTimer:
-    def test_starts_at_zero_and_follows_the_real_clock(self):
-        timer = Timer()
-        first = timer.now()
-        time.sleep(0.02)
-        later = timer.now()
-        assert isinstance(first, Timestamp)
-        assert first < Timestamp(ns=1_000_000_000)
-        assert later - first >= 0.02
-
+    # How the time runs (scale, pause, sleep) is checked on the core, in
+    # crates/mujou-core/tests/time.rs; here, what the bindings take and give.
     def test_starts_at_the_given_time_and_scale(self):
+        assert Timer().now() < Timestamp(ns=1_000_000_000)
         timer = Timer(start=Timestamp(ns=5_000_000_000), time_scale=4.0)
         assert timer.now() >= Timestamp(ns=5_000_000_000)
         assert timer.time_scale() == 4.0
@@ -47,12 +36,6 @@ class TestTimer:
         assert timer.time_scale() == 4.0
         assert global_timer.time_scale() == 1.0
         assert Timer().time_scale() == 1.0
-
-    def test_sleeps_on_its_own_time(self):
-        timer = Timer(time_scale=10.0)
-        started = time.monotonic()
-        timer.sleep(0.5)  # 0.05 s of real time
-        assert time.monotonic() - started < 0.4
 
     @pytest.mark.parametrize("scale", [0.0, -1.0, float("nan")])
     def test_rejects_an_invalid_scale(self, scale: float):
@@ -83,8 +66,6 @@ class TestVirtualTimer:
     def test_moves_only_by_advance(self):
         timer = VirtualTimer()
         assert timer.now() == Timestamp(ns=0)
-        time.sleep(0.01)
-        assert timer.now() == Timestamp(ns=0)
         timer.advance(1.5)
         timer.advance(1e-9)
         assert timer.now() == Timestamp(ns=1_500_000_001)
@@ -93,39 +74,35 @@ class TestVirtualTimer:
     def test_starts_at_the_given_time(self):
         assert VirtualTimer(start=Timestamp(ns=7)).now() == Timestamp(ns=7)
 
-    def test_the_scale_does_not_apply(self):
-        timer = VirtualTimer()
-        timer.set_time_scale(3.0)
-        timer.advance(1.0)
-        assert timer.now() == Timestamp(ns=1_000_000_000)
-
-    def test_keeps_the_given_scale(self):
+    def test_keeps_the_given_scale_and_does_not_apply_it(self):
         timer = VirtualTimer(time_scale=2.0)
         assert timer.time_scale() == 2.0
+        timer.set_time_scale(3.0)
         timer.advance(1.0)
         assert timer.now() == Timestamp(ns=1_000_000_000)
         with pytest.raises(ValueError):
             VirtualTimer(time_scale=0.0)
 
     def test_sleep_returns_once_advanced_far_enough(self):
+        # The core checks the wait (time.rs); this checks that sleep waits
+        # without the GIL, so that this thread can advance the timer. The sleeper
+        # measures its own sleep, whenever it starts relative to the advances.
         timer = VirtualTimer()
-        done = threading.Event()
+        slept: list[float] = []
 
         def sleeper() -> None:
+            start = timer.now()
             timer.sleep(1.0)
-            done.set()
+            slept.append(timer.now() - start)
 
         thread = threading.Thread(target=sleeper)
         thread.start()
-        try:
-            assert not done.wait(0.05)
-            timer.advance(0.5)
-            assert not done.wait(0.05)
-            timer.advance(0.5)
-            assert done.wait(5.0)
-        finally:
-            timer.advance(10.0)
-            thread.join(5.0)
+        for _ in range(10_000):
+            if not thread.is_alive():
+                break
+            timer.advance(0.1)
+            thread.join(0.001)
+        assert slept and slept[0] >= 1.0
 
     @pytest.mark.parametrize("seconds", [-1.0, float("nan")])
     def test_rejects_an_invalid_advance(self, seconds: float):
@@ -152,18 +129,6 @@ class TestPause:
         timer.advance(1.0)
         assert timer.now() == Timestamp(ns=1_000_000_000)
 
-    def test_sleep_does_not_return_until_resumed(self):
-        timer = Timer(time_scale=1000.0)
-        timer.pause()
-        slept = threading.Event()
-        sleeper = threading.Thread(target=lambda: (timer.sleep(0.001), slept.set()))
-        sleeper.start()
-        # 0.05 real seconds pass, and none of the timer's.
-        assert not slept.wait(0.05)
-        timer.resume()
-        sleeper.join(5.0)
-        assert slept.is_set()
-
 
 class TestReadOnlyTimer:
     def test_reads_its_timer_and_has_nothing_that_changes_it(self):
@@ -175,16 +140,6 @@ class TestReadOnlyTimer:
         assert view.time_scale() == 3.0
         public = {n for n in dir(view) if not n.startswith("_")}
         assert public == {"now", "time_scale"}
-
-
-class TestGlobalTimer:
-    def test_is_one_timer(self):
-        assert isinstance(global_timer, Timer)
-
-    def test_follows_the_real_clock(self):
-        first = global_timer.now()
-        time.sleep(0.01)
-        assert global_timer.now() - first >= 0.01
 
 
 class TestTimestamp:
