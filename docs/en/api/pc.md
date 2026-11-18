@@ -8,7 +8,7 @@
 
 ::: mujou.pc.optim
     options:
-      members: [Optimizer, BoundOptimizer, SGD, AdamW]
+      members: [Optimizer, BoundOptimizer, SGD, RMSProp, AdamW]
 
 ::: mujou.pc.relax
     options:
