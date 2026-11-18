@@ -99,33 +99,21 @@ def run_states(
 
 
 class TestChain:
-    def test_runs_as_the_nodes_connected_by_hand(self, start_manual: StartManual):
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        initial = copy.deepcopy(head.state_dict())
-        net = chain(*copy.deepcopy(layers), copy.deepcopy(head))
-        expected = run_states(start_manual, *by_hand(layers, head))
-        assert_same_tree(run_states(start_manual, net, net.input), expected)
-        learned = expected["nodes"]["output"]["state"]["module"]["weight"]
-        assert not torch.equal(learned, initial["weight"])  # it did learn
-
-    def test_steps_to_the_same_bits_on_one_worker_and_on_several(
+    def test_runs_as_the_nodes_connected_by_hand_on_any_number_of_workers(
         self, start_manual: StartManual
     ):
         # Credit goes back as activity goes forward: every node reads only the
-        # values of the step before, however many update at once.
+        # values of the step before, however many update at once, so the chain
+        # on several workers steps to the bits of the nodes by hand on one.
         layers, head = make_modules("linear", "tanh", WIDTHS)
-        several = chain(*copy.deepcopy(layers), copy.deepcopy(head))
-        one = chain(*layers, head)
-        expected = run_states(start_manual, one, one.input, workers=1)
-        assert_same_tree(
-            run_states(start_manual, several, several.input, workers=4), expected
-        )
+        initial = copy.deepcopy(head.state_dict())
+        net = chain(*copy.deepcopy(layers), copy.deepcopy(head))
+        expected = run_states(start_manual, *by_hand(layers, head), workers=1)
+        assert_same_tree(run_states(start_manual, net, net.input, workers=4), expected)
+        learned = expected["nodes"]["output"]["state"]["module"]["weight"]
+        assert not torch.equal(learned, initial["weight"])  # it did learn
 
-    def test_is_shown_samples(self):
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        assert isinstance(chain(*layers, head), pc.Shown)
-
-    def test_the_children_are_named_after_their_place(self):
+    def test_the_children_are_the_nodes_in_order_connected_one_to_the_next(self):
         layers, head = make_modules("linear", "tanh", WIDTHS)
         net = chain(*layers, head)
         assert list(vars(net)) == [
@@ -139,32 +127,28 @@ class TestChain:
         assert [layer.module for layer in net.layers] == layers
         assert net.layers[1] is getattr(net, "layer1")
         assert net.output.module is head
-
-    def test_each_node_takes_the_act_of_the_one_before(self):
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head)
         nodes = [net.input, *net.layers]
         for sender, receiver in zip(nodes, [*nodes[1:], net.output], strict=True):
             assert receiver.prev.recv_spec == sender.act_spec
             assert sender.next.channels == receiver.prev.channels
-
-    def test_exposes_the_ports_of_the_host(self):
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head)
         assert net.prev is net.input.prev
         assert net.next is net.output.next
 
-    def test_every_node_runs_at_tau_period(self):
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head)
-        periods = [
-            node.period for node in vars(net).values() if isinstance(node, pc.Layer)
-        ]
-        periods += [net.input.period, net.output.period]
-        assert periods == pytest.approx([TAU.period] * 4)
+    def test_one_module_is_the_output(self):
+        head = nn.Linear(WIDTHS[0], N_OUT).double()
+        net = chain(head)
+        assert list(vars(net)) == ["input", "output", "prev", "next"]
+        assert net.output.prev.recv_spec == net.input.act_spec
 
-    def test_every_node_runs_at_the_period_given(self):
+    @pytest.mark.parametrize(
+        ("period", "expected"), [(None, TAU.period), (TAU.h / 16, TAU.h / 16)]
+    )
+    def test_every_node_runs_at_the_period_given_or_tau_period(
+        self, period: float | None, expected: float
+    ):
         layers, head = make_modules("linear", "tanh", WIDTHS)
+        # Without a period, the chain is left to its default.
+        given: dict[str, Any] = {} if period is None else {"period": period}
         net = pc.Chain(
             *layers,
             head,
@@ -175,48 +159,33 @@ class TestChain:
             tau=TAU,
             optimizer=SGD,
             learn_interval=LEARN_INTERVAL,
-            period=TAU.h / 16,
+            **given,
         )
-        periods = [
-            node.period for node in vars(net).values() if isinstance(node, pc.Layer)
-        ]
+        periods = [layer.period for layer in net.layers]
         periods += [net.input.period, net.output.period]
-        assert periods == pytest.approx([TAU.h / 16] * 4)
+        assert periods == pytest.approx([expected] * 4)
 
-    def test_each_node_binds_the_optimizer_to_its_own_parameters(
+    def test_each_node_binds_the_optimizer_and_the_relaxer_to_its_own_state(
         self, start_manual: StartManual
     ):
-        # One AdamW for the whole chain: each node binds it to its own module,
-        # so each keeps moments of its own (one bound optimizer in two nodes
-        # would keep the run from starting).
+        # One AdamW and one relaxer with a state for the whole chain: each node
+        # binds the AdamW to its own module and each layer the relaxer to its
+        # own r, so each keeps moments and a velocity of its own (one bound
+        # optimizer in two nodes would keep the run from starting); the output
+        # holds no r.
         layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head, optimizer=ADAMW)
+        net = chain(*layers, head, optimizer=ADAMW, relaxer=Inertial(tau=3e-3))
         tree = run_states(start_manual, net, net.input)
         modules = {"layer0": layers[0], "layer1": layers[1], "output": head}
         for path, module in modules.items():
             moments = tree["nodes"][path]["state"]["optimizer"]["m"]
             assert [m.shape for m in moments] == [p.shape for p in module.parameters()]
-        assert "optimizer" not in tree["nodes"]["input"]["state"]
-
-    def test_each_layer_binds_the_relaxer_to_its_own_deviation(
-        self, start_manual: StartManual
-    ):
-        # One relaxer with a state for the whole chain: each layer binds it to
-        # its own r, so each keeps a velocity of its own; the output holds no r.
-        layers, head = make_modules("linear", "tanh", WIDTHS)
-        net = chain(*layers, head, relaxer=Inertial(tau=3e-3))
-        tree = run_states(start_manual, net, net.input)
         for path, width in (("layer0", WIDTHS[1]), ("layer1", WIDTHS[2])):
             velocity = tree["nodes"][path]["state"]["relaxer"]["velocity"]
             assert velocity.shape == (B, width)
         assert "relaxer" not in tree["nodes"]["output"]["state"]
+        assert "optimizer" not in tree["nodes"]["input"]["state"]
         assert "relaxer" not in tree["nodes"]["input"]["state"]
-
-    def test_one_module_is_the_output(self):
-        head = nn.Linear(WIDTHS[0], N_OUT).double()
-        net = chain(head)
-        assert list(vars(net)) == ["input", "output", "prev", "next"]
-        assert net.output.prev.recv_spec == net.input.act_spec
 
 
 def learned(
@@ -288,27 +257,17 @@ class TestBatch:
         initial = make_modules("linear", "tanh", WIDTHS)[1].state_dict()["weight"]
         assert not torch.equal(expected["output"]["module"]["weight"], initial)
 
-    def test_no_batch_learns_as_a_batch_of_one(self, start_manual: StartManual):
-        x, y, mask = self._sample()
-        expected = learned(start_manual, 1, x[:1], y[:1], mask[:1])
-        states = learned(start_manual, (), x[0], y[0], mask[0])
-        assert_learned_alike(states, expected)
-
-    def test_one_class_without_a_batch_learns_as_a_batch_of_one(
-        self, start_manual: StartManual
+    @pytest.mark.parametrize("loss", [pc.loss.MSELoss, pc.loss.CrossEntropyLoss])
+    def test_no_batch_learns_as_a_batch_of_one(
+        self,
+        start_manual: StartManual,
+        loss: type[pc.loss.MSELoss | pc.loss.CrossEntropyLoss],
     ):
-        # The target is a scalar: the class of the one sample.
-        x, _, _ = self._sample()
-        y = torch.tensor([1, 0, 1, 1, 0, 1])
-        expected = learned(
-            start_manual,
-            1,
-            x[:1],
-            y[:1],
-            torch.tensor([True]),
-            pc.loss.CrossEntropyLoss,
-        )
-        states = learned(
-            start_manual, (), x[0], y[0], torch.tensor(True), pc.loss.CrossEntropyLoss
-        )
+        # With cross entropy the target is a scalar: the class of the sample.
+        x, y, _ = self._sample()
+        if loss is pc.loss.CrossEntropyLoss:
+            y = torch.tensor([1, 0, 1, 1, 0, 1])
+        mask = torch.tensor(True)
+        expected = learned(start_manual, 1, x[:1], y[:1], mask[None], loss)
+        states = learned(start_manual, (), x[0], y[0], mask, loss)
         assert_learned_alike(states, expected)

@@ -13,12 +13,9 @@ class TestMSELoss:
         g = _generator()
         y_hat = torch.randn(2, 3, 4, generator=g, dtype=torch.float64)
         y = torch.randn(2, 3, 4, generator=g, dtype=torch.float64)
-        for batch in [(), 2, (2, 3)]:
+        for batch in [2, (2, 3)]:
             assert torch.equal(MSELoss(batch)(y_hat, y), mse(y_hat, y, batch))
-
-    def test_without_a_batch_by_default(self):
-        y_hat, y = torch.zeros(3), torch.ones(3)
-        assert MSELoss()(y_hat, y).shape == ()
+        assert torch.equal(MSELoss()(y_hat, y), mse(y_hat, y))  # no batch
 
 
 class TestCrossEntropyLoss:
@@ -31,7 +28,5 @@ class TestCrossEntropyLoss:
         )
         y = torch.randint(0, 3, (2, 4), generator=g)  # 3 classes, 4 per sample
         assert torch.equal(CrossEntropyLoss(2)(y_hat, y), cross_entropy(y_hat, y, 2))
-
-    def test_without_a_batch_by_default(self):
-        y_hat, y = torch.zeros(4), torch.tensor(1)
-        assert CrossEntropyLoss()(y_hat, y).shape == ()
+        y_hat, y = y_hat[0, 0], torch.tensor(1)  # no batch
+        assert torch.equal(CrossEntropyLoss()(y_hat, y), cross_entropy(y_hat, y))

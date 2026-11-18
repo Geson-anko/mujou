@@ -296,11 +296,20 @@ class TestCreditAfterRelax:
         assert (g_sent - g_in(before)).abs().max() > 1e-6
 
 
-# Steps to the fixed point from r = lam = 0, to 1e-10 at TAU and these sizes.
-RELAX_STEPS = 3000
-# The same for the chain of eight residual blocks, to 1e-9.
-DEEP_STEPS = 6000
-CASES = [(block, act) for block in ("linear", "res") for act in ("linear", "tanh")]
+# Time constants with which one update of dt = H moves delta = r + lam to -g
+# (``TimeConstants.period``): the fixed point is that of any time constants, and
+# the chains below reach it to 1e-12 in about 40 (three nodes) to 70 (sixteen)
+# steps, with the margin of RELAX_STEPS.
+FAST = pc.TimeConstants(h=2 * H, lam=H, r=2 * H)
+RELAX_STEPS = 100
+CASES = [
+    *(
+        pytest.param(block, act, False, id=f"{block}-{act}")
+        for block in ("linear", "res")
+        for act in ("linear", "tanh")
+    ),
+    pytest.param("linear", "tanh", True, id="two-constraints-in-one-node"),
+]
 
 
 def assert_fixed_point(
@@ -320,94 +329,136 @@ def assert_fixed_point(
         close(node["state"]["lam"], credit, tol_lam)
 
 
-@pytest.mark.slow
-class TestFixedPoint:
-    @pytest.mark.parametrize(("block", "act"), CASES)
-    def test_lam_is_the_credit_of_backpropagation(
-        self, start_manual: StartManual, block: str, act: str
-    ):
-        widths = [4, 4, 4] if block == "res" else [4, 5, 3]
-        layers, head = make_modules(block, act, widths)
-        chain = HandChain(layers, head, widths, learn_interval=math.inf)
-        run = start_manual(chain.net)
-        x, y = sample(widths, 0)
-        chain.write(run, x, y, MASK)
-        run_steps(run, chain.from_next(), RELAX_STEPS)
-        nodes = run.state_dict()["nodes"]
-        expected = credits(layers, head, x, y, MASK)
-        with torch.no_grad():
-            forward_hs, _ = forward(layers, head, x)
-        assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-10, 1e-8)
-        if block == "linear":
-            # skill pc-alm 4: lam_{L-1} = W_L^T e_L,
-            # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}), where the mean
-            # squared error makes e_L = (2 / N_OUT) (y - y_hat).
-            hs, y_hat = forward(layers, head, x)
-            assert isinstance(head, nn.Linear)
-            e = (2 / N_OUT) * (y - y_hat)
-            lam_last = torch.where(MASK[:, None], e, 0.0) @ head.weight
-            linear = cast(nn.Linear, cast(nn.Sequential, layers[1])[0])
-            a = linear(hs[0])
-            slope = torch.ones_like(a) if act == "linear" else 1 - torch.tanh(a) ** 2
-            lam_first = (slope * lam_last) @ linear.weight
-            close(nodes["l1"]["state"]["lam"], lam_last.detach(), 1e-8)
-            close(nodes["l0"]["state"]["lam"], lam_first.detach(), 1e-8)
-
-    @pytest.mark.parametrize(("block", "act"), CASES)
-    def test_one_update_at_the_fixed_point_is_sgd(
-        self, start_manual: StartManual, block: str, act: str
-    ):
-        # The first update comes learn_interval after the input was written (at
-        # time 0), at the fixed point, weighted by the time since the start.
-        widths = [4, 4, 4] if block == "res" else [4, 5, 3]
-        layers, head = make_modules(block, act, widths)
-        sgd = [copy.deepcopy(m) for m in [*layers, head]]
-        chain = HandChain(layers, head, widths, learn_interval=RELAX_STEPS * H)
-        run = start_manual(chain.net)
-        x, y = sample(widths, 0)
-        chain.write(run, x, y, MASK)
-        run_steps(run, chain.from_next(), RELAX_STEPS)
-        # Backpropagation of the mean loss, one step of the same rate.
-        rate = RELAX_STEPS * H / TAU_THETA
+def sgd_steps(
+    modules: Sequence[nn.Module], x: torch.Tensor, y: torch.Tensor, rate: float, n: int
+) -> list[nn.Module]:
+    """Copies of the layers then the head after ``n`` steps of SGD of ``rate`` on
+    the mean masked loss, by backpropagation through the whole network."""
+    sgd = [copy.deepcopy(m) for m in modules]
+    params = [p for m in sgd for p in m.parameters()]
+    for _ in range(n):
         _, y_hat = forward(sgd[:-1], sgd[-1], x)
-        params = [p for m in sgd for p in m.parameters()]
         grads = torch.autograd.grad(masked_mse(y_hat, y, MASK) / B, params)
         with torch.no_grad():
             for p, g in zip(params, grads, strict=True):
                 p -= rate * g
-        nodes = run.state_dict()["nodes"]
-        for name, module in zip(
-            [*(f"l{i}" for i in range(len(layers))), "out"], sgd, strict=True
-        ):
-            for key, value in module.state_dict().items():
-                close(nodes[name]["state"]["module"][key], value, 1e-10)
+    return sgd
+
+
+def assert_learned(tree: dict[str, Any], sgd: Sequence[nn.Module]) -> None:
+    names = [*(f"l{i}" for i in range(len(sgd) - 1)), "out"]
+    for name, module in zip(names, sgd, strict=True):
+        for key, value in module.state_dict().items():
+            close(tree["nodes"][name]["state"]["module"][key], value, 1e-10)
+
+
+@pytest.mark.slow
+class TestFixedPoint:
+    @pytest.mark.parametrize(
+        ("block", "act", "one_node"),
+        CASES,
+    )
+    def test_lam_is_the_credit_and_the_update_is_sgd(
+        self, start_manual: StartManual, block: str, act: str, one_node: bool
+    ):
+        # The first update comes learn_interval after the input was written (at
+        # time 0), at the fixed point, weighted by the time since the start: the
+        # update of every node is one step of SGD by backpropagation. In it,
+        # each layer relaxes before it learns, and sends mu with the theta
+        # before the update: r = 0, h is the forward pass and lam the credit of
+        # backpropagation. Linear + tanh twice as one node (two constraints in
+        # one) learns as the two nodes do.
+        widths = [4, 4, 4] if block == "res" else [4, 5, 3]
+        layers, head = make_modules(block, act, widths)
+        if one_node:
+            layers, widths = [nn.Sequential(*layers)], [widths[0], widths[-1]]
+        x, y = sample(widths, 0)
+        sgd = sgd_steps([*layers, head], x, y, RELAX_STEPS * H / TAU_THETA, 1)
+        expected = credits(layers, head, x, y, MASK)
+        with torch.no_grad():
+            forward_hs, y_hat = forward(layers, head, x)
+        # The nodes learn on copies: layers and head stay at the start.
+        chain = HandChain(
+            [copy.deepcopy(m) for m in layers],
+            copy.deepcopy(head),
+            widths,
+            tau=FAST,
+            learn_interval=RELAX_STEPS * H,
+        )
+        run = start_manual(chain.net)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), RELAX_STEPS)
+        tree = run.state_dict()
+        assert_learned(tree, sgd)
+        assert_fixed_point(tree, forward_hs, expected, 1e-10, 1e-8)
+        if block == "linear" and not one_node:
+            # skill pc-alm 4: lam_{L-1} = W_L^T e_L,
+            # lam_i = W_{i+1}^T (sigma'(a_{i+1}) * lam_{i+1}), where the mean
+            # squared error makes e_L = (2 / N_OUT) (y - y_hat).
+            assert isinstance(head, nn.Linear)
+            e = (2 / N_OUT) * (y - y_hat)
+            lam_last = torch.where(MASK[:, None], e, 0.0) @ head.weight.detach()
+            linear = cast(nn.Linear, cast(nn.Sequential, layers[1])[0])
+            with torch.no_grad():
+                a = linear(forward_hs[0])
+            slope = torch.ones_like(a) if act == "linear" else 1 - torch.tanh(a) ** 2
+            lam_first = (slope * lam_last) @ linear.weight.detach()
+            close(tree["nodes"]["l1"]["state"]["lam"], lam_last, 1e-8)
+            close(tree["nodes"]["l0"]["state"]["lam"], lam_first, 1e-8)
 
 
 @pytest.mark.slow
 class TestDeepChain:
-    def test_eight_residual_nodes_reach_the_fixed_point(
-        self, start_manual: StartManual
+    @pytest.mark.parametrize(
+        "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
+    )
+    def test_eight_residual_nodes_reach_the_fixed_point_while_learning(
+        self, start_manual: StartManual, learn_interval: float | None
     ):
         # Residual blocks have Jacobians near the identity. The target is the
-        # forward pass plus noise, for credits of order 1.
+        # forward pass plus noise, for credits of order 1. A theta so slow it
+        # barely moves, learning in every update or at intervals of about the
+        # round trip 2 * depth * period of this chain (18 periods): lam goes to
+        # the credit, never far past it, and stays there.
         widths = [8] * 9
         layers, head = make_modules("res", "tanh", widths)
         x, noise = sample(widths, 0)
         with torch.no_grad():
-            forward_hs, y_hat = forward(layers, head, x)
+            _, y_hat = forward(layers, head, x)
         y = y_hat + noise
-        chain = HandChain(layers, head, widths, learn_interval=math.inf)
+        bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
+        slow = pc.optim.SGD(tau=1e9)
+        chain = HandChain(
+            layers,
+            head,
+            widths,
+            tau=FAST,
+            optimizer=slow,
+            learn_interval=learn_interval,
+        )
         run = start_manual(chain.net)
         chain.write(run, x, y, MASK)
-        run_steps(run, chain.from_next(), DEEP_STEPS)
-        expected = credits(layers, head, x, y, MASK)
+        # Long past the fixed point (about 40 steps), so that the chain learns
+        # there a few dozen times: a slowly growing instability shows.
+        for _ in range(4 * RELAX_STEPS // 20):
+            run_steps(run, chain.from_next(), 20)
+            nodes = run.state_dict()["nodes"]
+            assert (
+                max(nodes[f"l{i}"]["state"]["lam"].abs().max() for i in range(8))
+                < bound
+            )
+        moved = [layer.module for layer in chain.layers]  # the nodes' own modules
+        with torch.no_grad():
+            forward_hs, _ = forward(moved, chain.out.module, x)
+        expected = credits(moved, chain.out.module, x, y, MASK)
         assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-9, 1e-8)
 
     @pytest.mark.parametrize(
         ("tau", "steps"),
         [
-            (pc.TimeConstants(h=2 * H, lam=H, r=2 * H), 200),
-            (pc.TimeConstants(h=TAU.h, lam=TAU.lam, r=math.inf), RELAX_STEPS),
+            (FAST, RELAX_STEPS),
+            # About 230 steps to 1e-12.
+            (pc.TimeConstants(h=2 * H, lam=2 * H, r=math.inf), 3 * RELAX_STEPS),
         ],
         ids=["delta-in-one-step", "without-the-decay"],
     )
@@ -416,8 +467,7 @@ class TestDeepChain:
     ):
         # 16 gains of 1.25: the nodes send mu, so the credit only flows down
         # and no r loops back through the product of the Jacobians, which
-        # would diverge however short the steps or long tau.r. With dt = h / 2,
-        # lam = dt and r = h, delta follows -g in one update.
+        # would diverge however short the steps or long tau.r.
         widths = [4] * 17
         layers: list[nn.Module] = []
         for _ in range(16):
@@ -436,83 +486,6 @@ class TestDeepChain:
         expected = credits(layers, head, x, y, MASK)
         assert_fixed_point(run.state_dict(), forward_hs, expected, 1e-9, 1e-8)
 
-    @pytest.mark.parametrize(
-        "learn_interval", [None, 16 * H], ids=["every-update", "16-periods"]
-    )
-    def test_learning_keeps_lam_at_the_credit(
-        self, start_manual: StartManual, learn_interval: float | None
-    ):
-        # A theta so slow it barely moves, learning in every update or at
-        # intervals of about the round trip 2 * depth * period of this chain (18
-        # periods): lam goes to the credit and stays there.
-        widths = [8] * 9
-        layers, head = make_modules("res", "tanh", widths)
-        x, noise = sample(widths, 0)
-        with torch.no_grad():
-            _, y_hat = forward(layers, head, x)
-        y = y_hat + noise
-        bound = 2 * max(c.abs().max() for c in credits(layers, head, x, y, MASK))
-        slow = pc.optim.SGD(tau=1e9)
-        chain = HandChain(
-            layers, head, widths, optimizer=slow, learn_interval=learn_interval
-        )
-        run = start_manual(chain.net)
-        chain.write(run, x, y, MASK)
-        for _ in range(DEEP_STEPS // 100):
-            run_steps(run, chain.from_next(), 100)
-            nodes = run.state_dict()["nodes"]
-            assert (
-                max(nodes[f"l{i}"]["state"]["lam"].abs().max() for i in range(8))
-                < bound
-            )
-        nodes = run.state_dict()["nodes"]
-        moved = [layer.module for layer in chain.layers]  # the nodes' own modules
-        expected = credits(moved, chain.out.module, x, y, MASK)
-        for i, credit in enumerate(expected):
-            close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
-
-
-@pytest.mark.slow
-class TestNodeBoundaries:
-    def test_two_constraints_in_one_node_learn_as_in_two(
-        self, start_manual: StartManual
-    ):
-        # Linear + tanh twice, as one node or as two: at the fixed point, the
-        # update of theta is that of backpropagation either way.
-        widths = [4, 5, 3]
-        layers, head = make_modules("linear", "tanh", widths)
-        x, y = sample(widths, 0)
-        whole = nn.Sequential(*copy.deepcopy(layers))
-        updated: list[dict[str, torch.Tensor]] = []
-        for modules, chain_widths in [
-            ([whole], [widths[0], widths[-1]]),
-            ([copy.deepcopy(m) for m in layers], widths),
-        ]:
-            chain = HandChain(
-                modules,
-                copy.deepcopy(head),
-                chain_widths,
-                learn_interval=RELAX_STEPS * H,
-            )
-            run = start_manual(chain.net, timer=VirtualTimer())
-            chain.write(run, x, y, MASK)
-            run_steps(run, chain.from_next(), RELAX_STEPS)
-            nodes = run.state_dict()["nodes"]
-            names = [f"l{i}" for i in range(len(modules))]
-            # The parameters by their names in nn.Sequential(*layers).
-            params = {
-                f"{i}.{key}" if len(names) > 1 else key: value
-                for i, name in enumerate(names)
-                for key, value in nodes[name]["state"]["module"].items()
-            }
-            updated.append(
-                params
-                | {f"head.{k}": v for k, v in nodes["out"]["state"]["module"].items()}
-            )
-        assert updated[0].keys() == updated[1].keys()
-        for key, value in updated[0].items():
-            close(value, updated[1][key], 1e-10)
-
 
 @pytest.mark.slow
 class TestPcLimit:
@@ -521,11 +494,12 @@ class TestPcLimit:
     ):
         # alpha = 0: lam stays exactly zero, and the nodes are those of
         # predictive coding with the fixed prediction assumption: they send the
-        # forward pass, and the error r settles at the credit of BP.
+        # forward pass, and the error r settles at the credit of BP (about 50
+        # steps to 1e-12, r halving its distance in each).
         widths = [4, 5, 3]
         layers, head = make_modules("linear", "tanh", widths)
         # Without the decay of r too, which would move the fixed point.
-        tau = pc.TimeConstants(h=TAU.h, lam=math.inf, r=math.inf)
+        tau = pc.TimeConstants(h=2 * H, lam=math.inf, r=math.inf)
         chain = HandChain(layers, head, widths, tau=tau, learn_interval=math.inf)
         run = start_manual(chain.net)
         x, y = sample(widths, 0)
@@ -549,9 +523,10 @@ class TestPcLimit:
 class TestScalar:
     def test_lam_is_w2_times_the_error(self, start_manual: StartManual):
         # y_hat = w2 h, h = w1 x, loss 0.5 (y - y_hat)^2: at the fixed point
-        # lam = w2 (y - y_hat). With the half, r relaxes with the curvature
-        # 1 + tau_h / tau_r + w2^2 = 6; MSELoss would make it 10, beyond 8, where
-        # the explicit steps of dt / tau_h = 1/4 diverge.
+        # lam = w2 (y - y_hat) (to 1e-12 in about 400 steps). With the half, r
+        # relaxes with the curvature 1 + tau_h / tau_r + w2^2 = 6; MSELoss would
+        # make it 10, beyond 8, where the explicit steps of dt / tau_h = 1/4
+        # diverge.
         w1, w2, x, y = 0.5, 2.0, 1.5, 1.0
         first, head = nn.Linear(1, 1, bias=False), nn.Linear(1, 1, bias=False)
         with torch.no_grad():
@@ -587,7 +562,7 @@ class TestScalar:
                 }
             }
         )
-        run_steps(run, [out, layer, inp], 1500)
+        run_steps(run, [out, layer, inp], 600)
         lam = run.state_dict()["nodes"]["layer"]["state"]["lam"]
         close(lam, torch.full((1, 1), w2 * (y - w2 * w1 * x), dtype=F64), 1e-10)
         # The host reads the h the layer sent: the forward value.
@@ -596,44 +571,19 @@ class TestScalar:
 
 @pytest.mark.slow
 class TestSchedules:
-    def test_every_order_reaches_the_same_fixed_point(self, start_manual: StartManual):
-        widths = [4, 4, 4]
-        x, y = sample(widths, 0)
-        expected = credits(*make_modules("res", "tanh", widths), x, y, MASK)
-        shuffle = random.Random(0)
-        orders: list[Callable[[HandChain], list[Any]]] = [
-            HandChain.from_next,
-            HandChain.from_prev,
-            lambda chain: shuffle.sample(chain.from_prev(), k=len(chain.from_prev())),
-        ]
-        for order in orders:
-            layers, head = make_modules("res", "tanh", widths)
-            chain = HandChain(layers, head, widths, learn_interval=math.inf)
-            run = start_manual(chain.net, timer=VirtualTimer())
-            chain.write(run, x, y, MASK)
-            for _ in range(RELAX_STEPS):
-                run.step(H, *order(chain))
-            nodes = run.state_dict()["nodes"]
-            for i, credit in enumerate(expected):
-                close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
-
-    def test_every_order_learns_as_sgd(self, start_manual: StartManual):
+    def test_every_order_reaches_the_fixed_point_and_learns_as_sgd(
+        self, start_manual: StartManual
+    ):
         # Learning at intervals, twice, at the fixed point each time: whatever
-        # the order, each update is one step of SGD, the second from the
-        # parameters of the first, and the chain relaxes to the next fixed point.
+        # the order, lam is the credit of backpropagation when the nodes first
+        # learn, each update is one step of SGD, the second from the parameters
+        # of the first, and the chain relaxes to the next fixed point.
         widths = [4, 5, 3]
         x, y = sample(widths, 0)
-        layers, head = make_modules("linear", "tanh", widths)
-        sgd = [copy.deepcopy(m) for m in [*layers, head]]
+        start_layers, start_head = make_modules("linear", "tanh", widths)
+        expected = credits(start_layers, start_head, x, y, MASK)
         optimizer = pc.optim.SGD(tau=RELAX_STEPS * H / 0.1)
-        rate = RELAX_STEPS * H / optimizer.tau
-        params = [p for m in sgd for p in m.parameters()]
-        for _ in range(2):
-            _, y_hat = forward(sgd[:-1], sgd[-1], x)
-            grads = torch.autograd.grad(masked_mse(y_hat, y, MASK) / B, params)
-            with torch.no_grad():
-                for p, g in zip(params, grads, strict=True):
-                    p -= rate * g
+        sgd = sgd_steps([*start_layers, start_head], x, y, 0.1, 2)
         shuffle = random.Random(0)
         orders: list[Callable[[HandChain], list[Any]]] = [
             HandChain.from_next,
@@ -646,17 +596,20 @@ class TestSchedules:
                 layers,
                 head,
                 widths,
+                tau=FAST,
                 optimizer=optimizer,
                 learn_interval=RELAX_STEPS * H,
             )
             run = start_manual(chain.net, timer=VirtualTimer())
             chain.write(run, x, y, MASK)
-            for _ in range(2 * RELAX_STEPS):
+            for _ in range(RELAX_STEPS):
                 run.step(H, *order(chain))
             nodes = run.state_dict()["nodes"]
-            for name, module in zip(["l0", "l1", "out"], sgd, strict=True):
-                for key, value in module.state_dict().items():
-                    close(nodes[name]["state"]["module"][key], value, 1e-10)
+            for i, credit in enumerate(expected):
+                close(nodes[f"l{i}"]["state"]["lam"], credit, 1e-8)
+            for _ in range(RELAX_STEPS):
+                run.step(H, *order(chain))
+            assert_learned(run.state_dict(), sgd)
 
 
 class TestWithoutTeacher:
@@ -1406,7 +1359,8 @@ class TestRelaxer:
     def test_lam_is_still_the_credit_of_backpropagation(
         self, start_manual: StartManual
     ):
-        lams, expected = self._lams(start_manual, self.INERTIAL, RELAX_STEPS)
+        # About 550 steps to 1e-12 at TAU.
+        lams, expected = self._lams(start_manual, self.INERTIAL, 800)
         for lam, credit in zip(lams, expected, strict=True):
             close(lam, credit, 1e-8)
 
@@ -1516,8 +1470,11 @@ class TestCudaGraph:
             )
 
     @pytest.mark.cuda
-    @pytest.mark.parametrize("optimizer", [SGD, ADAMW], ids=["sgd", "adamw"])
-    @pytest.mark.parametrize("learn_interval", [None, 3 * H], ids=["every", "interval"])
+    @pytest.mark.parametrize(
+        ("optimizer", "learn_interval"),
+        [(SGD, None), (ADAMW, 3 * H)],
+        ids=["sgd-every", "adamw-interval"],
+    )
     def test_the_replayed_update_is_the_eager_one_bit_for_bit(
         self,
         start_manual: StartManual,

@@ -91,22 +91,21 @@ class TestOutlet:
         assert y.shape == x.shape
         assert torch.equal(bits(y), bits(x))
 
-    def test_round_trips_zero_dimensional(self):
-        outlet = Outlet(tensor_schema(()), 0, "p", clock=CLOCK)
-        outlet.send([torch.tensor(2.5)])
-        (y,) = values(outlet.outbox.read())
-        assert y.shape == ()
-        assert y.item() == 2.5
-
     def test_round_trips_fields_in_key_order(self):
-        s = schema(("error", (2,), torch.float64), ("mask", (3,), torch.bool))
+        s = schema(
+            ("error", (2,), torch.float64),
+            ("mask", (3,), torch.bool),
+            ("zero_dim", (), torch.float32),
+        )
         outlet = Outlet(s, 0, "p", clock=CLOCK)
         error = torch.tensor([1.5, -2.0], dtype=torch.float64)
         mask = torch.tensor([True, False, True])
-        outlet.send([error, mask])
+        outlet.send([error, mask, torch.tensor(2.5)])
         got = values(outlet.outbox.read())
         assert torch.equal(got[0], error)
         assert torch.equal(got[1], mask)
+        assert got[2].shape == ()
+        assert got[2].item() == 2.5
 
     @pytest.mark.parametrize(
         "make",
@@ -298,18 +297,22 @@ class TestInputGroup:
 
 
 class TestTime:
-    def test_only_what_the_writers_wrote_has_a_time(self):
-        outlet = Outlet(tensor_schema((2,)), 1, "p", clock=CLOCK)
-        group = InputGroup(clock=CLOCK)
+    def test_only_what_the_writers_wrote_has_a_time_of_their_clock(self):
+        given, other = VirtualTimer(), VirtualTimer()
+        other.advance(5.0)  # in no message
+        given.advance(1.5)
+        clock = ReadOnlyTimer(given)
+        outlet = Outlet(tensor_schema((2,)), 1, "p", clock=clock)
+        group = InputGroup(clock=clock)
         x = group.input(tensor_schema((2,)), "x")
         assert outlet.outbox.read().timestamp is None
         assert outlet.channel(0).read().timestamp is None
         assert x.read().timestamp is None
         outlet.send([torch.ones(2)])
         written_at = group.write([(x, [torch.ones(2)])])
-        assert outlet.outbox.read().timestamp == outlet.channel(0).read().timestamp
-        assert outlet.outbox.read().timestamp is not None
-        assert x.read().timestamp == written_at
+        sent = outlet.outbox.read().timestamp
+        assert sent == outlet.channel(0).read().timestamp
+        assert sent == x.read().timestamp == written_at == Timestamp(ns=1_500_000_000)
 
     @pytest.mark.parametrize("time_ns", [None, 5])
     def test_restore_sets_it(self, time_ns: int | None):
@@ -320,18 +323,3 @@ class TestTime:
         expected = None if time_ns is None else Timestamp(ns=time_ns)
         assert outlet.outbox.read().timestamp == expected
         assert x.read().timestamp == expected
-
-
-class TestClocks:
-    def test_slots_stamp_with_the_clock_they_are_given(self):
-        given, other = VirtualTimer(), VirtualTimer()
-        other.advance(5.0)  # in no message
-        given.advance(1.5)
-        clock = ReadOnlyTimer(given)
-        outlet = Outlet(tensor_schema((1,)), 1, "p", clock=clock)
-        group = InputGroup(clock=clock)
-        x = group.input(tensor_schema((1,)), "x")
-        outlet.send([torch.ones(1)])
-        written_at = group.write([(x, [torch.ones(1)])])
-        sent = outlet.outbox.read().timestamp
-        assert sent == x.read().timestamp == written_at == Timestamp(ns=1_500_000_000)

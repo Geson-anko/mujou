@@ -404,10 +404,10 @@ $r$ の緩和の仕方は差し替えられる部品にする（`src/mujou/pc/re
 7. `Output` は常に、受け取った活動と同じメッセージの $y$ を使う。`mask` が False のサンプルは損失に入らず、`Layer` もその行の credit を返さない
 8. `LearnClock` を、仕様の式から書いた期待値で検査する（`test_clock.py`）
 9. 状態から復元すると、同じスケジュールで同じ値になる
-10. ResBlock 8 ノードの鎖が $\tau_r = \tau_h$ で不動点に着く。増幅する線形の鎖（1.25 × 16）が、臨界減衰の時定数でも減衰なしでも credit に着く。`learn_interval=None` と 16 周期で回すと、$\lambda$ は credit の 2 倍を超えず、credit に収束する
-11. 2 つの制約を 1 ノードにまとめた鎖と、2 ノードに分けた鎖で、不動点での $\theta$ の更新が一致する（ノードの分け方に依らない）
+10. ResBlock 8 ノードの鎖を `learn_interval=None` と 16 周期で学ばせながら回すと、$\lambda$ は credit の 2 倍を超えず、不動点に着いた後も学び続けて credit に留まる。増幅する線形の鎖（1.25 × 16）が、臨界減衰の時定数でも減衰なしでも credit に着く。不動点は時定数に依らないので、収束を見るテストは 1 回の更新で $\delta$ が $-g$ に着く時定数で回して速くする（$\tau_r = \tau_h$ のダイナミクスは参照実装との一致（`TestReference`）が固定する）
+11. 2 つの制約を 1 ノードにまとめた鎖でも、2 ノードに分けた鎖と同じく、不動点での $\theta$ の更新が BP の SGD と一致する（ノードの分け方に依らない）
 12. 時刻 0 に書いた最初の入力を学ぶ
 13. credit の波面: $\lambda$ が初めて 0 でなくなるステップが、`step(h)` で層 $i$ に $2 \times \text{hops} - i$、出力側からの逐次で全層 $\text{hops} + 1$、入力側からの逐次で $L + 1 - i$ になる。送った $g_{\mathrm{in}}$ が、更新前でなく緩和した後の $\delta$ から作られている
 14. `Chain` が手組みと `torch.equal` で一致する。`show` が書き込みに対する最初の予測を返す（実時間の run）
-15. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致は subprocess の 1 本（slow）で確かめ、自前の optimizer が 3.14t の GIL を戻さないことも subprocess で確かめる
+15. optimizer（`test_optim.py`）: SGD が `p - (elapsed/τ) g` と一致する。AdamW が Δt 一定で手で書いた torch の AdamW の式と 1e-12 で一致し、初回の 1 歩が閉じた形 $\theta(1-\eta w) - \eta g/(|g|+\varepsilon)$ になる。Δt を 2 回と 2Δt を 1 回で m・v・c が一致し、c が $1 - e^{-\sum\Delta t/\tau}$ になる。状態の復元で同じ値になる。`torch.optim.AdamW` との一致と、自前の optimizer が 3.14t の GIL を戻さないことは、1 本の subprocess でまとめて確かめる（slow にせず `just test-fast` にも入れる）
 16. relaxer（`test_relax.py`）: `Euler` が `r - (dt/τ_h) F` と一致し、状態を持たない。`Layer` では、状態を持つ自作の relaxer（テストの `Inertial`、速度を持つ）でも $\lambda$ が BP の credit に一致し、その状態がノードの状態に入って復元される。`reset_` は入力ごとに 1 回、その入力の `reset` を渡して呼ばれ、$\theta$ の跳びでは呼ばれない。状態を持つ relaxer は、リセットしたサンプルの状態だけを捨てる。`Chain` は各 `Layer` に別々の束縛を持たせる

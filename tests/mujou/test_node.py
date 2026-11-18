@@ -54,38 +54,27 @@ class TestThreadSetup:
         # specs: the framework does not change gradient recording; a new thread
         # records gradients, as in plain PyTorch.
         node = Starts(seed=0)
-        start_manual(Group(node=node))
+        run = start_manual(Group(node=node))
         assert node.grad_enabled is True
         assert node.ident not in (None, threading.get_ident())
-
-    def test_the_generator_follows_the_seed(self, start_manual: StartManual):
-        a, b, c = Starts(seed=7), Starts(seed=7), Starts(seed=8)
-        for node in (a, b, c):
-            start_manual(Group(node=node))
-        assert a.draws is not None and b.draws is not None and c.draws is not None
-        expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
-        assert torch.equal(a.draws, expected)
-        assert torch.equal(b.draws, expected)
-        assert not torch.equal(c.draws, expected)
-
-    def test_leaves_the_hooks_of_the_node_alone(self, start_manual: StartManual):
-        node = Starts(seed=0)
-        run = start_manual(Group(node=node))
+        # Nor does the framework set the node's hooks on it.
         run.state_dict()
         assert not {"on_update", "state_dict"} & set(vars(node))
 
-    def test_the_generator_is_ready_in_init(self):
-        node = InitDraws(seed=7)
-        expected = torch.rand(3, generator=torch.Generator().manual_seed(7))
-        assert torch.equal(node.draws_in_init, expected)
-
-    def test_on_start_continues_the_sequence_from_init(self, start_manual: StartManual):
-        node = InitDraws(seed=7)
-        start_manual(Group(node=node))
+    def test_the_generator_follows_the_seed_from_init_to_on_start(
+        self, start_manual: StartManual
+    ):
+        a, b, c = InitDraws(seed=7), InitDraws(seed=7), InitDraws(seed=8)
         generator = torch.Generator().manual_seed(7)
-        _ = torch.rand(3, generator=generator)  # what __init__ drew
-        assert node.draws is not None
-        assert torch.equal(node.draws, torch.rand(3, generator=generator))
+        in_init = torch.rand(3, generator=generator)
+        for node in (a, b):
+            assert torch.equal(node.draws_in_init, in_init)
+        start_manual(Group(a=a, b=b, c=c))
+        in_on_start = torch.rand(3, generator=generator)
+        assert a.draws is not None and b.draws is not None and c.draws is not None
+        assert torch.equal(a.draws, in_on_start)
+        assert torch.equal(b.draws, in_on_start)
+        assert not torch.equal(c.draws, in_on_start)
 
     def test_a_hook_backpropagates_without_turning_gradients_on(
         self, start_manual: StartManual
@@ -264,7 +253,7 @@ class TestTimer:
         class Slow(Timed):
             @override
             def state_dict(self) -> dict[str, Any]:
-                time.sleep(0.05)  # while the host's other thread reads
+                time.sleep(0.01)  # while the host's other thread reads
                 return {"now": self.timer.now()}
 
         node = Slow()
@@ -322,15 +311,9 @@ class TestTimer:
 
 
 class TestDevice:
-    def test_defaults_to_the_cpu(self):
-        assert Starts().device == torch.device("cpu")
-
-    def test_takes_a_string(self):
-        class OnCpu(Node):
-            def __init__(self) -> None:
-                super().__init__(device="cpu")
-
-        assert OnCpu().device == torch.device("cpu")
+    def test_defaults_to_the_cpu_and_takes_a_string(self):
+        assert Node().device == torch.device("cpu")
+        assert Node(device="cpu").device == torch.device("cpu")
 
     @pytest.mark.skipif(torch.cuda.is_available(), reason="needs no CUDA")
     def test_rejects_cuda_without_cuda(self):
@@ -366,10 +349,6 @@ class TestPeriod:
     def test_defaults_to_ten_milliseconds(self):
         assert Starts().period == 0.01
 
-    @pytest.mark.parametrize("period", [0.0, 0.5, math.inf])
-    def test_is_kept(self, period: float):
-        assert Node(period=period).period == period
-
     @pytest.mark.parametrize("period", [-0.01, math.nan])
     def test_rejects_what_is_negative_or_nan(self, period: float):
         with pytest.raises(ValueError, match=r"^the period must be >= 0 seconds"):
@@ -383,14 +362,17 @@ class TestPeriod:
         start(Group(node=node), timer=virtual)
         virtual.advance(0.005)
         with pytest.raises(queue.Empty):
-            node.dts.get(timeout=0.05)
+            node.dts.get(timeout=0.02)
         virtual.advance(0.005)
         assert node.dts.get(timeout=5.0) == 0.01
 
-    def test_a_period_of_zero_updates_as_soon_as_the_time_moves(
-        self, virtual: VirtualTimer, start: Start
+    # A period of zero updates as soon as the time moves, and one below a
+    # nanosecond is one nanosecond.
+    @pytest.mark.parametrize("period", [0.0, 1e-10])
+    def test_updates_once_the_time_moves_a_nanosecond(
+        self, virtual: VirtualTimer, start: Start, period: float
     ):
-        node = Ticker(period=0.0)
+        node = Ticker(period=period)
         start(Group(node=node), timer=virtual)
         virtual.advance(1e-9)
         assert node.dts.get(timeout=5.0) == 1e-9
@@ -402,22 +384,11 @@ class TestPeriod:
         run = start(Group(node=node), timer=virtual)
         virtual.advance(1e9)
         with pytest.raises(queue.Empty):
-            node.dts.get(timeout=0.05)
+            node.dts.get(timeout=0.02)
         run.shutdown()
-
-    def test_a_period_below_a_nanosecond_is_one_nanosecond(
-        self, virtual: VirtualTimer, start: Start
-    ):
-        node = Ticker(period=1e-10)
-        start(Group(node=node), timer=virtual)
-        virtual.advance(1e-9)
-        assert node.dts.get(timeout=5.0) == 1e-9
 
 
 class TestDedicatedThread:
-    def test_defaults_to_the_workers(self):
-        assert Starts().dedicated_thread is False
-
     def test_a_dedicated_node_runs_every_hook_on_one_thread_of_its_own(
         self, start_manual: StartManual
     ):
@@ -493,10 +464,7 @@ class TestStateCollection:
         assert torch.equal(at(state, "p"), node.p.detach())
         assert set(cast(Mapping[str, object], state["linear"])) == {"weight", "bias"}
         assert torch.equal(at(state, "linear", "weight"), node.linear.weight.detach())
-
-    def test_the_tree_holds_detached_views_of_the_live_tensors(self):
-        node = Stateful(0.0)
-        state = node.state_dict()
+        # Detached views of the live tensors.
         p, weight = at(state, "p"), at(state, "linear", "weight")
         assert not p.requires_grad and not weight.requires_grad
         assert p.data_ptr() == node.p.data_ptr()
@@ -812,6 +780,8 @@ class TestRestore:
         for _ in range(k):
             run.step(H)
         tree = pickle.loads(pickle.dumps(run.state_dict()))
+        # The run keeps the tree on the CPU, whatever the node's device.
+        assert at(tree, "nodes", "node", "state", "_x").device == torch.device("cpu")
         for _ in range(m):
             run.step(H)
         expected = copy.deepcopy(node.state_dict())

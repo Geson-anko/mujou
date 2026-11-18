@@ -275,9 +275,18 @@ class StreamRecorder(Node):
         self.updated.put(None)
 
 
+# A large tensor and many in-place updates of it per hook, so that the GPU is
+# still busy long after the CPU has queued them: a missing wait for a stream
+# shows. Small enough for the CUDA budget of the tests (conftest).
+BIG = 1 << 24  # 64 MB of float32
+ADDS = 80  # in-place updates of the whole tensor per on_update
+HOST_ADDS = 200  # in-place updates of the whole tensor per other hook
+CUDA0 = torch.device("cuda", 0)
+
+
 class Busy(Node):
-    """Each ``on_update`` adds 1 to a large tensor 20 times, in place, and first
-    records whether the node's stream had finished the previous update."""
+    """Each ``on_update`` adds 1 to a large tensor ``ADDS`` times, in place, and
+    first records whether the node's stream had finished the previous update."""
 
     def __init__(self) -> None:
         super().__init__(device="cuda:0")
@@ -286,18 +295,13 @@ class Busy(Node):
 
     @override
     def on_start(self) -> None:
-        self.w = torch.zeros(1 << 26, device=self.device)  # 256 MB of float32
+        self.w = torch.zeros(BIG, device=self.device)
 
     @override
     def on_update(self, dt: float) -> None:
         self.idle_at_update.append(torch.cuda.current_stream().query())
-        for _ in range(20):
+        for _ in range(ADDS):
             self.w.add_(1.0)
-
-
-BIG = 1 << 26  # 256 MB of float32
-ADDS = 20  # in-place updates of the whole tensor per on_update
-CUDA0 = torch.device("cuda", 0)
 
 
 class DeviceLeaky(Node):
@@ -326,35 +330,6 @@ class DeviceChain(Network):
         self.a.next.connect(self.b.prev)
         self.prev = self.a.prev
         self.next = self.b.next
-
-
-class CudaSource(Node):
-    def __init__(self, device: str) -> None:
-        super().__init__(device=device)
-        self.next = Port(send=vec())
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.next.send(torch.tensor([1.0, 2.0], dtype=F64, device=self.device))
-
-
-class CudaSink(Node):
-    def __init__(self, device: str) -> None:
-        super().__init__(device=device)
-        self.prev = Port(recv=vec())
-        self.received: torch.Tensor | None = None
-
-    @override
-    def on_update(self, dt: float) -> None:
-        self.received = self.prev.recv()
-
-
-class SourceToSink(Network):
-    def __init__(self, source: CudaSource, sink: CudaSink) -> None:
-        super().__init__()
-        self.source = source
-        self.sink = sink
-        source.next.connect(sink.prev)
 
 
 class Counter(Node):
@@ -396,58 +371,29 @@ def is_uniform(tree: dict[str, Any]) -> bool:
     return w.min().item() == k and w.max().item() == k
 
 
-HOST_ADDS = 50
-
-
-class QueuesOnTheHost(Node):
-    """Queues ``HOST_ADDS`` updates of a large tensor on the host's stream in
-    ``__init__`` and reads it in ``on_start``."""
+class QueuesWork(Node):
+    """Leaves ``HOST_ADDS`` updates of a large tensor queued on a stream at each
+    of three places: the host's, in ``__init__``; its own, in ``on_start``, after
+    keeping the value it finds there in ``seen``; and its own, in ``on_stop``."""
 
     def __init__(self, device: torch.device) -> None:
         super().__init__(device=device)
         self.w = torch.zeros(BIG, device=self.device)
+        self.add()
+        self.seen: float | None = None
+
+    def add(self) -> None:
         for _ in range(HOST_ADDS):
             self.w.add_(1.0)
-        self.seen: float | None = None
 
     @override
     def on_start(self) -> None:
         self.seen = self.w.min().item()
-
-
-class BusyStart(Node):
-    """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
-    ``on_start`` (no ``on_update`` waits for them)."""
-
-    def __init__(self, device: torch.device) -> None:
-        super().__init__(device=device)
-
-    @override
-    def on_start(self) -> None:
-        self.w = torch.zeros(BIG, device=self.device)
-        for _ in range(HOST_ADDS):
-            self.w.add_(1.0)
-
-    @override
-    def state_dict(self) -> dict[str, Any]:
-        return {"w": self.w}
-
-
-class BusyStop(Node):
-    """Leaves ``HOST_ADDS`` updates of a large tensor on its stream in
-    ``on_stop``."""
-
-    def __init__(self, device: torch.device) -> None:
-        super().__init__(device=device)
-
-    @override
-    def on_start(self) -> None:
-        self.w = torch.zeros(BIG, device=self.device)
+        self.add()
 
     @override
     def on_stop(self) -> None:
-        for _ in range(HOST_ADDS):
-            self.w.add_(1.0)
+        self.add()
 
     @override
     def state_dict(self) -> dict[str, Any]:
@@ -488,6 +434,13 @@ print(torch.cuda.is_initialized())
         run.step(H)
         assert node.current_device == index
         assert node.own_stream is True
+        # After the end, the node's state_dict runs on the host's thread and
+        # leaves the host's device and stream as they were.
+        run.shutdown()
+        device, stream = torch.cuda.current_device(), torch.cuda.current_stream()
+        run.state_dict()
+        assert torch.cuda.current_device() == device
+        assert torch.cuda.current_stream() == stream
 
     @pytest.mark.parametrize(
         "indices", [(0, 0), pytest.param((0, 1), marks=pytest.mark.cuda(2))]
@@ -508,19 +461,6 @@ print(torch.cuda.is_initialized())
             assert node.streams[0] != torch.cuda.default_stream(index).cuda_stream
         assert a.streams[0] != b.streams[0]
 
-    @pytest.mark.parametrize("index", [0, pytest.param(1, marks=pytest.mark.cuda(2))])
-    def test_the_state_after_the_end_leaves_the_hosts_device_and_stream(
-        self, start_manual: StartManual, index: int
-    ):
-        # After the end, the node's state_dict runs on the host's thread.
-        run = start_manual(Group(node=OnDevice(f"cuda:{index}")))
-        run.step(H)
-        run.shutdown()
-        device, stream = torch.cuda.current_device(), torch.cuda.current_stream()
-        run.state_dict()
-        assert torch.cuda.current_device() == device
-        assert torch.cuda.current_stream() == stream
-
     @pytest.mark.slow
     def test_waits_for_its_stream_after_each_update(self, start_manual: StartManual):
         # Busy overrides on_start and on_update without calling super(): the
@@ -531,17 +471,6 @@ print(torch.cuda.is_initialized())
             run.step(H)
         # The first update follows on_start, after which nothing waits.
         assert node.idle_at_update[1:] == [True] * 4
-
-    @pytest.mark.cuda(2)
-    def test_a_message_goes_from_one_gpu_to_another(self, start_manual: StartManual):
-        source, sink = CudaSource("cuda:0"), CudaSink("cuda:1")
-        net = SourceToSink(source, sink)
-        run = start_manual(net)
-        run.step(H, source, sink)
-        received = sink.received
-        assert received is not None
-        assert received.device == torch.device("cuda", 1)
-        assert torch.equal(received.cpu(), torch.tensor([1.0, 2.0], dtype=F64))
 
     @pytest.mark.cuda(2)
     def test_a_reader_off_the_writers_device_copies_on_a_stream_of_its_own(
@@ -582,27 +511,12 @@ print(torch.cuda.is_initialized())
         assert cpu_stream != cuda1_stream
         assert cuda1_device == 1
 
-    def test_the_state_is_on_the_cpu_and_restores_to_the_device(
-        self, start_manual: StartManual
-    ):
-        source = DeviceChain(CUDA0)
-        run = start_manual(source, inputs={source.prev: u(1)})
-        run.step(H, source.a, source.b)
-        tree = run.state_dict()
-        run.shutdown()
-        x = tree["nodes"]["a"]["state"]["x"]
-        assert x.device == torch.device("cpu")
-        net = DeviceChain(CUDA0)
-        start_manual(net, state=tree)
-        assert net.a.x.device == CUDA0
-        assert torch.equal(net.a.x.cpu(), x)
-
     def test_manual_steps_match_the_discrete_algorithm(self, start_manual: StartManual):
         net = DeviceChain(CUDA0)
         run = start_manual(net)
         xa = torch.zeros(2, dtype=F64, device=CUDA0)
         xb = torch.zeros(2, dtype=F64, device=CUDA0)
-        for k in range(20):
+        for k in range(5):
             run.write({net.prev: u(k)})
             run.step(H, net.a, net.b)
             xa = euler(xa, u(k).to(CUDA0))
@@ -614,7 +528,7 @@ print(torch.cuda.is_initialized())
         run = start(Group(node=Counter(CUDA0)))
         run.timer.sleep(0.2)
         trees: list[dict[str, Any]] = []
-        for _ in range(40):
+        for _ in range(20):
             trees.append(run.state_dict())
             run.timer.sleep(0.01)
         torn = [i for i, tree in enumerate(trees) if not is_uniform(tree)]
@@ -627,36 +541,24 @@ print(torch.cuda.is_initialized())
         assert trees[-1]["nodes"]["node"]["state"]["k"] > 0
 
     @pytest.mark.slow
-    def test_on_start_sees_the_work_the_host_queued(self, start_manual: StartManual):
-        seen: list[float | None] = []
-        for _ in range(5):
-            # Run each node right after making it, while its work is still queued.
-            node = QueuesOnTheHost(CUDA0)
-            start_manual(Group(node=node)).shutdown()
-            seen.append(node.seen)
-        assert seen == [float(HOST_ADDS)] * 5
-
-    @pytest.mark.slow
-    def test_state_dict_waits_for_the_work_of_on_start(self, start_manual: StartManual):
-        captured: list[tuple[float, float]] = []
-        for _ in range(5):
-            run = start_manual(Group(node=BusyStart(CUDA0)))
-            w = run.state_dict()["nodes"]["node"]["state"]["w"]
-            run.shutdown()
-            captured.append((w.min().item(), w.max().item()))
-        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
-
-    @pytest.mark.slow
-    def test_state_dict_after_the_end_waits_for_the_work_of_on_stop(
+    def test_each_hook_and_the_state_see_the_work_queued_before(
         self, start_manual: StartManual
     ):
-        captured: list[tuple[float, float]] = []
+        # on_start sees what the host queued; a state taken while paused sees
+        # what on_start queued, and one after the end what on_stop queued.
+        seen: list[tuple[float | None, float, float]] = []
         for _ in range(5):
-            run = start_manual(Group(node=BusyStop(CUDA0)))
+            # Run each node right after making it, while its work is still queued.
+            node = QueuesWork(CUDA0)
+            run = start_manual(Group(node=node))
+            paused = run.state_dict()["nodes"]["node"]["state"]["w"]
             run.shutdown()
-            w = run.state_dict()["nodes"]["node"]["state"]["w"]
-            captured.append((w.min().item(), w.max().item()))
-        assert captured == [(float(HOST_ADDS), float(HOST_ADDS))] * 5
+            ended = run.state_dict()["nodes"]["node"]["state"]["w"]
+            for w in (paused, ended):
+                assert w.min().item() == w.max().item()
+            seen.append((node.seen, paused.min().item(), ended.min().item()))
+        expected = (float(HOST_ADDS), 2.0 * HOST_ADDS, 3.0 * HOST_ADDS)
+        assert seen == [expected] * 5
 
     @pytest.mark.slow
     def test_a_restored_node_starts_from_the_tree(

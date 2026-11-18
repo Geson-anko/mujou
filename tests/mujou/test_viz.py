@@ -93,8 +93,9 @@ def hidden(path: str, name: str) -> dict[str, Any]:
 
 
 class TestToHtml:
-    def test_tree(self):
-        assert graph(to_html(Classifier()))["root"] == {
+    def test_tree_and_edges(self):
+        found = graph(to_html(Classifier()))
+        assert found["root"] == {
             "kind": "network",
             "name": "Classifier",
             "path": "",
@@ -144,10 +145,8 @@ class TestToHtml:
                 {"name": "teacher", "path": "head.teacher"},
             ],
         }
-
-    def test_edges(self):
-        # One per channel, from the end first in the tree when both send.
-        assert graph(to_html(Classifier()))["edges"] == [
+        # One edge per channel, from the end first in the tree when both send.
+        assert found["edges"] == [
             {"from": "body.l1.next", "to": "body.l2.prev"},
             {"from": "body.l2.next", "to": "head.prev"},
         ]

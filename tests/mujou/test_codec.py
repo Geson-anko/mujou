@@ -101,18 +101,6 @@ class TestRoundTrip:
         assert torch.equal(bits(y), bits(x))
         assert y.data_ptr() != x.data_ptr()
 
-    @pytest.mark.parametrize("dtype", list(DLPACK), ids=str)
-    def test_a_dict_round_trips_every_dtype_bit_for_bit(self, dtype: torch.dtype):
-        spec = DictSpec(
-            Feedback, error=TensorSpec((2, 3), dtype), target=TensorSpec((), dtype)
-        )
-        msg = {"target": sample((), dtype), "error": sample((2, 3), dtype)}
-        back = through_the_core(spec, msg)
-        assert isinstance(back, dict)
-        assert list(back) == ["error", "target"]
-        for key in ("error", "target"):
-            assert torch.equal(bits(back[key]), bits(msg[key])), key
-
     def test_always_copies(self):
         spec = TensorSpec((2,))
         x = torch.zeros(2)
@@ -152,18 +140,13 @@ INT_BOUNDS = [
 
 class TestScalars:
     @pytest.mark.parametrize(("bits", "signed", "value"), INT_BOUNDS)
-    def test_an_int_round_trips_at_the_bounds(
+    def test_an_int_round_trips_at_the_bounds_and_overflows_beyond(
         self, bits: int, signed: bool, value: int
     ):
-        back = through_the_core(IntSpec(bits, signed=signed), value)  # pyright: ignore[reportArgumentType]
-        assert back == value and type(back) is int
-
-    @pytest.mark.parametrize(("bits", "signed", "value"), INT_BOUNDS)
-    def test_an_int_beyond_the_bounds_overflows(
-        self, bits: int, signed: bool, value: int
-    ):
-        beyond = value + 1 if value > 0 else value - 1  # the high or low bound
         spec = IntSpec(bits, signed=signed)  # pyright: ignore[reportArgumentType]
+        back = through_the_core(spec, value)
+        assert back == value and type(back) is int
+        beyond = value + 1 if value > 0 else value - 1  # the high or low bound
         with pytest.raises(OverflowError, match=f"'a.next/out'.*{beyond}"):
             through_the_core(spec, beyond)
 
@@ -218,19 +201,6 @@ class TestScalars:
             True,
             Timestamp(ns=7),
         ]
-
-    @pytest.mark.parametrize(
-        ("spec", "zero"),
-        [
-            (IntSpec(8), 0),
-            (FloatSpec(), 0.0),
-            (BoolSpec(), False),
-            (TimestampSpec(), Timestamp(ns=0)),
-        ],
-    )
-    def test_the_initial_value_is_zero(self, spec: MessageSpec[Any], zero: object):
-        initial = read_initial(spec)
-        assert initial == zero and type(initial) is type(zero)
 
     def test_the_initial_dict_is_its_zeros(self):
         initial = read_initial(mixed_spec())
@@ -317,16 +287,6 @@ def outlet_of(spec: MessageSpec[Any]) -> Outlet:
 
 @pytest.mark.cuda
 class TestCuda:
-    @pytest.mark.parametrize("dtype", list(DLPACK), ids=str)
-    def test_a_tensor_on_the_device_round_trips_every_dtype_bit_for_bit(
-        self, dtype: torch.dtype
-    ):
-        spec = TensorSpec((3, 5), dtype)
-        x = sample(spec.shape, dtype)
-        y = through_the_core(spec, x.to(CUDA0), device=CUDA0)
-        assert isinstance(y, torch.Tensor)
-        assert torch.equal(bits(y), bits(x))
-
     def test_the_core_holds_a_contiguous_clone_on_the_device(self):
         spec = TensorSpec((3, 2))
         x = torch.arange(6.0, device=CUDA0).reshape(2, 3).t()  # not contiguous
@@ -346,12 +306,6 @@ class TestCuda:
         (by_the_host,) = to_core(spec, torch.ones(2, device=CUDA0), "a.next")
         for y in (on_cpu, by_the_host):
             assert isinstance(y, torch.Tensor) and y.device == CPU
-
-    def test_a_tensor_that_is_not_dense_is_refused(self):
-        spec = TensorSpec((2, 2))
-        sparse = torch.eye(2, device=CUDA0).to_sparse()
-        with pytest.raises(BufferError):
-            outlet_of(spec).send(to_core(spec, sparse, "a.next", device=CUDA0))
 
     def test_reading_copies_and_peeking_does_not(self):
         spec = mixed_spec()

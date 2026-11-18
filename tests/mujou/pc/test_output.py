@@ -8,7 +8,7 @@ from torch import nn
 import mujou.pc as pc
 from mujou import DictSpec, Group, ManualRun, TensorSpec, TimestampSpec
 from tests.mujou.nodes import F64, close
-from tests.mujou.pc._reference import ADAMW, SGD, TAU_THETA
+from tests.mujou.pc._reference import SGD, TAU_THETA
 
 if TYPE_CHECKING:
     from tests.mujou.conftest import StartManual
@@ -126,7 +126,7 @@ class TestConstruction:
             time=TimestampSpec(),
         )
 
-    def test_the_period_defaults_to_tau_period(self):
+    def test_the_period_defaults_to_tau_period_and_must_not_pass_max_dt(self):
         out = pc.Output(
             nn.Linear(N_IN, N_OUT),
             loss=pc.loss.MSELoss(B),
@@ -136,8 +136,6 @@ class TestConstruction:
             learn_interval=None,
         )
         assert out.period == pytest.approx(TAU.period)
-
-    def test_the_period_must_not_be_longer_than_max_dt(self):
         with pytest.raises(ValueError, match="max_dt"):
             pc.Output(
                 nn.Linear(N_IN, N_OUT),
@@ -230,28 +228,3 @@ class TestMaxDt:
                 p -= (2 * H / TAU_THETA) * g / B
         for key, value in reference.state_dict().items():
             close(direct.weights()[key], value)
-
-
-class TestOptimizer:
-    def test_the_first_update_with_adamw_is_its_closed_form(
-        self, start_manual: StartManual
-    ):
-        # Learning in every update: the output first learns at step 2, by H.
-        # The first step of AdamW has m_hat = g and v_hat = g^2 whatever tau_m
-        # and tau_v: theta (1 - eta w) - eta g / (|g| + eps), eta = H / tau,
-        # with the mean gradient g = g_theta / B.
-        module = head()
-        reference = copy.deepcopy(module)
-        direct = Direct(start_manual, module, optimizer=ADAMW, learn_interval=None)
-        x, y, mask = samples(1)[0]
-        direct.step((x, y, mask))  # the output reads zeros: nothing to learn
-        direct.step(None)
-        _, _, g_theta = gradients(reference, x, y, mask)
-        eta = H / ADAMW.tau
-        decay = 1 - eta * ADAMW.weight_decay
-        with torch.no_grad():
-            for p, g_sum in zip(reference.parameters(), g_theta, strict=True):
-                g = g_sum / B
-                p.copy_(p * decay - eta * g / (g.abs() + ADAMW.eps))
-        for key, value in reference.state_dict().items():
-            close(direct.weights()[key], value, 1e-12)

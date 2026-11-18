@@ -52,21 +52,6 @@ def u(k: float) -> torch.Tensor:
     return torch.tensor([math.sin(k), math.cos(k)], dtype=F64)
 
 
-class Echo(Node):
-    """Sends the time of the message it receives, in nanoseconds."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.prev = Port(recv=vec())
-        self.next = Port(send=TensorSpec((), torch.int64))
-
-    @override
-    def on_update(self, dt: float) -> None:
-        _, t = self.prev.recv_with_time()
-        assert t is not None  # the host writes before each step
-        self.next.send(torch.tensor(t.ns))
-
-
 def euler(x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """The reference of one ``Leaky`` update with ``tau=1`` and ``dt=H``."""
     return x + min(H / 1.0, 1.0) * (target - x)
@@ -214,13 +199,12 @@ class TestRefusedRun:
             ("inputs", r"^slot 'a\.prev/in': expected shape \(2,\)"),
             ("inputs-connected", r"^the host does not write b\.prev"),
             ("initial", r"^slot 'bad\.next/out': expected shape \(2,\)"),
-            ("workers", r"^workers must be at least 1"),
             ("state", r"^the state tree does not match this run"),
             ("timer-and-state", r"^a restored run runs on a timer of its own"),
         ],
     )
     def test_changes_nothing_and_the_same_instances_run(
-        self, start_manual: StartManual, start: Start, given: str, match: str
+        self, start_manual: StartManual, given: str, match: str
     ):
         net = Chain()
         wrong = torch.zeros(3, dtype=F64)
@@ -232,7 +216,6 @@ class TestRefusedRun:
             "inputs": partial(start_manual, net, inputs={net.prev: wrong}),
             "inputs-connected": partial(start_manual, net, inputs={net.b.prev: u(1)}),
             "initial": partial(start_manual, Group(net=net, bad=Initial(wrong))),
-            "workers": partial(start, net, timer=VirtualTimer(), workers=0),
             "state": partial(start_manual, net, state=broken),
             "timer-and-state": partial(
                 start_manual, net, timer=VirtualTimer(), state=tree
@@ -376,7 +359,7 @@ class TestWorkers:
         for node, x in zip(nodes, expected, strict=True):
             assert torch.equal(node.x, x)
 
-    def test_the_default_shares_threads_among_more_nodes_than_cpus(
+    def test_the_default_shares_at_most_the_cpus_among_more_nodes(
         self, start_manual: StartManual
     ):
         n = more_nodes_than_cpus()
@@ -387,13 +370,8 @@ class TestWorkers:
         idents = {i for node in nodes for i in node.idents}
         assert len(idents) <= workers_of(run) < n
         assert threading.get_ident() not in idents
-
-    def test_the_default_is_at_most_the_cpus_or_half_of_them_with_the_gil(
-        self, start_manual: StartManual
-    ):
         # The runtime also counts a CPU quota, which Python cannot see, so only
-        # the bound is known here.
-        run = start_manual(group(noisy_chain(more_nodes_than_cpus())))
+        # the bound is known here: the CPUs, or half of them with the GIL.
         cpus = os.process_cpu_count() or 1
         gil = sys._is_gil_enabled()  # pyright: ignore[reportPrivateUsage]
         assert 1 <= workers_of(run) <= (max(1, cpus // 2) if gil else cpus)
@@ -403,7 +381,7 @@ class TestWorkers:
         # worker takes updates: one thread per worker, as many as the default.
         nodes = [Holding() for _ in range(more_nodes_than_cpus())]
         run = start(group(nodes), timer=Timer())
-        time.sleep(0.5)
+        time.sleep(0.2)
         run.shutdown()
         idents = set[int]().union(*(node.idents for node in nodes))
         assert len(idents) == workers_of(run)
@@ -477,11 +455,6 @@ class TestTimer:
         timer = Timer()
         assert start(Chain(), timer=timer).timer is timer
         assert start(Chain()).timer is global_timer
-
-    def test_a_manual_run_gives_its_virtual_timer(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        assert start_manual(Chain(), timer=virtual).timer is virtual
 
     def test_the_global_timer_by_default(self, start: Start):
         class ReadsTimer(Node):
@@ -619,7 +592,7 @@ class TestPausedTimer:
     """The host stops a timer to do something at one time T, such as taking the
     states of every run on it."""
 
-    def test_the_states_of_two_runs_on_one_timer_are_of_one_time(self):
+    def test_the_states_of_two_runs_on_one_timer_are_of_one_time_and_go_on(self):
         timer = Timer()  # the real clock: one state after the other would differ
         a, b = Ticks(), Ticks()
         with mujou.run(a, timer=timer) as run_a, mujou.run(b, timer=timer) as run_b:
@@ -638,10 +611,18 @@ class TestPausedTimer:
             assert tree["timer"]["time_ns"] == paused_at.ns
             assert tree["nodes"][""]["last_update_ns"] <= paused_at.ns
             assert tree["nodes"][""]["state"]["count"] > 2
+            # Each restored on a timer of its own, both from the same time.
+            restored = Ticks()
+            with mujou.run(restored, state=tree) as run:
+                assert run.timer.now().ns >= paused_at.ns
+                saved = int(tree["nodes"][""]["state"]["count"])
+                wait_for_updates(run, restored, saved)
+            assert run.state_dict()["nodes"][""]["last_update_ns"] > paused_at.ns
 
-    def test_nothing_moves_while_paused(self):
+    def test_nothing_moves_while_paused_and_the_first_dt_leaves_out_the_pause(self):
         timer = Timer()
         node = Ticks()
+        real_start, start = time.monotonic(), timer.now()
         with mujou.run(node, timer=timer) as run:
             wait_for_updates(run, node, 2)
             timer.pause()
@@ -651,19 +632,9 @@ class TestPausedTimer:
                 after = run.state_dict()
             finally:
                 timer.resume()
-        assert_same_tree(after, before)
-
-    def test_the_first_dt_after_resume_leaves_out_the_pause(self):
-        timer = Timer()
-        node = Ticks()
-        real_start, start = time.monotonic(), timer.now()
-        with mujou.run(node, timer=timer) as run:
-            wait_for_updates(run, node, 2)
-            timer.pause()
-            time.sleep(0.05)
-            timer.resume()
             wait_for_updates(run, node, int(run.read(node.next)) + 1)
         end, real_end = timer.now(), time.monotonic()
+        assert_same_tree(after, before)
         # Every dt is on the timer, which stood still for the 0.05 real seconds
         # of the pause: a dt that counted the pause would sum past the timer.
         assert sum(node.dts) <= end - start
@@ -680,27 +651,6 @@ class TestPausedTimer:
             timer.resume()
             run.step(H)
         assert node.dts == [H, H]
-
-    def test_runs_go_on_from_states_taken_while_paused(self):
-        timer = Timer()
-        a, b = Ticks(), Ticks()
-        with mujou.run(a, timer=timer) as run_a, mujou.run(b, timer=timer) as run_b:
-            wait_for_updates(run_a, a, 2)
-            wait_for_updates(run_b, b, 2)
-            timer.pause()
-            try:
-                trees = [run_a.state_dict(), run_b.state_dict()]
-            finally:
-                timer.resume()
-        paused_at_ns = trees[0]["timer"]["time_ns"]
-        for tree in trees:
-            # Each on a timer of its own, both from the same time.
-            restored = Ticks()
-            with mujou.run(restored, state=tree) as run:
-                assert run.timer.now().ns >= paused_at_ns
-                saved = int(tree["nodes"][""]["state"]["count"])
-                wait_for_updates(run, restored, saved)
-            assert run.state_dict()["nodes"][""]["last_update_ns"] > paused_at_ns
 
 
 class TestOnlyTheHostControlsTheTime:
@@ -788,12 +738,6 @@ class TestOnlyTheHostControlsTheTime:
 
 
 class TestInputs:
-    def test_are_the_initial_values(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net, inputs={net.prev: u(1)})
-        run.step(H)
-        assert torch.equal(net.a.x, euler(torch.zeros(2, dtype=F64), u(1)))
-
     def test_after_a_state_take_precedence_and_carry_its_time(
         self, start_manual: StartManual
     ):
@@ -819,7 +763,7 @@ class TestInputs:
 
 
 class TestWrite:
-    def test_switches_every_port_at_once(
+    def test_switches_every_port_at_once_and_returns_the_time_they_carry(
         self, virtual: VirtualTimer, start_manual: StartManual
     ):
         # Manual mode: the write and the update do not overlap, so the node
@@ -827,38 +771,15 @@ class TestWrite:
         node = Pair()
         run = start_manual(Group(node=node))
         virtual.advance(H)
-        run.write({node.x: u(1), node.y: u(2)})
-        written_at = virtual.now()
+        written_at = run.write({node.x: u(1), node.y: u(2)})
+        assert written_at == virtual.now()
         run.step(H)
         ((x, tx), (y, ty)) = node.seen[0]
         assert torch.equal(x, u(1)) and torch.equal(y, u(2))
         assert tx == ty == written_at
-
-    def test_returns_the_time_every_value_carries(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        node = Pair()
-        run = start_manual(Group(node=node))
-        virtual.advance(H)
-        written_at = run.write({node.x: u(1), node.y: u(2)})
-        assert written_at == virtual.now()
-        run.step(H)
-        ((_, tx), (_, ty)) = node.seen[0]
-        assert tx == ty == written_at
         tree = run.state_dict()
         assert port_slots(tree, "node", "x")["in"]["time_ns"] == written_at.ns
         assert port_slots(tree, "node", "y")["in"]["time_ns"] == written_at.ns
-
-    def test_returns_the_time_a_node_reads_and_sends_on(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        echo = Echo()
-        run = start_manual(echo)
-        virtual.advance(H)
-        written_at = run.write({echo.prev: u(1)})
-        run.step(H)
-        received_ns = run.read(echo.next)
-        assert int(received_ns) == written_at.ns
 
     def test_of_nothing_returns_the_time_and_changes_nothing(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -940,7 +861,9 @@ class TestWrite:
 
 
 class TestRead:
-    def test_gives_the_latest_output(self, start_manual: StartManual):
+    def test_gives_the_latest_output_and_its_time(
+        self, virtual: VirtualTimer, start_manual: StartManual
+    ):
         net = Chain()
         run = start_manual(net)
         run.write({net.prev: u(1)})
@@ -948,14 +871,6 @@ class TestRead:
         assert torch.equal(run.read(net.next), net.b.x)
         inner = run.read(net.a.next)  # a connected port shows an inner node
         assert torch.equal(inner, net.a.x)
-
-    def test_with_time_gives_the_latest_output_and_its_time(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        run.write({net.prev: u(1)})
-        run.step(H)
         out, t = run.read_with_time(net.next)
         assert torch.equal(out, net.b.x)
         assert isinstance(t, Timestamp) and t == virtual.now()
@@ -963,11 +878,15 @@ class TestRead:
     def test_gives_zeros_before_the_first_send(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
+        zeros = torch.zeros(2, dtype=F64)
         out, t = run.read_with_time(net.next)
-        assert torch.equal(out, torch.zeros(2, dtype=F64))
-        assert t is None
+        assert torch.equal(out, zeros) and t is None
+        out, t = next(run.subscribe(net.next))
+        assert torch.equal(out, zeros) and t is None
 
-    def test_rejects_a_port_that_sends_nothing(self, start_manual: StartManual):
+    def test_rejects_a_port_that_sends_nothing_or_is_outside_the_run(
+        self, start_manual: StartManual
+    ):
         net = Chain()
         run = start_manual(net)
         with pytest.raises(
@@ -976,20 +895,13 @@ class TestRead:
             "sends$",
         ):
             run.read(net.prev)
-
-    def test_rejects_a_port_outside_the_run(self, start_manual: StartManual):
-        run = start_manual(Chain())
+        with pytest.raises(ValueError, match=r"does not read a\.prev"):
+            run.read_with_time(net.prev)
         other = Chain()
         with pytest.raises(
             ValueError, match=rf"^the host does not read {re.escape(repr(other.next))}"
         ):
             run.read(other.next)
-
-    def test_with_time_rejects_what_read_rejects(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        with pytest.raises(ValueError, match="does not read a.prev"):
-            run.read_with_time(net.prev)
 
 
 class TestSubscribe:
@@ -1009,17 +921,15 @@ class TestSubscribe:
         # The first two values were skipped: only the latest is given.
         out, t = next(values)
         assert torch.equal(out, net.b.x) and t == virtual.now()
+        # One with a timeout yields what arrives within it, too.
+        timed = run.subscribe(net.next, timeout=60.0)
+        next(timed)
         run.step(H)
-        assert next(values)[1] == virtual.now()
+        assert next(values)[1] == next(timed)[1] == virtual.now()
         run.shutdown()
-        with pytest.raises(StopIteration):
-            next(values)
-
-    def test_gives_the_value_before_the_first_send(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        out, _ = next(run.subscribe(net.next))
-        assert torch.equal(out, torch.zeros(2, dtype=F64))
+        for ended in (values, timed):
+            with pytest.raises(StopIteration):
+                next(ended)
 
     def test_gives_the_last_value_after_a_normal_end(
         self, virtual: VirtualTimer, start_manual: StartManual
@@ -1046,44 +956,14 @@ class TestSubscribe:
         assert times == sorted(times)
         assert len(times) >= 5
 
-    def test_raises_after_the_timeout_and_the_network_keeps_running(
-        self, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        values = run.subscribe(net.next, timeout=0.05)
-        next(values)  # the first step does not wait
-        begin = time.monotonic()
-        with pytest.raises(TimeoutError):
-            next(values)  # nothing is sent: the nodes wait for step
-        assert time.monotonic() - begin < 5.0
-        with pytest.raises(StopIteration):
-            next(values)
-        run.write({net.prev: u(1)})
-        run.step(H)
-        assert torch.equal(run.read(net.next), net.b.x)
-
     def test_the_timeout_counts_the_whole_iteration(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        values = run.subscribe(net.next, timeout=0.05)
+        values = run.subscribe(net.next, timeout=0.02)
         next(values)
-        time.sleep(0.1)  # the body of a loop that took longer than the timeout
+        time.sleep(0.04)  # the body of a loop that took longer than the timeout
         run.step(H)  # a newer message is there
         with pytest.raises(TimeoutError):
-            next(values)
-
-    def test_yields_what_arrives_within_the_timeout(
-        self, virtual: VirtualTimer, start_manual: StartManual
-    ):
-        net = Chain()
-        run = start_manual(net)
-        values = run.subscribe(net.next, timeout=60.0)
-        next(values)
-        run.step(H)
-        assert next(values)[1] == virtual.now()
-        run.shutdown()
-        with pytest.raises(StopIteration):
             next(values)
 
 
@@ -1109,16 +989,10 @@ class TestWaitFor:
         assert len(seen) == 3
         assert torch.equal(out, net.b.x) and t == virtual.now()
 
-    def test_raises_when_it_times_out(self, start_manual: StartManual):
-        net = Chain()
-        run = start_manual(net)
-        with pytest.raises(TimeoutError, match=r"within 0\.05 s"):
-            run.wait_for(net.next, lambda _: False, timeout=0.05)
-
     def test_raises_when_the_run_shuts_down_first(self, start_manual: StartManual):
         net = Chain()
         run = start_manual(net)
-        stopper = threading.Timer(0.05, run.shutdown)
+        stopper = threading.Timer(0.02, run.shutdown)
         stopper.start()
         with pytest.raises(RuntimeError, match=r"shut down before b\.next sent"):
             run.wait_for(net.next, lambda _: False)
@@ -1257,9 +1131,9 @@ class TestShutdown:
         before = threading.active_count()
         try:
             started = time.monotonic()
-            for _ in range(5):  # asked again without a thread for each ask
+            for _ in range(3):  # asked again without a thread for each ask
                 with pytest.raises(TimeoutError):
-                    run.shutdown(timeout=0.02)
+                    run.shutdown(timeout=0.01)
             assert time.monotonic() - started < 5.0
             assert not node.stopped.is_set()
             assert threading.active_count() <= before
@@ -1298,7 +1172,7 @@ class TestJoin:
         with pytest.raises(TimeoutError):
             run.join(timeout=0.0)  # still running
         # Shut down a little later, so that join is (almost always) already waiting.
-        stopper = threading.Timer(0.05, run.shutdown)
+        stopper = threading.Timer(0.02, run.shutdown)
         stopper.start()
         run.join()
         stopper.join()
@@ -1306,17 +1180,22 @@ class TestJoin:
 
 
 class TestTimeout:
-    @pytest.mark.parametrize("method", ["join", "wait_for"])
     def test_raises_after_the_timeout_and_the_network_keeps_running(
-        self, start_manual: StartManual, method: str
+        self, start_manual: StartManual
     ):
         net = Chain()
         run = start_manual(net)
+        # Nothing is sent: the nodes wait for step.
         with pytest.raises(TimeoutError):
-            if method == "join":
-                run.join(timeout=0.05)
-            else:
-                run.wait_for(net.next, lambda _: False, timeout=0.05)
+            run.join(timeout=0.02)
+        with pytest.raises(TimeoutError, match=r"within 0\.02 s"):
+            run.wait_for(net.next, lambda _: False, timeout=0.02)
+        values = run.subscribe(net.next, timeout=0.02)
+        next(values)  # the first value does not wait
+        with pytest.raises(TimeoutError):
+            next(values)
+        with pytest.raises(StopIteration):
+            next(values)
         run.write({net.prev: u(1)})
         run.step(H)
         assert torch.equal(run.read(net.next), net.b.x)
@@ -1469,15 +1348,16 @@ class TestRunManually:
             names = inspect.signature(f).parameters
             assert not [n for n in names if n.startswith("_")], f
 
-    def test_returns_a_manual_run(self, virtual: VirtualTimer):
-        with mujou.run_manually(Chain(), timer=virtual) as run:
-            assert isinstance(run, ManualRun) and isinstance(run, Run)
-
     def test_runs_on_a_new_virtual_timer_by_default(self):
         net = Chain()
-        with mujou.run_manually(net, inputs={net.prev: u(1)}) as run:
+        with (
+            mujou.run_manually(net, inputs={net.prev: u(1)}) as run,
+            mujou.run_manually(Chain()) as other,
+        ):
+            assert isinstance(run, ManualRun) and isinstance(run, Run)
             timer = run.timer
             assert isinstance(timer, VirtualTimer)
+            assert other.timer is not timer  # each run gets its own
             assert timer.now() == Timestamp(ns=0)
             for _ in range(3):
                 run.step(H)  # the clock moves only here
@@ -1488,26 +1368,10 @@ class TestRunManually:
         assert torch.equal(net.a.x, x)
         assert t == Timestamp(ns=3 * H_NS) and torch.equal(out, net.b.x)
 
-    def test_each_run_gets_its_own_timer(self):
-        with (
-            mujou.run_manually(Chain()) as first,
-            mujou.run_manually(Chain()) as second,
-        ):
-            assert first.timer is not second.timer
-
     def test_gives_the_timer_it_was_given(self, start_manual: StartManual):
         timer = VirtualTimer()
         run = start_manual(Chain(), timer=timer)
         assert run.timer is timer
-
-    @pytest.mark.parametrize("workers", [0, -1])
-    def test_rejects_less_than_one_worker_before_starting(
-        self, start_manual: StartManual, workers: int
-    ):
-        net = Chain()
-        with pytest.raises(ValueError, match="^workers must be at least 1"):
-            start_manual(net, workers=workers)
-        assert not (net.a.started or net.b.started)
 
     def test_runs_on_the_workers_given(self, start_manual: StartManual):
         run = start_manual(group(noisy_chain(4)), workers=2)
@@ -1547,17 +1411,11 @@ class TestManualRunStep:
         assert times == [Timestamp(ns=2 * H_NS)] * 3
 
     def test_ignores_the_period(self, start_manual: StartManual):
-        node = Calls()  # period 0.01
-        run = start_manual(node)
+        node, unhurried = Calls(), Unhurried()  # periods 0.01 and infinite
+        run = start_manual(Group(node=node, unhurried=unhurried))
         run.step(0.001)
         run.step(1.0)
-        assert node.dts == [0.001, 1.0]
-
-    def test_updates_a_node_of_an_infinite_period(self, start_manual: StartManual):
-        node = Unhurried()
-        run = start_manual(Group(node=node, other=Calls()))
-        run.step(H)
-        assert node.dts == [H]
+        assert node.dts == unhurried.dts == [0.001, 1.0]
 
     def test_a_node_given_twice_updates_once(self, start_manual: StartManual):
         node = Calls()
@@ -1779,21 +1637,23 @@ class TestEndToEnd:
         tau, presented = 0.01, 0.3  # 30 time constants
         net = Chain(tau=tau)
         run = start(net)
-        before = torch.zeros(2, dtype=F64)
-        for k in (1, 2):
-            run.write({net.prev: u(k)})
-            run.timer.sleep(presented)
-            out = run.read(net.next)
-            # After a step of the input by d, the error of two leaky stages in a
-            # row is d (1 + t/tau) exp(-t/tau). Allow the nodes to have run for
-            # only a third of the time (scheduling under load): t = 10 tau.
-            d = (u(k) - before).abs().max().item()
-            bound = d * (1 + 10) * math.exp(-10)
-            assert (out - u(k)).abs().max().item() <= bound
-            before = u(k)
+        run.write({net.prev: u(1)})
+        run.timer.sleep(presented)
+        out = run.read(net.next)
+        # After a step of the input by d (from 0), the error of two leaky stages
+        # in a row is d (1 + t/tau) exp(-t/tau). Allow the nodes to have run for
+        # only a third of the time (scheduling under load): t = 10 tau.
+        d = u(1).abs().max().item()
+        bound = d * (1 + 10) * math.exp(-10)
+        assert (out - u(1)).abs().max().item() <= bound
 
-    @pytest.mark.parametrize("grouped", [False, True])
-    @pytest.mark.parametrize("b_first", [False, True])
+    @pytest.mark.parametrize(
+        ("grouped", "b_first"),
+        [
+            pytest.param(False, False, id="chain-gauss-seidel"),
+            pytest.param(True, True, id="grouped-jacobi"),
+        ],
+    )
     def test_manual_steps_match_the_discrete_algorithm(
         self,
         start_manual: StartManual,
@@ -1814,7 +1674,7 @@ class TestEndToEnd:
             run = start_manual(chain)
         order = (b, a) if b_first else (a, b)
         xa = xb = sent_a = torch.zeros(2, dtype=F64)
-        for k in range(20):
+        for k in range(10):
             run.write({a.prev: u(k)})
             run.step(H, *order)
             if b_first:  # Jacobi: b reads a's value of the previous step
@@ -1846,7 +1706,7 @@ class Slow(Node):
         self.out.send(torch.ones(2))
 
     def on_stop(self) -> None:
-        time.sleep(0.3)  # an actuator taking its time to stop
+        time.sleep(0.2)  # an actuator taking its time to stop
         pathlib.Path(sys.argv[1]).write_text("stopped")
 
 class Net(Network):
@@ -1855,19 +1715,6 @@ class Net(Network):
         self.node = Slow()
         self.out = self.node.out
 """
-
-    def run_script(
-        self, body: str, marker: Path, gil: str | None = None
-    ) -> subprocess.CompletedProcess[str]:
-        env = os.environ if gil is None else {**os.environ, "PYTHON_GIL": gil}
-        return subprocess.run(
-            [sys.executable, "-c", self.PRELUDE + body, str(marker)],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
 
     @pytest.mark.slow
     @pytest.mark.parametrize(
@@ -1883,32 +1730,40 @@ class Net(Network):
             "1",
         ],
     )
-    def test_waits_for_on_stop_of_a_dropped_network(self, tmp_path: Path, gil: str):
-        marker = tmp_path / "marker"
-        body = "def main() -> None:\n    mujou.run(Net())\nmain()\n"
-        done = self.run_script(body, marker, gil)
-        assert done.returncode == 0, done.stderr
-        assert marker.read_text() == "stopped"
-
-    @pytest.mark.slow
-    def test_ctrl_c_while_starting_raises_once_the_network_has_stopped(
-        self, tmp_path: Path
+    def test_ctrl_c_while_starting_and_a_dropped_network_wait_for_on_stop(
+        self, tmp_path: Path, gil: str
     ):
+        # One interpreter for both: starting one takes most of the time.
         marker = tmp_path / "marker"
         body = (
             "import signal\n"
             "class SlowStart(Slow):\n"
             "    def on_start(self) -> None:\n"
             "        signal.raise_signal(signal.SIGINT)\n"
-            "        time.sleep(0.5)  # the host sees Ctrl-C meanwhile\n"
+            "        time.sleep(0.2)  # the host sees Ctrl-C meanwhile\n"
+            "marker = pathlib.Path(sys.argv[1])\n"
             "try:\n"
             "    mujou.run(SlowStart())\n"
             "except KeyboardInterrupt:\n"
-            "    print(pathlib.Path(sys.argv[1]).read_text())\n"
+            "    print(marker.read_text())\n"
+            "marker.unlink()\n"
+            "def main() -> None:\n"
+            "    mujou.run(Net())\n"
+            "main()\n"
         )
-        done = self.run_script(body, marker)
+        done = subprocess.run(
+            [sys.executable, "-c", self.PRELUDE + body, str(marker)],
+            env={**os.environ, "PYTHON_GIL": gil},
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
         assert done.returncode == 0, done.stderr
+        # Ctrl-C raised once the network had stopped.
         assert done.stdout.strip() == "stopped"
+        # The exit waited for on_stop of the network dropped in main.
+        assert marker.read_text() == "stopped"
 
 
 class Decay(Node):

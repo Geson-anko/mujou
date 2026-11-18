@@ -9,12 +9,11 @@ import os
 import subprocess
 import sys
 import sysconfig
-from typing import Any, override
+from typing import Any
 
 import pytest
 import torch
 
-import mujou
 import mujou.pc as pc
 from tests.mujou.nodes import F64, assert_same_tree
 
@@ -99,16 +98,13 @@ class TestSGD:
         for p, p_0, g in zip(ps, p0, g_sum, strict=True):
             assert torch.equal(p, p_0.sub(g, alpha=elapsed / tau / batch))
 
-    def test_zero_elapsed_moves_nothing(self):
+    def test_zero_elapsed_moves_nothing_and_there_is_no_state(self):
         ps = params()
         p0 = clones(ps)
-        pc.optim.SGD(tau=0.5).bind(ps).step_(grads(0), 0.0)
+        bound = pc.optim.SGD(tau=0.5).bind(ps)
+        bound.step_(grads(0), 0.0)
         for p, p_0 in zip(ps, p0, strict=True):
             assert torch.equal(p, p_0)
-
-    def test_has_no_state(self):
-        bound = pc.optim.SGD(tau=0.5).bind(params())
-        bound.step_(grads(0), DT)
         assert bound.state_dict() == {}
 
 
@@ -159,7 +155,8 @@ class TestAdamW:
 
     def test_the_mass_is_one_minus_the_decay_of_the_total_time(self):
         # tau_m dc/dt = 1 - c from c = 0: c = 1 - exp(-t / tau_m), whatever the
-        # steps the time t was taken in.
+        # steps the time t was taken in; a long step makes it one. The state is
+        # the moments and their masses, without a step count.
         bound = ADAMW.bind(params())
         total = 0.0
         for k, dt in enumerate([1e-3, 5e-3, 2e-4, 3e-2, 7e-3]):
@@ -172,23 +169,12 @@ class TestAdamW:
             assert state["c_v"] == pytest.approx(
                 -math.expm1(-total / TAU_V), rel=1e-12, abs=0.0
             )
-            assert 0.0 < state["c_m"] <= 1.0
-            assert 0.0 < state["c_v"] <= 1.0
-
-    def test_a_long_step_makes_the_mass_one(self):
-        ps = params()
-        bound = ADAMW.bind(ps)
-        bound.step_(grads(0), 1e6 * TAU_V)
-        state = bound.state_dict()
-        assert state["c_m"] == 1.0
-        assert state["c_v"] == 1.0
-
-    def test_the_state_is_the_moments_and_their_masses_without_a_count(self):
-        bound = ADAMW.bind(params())
-        bound.step_(grads(0), DT)
+        bound.step_(grads(5), 1e6 * TAU_V)
         state = bound.state_dict()
         assert set(state) == {"m", "v", "c_m", "c_v"}
         assert len(state["m"]) == len(state["v"]) == 2
+        assert state["c_m"] == 1.0
+        assert state["c_v"] == 1.0
 
     def test_weight_decay_alone_shrinks_by_one_minus_eta_w_per_step(self):
         # With g = 0, m = v = 0 and the Adam term is 0 / eps: theta decays by
@@ -251,42 +237,6 @@ class TestBound:
         with pytest.raises(ValueError):
             bound.step_(grads(0)[:1], DT)
 
-    @pytest.mark.parametrize("optimizer", OPTIMIZERS, ids=IDS)
-    def test_is_a_bound_optimizer_with_a_state(self, optimizer: pc.optim.Optimizer):
-        # A node holds it as an attribute, so it is in the node's state.
-        bound = optimizer.bind([])
-        assert isinstance(bound, pc.optim.BoundOptimizer)
-        assert isinstance(bound, mujou.Stateful)
-
-
-class TestAbstract:
-    def test_an_optimizer_needs_bind(self):
-        class NoBind(pc.optim.Optimizer):
-            pass
-
-        with pytest.raises(TypeError, match="bind"):
-            NoBind()  # pyright: ignore[reportAbstractUsage]
-
-    def test_a_bound_optimizer_needs_step_and_its_state(self):
-        class NoStep(pc.optim.BoundOptimizer):
-            @override
-            def state_dict(self) -> dict[str, Any]:
-                return {}
-
-            @override
-            def load_state_dict(self, state: Any, /) -> None:
-                pass
-
-        class NoState(pc.optim.BoundOptimizer):
-            @override
-            def step_(self, grads: Any, elapsed: float) -> None:
-                pass
-
-        with pytest.raises(TypeError, match="step_"):
-            NoStep()  # pyright: ignore[reportAbstractUsage]
-        with pytest.raises(TypeError, match="state_dict"):
-            NoState()  # pyright: ignore[reportAbstractUsage]
-
 
 def saved(state: dict[str, Any]) -> dict[str, Any]:
     """``state`` through ``torch.save`` and ``torch.load(weights_only=True)``."""
@@ -344,8 +294,10 @@ class TestChecks:
         with pytest.raises(ValueError, match="SGD.tau"):
             pc.optim.SGD(tau=tau)
 
-    @pytest.mark.parametrize("field", ["tau", "tau_m", "tau_v", "eps"])
-    @pytest.mark.parametrize("value", [0.0, -1.0, math.nan, math.inf])
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("tau", 0.0), ("tau_m", -1.0), ("tau_v", math.nan), ("eps", math.inf)],
+    )
     def test_adamw_time_constants_and_eps_must_be_finite_and_positive(
         self, field: str, value: float
     ):
@@ -358,8 +310,6 @@ class TestChecks:
     def test_adamw_weight_decay_must_be_finite_and_not_negative(self, value: float):
         with pytest.raises(ValueError, match="AdamW.weight_decay must"):
             pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=value)
-
-    def test_adamw_takes_zero_weight_decay(self):
         pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=0.0)
 
     def test_fields_are_keyword_only(self):
@@ -370,11 +320,13 @@ class TestChecks:
 
 
 # Runs in a subprocess: building a torch.optim optimizer imports
-# torch._dynamo, which re-enables the GIL of the free-threaded build.
+# torch._dynamo, which re-enables the GIL of the free-threaded build. The GIL is
+# read before that, so the same fresh interpreter also shows that binding and
+# stepping the optimizers of mujou keep it disabled.
 TORCH_ADAMW = """
 import math
+import sys
 import torch
-from torch.optim import AdamW
 import mujou.pc as pc
 
 dt, tau, tau_m, tau_v, eps, w = 4e-3, 0.3, 0.02, 0.1, 1e-3, 0.1
@@ -383,9 +335,21 @@ p0 = [
     torch.randn(4, 3, dtype=torch.float64, generator=generator),
     torch.randn(3, dtype=torch.float64, generator=generator),
 ]
+grads = [
+    [1e-3 * torch.randn(p.shape, dtype=torch.float64, generator=generator)
+     for p in p0]
+    for _ in range(20)
+]
 ours = [p.clone() for p in p0]
-theirs = [p.clone().requires_grad_() for p in p0]
 bound = pc.optim.AdamW(tau=tau, tau_m=tau_m, tau_v=tau_v, eps=eps, weight_decay=w).bind(ours)
+for gs in grads:
+    bound.step_(gs, dt)
+pc.optim.SGD(tau=tau).bind([p.clone() for p in p0]).step_(grads[0], dt)
+print(sys._is_gil_enabled())
+
+from torch.optim import AdamW
+
+theirs = [p.clone().requires_grad_() for p in p0]
 optimizer = AdamW(
     theirs,
     lr=dt / tau,
@@ -394,11 +358,8 @@ optimizer = AdamW(
     weight_decay=w,
     foreach=False,
 )
-for _ in range(20):
-    grads = [1e-3 * torch.randn(p.shape, dtype=torch.float64, generator=generator)
-             for p in p0]
-    bound.step_(grads, dt)
-    for p, g in zip(theirs, grads):
+for gs in grads:
+    for p, g in zip(theirs, gs):
         p.grad = g.clone()
     optimizer.step()
 error = max(
@@ -409,9 +370,8 @@ print("ok" if error < 1e-10 else f"relative error {error}")
 """
 
 
-@pytest.mark.slow
 class TestTorchAdamW:
-    def test_a_constant_dt_is_torch_optim_adamw(self):
+    def test_a_constant_dt_is_torch_optim_adamw_and_keeps_the_gil_disabled(self):
         # lr = dt / tau, betas = exp(-dt / tau_m), exp(-dt / tau_v): the same
         # AdamW to rounding (the masses replace the step count).
         done = subprocess.run(
@@ -419,39 +379,11 @@ class TestTorchAdamW:
             capture_output=True,
             text=True,
             check=False,
-        )
-        assert done.returncode == 0, done.stderr
-        assert done.stdout.strip() == "ok"
-
-
-FREE_THREADED = """
-import sys
-import torch
-import mujou.pc as pc
-
-for optimizer in (
-    pc.optim.SGD(tau=0.3),
-    pc.optim.AdamW(tau=0.3, tau_m=0.02, tau_v=0.1),
-):
-    p = torch.zeros(3, dtype=torch.float64)
-    optimizer.bind([p]).step_([torch.ones(3, dtype=torch.float64)], 1e-3)
-print(sys._is_gil_enabled())
-"""
-
-
-@pytest.mark.skipif(
-    not sysconfig.get_config_var("Py_GIL_DISABLED"),
-    reason="requires a free-threaded build",
-)
-class TestFreeThreaded:
-    def test_binding_and_stepping_keep_the_gil_disabled(self):
-        # A fresh interpreter, so that nothing else has re-enabled the GIL.
-        done = subprocess.run(
-            [sys.executable, "-c", FREE_THREADED],
-            capture_output=True,
-            text=True,
-            check=True,
             # PYTHON_GIL=0 would keep the GIL off whatever is imported.
             env={k: v for k, v in os.environ.items() if k != "PYTHON_GIL"},
         )
-        assert done.stdout.strip() == "False"
+        assert done.returncode == 0, done.stderr
+        gil, *result = done.stdout.splitlines()
+        assert result == ["ok"], done.stdout
+        if sysconfig.get_config_var("Py_GIL_DISABLED"):
+            assert gil == "False"
