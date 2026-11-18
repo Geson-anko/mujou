@@ -89,7 +89,7 @@ mujou が支える使い方（提供シナリオ）と、その中で起こり�
 | K28 | S7 | h か y が `batch` で始まらない（module の出力がバッチで始まらない場合を含む） | `activity_spec` | `ValueError` | mask の行が、黙って broadcast される | `pc/test_messages.py` の `test_h_and_y_must_start_with_the_batch` |
 | K29 | S7 | `vjp` の δ と μ の shape が違う、`mse` の y と ŷ の shape が違う | `functional.vjp` / `functional.mse` | `ValueError` | broadcast が黙って通る | `pc/test_functional.py` の `test_delta_must_have_the_shape_of_mu` と `test_shapes_must_match` |
 | K30 | S1 | `register_state` に、まだ代入していない名前を渡す（綴りの誤り、property） | `Node.register_state` | `AttributeError` | `__dict__` から決めるので、綴りを誤った名前は黙って状態から漏れる | `test_node.py` の `test_rejects_a_name_without_an_attribute` |
-| K31 | S7 | `SGD` の tau、`AdamW` の tau・tau_m・tau_v・eps が有限で > 0 でない、`AdamW` の weight_decay が有限で >= 0 でない | `SGD.__post_init__` / `AdamW.__post_init__` | `ValueError` | NaN になるか、学習しない | `pc/test_optim.py` の `TestChecks` |
+| K31 | S7 | `SGD` の tau（と渡した tau_m）、`RMSProp` の tau・tau_v・eps、`AdamW` の tau・tau_m・tau_v・eps が有限で > 0 でない、`AdamW` の weight_decay が有限で >= 0 でない | `SGD.__post_init__` / `RMSProp.__post_init__` / `AdamW.__post_init__` | `ValueError` | NaN になるか、学習しない | `pc/test_optim.py` の `TestChecks` |
 | K32 | S6/S8 | 並列の `step(dt)` の中でノードが例外を出す | `ManualRun.step` と Rust の `Staging`（失敗したステップの保留は公開しない） | `NetworkError`（`__cause__` がその例外）。以後のホストの呼び出しも同じ。全ノードが `on_exception` → `on_stop` | 失敗したステップで一部のノードが送った値だけが見え、状態が食い違う | `test_execution.py` の `TestManualRunStep` の `test_an_exception_in_a_step_stops_every_node` |
 
 テストのパスは `tests/mujou/` からの相対パス。
