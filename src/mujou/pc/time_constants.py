@@ -33,7 +33,7 @@ class TimeConstants:
     the path only, and the steps are stable in any chain once they are in each
     node. The defaults are chosen together: with ``r = h``, ``lam = h / 2`` and
     a period of ``h / 2``, one update moves ``delta = r + lam`` to ``-g``
-    exactly, so the credit moves one node in each period and does not
+    exactly, so the credit takes at most one period per hop and does not
     overshoot (a larger step overshoots, and the overshoot grows at every
     node). An analog integrator that holds ``r`` and leaks is this decay.
 

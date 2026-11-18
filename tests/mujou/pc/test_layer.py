@@ -154,28 +154,35 @@ class TestConstruction:
             self._layer(**kwargs)
 
 
-class TestFromTheOutput:
+class TestReference:
     @pytest.mark.parametrize("reset", [KEEP, RESET], ids=["keep", "reset"])
     @pytest.mark.parametrize("learn_interval", [None, 4 * H])
-    def test_stepping_from_the_output_is_the_reference_update(
+    @pytest.mark.parametrize("schedule", ["from_next", "jacobi"])
+    def test_stepping_is_the_reference_update(
         self,
         start_manual: StartManual,
+        schedule: str,
         learn_interval: float | None,
         reset: torch.Tensor,
     ):
-        # Linear + tanh, then a residual block: stepping from the output to the
-        # input reads the activity of the previous step and the credit of this
-        # one, as the reference does, so the two agree to rounding. The second
-        # input continues the first (keep) or starts some samples anew (reset),
-        # once, in the update of each layer that first sees it.
+        # Linear + tanh, then a residual block. Stepped from the output to the
+        # input, each layer reads the activity of the previous step and the
+        # credit of this one; stepped by Jacobi (run.step(h)), the credit of
+        # the previous step too. Either way it relaxes first and sends back
+        # g_in from the delta it has just relaxed, as the reference does, so
+        # the two agree to rounding. The second input continues the first
+        # (keep) or starts some samples anew (reset), once, in the update of
+        # each layer that first sees it.
         widths = [4, 5, 5]
         layers = [
             make_modules("linear", "tanh", widths[:2])[0][0],
             make_modules("res", "tanh", widths[1:], seed=1)[0][0],
         ]
         head = make_modules("linear", "tanh", widths, seed=2)[1]
-        reference = Reference(layers, head, widths, learn_interval)
+        jacobi = schedule == "jacobi"
+        reference = Reference(layers, head, widths, learn_interval, jacobi=jacobi)
         chain = HandChain(layers, head, widths, learn_interval=learn_interval)
+        order = [] if jacobi else chain.from_next()
         run = start_manual(chain.net)
         samples = [sample(widths, seed) for seed in (0, 1)]
         x, y = samples[0]
@@ -186,7 +193,7 @@ class TestFromTheOutput:
                 x, y = samples[1]
                 written = reset
                 time = chain.write(run, x, y, MASK, reset)
-            run.step(H, *chain.from_next())
+            run.step(H, *order)
             reference.step(x, y, MASK, time, H, run.timer.now().ns, written)
             tree = run.state_dict()
             for i, layer in enumerate(reference.layers):
@@ -216,6 +223,77 @@ class TestFromTheOutput:
             close(prediction["y_hat"], reference.y_hat, 1e-12)
             assert torch.equal(prediction["y"], reference.prediction_carried[0])
             assert torch.equal(prediction["mask"], reference.prediction_carried[1])
+
+
+class TestCreditSpeed:
+    @pytest.mark.parametrize("schedule", ["jacobi", "from_next", "from_prev"])
+    def test_the_credit_moves_back_one_hop_per_step(
+        self, start_manual: StartManual, schedule: str
+    ):
+        # Five layers and the output: hops = 6 links from the input to the
+        # output, one input written before step 1. A node sends back in its
+        # update the credit it relaxed with in that update, so the credit takes
+        # one step per hop back under Jacobi (as the activity forward), none
+        # from the output back, and one per node from the input on: lam of l_i
+        # first leaves 0 at 2 hops - i, hops + 1 and L + 1 - i.
+        widths = [4, 5, 5, 5, 5, 5]
+        n_layers, hops = len(widths) - 1, len(widths)
+        layers, head = make_modules("linear", "tanh", widths)
+        chain = HandChain(layers, head, widths, learn_interval=math.inf)
+        order = {
+            "jacobi": [],
+            "from_next": chain.from_next(),
+            "from_prev": chain.from_prev(),
+        }[schedule]
+        run = start_manual(chain.net)
+        x, y = sample(widths, 0)
+        chain.write(run, x, y, MASK)
+        first: dict[int, int] = {}
+        for s in range(1, 2 * hops + 1):
+            run.step(H, *order)
+            nodes = run.state_dict()["nodes"]
+            for i in range(n_layers):
+                if i not in first and bool(nodes[f"l{i}"]["state"]["lam"].any()):
+                    first[i] = s
+        expected = {
+            "jacobi": [2 * hops - i for i in range(n_layers)],
+            "from_next": [hops + 1] * n_layers,
+            "from_prev": [n_layers + 1 - i for i in range(n_layers)],
+        }[schedule]
+        assert [first.get(i) for i in range(n_layers)] == expected
+
+
+class TestCreditAfterRelax:
+    def test_g_in_is_made_from_the_relaxed_delta(self, start_manual: StartManual):
+        # Stepped from the output, l0 reads h_in sent before the step and the
+        # g that l1 sent in it, relaxes r and lam, and sends back
+        # g_in = -J^T delta' from the delta' = r' + lam' it has just relaxed
+        # (zero where the mask is False), at the theta it held before the step.
+        # Not from r + lam before the step: the two differ by far more than the
+        # rounding at the step chosen.
+        widths = [4, 5, 5]
+        layers, head = make_modules("linear", "tanh", widths)
+        chain = HandChain(layers, head, widths, learn_interval=math.inf)
+        run = start_manual(chain.net)
+        x, y = sample(widths, 0)
+        chain.write(run, x, y, MASK)
+        run_steps(run, chain.from_next(), 5)
+        before = run.state_dict()
+        run.step(H, *chain.from_next())
+        after = run.state_dict()
+        module = copy.deepcopy(layers[0])
+        module.load_state_dict(before["nodes"]["l0"]["state"]["module"])
+        sent = before["nodes"]["inp"]["ports"]["next"]["out"]["value"]
+        labeled = sent["mask"][:, None]
+
+        def g_in(tree: dict[str, Any]) -> torch.Tensor:
+            state = tree["nodes"]["l0"]["state"]
+            delta = torch.where(labeled, state["r"] + state["lam"], 0.0)
+            return pc.functional.vjp(module, sent["h"], lambda _: delta)[1]
+
+        g_sent = after["nodes"]["l0"]["ports"]["prev"]["out"]["value"]
+        close(g_sent, g_in(after), 1e-14)
+        assert (g_sent - g_in(before)).abs().max() > 1e-6
 
 
 # Steps to the fixed point from r = lam = 0, to 1e-10 at TAU and these sizes.
@@ -695,21 +773,24 @@ class Learning:
 
 
 def layer_gradients(
-    tree: dict[str, Any], module: nn.Module
+    before: dict[str, Any], after: dict[str, Any], module: nn.Module
 ) -> tuple[nn.Module, list[torch.Tensor]]:
     """A copy of the ``module`` of ``l0`` with the parameters of the state
-    ``tree`` taken before a step, and the mean gradients ``g_theta / B`` that
-    the layer hands its optimizer in the step, from ``delta = r + lam``.
+    ``before`` a step, and the mean gradients ``g_theta / B`` that the layer
+    hands its optimizer in the step: at the ``h_in`` and ``mask`` it read
+    (sent before the step), from ``delta = r + lam`` it has just relaxed. The
+    layer learns last in its update, so the ``r`` and ``lam`` of the state
+    ``after`` the step are those it learned from.
 
     It computes ``g_theta`` with ``functional.vjp``, which its own tests check
     against finite differences: the tests that use it check when the update
     comes and how much time weighs it.
     """
     module = copy.deepcopy(module)
-    module.load_state_dict(tree["nodes"]["l0"]["state"]["module"])
+    module.load_state_dict(before["nodes"]["l0"]["state"]["module"])
     params = list(module.parameters())
-    state = tree["nodes"]["l0"]["state"]
-    sent = tree["nodes"]["inp"]["ports"]["next"]["out"]["value"]
+    state = after["nodes"]["l0"]["state"]
+    sent = before["nodes"]["inp"]["ports"]["next"]["out"]["value"]
     labeled = sent["mask"][:, None]
 
     def delta(mu: torch.Tensor) -> torch.Tensor:
@@ -720,11 +801,11 @@ def layer_gradients(
 
 
 def layer_update(
-    tree: dict[str, Any], module: nn.Module, elapsed: float
+    before: dict[str, Any], after: dict[str, Any], module: nn.Module, elapsed: float
 ) -> dict[str, torch.Tensor]:
-    """The parameters of ``l0`` after one update of SGD from the state ``tree``
-    taken before the step: ``theta - (elapsed / tau_theta) g_theta / B``."""
-    module, grads = layer_gradients(tree, module)
+    """The parameters of ``l0`` after one update of SGD in the step from the
+    state ``before`` to ``after``: ``theta - (elapsed / tau_theta) g_theta / B``."""
+    module, grads = layer_gradients(before, after, module)
     with torch.no_grad():
         for p, g in zip(module.parameters(), grads, strict=True):
             p -= (elapsed / TAU_THETA) * g
@@ -732,13 +813,13 @@ def layer_update(
 
 
 def adamw_first_update(
-    tree: dict[str, Any], module: nn.Module, elapsed: float
+    before: dict[str, Any], after: dict[str, Any], module: nn.Module, elapsed: float
 ) -> dict[str, torch.Tensor]:
-    """The parameters of ``l0`` after the first update of ``ADAMW`` from the
-    state ``tree`` taken before the step. The first step has ``m_hat = g`` and
+    """The parameters of ``l0`` after the first update of ``ADAMW`` in the step
+    from the state ``before`` to ``after``. The first step has ``m_hat = g`` and
     ``v_hat = g^2`` whatever ``tau_m`` and ``tau_v``:
     ``theta (1 - eta w) - eta g / (|g| + eps)``, ``eta = elapsed / tau``."""
-    module, grads = layer_gradients(tree, module)
+    module, grads = layer_gradients(before, after, module)
     eta = elapsed / ADAMW.tau
     decay = 1 - eta * ADAMW.weight_decay
     with torch.no_grad():
@@ -768,11 +849,12 @@ class TestLearnInterval:
         for s in range(1, 21):
             before = learning.run.state_dict()
             learning.step()
-            after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
+            tree = learning.run.state_dict()
+            after = tree["nodes"]["l0"]["state"]["module"]
             if equal_states(after, before["nodes"]["l0"]["state"]["module"]):
                 continue
             elapsed = (s - last) * H
-            expected = layer_update(before, module, elapsed)
+            expected = layer_update(before, tree, module, elapsed)
             for key, value in expected.items():
                 close(after[key], value, 1e-14)
             learned.append((s, elapsed))
@@ -799,8 +881,9 @@ class TestLearnInterval:
             before = run.state_dict()
             run.step(H, *chain.from_next())
             if s == 2 * K:
-                expected = layer_update(before, layers[0], s * H)
-                after = run.state_dict()["nodes"]["l0"]["state"]["module"]
+                tree = run.state_dict()
+                expected = layer_update(before, tree, layers[0], s * H)
+                after = tree["nodes"]["l0"]["state"]["module"]
                 for key, value in expected.items():
                     close(after[key], value, 1e-14)
                 assert not equal_states(after, before["nodes"]["l0"]["state"]["module"])
@@ -844,22 +927,25 @@ class TestLearnInterval:
         module = learning.chain.layers[0].module
         run = learning.run
 
-        def step(s: int) -> tuple[dict[str, Any], dict[str, torch.Tensor]]:
+        def step(s: int) -> tuple[dict[str, Any], dict[str, Any]]:
             run.timer.advance(H)
             if s <= 7:
                 x, y = sample(learning.widths, s)
                 learning.chain.write(run, x, y, MASK)
             before = run.state_dict()
             run.step(0.0, *learning.chain.from_next())
-            return before, run.state_dict()["nodes"]["l0"]["state"]["module"]
+            return before, run.state_dict()
+
+        def theta(tree: dict[str, Any]) -> dict[str, torch.Tensor]:
+            return tree["nodes"]["l0"]["state"]["module"]
 
         for s in range(1, 7 + K):
             before, after = step(s)
-            assert equal_states(after, before["nodes"]["l0"]["state"]["module"]), s
+            assert equal_states(theta(after), theta(before)), s
         before, after = step(7 + K)
-        expected = layer_update(before, module, K * H)
+        expected = layer_update(before, after, module, K * H)
         for key, value in expected.items():
-            close(after[key], value, 1e-14)
+            close(theta(after)[key], value, 1e-14)
 
 
 def learned_steps(
@@ -986,7 +1072,7 @@ class TestMaxDt:
         learning.step()
         after = learning.run.state_dict()
         assert_relaxed(after, "l0", relaxed(before, after, module, counted))
-        expected = layer_update(before, module, counted)
+        expected = layer_update(before, after, module, counted)
         for key, value in expected.items():
             close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
 
@@ -1112,8 +1198,9 @@ class TestUnlabeled:
             learning.step(masks)
         before = learning.run.state_dict()
         learning.step(masks)  # step 9
-        after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
-        expected = layer_update(before, module, 5 * H)
+        tree = learning.run.state_dict()
+        after = tree["nodes"]["l0"]["state"]["module"]
+        expected = layer_update(before, tree, module, 5 * H)
         for key, value in expected.items():
             close(after[key], value, 1e-14)
 
@@ -1121,8 +1208,9 @@ class TestUnlabeled:
         self, start_manual: StartManual
     ):
         # The first input has targets for all samples, the second for samples 0
-        # and 2 only: sample 1 still holds the delta of the first input, but
-        # sends back no credit for it and adds nothing to the update of theta.
+        # and 2 only: sample 1 still holds the delta of the first input after
+        # it relaxes, but sends back no credit for it and adds nothing to the
+        # update of theta.
         learning = Learning(start_manual)
         module = learning.chain.layers[0].module
 
@@ -1134,11 +1222,11 @@ class TestUnlabeled:
         before = learning.run.state_dict()
         learning.step(masks)  # step 9: learns from the second input
         after = learning.run.state_dict()
-        state = before["nodes"]["l0"]["state"]
+        state = after["nodes"]["l0"]["state"]
         assert (state["r"] + state["lam"])[1].abs().max() > 1e-6
         g_in = after["nodes"]["l0"]["ports"]["prev"]["out"]["value"]
         assert torch.equal(g_in[1], torch.zeros_like(g_in[1]))
-        expected = layer_update(before, module, 5 * H)
+        expected = layer_update(before, after, module, 5 * H)
         for key, value in expected.items():
             close(after["nodes"]["l0"]["state"]["module"][key], value, 1e-14)
 
@@ -1219,8 +1307,9 @@ class TestOptimizer:
             learning.step()
         before = learning.run.state_dict()
         learning.step()
-        after = learning.run.state_dict()["nodes"]["l0"]["state"]["module"]
-        expected = adamw_first_update(before, module, K * H)
+        tree = learning.run.state_dict()
+        after = tree["nodes"]["l0"]["state"]["module"]
+        expected = adamw_first_update(before, tree, module, K * H)
         for key, value in expected.items():
             close(after[key], value, 1e-12)
 

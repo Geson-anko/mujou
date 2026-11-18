@@ -51,13 +51,17 @@ class Layer(Node):
     loop that diverges in chains whose forward pass amplifies, however short
     the steps. With the defaults of ``TimeConstants`` (``period = tau.h / 2``,
     ``tau.lam = tau.h / 2``, ``tau.r = tau.h``), ``delta`` follows ``-g`` in
-    one update, so the credit moves one node down in each period.
+    one update, which is also when it is passed on to the previous node: the
+    credit takes at most one period per hop.
 
     Whatever moves ``mu`` (a new sample, an update of ``theta`` here or
     below), ``r`` and ``lam`` stay and only relax, unless the sample starts
     anew: in the update that first sees an input, the node sets ``r`` and
-    ``lam`` of the samples whose ``reset`` is set to zero, so that no credit of
-    an unrelated sample is left (``Sample``). Without a target, ``r`` and
+    ``lam`` of the samples whose ``reset`` is set to zero (``Sample``). The
+    same update still relaxes them with the ``g`` of the next nodes, which have
+    not yet seen the input, so it passes the credit of the sample before down
+    once more (``delta = -g`` with the defaults); that credit is gone within
+    the round trip, before the node learns. Without a target, ``r`` and
     ``lam`` decay to 0.
 
     Each ``on_update(dt)``:
@@ -65,11 +69,11 @@ class Layer(Node):
     1. reads the activity and ticks its ``clock``, which caps ``dt`` at
        ``max_dt``; with a new input, sets ``r`` and ``lam`` of the samples it
        resets to zero;
-    2. computes ``mu``, ``g_in`` and, when it learns, ``g_theta`` with the
-       ``delta`` before this update, zero for the samples whose ``mask`` is
-       False, and sends ``g_in``;
-    3. moves ``r`` and then ``lam`` by ``dt`` with the ``g`` the next nodes
+    2. moves ``r`` and then ``lam`` by ``dt`` with the ``g`` the next nodes
        sent (``functional.relax_``);
+    3. computes ``mu``, ``g_in`` and, when it learns, ``g_theta`` with the
+       ``delta`` it has just relaxed, zero for the samples whose ``mask`` is
+       False, and sends ``g_in``;
     4. sends ``h = mu``, and the ``y``, ``mask``, ``reset`` and ``time`` that
        came with ``h_in``;
     5. when it learns, moves ``theta`` by the time since its last update
@@ -79,18 +83,20 @@ class Layer(Node):
     once ``learn_interval`` seconds have passed since the host wrote the input
     (its ``time``, on the run's time), and then every ``learn_interval``
     seconds while the input stays, but never in the update that first sees an
-    input (its ``delta`` is still that of the input before); with
+    input (the ``g`` it relaxes with is still that of the input before); with
     ``learn_interval=None``, in every update; with ``math.inf``, never. The
     nodes read the one timer of the run, so the nodes on a path learn at about
     the same time, however deep they are, and each from the relaxed ``delta``
-    of the same input. A ``learn_interval``
-    longer than the round trip of the credit down the path and back
-    (``2 * hops * period``, with ``hops`` the number of connections from the
-    ``Input`` to the ``Output``) is recommended, so that the nodes learn from
-    the relaxed ``delta``. The node does not learn when no sample of the input
-    has a target (every ``mask`` is False): that time is dropped from the next
-    update, which would otherwise learn from the ``delta`` left over from an
-    earlier input. Nor does it keep the time of an input that changed before
+    of the same input. The input goes forward, and the credit back, at most
+    one period per hop (exactly one step per hop under ``ManualRun.step(dt)``).
+    A ``learn_interval`` longer than the round trip (``2 * hops * period``,
+    with ``hops`` the number of connections from the ``Input`` to the
+    ``Output``) is recommended, so that the nodes learn from the relaxed
+    ``delta``. A free run of equal periods without jitter often goes round in
+    about ``hops * period``, but only the bound holds in general. The node
+    does not learn when no sample of the input has a target (every ``mask`` is
+    False): that time is dropped from the next update, which would otherwise
+    learn from the ``delta`` left over from an earlier input. Nor does it keep the time of an input that changed before
     the node learned from it. Until the first sample reaches the node, the
     activity is zeros (``mask`` all False, ``time`` 0), so it does not learn
     then.
@@ -243,9 +249,9 @@ class Layer(Node):
         learn = tick.learn and bool(act["mask"].any())
         if tick.new:
             self._reset(act["reset"])
-        mu, g_theta = self._predict(act, learn)
         g = sum(self.next.recv().values(), torch.zeros_like(self.r))
         relax_(self.r, self.lam, g, tick.dt, self._tau, self.relaxer)
+        mu, g_theta = self._predict(act, learn)
         self._send(act, mu)
         if learn:
             # theta moves by the mean gradient of the batch, g_theta / B.
@@ -262,8 +268,8 @@ class Layer(Node):
     def _predict(
         self, act: Activity, learn: bool
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        """Compute ``mu`` and, to ``learn``, ``g_theta`` from the ``delta`` before
-        this update; send ``g_in``."""
+        """Compute ``mu`` and, to ``learn``, ``g_theta`` from the ``delta`` this
+        update has relaxed; send ``g_in``."""
         # A sample without a target sends back no credit and adds nothing to
         # g_theta: its delta may be left over from an earlier input.
         delta = torch.where(rows(act["mask"], self.r), self.r + self.lam, 0.0)

@@ -186,9 +186,16 @@ class Clock:
 
 
 class Reference:
-    """PC-ALM in plain PyTorch, stepped from the output to the input: each layer
-    reads the activity sent in the previous step and the credit (``g_in``) the
-    next node sent in this one.
+    """PC-ALM in plain PyTorch. Each layer reads the activity sent in the
+    previous step, relaxes ``r`` and ``lam`` with the credit ``g`` the next node
+    sent, and sends back ``g_in`` made from the ``delta`` it has just relaxed:
+
+    - ``jacobi=False``: stepped from the output to the input
+      (``step(h, *chain.from_next())``), so ``g`` is the one the next node sent
+      in this step
+    - ``jacobi=True``: every node from the values at the start of the step
+      (``ManualRun.step(h)``), so ``g`` is the one the next node sent in the
+      previous step
 
     ``h[0]`` is the ``x`` the input sent and ``h[i + 1]`` the activity that layer
     ``i`` sent, its prediction ``mu`` of the ``h_in`` it read (the deviation
@@ -204,7 +211,10 @@ class Reference:
         head: nn.Module,
         widths: Sequence[int],
         learn_interval: float | None = None,
+        *,
+        jacobi: bool = False,
     ) -> None:
+        self._jacobi = jacobi
         self.layers = [copy.deepcopy(m) for m in layers]
         self.head = copy.deepcopy(head)
         interval = None if learn_interval is None else round(learn_interval * 1e9)
@@ -227,6 +237,9 @@ class Reference:
         reset: torch.Tensor = KEEP,
     ) -> None:
         tau = TAU
+        # The credits the layers read: a copy of those sent before this step
+        # (Jacobi), or those sent so far in this step (from the output).
+        g_sent = list(self.g_in) if self._jacobi else self.g_in
         # The output: the gradient of the masked loss.
         y_c, mask_c, _, time_c = self.carried[-1]
         _, learn = self.clocks[-1].tick(dt, time_c, now)
@@ -241,8 +254,9 @@ class Reference:
         self.g_in[-1] = g_next
         if learn:
             self._learn(params, g_theta, mask_c, self.clocks[-1], now)
-        # The layers, from the last: each with the g the next one sent in this
-        # step, made from its values before the step.
+        # The layers, from the last: each relaxes with the g the next one sent
+        # in this step (from the output) or the previous one (Jacobi), then
+        # makes g_in and its g_theta from the delta it has just relaxed.
         h_new = list(self.h)
         for i in reversed(range(len(self.layers))):
             _, mask_i, reset_i, time_i = self.carried[i]
@@ -255,22 +269,22 @@ class Reference:
             if learn and not mask_i.any():
                 clock.learned(now)
                 learn = False
+            g = g_sent[i + 1]
+            r, lam = self.r[i], self.lam[i]
+            # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r
+            r = r - (dt / tau.h) * ((1 + tau.h / tau.r) * r + lam + g)
+            lam = lam + (dt / tau.lam) * r  # tau_lam dlam/dt = r
+            self.r[i], self.lam[i] = r, lam
             module = self.layers[i]
             h_in = self.h[i].clone().requires_grad_()
             params = list(module.parameters())
             mu = module(h_in)
-            r, lam = self.r[i], self.lam[i]
             delta = torch.where(mask_i[:, None], r + lam, 0.0)
             g_in, *g_theta = torch.autograd.grad(mu, [h_in, *params], -delta)
-            # tau_h dr/dt = -(r + lam + g) - (tau_h / tau_r) r
-            r = r - (dt / tau.h) * ((1 + tau.h / tau.r) * r + lam + g_next)
-            self.lam[i] = lam + (dt / tau.lam) * r  # tau_lam dlam/dt = r
-            self.r[i] = r
             h_new[i + 1] = mu.detach()
             if learn:
                 self._learn(params, g_theta, mask_i, clock, now)
             self.g_in[i] = g_in
-            g_next = g_in
         h_new[0] = x
         self.h = h_new
         self.carried = [(y, mask, reset, time), *self.carried[:-1]]

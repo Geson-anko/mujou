@@ -7,13 +7,14 @@ stage, the third stage, and the head. Inside a node, autograd differentiates
 the module as in plain PyTorch; between the nodes, only the messages of PC-ALM
 flow.
 
-The credit moves one node down in each period of the nodes, so a sample needs
-about twice as many periods as there are connections from the input to the
-output before every node has its credit. On one GPU, a period of all the nodes
-costs about the same however the network is cut (launching the kernels from
-the CPU is the limit), so fewer nodes learn faster: cut into one node per
-block (11 nodes), a batch needed 24 periods and could not keep up with a period
-of 2.5 ms of real time; cut into stages, 12 periods are enough.
+The credit takes at most one period of the nodes per hop (exactly one step per
+hop under ``ManualRun.step(dt)``), so a sample needs about twice as many periods
+as there are connections from the input to the output before every node has its
+credit. On one GPU, a period of all the nodes costs about the same however the
+network is cut (launching the kernels from the CPU is the limit), so fewer nodes
+learn faster: cut into one node per block (11 nodes), a batch needed 24 periods
+and could not keep up with a period of 2.5 ms of real time; cut into stages, 12
+periods are enough.
 
 GroupNorm replaces BatchNorm: it normalizes each sample on its own, so it has no
 running statistics and no train or eval mode to switch, and a batch padded with

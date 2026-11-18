@@ -405,6 +405,19 @@ CUDA の送受信（scratch のスクリプト。manual run で書き手と読�
 - P2P の無い 2 枚（4090 と 4060。`torch.cuda.can_device_access_peer` が False）の間の recv は、ドライバがホストを中継するので変わらない。send の D2H は無くなる
 - ホストを経由しないことは、`tests/mujou/test_port.py` の `test_a_message_skips_host_memory_only_from_a_cuda_device_to_a_node_on_it` が `torch.profiler` の Memcpy の端点で確かめる
 
+## g_in を緩和の後に送った後（2026-11-16）
+
+`pc.Layer` の更新の順序を「vjp、`g_in` を送る、`relax_`」から「`relax_`、vjp、`g_in` を送る」に変えた後の `benchmarks/pc_dense.py`（既定の引数、repeats 5）。前は、PR #118 の後の `layer.py` だけを差し替えた同じ checkout の複製。同じ機械（aarch64、14 コア、CPU）で、前後を交互に 3 回ずつ回した。ほかの作業が同じ機械で動いていたので、1 回ごとの揺れが大きい（manual の labels は 1036〜1457 µs）。
+
+| 条件（3 回の中央値の平均） | 前 | 後 | 差 |
+| --- | --- | --- | --- |
+| manual dense µs/step | 1085.6 | 1115.8 | +2.8% |
+| manual labels µs/step | 1144 | 1190 | +4%（揺れの内） |
+| free dense l1 updates/s | 1,068 | 1,007 | -5.7%（揺れの内） |
+| free dense out updates/s | 1,818 | 1,680 | 揺れの内（各回 1,571〜1,884） |
+
+1 回の更新の計算（VJP 1 回、メッセージの数と大きさ）は変えていないので、変化は揺れの範囲（±5% 前後）で、計算の増加は無い。
+
 ## M:N スケジューラの比較
 
 ワーカープールに載せる設計と既定のワーカー数を決めたときの測定。`benchmarks/mn_scheduler.py` を Apple M4 Pro（14 コア = 性能コア 10 + 効率コア 4、SMT なし、macOS 26.5、torch 2.14.1）で回した。ノードの負荷は `on_update` 1 回あたり、軽い Python のカウンタ（約 0.6 µs）、`addmm_`（384×384、約 65 µs）、`tanh`（32768 要素、約 78 µs）の 3 通り。torch の内部スレッドは 1 本。

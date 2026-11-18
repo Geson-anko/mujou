@@ -20,9 +20,9 @@ nothing learns from them) and the real time.
 The messages between the nodes stay on the GPU: a node on CUDA sends to a node
 on CUDA from device to device. With the defaults of ``pc.TimeConstants``
 (``tau.lam = tau.h / 2``, ``tau.r = tau.h``) and a period of ``tau.h / 2``, the
-credit moves one node down in each period, so ``S = 12`` periods are enough
-for the 4 connections down the chain and back. ``tau.h`` is 10 ms, so the
-period is 5 ms of the timer, and the timer goes twice as fast as real time
+credit takes at most one period per hop, so ``S = 12`` periods are enough for
+the 4 connections down the chain and back. ``tau.h`` is 10 ms, so the period is
+5 ms of the timer, and the timer goes twice as fast as real time
 (``--time-scale`` 2): 2.5 ms of real time, in which a node updates in about
 1.7 ms on an RTX 4090 (launching the kernels from the CPU is the limit, so a
 larger batch costs little more; BP gains more from it, and the batch is 32).
@@ -87,8 +87,9 @@ def train_pc(
 ) -> list[Epoch]:
     """Train the modules as PC-ALM nodes in a run, and measure each epoch."""
     # --8<-- [start:chain]
-    # With these, delta follows -g in one update: the credit moves one node
-    # down in each period of tau.h / 2, the default period of pc.Chain.
+    # With these, delta follows -g in one update, which the node passes on in
+    # the same update: the credit takes at most one period per hop, a period of
+    # tau.h / 2, the default period of pc.Chain.
     tau = pc.TimeConstants(h=args.tau_h, lam=args.tau_h / 2, r=args.tau_h)
     shown = args.steps * tau.period  # how long the host shows each batch
     net = pc.Chain(
