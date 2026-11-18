@@ -42,21 +42,22 @@ just container just run   # start the container if needed, then run `just run` i
 
 ## Commands
 
-| Recipe                 | What it does                                                                                        |
-| ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `just setup`           | Recreate `.venv/`, install the dependencies and the pre-commit hooks                                |
-| `just format`          | Run every pre-commit hook on all files (ruff, mdformat, codespell, cargo fmt, cargo clippy, ...)    |
-| `just test`            | `just test-rs`, then `just test-py`                                                                 |
-| `just test-rs`         | `cargo test --workspace`                                                                            |
-| `just test-py`         | pytest on all tests, including slow ones, with coverage                                             |
-| `just test-fast`       | `cargo test --workspace`, then pytest without the slow tests. Use it while you iterate              |
-| `just type`            | pyright: strict on `src/`, standard on the rest (tests, examples, benchmarks, hooks)                |
-| `just run`             | `format`, `test`, `type` and `docs-build`, in this order                                            |
-| `just docs`            | Serve the documentation at <http://127.0.0.1:8000> with live reload. Arguments go to `mkdocs serve` |
-| `just docs-build`      | Build the documentation into `site/`; any warning (a broken link, a missing API object) fails       |
-| `just stub`            | Generate `src/mujou/_native.pyi` from the Rust signatures and doc comments                          |
-| `just clean`           | Remove `dist/`, `build/`, `site/`, `htmlcov/`, `.coverage`, `__pycache__/` and `.pytest_cache/`     |
-| `just container <cmd>` | Run `<cmd>` in the dev container, in this checkout                                                  |
+| Recipe                 | What it does                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `just setup`           | Recreate `.venv/`, install the dependencies and the pre-commit hooks                                     |
+| `just format`          | Run every pre-commit hook on all files (ruff, mdformat, codespell, cargo fmt, cargo clippy, ...)         |
+| `just test`            | `just test-rs`, then `just test-py`                                                                      |
+| `just test-rs`         | `cargo test --workspace`                                                                                 |
+| `just doc-rs`          | `cargo doc --workspace --no-deps`; any warning (a broken intra-doc link, a link to a private item) fails |
+| `just test-py`         | pytest on all tests, including slow ones, with coverage                                                  |
+| `just test-fast`       | `cargo test --workspace`, then pytest without the slow tests. Use it while you iterate                   |
+| `just type`            | pyright: strict on `src/`, standard on the rest (tests, examples, benchmarks, hooks)                     |
+| `just run`             | `format`, `test`, `doc-rs`, `type` and `docs-build`, in this order                                       |
+| `just docs`            | Serve the documentation at <http://127.0.0.1:8000> with live reload. Arguments go to `mkdocs serve`      |
+| `just docs-build`      | Build the documentation into `site/`; any warning (a broken link, a missing API object) fails            |
+| `just stub`            | Generate `src/mujou/_native.pyi` from the Rust signatures and doc comments                               |
+| `just clean`           | Remove `dist/`, `build/`, `site/`, `htmlcov/`, `.coverage`, `__pycache__/` and `.pytest_cache/`          |
+| `just container <cmd>` | Run `<cmd>` in the dev container, in this checkout                                                       |
 
 One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run pytest -k "<expr>"`.
 
@@ -115,13 +116,13 @@ One test file: `uv run pytest tests/mujou/test_time.py -v`. By keyword: `uv run 
 
 CI runs these workflows on pull requests to `main` and to `release/**`, except GPU. Test, Type Check and Docs run only when files they depend on change.
 
-| Workflow      | Checks                                                                                                                                                                                                                                                                              |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test          | `just test-py` on Ubuntu, macOS and Windows, with Python 3.14t and 3.14, and that the committed `_native.pyi` matches `just stub`; `just test-rs` and `cargo doc` (warnings are errors) on Ubuntu, macOS and Windows; `cargo check` with the oldest supported Rust (`rust-version`) |
-| Type Check    | `just type` (pyright)                                                                                                                                                                                                                                                               |
-| Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                                            |
-| Docs          | `just docs-build`                                                                                                                                                                                                                                                                   |
-| GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. On pushes and pull requests, but not from forks ([.github/runner/README.md](.github/runner/README.md))                                                                                                                 |
+| Workflow      | Checks                                                                                                                                                                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test          | `just test-py` on Ubuntu, macOS and Windows, with Python 3.14t and 3.14, and that the committed `_native.pyi` matches `just stub`; `just test-rs` and `just doc-rs` on Ubuntu, macOS and Windows; `cargo check` with the oldest supported Rust (`rust-version`) |
+| Type Check    | `just type` (pyright)                                                                                                                                                                                                                                           |
+| Format & Lint | All pre-commit hooks except `mujou-stub`                                                                                                                                                                                                                        |
+| Docs          | `just docs-build`                                                                                                                                                                                                                                               |
+| GPU           | The tests marked `cuda`, on a self-hosted runner with a GPU. On pushes and pull requests, but not from forks ([.github/runner/README.md](.github/runner/README.md))                                                                                             |
 
 The Publish workflow runs on a pushed tag `v*` instead ([Releases](#releases)).
 

@@ -120,7 +120,7 @@ lock-free の `arc-swap` は使わない。arc-swap の読み手は、読んだ�
 
 - Python のパッケージのビルドバックエンドは maturin。`uv sync` が拡張モジュールをビルドして `src/mujou/` に置く（editable install）。`pyproject.toml` の `[tool.uv] cache-keys` に Rust のソースを入れてあるので、`uv run` は Rust の変更を検知して再ビルドする
 - 版数は Cargo workspace の `version` だけで決める。maturin が Python パッケージの版にし、`mujou.__version__` は `importlib.metadata` から取る
-- Rust の版は `rust-toolchain.toml` で固定する。最低限サポートする版は `Cargo.toml` の `rust-version` で、CI の MSRV ジョブがその版で `cargo check --workspace --all-targets` を通す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で、`cargo doc`（警告で失敗）は CI で回す
+- Rust の版は `rust-toolchain.toml` で固定する。最低限サポートする版は `Cargo.toml` の `rust-version` で、CI の MSRV ジョブがその版で `cargo check --workspace --all-targets` を通す。`cargo fmt` と `cargo clippy -D warnings` は pre-commit で、`cargo doc`（警告で失敗）は `just doc-rs` で `just run` と CI から回す
 - 実行時の依存は `torch` だけ。examples が使う numpy は dependency group `examples` に置き、`default-groups` で `uv sync` が入れる
 
 ### 型スタブ
