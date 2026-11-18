@@ -17,4 +17,4 @@ metadata:
 
 **Why:** 0.x の間も破壊的変更が続くので、main の変更がパッチに混ざらないよう release ブランチで系列を分ける。
 
-**How to apply:** 利用者に見える変更は `CHANGELOG.md` の Unreleased に書く。リリース作業は CONTRIBUTING.md の手順に従う。公開後の互換方針は [[feedback-no-compat-before-release]]。
+**How to apply:** 利用者に見える変更は `CHANGELOG.md` の Unreleased に書く。リリース作業は CONTRIBUTING.md の手順に従う。破壊的変更での互換の方針は [[feedback-no-compat-in-0x]]。

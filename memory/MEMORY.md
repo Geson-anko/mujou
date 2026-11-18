@@ -61,7 +61,7 @@
 - [example は手引き](feedback_examples_are_guides.md) — examples/ は利用者への手引きで動作確認用ではない。テストで実行せず、just type が静的に検査する（2026-10-20）
 - [向きは属性名の prev / next](feedback_direction_names.md) — クラスは Port / MultiPort（R2）。Up / Down、Bottom / Top は重力方向の直感と食い違うので使わない（2026-10-20）
 - [super() を呼ぶ](feedback_super_calls.md) — Node/Network のサブクラスは `__init__` と override した hook の最初で super() を呼ぶ。サンプル・docs・docstring・テストの例も常に
-- [公開前は互換を残さない](feedback_no_compat_before_release.md) — PyPI への正式公開までは、破壊的変更で古い名前の受け付け・移行の案内・deprecation の警告を入れず単に消す
+- [0.x の間は互換を残さない](feedback_no_compat_in_0x.md) — 0.x の間は、破壊的変更で古い名前の受け付け・移行の案内・deprecation の警告を入れず単に消し、CHANGELOG の Removed / Changed に書く。1.0 以降は改めて決める
 - [ガードは提供シナリオの中だけ](feedback_guards_within_scenarios.md) — 入力検証・状態の検査は提供するシナリオで起こりうる誤りに止め、1 か所で知らせる。それ以外は YAGNI（2026-10-20）
 - [良いセンスのコード](feedback_good_taste.md) — Linux カーネルメンテナーのように書く。特別扱いはデータ構造の見直しで消す、短い関数、使用者のいない抽象化を作らない（2026-10-20）
 - [ダックタイピングを使わない](feedback_no_duck_typing.md) — Protocol と hasattr をやめ ABC の継承にする。状態は mujou.Stateful（nn.Module は register）、pc.optim.Optimizer / BoundOptimizer、pc.Shown、current.Running（2026-10-23）
