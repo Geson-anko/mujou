@@ -178,46 +178,32 @@ class SGD(Optimizer):
     def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
         """Return the optimizer bound to ``params``, with the momentum and its
         mass at zero if it has one."""
-        if self.tau_m is None:
-            return _BoundSGD(list(params), self.tau)
-        return _BoundMomentumSGD(list(params), self.tau, self.tau_m)
+        return _BoundSGD(list(params), self)
 
 
 class _BoundSGD(BoundOptimizer):
-    def __init__(self, params: list[torch.Tensor], tau: float) -> None:
+    def __init__(self, params: list[torch.Tensor], config: SGD) -> None:
         self._params = params
-        self._tau = tau
-
-    @override
-    def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
-        with torch.no_grad():
-            for p, g in zip(self._params, grads, strict=True):
-                p.sub_(g, alpha=elapsed / self._tau)  # tau dtheta/dt = -g
-
-    @override
-    def state_dict(self) -> dict[str, Any]:
-        return {}
-
-    @override
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        pass
-
-
-class _BoundMomentumSGD(BoundOptimizer):
-    def __init__(self, params: list[torch.Tensor], tau: float, tau_m: float) -> None:
-        self._params = params
-        self._tau = tau
-        self._tau_m = tau_m
-        self._m = [torch.zeros_like(p) for p in params]
+        self._config = config
+        # The momentum and its mass, unused without tau_m (no state).
+        self._m: list[torch.Tensor] = (
+            [] if config.tau_m is None else [torch.zeros_like(p) for p in params]
+        )
         self._c_m = 0.0
 
     @override
     def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
+        config = self._config
+        eta = elapsed / config.tau
+        if config.tau_m is None:
+            with torch.no_grad():
+                for p, g in zip(self._params, grads, strict=True):
+                    p.sub_(g, alpha=eta)  # tau dtheta/dt = -g
+            return
         if elapsed == 0:
             return  # the flow of no time; before the first step, c = 0
-        a_m = -math.expm1(-elapsed / self._tau_m)  # 1 - exp(-dt / tau_m)
+        a_m = -math.expm1(-elapsed / config.tau_m)  # 1 - exp(-dt / tau_m)
         self._c_m += a_m * (1 - self._c_m)  # tau_m dc_m/dt = 1 - c_m
-        eta = elapsed / self._tau
         with torch.no_grad():
             for p, g, m in zip(self._params, grads, self._m, strict=True):
                 m.lerp_(g, a_m)  # tau_m dm/dt = g - m
@@ -225,10 +211,14 @@ class _BoundMomentumSGD(BoundOptimizer):
 
     @override
     def state_dict(self) -> dict[str, Any]:
+        if self._config.tau_m is None:
+            return {}
         return {"m": list(self._m), "c_m": self._c_m}
 
     @override
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        if self._config.tau_m is None:
+            return
         with torch.no_grad():
             for mine, saved in zip(self._m, state["m"], strict=True):
                 mine.copy_(saved)
