@@ -93,6 +93,7 @@ class TestPcPublicNames:
             "AdamW",
             "BoundOptimizer",
             "Optimizer",
+            "RMSProp",
             "SGD",
         ]
         assert sorted(mujou.pc.relax.__all__) == [

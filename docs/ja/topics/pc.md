@@ -77,16 +77,20 @@ p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask, reset=new), seconds=sho
 | optimizer                                                                    | `elapsed` 秒の 1 回の学習                                                                    | 状態                   |
 | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------- |
 | `pc.optim.SGD(tau=...)`                                                      | `p -= (elapsed / tau) * g`                                                                   | 無し                   |
+| `pc.optim.SGD(tau=..., tau_m=...)`                                           | `p -= (elapsed / tau) * m_hat`。momentum の `m` は勾配を時定数 `tau_m` で平均したもの        | `m`、`c_m`             |
+| `pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)`                             | 学習率 `elapsed / tau` の RMSProp。二乗平均の `v` は時定数 `tau_v` で減衰する                | `v`、`c_v`             |
 | `pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | 学習率 `elapsed / tau` の AdamW。moment の `m` と `v` は時定数 `tau_m` と `tau_v` で減衰する | `m`、`v`、`c_m`、`c_v` |
 
 - **ステップでなく時間**: `tau` はどれも秒。`elapsed` はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの `elapsed` を合わせると見せる時間になる。そのため `pc.optim.SGD` では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ
 - **SGD** は MNIST が使うもの。`tau` は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める
+- **SGD の momentum**（`tau_m`）は勾配をおよそ直近 `tau_m` 秒で平均し、学習率は変えない。勾配が一定なら重みは momentum 無しと同じだけ動く。`Δt` を 2 回の学習の間の時間として、`torch.optim.SGD(lr, momentum=beta, dampening=beta)` からは `tau = Δt / lr`、`tau_m = -Δt / ln(beta)`。torch の既定の `dampening=0` では、buffer がたまると歩みが `1 / (1 - beta)` 倍になる。それに合わせるなら `tau = (1 - beta) * Δt / lr`。`mujou.pc` に適した値はまだ測っていない
+- **RMSProp** は勾配をその二乗平均の平方根で割る。momentum と weight decay は無く、各重みを 1 回に最大でおよそ `elapsed / tau` 動かす。`torch.optim.RMSprop(lr, alpha, eps)` からは `tau = Δt / lr`、`tau_v = -Δt / ln(alpha)`。`mujou.pc` に適した値はまだ測っていない
 - **AdamW** は勾配の大きさによらず、各重みを 1 回におよそ `elapsed / tau` 動かす。`mujou.pc` に適した AdamW の値はまだ測っていない
 - **`torch.optim.AdamW` からの換算**: `Δt` は 2 回の学習の間の時間で、1 バッチに 1 回学ぶなら見せる時間。`torch.optim.AdamW` の `lr`・`betas` の値を使うなら、`tau = Δt / lr`、`tau_m = -Δt / ln(beta1)`、`tau_v = -Δt / ln(beta2)` とする。`Δt` が一定なら、歩みは `torch.optim.AdamW` と同じになる。32 ms に 1 回学ぶなら、`beta1 = 0.9` は `tau_m` ≈ 0.30 s、`beta2 = 0.999` は `tau_v` ≈ 32 s
 - **`weight_decay`** は `torch.optim.AdamW` と同じく単位を持たない。重みを時定数 `tau / weight_decay` で減衰させる
-- **不正な値**: `tau` と `eps` はどれも有限で > 0、`weight_decay` は有限で >= 0 でなければ、optimizer が `ValueError` を送出する。ノードに学ばせないときは、その `pc.Layer` か `pc.Output` に無限大の `tau` でなく `learn_interval=math.inf` を渡す（`pc.Chain` は 1 つの `learn_interval` を全ノードに渡す）
+- **不正な値**: `tau`（渡したなら SGD の `tau_m` も）と `eps` はどれも有限で > 0、`weight_decay` は有限で >= 0 でなければ、optimizer が `ValueError` を送出する。ノードに学ばせないときは、その `pc.Layer` か `pc.Output` に無限大の `tau` でなく `learn_interval=math.inf` を渡す（`pc.Chain` は 1 つの `learn_interval` を全ノードに渡す）
 - **学ぶ重みだけ**: ノードは `requires_grad=True` のパラメータだけを bind する。凍結したパラメータには weight decay も掛からない
-- **状態**: ノードの optimizer の状態は `run.state_dict()["nodes"][path]["state"]["optimizer"]` にある。`pc.optim.AdamW` ならキー `"m"`・`"v"`・`"c_m"`・`"c_v"` の dict、`pc.optim.SGD` なら空の dict。実行のほかの状態と一緒に保存・復元される
+- **状態**: ノードの optimizer の状態は `run.state_dict()["nodes"][path]["state"]["optimizer"]` にある。`pc.optim.AdamW` ならキー `"m"`・`"v"`・`"c_m"`・`"c_v"` の dict、`pc.optim.RMSProp` なら `"v"`・`"c_v"`、`tau_m` を渡した `pc.optim.SGD` なら `"m"`・`"c_m"`、渡さなければ空の dict。実行のほかの状態と一緒に保存・復元される
 
 ```python
 # torch の lr=1e-3, betas=(0.9, 0.999) を、32 ms のバッチごとに 1 回学ぶ場合に換算して丸めたもの。

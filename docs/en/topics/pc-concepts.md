@@ -215,7 +215,7 @@ Make the `tau` of the optimizer much larger than `tau.h`. When the weights move 
 
 ### A setting, bound in each node
 
-`pc.optim.SGD(tau=)` and `pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` are settings: frozen values without state. `Layer`, `Output` and `Chain` take one as the required argument `optimizer=`. Each node binds the setting to its own weights that require gradients, and keeps the **bound optimizer** as `self.optimizer`. The bound optimizer holds the state and moves the weights.
+`pc.optim.SGD(tau=, tau_m=None)`, `pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)` and `pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` are settings: frozen values without state. `Layer`, `Output` and `Chain` take one as the required argument `optimizer=`. Each node binds the setting to its own weights that require gradients, and keeps the **bound optimizer** as `self.optimizer`. The bound optimizer holds the state and moves the weights.
 
 ```mermaid
 flowchart LR
@@ -235,19 +235,23 @@ self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
 - The node divides $g_\theta$ by $B$ before `step_`. The optimizer does not know the batch
 - A step with `elapsed == 0` moves nothing: neither the weights nor the state
 
-### SGD and AdamW
+### SGD, RMSProp and AdamW
 
 With the mean gradient $g = g_\theta / B$:
 
-| Optimizer        | Flow in time                                                                                                                                        | One step of `elapsed` $= \Delta t$ seconds                                                                                                              |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pc.optim.SGD`   | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$: SGD with the learning rate $\Delta t / \tau_\theta$                                        |
-| `pc.optim.AdamW` | $\tau_m \dot m = g - m$, $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $m \leftarrow m + a_m (g - m)$ with $a_m = 1 - e^{-\Delta t/\tau_m}$, the same for $v$; then $\theta$ steps as AdamW with $\eta = \Delta t/\tau_\theta$ |
+| Optimizer                   | Flow in time                                                                                                                                        | One step of `elapsed` $= \Delta t$ seconds                                                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pc.optim.SGD`              | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$: SGD with the learning rate $\Delta t / \tau_\theta$                                        |
+| `pc.optim.SGD` with `tau_m` | $\tau_m \dot m = g - m$, $\tau_\theta \dot\theta = -\hat m$                                                                                         | $m \leftarrow m + a_m (g - m)$; then $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} \hat m$                                                   |
+| `pc.optim.RMSProp`          | $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon}$                                                        | $v \leftarrow v + a_v (g^2 - v)$ with $a_v = 1 - e^{-\Delta t/\tau_v}$; then $\theta \leftarrow \theta - \eta\,\frac{g}{\sqrt{\hat v} + \varepsilon}$   |
+| `pc.optim.AdamW`            | $\tau_m \dot m = g - m$, $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $m \leftarrow m + a_m (g - m)$ with $a_m = 1 - e^{-\Delta t/\tau_m}$, the same for $v$; then $\theta$ steps as AdamW with $\eta = \Delta t/\tau_\theta$ |
 
-- `tau` is $\tau_\theta$, `tau_m` is $\tau_m$ and `tau_v` is $\tau_v$, all in seconds. Each must be finite and > 0. Never to learn, give the node `learn_interval=math.inf`
+- `tau` is $\tau_\theta$, `tau_m` is $\tau_m$ and `tau_v` is $\tau_v$, all in seconds. Each must be finite and > 0 (`tau_m` of SGD may also be `None`, for no momentum). Never to learn, give the node `learn_interval=math.inf`
 - `eps` ($\varepsilon$) must be > 0, so that a weight whose gradient has been 0 does not get `0 / 0`
 - `weight_decay` ($w$) has no unit. It decays $\theta$ with the time constant $\tau_\theta / w$, as `weight_decay` works with `lr` in `torch.optim.AdamW`
 - AdamW moves each weight by about $\eta$ per step, whatever the size of its gradient. To match the `lr` of Adam, take $\Delta t$, the time between two learning steps (the time each input is shown, when a node learns once per input), and set `tau` to $\Delta t$ / `lr`
+- The momentum of SGD averages $g$ and keeps the learning rate: with a constant $g$, $\hat m = g$ and the step is that of SGD without momentum. $\tau_m \to 0$ is SGD without momentum
+- RMSProp is AdamW without the first moment and the weight decay: $g$ in place of $\hat m$
 
 ### The mass c: bias correction in time
 
@@ -264,7 +268,9 @@ A step solves the flow exactly for a $g$ held over $\Delta t$. So the moments an
 | Two steps of 0.05 s | $1 - e^{-1} = 0.632$      | $1 - \beta_1^2 = 0.632$                                                |
 | One step of 0.1 s   | $1 - e^{-1} = 0.632$      | $1 - \beta_1^1 = 0.393$                                                |
 
-When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))`. So from the $\beta$ of torch, $\tau_m = -\Delta t / \ln\beta_1$, with the same $\Delta t$ between two learning steps. Learning every 32 ms, $\beta_1 = 0.9$ is about 0.30 s and $\beta_2 = 0.999$ about 32 s. To choose between SGD and AdamW and their values, see [Choosing the optimizer](pc.md#choosing-the-optimizer).
+The momentum of SGD has its mass $c_m$, and RMSProp its mass $c_v$, in the same way.
+
+When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))`. So from the $\beta$ of torch, $\tau_m = -\Delta t / \ln\beta_1$, with the same $\Delta t$ between two learning steps. Learning every 32 ms, $\beta_1 = 0.9$ is about 0.30 s and $\beta_2 = 0.999$ about 32 s. `torch.optim.SGD` and `torch.optim.RMSprop` have no bias correction: with $\beta = e^{-\Delta t/\tau_m}$, the momentum of SGD is `torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)`, and RMSProp is `torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)`, once the mass is 1 (the difference decays as the power $t$ of `momentum` or `alpha`; for a constant $g$, the momentum agrees from the first step). To choose between SGD and AdamW and their values, see [Choosing the optimizer](pc.md#choosing-the-optimizer).
 
 ??? question "Why not use torch.optim?"
 

@@ -10,6 +10,8 @@ All notable changes to Mujou are documented in this file. The format is based on
 
 - `mujou.run_manually` and `mujou.ManualRun` at the top level, for simulations: the network runs on virtual time, stepped by hand as fast as the machine computes. `run_manually` takes `workers=` as `mujou.run` does. See the new topic Simulation.
 - `pc.Layer(cuda_graph=True)`: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).
+- `pc.optim.SGD(tau_m=...)`: SGD with a momentum, the gradient averaged with the time constant `tau_m` in seconds and corrected for its start at zero by a mass, as in `pc.optim.AdamW`. It keeps the learning rate: with a constant gradient, the weights move as without the momentum. Without `tau_m`, `pc.optim.SGD` is as before.
+- `pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)`: RMSProp in time, the gradient divided by the root of its mean square, which decays with the time constant `tau_v` in seconds and is corrected by a mass, as in `pc.optim.AdamW`. It has no momentum and no weight decay.
 
 ### Changed
 
