@@ -2116,6 +2116,16 @@
 <td>無し</td>
 </tr>
 <tr>
+<td><code>pc.optim.SGD(tau=..., tau_m=...)</code></td>
+<td><code>p -= (elapsed / tau) * m_hat</code>。momentum の <code>m</code> は勾配を時定数 <code>tau_m</code> で平均したもの</td>
+<td><code>m</code>、<code>c_m</code></td>
+</tr>
+<tr>
+<td><code>pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)</code></td>
+<td>学習率 <code>elapsed / tau</code> の RMSProp。二乗平均の <code>v</code> は時定数 <code>tau_v</code> で減衰する</td>
+<td><code>v</code>、<code>c_v</code></td>
+</tr>
+<tr>
 <td><code>pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)</code></td>
 <td>学習率 <code>elapsed / tau</code> の AdamW。moment の <code>m</code> と <code>v</code> は時定数 <code>tau_m</code> と <code>tau_v</code> で減衰する</td>
 <td><code>m</code>、<code>v</code>、<code>c_m</code>、<code>c_v</code></td>
@@ -2125,12 +2135,14 @@
 <ul>
 <li><strong>ステップでなく時間</strong>: <code>tau</code> はどれも秒。<code>elapsed</code> はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの <code>elapsed</code> を合わせると見せる時間になる。そのため <code>pc.optim.SGD</code> では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ</li>
 <li><strong>SGD</strong> は MNIST が使うもの。<code>tau</code> は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める</li>
+<li><strong>SGD の momentum</strong>（<code>tau_m</code>）は勾配をおよそ直近 <code>tau_m</code> 秒で平均し、学習率は変えない。勾配が一定なら重みは momentum 無しと同じだけ動く。<code>Δt</code> を 2 回の学習の間の時間として、<code>torch.optim.SGD(lr, momentum=beta, dampening=beta)</code> からは <code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta)</code>。torch の既定の <code>dampening=0</code> では、buffer がたまると歩みが <code>1 / (1 - beta)</code> 倍になる。それに合わせるなら <code>tau = (1 - beta) * Δt / lr</code>。<code>mujou.pc</code> に適した値はまだ測っていない</li>
+<li><strong>RMSProp</strong> は勾配をその二乗平均の平方根で割る。momentum と weight decay は無く、各重みを 1 回に最大でおよそ <code>elapsed / tau</code> 動かす。<code>torch.optim.RMSprop(lr, alpha, eps)</code> からは <code>tau = Δt / lr</code>、<code>tau_v = -Δt / ln(alpha)</code>。<code>mujou.pc</code> に適した値はまだ測っていない</li>
 <li><strong>AdamW</strong> は勾配の大きさによらず、各重みを 1 回におよそ <code>elapsed / tau</code> 動かす。<code>mujou.pc</code> に適した AdamW の値はまだ測っていない</li>
 <li><strong><code>torch.optim.AdamW</code> からの換算</strong>: <code>Δt</code> は 2 回の学習の間の時間で、1 バッチに 1 回学ぶなら見せる時間。<code>torch.optim.AdamW</code> の <code>lr</code>・<code>betas</code> の値を使うなら、<code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta1)</code>、<code>tau_v = -Δt / ln(beta2)</code> とする。<code>Δt</code> が一定なら、歩みは <code>torch.optim.AdamW</code> と同じになる。32 ms に 1 回学ぶなら、<code>beta1 = 0.9</code> は <code>tau_m</code> ≈ 0.30 s、<code>beta2 = 0.999</code> は <code>tau_v</code> ≈ 32 s</li>
 <li><strong><code>weight_decay</code></strong> は <code>torch.optim.AdamW</code> と同じく単位を持たない。重みを時定数 <code>tau / weight_decay</code> で減衰させる</li>
-<li><strong>不正な値</strong>: <code>tau</code> と <code>eps</code> はどれも有限で &gt; 0、<code>weight_decay</code> は有限で &gt;= 0 でなければ、optimizer が <code>ValueError</code> を送出する。ノードに学ばせないときは、その <code>pc.Layer</code> か <code>pc.Output</code> に無限大の <code>tau</code> でなく <code>learn_interval=math.inf</code> を渡す（<code>pc.Chain</code> は 1 つの <code>learn_interval</code> を全ノードに渡す）</li>
+<li><strong>不正な値</strong>: <code>tau</code>（渡したなら SGD の <code>tau_m</code> も）と <code>eps</code> はどれも有限で &gt; 0、<code>weight_decay</code> は有限で &gt;= 0 でなければ、optimizer が <code>ValueError</code> を送出する。ノードに学ばせないときは、その <code>pc.Layer</code> か <code>pc.Output</code> に無限大の <code>tau</code> でなく <code>learn_interval=math.inf</code> を渡す（<code>pc.Chain</code> は 1 つの <code>learn_interval</code> を全ノードに渡す）</li>
 <li><strong>学ぶ重みだけ</strong>: ノードは <code>requires_grad=True</code> のパラメータだけを bind する。凍結したパラメータには weight decay も掛からない</li>
-<li><strong>状態</strong>: ノードの optimizer の状態は <code>run.state_dict()["nodes"][path]["state"]["optimizer"]</code> にある。<code>pc.optim.AdamW</code> ならキー <code>"m"</code>・<code>"v"</code>・<code>"c_m"</code>・<code>"c_v"</code> の dict、<code>pc.optim.SGD</code> なら空の dict。実行のほかの状態と一緒に保存・復元される</li>
+<li><strong>状態</strong>: ノードの optimizer の状態は <code>run.state_dict()["nodes"][path]["state"]["optimizer"]</code> にある。<code>pc.optim.AdamW</code> ならキー <code>"m"</code>・<code>"v"</code>・<code>"c_m"</code>・<code>"c_v"</code> の dict、<code>pc.optim.RMSProp</code> なら <code>"v"</code>・<code>"c_v"</code>、<code>tau_m</code> を渡した <code>pc.optim.SGD</code> なら <code>"m"</code>・<code>"c_m"</code>、渡さなければ空の dict。実行のほかの状態と一緒に保存・復元される</li>
 </ul>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># torch の lr=1e-3, betas=(0.9, 0.999) を、32 ms のバッチごとに 1 回学ぶ場合に換算して丸めたもの。</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="mf">0.032</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">tau_m</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">tau_v</span><span class="o">=</span><span class="mf">32.0</span><span class="p">)</span>

@@ -2093,7 +2093,79 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.optim.SGD.tau_m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau_m
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.optim.SGD.bind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RMSProp
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RMSProp">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.tau" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.tau_v" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau_v
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.eps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        eps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.bind" class="md-nav__link">
     <span class="md-ellipsis">
       
         bind
@@ -3495,7 +3567,79 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mujou.pc.optim.SGD.tau_m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau_m
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mujou.pc.optim.SGD.bind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RMSProp
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RMSProp">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.tau" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.tau_v" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tau_v
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.eps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        eps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.RMSProp.bind" class="md-nav__link">
     <span class="md-ellipsis">
       
         bind
@@ -6643,12 +6787,12 @@ spec of <code>chain.prev</code>.</p>
 
     <div class="doc doc-contents first">
 
-        <p>The optimizers that move the parameters of a node in time: <code>SGD</code> and
-<code>AdamW</code>.</p>
+        <p>The optimizers that move the parameters of a node in time: <code>SGD</code> (with
+an optional momentum), <code>RMSProp</code> and <code>AdamW</code>.</p>
 <p>An optimizer here is a setting (<code>Optimizer</code>): a frozen value that holds no
 state and may be shared by every node. A node binds it to its own parameters
 with <code>bind(params)</code>, which returns the <code>BoundOptimizer</code> that holds the state
-(the moments of <code>AdamW</code>) and moves the parameters by <code>step_(grads,
+(the moments) and moves the parameters by <code>step_(grads,
 elapsed)</code>. The time constants are in seconds, so the flow does not depend on
 how often the node learns: <code>elapsed</code> is the time the step weighs.</p>
 <p>They do not use <code>torch.optim</code>: its optimizers count steps rather than time,
@@ -6988,7 +7132,7 @@ run copies the state it takes.</p>
   </span>
 
 <a href="#mujou.pc.optim.SGD" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">SGD</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">SGD</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">tau_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -6997,12 +7141,41 @@ run copies the state it takes.</p>
 
 
 
-        <p>Gradient descent in time, <span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span>.</p>
+        <p>Gradient descent in time, <span class="arithmatex">\(\tau_\theta \dot\theta = -g\)</span>, with an
+optional momentum.</p>
 <p>A step of <code>elapsed</code> seconds is one step of SGD with the learning rate
 <code>elapsed / tau</code>: <code>p -= (elapsed / tau) * g</code>. With <span class="arithmatex">\(\Delta t\)</span> seconds
 between two updates of the parameters (the time each input is shown, for a
 node that learns once from each), the step is of the learning rate
-<code>Δt / tau</code>. The bound optimizer has no state (an empty <code>state_dict</code>).</p>
+<code>Δt / tau</code>. Without <code>tau_m</code>, the bound optimizer has no state (an empty
+<code>state_dict</code>).</p>
+<p>With <code>tau_m</code>, the parameters descend along the gradient averaged over
+about the last <span class="arithmatex">\(\tau_m\)</span> seconds instead:</p>
+<div class="arithmatex">\[
+\tau_m \dot m = g - m,\qquad
+\tau_\theta \dot\theta = -\hat m,
+\]</div>
+<p>where <span class="arithmatex">\(\hat m = m / c_m\)</span> corrects the bias of the moment that starts at
+zero, with the mass <span class="arithmatex">\(\tau_m \dot c_m = 1 - c_m\)</span> from <span class="arithmatex">\(c_m = 0\)</span>, as in
+<code>AdamW</code>. A step of <code>elapsed</code> <span class="arithmatex">\(= \Delta t\)</span> seconds moves <span class="arithmatex">\(m\)</span> and <span class="arithmatex">\(c_m\)</span>
+exactly as the flow would with <span class="arithmatex">\(g\)</span> held over <span class="arithmatex">\(\Delta t\)</span>
+(<span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span> and <span class="arithmatex">\(c_m \leftarrow c_m + a_m (1 - c_m)\)</span>
+with <span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span>), then
+<span class="arithmatex">\(\theta \leftarrow \theta - (\Delta t / \tau_\theta)\,\hat m\)</span>. With a
+constant <span class="arithmatex">\(g\)</span>, <span class="arithmatex">\(\hat m = g\)</span>, and the step is that of SGD without momentum:
+the momentum averages the gradient and leaves the learning rate as it is.
+<span class="arithmatex">\(\tau_m \to 0\)</span> is SGD without momentum. A step of <code>elapsed == 0</code> moves
+nothing.</p>
+<p>With a constant <span class="arithmatex">\(\Delta t\)</span> and <span class="arithmatex">\(\beta = e^{-\Delta t/\tau_m}\)</span>, the steps
+are those of <code>torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)</code>
+(its buffer is then <span class="arithmatex">\(m \leftarrow \beta m + (1 - \beta) g\)</span>) up to the bias
+correction: torch starts its buffer at the first gradient instead of
+dividing by <span class="arithmatex">\(c_m\)</span>. The two agree for a constant <span class="arithmatex">\(g\)</span>, and from the same <span class="arithmatex">\(m\)</span>
+once <span class="arithmatex">\(c_m = 1\)</span>; otherwise their difference decays as <span class="arithmatex">\(\beta^t\)</span> after <span class="arithmatex">\(t\)</span>
+steps.</p>
+<p>The state (<code>state_dict()</code>) holds the moment <code>"m"</code> (a list of tensors,
+of the dtype and device of the parameters) and the mass <code>"c_m"</code> (a
+Python float in <code>[0, 1]</code>). There is no count of steps.</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>hidden = pc.Layer(module, act_spec=..., tau=tau,
                   optimizer=pc.optim.SGD(tau=0.3), learn_interval=24e-3)
@@ -7033,6 +7206,27 @@ node that learns once from each), the step is of the learning rate
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau_m</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constant <span class="arithmatex">\(\tau_m\)</span> of the momentum, in seconds, or
+<code>None</code> for none.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -7053,7 +7247,8 @@ node that learns once from each), the step is of the learning rate
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p><code>tau</code> is not finite and &gt; 0. Never to learn, give the node
+                <p><code>tau</code> is not finite and &gt; 0, or <code>tau_m</code> is given and is
+not finite and &gt; 0. Never to learn, give the node
 <code>learn_interval=math.inf</code>.</p>
               </div>
             </td>
@@ -7101,6 +7296,29 @@ node that learns once from each), the step is of the learning rate
 
 </div>
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.SGD.tau_m" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">tau_m</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.SGD.tau_m" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">tau_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
 
 
 
@@ -7117,7 +7335,269 @@ node that learns once from each), the step is of the learning rate
 
     <div class="doc doc-contents ">
 
-        <p>Return the optimizer bound to <code>params</code>.</p>
+        <p>Return the optimizer bound to <code>params</code>, with the momentum and its
+mass at zero if it has one.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.optim.RMSProp" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">RMSProp</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.RMSProp" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">RMSProp</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">tau_v</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-08</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Optimizer (mujou.pc.optim.Optimizer)" href="#mujou.pc.optim.Optimizer">Optimizer</a></code></p>
+
+
+
+        <p>RMSProp in time: the gradient divided by the root of a mean square that
+decays with a time constant.</p>
+<p>With the gradient <span class="arithmatex">\(g\)</span> (averaged over the batch):</p>
+<div class="arithmatex">\[
+\tau_v \dot v = g^2 - v,\qquad
+\tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon},
+\]</div>
+<p>where <span class="arithmatex">\(\hat v = v / c_v\)</span> corrects the bias of the moment that starts at
+zero, with the mass <span class="arithmatex">\(\tau_v \dot c_v = 1 - c_v\)</span> from <span class="arithmatex">\(c_v = 0\)</span>, as in
+<code>AdamW</code>. A step of <code>elapsed</code> <span class="arithmatex">\(= \Delta t\)</span> seconds moves <span class="arithmatex">\(v\)</span> and <span class="arithmatex">\(c_v\)</span>
+exactly as the flow would with <span class="arithmatex">\(g\)</span> held over <span class="arithmatex">\(\Delta t\)</span>
+(<span class="arithmatex">\(v \leftarrow v + a_v (g^2 - v)\)</span> and <span class="arithmatex">\(c_v \leftarrow c_v + a_v (1 - c_v)\)</span>
+with <span class="arithmatex">\(a_v = 1 - e^{-\Delta t/\tau_v}\)</span>), then
+<span class="arithmatex">\(\theta \leftarrow \theta - \eta\,g / (\sqrt{\hat v} + \varepsilon)\)</span> with
+<span class="arithmatex">\(\eta = \Delta t / \tau_\theta\)</span>. A step of <code>elapsed == 0</code> moves nothing.
+There is no momentum and no weight decay.</p>
+<p>With a constant <span class="arithmatex">\(\Delta t\)</span>, the steps are those of
+<code>torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)</code> up
+to the bias correction: torch starts its mean square at zero and does not
+divide it by <span class="arithmatex">\(c_v\)</span>, so its first steps are larger. The two agree once
+<span class="arithmatex">\(c_v = 1\)</span>; their difference decays as <span class="arithmatex">\(\alpha^t\)</span> after <span class="arithmatex">\(t\)</span> steps.</p>
+<p>The state (<code>state_dict()</code>) holds the moment <code>"v"</code> (a list of tensors,
+of the dtype and device of the parameters) and the mass <code>"c_v"</code> (a
+Python float in <code>[0, 1]</code>). There is no count of steps.</p>
+<p>Like <code>AdamW</code>, a step moves each element by up to about <span class="arithmatex">\(\eta\)</span> whatever
+the size of its gradient.</p>
+<p>Example (<code>lr = 1e-3</code> and <code>alpha = 0.99</code> of torch, learning once from
+each input, shown for 32 ms)::</p>
+<div class="highlight"><pre><span></span><code>hidden = pc.Layer(module, act_spec=..., tau=tau,
+                  optimizer=pc.optim.RMSProp(tau=32e-3 / 1e-3, tau_v=3.2),
+                  learn_interval=24e-3)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constant <span class="arithmatex">\(\tau_\theta\)</span> of the parameters, in seconds.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tau_v</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The time constant <span class="arithmatex">\(\tau_v\)</span> of the mean square, in seconds.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>eps</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The <span class="arithmatex">\(\varepsilon\)</span> added to <span class="arithmatex">\(\sqrt{\hat v}\)</span>. It is &gt; 0, so that an
+element whose gradient has been 0 does not become <code>0 / 0</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>1e-08</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>tau</code>, <code>tau_v</code> or <code>eps</code> is not finite and &gt; 0.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.RMSProp.tau" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">tau</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.RMSProp.tau" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">tau</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.RMSProp.tau_v" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">tau_v</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.RMSProp.tau_v" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">tau_v</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.RMSProp.eps" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">eps</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.RMSProp.eps" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-08</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="mujou.pc.optim.RMSProp.bind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">bind</span>
+
+
+<a href="#mujou.pc.optim.RMSProp.bind" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">bind</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BoundOptimizer</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the optimizer bound to <code>params</code>, with the mean square and
+its mass at zero.</p>
 
 
     </div>

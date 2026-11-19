@@ -1306,10 +1306,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sgd-and-adamw" class="md-nav__link">
+  <a href="#sgd-rmsprop-and-adamw" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SGD and AdamW
+        SGD, RMSProp and AdamW
       
     </span>
   </a>
@@ -1929,10 +1929,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sgd-and-adamw" class="md-nav__link">
+  <a href="#sgd-rmsprop-and-adamw" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SGD and AdamW
+        SGD, RMSProp and AdamW
       
     </span>
   </a>
@@ -2489,7 +2489,7 @@
 <p>The weights move in seconds too. An optimizer is a flow in time: its time constants are in seconds, and each step moves it by the <code>elapsed</code> seconds the step covers. So how often a node learns does not change how fast its weights move per second.</p>
 </div>
 <h3 id="a-setting-bound-in-each-node">A setting, bound in each node<a class="headerlink" href="#a-setting-bound-in-each-node" title="Permanent link">&para;</a></h3>
-<p><code>pc.optim.SGD(tau=)</code> and <code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> are settings: frozen values without state. <code>Layer</code>, <code>Output</code> and <code>Chain</code> take one as the required argument <code>optimizer=</code>. Each node binds the setting to its own weights that require gradients, and keeps the <strong>bound optimizer</strong> as <code>self.optimizer</code>. The bound optimizer holds the state and moves the weights.</p>
+<p><code>pc.optim.SGD(tau=, tau_m=None)</code>, <code>pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)</code> and <code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> are settings: frozen values without state. <code>Layer</code>, <code>Output</code> and <code>Chain</code> take one as the required argument <code>optimizer=</code>. Each node binds the setting to its own weights that require gradients, and keeps the <strong>bound optimizer</strong> as <code>self.optimizer</code>. The bound optimizer holds the state and moves the weights.</p>
 <pre class="mermaid"><code>flowchart LR
     S["pc.optim.AdamW(...)&lt;br/&gt;setting, no state"] --&gt;|"bind(params)"| B0["Layer 0: bound optimizer&lt;br/&gt;m, v, c_m, c_v"]
     S --&gt;|"bind(params)"| B1["Layer 1: bound optimizer&lt;br/&gt;m, v, c_m, c_v"]
@@ -2504,7 +2504,7 @@
 <li>The node divides <span class="arithmatex">\(g_\theta\)</span> by <span class="arithmatex">\(B\)</span> before <code>step_</code>. The optimizer does not know the batch</li>
 <li>A step with <code>elapsed == 0</code> moves nothing: neither the weights nor the state</li>
 </ul>
-<h3 id="sgd-and-adamw">SGD and AdamW<a class="headerlink" href="#sgd-and-adamw" title="Permanent link">&para;</a></h3>
+<h3 id="sgd-rmsprop-and-adamw">SGD, RMSProp and AdamW<a class="headerlink" href="#sgd-rmsprop-and-adamw" title="Permanent link">&para;</a></h3>
 <p>With the mean gradient <span class="arithmatex">\(g = g_\theta / B\)</span>:</p>
 <table>
 <thead>
@@ -2521,6 +2521,16 @@
 <td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>: SGD with the learning rate <span class="arithmatex">\(\Delta t / \tau_\theta\)</span></td>
 </tr>
 <tr>
+<td><code>pc.optim.SGD</code> with <code>tau_m</code></td>
+<td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>, <span class="arithmatex">\(\tau_\theta \dot\theta = -\hat m\)</span></td>
+<td><span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>; then <span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} \hat m\)</span></td>
+</tr>
+<tr>
+<td><code>pc.optim.RMSProp</code></td>
+<td><span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>, <span class="arithmatex">\(\tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon}\)</span></td>
+<td><span class="arithmatex">\(v \leftarrow v + a_v (g^2 - v)\)</span> with <span class="arithmatex">\(a_v = 1 - e^{-\Delta t/\tau_v}\)</span>; then <span class="arithmatex">\(\theta \leftarrow \theta - \eta\,\frac{g}{\sqrt{\hat v} + \varepsilon}\)</span></td>
+</tr>
+<tr>
 <td><code>pc.optim.AdamW</code></td>
 <td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>, <span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>, <span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
 <td><span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span> with <span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span>, the same for <span class="arithmatex">\(v\)</span>; then <span class="arithmatex">\(\theta\)</span> steps as AdamW with <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span></td>
@@ -2528,10 +2538,12 @@
 </tbody>
 </table>
 <ul>
-<li><code>tau</code> is <span class="arithmatex">\(\tau_\theta\)</span>, <code>tau_m</code> is <span class="arithmatex">\(\tau_m\)</span> and <code>tau_v</code> is <span class="arithmatex">\(\tau_v\)</span>, all in seconds. Each must be finite and &gt; 0. Never to learn, give the node <code>learn_interval=math.inf</code></li>
+<li><code>tau</code> is <span class="arithmatex">\(\tau_\theta\)</span>, <code>tau_m</code> is <span class="arithmatex">\(\tau_m\)</span> and <code>tau_v</code> is <span class="arithmatex">\(\tau_v\)</span>, all in seconds. Each must be finite and &gt; 0 (<code>tau_m</code> of SGD may also be <code>None</code>, for no momentum). Never to learn, give the node <code>learn_interval=math.inf</code></li>
 <li><code>eps</code> (<span class="arithmatex">\(\varepsilon\)</span>) must be &gt; 0, so that a weight whose gradient has been 0 does not get <code>0 / 0</code></li>
 <li><code>weight_decay</code> (<span class="arithmatex">\(w\)</span>) has no unit. It decays <span class="arithmatex">\(\theta\)</span> with the time constant <span class="arithmatex">\(\tau_\theta / w\)</span>, as <code>weight_decay</code> works with <code>lr</code> in <code>torch.optim.AdamW</code></li>
 <li>AdamW moves each weight by about <span class="arithmatex">\(\eta\)</span> per step, whatever the size of its gradient. To match the <code>lr</code> of Adam, take <span class="arithmatex">\(\Delta t\)</span>, the time between two learning steps (the time each input is shown, when a node learns once per input), and set <code>tau</code> to <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code></li>
+<li>The momentum of SGD averages <span class="arithmatex">\(g\)</span> and keeps the learning rate: with a constant <span class="arithmatex">\(g\)</span>, <span class="arithmatex">\(\hat m = g\)</span> and the step is that of SGD without momentum. <span class="arithmatex">\(\tau_m \to 0\)</span> is SGD without momentum</li>
+<li>RMSProp is AdamW without the first moment and the weight decay: <span class="arithmatex">\(g\)</span> in place of <span class="arithmatex">\(\hat m\)</span></li>
 </ul>
 <h3 id="the-mass-c-bias-correction-in-time">The mass c: bias correction in time<a class="headerlink" href="#the-mass-c-bias-correction-in-time" title="Permanent link">&para;</a></h3>
 <p><span class="arithmatex">\(m\)</span> and <span class="arithmatex">\(v\)</span> start at 0, so at first they are too small. <code>torch.optim.AdamW</code> corrects this with the number of steps <span class="arithmatex">\(t\)</span>: it divides <span class="arithmatex">\(m\)</span> by <span class="arithmatex">\(1 - \beta_1^t\)</span>. <code>pc.optim.AdamW</code> counts no steps. Instead it keeps a <strong>mass</strong> <span class="arithmatex">\(c\)</span> for each moment: the share of the moment made of gradients so far (the rest is the zero it started from). The mass moves with the time constant of its moment.</p>
@@ -2559,7 +2571,8 @@
 </tr>
 </tbody>
 </table>
-<p>When <span class="arithmatex">\(\Delta t\)</span> is constant, the steps are those of <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code>. So from the <span class="arithmatex">\(\beta\)</span> of torch, <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span>, with the same <span class="arithmatex">\(\Delta t\)</span> between two learning steps. Learning every 32 ms, <span class="arithmatex">\(\beta_1 = 0.9\)</span> is about 0.30 s and <span class="arithmatex">\(\beta_2 = 0.999\)</span> about 32 s. To choose between SGD and AdamW and their values, see <a href="../pc/#choosing-the-optimizer">Choosing the optimizer</a>.</p>
+<p>The momentum of SGD has its mass <span class="arithmatex">\(c_m\)</span>, and RMSProp its mass <span class="arithmatex">\(c_v\)</span>, in the same way.</p>
+<p>When <span class="arithmatex">\(\Delta t\)</span> is constant, the steps are those of <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code>. So from the <span class="arithmatex">\(\beta\)</span> of torch, <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span>, with the same <span class="arithmatex">\(\Delta t\)</span> between two learning steps. Learning every 32 ms, <span class="arithmatex">\(\beta_1 = 0.9\)</span> is about 0.30 s and <span class="arithmatex">\(\beta_2 = 0.999\)</span> about 32 s. <code>torch.optim.SGD</code> and <code>torch.optim.RMSprop</code> have no bias correction: with <span class="arithmatex">\(\beta = e^{-\Delta t/\tau_m}\)</span>, the momentum of SGD is <code>torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)</code>, and RMSProp is <code>torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)</code>, once the mass is 1 (the difference decays as the power <span class="arithmatex">\(t\)</span> of <code>momentum</code> or <code>alpha</code>; for a constant <span class="arithmatex">\(g\)</span>, the momentum agrees from the first step). To choose between SGD and AdamW and their values, see <a href="../pc/#choosing-the-optimizer">Choosing the optimizer</a>.</p>
 <details class="question">
 <summary>Why not use torch.optim?</summary>
 <ol>

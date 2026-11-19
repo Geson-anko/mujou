@@ -1308,10 +1308,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sgd-と-adamw" class="md-nav__link">
+  <a href="#sgdrmspropadamw" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SGD と AdamW
+        SGD・RMSProp・AdamW
       
     </span>
   </a>
@@ -1931,10 +1931,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#sgd-と-adamw" class="md-nav__link">
+  <a href="#sgdrmspropadamw" class="md-nav__link">
     <span class="md-ellipsis">
       
-        SGD と AdamW
+        SGD・RMSProp・AdamW
       
     </span>
   </a>
@@ -2491,7 +2491,7 @@
 <p>重みも秒で動く。optimizer は時間に沿った流れで、時定数を秒で持ち、1 歩ごとにその歩みが受け持つ <code>elapsed</code> 秒だけ進む。だから学ぶ頻度を変えても、重みが 1 秒あたりに動く速さは変わらない。</p>
 </div>
 <h3 id="設定を各ノードで束縛する">設定を各ノードで束縛する<a class="headerlink" href="#設定を各ノードで束縛する" title="Permanent link">&para;</a></h3>
-<p><code>pc.optim.SGD(tau=)</code> と <code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
+<p><code>pc.optim.SGD(tau=, tau_m=None)</code>・<code>pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)</code>・<code>pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)</code> は設定で、状態を持たない frozen な値。<code>Layer</code>・<code>Output</code>・<code>Chain</code> は必須の引数 <code>optimizer=</code> で受け取る。各ノードは設定を自分の勾配を取る重みに束縛し、<strong>束縛した optimizer</strong> を <code>self.optimizer</code> に置く。状態を持ち、重みを動かすのは束縛した optimizer。</p>
 <pre class="mermaid"><code>flowchart LR
     S["pc.optim.AdamW(...)&lt;br/&gt;設定、状態なし"] --&gt;|"bind(params)"| B0["Layer 0: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
     S --&gt;|"bind(params)"| B1["Layer 1: 束縛した optimizer&lt;br/&gt;m, v, c_m, c_v"]
@@ -2506,7 +2506,7 @@
 <li>ノードが <span class="arithmatex">\(g_\theta\)</span> を <span class="arithmatex">\(B\)</span> で割ってから <code>step_</code> に渡す。optimizer はバッチを知らない</li>
 <li><code>elapsed == 0</code> の歩みは重みも状態も動かさない</li>
 </ul>
-<h3 id="sgd-と-adamw">SGD と AdamW<a class="headerlink" href="#sgd-と-adamw" title="Permanent link">&para;</a></h3>
+<h3 id="sgdrmspropadamw">SGD・RMSProp・AdamW<a class="headerlink" href="#sgdrmspropadamw" title="Permanent link">&para;</a></h3>
 <p>平均の勾配を <span class="arithmatex">\(g = g_\theta / B\)</span> とする。</p>
 <table>
 <thead>
@@ -2523,6 +2523,16 @@
 <td><span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g\)</span>。学習率 <span class="arithmatex">\(\Delta t / \tau_\theta\)</span> の SGD</td>
 </tr>
 <tr>
+<td><code>tau_m</code> を渡した <code>pc.optim.SGD</code></td>
+<td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\hat m\)</span></td>
+<td><span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>。続けて <span class="arithmatex">\(\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} \hat m\)</span></td>
+</tr>
+<tr>
+<td><code>pc.optim.RMSProp</code></td>
+<td><span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon}\)</span></td>
+<td><span class="arithmatex">\(a_v = 1 - e^{-\Delta t/\tau_v}\)</span> で <span class="arithmatex">\(v \leftarrow v + a_v (g^2 - v)\)</span>。続けて <span class="arithmatex">\(\theta \leftarrow \theta - \eta\,\frac{g}{\sqrt{\hat v} + \varepsilon}\)</span></td>
+</tr>
+<tr>
 <td><code>pc.optim.AdamW</code></td>
 <td><span class="arithmatex">\(\tau_m \dot m = g - m\)</span>、<span class="arithmatex">\(\tau_v \dot v = g^2 - v\)</span>、<span class="arithmatex">\(\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)\)</span></td>
 <td><span class="arithmatex">\(a_m = 1 - e^{-\Delta t/\tau_m}\)</span> で <span class="arithmatex">\(m \leftarrow m + a_m (g - m)\)</span>、<span class="arithmatex">\(v\)</span> も同様。続けて <span class="arithmatex">\(\eta = \Delta t/\tau_\theta\)</span> で AdamW の 1 歩</td>
@@ -2530,10 +2540,12 @@
 </tbody>
 </table>
 <ul>
-<li><code>tau</code> は <span class="arithmatex">\(\tau_\theta\)</span>、<code>tau_m</code> は <span class="arithmatex">\(\tau_m\)</span>、<code>tau_v</code> は <span class="arithmatex">\(\tau_v\)</span> で、どれも秒。有限で &gt; 0。学ばないならノードに <code>learn_interval=math.inf</code> を渡す</li>
+<li><code>tau</code> は <span class="arithmatex">\(\tau_\theta\)</span>、<code>tau_m</code> は <span class="arithmatex">\(\tau_m\)</span>、<code>tau_v</code> は <span class="arithmatex">\(\tau_v\)</span> で、どれも秒。有限で &gt; 0（SGD の <code>tau_m</code> は momentum 無しの <code>None</code> も可）。学ばないならノードに <code>learn_interval=math.inf</code> を渡す</li>
 <li><code>eps</code>（<span class="arithmatex">\(\varepsilon\)</span>）は &gt; 0。勾配が 0 のままだった重みが <code>0 / 0</code> にならないようにするため</li>
 <li><code>weight_decay</code>（<span class="arithmatex">\(w\)</span>）は無次元。<span class="arithmatex">\(\theta\)</span> を時定数 <span class="arithmatex">\(\tau_\theta / w\)</span> で減衰させる。<code>torch.optim.AdamW</code> の <code>weight_decay</code> が <code>lr</code> と組むのと同じ</li>
 <li>AdamW は勾配の大きさによらず、1 歩で各重みをおよそ <span class="arithmatex">\(\eta\)</span> ずつ動かす。Adam の <code>lr</code> に合わせるなら、2 回の学習の間の時間を <span class="arithmatex">\(\Delta t\)</span> とし（1 入力につき 1 回学ぶなら入力を見せる時間）、<code>tau</code> を <span class="arithmatex">\(\Delta t\)</span> / <code>lr</code> にする</li>
+<li>SGD の momentum は <span class="arithmatex">\(g\)</span> を平均するだけで学習率は変えない。<span class="arithmatex">\(g\)</span> が一定なら <span class="arithmatex">\(\hat m = g\)</span> で、歩みは momentum 無しの SGD と同じ。<span class="arithmatex">\(\tau_m \to 0\)</span> で momentum 無しの SGD に戻る</li>
+<li>RMSProp は AdamW から 1 次の moment と weight decay を除いたもの。<span class="arithmatex">\(\hat m\)</span> の代わりに <span class="arithmatex">\(g\)</span> を使う</li>
 </ul>
 <h3 id="質量-c-時間で行う-bias-補正">質量 c: 時間で行う bias 補正<a class="headerlink" href="#質量-c-時間で行う-bias-補正" title="Permanent link">&para;</a></h3>
 <p><span class="arithmatex">\(m\)</span> と <span class="arithmatex">\(v\)</span> は 0 から始まるので、はじめは小さすぎる。<code>torch.optim.AdamW</code> はステップ数 <span class="arithmatex">\(t\)</span> で補正し、<span class="arithmatex">\(m\)</span> を <span class="arithmatex">\(1 - \beta_1^t\)</span> で割る。<code>pc.optim.AdamW</code> はステップを数えない。代わりに moment ごとに<strong>質量</strong> <span class="arithmatex">\(c\)</span> を持つ。質量はその moment のうちこれまでの勾配が占める割合（残りは初めの 0）で、moment と同じ時定数で動く。</p>
@@ -2561,7 +2573,8 @@
 </tr>
 </tbody>
 </table>
-<p><span class="arithmatex">\(\Delta t\)</span> が一定なら、歩みは <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code> と同じになる。だから torch の <span class="arithmatex">\(\beta\)</span> からは <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span> と決まる。<span class="arithmatex">\(\Delta t\)</span> はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、<span class="arithmatex">\(\beta_1 = 0.9\)</span> は約 0.30 秒、<span class="arithmatex">\(\beta_2 = 0.999\)</span> は約 32 秒。SGD と AdamW の選び方と値は <a href="../pc/#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a> へ。</p>
+<p>SGD の momentum は質量 <span class="arithmatex">\(c_m\)</span>、RMSProp は質量 <span class="arithmatex">\(c_v\)</span> を同じように持つ。</p>
+<p><span class="arithmatex">\(\Delta t\)</span> が一定なら、歩みは <code>torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))</code> と同じになる。だから torch の <span class="arithmatex">\(\beta\)</span> からは <span class="arithmatex">\(\tau_m = -\Delta t / \ln\beta_1\)</span> と決まる。<span class="arithmatex">\(\Delta t\)</span> はここでも 2 回の学習の間の時間。32 ms ごとに学ぶなら、<span class="arithmatex">\(\beta_1 = 0.9\)</span> は約 0.30 秒、<span class="arithmatex">\(\beta_2 = 0.999\)</span> は約 32 秒。<code>torch.optim.SGD</code> と <code>torch.optim.RMSprop</code> は bias 補正を持たない。<span class="arithmatex">\(\beta = e^{-\Delta t/\tau_m}\)</span> として、SGD の momentum は <code>torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)</code>、RMSProp は <code>torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)</code> と、質量が 1 になってから一致する（差は <code>momentum</code> か <code>alpha</code> の <span class="arithmatex">\(t\)</span> 乗で減る。<span class="arithmatex">\(g\)</span> が一定なら momentum は最初の 1 歩から一致）。SGD と AdamW の選び方と値は <a href="../pc/#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a> へ。</p>
 <details class="question">
 <summary>なぜ torch.optim を使わないの？</summary>
 <ol>

@@ -2114,6 +2114,16 @@
 <td>None</td>
 </tr>
 <tr>
+<td><code>pc.optim.SGD(tau=..., tau_m=...)</code></td>
+<td><code>p -= (elapsed / tau) * m_hat</code>, with the momentum <code>m</code>, the gradient averaged with the time constant <code>tau_m</code></td>
+<td><code>m</code>, <code>c_m</code></td>
+</tr>
+<tr>
+<td><code>pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)</code></td>
+<td>RMSProp with the learning rate <code>elapsed / tau</code>. The mean square <code>v</code> decays with the time constant <code>tau_v</code></td>
+<td><code>v</code>, <code>c_v</code></td>
+</tr>
+<tr>
 <td><code>pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)</code></td>
 <td>AdamW with the learning rate <code>elapsed / tau</code>. The moments <code>m</code> and <code>v</code> decay with the time constants <code>tau_m</code> and <code>tau_v</code></td>
 <td><code>m</code>, <code>v</code>, <code>c_m</code>, <code>c_v</code></td>
@@ -2123,12 +2133,14 @@
 <ul>
 <li><strong>Time, not steps.</strong> Every <code>tau</code> is in seconds. <code>elapsed</code> is the time since the node last learned, so the <code>elapsed</code> of the steps in one batch add up to the showing time, however many steps there are. With <code>pc.optim.SGD</code>, the weights thus move as far per batch whether the nodes learn once or twice per batch</li>
 <li><strong>SGD</strong> is what MNIST uses. Choose <code>tau</code> as in the table of the time constants: the showing time divided by the learning rate per batch</li>
+<li><strong>The momentum of SGD</strong> (<code>tau_m</code>) averages the gradient over about the last <code>tau_m</code> seconds and keeps the learning rate: with a constant gradient, the weights move as without it. With <code>Δt</code> the time between two learning steps, <code>torch.optim.SGD(lr, momentum=beta, dampening=beta)</code> is <code>tau = Δt / lr</code> and <code>tau_m = -Δt / ln(beta)</code>. The usual <code>dampening=0</code> of torch also makes the steps <code>1 / (1 - beta)</code> times larger once its buffer has filled; to match those, set <code>tau = (1 - beta) * Δt / lr</code>. Good values for <code>mujou.pc</code> have not been measured yet</li>
+<li><strong>RMSProp</strong> divides the gradient by the root of its mean square, without momentum or weight decay, and moves each weight by up to about <code>elapsed / tau</code> per step. From <code>torch.optim.RMSprop(lr, alpha, eps)</code>, set <code>tau = Δt / lr</code> and <code>tau_v = -Δt / ln(alpha)</code>. Good values for <code>mujou.pc</code> have not been measured yet</li>
 <li><strong>AdamW</strong> moves each weight by about <code>elapsed / tau</code> per step, whatever the size of its gradient. Good values of AdamW for <code>mujou.pc</code> have not been measured yet</li>
 <li><strong>From <code>torch.optim.AdamW</code>.</strong> Let <code>Δt</code> be the time between two learning steps: the showing time when the nodes learn once per batch. To reuse the values <code>lr</code> and <code>betas</code> of <code>torch.optim.AdamW</code>, set <code>tau = Δt / lr</code>, <code>tau_m = -Δt / ln(beta1)</code> and <code>tau_v = -Δt / ln(beta2)</code>. With a constant <code>Δt</code>, the steps are then those of <code>torch.optim.AdamW</code>. For one step every 32 ms, <code>beta1 = 0.9</code> is <code>tau_m</code> ≈ 0.30 s and <code>beta2 = 0.999</code> is <code>tau_v</code> ≈ 32 s</li>
 <li><strong><code>weight_decay</code></strong> has no unit, as in <code>torch.optim.AdamW</code>: it decays the weights with the time constant <code>tau / weight_decay</code></li>
-<li><strong>Invalid values.</strong> Every <code>tau</code> and <code>eps</code> must be finite and &gt; 0, and <code>weight_decay</code> finite and &gt;= 0; otherwise the optimizer raises <code>ValueError</code>. For a node that never learns, give that <code>pc.Layer</code> or <code>pc.Output</code> <code>learn_interval=math.inf</code>, not an infinite <code>tau</code> (<code>pc.Chain</code> gives one <code>learn_interval</code> to every node)</li>
+<li><strong>Invalid values.</strong> Every <code>tau</code> (<code>tau_m</code> of SGD when given) and <code>eps</code> must be finite and &gt; 0, and <code>weight_decay</code> finite and &gt;= 0; otherwise the optimizer raises <code>ValueError</code>. For a node that never learns, give that <code>pc.Layer</code> or <code>pc.Output</code> <code>learn_interval=math.inf</code>, not an infinite <code>tau</code> (<code>pc.Chain</code> gives one <code>learn_interval</code> to every node)</li>
 <li><strong>Only the weights that learn.</strong> The nodes bind the parameters with <code>requires_grad=True</code> only. A frozen parameter gets no weight decay either</li>
-<li><strong>The state</strong> of a node's optimizer is in <code>run.state_dict()["nodes"][path]["state"]["optimizer"]</code>: a dict with the keys <code>"m"</code>, <code>"v"</code>, <code>"c_m"</code> and <code>"c_v"</code> for <code>pc.optim.AdamW</code>, empty for <code>pc.optim.SGD</code>. It is saved and restored with the rest of the run</li>
+<li><strong>The state</strong> of a node's optimizer is in <code>run.state_dict()["nodes"][path]["state"]["optimizer"]</code>: a dict with the keys <code>"m"</code>, <code>"v"</code>, <code>"c_m"</code> and <code>"c_v"</code> for <code>pc.optim.AdamW</code>, <code>"v"</code> and <code>"c_v"</code> for <code>pc.optim.RMSProp</code>, <code>"m"</code> and <code>"c_m"</code> for <code>pc.optim.SGD</code> with <code>tau_m</code>, and empty without. It is saved and restored with the rest of the run</li>
 </ul>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># lr=1e-3, betas=(0.9, 0.999) of torch, rounded, for one step per batch of 32 ms.</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="mf">0.032</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">tau_m</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">tau_v</span><span class="o">=</span><span class="mf">32.0</span><span class="p">)</span>

@@ -1794,6 +1794,8 @@
 <ul>
 <li><code>mujou.run_manually</code> and <code>mujou.ManualRun</code> at the top level, for simulations: the network runs on virtual time, stepped by hand as fast as the machine computes. <code>run_manually</code> takes <code>workers=</code> as <code>mujou.run</code> does. See the new topic Simulation.</li>
 <li><code>pc.Layer(cuda_graph=True)</code>: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).</li>
+<li><code>pc.optim.SGD(tau_m=...)</code>: SGD with a momentum, the gradient averaged with the time constant <code>tau_m</code> in seconds and corrected for its start at zero by a mass, as in <code>pc.optim.AdamW</code>. It keeps the learning rate: with a constant gradient, the weights move as without the momentum. Without <code>tau_m</code>, <code>pc.optim.SGD</code> is as before.</li>
+<li><code>pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)</code>: RMSProp in time, the gradient divided by the root of its mean square, which decays with the time constant <code>tau_v</code> in seconds and is corrected by a mass, as in <code>pc.optim.AdamW</code>. It has no momentum and no weight decay.</li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
