@@ -13,7 +13,7 @@ metadata:
 - **1/B はノードが掛けてから渡す。** optimizer はバッチを知らない
 - **AdamW は時間で進める。** `a = 1 - exp(-Δt/τ)`、`m ← m + a(g - m)`、bias 補正はステップのカウンタの代わりに質量 `c ← c + a(1 - c)`（Python の float）。`elapsed == 0` は何もしない。θ は torch と同じ順（decay を歩みの前の θ に先に掛け、Adam の項は更新後の m・v・c で取る）。`eps` は有限で > 0（`eps=0` は勾配がずっと 0 の要素を 0/0 で NaN にするので K31 で断る。torch とは違う）。`elapsed` は `Tick.elapsed`（時計が捨てた時間を含まない）で、捨てた時間はモーメントも動かさない。Δt 一定なら `torch.optim.AdamW(lr=Δt/τ, betas=(e^{-Δt/τm}, e^{-Δt/τv}))` と一致する。`weight_decay` は無次元で 1/τθ と組む（torch と同じ意味）
 - **SGD の momentum と RMSProp（2026-11-18、ユーザーと決定）。** momentum は別クラスにせず `SGD(tau=, tau_m=None)`。`None` は従来の SGD（状態は空）。`tau_m` を渡すと `m` と質量 `c_m` を持ち、θ は $\hat m = m / c_m$ で動く（g 一定なら SGD と同じ歩み。学習率を変えない）。`RMSProp(tau=, tau_v=, eps=1e-8)` は質量 `c_v` つきで momentum・weight decay なし。torch とは質量が 1 の状態から `SGD(momentum=β, dampening=β)`（`dampening=1-β` ではない）と `RMSprop(alpha=e^{-Δt/τv})` に一致する
-- **`TimeScaled(optimizer, *, scale)`（2026-11-22、ユーザーと決定）。** 連続した c サンプルを 1 バッチで見せる実験のため、内側の束縛を `elapsed * scale` で進める包み（状態は内側のまま）。時定数を手で c で割る運用をやめる。緩和（r・λ）は倍にしない。変換は時間だけで、勾配はバッチ平均のまま
+- **`TimeScaled(optimizer, *, scale)`（2026-11-22、ユーザーと決定）。** 連続した c サンプルを 1 バッチで見せる実験のため、内側の束縛を `elapsed * scale` で進める包み（状態は内側のまま）。時定数を手で c で割る運用をやめる。緩和（r・λ）は倍にしない。変換は時間だけで、勾配はバッチ平均のまま（RMSProp・AdamW は v が小さくなり 1 歩が大きくなる。ノイズが支配的なら最大で約 √c 倍）
 - **h の則の差し替えは relaxer（2026-10-26）。** 重みの optimizer と同じ形（設定 + bind）で、`pc.relax.Euler`（`HeavyBall` は 2026-10-28 に削除）。[[project-pc-relaxer]]。λ の差し替えと h・λ を 1 組で差し替える部品は研究から。今は実装しない（`specs/open-decisions.md`）
 
 **Why:** 3.14t では `torch.optim` のコンストラクタが `torch._dynamo` → `triton._C` を import し、プロセス全体の GIL が戻る。torch の β は 1 ステップあたりで、学習の間隔が変わると実効の時定数が変わる。`state["step"]` は float32 で 2^24 回で止まる。

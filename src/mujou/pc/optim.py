@@ -487,17 +487,21 @@ class TimeScaled(Optimizer):
     With ``scale`` $= c$, ``SGD``, ``RMSProp`` and ``AdamW`` take each time
     constant $\tau$ in a step as $c\,\Delta t / \tau = \Delta t / (\tau / c)$:
     this is ``optimizer`` with all of its time constants divided by $c$, up to
-    rounding (an optimizer of your own too, if its time constants enter as
-    ``elapsed / tau``). ``weight_decay`` has no unit and stays as it is.
+    rounding (an optimizer of your own too, if it uses ``elapsed`` only as
+    ``elapsed / tau``). ``weight_decay`` has no unit and stays as it is: the
+    decay, of the time constant $\tau / w$, speeds up with $\tau$.
 
-    It is for one stream shown as batches of $c$ consecutive samples: each
-    second of the run then covers $c$ seconds of the stream, and the time
-    constants of ``optimizer`` are written in the stream's seconds. It scales
-    the time of the weights only; the relaxation of ``r`` and ``lam`` of each
-    sample runs on the run's time, as before. It converts the time and nothing
-    else: the gradient is still the mean over the batch, so the moments of
-    ``RMSProp`` and ``AdamW`` are those of the mean gradient, not of the
-    samples one by one.
+    It is for one stream shown as batches of $c$ consecutive samples, each
+    batch for as long as one sample: each second of the run then covers $c$
+    seconds of the stream, and the time constants of ``optimizer`` are written
+    in the stream's seconds. Wrap the optimizer of every node that learns with
+    the same ``scale``. It scales the time of the weights only; the relaxation
+    of ``r`` and ``lam`` of each sample runs on the run's time, as before. It
+    converts the time and nothing else: the gradient is still the mean over
+    the batch, so the moments of ``RMSProp`` and ``AdamW`` are those of the
+    mean gradient, whose noise has a variance $c$ times smaller than that of
+    one sample; a step of theirs is then larger than $c$ steps of one sample,
+    up to about $\sqrt{c}$ times when the noise dominates.
 
     The state (``state_dict()``) is that of ``optimizer``'s bound optimizer,
     with nothing added.
