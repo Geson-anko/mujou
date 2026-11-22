@@ -1,5 +1,6 @@
 r"""The optimizers that move the parameters of a node in time: ``SGD`` (with
-an optional momentum), ``RMSProp`` and ``AdamW``.
+an optional momentum), ``RMSProp`` and ``AdamW``, and ``TimeScaled``, which
+runs another optimizer on a scaled time.
 
 An optimizer here is a setting (``Optimizer``): a frozen value that holds no
 state and may be shared by every node. A node binds it to its own parameters
@@ -15,7 +16,7 @@ and making one brings the GIL back into a free-threaded Python.
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from typing import Any, override
 
 import torch
@@ -26,6 +27,7 @@ __all__ = [
     "SGD",
     "RMSProp",
     "AdamW",
+    "TimeScaled",
     "Optimizer",
     "BoundOptimizer",
 ]
@@ -474,3 +476,74 @@ class _BoundAdamW(BoundOptimizer):
                 mine.copy_(saved)
         self._c_m = float(state["c_m"])
         self._c_v = float(state["c_v"])
+
+
+@dataclass(frozen=True)
+class TimeScaled(Optimizer):
+    r"""Another optimizer on a time that runs ``scale`` times as fast: a step of
+    ``elapsed`` seconds is a step of ``elapsed * scale`` seconds of
+    ``optimizer``.
+
+    With ``scale`` $= c$, ``SGD``, ``RMSProp`` and ``AdamW`` take each time
+    constant $\tau$ in a step as $c\,\Delta t / \tau = \Delta t / (\tau / c)$:
+    this is ``optimizer`` with all of its time constants divided by $c$, up to
+    rounding (an optimizer of your own too, if its time constants enter as
+    ``elapsed / tau``). ``weight_decay`` has no unit and stays as it is.
+
+    It is for one stream shown as batches of $c$ consecutive samples: each
+    second of the run then covers $c$ seconds of the stream, and the time
+    constants of ``optimizer`` are written in the stream's seconds. It scales
+    the time of the weights only; the relaxation of ``r`` and ``lam`` of each
+    sample runs on the run's time, as before. It converts the time and nothing
+    else: the gradient is still the mean over the batch, so the moments of
+    ``RMSProp`` and ``AdamW`` are those of the mean gradient, not of the
+    samples one by one.
+
+    The state (``state_dict()``) is that of ``optimizer``'s bound optimizer,
+    with nothing added.
+
+    Example (4 consecutive samples of one stream in each batch)::
+
+        optimizer = pc.optim.TimeScaled(
+            pc.optim.AdamW(tau=30.0, tau_m=0.3, tau_v=30.0), scale=4
+        )
+
+    Args:
+        optimizer: The optimizer that moves the parameters.
+        scale: How many seconds of ``optimizer``'s time pass in a second of
+            the run. Keyword only.
+
+    Raises:
+        ValueError: ``scale`` is not finite and > 0.
+    """
+
+    optimizer: Optimizer
+    _: KW_ONLY
+    scale: float
+
+    def __post_init__(self) -> None:
+        _check_positive("TimeScaled", "scale", self.scale)
+
+    @override
+    def bind(self, params: Iterable[torch.Tensor]) -> BoundOptimizer:
+        """Return ``optimizer`` bound to ``params``, stepped on the scaled
+        time."""
+        return _BoundTimeScaled(self.optimizer.bind(params), self.scale)
+
+
+class _BoundTimeScaled(BoundOptimizer):
+    def __init__(self, inner: BoundOptimizer, scale: float) -> None:
+        self._inner = inner
+        self._scale = scale
+
+    @override
+    def step_(self, grads: Sequence[torch.Tensor], elapsed: float) -> None:
+        self._inner.step_(grads, elapsed * self._scale)
+
+    @override
+    def state_dict(self) -> dict[str, Any]:
+        return self._inner.state_dict()
+
+    @override
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        self._inner.load_state_dict(state)

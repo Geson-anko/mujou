@@ -1,6 +1,7 @@
 """The weight optimizers of ``mujou.pc``, which move the parameters by the
 time that passed: ``pc.optim.SGD`` (with and without momentum),
-``pc.optim.RMSProp`` and ``pc.optim.AdamW``. The expected values are the
+``pc.optim.RMSProp`` and ``pc.optim.AdamW``, and ``pc.optim.TimeScaled``,
+which runs one of them on a scaled time. The expected values are the
 formulas written out here; ``torch.optim`` runs only in a subprocess, since
 building one re-enables the GIL of the free-threaded build."""
 
@@ -387,8 +388,92 @@ class TestAdamW:
         assert state["c_v"] == 0.0
 
 
-OPTIMIZERS = [pc.optim.SGD(tau=TAU), SGD_M, RMSPROP, ADAMW]
-IDS = ["sgd", "sgd-momentum", "rmsprop", "adamw"]
+OPTIMIZERS = [
+    pc.optim.SGD(tau=TAU),
+    SGD_M,
+    RMSPROP,
+    ADAMW,
+    pc.optim.TimeScaled(ADAMW, scale=3.0),
+]
+IDS = ["sgd", "sgd-momentum", "rmsprop", "adamw", "time-scaled-adamw"]
+
+C = 3.0  # not a power of two, so that elapsed * C rounds
+# Each optimizer with its time constants divided by C.
+DIVIDED = [
+    (pc.optim.SGD(tau=TAU), pc.optim.SGD(tau=TAU / C)),
+    (SGD_M, pc.optim.SGD(tau=TAU / C, tau_m=TAU_M / C)),
+    (RMSPROP, pc.optim.RMSProp(tau=TAU / C, tau_v=TAU_V / C, eps=EPS)),
+    (
+        ADAMW,
+        pc.optim.AdamW(
+            tau=TAU / C, tau_m=TAU_M / C, tau_v=TAU_V / C, eps=EPS, weight_decay=W
+        ),
+    ),
+]
+
+
+class TestTimeScaled:
+    @pytest.mark.parametrize("inner", OPTIMIZERS[:4], ids=IDS[:4])
+    def test_a_step_of_elapsed_is_a_step_of_the_inner_one_of_scale_times_elapsed(
+        self, inner: pc.optim.Optimizer
+    ):
+        # step_(g, elapsed) of the wrapper is step_(g, elapsed * scale) of the
+        # inner optimizer, whatever elapsed is: the same floats, to the bit.
+        ps, qs = params(), params()
+        scaled, plain = pc.optim.TimeScaled(inner, scale=C).bind(ps), inner.bind(qs)
+        for k in range(6):
+            elapsed = DT * (k % 3 + 1)
+            scaled.step_(grads(k), elapsed)
+            plain.step_(grads(k), elapsed * C)
+        for p, q in zip(ps, qs, strict=True):
+            assert torch.equal(p, q)
+        assert_same_tree(scaled.state_dict(), plain.state_dict())
+
+    @pytest.mark.parametrize(
+        ("inner", "divided"), DIVIDED, ids=["sgd", "sgd-momentum", "rmsprop", "adamw"]
+    )
+    def test_is_the_inner_one_with_its_time_constants_divided_by_scale(
+        self, inner: pc.optim.Optimizer, divided: pc.optim.Optimizer
+    ):
+        # Every time constant enters as elapsed / tau, and elapsed * c / tau =
+        # elapsed / (tau / c); weight_decay has no unit and stays. Only the
+        # rounding differs.
+        ps, qs = params(), params()
+        scaled, plain = pc.optim.TimeScaled(inner, scale=C).bind(ps), divided.bind(qs)
+        for k in range(10):
+            scaled.step_(grads(k), DT)
+            plain.step_(grads(k), DT)
+        for p, q in zip(ps, qs, strict=True):
+            assert_close(p, q, rtol=1e-12)
+
+    @pytest.mark.parametrize("inner", OPTIMIZERS[:4], ids=IDS[:4])
+    def test_a_scale_of_one_is_the_inner_optimizer(self, inner: pc.optim.Optimizer):
+        ps, qs = params(), params()
+        scaled, plain = pc.optim.TimeScaled(inner, scale=1.0).bind(ps), inner.bind(qs)
+        for k in range(4):
+            scaled.step_(grads(k), DT)
+            plain.step_(grads(k), DT)
+        for p, q in zip(ps, qs, strict=True):
+            assert torch.equal(p, q)
+
+    def test_zero_elapsed_first_moves_nothing_and_keeps_the_masses_at_zero(self):
+        ps = params()
+        p0 = clones(ps)
+        bound = pc.optim.TimeScaled(ADAMW, scale=C).bind(ps)
+        bound.step_(grads(0), 0.0)
+        for p, p_0 in zip(ps, p0, strict=True):
+            assert torch.equal(p, p_0)
+        state = bound.state_dict()
+        assert state["c_m"] == 0.0
+        assert state["c_v"] == 0.0
+
+    def test_the_state_is_that_of_the_inner_optimizer(self):
+        # The wrapper adds nothing: a state saved by AdamW loads into it.
+        source = ADAMW.bind(params())
+        source.step_(grads(0), DT * C)
+        bound = pc.optim.TimeScaled(ADAMW, scale=C).bind(params())
+        bound.load_state_dict(saved(source.state_dict()))
+        assert_same_tree(bound.state_dict(), source.state_dict())
 
 
 class TestBound:
@@ -505,6 +590,11 @@ class TestChecks:
             pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=value)
         pc.optim.AdamW(tau=TAU, tau_m=TAU_M, tau_v=TAU_V, weight_decay=0.0)
 
+    @pytest.mark.parametrize("scale", [0.0, -1.0, math.nan, math.inf])
+    def test_time_scaled_scale_must_be_finite_and_positive(self, scale: float):
+        with pytest.raises(ValueError, match="TimeScaled.scale must"):
+            pc.optim.TimeScaled(ADAMW, scale=scale)
+
     def test_fields_are_keyword_only(self):
         with pytest.raises(TypeError):
             pc.optim.SGD(0.5)  # pyright: ignore[reportCallIssue]
@@ -514,6 +604,8 @@ class TestChecks:
             pc.optim.RMSProp(TAU, TAU_V)  # pyright: ignore[reportCallIssue]
         with pytest.raises(TypeError):
             pc.optim.AdamW(TAU, TAU_M, TAU_V)  # pyright: ignore[reportCallIssue]
+        with pytest.raises(TypeError):
+            pc.optim.TimeScaled(ADAMW, C)  # pyright: ignore[reportCallIssue]
 
 
 # Runs in a subprocess: building a torch.optim optimizer imports
