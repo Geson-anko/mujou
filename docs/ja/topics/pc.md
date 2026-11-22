@@ -80,6 +80,7 @@ p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask, reset=new), seconds=sho
 | `pc.optim.SGD(tau=..., tau_m=...)`                                           | `p -= (elapsed / tau) * m_hat`。momentum の `m` は勾配を時定数 `tau_m` で平均したもの        | `m`、`c_m`             |
 | `pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)`                             | 学習率 `elapsed / tau` の RMSProp。二乗平均の `v` は時定数 `tau_v` で減衰する                | `v`、`c_v`             |
 | `pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | 学習率 `elapsed / tau` の AdamW。moment の `m` と `v` は時定数 `tau_m` と `tau_v` で減衰する | `m`、`v`、`c_m`、`c_v` |
+| `pc.optim.TimeScaled(optimizer, scale=...)`                                  | `optimizer` を `elapsed * scale` 秒ぶん進める                                                | `optimizer` の状態     |
 
 - **ステップでなく時間**: `tau` はどれも秒。`elapsed` はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの `elapsed` を合わせると見せる時間になる。そのため `pc.optim.SGD` では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ
 - **SGD** は MNIST が使うもの。`tau` は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める
@@ -188,6 +189,23 @@ layer = pc.Layer(
 - サンプルは互いに独立であること。module はバッチのどの次元についても、各サンプルを別々に計算する。系列の時間のように module が混ぜる次元はバッチでなくサンプルの次元。`T` ステップの系列 64 本なら `batch=64` で `x` は `(64, T, 784)`
 - 多次元のバッチは同じサンプルを 1 次元に並べたものと同じように学ぶ。`(8, 4)` は `32` と同じ
 - 損失もバッチを受け取る。`pc.loss.MSELoss(batch)` と `pc.loss.CrossEntropyLoss(batch)`。`pc.loss.CrossEntropyLoss` の `y` はクラス（int64 で、`y_hat` からクラスの次元を除いた shape）かクラスごとの確率（`y_hat` と同じ shape）。クラスの次元は `nn.CrossEntropyLoss` と同じく `y_hat` のバッチの直後。その後ろの次元（画像の画素など）は平均する
+
+## 1 本のストリームを連続したサンプルのバッチで流す {#one-stream-as-a-batch-of-consecutive-samples}
+
+長いストリームを速く流すには、連続した `c` 個のサンプルを 1 つのバッチで見せる。サンプル `t` から `t + c - 1` を一度に見せ、次の `c` 個へ進む。1 回の学習がストリームの `c` サンプル分になるので、重みは `c` 倍の時間が経ったように動く必要がある。optimizer を `scale=c` の `pc.optim.TimeScaled` で包み、時定数はストリームの秒で書く。
+
+```python
+# 32 ms に 1 サンプルのストリームを、連続した 8 サンプルのバッチで見せる。
+optimizer = pc.optim.TimeScaled(
+    pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0), scale=8
+)
+```
+
+- optimizer の時定数（`tau`・`tau_m`・`tau_v`、`elapsed / tau` の形で時間を読む自作の optimizer の時定数）をすべて `c` で割る。割り忘れが起きない
+- 変えるのは重みだけ。`r` と `lam` の緩和はサンプルごとに従来どおりで、`pc.TimeConstants` も同じ
+- 変換するのは時間だけ。勾配はバッチの平均なので、`pc.optim.RMSProp` と `pc.optim.AdamW` の `v` は平均した勾配のもので、1 サンプルずつ流したときとは異なる
+- `r` と `lam` はバッチの行ごとに持つ。`reset` が False なら、各行はストリームで `c` 個前のサンプルから続く（直前のサンプルからではない）
+- `c` が大きいと、1 本のストリームより学習が遅れうる。1 サンプルずつ流した実行と比べて確かめる
 
 ## 落とし穴
 
