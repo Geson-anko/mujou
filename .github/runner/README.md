@@ -6,9 +6,10 @@ The tests marked `cuda` run only on a machine with CUDA devices, so the regular 
 
 On a Linux machine (x86_64 or aarch64) with an NVIDIA GPU:
 
-1. Install the NVIDIA driver (`nvidia-smi` must work), `git`, `curl`, a C toolchain (`build-essential`), and Rust with [rustup](https://rustup.rs/) for the user who runs the runner. The workflow installs uv, Python and just itself.
-2. In the repository's Settings > Actions > Runners, choose "New self-hosted runner" and copy the registration token (valid for one hour).
-3. Run the script from a checkout of this repository:
+1. Give the machine (or its VM) at least 4 GB of RAM: some tests keep over a gigabyte of copied state, and the kernel kills the tests when the memory runs out (exit code 137). The workflow prints the memory and `nvidia-smi` before the tests.
+2. Install the NVIDIA driver (`nvidia-smi` must work), `git`, `curl`, a C toolchain (`build-essential`), and Rust with [rustup](https://rustup.rs/) for the user who runs the runner. The workflow installs uv, Python and just itself.
+3. In the repository's Settings > Actions > Runners, choose "New self-hosted runner" and copy the registration token (valid for one hour).
+4. Run the script from a checkout of this repository:
 
 ```sh
 RUNNER_TOKEN=<token> .github/runner/setup-gpu-runner.sh            # configure; start with run.sh
