@@ -51,8 +51,19 @@ jobs:
       - name: Install dependencies
         run: uv sync --reinstall-package mujou
 
+      # The memory of the machine and of the GPU, to tell why a test is killed.
+      - name: Show the memory
+        run: |
+          free -h
+          nvidia-smi
+          cat /sys/fs/cgroup/memory.max 2>/dev/null || true
+
       - name: Check that torch sees a CUDA device
         run: uv run --no-sync python -c "import torch; assert torch.cuda.is_available(), 'no CUDA device'; print(torch.__version__, torch.cuda.get_device_name(0))"
 
       - name: Run the tests marked cuda
         run: uv run --no-sync pytest -m cuda -v
+
+      - name: Show why a process was killed
+        if: failure()
+        run: journalctl -k --since "-30min" --no-pager 2>/dev/null | grep -iE "out of memory|oom|killed process" || dmesg 2>/dev/null | tail -n 30 || true
