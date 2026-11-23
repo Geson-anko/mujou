@@ -1,29 +1,10 @@
 # 🧠 5. PC-ALM で学習する
 
-`mujou.pc` は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学習させるモジュールである。各ノードはモデルの一部を持ち、隣のノードのメッセージだけから学ぶ。平衡点では、その勾配が誤差逆伝播法（BP）の勾配と一致する。このページでは回帰を学習させる。
+[`mujou.pc`][mujou.pc] は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<https://pub.sakana.ai/pc-alm/>）で学ばせる。各ノードはモデルの一部を持ち、隣のノードとのメッセージだけから学ぶ。ここでは `pc.Chain` で回帰を学ばせる。前提は [4. ノードの中で学習する](4-learn-in-a-node.md)。
 
-!!! abstract "このページで分かること"
+## プログラム {#program}
 
-    - `pc.Chain` で `nn.Sequential` と同じ順のモジュールを PC-ALM のノードの鎖にする方法
-    - 決める値（時定数・重みの optimizer・学ぶ時刻・見せる時間）とその意味
-    - `pc.show` でバッチを見せて学ばせ、学ぶ前の予測で損失を測る方法
-
-    前提は [4. ノードの中で学習する](4-learn-in-a-node.md)。
-
-モデル・spec・損失のほかに決める値は次の 4 つだけ。
-
-| 決めるもの             | 引数                           | この例                                       |
-| ---------------------- | ------------------------------ | -------------------------------------------- |
-| 活動と双対変数の時定数 | `pc.Chain(tau=...)`            | `pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)` |
-| 重みの optimizer       | `pc.Chain(optimizer=...)`      | `pc.optim.SGD(tau=SHOWN / 0.3)`              |
-| 学ぶ時刻               | `pc.Chain(learn_interval=...)` | `0.75 * SHOWN`                               |
-| 各バッチを見せる時間   | `pc.show(..., seconds=...)`    | `SHOWN = 0.032`（秒）                        |
-
-## プログラム
-
-!!! abstract "要点"
-
-    32 サンプルずつのバッチのストリームから $y = \sin(2 x_1)\cos(x_2)$ を学ぶ。学ぶ前の損失は約 0.4 から 0.01 未満に下がる。
+32 サンプルずつのバッチのストリームから $y = \sin(2 x_1)\cos(x_2)$ を学び、学ぶ前の約 0.4 の損失が 0.01 未満に下がる。
 
 ```sh
 uv run python examples/pc_regression.py
@@ -36,11 +17,7 @@ batch  50: loss 0.1686 (the mean of the last 50)
 batch 300: loss 0.0043 (the mean of the last 50)
 ```
 
-## 鎖
-
-!!! abstract "要点"
-
-    `pc.Chain` はモジュールごとにノードを 1 つ作り、`nn.Sequential` が計算する順につなぐ。
+## 鎖 {#chain}
 
 ```python
 --8<-- "examples/pc_regression.py:chain"
@@ -49,91 +26,25 @@ batch 300: loss 0.0043 (the mean of the last 50)
 ```mermaid
 flowchart LR
     H1["ホスト"] -->|"pc.msg.Sample"| I["input<br/>pc.Input"]
-    I -->|"活動"| L0["layer0<br/>pc.Layer<br/>Linear(2, 64) + Tanh"]
-    L0 -->|"活動"| L1["layer1<br/>pc.Layer<br/>Linear(64, 64) + Tanh"]
-    L1 -->|"活動"| O["output<br/>pc.Output<br/>Linear(64, 1) + 損失"]
+    I -->|"活動（前へ）"| L0["layer0<br/>pc.Layer<br/>Linear(2, 64) + Tanh"]
+    L0 -->|"活動（前へ）"| L1["layer1<br/>pc.Layer<br/>Linear(64, 64) + Tanh"]
+    L1 -->|"活動（前へ）"| O["output<br/>pc.Output<br/>Linear(64, 1) + 損失"]
     O -->|"pc.msg.Prediction"| H2["ホスト"]
-    O -.->|"g_in"| L1
-    L1 -.->|"g_in"| L0
-    L0 -.->|"g_in"| I
+    O -.->|"g_in（勾配を後ろへ）"| L1
+    L1 -.->|"g_in（勾配を後ろへ）"| L0
+    L0 -.->|"g_in（勾配を後ろへ）"| I
 ```
 
-実線は活動を前へ送り、点線は勾配 `g_in` を後ろへ送り返す。各ノードは隣のノードとのメッセージだけでやり取りする。
+[`pc.Chain`][mujou.pc.Chain] の `batch=B` は `x`・`y` の spec の先頭の shape で、`loss` にも同じ `B` を渡すとサンプルごとの損失（shape `(B,)`）を返す（[バッチ](../topics/pc.md#batch)）。
 
-| 子（状態のパス） | クラス      | 持つもの                            |
-| ---------------- | ----------- | ----------------------------------- |
-| `input`          | `pc.Input`  | サンプルを受け取る                  |
-| `layer0`         | `pc.Layer`  | 1 つ目のモジュール。`net.layers[0]` |
-| `layer1`         | `pc.Layer`  | 2 つ目のモジュール。`net.layers[1]` |
-| `output`         | `pc.Output` | 最後のモジュールと損失              |
+## 値を決める {#values}
 
-最後以外のモジュールは `pc.Layer` になり、最後のモジュールは損失を持つ `pc.Output` になる。子の名前 `input`・`layer0`・`layer1`・`output` がそのまま状態のパスになり、層は `net.layers` で順に取れる。
-
-### 引数
-
-| 引数             | 意味                                         | この例                                       | 既定値                        |
-| ---------------- | -------------------------------------------- | -------------------------------------------- | ----------------------------- |
-| `x`・`y`         | 入力と目標の spec                            | `TensorSpec((B, 2))`・`TensorSpec((B, 1))`   | 無し                          |
-| `batch`          | spec の先頭の shape                          | `B`（32 サンプル）                           | `()`（1 サンプルずつ）        |
-| `loss`           | サンプルごとの損失。バッチの shape で返す    | `pc.loss.MSELoss(B)`                         | 無し                          |
-| `tau`            | 活動と双対変数の時定数（実行のタイマーの秒） | `pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)` | 無し                          |
-| `optimizer`      | ノードが学ぶときの重みの動かし方             | `pc.optim.SGD(tau=SHOWN / 0.3)`              | 無し                          |
-| `learn_interval` | 各書き込みから数えた、ノードが学ぶ時刻       | `0.75 * SHOWN`                               | 無し（`None` も明示して渡す） |
-
-### batch と loss
-
-|              | `batch=B`（この例）                | `batch` を省く                  |
-| ------------ | ---------------------------------- | ------------------------------- |
-| 受け取るもの | `B` 個のサンプル                   | サンプル 1 つずつ               |
-| `x`          | `TensorSpec((B, 2))`               | `TensorSpec((2,))`              |
-| `y`          | `TensorSpec((B, 1))`               | `TensorSpec((1,))`              |
-| `loss`       | `pc.loss.MSELoss(B)`。shape `(B,)` | `pc.loss.MSELoss()`。shape `()` |
-
-| 損失                          | 返すもの                                                              |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `pc.loss.MSELoss(B)`          | サンプルごとの平均二乗誤差。`nn.MSELoss` と同じくサンプルの次元で平均 |
-| `pc.loss.CrossEntropyLoss(B)` | サンプルごとの交差エントロピー                                        |
-| 自作の関数                    | 同じ shape（バッチの shape）の、サンプルごとの損失                    |
-
-損失には鎖と同じバッチを渡す。詳しくは [バッチ](../topics/pc.md#%E3%83%90%E3%83%83%E3%83%81)。
-
-### tau: 活動と双対変数の時定数
-
-| フィールド | 何の時定数       | この例          |
-| ---------- | ---------------- | --------------- |
-| `h`        | 活動             | 4e-3 秒         |
-| `lam`      | 双対変数         | 2e-3 秒         |
-| `r`        | ずれの減衰       | 4e-3 秒         |
-| （重み）   | optimizer が持つ | `optimizer.tau` |
-
-鎖のどのノードも `tau.period` ごとに更新する。`tau.r = tau.h` のとき `tau.period` は `tau.h / 2` になり、この例では 2 ms。この組では credit が 1 ホップ（ノード間の接続 1 つ）を最大 1 周期で戻る。重みの時定数は `tau` ではなく optimizer が持つ。
-
-### optimizer: 重みの動かし方
-
-$$
-\theta \leftarrow \theta - \frac{\Delta t}{\tau}\,\bar g
-$$
-
-| 記号              | 意味                             | この例                           |
-| ----------------- | -------------------------------- | -------------------------------- |
-| $\Delta t$        | そのノードが前に学んでからの時間 | `SHOWN`（バッチごとに 1 回学ぶ） |
-| $\tau$            | 重みの時定数（`optimizer.tau`）  | `SHOWN / 0.3`                    |
-| $\bar g$          | バッチの平均の勾配               | —                                |
-| $\Delta t / \tau$ | 1 バッチあたりの学習率           | 0.3                              |
-
-| optimizer               | 内容                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `pc.optim.SGD(tau=...)` | 勾配降下。`tau` は重みの時定数                                                                 |
-| `pc.optim.AdamW`        | もう 1 つの選択肢（[optimizer を選ぶ](../topics/pc.md#optimizer-%E3%82%92%E9%81%B8%E3%81%B6)） |
-
-各ノードは optimizer を自分の重みに結び付けるため、1 つの `pc.optim.SGD` を鎖全体で使える。`optimizer` に既定値は無い。
-
-### learn_interval: 学ぶ時刻
-
-| 値                            | ノードが学ぶとき                                                                     | 向くもの                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| 秒数（この例 `0.75 * SHOWN`） | 各書き込みからその時間が経った時点以降の最初の更新。入力が変わらない間はその間隔ごと | バッチを一定時間ずつ見せる。この例ではバッチごとに 1 回        |
-| `None`                        | 毎回の更新                                                                           | フレームごとに入力が変わるストリーム。よい値はまだ測っていない |
+| 値                      | 何を決めるか                                     | この例                                                       | 決め方                                                  |
+| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `tau`                   | 活動 `h` と、双対変数 `lam`・ずれ `r` の動く速さ | `pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)`                 | [時定数を決める](../topics/pc.md#choose-time-constants) |
+| `optimizer`             | 重みの動く速さ                                   | `pc.optim.SGD(tau=SHOWN / 0.3)`。1 バッチの学習率 Δt/τ = 0.3 | [optimizer を選ぶ](../topics/pc.md#optimizer)           |
+| `learn_interval`        | 見せている間のいつ学ぶか                         | `0.75 * SHOWN`。書き込みから 24 ms の後                      | [時定数を決める](../topics/pc.md#choose-time-constants) |
+| 見せる秒数（`seconds`） | 1 つのバッチを見せ続ける時間                     | `SHOWN = 0.032`                                              | [時定数を決める](../topics/pc.md#choose-time-constants) |
 
 <figure class="mujou-diagram">
 <svg viewBox="0 0 640 175" role="img" aria-label="1 つのバッチを見せる 32 ミリ秒の流れ。0 ミリ秒に書き込み、ノードは 2 ミリ秒ごとに更新し、最初の予測は学ぶ前に届き、24 ミリ秒の後の最初の更新で学び、32 ミリ秒で pc.show が返る">
@@ -153,50 +64,18 @@ $$
 <text class="mujou-note" x="592" y="156" text-anchor="middle">32 ms</text>
 <text class="mujou-label" x="615" y="172" text-anchor="end">実行のタイマー →</text>
 </svg>
-<figcaption>この例で 1 つのバッチを見せる 32 ms（<code>SHOWN</code>）。ノードは書き込みから <code>learn_interval</code> = 24 ms が経った時点以降の最初の更新で学ぶ。見せる間に学ぶのは 1 回</figcaption>
+<figcaption>この例で 1 つのバッチを見せる 32 ms（<code>SHOWN</code>）。ノードは書き込みから <code>learn_interval</code> = 24 ms が経った後の最初の更新で、1 回だけ学ぶ</figcaption>
 </figure>
 
-!!! tip "`learn_interval` の目安"
+重みはモジュールを作る時点（この例では実行の前にホストで `torch.manual_seed(0)`）で決まり、`mujou.pc` のノードは初期化し直さない。
 
-    credit が鎖を往復する時間 `2 * len(modules) * period` より長くするとよい。この例では 2 × 3 × 2 ms = 12 ms で、24 ms はそれより長い。
-
-### 重みの初期化
-
-ノードの内側では BP と同じくモジュールを autograd で微分する。重みはモジュールを作るときに初期化し（この例では実行の前にホストで `torch.manual_seed(0)`）、ノードは初期化しない。
-
-## 見せて学ぶ
-
-!!! abstract "要点"
-
-    `pc.show` はバッチを書き、実行のタイマーで `seconds` 秒見せ、学ぶ前の予測を返す。その間にノードは緩和し、学ぶ。
+## 見せて学ぶ {#show}
 
 ```python
 --8<-- "examples/pc_regression.py:run"
 ```
 
-```mermaid
-sequenceDiagram
-    participant H as ホスト
-    participant S as pc.show
-    participant N as 鎖のノード
-    H->>S: pc.show(run, net, sample, seconds=SHOWN)
-    S->>N: run.write（サンプルを書く）
-    N-->>S: 最初の予測（どのノードもまだ学んでいない）
-    Note over N: 目標に向かって緩和し、learn_interval が経ったら学ぶ
-    S->>S: 書いてから SHOWN 秒（実行のタイマー）まで待つ
-    S-->>H: 最初の予測（pc.msg.Prediction）
-```
-
-`pc.show` が返す予測は、どのノードもまだそのバッチから学んでいない時点のもの。その損失は、まだ見ていないデータをどれだけ当てられるかを表す（prequential な損失）。
-
-### Sample: 書くもの
-
-| フィールド | 意味                         | この例                                | ほかの使い方                                  |
-| ---------- | ---------------------------- | ------------------------------------- | --------------------------------------------- |
-| `x`        | 入力                         | `(B, 2)`                              | —                                             |
-| `y`        | 目標                         | `(B, 1)`                              | —                                             |
-| `mask`     | どのサンプルに目標があるか   | すべて True                           | すべて False で評価。重みは動かず、活動は動く |
-| `reset`    | どのサンプルが新しく始まるか | すべて True（バッチを毎回新しく引く） | フレームが続くストリームでは False            |
+[`pc.show`][mujou.pc.show] はどのノードもそのバッチから学ぶ前の予測を返すので、例の損失はまだ見ていないデータへの損失になる。
 
 === "学ぶ"
 
@@ -213,38 +92,12 @@ sequenceDiagram
     sample = pc.msg.Sample(x=x, y=y, mask=none, reset=every)  # 重みは動かない
     ```
 
-`mask` が False のサンプルは損失に何も足さず、すべて False なら重みは動かない（活動は動く）。実行中の同じ鎖を評価するにはこれを使い、推論モードへの切り替えは無い。`reset` が True のサンプルでは、ノードは前のバッチについて持っていたものを捨てる（詳しくは [新しく始めるサンプル](../topics/pc.md#reset)）。
+`mask` を全部 False にすると、実行中の同じ鎖が学ばずに評価する。推論モードへの切り替えは無い。この例はバッチを毎回新しく引き、どのサンプルも前のサンプルに続かないので、`reset=every`（全部 True）でノードが前のバッチについて持っていた `r`・`lam` を 0 に戻させる（[新しく始めるサンプル](../topics/pc.md#reset)）。
 
-### Prediction: 返るもの
-
-| フィールド          | 中身                                       |
-| ------------------- | ------------------------------------------ |
-| `y_hat`             | 予測                                       |
-| `y`・`mask`・`time` | 予測の元になったサンプルの目標・mask・時刻 |
-
-`pc.msg.Prediction` は `y_hat` を、元になったサンプルの `y`・`mask`・`time` と組で持つため、予測はいつも自分の目標と対になる。
-
-### ノードの状態をのぞく
-
-```python
-run.state_dict()["nodes"]["layer0"]["state"]  # 最初の層の状態
-```
-
-| キー          | 中身                                           |
-| ------------- | ---------------------------------------------- |
-| `"r"`         | 活動の予測からのずれ                           |
-| `"lam"`       | 双対変数。平衡点では誤差逆伝播法の credit      |
-| `"module"`    | モジュール                                     |
-| `"clock"`     | クロック（いつ学ぶかを決める）                 |
-| `"optimizer"` | optimizer                                      |
-| `"relaxer"`   | relaxer                                        |
-| `"generator"` | ノードの乱数生成器の状態（どのノードにもある） |
-
-ノードが送る予測 `mu` は、ノードの状態ではなく Port `next` の状態にある（[mujou.pc の仕組み](../topics/pc-concepts.md#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E6%8C%81%E3%81%A4%E9%87%8F)）。
+例の最後の `run.state_dict()["nodes"]["layer0"]["state"]` のように、ノードの状態はパスで取り出せ、キーは [`pc.Layer`][mujou.pc.Layer] にある。
 
 ## 次へ
 
 - 部品のつながりと、ノードが 1 回の更新で行うこと: [mujou.pc の仕組み](../topics/pc-concepts.md)
-- `pc.Chain` で MNIST を学ぶ 784-256-256-10 のネットワークと BP の比較: `examples/mnist/`（`uv run python examples/mnist/main.py`）。説明は [PC-ALM](../topics/pc.md#mnist)
-- GPU の上の `pc.Chain` で CIFAR-10 を学ぶ ResNet-20 と BP の比較: `examples/cifar10/`（`uv run python examples/cifar10/main.py`）。説明は [PC-ALM](../topics/pc.md#cifar-10)
-- 時定数・optimizer・`learn_interval` の決め方、落とし穴、自作のノード: [PC-ALM](../topics/pc.md)
+- 値の決め方・落とし穴・自作のノード: [PC-ALM](../topics/pc.md)
+- MNIST・CIFAR-10 で BP と比べる: [PC-ALM の実験](../topics/pc-benchmarks.md)

@@ -15,11 +15,9 @@ from leaky import SCALAR, LeakyChain
 
 import mujou
 
-# --8<-- [start:threads]
 # Each worker runs torch operations with threads of torch's own: keep those few
 # (a setting of the whole process, made by the host before the run).
 torch.set_num_threads(1)
-# --8<-- [end:threads]
 
 TAU = 0.05  # the time constant of the integrators, in seconds
 H = 0.001  # one step: 1 ms of the run's timer

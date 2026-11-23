@@ -16,11 +16,9 @@ from mujou import NetworkError, Node, Port, TensorSpec
 
 SCALAR = TensorSpec(())
 
-# --8<-- [start:logging]
 # mujou also logs the node's exception, with its traceback, to the "mujou" logger.
 # Show the log on stdout here (without a handler, Python prints it to stderr).
 logging.basicConfig(stream=sys.stdout, format="log: %(message)s")
-# --8<-- [end:logging]
 
 
 class Checked(Node):

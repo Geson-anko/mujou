@@ -134,6 +134,7 @@ plugins:
             Errors and Shutdown: 例外と終了
             Update Rules: 更新則
             How mujou.pc Works: mujou.pc の仕組み
+            PC-ALM Benchmarks: PC-ALM の実験
             Visualize a Network: ネットワークの可視化
             Examples: サンプル
             API Reference: API リファレンス
@@ -201,6 +202,7 @@ nav:
       - Update Rules: topics/update-rules.md
       - How mujou.pc Works: topics/pc-concepts.md
       - PC-ALM: topics/pc.md
+      - PC-ALM Benchmarks: topics/pc-benchmarks.md
       - Visualize a Network: topics/visualize.md
   - Examples: examples.md
   - API Reference:

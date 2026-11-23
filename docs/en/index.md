@@ -8,15 +8,13 @@ Asynchronous Distributed Deep Learning Library for Continuous Learning
   <figcaption>Image: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>.</figcaption>
 </figure>
 
-Mujou is a deep learning framework that keeps inferring and learning at the same time. You write nodes in PyTorch code and run a network that connects them.
+Mujou is a deep learning framework in which a network of connected nodes keeps inferring and learning at the same time.
 
 !!! warning "Early development"
 
     Mujou is in an early stage of development. The API may change without notice.
 
-## 🌱 A network that keeps learning
-
-Conventional machine learning trains a model, then freezes its weights for inference. A Mujou network takes input and produces output for as long as it runs, and keeps learning at the same time.
+## A network that keeps learning {#continual}
 
 ```mermaid
 flowchart TB
@@ -31,11 +29,9 @@ flowchart TB
     end
 ```
 
-There is no mode to switch between training and inference, and there are no epochs.
+The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou builds machines that keep learning from a stream and keep changing, for uses that learn while they act, such as real-time processing and robotics.
 
-The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou is a framework for machines that keep learning from a stream and keep changing. It targets uses that learn while they act, such as real-time processing and robotics.
-
-The program below is such a network: a chain of PC-ALM nodes, three of them learning, that learns a regression from a stream of batches. Each batch is predicted before the nodes learn from it, while the nodes keep running.
+In the program below, a chain of PC-ALM nodes (three of them learning) keeps running while each incoming batch is first predicted and then learned from as a regression (walked through in [5. Learn with PC-ALM](tutorial/5-learn-with-pc.md)).
 
 ```python
 --8<-- "examples/pc_regression.py:chain"
@@ -43,38 +39,17 @@ The program below is such a network: a chain of PC-ALM nodes, three of them lear
 --8<-- "examples/pc_regression.py:run"
 ```
 
-## ✨ Features
+## Features {#features}
 
-- 🔄 **Inference and learning at once**: no training mode, no inference mode, no epochs
-- 🧩 **Nodes in PyTorch**: write each node in ordinary PyTorch code, run synchronously inside the node
-- ⚡ **Asynchronous nodes**: each node updates on its own schedule and never waits for another
-- ⏱️ **Continuous time**: nodes update in proportion to `dt`, the time that really passed
-- 🧠 **Any update rule**: backpropagation inside a node, PC-ALM across nodes, or a rule of your own
-- 💾 **Save the state**: take the state of a running network and resume from it later
-- 🧪 **Simulation and deterministic tests**: virtual time, stepped by hand as fast as the machine computes
+- 🔄 **[Inference and learning at once](concepts.md#learning)**: no training mode, no inference mode, no epochs
+- 🧩 **[Nodes in PyTorch](concepts.md#nodes)**: each node is written and run in PyTorch
+- ⚡ **[Asynchronous nodes](concepts.md#ports)**: each node updates on its own schedule and never waits for another
+- ⏱️ **[Continuous time](concepts.md#time)**: nodes update in proportion to `dt`, the time that really passed
+- 🧠 **[Any update rule](concepts.md#learning)**: BP inside a node, PC-ALM across nodes, or a rule of your own
+- 💾 **[Save the state](tutorial/6-save-and-resume.md)**: take the state of a network and resume from it later
+- 🧪 **[Simulation and deterministic tests](topics/simulation.md)**: step virtual time by hand and simulate as fast as the machine computes
 
-## ⚙️ How it runs
-
-```mermaid
-flowchart LR
-    H["Host (your program)"] -->|"writes inputs"| A["Node A"]
-    A -->|"latest value"| B["Node B"]
-    B -->|"reads outputs"| H
-```
-
-Each node repeats its update on its own schedule and never waits for another node; it reads the latest value its neighbor sent.
-
-The host (the program that runs the network) writes inputs to the running network and reads its outputs.
-
-## 🧭 Where to go next
-
-- **New to Mujou**
-
-    Installation → How Mujou Works → the Tutorial, from its first page
-
-- **Going further**
-
-    → the Topics, the Examples and the API Reference
+## Where to go next {#next}
 
 <div class="grid cards" markdown>
 
@@ -82,7 +57,7 @@ The host (the program that runs the network) writes inputs to the running networ
 
     ______________________________________________________________________
 
-    Build Mujou from source and check that it works.
+    How to install and check it works.
 
     [:octicons-arrow-right-24: Installation](install.md)
 
@@ -90,7 +65,7 @@ The host (the program that runs the network) writes inputs to the running networ
 
     ______________________________________________________________________
 
-    Nodes, ports, networks, runs, time, state, simulation and learning, and the rules a node keeps.
+    The mechanism, in diagrams.
 
     [:octicons-arrow-right-24: How Mujou Works](concepts.md)
 
@@ -98,7 +73,7 @@ The host (the program that runs the network) writes inputs to the running networ
 
     ______________________________________________________________________
 
-    Run a network, write and test a node, learn in a node and with PC-ALM, save and resume.
+    Step by step, in code.
 
     [:octicons-arrow-right-24: Tutorial](tutorial/1-run.md)
 
@@ -106,7 +81,7 @@ The host (the program that runs the network) writes inputs to the running networ
 
     ______________________________________________________________________
 
-    Ports, groups, host I/O, time, threads and devices, errors, update rules, PC-ALM.
+    How to choose and decide, topic by topic.
 
     [:octicons-arrow-right-24: Topics](topics/ports.md)
 
@@ -114,7 +89,7 @@ The host (the program that runs the network) writes inputs to the running networ
 
     ______________________________________________________________________
 
-    Every example program, by what you want to do.
+    Find a program by what you want to do.
 
     [:octicons-arrow-right-24: Examples](examples.md)
 

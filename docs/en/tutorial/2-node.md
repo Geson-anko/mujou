@@ -1,18 +1,10 @@
 # 🧩 2. Write a Node
 
-This page writes a node whose state follows a differential equation, the leaky integrator `Leaky`, and runs two of them in a row. It covers `dt`, the state and the period. The rules every node keeps are in [How Mujou Works](../concepts.md#rules-a-node-keeps).
+This page writes `Leaky`, a leaky integrator whose state follows a differential equation, and runs two of them in a row. The rules every node keeps are in [How Mujou Works](../concepts.md#rules).
 
-!!! abstract "On this page"
+## The node {#node}
 
-    - How to write a continuous-time differential equation as one update, `on_update(dt)`
-    - How to stay stable even for the longest `dt` that can come
-    - How to tell state from settings, and how to choose the period `period`
-
-## The node
-
-!!! abstract "In short"
-
-    `Leaky` follows its input $u$ with the time constant $\tau$. Its state $x$ follows this differential equation.
+`Leaky` follows its input $u$ with the time constant $\tau$. Its state $x$ follows this differential equation.
 
 $$
 \frac{dx}{dt} = \frac{u - x}{\tau}
@@ -22,23 +14,9 @@ $$
 --8<-- "examples/leaky.py:node"
 ```
 
-| Where           | What you write                                                    |
-| --------------- | ----------------------------------------------------------------- |
-| `__init__`      | The settings (`tau`), the state (`x`), the ports (`prev`, `next`) |
-| `on_update(dt)` | Read the input, move the state by `dt`, send the result           |
-| A loop          | None. Mujou calls `on_update` again and again                     |
+## Update in proportion to `dt` {#dt}
 
-## Update in proportion to `dt`
-
-!!! abstract "In short"
-
-    `dt` is the time in seconds that actually passed since the previous update. Always make the update proportional to `dt`, and keep it stable even for the longest `dt` that can come.
-
-| About `dt`       | What it is                                                                  |
-| ---------------- | --------------------------------------------------------------------------- |
-| What it measures | Seconds since this node's previous update, on the run's timer               |
-| The first `dt`   | Counts from the start of the run, once every node's `on_start` has returned |
-| Length           | Not constant. It gets longer when the machine is busy                       |
+`dt` is not constant: it gets longer when the machine is busy ([How Mujou Works](../concepts.md#time)), so always make the update proportional to `dt`.
 
 <figure class="mujou-diagram">
 <svg viewBox="0 0 640 250" role="img" aria-label="Two nodes that update at different rates. With a fixed step per update the faster node changes faster; in proportion to dt both follow the same curve">
@@ -87,7 +65,6 @@ $$
 <line class="mujou-lane" style="fill: none; stroke-dasharray: 4 4" x1="380" y1="232" x2="410" y2="232"/>
 <text class="mujou-note" x="416" y="236">continuous-time solution</text>
 </svg>
-<figcaption>Two nodes that update at different rates. The marks are updates, the dotted line the continuous-time solution. With a fixed step the faster node A changes faster; in proportion to <code>dt</code> both follow the same solution</figcaption>
 </figure>
 
 === "Avoid"
@@ -108,65 +85,33 @@ $$
     self.x += dt * (u - self.x) / self.tau
     ```
 
-??? question "Why proportional to `dt`?"
+### Stay stable for a long `dt` {#stability}
 
-    A node updates at its own rate, and that rate varies with the load. With updates proportional to `dt`, every node follows the same dynamics on the same flow of time; a busy machine only makes `dt` longer. With a fixed step, a node that loops faster changes faster (left of the figure above).
-
-### Stay stable for a long `dt`
-
-Cutting `dt` loses time, and the result drifts from the continuous-time solution. Do not cut it; choose an update that stays stable for the longest `dt` that can come (the ways are in the figure and table below).
-
-```mermaid
-flowchart TD
-    Q1{"Is there an exact solution?"} -- yes --> A["Advance by dt with the exact solution"]
-    Q1 -- no --> Q2{"Does the instability come from the coupling with other nodes?"}
-    Q2 -- no --> B["Split dt into n steps"]
-    Q2 -- yes --> C["Cap the dt you use, at the cost of the time you drop"]
-```
-
-| Way            | How                                                                                                                        | Example                                    |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Exact solution | Advance by `dt` with the exact solution                                                                                    | `Leaky` (the equation below)               |
-| Split the step | In one `on_update`, split `dt` into `n` steps no longer than a stable length, and update `n` times in a `for` loop         | [4. Learn in a Node](4-learn-in-a-node.md) |
-| Cap `dt`       | Only when the instability comes from the coupling with other nodes, cap the `dt` you use, at the cost of the time you drop | `max_dt` of the nodes of `mujou.pc`        |
-
-One update of `Leaky`:
+| When                                                 | Way                                                                                                                                                       | Example                                                                                        |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| There is an exact solution                           | Advance by `dt` with the exact solution                                                                                                                   | `Leaky` (the equation below)                                                                   |
+| There is no exact solution                           | In one `on_update`, split `dt` into `n` steps no longer than a stable length, and update `n` times                                                        | [4. Learn in a Node](4-learn-in-a-node.md#learn-by-time)                                       |
+| The instability comes from coupling with other nodes | Cap the `dt` you use, at the cost of the time you drop. The values a node receives stay constant over `dt`, so splitting the step does not make it stable | `max_dt` of the nodes of `mujou.pc` ([TimeConstants](../topics/pc-concepts.md#time-constants)) |
 
 $$
 x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 $$
 
-`Leaky` moves `x` by the fraction `1 - exp(-dt / tau)` of its distance to `u`. The update is exact while `u` stays constant, and the fraction is below 1 for any `dt`, so `x` never overshoots `u`.
+`Leaky` updates with this equation. It is exact while $u$ stays constant, and the coefficient $1 - e^{-\Delta t / \tau}$ is below 1 for any `dt`, so $x$ never overshoots $u$.
 
-??? question "Why does splitting not help when the instability comes from the coupling?"
+### Adding noise {#noise}
 
-    The messages a node reads (the values of other nodes) stay as they were over `dt`, so splitting the step does not remove an instability from the coupling. Such a node may cap the `dt` it uses, at the cost of the time it drops (the nodes of `mujou.pc` cap it with `max_dt`).
+To add noise to a continuous-time update, scale the change by `dt` and the standard deviation of the noise by $\sqrt{dt}$, so that the result does not depend on how often the node updates.
 
-### Adding noise
+## The state {#state}
 
-| What you add                          | Scale it by |
-| ------------------------------------- | ----------- |
-| A continuous-time update (the change) | `dt`        |
-| The standard deviation of noise       | $\sqrt{dt}$ |
-
-To add noise to a continuous-time update, scale its standard deviation by $\sqrt{dt}$, so that the result does not depend on how often the node updates.
-
-## The state
-
-!!! abstract "In short"
-
-    Tensor attributes join the state by themselves. Create the state in `__init__`, and update it in place in `on_update`.
-
-| Attribute                                                 | Kind    | In the state?                                                                                                         |
-| --------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
-| `self.x` (a tensor)                                       | State   | Yes, by itself. `run.state_dict()` takes it, and a restore loads it back ([6. Save and Resume](6-save-and-resume.md)) |
-| `self.tau` (a number set from an argument)                | Setting | No. A node restored with another `tau` keeps its own                                                                  |
-| A plain value that changes while running (a counter, say) | State   | Add it with `register_state` (the example in [4. Learn in a Node](4-learn-in-a-node.md))                              |
+Tensor attributes (`self.x`) join the state by themselves; settings from the arguments (`self.tau`) do not ([what goes in the state](6-save-and-resume.md#custom-state)).
 
 === "Avoid"
 
     ```python
-    self.x = self.x + (1 - math.exp(-dt / self.tau)) * (u - self.x)  # assigns a new tensor
+    # Assigns a new tensor: references held by an optimizer and the like still point at the old one
+    self.x = self.x + (1 - math.exp(-dt / self.tau)) * (u - self.x)
     ```
 
 === "Write this"
@@ -175,82 +120,17 @@ To add noise to a continuous-time update, scale its standard deviation by $\sqrt
     self.x += (1 - math.exp(-dt / self.tau)) * (u - self.x)  # in place (+=, copy_ and the like)
     ```
 
-??? question "What goes wrong when you assign a new tensor?"
+## The period {#period}
 
-    ```mermaid
-    flowchart LR
-        subgraph before["Before the assignment"]
-            X1["self.x"] --> T1["tensor 1"]
-            O1["other attributes, optimizer"] --> T1
-        end
-        subgraph after["After assigning a new tensor to self.x"]
-            X2["self.x"] --> T2["tensor 2 (the state from now on)"]
-            O2["other attributes, optimizer"] --> T1b["tensor 1 (stale)"]
-        end
-    ```
+| Case                                                            | How to choose the period                                                                                              |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Keep the delay seen downstream (at most about one period) small | Well below the time constant. `Leaky` defaults to 1 ms, below `tau`                                                   |
+| A chain fed by a node with a period (a sensor, say)             | The period downstream is no longer than the period of the input, since it reads the same input until the next arrives |
+| A node that must not wait                                       | `period=0.0`                                                                                                          |
 
-    Assigning a new tensor raises no error, and the new tensor is the state from then on. But any other attribute or optimizer that refers to the first tensor still points at the old one. A restore also writes in place into the tensor the node holds.
+A node with `period=0.0` keeps a CPU core busy ([`Node`][mujou.Node]).
 
-!!! tip "You may change `self.x` after sending it"
-
-    `Leaky` changes `self.x` after sending it. That is fine: `send` copies the value, so what was sent does not change.
-
-## The period
-
-!!! abstract "In short"
-
-    A node updates once every `period` seconds on average, 0.01 s by default. But `dt` is not exactly `period`.
-
-<figure class="mujou-diagram">
-<svg viewBox="0 0 640 150" role="img" aria-label="Updates every period on average. A delayed update has a long dt, and the next one a short dt">
-<line class="mujou-axis" x1="90" y1="120" x2="620" y2="120"/>
-<text class="mujou-label" x="620" y="142" text-anchor="end">the run's timer →</text>
-<text class="mujou-label" x="10" y="84">node</text>
-<line class="mujou-lane" x1="90" y1="80" x2="620" y2="80"/>
-<g class="mujou-lane" style="stroke-dasharray: 3 3"><line x1="100" y1="96" x2="100" y2="120"/><line x1="180" y1="96" x2="180" y2="120"/><line x1="260" y1="96" x2="260" y2="120"/><line x1="340" y1="96" x2="340" y2="120"/><line x1="420" y1="96" x2="420" y2="120"/><line x1="500" y1="96" x2="500" y2="120"/><line x1="580" y1="96" x2="580" y2="120"/></g>
-<text class="mujou-note" x="140" y="114" text-anchor="middle">period</text>
-<text class="mujou-note" x="220" y="114" text-anchor="middle">period</text>
-<g class="mujou-tick-a"><line x1="100" y1="68" x2="100" y2="92"/><line x1="180" y1="68" x2="180" y2="92"/><line x1="260" y1="68" x2="260" y2="92"/><line x1="385" y1="68" x2="385" y2="92"/><line x1="420" y1="68" x2="420" y2="92"/><line x1="500" y1="68" x2="500" y2="92"/><line x1="580" y1="68" x2="580" y2="92"/></g>
-<text class="mujou-note" x="140" y="58" text-anchor="middle">dt ≈ period</text>
-<path class="mujou-brace" d="M 262 62 Q 262 54 270 54 L 375 54 Q 383 54 383 62"/>
-<text class="mujou-note" x="322" y="44" text-anchor="middle">long dt after a delay</text>
-<path class="mujou-brace" d="M 387 62 Q 387 54 395 54 L 410 54 Q 418 54 418 62"/>
-<text class="mujou-note" x="420" y="30" text-anchor="middle">short dt after that</text>
-<line class="mujou-lane" x1="403" y1="34" x2="403" y2="52"/>
-</svg>
-<figcaption>The vertical lines are updates, the dotted lines below mark the average <code>period</code>. A delayed update has a long <code>dt</code>, and the next one a short one</figcaption>
-</figure>
-
-| About the period           | What it is                                                              |
-| -------------------------- | ----------------------------------------------------------------------- |
-| The default `period`       | 0.01 s                                                                  |
-| The time `on_update` takes | Counts toward the period                                                |
-| After falling behind       | The node does not update several times in a row to catch up             |
-| `dt`                       | The time that actually passed: longer after a delay, shorter after that |
-| Updates with a period      | Still proportional to `dt`                                              |
-
-| Case                                                | How to choose the period                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------- |
-| Keep the delay seen downstream small                | Well below the time constant. `Leaky` defaults to 1 ms, below `tau` |
-| A chain fed by a node with a period (a sensor, say) | The period downstream is no longer than the period of the input     |
-| A node that must not wait                           | `period=0.0` (see the warning below)                                |
-
-A node downstream sees the output at most about one period late. With the default period of `Leaky`, 1 ms, the delay is small next to `tau`. In a chain fed by a node with a period (a sensor, say), the nodes after it read the same input until the next one arrives.
-
-!!! warning "`period=0.0` uses up a CPU core"
-
-    With `period=0.0`, the next `on_update` is called as soon as any time has passed. Such a node keeps a CPU core busy, takes time from the other nodes and makes their `dt` irregular. Pass it only to a node that must not wait.
-
-## Two in a row
-
-!!! abstract "In short"
-
-    `LeakyChain` is a chain of two `Leaky`. It steps the input from 0 to 1, and compares each output with the exact solution at the time it was sent.
-
-```mermaid
-flowchart LR
-    U(["u (net.prev)"]) --> A["a<br/>Leaky(tau)"] --> B["b<br/>Leaky(tau)"] --> Y(["output (net.next)"])
-```
+## Two in a row {#chain}
 
 ```python
 --8<-- "examples/leaky.py:chain"
@@ -282,7 +162,7 @@ flowchart LR
 <line style="fill: none; stroke: var(--md-accent-fg-color); stroke-width: 2.5" x1="300" y1="246" x2="330" y2="246"/>
 <text class="mujou-note" x="336" y="250">b: 1 − e^(−t/τ)(1 + t/τ)</text>
 </svg>
-<figcaption>The exact solution after the input steps from 0 to 1 at time 0 (<code>step_response</code> in <code>leaky.py</code>). <code>b</code> follows <code>a</code>, so it rises later. The vertical lines are about when <code>main</code> reads the outputs</figcaption>
+<figcaption>The exact solution after the input steps from 0 to 1 at time 0 (<code>step_response</code> in <code>leaky.py</code>)</figcaption>
 </figure>
 
 ```python
@@ -293,16 +173,10 @@ flowchart LR
 uv run python examples/leaky.py
 ```
 
-| Call                       | Returns                                                              |
-| -------------------------- | -------------------------------------------------------------------- |
-| `run.write(...)`           | The time of the write; here `start`, the time the input stepped      |
-| `run.read_with_time(port)` | The output and the time it was sent (`None` if nothing was sent yet) |
-| `run.timer.sleep(tau / 2)` | Waits `tau / 2` seconds on the run's timer                           |
-
-The difference between the time of an output and `start` is the time since the step on the run's timer, correct however the nodes got scheduled. On a busy machine a node may not have sent anything since the step yet; then the difference is negative (and the output is compared with 0, the exact solution before the step).
+On a busy machine a node may not have sent anything since the step yet, and the difference between the time of the output and `start` is negative. Then the output is compared with 0, the exact solution before the step.
 
 ## Next
 
 - Test this node deterministically: [3. Test a Node](3-test.md)
-- More about ports (specs, initial values, one message for values that belong together): [Ports and Channels](../topics/ports.md)
+- More about ports (specs, initial values, values that belong together): [Ports and Channels](../topics/ports.md)
 - The seed, the device and the threads of a node: [Threads and Devices](../topics/threads-and-devices.md)

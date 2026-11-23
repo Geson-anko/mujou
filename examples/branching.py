@@ -114,7 +114,5 @@ for net, want in ((Diamond(), 2 * (x + 1) + (x + 1) ** 2), (Magnitude(), x.abs()
         # given time depends on how the threads get scheduled: follow the output
         # until y arrives (TimeoutError after 5 s of real time).
         y, _ = run.wait_for(net.next, lambda y: torch.equal(y, want), timeout=5.0)
-        # --8<-- [start:paths]
         print("nodes:", list(run.state_dict()["nodes"]))  # their paths from the root
-        # --8<-- [end:paths]
     print(f"{type(net).__name__}: x = {x}, y = {y}")

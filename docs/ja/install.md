@@ -1,11 +1,5 @@
 # 📦 インストール
 
-!!! abstract "このページで分かること"
-
-    - mujou を動かすのに必要なもの
-    - PyPI からインストールする方法と、ソースからビルドする方法
-    - インストールできたことの確かめ方
-
 ```mermaid
 flowchart LR
     Q{"サンプルを動かす？<br>mujou を開発する？"}
@@ -15,58 +9,16 @@ flowchart LR
     S --> C
 ```
 
-## 必要なもの
+## 必要なもの {#requirements}
 
-!!! abstract "要点"
+| もの    | 条件                                                                                                                                                | PyPI から                        | ソースから |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------- |
+| Python  | 3.14 以上。free-threaded 版の 3.14t を推奨、GIL ありも可（[理由](topics/threads-and-devices.md#workers)）                                           | 要る                             | 要る       |
+| PyTorch | mujou の依存として自動でインストールされる。CPU 版・別の CUDA 版は [PyTorch のインストールの手引き](https://pytorch.org/get-started/locally/)に従う | 自動                             | 自動       |
+| Rust    | 1.85 以上を [rustup](https://rustup.rs/) でインストール。ソースからのビルド用                                                                       | wheel の無いプラットフォームだけ | 要る       |
+| uv      | [uv](https://docs.astral.sh/uv/)。ソースからのビルド用                                                                                              | `uv add` を使うなら              | 要る       |
 
-    PyPI からインストールするなら Python 3.14 以上があればよい（wheel の無いプラットフォームでは Rust も要る）。ソースからビルドするには Rust と uv も要る。
-
-| もの    | 条件                                                                          | PyPI から                        | ソースから |
-| ------- | ----------------------------------------------------------------------------- | -------------------------------- | ---------- |
-| Python  | 3.14 以上。free-threaded 版の 3.14t を推奨。GIL ありでも良い                  | 要る                             | 要る       |
-| PyTorch | mujou の依存として自動でインストールされる                                    | 自動                             | 自動       |
-| Rust    | 1.85 以上を [rustup](https://rustup.rs/) でインストール。ソースからのビルド用 | wheel の無いプラットフォームだけ | 要る       |
-| uv      | [uv](https://docs.astral.sh/uv/)。ソースからのビルド用                        | `uv add` を使うなら              | 要る       |
-
-### Python の版
-
-| 版                     | Python で書いたノード同士        | 選び方       |
-| ---------------------- | -------------------------------- | ------------ |
-| 3.14t（free-threaded） | 並列に動く                       | 推奨         |
-| 3.14（GIL あり）       | GIL を取り合い、並列に動きにくい | 使っても良い |
-
-??? question "free-threaded 版を勧めるのはなぜ？"
-
-    ノードは複数のワーカースレッドで同時に動くため、GIL の無い 3.14t を勧める。GIL ありの版では Python のノード同士が GIL を取り合い、並列に動きにくい。
-
-!!! warning "API はまだ変わる"
-
-    mujou は 0.x の段階にあり、リリースの種類によって API の変わり方が違う。
-
-    | リリース          | 変わること             |
-    | ----------------- | ---------------------- |
-    | マイナー（0.x.0） | API が壊れることがある |
-    | パッチ（0.x.y）   | バグの修正だけ         |
-
-    === "避ける"
-
-        ```toml
-        dependencies = ["mujou"]  # 次のマイナーリリースで API が壊れうる
-        ```
-
-    === "こう書く"
-
-        ```toml
-        dependencies = ["mujou~=0.1.0"]  # マイナーバージョンを固定する
-        ```
-
-    マイナーバージョンを上げる前に [変更履歴](changelog.md) を読む。
-
-## PyPI からインストールする
-
-!!! abstract "要点"
-
-    `uv add mujou` か `pip install mujou` でインストールする。下の表のプラットフォームには wheel があり、ビルドは要らない。
+## PyPI からインストールする {#pypi}
 
 === "uv"
 
@@ -84,7 +36,7 @@ flowchart LR
     pip install mujou
     ```
 
-公開している wheel:
+wheel を公開しているプラットフォーム（ビルドは要らない）:
 
 | OS      | アーキテクチャ  | Python        |
 | ------- | --------------- | ------------- |
@@ -92,29 +44,18 @@ flowchart LR
 | macOS   | arm64           | 3.14 と 3.14t |
 | Windows | x86_64          | 3.14 と 3.14t |
 
-上の表にないプラットフォームでは pip が sdist からビルドするため、Rust（1.85 以上）が要る。
+依存ではマイナーバージョンを固定し、上げる前に [変更履歴](changelog.md) を読む。
 
-!!! tip "CPU 版や別の CUDA 版の PyTorch"
+```toml
+dependencies = ["mujou~=0.1.0"]
+```
 
-    PyTorch もほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使うなら、[PyTorch のインストール案内](https://pytorch.org/get-started/locally/) を見る。
-
-## ソースからビルドする
-
-!!! abstract "要点"
-
-    サンプルプログラムを動かすときや mujou 自体を開発するときは、リポジトリを clone して `uv sync` を実行する。
+## ソースからビルドする {#source}
 
 ```sh
 git clone https://github.com/Geson-anko/mujou.git
 cd mujou
-uv sync
-```
-
-`uv sync` がすること:
-
-```mermaid
-flowchart LR
-    A["Python 3.14t を用意"] --> B[".venv/ を作る"] --> C["依存をインストール<br>（サンプルが使う numpy なども）"] --> D["Rust で書かれたコアをビルド"]
+uv sync  # .venv/ を作り、依存（サンプルが使う numpy なども）を入れ、Rust のコアをビルドする
 ```
 
 使う Python は `uv sync` の引数で選ぶ。
@@ -131,33 +72,18 @@ flowchart LR
     uv sync --python 3.14
     ```
 
-## 動作を確かめる
+## 動作を確かめる {#check}
 
-!!! abstract "要点"
-
-    バージョンを表示し、最小のサンプル `quickstart.py` を走らせる。
-
-=== "ソースからビルドした場合"
-
-    clone したリポジトリで:
+=== "uv"
 
     ```sh
-    uv run python -c "import mujou; print(mujou.__version__)"
-    uv run python examples/quickstart.py
+    uv run python -c "import mujou; print(mujou.__version__)"  # 0.1.0 のようなバージョンを表示する
     ```
 
-=== "pip でインストールした場合"
-
-    [`examples/quickstart.py`](https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py) を手元にコピーしてから:
+=== "pip"
 
     ```sh
-    python -c "import mujou; print(mujou.__version__)"
-    python quickstart.py
+    python -c "import mujou; print(mujou.__version__)"  # 0.1.0 のようなバージョンを表示する
     ```
 
-| コマンド                   | 表示の例                                                |
-| -------------------------- | ------------------------------------------------------- |
-| `import mujou` して表示    | `0.1.0` のようなバージョン                              |
-| `quickstart.py` を走らせる | `y = tensor([3., 5., 7.]) at t = 0.017 s` のような 1 行 |
-
-2 つ目のプログラム `quickstart.py` とその出力は、[チュートリアルの最初のページ](tutorial/1-run.md)で説明する。
+最初のプログラムは [1. ネットワークを走らせる](tutorial/1-run.md#program) で走らせる。
