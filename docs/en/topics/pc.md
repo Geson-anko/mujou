@@ -80,6 +80,7 @@ Every rate in `mujou.pc` is a time constant in seconds of the run's timer: the s
 | `pc.optim.SGD(tau=..., tau_m=...)`                                           | `p -= (elapsed / tau) * m_hat`, with the momentum `m`, the gradient averaged with the time constant `tau_m`             | `m`, `c_m`             |
 | `pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)`                             | RMSProp with the learning rate `elapsed / tau`. The mean square `v` decays with the time constant `tau_v`               | `v`, `c_v`             |
 | `pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | AdamW with the learning rate `elapsed / tau`. The moments `m` and `v` decay with the time constants `tau_m` and `tau_v` | `m`, `v`, `c_m`, `c_v` |
+| `pc.optim.TimeScaled(optimizer, scale=...)`                                  | A step of `elapsed * scale` seconds of `optimizer`                                                                      | That of `optimizer`    |
 
 - **Time, not steps.** Every `tau` is in seconds. `elapsed` is the time since the node last learned, so the `elapsed` of the steps in one batch add up to the showing time, however many steps there are. With `pc.optim.SGD`, the weights thus move as far per batch whether the nodes learn once or twice per batch
 - **SGD** is what MNIST uses. Choose `tau` as in the table of the time constants: the showing time divided by the learning rate per batch
@@ -188,6 +189,30 @@ The batch is the shape that every tensor of the messages starts with. Give it as
 - The samples must be independent: the module must compute each one on its own, along every dimension of the batch. A dimension that the module mixes, such as the time of a sequence, is a dimension of the sample, not of the batch: 64 sequences of `T` steps are `batch=64` with `x` of `(64, T, 784)`
 - A batch of several dimensions learns as the same samples in one dimension: `(8, 4)` as `32`
 - The losses take the batch too: `pc.loss.MSELoss(batch)` and `pc.loss.CrossEntropyLoss(batch)`. For `pc.loss.CrossEntropyLoss`, `y` holds the classes, int64 of the shape of `y_hat` without its class dimension, or the probabilities of the classes, of the shape of `y_hat`. The classes are the dimension of `y_hat` right after the batch, as in `nn.CrossEntropyLoss`, and the dimensions after them, such as the pixels of an image, are averaged
+
+## One stream as a batch of consecutive samples
+
+To go through one long stream faster, show `c` consecutive samples of it as one batch: the samples `t` to `t + c - 1` at once, then the next `c`. Each learning step then covers `c` samples of the stream: each second of the run is `c` seconds of the stream, and the weights must learn as much as in those `c` seconds. `pc.optim.TimeScaled(optimizer, scale=c)` does this: it steps `optimizer` by `c` times the elapsed time. Set it up as follows:
+
+1. Show each batch for the time of one sample of the stream: this is the showing time. Showing it `c` times as long as well would scale the time twice: the weights would learn `c` times too fast
+2. Write the time constants of `optimizer` in the stream's seconds, as for a run of one sample at a time. `TimeScaled` divides each of them by `c` (`tau`, `tau_m`, `tau_v`, and those of an optimizer of your own that uses `elapsed` only as `elapsed / tau`), so none is forgotten. `weight_decay` has no unit and stays as it is; the time constant of the decay, `tau / weight_decay`, is divided by `c` with `tau`
+3. Wrap the optimizer of every node that learns (each `pc.Layer` and the `pc.Output`, or the `optimizer=` of a `pc.Chain`) with the same `scale=c`: a node with another `scale` learns faster or slower than the rest
+4. Choose `tau.h`, `tau.r`, `tau.lam`, the period and `learn_interval` from this showing time, as for a run of one sample at a time ([Choosing the time constants](#choosing-the-time-constants)). They stay in the run's seconds: `TimeScaled` scales the time of the weights only
+
+```python
+# A stream of one sample per 32 ms, shown as batches of 8 consecutive samples,
+# each batch for 32 ms. The time constants are lr=1e-3 and betas=(0.9, 0.999)
+# of torch for one step per sample of the stream.
+optimizer = pc.optim.TimeScaled(
+    pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0), scale=8
+)
+```
+
+`TimeScaled` converts the time and nothing else. Expect these differences from a run of one sample at a time, and check them against one:
+
+- **Larger steps with RMSProp and AdamW.** The gradient is the mean over the batch, taken with one set of weights. `v` is that of the mean gradient, whose noise has a variance `c` times smaller than that of one sample, so the step of one batch is at least about as large as the sum of `c` steps of one sample: about as large when the mean gradient dominates, and up to about `sqrt(c)` times as large when the noise dominates. If the steps are too large, lengthen `tau` by a factor between 1 and about `sqrt(c)`, depending on the share of the noise; good values have not been measured yet. With `pc.optim.SGD` the step is that of `c` steps to first order
+- **`r` and `lam` from `c` samples before.** Each row of the batch keeps its own `r` and `lam` (and the state of the relaxer): with `reset` False, a row continues from the sample `c` before it in the stream (the same row of the previous batch), not from the one just before
+- **Instability with a large `c`.** The weights take one step over `c` times the time instead of `c` steps, so a large `c` can lag behind the single stream, or learn too fast and become unstable
 
 ## Pitfalls
 

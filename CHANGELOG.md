@@ -12,6 +12,7 @@ All notable changes to Mujou are documented in this file. The format is based on
 - `pc.Layer(cuda_graph=True)`: the node records the vector-Jacobian product of its module in a CUDA graph and replays it in every update, the same bit for bit with far fewer kernel launches from the CPU (an update of a ViT stage with one sample: 2.06 ms to 0.47 ms on an RTX 4090).
 - `pc.optim.SGD(tau_m=...)`: SGD with a momentum, the gradient averaged with the time constant `tau_m` in seconds and corrected for its start at zero by a mass, as in `pc.optim.AdamW`. It keeps the learning rate: with a constant gradient, the weights move as without the momentum. Without `tau_m`, `pc.optim.SGD` is as before.
 - `pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)`: RMSProp in time, the gradient divided by the root of its mean square, which decays with the time constant `tau_v` in seconds and is corrected by a mass, as in `pc.optim.AdamW`. It has no momentum and no weight decay.
+- `pc.optim.TimeScaled(optimizer, scale=)`: runs another optimizer on a time `scale` times as fast, a step of `elapsed` seconds being one of `elapsed * scale` seconds of `optimizer`, so all of its time constants are divided by `scale`. For one stream shown as batches of `scale` consecutive samples, with the time constants in the stream's seconds; the relaxation of `r` and `lam` is not scaled. See the new section "One stream as a batch of consecutive samples" of the PC-ALM topic.
 
 ### Changed
 

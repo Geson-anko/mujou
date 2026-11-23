@@ -95,6 +95,7 @@ class TestPcPublicNames:
             "Optimizer",
             "RMSProp",
             "SGD",
+            "TimeScaled",
         ]
         assert sorted(mujou.pc.relax.__all__) == [
             "BoundRelaxer",

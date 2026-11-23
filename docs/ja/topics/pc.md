@@ -80,6 +80,7 @@ p = pc.show(run, net, pc.msg.Sample(x=x, y=y, mask=mask, reset=new), seconds=sho
 | `pc.optim.SGD(tau=..., tau_m=...)`                                           | `p -= (elapsed / tau) * m_hat`。momentum の `m` は勾配を時定数 `tau_m` で平均したもの        | `m`、`c_m`             |
 | `pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)`                             | 学習率 `elapsed / tau` の RMSProp。二乗平均の `v` は時定数 `tau_v` で減衰する                | `v`、`c_v`             |
 | `pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)` | 学習率 `elapsed / tau` の AdamW。moment の `m` と `v` は時定数 `tau_m` と `tau_v` で減衰する | `m`、`v`、`c_m`、`c_v` |
+| `pc.optim.TimeScaled(optimizer, scale=...)`                                  | `optimizer` を `elapsed * scale` 秒ぶん進める                                                | `optimizer` の状態     |
 
 - **ステップでなく時間**: `tau` はどれも秒。`elapsed` はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの `elapsed` を合わせると見せる時間になる。そのため `pc.optim.SGD` では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ
 - **SGD** は MNIST が使うもの。`tau` は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める
@@ -188,6 +189,30 @@ layer = pc.Layer(
 - サンプルは互いに独立であること。module はバッチのどの次元についても、各サンプルを別々に計算する。系列の時間のように module が混ぜる次元はバッチでなくサンプルの次元。`T` ステップの系列 64 本なら `batch=64` で `x` は `(64, T, 784)`
 - 多次元のバッチは同じサンプルを 1 次元に並べたものと同じように学ぶ。`(8, 4)` は `32` と同じ
 - 損失もバッチを受け取る。`pc.loss.MSELoss(batch)` と `pc.loss.CrossEntropyLoss(batch)`。`pc.loss.CrossEntropyLoss` の `y` はクラス（int64 で、`y_hat` からクラスの次元を除いた shape）かクラスごとの確率（`y_hat` と同じ shape）。クラスの次元は `nn.CrossEntropyLoss` と同じく `y_hat` のバッチの直後。その後ろの次元（画像の画素など）は平均する
+
+## 1 本のストリームを連続したサンプルのバッチで流す {#one-stream-as-a-batch-of-consecutive-samples}
+
+長いストリームを速く流すには、連続した `c` 個のサンプルを 1 つのバッチで見せる。サンプル `t` から `t + c - 1` を一度に見せ、次の `c` 個へ進む。1 回の学習がストリームの `c` サンプル分になる。run の 1 秒がストリームの `c` 秒に当たり、重みはその `c` 秒の分だけ学ぶ必要がある。`pc.optim.TimeScaled(optimizer, scale=c)` がこれを行う。経った時間を `c` 倍にして `optimizer` を進める。次のように設定する。
+
+1. 各バッチは、ストリームの 1 サンプル分の時間だけ見せる。これが見せる時間になる。見せる時間まで `c` 倍にすると、時間を二重に倍にすることになり、重みが `c` 倍速く学びすぎる
+2. `optimizer` の時定数は、1 サンプルずつ流す実行と同じく、ストリームの秒で書く。`TimeScaled` がそれぞれを `c` で割る（`tau`・`tau_m`・`tau_v`、`elapsed` を `elapsed / tau` の形でだけ使う自作の optimizer の時定数）ので、割り忘れが起きない。`weight_decay` は無次元でそのまま。減衰の時定数 `tau / weight_decay` は `tau` とともに `c` で割られる
+3. 学習するすべてのノード（各 `pc.Layer` と `pc.Output`、`pc.Chain` なら `optimizer=`）の optimizer を、同じ `scale=c` で包む。`scale` が違うノードは、ほかのノードより速く、または遅く学ぶ
+4. `tau.h`・`tau.r`・`tau.lam`・周期・`learn_interval` は、1 サンプルずつ流す実行と同じく、この見せる時間から決める（[時定数を決める](#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B)）。どれも run の秒のまま。`TimeScaled` が変えるのは重みの時間だけ
+
+```python
+# 32 ms に 1 サンプルのストリームを、連続した 8 サンプルのバッチで見せる。
+# 各バッチを見せるのは 32 ms。時定数は torch の lr=1e-3 と betas=(0.9, 0.999) を、
+# ストリームの 1 サンプルにつき 1 歩として換算したもの。
+optimizer = pc.optim.TimeScaled(
+    pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0), scale=8
+)
+```
+
+`TimeScaled` が変換するのは時間だけ。1 サンプルずつ流す実行とは次の点が違うと予想し、その実行と比べて確かめる。
+
+- **RMSProp と AdamW では歩みが大きくなる**: 勾配は 1 組の重みで取ったバッチの平均。`v` は平均した勾配のもので、そのノイズの分散は 1 サンプルの `c` 分の 1。そのため 1 バッチの歩みは、1 サンプルずつの `c` 歩の和と少なくとも同じくらいになる。平均の勾配が支配的ならほぼ同じで、ノイズが支配的なら最大で約 `sqrt(c)` 倍になる。歩みが大きすぎるなら `tau` を伸ばす。倍率はノイズの割合に応じて 1 から約 `sqrt(c)` の間で、良い値はまだ測っていない。`pc.optim.SGD` なら 1 次の近似で `c` 歩と同じ
+- **`r` と `lam` は `c` 個前のサンプルから続く**: `r` と `lam`（と relaxer の状態）はバッチの行ごとに持つ。`reset` が False なら、各行はストリームで `c` 個前のサンプル（前のバッチの同じ行）から続く。直前のサンプルからではない
+- **`c` が大きいと不安定になりうる**: 重みは `c` 歩の代わりに、`c` 倍の時間を 1 歩で進む。そのため `c` が大きいと、1 本のストリームより学習が遅れることも、学びすぎて不安定になることもある
 
 ## 落とし穴
 
