@@ -2265,6 +2265,56 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeScaled
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeScaled">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.scale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        scale
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.bind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3725,6 +3775,56 @@
         
           <li class="md-nav__item">
   <a href="#mujou.pc.optim.AdamW.bind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TimeScaled
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TimeScaled">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.scale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        scale
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujou.pc.optim.TimeScaled.bind" class="md-nav__link">
     <span class="md-ellipsis">
       
         bind
@@ -6790,7 +6890,8 @@ spec of <code>chain.prev</code>.</p>
     <div class="doc doc-contents first">
 
         <p>The optimizers that move the parameters of a node in time: <code>SGD</code> (with
-an optional momentum), <code>RMSProp</code> and <code>AdamW</code>.</p>
+an optional momentum), <code>RMSProp</code> and <code>AdamW</code>, and <code>TimeScaled</code>, which
+runs another optimizer on a scaled time.</p>
 <p>An optimizer here is a setting (<code>Optimizer</code>): a frozen value that holds no
 state and may be shared by every node. A node binds it to its own parameters
 with <code>bind(params)</code>, which returns the <code>BoundOptimizer</code> that holds the state
@@ -7972,6 +8073,223 @@ element whose gradient has been 0 does not become <code>0 / 0</code>.</p>
 
         <p>Return the optimizer bound to <code>params</code>, with the moments and the
 masses at zero.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="mujou.pc.optim.TimeScaled" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">TimeScaled</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.TimeScaled" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">TimeScaled</span><span class="p">(</span><span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Optimizer (mujou.pc.optim.Optimizer)" href="#mujou.pc.optim.Optimizer">Optimizer</a></code></p>
+
+
+
+        <p>Another optimizer on a time that runs <code>scale</code> times as fast: a step of
+<code>elapsed</code> seconds is a step of <code>elapsed * scale</code> seconds of
+<code>optimizer</code>.</p>
+<p>With <code>scale</code> <span class="arithmatex">\(= c\)</span>, <code>SGD</code>, <code>RMSProp</code> and <code>AdamW</code> take each time
+constant <span class="arithmatex">\(\tau\)</span> in a step as <span class="arithmatex">\(c\,\Delta t / \tau = \Delta t / (\tau / c)\)</span>:
+this is <code>optimizer</code> with all of its time constants divided by <span class="arithmatex">\(c\)</span>, up to
+rounding (an optimizer of your own too, if it uses <code>elapsed</code> only as
+<code>elapsed / tau</code>). <code>weight_decay</code> has no unit and stays as it is: the
+decay, of the time constant <span class="arithmatex">\(\tau / w\)</span>, speeds up with <span class="arithmatex">\(\tau\)</span>.</p>
+<p>It is for one stream shown as batches of <span class="arithmatex">\(c\)</span> consecutive samples, each
+batch for as long as one sample: each second of the run then covers <span class="arithmatex">\(c\)</span>
+seconds of the stream, and the time constants of <code>optimizer</code> are written
+in the stream's seconds. Wrap the optimizer of every node that learns with
+the same <code>scale</code>. It scales the time of the weights only; the relaxation
+of <code>r</code> and <code>lam</code> of each sample runs on the run's time, as before. It
+converts the time and nothing else: the gradient is still the mean over
+the batch, so the moments of <code>RMSProp</code> and <code>AdamW</code> are those of the
+mean gradient, whose noise has a variance <span class="arithmatex">\(c\)</span> times smaller than that of
+one sample; a step of theirs is then at least about as large as the sum of
+<span class="arithmatex">\(c\)</span> steps of one sample: about as large when the mean gradient dominates,
+and up to about <span class="arithmatex">\(\sqrt{c}\)</span> times as large when the noise dominates.</p>
+<p>The state (<code>state_dict()</code>) is that of <code>optimizer</code>'s bound optimizer,
+with nothing added.</p>
+<p>Example (a stream of one sample per 32 ms, shown as batches of 8
+consecutive samples, each batch for 32 ms; the time constants are
+<code>lr=1e-3</code> and <code>betas=(0.9, 0.999)</code> of torch for one step per sample of
+the stream)::</p>
+<div class="highlight"><pre><span></span><code>optimizer = pc.optim.TimeScaled(
+    pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0), scale=8
+)
+</code></pre></div>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>optimizer</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The optimizer that moves the parameters.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="Optimizer (mujou.pc.optim.Optimizer)" href="#mujou.pc.optim.Optimizer">Optimizer</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>scale</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>How many seconds of <code>optimizer</code>'s time pass in a second of
+the run. Keyword only.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="float">float</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="ValueError">ValueError</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p><code>scale</code> is not finite and &gt; 0.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.TimeScaled.optimizer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">optimizer</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.TimeScaled.optimizer" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="mujou.pc.optim.TimeScaled.scale" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">scale</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#mujou.pc.optim.TimeScaled.scale" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">scale</span><span class="p">:</span> <span class="nb">float</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="mujou.pc.optim.TimeScaled.bind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">bind</span>
+
+
+<a href="#mujou.pc.optim.TimeScaled.bind" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">bind</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BoundOptimizer</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>optimizer</code> bound to <code>params</code>, stepped on the scaled
+time.</p>
 
 
     </div>
