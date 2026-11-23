@@ -500,16 +500,20 @@ class TimeScaled(Optimizer):
     converts the time and nothing else: the gradient is still the mean over
     the batch, so the moments of ``RMSProp`` and ``AdamW`` are those of the
     mean gradient, whose noise has a variance $c$ times smaller than that of
-    one sample; a step of theirs is then larger than $c$ steps of one sample,
-    up to about $\sqrt{c}$ times when the noise dominates.
+    one sample; a step of theirs is then at least about as large as the sum of
+    $c$ steps of one sample: about as large when the mean gradient dominates,
+    and up to about $\sqrt{c}$ times as large when the noise dominates.
 
     The state (``state_dict()``) is that of ``optimizer``'s bound optimizer,
     with nothing added.
 
-    Example (4 consecutive samples of one stream in each batch)::
+    Example (a stream of one sample per 32 ms, shown as batches of 8
+    consecutive samples, each batch for 32 ms; the time constants are
+    ``lr=1e-3`` and ``betas=(0.9, 0.999)`` of torch for one step per sample of
+    the stream)::
 
         optimizer = pc.optim.TimeScaled(
-            pc.optim.AdamW(tau=30.0, tau_m=0.3, tau_v=30.0), scale=4
+            pc.optim.AdamW(tau=0.032 / 1e-3, tau_m=0.3, tau_v=32.0), scale=8
         )
 
     Args:
