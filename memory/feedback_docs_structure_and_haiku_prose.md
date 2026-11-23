@@ -9,11 +9,11 @@ metadata:
 
 分担:
 
-- 構造（節の順、要点、mermaid / inline SVG の図、表、タブ、畳んだ「なぜ？」）は Opus が設計して書き切る。本文の位置には伝える事実を全部書いたプレースホルダー `<!-- PROSE: ... -->` を置く
+- 構造（節の順、mermaid / inline SVG の図、表、タブ、畳んだ「なぜ？」）は Opus が設計して書き切る。本文の位置には伝える事実を全部書いたプレースホルダー `<!-- PROSE: ... -->` を置く
 - プレースホルダーを haiku（effort medium）が自然な日本語の本文に置き換える。図・表・コードには触らせない
 - haiku は直感的でも誤った表現（条件の脱落、「常に」と「既定で」の取り違え、主語の欠落）を書くことがあるので、Opus が元のページとソースに照らして検査し、正しい言い回しは残す
 - 英語版は同じ構造にそろえる
 
 **Why:** Opus が書く日本語は硬く翻訳調になりやすく、文字だけの説明は非同期・dt のような仕組みが伝わらない。
 
-**How to apply:** docs/ の大きな改稿ではこの分担で進める（workflow で群ごとに pipeline: 設計 → haiku → 検査 → 英語 → ビルド）。図表の基準は [[feedback-docs-teaching-quality]]、文体は [[feedback-japanese-style]]。
+**How to apply:** docs/ の大きな改稿ではこの分担で進める（workflow で群ごとに pipeline: 設計 → haiku → 検査 → 英語 → ビルド）。図表の基準は [[feedback-docs-teaching-quality]]、事実の置き場所と長さは [[feedback-docs-one-fact-one-place]]、文体は [[feedback-japanese-style]]。
