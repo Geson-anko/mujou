@@ -1,6 +1,24 @@
 # 💡 Examples
 
-Working programs that show how to use Mujou, in `examples/` of the repository. The pages of this site include them as they are, so the code shown is the code you can run. They are guides, not tests: the test suite does not run them.
+Working programs that show how to use Mujou, all in `examples/` of the repository. The pages of this site include them as they are, so the code shown is the code you can run. `examples/` is a guide for users: the test suite does not run it.
+
+The programs of the tutorial (1 to 6) build on each other in the order of the arrows. From there, go on to the programs of the topics Update Rules and PC-ALM.
+
+```mermaid
+flowchart LR
+    subgraph T["Tutorial (1 → 6)"]
+        direction LR
+        q["quickstart.py<br>branching.py"] --> l["leaky.py"] --> t["test_leaky.py"] --> o["online_learning.py"] --> p["pc_regression.py"] --> s["save_and_restore.py"]
+    end
+    subgraph U["Topic: Update Rules"]
+        f["feedback_alignment.py"]
+    end
+    subgraph P["Topic: PC-ALM"]
+        m["pc_merge.py<br>mnist/<br>cifar10/"]
+    end
+    o --> f
+    p --> m
+```
 
 ## By what you want to do
 
@@ -26,27 +44,74 @@ Working programs that show how to use Mujou, in `examples/` of the repository. T
 
 ## What each program shows
 
-- `quickstart.py`: a two-node network, run with `with mujou.run(...)`. The host writes an input with `write`, and waits with `wait_for` until the expected output arrives
-- `branching.py`: a `Port` that only sends, connected to two branches that a `MultiPort` merges; and a `MultiPort` that sends a different value to each peer with `send_to`, on the channels `connect` returned
-- `leaky.py`: the leaky integrator, a node defined in continuous time and advanced by the exact solution, so that it is stable for any `dt`. Run, it steps the input of two in a row and compares them with the exact solution at the time each output was sent
-- `test_leaky.py`: tests of the node of `leaky.py` with `mujou.run_manually`, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with `uv run pytest examples/test_leaky.py`
-- `online_learning.py`: a teacher sends batches from y = a x + b with the `a` the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again
-- `feedback_alignment.py`: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with `pc.clock.LearnClock`
-- `pc_regression.py`: `pc.Chain` and `pc.show` learn a regression from a stream of batches, measured before each batch is learned from
-- `pc_merge.py`: `Merge`, a node of PC-ALM with two inputs written with `pc.functional` and `pc.clock.LearnClock`, joins two towers that learn a regression
-- `mnist/`: a 784-256-256-10 network learns MNIST as a `pc.Chain`, and the same network learns by BP from the same initial weights on the same batches. `main.py` is the entry point, `data.py` loads the data, `metrics.py` measures, `bp.py` trains the BP baseline and `watch.py` counts the `dt` of the nodes (`--watch`)
-- `cifar10/`: a ResNet-20 on a CUDA device, with a node for each stage, learns CIFAR-10 as a `pc.Chain` with `pc.optim.AdamW`, and the same network learns by BP on the GPU from the same initial weights on the same batches with the same optimizer. `main.py` is the entry point, `data.py` loads and augments the data, `resnet.py` builds the network and says why it is cut into few nodes, `metrics.py` measures and `bp.py` trains the BP baseline
-- `save_and_restore.py`: takes the state with `run.state_dict()`, saves it with `torch.save`, and resumes it in a new instance with `mujou.run(..., state=...)`, on a timer of the resumed run's own
-- `group.py`: `Group(enc=..., dec=...)`, and the paths of the nodes (`"enc.scale"`)
-- `subscribe.py`: `run.subscribe` yields the latest output, then each newer one, and stops with `break`
-- `timers.py`: `Timestamp`, a `Timer` of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own
-- `simulation.py`: `mujou.run_manually` simulates the chain of `leaky.py` on a sine input in steps of 1 ms, writing the input between steps, and prints how long it took in real time; the same result with any number of workers; `step(dt)` against the nodes given in either order
-- `errors.py`: the `NetworkError` the host receives and its `__cause__`, the order `on_exception` → `on_stop`, and `mujou.run` raising for an exception in `on_start`
-- `visualize.py`: `mujou.viz.to_html` writes the page of a network of two networks and a node, and of a `pc.Chain`, without running them
+!!! abstract "In short"
+
+    The programs fall into five groups by use. To find how an API is used, look it up in the column Main API.
+
+### Run and connect
+
+| Program         | What it shows                                                                                                                          | Main API                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `quickstart.py` | Runs a two-node network, writes an input and waits until the expected output arrives                                                   | `with mujou.run(...)`, `write`, `wait_for`                     |
+| `branching.py`  | Connects a `Port` that only sends to two branches, which a `MultiPort` merges. Then a `MultiPort` sends a different value to each peer | `Port`, `MultiPort`, the channels `connect` returns, `send_to` |
+| `group.py`      | Runs several networks together. How the paths of the nodes are formed (`"enc.scale"`)                                                  | `Group(enc=..., dec=...)`                                      |
+| `subscribe.py`  | Receives the latest output, then each newer one. Stops with `break`                                                                    | `run.subscribe`                                                |
+
+### Write and test nodes
+
+| Program         | What it shows                                                                                                                                                                                                               | Main API                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `leaky.py`      | The leaky integrator. Defined in continuous time and advanced by the exact solution, so it is stable for any `dt`. Steps the input of two in a row and compares each output with the exact solution at the time it was sent | `on_update(dt)`                                         |
+| `test_leaky.py` | Tests of the node of `leaky.py`: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop                                                                    | The virtual timer of `mujou.run_manually`, manual steps |
+| `errors.py`     | What happens when a node raises. The order `on_exception` → `on_stop`, and `mujou.run` raising for an exception in `on_start`                                                                                               | `NetworkError` and its `__cause__`                      |
+
+Run `test_leaky.py` as tests:
+
+```sh
+uv run pytest examples/test_leaky.py
+```
+
+### Learn
+
+| Program                 | How it learns                           | What it shows                                                                                                                                                                                                           | Main API                               |
+| ----------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `online_learning.py`    | BP inside a node                        | A teacher sends batches from y = a x + b with the `a` the host writes and changes. The learner learns from each new batch for the time since the last one. The host follows the loss as it falls, jumps and falls again | Plain PyTorch autograd                 |
+| `feedback_alignment.py` | A rule of your own (feedback alignment) | Two nodes learn a two-layer network. Two-way ports, a target relayed with the activity, one learning step per sample                                                                                                    | `pc.clock.LearnClock`                  |
+| `pc_regression.py`      | PC-ALM                                  | Learns a regression from a stream of batches. The loss is measured before each batch is learned from                                                                                                                    | `pc.Chain`, `pc.show`                  |
+| `pc_merge.py`           | PC-ALM (a node of your own)             | `Merge`, a node with two inputs, joins two towers that learn a regression                                                                                                                                               | `pc.functional`, `pc.clock.LearnClock` |
+| `mnist/`                | PC-ALM and BP                           | A 784-256-256-10 network learns MNIST. The same network also learns by BP from the same initial weights on the same batches                                                                                             | `pc.Chain`                             |
+| `cifar10/`              | PC-ALM and BP (GPU)                     | A ResNet-20 on a CUDA device, cut into a node for each stage, learns CIFAR-10. The same network also learns by BP on the GPU from the same initial weights, batches and optimizer                                       | `pc.Chain`, `pc.optim.AdamW`           |
+
+`mnist/` and `cifar10/` are made of several files. Both start from `main.py`.
+
+| File         | `mnist/`                                 | `cifar10/`                                               |
+| ------------ | ---------------------------------------- | -------------------------------------------------------- |
+| `main.py`    | Entry point                              | Entry point                                              |
+| `data.py`    | Loads the data                           | Loads and augments the data                              |
+| `metrics.py` | Measures                                 | Measures                                                 |
+| `bp.py`      | Trains the BP baseline                   | Trains the BP baseline                                   |
+| `watch.py`   | Counts the `dt` of the nodes (`--watch`) | —                                                        |
+| `resnet.py`  | —                                        | Builds the network and says why it is cut into few nodes |
+
+### Time, state and simulation
+
+| Program               | What it shows                                                                                                                                                                                                                                          | Main API                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `save_and_restore.py` | Takes the state, saves it and resumes it in a new instance. The resumed run goes on on a timer of its own                                                                                                                                              | `run.state_dict()`, `torch.save`, `mujou.run(..., state=...)` |
+| `timers.py`           | A timer of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time. A run resumed from one goes on on a timer of its own                                                   | `Timestamp`, `Timer`                                          |
+| `simulation.py`       | Simulates the chain of `leaky.py` on a sine input in steps of 1 ms and prints how long it took in real time. The input is written between steps. Also: the same result with any number of workers, and `step(dt)` with the nodes given in either order | `mujou.run_manually`, `step(dt)`                              |
+
+### Look
+
+| Program        | What it shows                                                                                       | Main API            |
+| -------------- | --------------------------------------------------------------------------------------------------- | ------------------- |
+| `visualize.py` | Writes the pages of a network of two networks and a node, and of a `pc.Chain`, without running them | `mujou.viz.to_html` |
 
 ## How to run them
 
-Run them from the root of the repository, in an environment built from source (see [Installation](install.md)).
+!!! abstract "In short"
+
+    In an environment built from source ([Installation](install.md)), run them with `uv run python` from the root of the repository.
 
 ```sh
 uv run python examples/quickstart.py
@@ -54,4 +119,8 @@ uv run python examples/mnist/main.py
 uv run python examples/cifar10/main.py
 ```
 
-Only `cifar10/` uses a GPU, and needs CUDA. Each finishes within 15 seconds, except `mnist/` and `cifar10/`. `mnist/` downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. `cifar10/` downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 4 minutes on an RTX 4090.
+| Program                         | Time                                                     | Download on the first run | GPU        |
+| ------------------------------- | -------------------------------------------------------- | ------------------------- | ---------- |
+| All but `mnist/` and `cifar10/` | Within 15 seconds                                        | —                         | Not needed |
+| `mnist/`                        | About 2 minutes with the default 3 epochs                | MNIST (about 11 MB)       | Not needed |
+| `cifar10/`                      | About 4 minutes on an RTX 4090 with the default 3 epochs | CIFAR-10 (about 160 MB)   | Needs CUDA |

@@ -18,6 +18,19 @@ Mujou is a deep learning framework that keeps inferring and learning at the same
 
 Conventional machine learning trains a model, then freezes its weights for inference. A Mujou network takes input and produces output for as long as it runs, and keeps learning at the same time.
 
+```mermaid
+flowchart TB
+    subgraph T["Conventional machine learning"]
+        direction LR
+        T1["Train (repeat epochs)"] --> T2["Freeze the weights"] --> T3["Infer"]
+    end
+    subgraph M["Mujou"]
+        direction LR
+        M1["Input"] --> M2["Network (infers and learns at once)"] --> M3["Output"]
+        M2 -->|"weights keep changing"| M2
+    end
+```
+
 There is no mode to switch between training and inference, and there are no epochs.
 
 The name comes from 無常 (*mujō*, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou is a framework for machines that keep learning from a stream and keep changing. It targets uses that learn while they act, such as real-time processing and robotics.
@@ -37,7 +50,7 @@ The program below is such a network: a chain of PC-ALM nodes, three of them lear
 - ⚡ **Asynchronous nodes**: each node updates on its own schedule and never waits for another
 - ⏱️ **Continuous time**: nodes update in proportion to `dt`, the time that really passed
 - 🧠 **Any update rule**: backpropagation inside a node, PC-ALM across nodes, or a rule of your own
-- 💾 **State without stopping**: take the state of a running network and resume from it later
+- 💾 **Save the state**: take the state of a running network and resume from it later
 - 🧪 **Simulation and deterministic tests**: virtual time, stepped by hand as fast as the machine computes
 
 ## ⚙️ How it runs
@@ -55,7 +68,13 @@ The host (the program that runs the network) writes inputs to the running networ
 
 ## 🧭 Where to go next
 
-New to Mujou? Install it, read How Mujou Works, then follow the Tutorial from the first page. The Topics go deeper into each part, the Examples list every program, and the API Reference has every public name.
+- **New to Mujou**
+
+    Installation → How Mujou Works → the Tutorial, from its first page
+
+- **Going further**
+
+    → the Topics, the Examples and the API Reference
 
 <div class="grid cards" markdown>
 

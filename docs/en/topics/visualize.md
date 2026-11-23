@@ -20,9 +20,27 @@
 --8<-- "examples/visualize.py:viz"
 ```
 
-`to_html` reads the network as `mujou.run` does, but runs nothing: no hook is called and no thread starts. So it shows the nodes by the same paths as a run, and a network that `mujou.run` refuses (a port connected to a node outside the network, say) raises the same error here.
+```mermaid
+flowchart LR
+    N["Network"] -->|"mujou.viz.to_html"| S["HTML string"]
+    S -->|"write_text"| F["graph.html"]
+    F -->|"open in a browser"| B["Page of the graph"]
+```
 
-The page is one file with nothing to download, so it opens offline, and you can send it to someone as it is. `mujou.viz` is not imported by `import mujou`: import it by name.
+`to_html` reads the network as `mujou.run` does, but runs nothing (the differences below). So it shows the nodes by the same paths as a run.
+
+|                                                                            | `mujou.run`          | `mujou.viz.to_html`   |
+| -------------------------------------------------------------------------- | -------------------- | --------------------- |
+| Hooks                                                                      | Called               | Not called            |
+| Threads                                                                    | Started              | Not started           |
+| Paths of the nodes                                                         | The paths of the run | The same as a run     |
+| A network it refuses (a port connected to a node outside the network, say) | Raises               | Raises the same error |
+
+| The page       | What holds                                                 |
+| -------------- | ---------------------------------------------------------- |
+| File           | One file, with nothing to download                         |
+| Where it opens | Offline too; you can send it to someone as it is           |
+| Import         | Not imported by `import mujou`: `import mujou.viz` by name |
 
 ## Try it
 
@@ -61,9 +79,33 @@ The page is one file with nothing to download, so it opens offline, and you can 
 
 ![The page with left open](../../assets/viz/open.png)
 
+=== "`left` closed"
+
+    ```mermaid
+    flowchart LR
+        L["left (closed box)"] --> M["monitor"]
+        R["right (closed box)"] --> M
+    ```
+
+=== "`left` open"
+
+    ```mermaid
+    flowchart LR
+        subgraph L["left (dashed frame)"]
+            direction LR
+            F["fast"] --> S["slow"]
+        end
+        S -->|"left.next = slow.next"| M["monitor"]
+        R["right (closed box)"] --> M
+    ```
+
 Opening `left` shows its two nodes, `fast` and `slow`, in a dashed frame. The channel from `left` to `monitor` now starts at `slow.next`, the port that `left.next` refers to. `right` is still closed, so its channel still starts at the box of `right`.
 
-Each network is laid out on its own: its children go from left to right in the order of their channels (a node that sends comes before the node that receives), and children in the same column keep the order of assignment.
+| Layout                  | How it is decided                                                          |
+| ----------------------- | -------------------------------------------------------------------------- |
+| Unit                    | Each network on its own                                                    |
+| Columns (left to right) | The order of the channels: a node that sends before the node that receives |
+| Within a column         | The order of assignment                                                    |
 
 ## See a node
 
@@ -85,24 +127,34 @@ Hovering over a box highlights its channels. The panel shows what the box leaves
 
 ## Move around
 
+!!! abstract "In short"
+
+    Buttons open, close and fit the graph; drag to move and scroll to zoom.
+
 | To                          | Do                            |
 | --------------------------- | ----------------------------- |
 | Open or close every network | `Expand all` / `Collapse all` |
 | Show the whole graph        | `Fit`                         |
 | Move the view               | Drag the background           |
 | Zoom                        | Scroll                        |
-
-The page follows the light or dark theme of the browser.
+| Light or dark theme         | Follows the browser's setting |
 
 ## A `pc.Chain`
 
-`to_html` draws any network, the networks of `mujou.pc` included:
+!!! abstract "In short"
+
+    `to_html` draws any network, the networks of `mujou.pc` included.
 
 ```python
 --8<-- "examples/visualize.py:chain"
 ```
 
-A `pc.Chain` shows `input`, `layer0`, ..., `output` in a row, each connected to the next by a channel that goes both ways: the activity goes forward and the feedback comes back. [The page it writes](../../assets/viz/chain.html){ target="_blank" }.
+```mermaid
+flowchart LR
+    I["input"] <--> L0["layer0"] <--> D["…"] <--> O["output"]
+```
+
+A `pc.Chain` shows `input`, `layer0`, ..., `output` in a row, each connected to the next by a channel that goes both ways: the activity goes forward and the feedback comes back. See [the page it writes](../../assets/viz/chain.html){ target="_blank" }.
 
 ??? question "Why HTML, and not an image?"
 

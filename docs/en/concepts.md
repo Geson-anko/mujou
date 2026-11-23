@@ -57,17 +57,20 @@ If you know PyTorch, start from this table.
 
     A node is a class whose `on_update(dt)` holds one update. You write no loop: Mujou calls it over and over.
 
-A node is the unit of computation, written as a class that inherits from `mujou.Node`. This one sends `a * x + b` of what it receives:
+A node is the unit of computation, written as a class that inherits from `mujou.Node`. This example, `Affine`, receives a value x and sends `a * x + b`:
 
 ```python
 --8<-- "examples/quickstart.py:node"
 ```
 
-`__init__` makes the ports, and `on_update(dt)` reads, computes and sends. A node keeps its state in its own attributes.
+| Method          | What you write                                                                                | In `Affine`                                               |
+| --------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `__init__`      | `super().__init__()` first. Make the ports, and keep the settings and the state in attributes | The input `prev`, the output `next`, settings `a` and `b` |
+| `on_update(dt)` | `super().on_update(dt)` first. Read from ports → compute → send to ports                      | `self.next.send(self.a * self.prev.recv() + self.b)`      |
 
 ### The order of the hooks
 
-Mujou calls the other hooks too. In one run, a node goes through them like this:
+Mujou calls the other hooks too. The diagram shows the main path a node takes through one run.
 
 ```mermaid
 stateDiagram-v2
@@ -95,7 +98,7 @@ The exact order and its fine print are in the API reference of [`Node`](api/node
 
 !!! tip "Call `super()` first in what you override"
 
-    In `__init__` and in every hook, call `super().__init__(...)` or `super().on_update(dt)` first, as the code above does.
+    In `__init__` and in every hook, call `super().__init__(...)` or `super().on_update(dt)` first, as `Affine` above does.
 
 ### Synchronous inside, asynchronous between
 
@@ -107,7 +110,7 @@ The way computation runs changes at the boundary of a node.
 | Exchange  | Variables and the computation graph | Messages through ports (copies, detached from the graph) |
 | Gradients | Recorded, as plain PyTorch does     | Never cross                                              |
 
-The node class decides how much computation one node holds: one layer, several layers, or a whole model. Put layers that should compute together (or learn together by backpropagation) in one node class.
+The node class, not a setting, decides how much computation one node holds: one layer, several layers, or a whole model. Put layers that should compute together, or learn together by backpropagation, in one node class.
 
 ```mermaid
 flowchart LR
@@ -159,9 +162,13 @@ sequenceDiagram
     A->>C: send(3)
 ```
 
-- Reading never waits: a value comes back at once, even before the peer has sent anything
-- Until the peer first sends, it returns the peer's initial value (zeros by default) with the time `None`
-- Every value carries the time it was sent. Read it with `recv_with_time()` to tell a new value from the same one read again
+| The channel                      | What `recv()` returns                                                | The time from `recv_with_time()` |
+| -------------------------------- | -------------------------------------------------------------------- | -------------------------------- |
+| The peer has never sent          | The initial value of the peer's port (`initial`; zeros if not given) | `None`                           |
+| The peer has sent                | The last value sent (any earlier ones were replaced)                 | The time that value was sent     |
+| Nothing sent since the last read | The same value as before                                             | The same time as before          |
+
+Reading never waits: a value comes back at once, even before the peer has sent anything. Every value carries the time it was sent, so `recv_with_time()` tells a newly arrived value from the same one read again.
 
 ??? question "Why not a queue?"
 
@@ -189,7 +196,7 @@ flowchart LR
 | What `recv()` returns  | One value                                           | A `dict[Channel, value]`, in the order of `connect`                |
 | Use it for             | One-to-one exchange; one-to-many when it only sends | Gathering inputs of one kind; the node decides how to combine them |
 
-Inputs of different roles (a prediction and an error, say) go to separate `Port`s, not to one `MultiPort`. Connections may form cycles. More in [Ports and Channels](topics/ports.md).
+Inputs of different roles (a prediction and an error, say) go to separate `Port`s, not to one `MultiPort`. Port connections may form cycles. More in [Ports and Channels](topics/ports.md).
 
 ## 3. Message types (specs)
 
@@ -203,7 +210,14 @@ self.prev = Port(recv=VECTOR)  # receives only
 self.next = Port(send=VECTOR)  # sends only
 ```
 
-Two ports connect only when the spec each sends matches the spec the other receives. The values are `torch.Tensor`, Python scalars, or a dict of them:
+`a.connect(b)` succeeds only when:
+
+| Condition                                                                 | Otherwise                                               |
+| ------------------------------------------------------------------------- | ------------------------------------------------------- |
+| The spec a sends = the spec b receives (and the same the other way round) | `TypeError`                                             |
+| A receiving `Port` has at most one peer                                   | `ValueError`; use a `MultiPort` to receive from several |
+
+A message value is a `torch.Tensor`, a Python scalar (int, float, bool, Timestamp), or a dict of them. The kinds of spec:
 
 | Spec                                                      | What it carries                           | Use it for                                                        |
 | --------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
@@ -213,7 +227,26 @@ Two ports connect only when the spec each sends matches the spec the other recei
 
 !!! warning "Send values that belong together in one message"
 
-    The values of two ports arrive separately: a reader may read a new value of one with an old value of the other. Put an input and its target in a `DictSpec`, and the whole dict arrives at once.
+    The values of two ports arrive separately, so a reader may read a new value of one with an old value of the other. Put values that belong together, such as an input and its target, in a `DictSpec`: then the whole dict arrives at once.
+
+=== "Avoid"
+
+    ```python
+    self.x = Port(recv=TensorSpec((32, 4)))  # the input
+    self.y = Port(recv=TensorSpec((32, 1)))  # the target, arriving apart from x
+    ```
+
+=== "Write instead"
+
+    ```python
+    class Batch(TypedDict):
+        x: torch.Tensor
+        y: torch.Tensor
+
+
+    BATCH = DictSpec(Batch, x=TensorSpec((32, 4)), y=TensorSpec((32, 1)))
+    self.batch = Port(recv=BATCH)  # x and y arrive at once
+    ```
 
 `send` sends a copy, detached from the computation graph: changing the tensor afterwards does not change what was sent.
 
@@ -223,15 +256,25 @@ Two ports connect only when the spec each sends matches the spec the other recei
 
     A `Network` is a container for building nodes together; it runs nothing itself. A path, the attribute names from the root joined with dots, names a node inside.
 
-As you give an `nn.Module` its submodules, you assign nodes to a network's attributes and connect their ports. This network puts two nodes in a row: double, then add 1.
+As you give an `nn.Module` its submodules, you assign nodes to a network's attributes and connect their ports. This network, `Pipeline`, puts two nodes in a row, scale and shift: double, then add 1.
 
 ```python
 --8<-- "examples/quickstart.py:network"
 ```
 
-The last line exposes the input of the first node and the output of the last as the network's own `prev` and `next`, so that the network connects from outside like a node.
+```mermaid
+flowchart LR
+    subgraph net["Pipeline"]
+        direction LR
+        S["scale<br/>doubles"] -->|"scale.next → shift.prev"| SH["shift<br/>adds 1"]
+    end
+    X(["x"]) -->|"net.prev (= scale.prev)"| S
+    SH -->|"net.next (= shift.next)"| Y(["y = 2x + 1"])
+```
 
-With networks inside networks, a path joins the attribute names from the root:
+The last line of the code exposes the input of the first node (scale) and the output of the last (shift) as the network's own `prev` and `next`, so that the network connects from outside like a node.
+
+With networks inside networks, a path joins the attribute names from the root with dots:
 
 ```mermaid
 flowchart TB
@@ -241,7 +284,12 @@ flowchart TB
     B -->|l2| L2["node<br/>path body.l2"]
 ```
 
-Paths are the keys of the state ([7. State](#7-state)). To only put children side by side under names, use `Group(**named)`. A network runs nothing itself; while running, the nodes inside it each run on their own.
+| How you build it  | How you write it                                                                   | The path name  |
+| ----------------- | ---------------------------------------------------------------------------------- | -------------- |
+| Inherit `Network` | Assign nodes to attributes and connect them in `__init__`                          | Attribute name |
+| `Group(**named)`  | Only put children side by side under names; connect them before passing them to it | Keyword        |
+
+Paths are the keys of the state ([7. State](#7-state)). A network runs nothing itself; while running, the nodes inside it each run on their own.
 
 ## 5. Runs
 
@@ -249,7 +297,7 @@ Paths are the keys of the state ([7. State](#7-state)). To only put children sid
 
     `mujou.run(root)` runs every node in the background and gives the host a handle, the `Run`. Through it, the host writes inputs and reads outputs.
 
-The host is your program. This runs the `Pipeline` above and waits for its output:
+The host is your program, the one that uses the network. This runs the `Pipeline` of section 4 and waits for its output:
 
 ```python
 --8<-- "examples/quickstart.py:run"
@@ -284,13 +332,39 @@ What the host does with a `Run`:
 | Take the state                            | `run.state_dict()`                          |
 | End the run                               | Leave the `with` block, or `run.shutdown()` |
 
-A root runs once: to run again, build new instances. After the run, the nodes' attributes are the host's to read. More in [Host I/O](topics/host-io.md).
+### Before and after a run
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "a new instance" as New
+    state "running" as Running
+    state "ended" as Done
+    state "RuntimeError" as Err
+    [*] --> New
+    New --> Running : mujou.run(net)
+    Running --> Done : leaving with, run.shutdown(), a node's exception
+    Done --> Err : mujou.run(net) again
+```
+
+| The root is | What the host may do with its nodes                                       |
+| ----------- | ------------------------------------------------------------------------- |
+| Running     | Read and write ports through the `Run`; do not read the nodes' attributes |
+| Ended       | Read the nodes' attributes. To run again, build new instances             |
+
+More in [Host I/O](topics/host-io.md).
 
 ## 6. Time
 
 !!! abstract "Key idea"
 
     A run has one time axis, its timer. A node moves its state forward in proportion to `dt`, the time since its last update.
+
+```mermaid
+flowchart LR
+    H["Host<br/>run.timer"] -->|"waits, pauses, changes the speed"| T["The run's timer<br/>(mujou.time.global_timer unless you pass a Timer)"]
+    N["Node<br/>self.timer"] -.->|"only reads"| T
+```
 
 Each run has one time axis, its timer, used by every node and by the host: `mujou.time.global_timer` unless the run is given a `Timer` of its own. The host waits on it and pauses it through `run.timer`; a node only reads it, with `self.timer`.
 
@@ -328,7 +402,25 @@ $$
 x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
 $$
 
-Written this way, nodes updating at different and varying rates follow the same dynamics; a busy machine only makes `dt` longer, and none of the elapsed time is lost. You build this node, `Leaky`, in [Write a Node](tutorial/2-node.md).
+=== "Avoid"
+
+    ```python
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        u = self.prev.recv()
+        self.x += 0.1 * (u - self.x)  # fixed per update: the update count sets the pace
+    ```
+
+=== "Write instead"
+
+    ```python
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        u = self.prev.recv()
+        self.x += (1 - math.exp(-dt / self.tau)) * (u - self.x)  # in proportion to dt
+    ```
+
+Written in proportion to `dt`, nodes updating at different and varying rates follow the same dynamics; a busy machine only makes `dt` longer, and none of the elapsed time is lost. You build this node, `Leaky`, in [Write a Node](tutorial/2-node.md).
 
 ### Two kinds of seconds
 
@@ -383,6 +475,13 @@ tree = run.state_dict()
 # }
 ```
 
+| Key                               | What it holds                                                        |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `timer`                           | The time `time_ns` and the timer's speed `time_scale`                |
+| `nodes` → path → `state`          | That node's `state_dict()`                                           |
+| `nodes` → path → `last_update_ns` | The time that node last updated                                      |
+| `nodes` → path → `ports`          | The latest message of each port (values sent, values the host wrote) |
+
 ```mermaid
 flowchart LR
     A["a running Run"] -->|"run.state_dict()"| T["the state tree<br/>(a plain dict on the CPU)"]
@@ -408,7 +507,12 @@ See [Save and Resume](tutorial/6-save-and-resume.md).
 | `dt`    | The time that actually passed               | The time `step` moved                                |
 | Results | Vary from run to run                        | The same every time                                  |
 
-`run.step(dt)` moves the time `dt` forward, then updates every node once, in parallel. Each node reads the values from the start of the step, and what the nodes send becomes visible when every update has ended. `run.step(dt, *nodes)` instead updates the given nodes one after another, in the given order.
+Either call first moves the virtual timer `dt` forward, then updates nodes once each. They differ like this:
+
+| Call                   | Nodes updated        | Order                       | What a node reads                                                                       |
+| ---------------------- | -------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
+| `run.step(dt)`         | Every node           | In parallel, once each      | Values from the start of the step; what is sent becomes visible after every update ends |
+| `run.step(dt, *nodes)` | Only the given nodes | One after another, as given | Also what nodes updated earlier sent in this step                                       |
 
 ```mermaid
 sequenceDiagram
@@ -503,7 +607,9 @@ The cautions about nodes on the other pages are gathered here.
 
 ### Sleeping
 
-**Do not block with `time.sleep`.** A node shares its worker thread with others, and a hook that blocks holds the worker: the other nodes' `dt` grows.
+**Do not block with `time.sleep`.**
+
+A node shares its worker thread with other nodes. A hook that blocks holds the worker meanwhile, and the other nodes' `dt` grows.
 
 === "Avoid"
 
@@ -520,27 +626,79 @@ The cautions about nodes on the other pages are gathered here.
         super().__init__(period=0.1)  # updates every 0.1 s on average
     ```
 
-Update at intervals with `period`, and give a node whose hooks must block (on a device, a socket, a lock) `dedicated_thread=True`. The host waits with `run.timer.sleep`, which follows the time scale and the pauses of the run; `time.sleep` follows neither.
+| To                                                   | Use                                   |
+| ---------------------------------------------------- | ------------------------------------- |
+| Update at intervals                                  | `period`                              |
+| Wait on a device, a socket or a lock, with no choice | Give the node `dedicated_thread=True` |
+| Wait on the host                                     | `run.timer.sleep`                     |
+
+`run.timer.sleep` follows the run's time scale and pauses; `time.sleep` follows neither.
 
 ### Running again
 
-**A node runs once.** Running a node or network that has run raises `RuntimeError`; build new instances to run again. After the run, the attributes stay readable.
+**A node runs once.**
+
+Running a node or network that has run raises `RuntimeError`, so build new instances. After the run, the attributes stay readable.
+
+=== "Avoid"
+
+    ```python
+    net = Pipeline()
+    with mujou.run(net) as run: ...
+    with mujou.run(net) as run: ...  # RuntimeError
+    ```
+
+=== "Write instead"
+
+    ```python
+    with mujou.run(Pipeline()) as run: ...
+    with mujou.run(Pipeline()) as run: ...  # new instances
+    ```
 
 ### Attributes while running
 
-**Do not read a node's attributes from the host while it runs.** It races with the node's updates. Read the ports with `run.read`, or take `run.state_dict()`.
+**Do not read a node's attributes from the host while it runs.**
+
+Reading a node's attributes from the host while it runs races with the node's updates. Read the ports with `run.read` instead, or take the state with `run.state_dict()`.
+
+=== "Avoid"
+
+    ```python
+    with mujou.run(net) as run:
+        x = net.b.x  # races with the node's updates
+    ```
+
+=== "Write instead"
+
+    ```python
+    with mujou.run(net) as run:
+        y = run.read(net.next)  # read a port
+        x = run.state_dict()["nodes"]["b"]["state"]["x"]  # take the state
+    ```
 
 ### Sending in on_start
 
-**Send nothing that depends on the state in `on_start`.** A restore loads the state after `on_start`.
+**Send nothing that depends on the state in `on_start`.**
+
+```mermaid
+flowchart LR
+    S["on_start()"] -->|"on a restore"| L["loads the state<br/>load_state_dict(state)"] --> U["the first on_update(dt)"]
+    S -->|"otherwise"| U
+```
+
+A restore loads the state after `on_start`. In `on_start` the attributes still hold their values from before the restore, and a value sent from them sends that old state.
 
 ### The state in on_stop
 
-**Do not change the state in `on_stop`.** The state taken after a normal end is the state the nodes left after `on_stop`. Release resources such as I/O there.
+**Do not change the state in `on_stop`.**
+
+The state taken after a normal end is what the nodes left after `on_stop`. In `on_stop`, only release resources such as I/O.
 
 ### Registering state
 
-**Register the values that change while running.** Tensors and modules are collected by themselves; plain values (a counter, the time last seen) and containers of tensors (a list as a replay buffer) need `register_state`, or a restore starts them again.
+**Register the values that change while running.**
+
+Tensors and modules are collected by themselves; plain values (a counter, the time last seen) and containers of tensors (a list as a replay buffer) need `register_state`, or a restore starts them again.
 
 === "Avoid"
 
@@ -557,7 +715,9 @@ Update at intervals with `period`, and give a node whose hooks must block (on a 
 
 ### The extent of the graph
 
-**Keep the graph inside one update.** Hooks record gradients as plain PyTorch does. Update the parameters inside `torch.no_grad()`, and detach a value computed from the parameters before you carry it to the next update in an attribute, or the graph keeps growing.
+**Keep the graph inside one update.**
+
+Hooks record gradients as plain PyTorch does. Update the parameters inside `torch.no_grad()`, and detach the values you carry to the next update, or the graph keeps growing.
 
 === "Avoid"
 
@@ -576,8 +736,22 @@ Update at intervals with `period`, and give a node whose hooks must block (on a 
 
 ### The time after an exception
 
-**After an exception, the time stands still.** The run's time stops when the run ends, so `self.timer` does not move in `on_exception` and `on_stop`: measure real time there (to slow a robot down over a second, say).
+**After an exception, the time stands still.**
+
+| Hook                          | `self.timer`            | To measure time, use |
+| ----------------------------- | ----------------------- | -------------------- |
+| `on_update(dt)`               | Moves                   | `self.timer`         |
+| `on_exception()`, `on_stop()` | Stands still at the end | Real time            |
+
+The run's time stops when the run ends, so `self.timer` does not move in `on_exception` and `on_stop`. Measure real time for work such as slowing a robot down over a second.
 
 ### Moving the time and talking
 
-**Only the host moves the time, and only through ports does a node talk.** In a hook, `Timer.sleep`, `pause`, `resume`, `set_time_scale`, `VirtualTimer.advance` and the methods of `Run` raise `RuntimeError`: a node that moved the time would change the `dt` of every other node of the run. `backward()` cannot reach another node, since a sent value is a detached copy.
+**Only the host moves the time, and only through ports does a node talk.**
+
+| Raises `RuntimeError` in a hook                                            | Why                                                     |
+| -------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `Timer.sleep`, `pause`, `resume`, `set_time_scale`, `VirtualTimer.advance` | It would change the `dt` of every other node of the run |
+| `mujou.run`, the methods of `Run` (`write`, `read`, `state_dict`, ...)     | A node talks only through its own ports                 |
+
+A value a node sends is a copy detached from the computation graph, so `backward()` cannot reach another node either.
