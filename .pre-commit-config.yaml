@@ -89,7 +89,9 @@ repos:
     hooks:
       - id: mdformat
         name: mdformat (docs)
-        args: ["--number"]
+        # --ignore-missing-references keeps the autorefs links to the API
+        # ([`Node`][mujou.Node]), which have no definition in the page, unescaped.
+        args: ["--number", "--ignore-missing-references"]
         files: ^docs/
         additional_dependencies:
           - mdformat-mkdocs==5.3.0
