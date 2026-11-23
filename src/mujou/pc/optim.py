@@ -10,7 +10,10 @@ elapsed)``. The time constants are in seconds, so the flow does not depend on
 how often the node learns: ``elapsed`` is the time the step weighs.
 
 They do not use ``torch.optim``: its optimizers count steps rather than time,
-and making one brings the GIL back into a free-threaded Python.
+in a float32 tensor (with torch's default dtype) that stops growing after
+``2**24`` steps (about 4.7 days when learning every 24 ms); and making one
+imports ``torch._dynamo``, which brings the GIL back for the whole process in a
+free-threaded Python (3.14t).
 """
 
 import math
@@ -72,7 +75,9 @@ class Optimizer(ABC):
     ``pc.Output`` bind those that require gradients).
 
     An optimizer of your own inherits this class, and its bound optimizer
-    ``BoundOptimizer``. For example, SGD with a learning rate per step rather
+    ``BoundOptimizer``, and implements every abstract method of both: a class
+    that misses one raises ``TypeError`` when it is instantiated (as any
+    ``abc.ABC``). For example, SGD with a learning rate per step rather
     than per second::
 
         @dataclass(frozen=True)

@@ -4,7 +4,10 @@
 class NetworkError(RuntimeError):
     """The network stopped because a node raised.
 
-    ``__cause__`` is the first exception a node raised. Once a run has stopped
+    ``__cause__`` is the first exception a node raised. Every exception of a
+    hook is logged to ``logging.getLogger("mujou")`` at ``ERROR``, with the
+    node's path, the hook and the traceback; those that other nodes raise about
+    the same time are only logged. Once a run has stopped
     this way, the host's calls on it (``write``, ``read``, ``state_dict``,
     ``shutdown``, ...) raise ``NetworkError`` too.
     """

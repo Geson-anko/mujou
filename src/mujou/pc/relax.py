@@ -65,7 +65,10 @@ class BoundRelaxer(Stateful):
         """Forget the state of ``samples`` (``batch`` bool), whose ``r`` the node
         has just set to zero: the node calls it when it first sees a sample whose
         ``reset`` is set, where what the relaxer remembers is of the sample
-        before. A relaxer without memory does nothing."""
+        before. A relaxer without memory does nothing.
+
+        It is not called when the prediction jumps (the weights or the input
+        change): neither ``r`` nor the force jumps then."""
 
 
 class Relaxer(ABC):
@@ -75,7 +78,9 @@ class Relaxer(ABC):
     the ``BoundRelaxer`` of the deviation of one node, which holds the state.
 
     A relaxer of your own inherits this class, and its bound relaxer
-    ``BoundRelaxer``. For example, a step that is capped in size::
+    ``BoundRelaxer``, and implements every abstract method of both: a class
+    that misses one raises ``TypeError`` when it is instantiated (as any
+    ``abc.ABC``). For example, a step that is capped in size::
 
         @dataclass(frozen=True)
         class Capped(pc.relax.Relaxer):

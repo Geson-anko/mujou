@@ -73,7 +73,8 @@ class TensorSpec(MessageSpec[torch.Tensor]):
     """The shape and the dtype of a message that is one ``torch.Tensor``.
 
     Every dimension is at least 1, and ``()`` is a scalar. A batch dimension is
-    just a part of the shape.
+    just a part of the shape. The dtype is ``torch.float32`` unless given,
+    whatever ``torch.get_default_dtype()`` is.
 
     Two specs are equal when their shapes and dtypes are equal. A message whose shape
     or dtype differs from the spec is an error; dtypes are never converted. A spec

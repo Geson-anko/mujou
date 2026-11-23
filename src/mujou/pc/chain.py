@@ -84,7 +84,8 @@ class Chain(Network, Shown):
         relaxer: How ``r`` of every ``Layer`` moves, as in ``Layer``: each binds
             it to its own ``r``. The ``Output`` has no ``r``.
         learn_interval: As in ``Layer``. Longer than the round trip of the
-            credit, ``2 * len(modules) * period``, is recommended.
+            credit, ``2 * len(modules) * period``, is recommended. It has no
+            default: pass ``None`` to learn in every update.
         batch: The batch, as in ``Input``: ``()`` for one sample, ``B`` for
             ``B`` samples.
         max_dt: As in ``Layer``.
