@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -978,17 +980,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#パス" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        パス
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#group" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -997,10 +988,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Group">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#group-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        束ねるときの規則
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#1-つの実行か複数か" class="md-nav__link">
+  <a href="#one-or-many" class="md-nav__link">
     <span class="md-ellipsis">
       
         1 つの実行か、複数か
@@ -1230,6 +1238,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1630,17 +1666,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#パス" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        パス
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#group" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1649,10 +1674,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Group">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#group-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        束ねるときの規則
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#1-つの実行か複数か" class="md-nav__link">
+  <a href="#one-or-many" class="md-nav__link">
     <span class="md-ellipsis">
       
         1 つの実行か、複数か
@@ -1683,56 +1725,34 @@
 
 
 <h1 id="-group">🗂️ Group<a class="headerlink" href="#-group" title="Permanent link">&para;</a></h1>
-<p><code>mujou.run</code> が走らせるルートは 1 つ。複数のネットワークを 1 つの実行で走らせるには、<code>mujou.Group</code> に並べる。このページでは書き方、パスの付き方、別々の実行に分けるべき場面を説明する。</p>
-<h2 id="パス">パス<a class="headerlink" href="#パス" title="Permanent link">&para;</a></h2>
-<p>ノードはパスで呼ぶ。パスはルートからの属性名を <code>.</code> でつないだもの。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Stack</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">l1</span> <span class="o">=</span> <span class="n">Hidden</span><span class="p">(</span><span class="mi">784</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">l2</span> <span class="o">=</span> <span class="n">Hidden</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">l1</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">l2</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">l1</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">l2</span><span class="o">.</span><span class="n">next</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Classifier</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">Stack</span><span class="p">()</span>  <span class="c1"># ネットワークの中のネットワーク</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">head</span> <span class="o">=</span> <span class="n">Head</span><span class="p">()</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">head</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># body.next の実体は l2.next</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">prev</span>  <span class="c1"># 子が公開した Port を、さらに公開する</span>
-</code></pre></div>
-<p><code>Classifier</code> のノードのパスは <code>"body.l1"</code>、<code>"body.l2"</code>、<code>"head"</code>。実行は属性を代入の順に読むので、それが木の順になる。ルートとして渡したノード自身のパスは <code>""</code>。</p>
-<p>パスは状態の木のキーになる。そのためネットワークのパスは走らせ方によらず同じで、属性名を変えると、変える前に保存した状態は復元できなくなる。</p>
+<p><a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a> のルートは 1 つなので、複数のネットワークを 1 つの実行で走らせるには <a class="autorefs autorefs-internal" title="mujou.Group" href="../../api/network/#mujou.Group"><code>Group</code></a> に並べる。ノードのパスの付き方は <a href="../../concepts/#networks">ネットワークとパス</a> にある。</p>
 <h2 id="group">Group<a class="headerlink" href="#group" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># By keyword: two networks connected before they are grouped.</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">enc</span><span class="p">,</span> <span class="n">dec</span> <span class="o">=</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">enc</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">dec</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># the ports a network exposes, as for nodes</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">])</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">Group</span><span class="p">(</span><span class="n">enc</span><span class="o">=</span><span class="n">enc</span><span class="p">,</span> <span class="n">dec</span><span class="o">=</span><span class="n">dec</span><span class="p">),</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">enc</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes, and how many fit in a given</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="c1"># time depends on how the threads get scheduled: follow the output until y</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="c1"># arrives (TimeoutError after 5 s).</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="c1"># The ports are those of the networks given.</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">dec</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"keyword: nodes </span><span class="si">{</span><span class="n">nodes</span><span class="si">}</span><span class="s2">, y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="k">assert</span> <span class="n">nodes</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"enc.scale"</span><span class="p">,</span> <span class="s2">"dec.scale"</span><span class="p">]</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="c1"># Two independent networks in one run.</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">both</span> <span class="o">=</span> <span class="n">Group</span><span class="p">(</span><span class="n">first</span><span class="o">=</span><span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="o">=</span><span class="n">second</span><span class="p">)</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">both</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">first</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">second</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>    <span class="n">y1</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>    <span class="n">y2</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">second</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"side by side: nodes </span><span class="si">{</span><span class="n">nodes</span><span class="si">}</span><span class="s2">, y1 = </span><span class="si">{</span><span class="n">y1</span><span class="si">}</span><span class="s2">, y2 = </span><span class="si">{</span><span class="n">y2</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="k">assert</span> <span class="n">nodes</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"first.scale"</span><span class="p">,</span> <span class="s2">"second.scale"</span><span class="p">]</span>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y1</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># By keyword: two networks connected before they are grouped.</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">enc</span><span class="p">,</span> <span class="n">dec</span> <span class="o">=</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">enc</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">dec</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># the ports a network exposes, as for nodes</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">])</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">Group</span><span class="p">(</span><span class="n">enc</span><span class="o">=</span><span class="n">enc</span><span class="p">,</span> <span class="n">dec</span><span class="o">=</span><span class="n">dec</span><span class="p">),</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">enc</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes, and how many fit in a given</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="c1"># time depends on how the threads get scheduled: follow the output until y</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="c1"># arrives (TimeoutError after 5 s).</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="c1"># The ports are those of the networks given.</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">dec</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"keyword: nodes </span><span class="si">{</span><span class="n">nodes</span><span class="si">}</span><span class="s2">, y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">assert</span> <span class="n">nodes</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"enc.scale"</span><span class="p">,</span> <span class="s2">"dec.scale"</span><span class="p">]</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="c1"># Two independent networks in one run.</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span> <span class="n">Stage</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">both</span> <span class="o">=</span> <span class="n">Group</span><span class="p">(</span><span class="n">first</span><span class="o">=</span><span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="o">=</span><span class="n">second</span><span class="p">)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">both</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">first</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">second</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">y1</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">y2</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">second</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">x</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"side by side: nodes </span><span class="si">{</span><span class="n">nodes</span><span class="si">}</span><span class="s2">, y1 = </span><span class="si">{</span><span class="n">y1</span><span class="si">}</span><span class="s2">, y2 = </span><span class="si">{</span><span class="n">y2</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="k">assert</span> <span class="n">nodes</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"first.scale"</span><span class="p">,</span> <span class="s2">"second.scale"</span><span class="p">]</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y1</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
 </code></pre></div>
-<p><code>Group(enc=a, dec=b)</code> は各ネットワークをキーワードの下に置く。</p>
 <table>
 <thead>
 <tr>
@@ -1759,16 +1779,40 @@
 </tr>
 </tbody>
 </table>
-<p><code>Group</code> 自体は何もつながない。ネットワークは束ねる前か後につなぎ、入出力にはネットワークの Port をそのまま使う（<code>enc.prev</code>、<code>dec.next</code>）。状態を復元するときは、保存時と同じキーワードで束ねる。</p>
-<p>ノードは 1 回だけ走る（<a href="../../concepts/#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E5%AE%88%E3%82%8B%E8%A6%8F%E5%89%87">ノードが守る規則</a>）。単独で走らせたネットワークは後から束ねられないので、最初からまとめて走らせるか、新しいインスタンスを作る。</p>
-<h2 id="1-つの実行か複数か">1 つの実行か、複数か<a class="headerlink" href="#1-つの実行か複数か" title="Permanent link">&para;</a></h2>
-<p>束ねたネットワークは 1 つの実行になり、1 本のタイマー、1 つの状態の木、1 つの終了を共有する。</p>
+<h3 id="group-rules">束ねるときの規則<a class="headerlink" href="#group-rules" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>規則</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Group</code> は何もつながない</td>
+<td>ネットワーク同士は束ねる前か後に <code>connect</code> でつなぐ</td>
+</tr>
+<tr>
+<td>入出力はネットワークの Port のまま</td>
+<td><code>enc.prev</code>、<code>dec.next</code> をそのまま <code>inputs=</code> や <code>read</code> に使う</td>
+</tr>
+<tr>
+<td>復元するときは同じキーワードで束ねる</td>
+<td>キーワードがパスの先頭になり、状態の木のキーになるため</td>
+</tr>
+<tr>
+<td>単独で走らせたネットワークは後から束ねられない</td>
+<td>ノードは 1 回だけ走る（<a href="../../concepts/#rules">ノードが守る規則</a>）。最初からまとめて走らせるか、新しいインスタンスを作る</td>
+</tr>
+</tbody>
+</table>
+<h2 id="one-or-many">1 つの実行か、複数か<a class="headerlink" href="#one-or-many" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>項目</th>
-<th>1 つの実行に束ねたとき</th>
-<th>別々の実行で、それぞれに <code>Timer</code> を渡したとき</th>
+<th>1 つの実行に束ねる</th>
+<th>別々の実行</th>
 </tr>
 </thead>
 <tbody>
@@ -1776,6 +1820,16 @@
 <td>つなぐこと</td>
 <td>できる</td>
 <td>できない。別の実行の Port はつなげない</td>
+</tr>
+<tr>
+<td>タイマー</td>
+<td>1 本を共有</td>
+<td>それぞれに <code>Timer</code> を渡す。渡さなければどれも <a class="autorefs autorefs-internal" title="global_timer
+
+
+  
+      module-attribute
+  " href="../../api/time/#mujou.time.global_timer"><code>global_timer</code></a> を共有し、状態の取得で止め合う（<a href="../time/#timers">時間</a>）</td>
 </tr>
 <tr>
 <td>状態の取得</td>
@@ -1794,11 +1848,6 @@
 </tr>
 </tbody>
 </table>
-<p>一方の状態を取得するときにもう一方を止めたくない、一方だけ速めたり遅くしたりしたい、一方が止まってももう一方は動かし続けたい。そういうときは別々の実行にし、それぞれに <code>mujou.time.Timer()</code> を渡す。</p>
-<div class="admonition warning">
-<p class="admonition-title">timer を渡さない実行はグローバルタイマーを共有する</p>
-<p><code>timer</code> を渡さない実行はどれも <code>mujou.time.global_timer</code> で走るので、1 つの状態を取得するとほかも止まる。止め合いたくないなら、それぞれに <code>Timer</code> を渡す（<a href="../time/">時間</a>）。</p>
-</div>
 
 
 

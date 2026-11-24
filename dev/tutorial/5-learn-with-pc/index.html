@@ -809,7 +809,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-program" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         The program
@@ -820,7 +820,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-chain" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         The chain
@@ -831,7 +831,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#show-and-learn" class="md-nav__link">
+  <a href="#values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing the values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#show" class="md-nav__link">
     <span class="md-ellipsis">
       
         Show and learn
@@ -904,6 +915,8 @@
   
     
     
+      
+        
       
         
       
@@ -1239,6 +1252,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1639,7 +1680,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-program" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         The program
@@ -1650,7 +1691,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-chain" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         The chain
@@ -1661,7 +1702,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#show-and-learn" class="md-nav__link">
+  <a href="#values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing the values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#show" class="md-nav__link">
     <span class="md-ellipsis">
       
         Show and learn
@@ -1703,8 +1755,9 @@
 
 
 <h1 id="-5-learn-with-pc-alm">🧠 5. Learn with PC-ALM<a class="headerlink" href="#-5-learn-with-pc-alm" title="Permanent link">&para;</a></h1>
-<p>The module <code>mujou.pc</code> learns a PyTorch model split into nodes with PC-ALM (Augmented Lagrangian Predictive Coding, <a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>). Each node holds a part of the model and learns from its neighbors' messages only; at equilibrium, its gradients are those of backpropagation. This page learns a regression with it. What you choose are the time constants, the optimizer of the weights, and how long each batch is shown.</p>
-<h2 id="the-program">The program<a class="headerlink" href="#the-program" title="Permanent link">&para;</a></h2>
+<p><a class="autorefs autorefs-internal" title="mujou.pc" href="../../api/pc/#mujou.pc"><code>mujou.pc</code></a> splits a PyTorch model into nodes and learns it with PC-ALM (Augmented Lagrangian Predictive Coding, <a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>). Each node holds a part of the model and learns from its neighbors' messages only. This page learns a regression with <code>pc.Chain</code>. It builds on <a href="../4-learn-in-a-node/">4. Learn in a Node</a>.</p>
+<h2 id="program">The program<a class="headerlink" href="#program" title="Permanent link">&para;</a></h2>
+<p>The chain learns <span class="arithmatex">\(y = \sin(2 x_1)\cos(x_2)\)</span> from a stream of batches of 32 samples, and the loss before learning falls from about 0.4 to below 0.01.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/pc_regression.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>batch   1: loss 0.4157 (the mean of the last 1)
@@ -1712,7 +1765,7 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>...
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>batch 300: loss 0.0043 (the mean of the last 50)
 </code></pre></div>
-<h2 id="the-chain">The chain<a class="headerlink" href="#the-chain" title="Permanent link">&para;</a></h2>
+<h2 id="chain">The chain<a class="headerlink" href="#chain" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">SHOWN</span> <span class="o">=</span> <span class="mf">0.032</span>  <span class="c1"># seconds of the run's timer each batch is shown</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># tau.h sets how fast the credit settles (and the period of the nodes, h / 2),</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># and the weights learn once per batch, by SGD at the rate</span>
@@ -1733,16 +1786,76 @@
 <a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">SHOWN</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
 <a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.Chain</code> makes one node for each module and connects them in order, as <code>nn.Sequential</code> computes them: a <code>pc.Input</code> that takes the samples, a <code>pc.Layer</code> for each module but the last (<code>layer0</code>, <code>layer1</code>), and a <code>pc.Output</code> for the last, with the loss. The children of the chain are <code>input</code>, <code>layer0</code>, <code>layer1</code> and <code>output</code>, which are also their paths in the state; <code>net.layers</code> gives the layers in order, <code>net.layers[0]</code> being <code>layer0</code>.</p>
-<ul>
-<li><code>x</code> and <code>y</code> are the specs of the inputs and targets, and <code>batch</code> is the shape they start with: <code>B</code> samples here. Without <code>batch</code>, the chain takes one sample at a time, and <code>x</code> and <code>y</code> would be <code>TensorSpec((2,))</code> and <code>TensorSpec((1,))</code></li>
-<li><code>loss</code> returns the loss of each sample, of the shape of the batch: <code>pc.loss.MSELoss(B)</code> (the mean squared error of each sample, averaged over its dimensions as <code>nn.MSELoss</code> does) or <code>pc.loss.CrossEntropyLoss(B)</code>, or a function of your own that returns that shape. Give the loss the same batch as the chain (<a href="../../topics/pc/#the-batch">the batch</a>)</li>
-<li><code>tau</code> holds the time constants of the activities and the duals, in seconds of the run's timer: <code>h</code> for the activities (every node of the chain updates once every <code>tau.period</code>, which is <code>tau.h / 2</code> with <code>tau.r = tau.h</code>), <code>lam</code> for the duals and <code>r</code> for the decay of the deviations. With these, the credit takes at most one period per hop back. The time constant of the weights is in the optimizer</li>
-<li><code>optimizer</code> moves the weights when a node learns. <code>pc.optim.SGD(tau=...)</code> is gradient descent with the time constant <code>tau</code> of the weights: a learning step moves the weights by (the time since the node last learned) / <code>tau</code> times the mean gradient of the batch. Here the nodes learn once per batch, so the learning rate per batch is <code>SHOWN / optimizer.tau</code> = 0.3, where <code>SHOWN</code> is the time each batch is shown. <code>pc.optim.AdamW</code> is the other choice (<a href="../../topics/pc/#choosing-the-optimizer">Choosing the optimizer</a>). Every node binds the optimizer to its own weights, so one <code>pc.optim.SGD</code> serves the whole chain. It has no default</li>
-<li><code>learn_interval</code> is when the nodes learn, counted from each write: here once per batch, three quarters of the way through it. It has no default: <code>None</code> learns in every update, for a stream whose input changes at every frame, and good values for that mode have not been measured yet</li>
-</ul>
-<p>Inside a node, the module is differentiated by autograd, as in BP. Initialize the weights when you make the modules (here from <code>torch.manual_seed</code> in the host, before the run); the nodes do not.</p>
-<h2 id="show-and-learn">Show and learn<a class="headerlink" href="#show-and-learn" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    H1["Host"] --&gt;|"pc.msg.Sample"| I["input&lt;br/&gt;pc.Input"]
+    I --&gt;|"activity (forward)"| L0["layer0&lt;br/&gt;pc.Layer&lt;br/&gt;Linear(2, 64) + Tanh"]
+    L0 --&gt;|"activity (forward)"| L1["layer1&lt;br/&gt;pc.Layer&lt;br/&gt;Linear(64, 64) + Tanh"]
+    L1 --&gt;|"activity (forward)"| O["output&lt;br/&gt;pc.Output&lt;br/&gt;Linear(64, 1) + loss"]
+    O --&gt;|"pc.msg.Prediction"| H2["Host"]
+    O -.-&gt;|"g_in (gradient, back)"| L1
+    L1 -.-&gt;|"g_in (gradient, back)"| L0
+    L0 -.-&gt;|"g_in (gradient, back)"| I</code></pre>
+<p>The <code>batch=B</code> of <a class="autorefs autorefs-internal" title="Chain" href="../../api/pc/#mujou.pc.Chain"><code>pc.Chain</code></a> is the shape the specs of <code>x</code> and <code>y</code> start with; given the same <code>B</code>, <code>loss</code> returns the loss of each sample, of shape <code>(B,)</code> (<a href="../../topics/pc/#batch">The batch</a>).</p>
+<h2 id="values">Choosing the values<a class="headerlink" href="#values" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>What it sets</th>
+<th>Here</th>
+<th>How to choose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tau</code></td>
+<td>How fast the activities <code>h</code>, the duals <code>lam</code> and the deviations <code>r</code> move</td>
+<td><code>pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)</code></td>
+<td><a href="../../topics/pc/#choose-time-constants">Choosing the time constants</a></td>
+</tr>
+<tr>
+<td><code>optimizer</code></td>
+<td>How fast the weights move</td>
+<td><code>pc.optim.SGD(tau=SHOWN / 0.3)</code>: a learning rate Δt/τ = 0.3 per batch</td>
+<td><a href="../../topics/pc/#optimizer">Choosing the optimizer</a></td>
+</tr>
+<tr>
+<td><code>learn_interval</code></td>
+<td>When to learn while a batch is shown</td>
+<td><code>0.75 * SHOWN</code>: after 24 ms from the write</td>
+<td><a href="../../topics/pc/#choose-time-constants">Choosing the time constants</a></td>
+</tr>
+<tr>
+<td>How long to show (<code>seconds</code>)</td>
+<td>How long each batch is shown</td>
+<td><code>SHOWN = 0.032</code></td>
+<td><a href="../../topics/pc/#choose-time-constants">Choosing the time constants</a></td>
+</tr>
+</tbody>
+</table>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 175" role="img" aria-label="The 32 milliseconds of showing one batch. The batch is written at 0 ms, every node updates every 2 ms, the first prediction arrives before learning, the nodes learn at the first update after 24 ms, and pc.show returns at 32 ms">
+<line class="mujou-axis" x1="70" y1="140" x2="615" y2="140"/>
+<g class="mujou-tick-a"><line x1="80" y1="40" x2="80" y2="140"/><line x1="464" y1="40" x2="464" y2="140"/><line x1="592" y1="22" x2="592" y2="140"/></g>
+<text class="mujou-label" x="86" y="34">write</text>
+<text class="mujou-label" x="464" y="34" text-anchor="middle">learn</text>
+<text class="mujou-label" x="592" y="16" text-anchor="end">pc.show returns</text>
+<text class="mujou-note" x="96" y="66">the first prediction arrives (nothing learned yet)</text>
+<text class="mujou-note" x="10" y="99">each node</text>
+<line class="mujou-lane" x1="80" y1="95" x2="600" y2="95"/>
+<g class="mujou-tick-b"><line x1="112" y1="85" x2="112" y2="105"/><line x1="144" y1="85" x2="144" y2="105"/><line x1="176" y1="85" x2="176" y2="105"/><line x1="208" y1="85" x2="208" y2="105"/><line x1="240" y1="85" x2="240" y2="105"/><line x1="272" y1="85" x2="272" y2="105"/><line x1="304" y1="85" x2="304" y2="105"/><line x1="336" y1="85" x2="336" y2="105"/><line x1="368" y1="85" x2="368" y2="105"/><line x1="400" y1="85" x2="400" y2="105"/><line x1="432" y1="85" x2="432" y2="105"/><line x1="496" y1="85" x2="496" y2="105"/><line x1="528" y1="85" x2="528" y2="105"/><line x1="560" y1="85" x2="560" y2="105"/></g>
+<path class="mujou-brace" d="M 112 110 Q 112 116 118 116 L 138 116 Q 144 116 144 110"/>
+<text class="mujou-note" x="150" y="126">tau.period = 2 ms</text>
+<text class="mujou-note" x="80" y="156" text-anchor="middle">0</text>
+<text class="mujou-note" x="464" y="156" text-anchor="middle">24 ms</text>
+<text class="mujou-note" x="592" y="156" text-anchor="middle">32 ms</text>
+<text class="mujou-label" x="615" y="172" text-anchor="end">the run's timer →</text>
+</svg>
+<figcaption>The 32 ms (<code>SHOWN</code>) during which this example shows one batch. The nodes learn once, at the first update after <code>learn_interval</code> = 24 ms has passed since the write</figcaption>
+</figure>
+
+<p>The weights are set when the modules are made (here by <code>torch.manual_seed(0)</code> in the host, before the run); the nodes of <code>mujou.pc</code> do not initialize them again.</p>
+<h2 id="show">Show and learn<a class="headerlink" href="#show" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">g</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>  <span class="c1"># every sample has a target, and is new</span>
@@ -1764,19 +1877,29 @@
 <a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="n">lam</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"layer0"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"lam"</span><span class="p">]</span>
 <a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the mean |lam| of layer0 (its credit) at the end: </span><span class="si">{</span><span class="n">lam</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.show(run, net, sample, seconds=SHOWN)</code> writes the batch, waits for the first prediction the chain makes for it, and returns that prediction once the batch has been shown for <code>SHOWN</code> seconds of the run's timer. Meanwhile the nodes relax towards the target and learn from it. The prediction comes before any node has learned from the batch, so its loss measures how well the model predicts data it has not seen yet (the prequential loss).</p>
-<ul>
-<li><code>mask</code> says which samples have a target. A sample whose <code>mask</code> is False adds nothing to the loss: with every <code>mask</code> False, no weight moves (the activities still do), which is how to evaluate the same running chain. There is no inference mode to switch to</li>
-<li><code>reset</code> says which samples start anew. Each batch here is drawn afresh, so every sample is new: the nodes drop what they hold of the batch before (<a href="../../topics/pc/#starting-anew-reset">Starting anew</a>). For a stream whose frames continue each other, it is False</li>
-<li>A <code>pc.msg.Prediction</code> holds <code>y_hat</code> with the <code>y</code>, <code>mask</code> and <code>time</code> of the sample it was made from, so a prediction always pairs with its own target</li>
-<li><code>run.state_dict()["nodes"]["layer0"]["state"]</code> is the state of the first layer: the deviation <code>r</code> of its activity from its prediction, its dual <code>lam</code> (the credit of backpropagation at equilibrium), its module, its clock, its optimizer and its relaxer. What it sends, its prediction <code>mu</code>, is in the state of its port <code>next</code> (<a href="../../topics/pc-concepts/#what-a-node-holds">How mujou.pc Works</a>)</li>
-</ul>
+<p><a class="autorefs autorefs-internal" title="show" href="../../api/pc/#mujou.pc.show"><code>pc.show</code></a> returns the prediction made before any node learned from the batch, so the example's loss is the loss on data the chain has not seen yet.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Learn</label><label for="__tabbed_1_2">Evaluate</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">sample</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">every</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">every</span><span class="p">)</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">none</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">sample</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">none</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">every</span><span class="p">)</span>  <span class="c1"># no weight moves</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>With every <code>mask</code> False, the same running chain evaluates without learning; there is no inference mode to switch to. This example draws each batch afresh, so no sample continues the one before, and <code>reset=every</code> (all True) makes the nodes set the <code>r</code> and <code>lam</code> they held for the previous batch back to 0 (<a href="../../topics/pc/#reset">Starting anew</a>).</p>
+<p>A node's state can be taken by its path, as <code>run.state_dict()["nodes"]["layer0"]["state"]</code> at the end of the example; its keys are in <a class="autorefs autorefs-internal" title="Layer" href="../../api/pc/#mujou.pc.Layer"><code>pc.Layer</code></a>.</p>
 <h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>How the parts connect, and what a node does in one update: <a href="../../topics/pc-concepts/">How mujou.pc Works</a></li>
-<li>A 784-256-256-10 network that learns MNIST with <code>pc.Chain</code> and compares itself with BP: <code>examples/mnist/</code> (<code>uv run python examples/mnist/main.py</code>), explained in <a href="../../topics/pc/#mnist">PC-ALM</a></li>
-<li>A ResNet-20 that learns CIFAR-10 on the GPU with <code>pc.Chain</code> and compares itself with BP: <code>examples/cifar10/</code> (<code>uv run python examples/cifar10/main.py</code>), explained in <a href="../../topics/pc/#cifar-10">PC-ALM</a></li>
-<li>How to choose the time constants, the optimizer and <code>learn_interval</code>, the pitfalls, and nodes of your own: <a href="../../topics/pc/">PC-ALM</a></li>
+<li>How to choose the values, the pitfalls, and nodes of your own: <a href="../../topics/pc/">PC-ALM</a></li>
+<li>Comparing with BP on MNIST and CIFAR-10: <a href="../../topics/pc-benchmarks/">PC-ALM Benchmarks</a></li>
 </ul>
 
 

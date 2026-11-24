@@ -753,10 +753,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-tools" class="md-nav__link">
+  <a href="#test" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The tools
+        The test
       
     </span>
   </a>
@@ -764,18 +764,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-test" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        A test
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-order-of-the-updates" class="md-nav__link">
+  <a href="#order" class="md-nav__link">
     <span class="md-ellipsis">
       
         The order of the updates
@@ -786,7 +775,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#save-and-restore" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         Save and restore
@@ -801,17 +790,6 @@
     <span class="md-ellipsis">
       
         Exceptions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#other-conditions-for-determinism" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Other conditions for determinism
       
     </span>
   </a>
@@ -937,6 +915,8 @@
   
     
     
+      
+        
       
         
       
@@ -1272,6 +1252,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1672,10 +1680,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-tools" class="md-nav__link">
+  <a href="#test" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The tools
+        The test
       
     </span>
   </a>
@@ -1683,18 +1691,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-test" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        A test
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-order-of-the-updates" class="md-nav__link">
+  <a href="#order" class="md-nav__link">
     <span class="md-ellipsis">
       
         The order of the updates
@@ -1705,7 +1702,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#save-and-restore" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         Save and restore
@@ -1720,17 +1717,6 @@
     <span class="md-ellipsis">
       
         Exceptions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#other-conditions-for-determinism" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Other conditions for determinism
       
     </span>
   </a>
@@ -1769,59 +1755,27 @@
 
 
 <h1 id="-3-test-a-node">🧪 3. Test a Node<a class="headerlink" href="#-3-test-a-node" title="Permanent link">&para;</a></h1>
-<p>In a run started with <code>mujou.run</code>, <code>dt</code> follows the real time that passes, and the order in which the nodes update differs every time, so the results differ slightly from run to run. This page tests the node of <a href="../2-node/">2. Write a Node</a> with <code>mujou.run_manually</code>, which runs nodes with the same result every time.</p>
-<h2 id="the-tools">The tools<a class="headerlink" href="#the-tools" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Role</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>mujou.run_manually(root, ...)</code></td>
-<td>Runs the tree with the <code>timer</code>, <code>inputs</code>, <code>state</code> and <code>workers</code> of <code>mujou.run</code> and returns a <code>ManualRun</code>. No node updates until <code>step</code> updates it. It runs on a new <code>mujou.time.VirtualTimer</code> by default</td>
-</tr>
-<tr>
-<td><code>ManualRun.step(dt)</code></td>
-<td>Moves the timer <code>dt</code> seconds forward, then updates every node once, all at once</td>
-</tr>
-<tr>
-<td><code>ManualRun.step(dt, *nodes)</code></td>
-<td>Moves the timer <code>dt</code> seconds forward, then updates the given nodes once each, one after another in the given order</td>
-</tr>
-<tr>
-<td><code>ManualRun.timer</code></td>
-<td>The run's <code>VirtualTimer</code></td>
-</tr>
-</tbody>
-</table>
-<p><code>ManualRun</code> is a <code>Run</code>, so <code>write</code>, <code>read</code>, <code>state_dict</code> and the rest work as with <code>mujou.run</code>.</p>
-<h2 id="a-test">A test<a class="headerlink" href="#a-test" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeaky</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_follows_the_exact_solution</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="n">tau</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mi">100</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">node</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">one</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">expected</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># 1 ms later, then every node once (period is ignored)</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                <span class="n">expected</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">h</span> <span class="o">/</span> <span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>            <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="n">steps</span> <span class="o">*</span> <span class="mi">1_000_000</span>  <span class="c1"># sent at the last step</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+<p>This page tests <code>Leaky</code> from <a href="../2-node/">2. Write a Node</a> with <a class="autorefs autorefs-internal" title="mujou.run_manually" href="../../api/run/#mujou.run_manually"><code>mujou.run_manually</code></a>. Such a run goes on a virtual time that moves only with <a class="autorefs autorefs-internal" title="step" href="../../api/run/#mujou.ManualRun.step"><code>step</code></a> (<a href="../../topics/simulation/#two-ways">two ways to run</a>).</p>
+<h2 id="test">The test<a class="headerlink" href="#test" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>examples/test_leaky.py
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>examples/test_leaky.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeaky</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_follows_the_exact_solution</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="n">tau</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mi">100</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="n">node</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">one</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">expected</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">one</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span><span class="p">):</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>                <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>  <span class="c1"># 1 ms later, then every node once (period is ignored)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>                <span class="n">expected</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">h</span> <span class="o">/</span> <span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">expected</span><span class="p">)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="n">steps</span> <span class="o">*</span> <span class="mi">1_000_000</span>  <span class="c1"># sent at the last step</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">expected</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
 </code></pre></div>
-<ol>
-<li><code>mujou.run_manually(node, inputs=...)</code> runs the node on a new <code>VirtualTimer</code> at time 0. <code>inputs</code> are the values of the input ports from the start</li>
-<li>Each <code>run.step(h)</code> moves the time <code>h</code> seconds forward and updates every node once, so the <code>dt</code> of the node is exactly <code>h</code></li>
-<li>The reference is the exact solution, computed with the same coefficient. Compare it with <code>torch.testing.assert_close</code>, or with <code>torch.equal</code> when the reference does the same operations in the same order (below)</li>
-<li>The time the node sent the output is <code>steps</code> milliseconds: no real time enters a manual run</li>
-</ol>
-<h2 id="the-order-of-the-updates">The order of the updates<a class="headerlink" href="#the-order-of-the-updates" title="Permanent link">&para;</a></h2>
+<p>The output is compared with the exact solution computed with the same coefficient. No real time enters a manual run, so the time of the output is exactly <code>steps</code> milliseconds (<code>t.ns == steps * 1_000_000</code>).</p>
+<p>When the reference does the same operations as the node in the same order, compare bit for bit with <code>torch.equal</code> instead of <code>assert_close</code> (the test in the next section).</p>
+<h2 id="order">The order of the updates<a class="headerlink" href="#order" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestLeakyChain</span><span class="p">:</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_follows_the_discrete_algorithm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="n">tau</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mi">50</span>
@@ -1853,15 +1807,8 @@
 <a id="__codelineno-2-29" name="__codelineno-2-29" href="#__codelineno-2-29"></a>            <span class="n">y</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">at_once</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
 <a id="__codelineno-2-30" name="__codelineno-2-30" href="#__codelineno-2-30"></a>        <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">expected</span><span class="p">)</span>
 </code></pre></div>
-<ul>
-<li><code>step(dt)</code> without nodes updates every node at the same time, on the run's workers. Every node reads the values from the start of the step: what a node sends in the step reaches the other nodes only in the next step</li>
-<li><code>step(dt, *nodes)</code> updates the given nodes one after another. A later node reads what an earlier one sent in this step. With <code>step(h, net.a, net.b)</code>, <code>b</code> reads the value <code>a</code> sent in this step; with <code>step(h, net.b, net.a)</code>, the one from the step before</li>
-<li>Passing every node to <code>step(dt, *nodes)</code> is not the same as <code>step(dt)</code>. Only in a chain whose messages go one way, toward the output, does the order from the output back to the input give the result of <code>step(dt)</code>, as <code>test_a_step_without_nodes_equals_the_order_from_the_output</code> shows. When messages also go back, in general no order does</li>
-<li>A node's <code>dt</code> is the time since its last update, the first from the start of the run. A node passed twice in one <code>step</code> updates once: the second time is skipped, since its time has not moved</li>
-<li>The period of a node is not used in a manual run</li>
-</ul>
-<h2 id="save-and-restore">Save and restore<a class="headerlink" href="#save-and-restore" title="Permanent link">&para;</a></h2>
-<p>A run that takes the state midway and goes on in a new instance matches a run that went on without stopping, to the last bit:</p>
+<p><code>step(h, net.a, net.b)</code> updates the nodes in the given order, so <code>b</code> reads what <code>a</code> sent in this step; with <code>step(h)</code> every node reads the values from the start of the step (<a href="../../topics/simulation/#steps">two kinds of step</a>).</p>
+<h2 id="restore">Save and restore<a class="headerlink" href="#restore" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">run_steps</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">"""Run a new ``LeakyChain`` for ``n`` steps of 1 ms and return its state."""</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">net</span> <span class="o">=</span> <span class="n">LeakyChain</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
@@ -1881,26 +1828,32 @@
 <a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="n">x</span> <span class="o">=</span> <span class="n">resumed</span><span class="p">[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"b"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"x"</span><span class="p">]</span>
 <a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">straight</span><span class="p">[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"b"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"x"</span><span class="p">])</span>
 </code></pre></div>
-<p>A run restored from a state runs on a <code>VirtualTimer</code> of its own, which starts at the time of the state.</p>
+<p>A run that takes the state midway and goes on in a new instance matches a run that went on without stopping, to the last bit.</p>
 <h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
-<p>When a node raises, <code>step</code> raises <code>NetworkError</code> at once, whose <code>__cause__</code> is the node's exception. Every later call of the run raises it again, including the <code>shutdown</code> at the end of the <code>with</code> block, so put <code>pytest.raises</code> around the whole block, in the same <code>with</code> statement:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">NetworkError</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">NetworkError</span><span class="p">)</span> <span class="k">as</span> <span class="n">info</span><span class="p">,</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>  <span class="c1"># a node raises ValueError here</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">__cause__</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write this</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">NetworkError</span><span class="p">):</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>  <span class="c1"># a node raises ValueError here</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># the shutdown at the end of the with block raises the same NetworkError again</span>
 </code></pre></div>
-<h2 id="other-conditions-for-determinism">Other conditions for determinism<a class="headerlink" href="#other-conditions-for-determinism" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Give a <code>seed</code> to the nodes that draw random numbers, and draw them from <code>self.generator</code> (see <a href="../../topics/threads-and-devices/#seeds-and-random-numbers">Threads and Devices</a>)</li>
-<li>Do not let nodes share a Python object they change: <code>step(dt)</code> updates them at the same time, so the result would depend on which ran first. If they must share one, update them in a fixed order with <code>step(dt, *nodes)</code></li>
-<li>Move the time only with <code>step</code>. Nothing is sent unless <code>step</code> is called, so <code>wait_for</code> and <code>subscribe</code> without a <code>timeout</code> wait forever on the thread that steps</li>
-<li>To put several runs on one time axis, pass the same <code>mujou.time.VirtualTimer()</code> to each: a <code>step</code> of one moves the others too</li>
-</ul>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">NetworkError</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="n">NetworkError</span><span class="p">)</span> <span class="k">as</span> <span class="n">info</span><span class="p">,</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run_manually</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">run</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>  <span class="c1"># a node raises ValueError here</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">__cause__</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Not only <code>step</code> but also the <code>shutdown</code> on leaving the <code>with</code> block raises <a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../../api/run/#mujou.NetworkError"><code>NetworkError</code></a>, so put <code>pytest.raises</code> in the same <code>with</code> statement as <code>run_manually</code>, around the whole block.</p>
 <h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>A node that learns: <a href="../4-learn-in-a-node/">4. Learn in a Node</a></li>
-<li>How a manual run works, and how to run a simulation with it: <a href="../../topics/simulation/">Simulation</a></li>
+<li>The conditions for determinism (random numbers, shared objects, several runs): <a href="../../topics/simulation/#determinism">Simulation</a></li>
 </ul>
 
 

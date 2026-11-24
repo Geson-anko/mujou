@@ -811,7 +811,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#プログラム" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         プログラム
@@ -822,7 +822,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#鎖" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         鎖
@@ -833,7 +833,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#見せて学ぶ" class="md-nav__link">
+  <a href="#values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        値を決める
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#show" class="md-nav__link">
     <span class="md-ellipsis">
       
         見せて学ぶ
@@ -906,6 +917,8 @@
   
     
     
+      
+        
       
         
       
@@ -1241,6 +1254,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1641,7 +1682,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#プログラム" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         プログラム
@@ -1652,7 +1693,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#鎖" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         鎖
@@ -1663,7 +1704,18 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#見せて学ぶ" class="md-nav__link">
+  <a href="#values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        値を決める
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#show" class="md-nav__link">
     <span class="md-ellipsis">
       
         見せて学ぶ
@@ -1705,8 +1757,9 @@
 
 
 <h1 id="-5-pc-alm-で学習する">🧠 5. PC-ALM で学習する<a class="headerlink" href="#-5-pc-alm-で学習する" title="Permanent link">&para;</a></h1>
-<p><code>mujou.pc</code> は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）で学習させるモジュール。各ノードはモデルの一部を持ち、隣のノードのメッセージだけから学ぶ。平衡点では、その勾配が誤差逆伝播法のものと一致する。このページでは回帰を学習させる。決めるのは時定数、重みの optimizer、各バッチを見せる時間だけ。</p>
-<h2 id="プログラム">プログラム<a class="headerlink" href="#プログラム" title="Permanent link">&para;</a></h2>
+<p><a class="autorefs autorefs-internal" title="mujou.pc" href="../../api/pc/#mujou.pc"><code>mujou.pc</code></a> は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）で学ばせる。各ノードはモデルの一部を持ち、隣のノードとのメッセージだけから学ぶ。ここでは <code>pc.Chain</code> で回帰を学ばせる。前提は <a href="../4-learn-in-a-node/">4. ノードの中で学習する</a>。</p>
+<h2 id="program">プログラム<a class="headerlink" href="#program" title="Permanent link">&para;</a></h2>
+<p>32 サンプルずつのバッチのストリームから <span class="arithmatex">\(y = \sin(2 x_1)\cos(x_2)\)</span> を学び、学ぶ前の約 0.4 の損失が 0.01 未満に下がる。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/pc_regression.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>batch   1: loss 0.4157 (the mean of the last 1)
@@ -1714,7 +1767,7 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>...
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>batch 300: loss 0.0043 (the mean of the last 50)
 </code></pre></div>
-<h2 id="鎖">鎖<a class="headerlink" href="#鎖" title="Permanent link">&para;</a></h2>
+<h2 id="chain">鎖<a class="headerlink" href="#chain" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">SHOWN</span> <span class="o">=</span> <span class="mf">0.032</span>  <span class="c1"># seconds of the run's timer each batch is shown</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># tau.h sets how fast the credit settles (and the period of the nodes, h / 2),</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># and the weights learn once per batch, by SGD at the rate</span>
@@ -1735,16 +1788,76 @@
 <a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">SHOWN</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
 <a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.Chain</code> はモジュールごとにノードを 1 つ作り、<code>nn.Sequential</code> が計算する順につなぐ。サンプルを受け取る <code>pc.Input</code>、最後以外の各モジュールの <code>pc.Layer</code>（<code>layer0</code>、<code>layer1</code>）、損失を持つ最後の <code>pc.Output</code> である。鎖の子は <code>input</code>・<code>layer0</code>・<code>layer1</code>・<code>output</code> で、これがそのまま状態のパスになる。層は <code>net.layers</code> で順に取れる（<code>net.layers[0]</code> が <code>layer0</code>）。</p>
-<ul>
-<li><code>x</code> と <code>y</code> は入力と目標の spec。<code>batch</code> はその先頭の shape で、ここでは <code>B</code> 個のサンプル。<code>batch</code> を省くと鎖はサンプルを 1 つずつ受け取り、<code>x</code> は <code>TensorSpec((2,))</code>、<code>y</code> は <code>TensorSpec((1,))</code> になる</li>
-<li><code>loss</code> はサンプルごとの損失をバッチの shape で返す。<code>pc.loss.MSELoss(B)</code>（サンプルごとの平均二乗誤差。<code>nn.MSELoss</code> と同じくサンプルの次元で平均する）か <code>pc.loss.CrossEntropyLoss(B)</code>、または同じ shape を返す自作の関数。損失には鎖と同じバッチを渡す（<a href="../../topics/pc/#%E3%83%90%E3%83%83%E3%83%81">バッチ</a>）</li>
-<li><code>tau</code> は活動と双対変数の時定数で、実行のタイマーの秒で表す。<code>h</code> は活動（鎖のどのノードも <code>tau.period</code>、つまり <code>tau.r = tau.h</code> なら <code>tau.h / 2</code> ごとに更新する）、<code>lam</code> は双対変数、<code>r</code> はずれの減衰の時定数。この組なら credit は 1 ホップを最大 1 周期で戻る。重みの時定数は optimizer が持つ</li>
-<li><code>optimizer</code> はノードが学ぶときに重みを動かす。<code>pc.optim.SGD(tau=...)</code> は勾配降下で、<code>tau</code> は重みの時定数。1 回の学習ではバッチの平均の勾配に（そのノードが前に学んでからの時間）/ <code>tau</code> を掛けた分だけ重みを動かす。ここではノードがバッチごとに 1 回学ぶので、1 バッチあたりの学習率は <code>SHOWN / optimizer.tau</code> = 0.3 になる（<code>SHOWN</code> は各バッチを見せる時間）。もう 1 つの選択肢は <code>pc.optim.AdamW</code>（<a href="../../topics/pc/#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a>）。各ノードは optimizer を自分の重みに結び付けるので、1 つの <code>pc.optim.SGD</code> を鎖全体で使える。<code>optimizer</code> に既定値は無い</li>
-<li><code>learn_interval</code> はノードが学ぶ時刻で、各書き込みから数える。ここではバッチごとに 1 回、見せる時間の 3/4 の時点。既定値は無い。<code>None</code> は毎回の更新で学ぶモードで、フレームごとに入力が変わるストリーム向け。このモードのよい値はまだ測っていない</li>
-</ul>
-<p>ノードの内側では BP と同じくモジュールを autograd で微分する。重みはモジュールを作るときに初期化しておく（ここでは実行の前にホストの <code>torch.manual_seed</code> で）。ノードは初期化しない。</p>
-<h2 id="見せて学ぶ">見せて学ぶ<a class="headerlink" href="#見せて学ぶ" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    H1["ホスト"] --&gt;|"pc.msg.Sample"| I["input&lt;br/&gt;pc.Input"]
+    I --&gt;|"活動（前へ）"| L0["layer0&lt;br/&gt;pc.Layer&lt;br/&gt;Linear(2, 64) + Tanh"]
+    L0 --&gt;|"活動（前へ）"| L1["layer1&lt;br/&gt;pc.Layer&lt;br/&gt;Linear(64, 64) + Tanh"]
+    L1 --&gt;|"活動（前へ）"| O["output&lt;br/&gt;pc.Output&lt;br/&gt;Linear(64, 1) + 損失"]
+    O --&gt;|"pc.msg.Prediction"| H2["ホスト"]
+    O -.-&gt;|"g_in（勾配を後ろへ）"| L1
+    L1 -.-&gt;|"g_in（勾配を後ろへ）"| L0
+    L0 -.-&gt;|"g_in（勾配を後ろへ）"| I</code></pre>
+<p><a class="autorefs autorefs-internal" title="Chain" href="../../api/pc/#mujou.pc.Chain"><code>pc.Chain</code></a> の <code>batch=B</code> は <code>x</code>・<code>y</code> の spec の先頭の shape で、<code>loss</code> にも同じ <code>B</code> を渡すとサンプルごとの損失（shape <code>(B,)</code>）を返す（<a href="../../topics/pc/#batch">バッチ</a>）。</p>
+<h2 id="values">値を決める<a class="headerlink" href="#values" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>値</th>
+<th>何を決めるか</th>
+<th>この例</th>
+<th>決め方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tau</code></td>
+<td>活動 <code>h</code> と、双対変数 <code>lam</code>・ずれ <code>r</code> の動く速さ</td>
+<td><code>pc.TimeConstants(h=4e-3, lam=2e-3, r=4e-3)</code></td>
+<td><a href="../../topics/pc/#choose-time-constants">時定数を決める</a></td>
+</tr>
+<tr>
+<td><code>optimizer</code></td>
+<td>重みの動く速さ</td>
+<td><code>pc.optim.SGD(tau=SHOWN / 0.3)</code>。1 バッチの学習率 Δt/τ = 0.3</td>
+<td><a href="../../topics/pc/#optimizer">optimizer を選ぶ</a></td>
+</tr>
+<tr>
+<td><code>learn_interval</code></td>
+<td>見せている間のいつ学ぶか</td>
+<td><code>0.75 * SHOWN</code>。書き込みから 24 ms の後</td>
+<td><a href="../../topics/pc/#choose-time-constants">時定数を決める</a></td>
+</tr>
+<tr>
+<td>見せる秒数（<code>seconds</code>）</td>
+<td>1 つのバッチを見せ続ける時間</td>
+<td><code>SHOWN = 0.032</code></td>
+<td><a href="../../topics/pc/#choose-time-constants">時定数を決める</a></td>
+</tr>
+</tbody>
+</table>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 175" role="img" aria-label="1 つのバッチを見せる 32 ミリ秒の流れ。0 ミリ秒に書き込み、ノードは 2 ミリ秒ごとに更新し、最初の予測は学ぶ前に届き、24 ミリ秒の後の最初の更新で学び、32 ミリ秒で pc.show が返る">
+<line class="mujou-axis" x1="70" y1="140" x2="615" y2="140"/>
+<g class="mujou-tick-a"><line x1="80" y1="40" x2="80" y2="140"/><line x1="464" y1="40" x2="464" y2="140"/><line x1="592" y1="22" x2="592" y2="140"/></g>
+<text class="mujou-label" x="86" y="34">書き込み</text>
+<text class="mujou-label" x="464" y="34" text-anchor="middle">学ぶ</text>
+<text class="mujou-label" x="592" y="16" text-anchor="end">pc.show が返る</text>
+<text class="mujou-note" x="96" y="66">最初の予測が届く（まだ学んでいない）</text>
+<text class="mujou-note" x="10" y="99">各ノード</text>
+<line class="mujou-lane" x1="80" y1="95" x2="600" y2="95"/>
+<g class="mujou-tick-b"><line x1="112" y1="85" x2="112" y2="105"/><line x1="144" y1="85" x2="144" y2="105"/><line x1="176" y1="85" x2="176" y2="105"/><line x1="208" y1="85" x2="208" y2="105"/><line x1="240" y1="85" x2="240" y2="105"/><line x1="272" y1="85" x2="272" y2="105"/><line x1="304" y1="85" x2="304" y2="105"/><line x1="336" y1="85" x2="336" y2="105"/><line x1="368" y1="85" x2="368" y2="105"/><line x1="400" y1="85" x2="400" y2="105"/><line x1="432" y1="85" x2="432" y2="105"/><line x1="496" y1="85" x2="496" y2="105"/><line x1="528" y1="85" x2="528" y2="105"/><line x1="560" y1="85" x2="560" y2="105"/></g>
+<path class="mujou-brace" d="M 112 110 Q 112 116 118 116 L 138 116 Q 144 116 144 110"/>
+<text class="mujou-note" x="150" y="126">tau.period = 2 ms</text>
+<text class="mujou-note" x="80" y="156" text-anchor="middle">0</text>
+<text class="mujou-note" x="464" y="156" text-anchor="middle">24 ms</text>
+<text class="mujou-note" x="592" y="156" text-anchor="middle">32 ms</text>
+<text class="mujou-label" x="615" y="172" text-anchor="end">実行のタイマー →</text>
+</svg>
+<figcaption>この例で 1 つのバッチを見せる 32 ms（<code>SHOWN</code>）。ノードは書き込みから <code>learn_interval</code> = 24 ms が経った後の最初の更新で、1 回だけ学ぶ</figcaption>
+</figure>
+
+<p>重みはモジュールを作る時点（この例では実行の前にホストで <code>torch.manual_seed(0)</code>）で決まり、<code>mujou.pc</code> のノードは初期化し直さない。</p>
+<h2 id="show">見せて学ぶ<a class="headerlink" href="#show" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">g</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Generator</span><span class="p">()</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>  <span class="c1"># every sample has a target, and is new</span>
@@ -1766,19 +1879,29 @@
 <a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="n">lam</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"layer0"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"lam"</span><span class="p">]</span>
 <a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the mean |lam| of layer0 (its credit) at the end: </span><span class="si">{</span><span class="n">lam</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.show(run, net, sample, seconds=SHOWN)</code> はバッチを書き、鎖がそのバッチに対して出す最初の予測を待つ。そしてバッチを実行のタイマーで <code>SHOWN</code> 秒見せ終えたところで、その予測を返す。その間ノードは目標に向かって緩和し、学ぶ。この予測はどのノードもまだそのバッチから学んでいない時点のものなので、その損失は、まだ見ていないデータをどれだけ当てられるかを表す（prequential な損失）。</p>
-<ul>
-<li><code>mask</code> はどのサンプルに目標があるかを表す。<code>mask</code> が False のサンプルは損失に何も足さない。<code>mask</code> がすべて False なら重みは動かない（活動は動く）。走っている同じ鎖を評価するにはこれを使う。切り替える推論モードは無い</li>
-<li><code>reset</code> はどのサンプルが新しく始まるかを表す。ここではバッチを毎回新しく引くので、どのサンプルも新しい。ノードは前のバッチについて持っていたものを捨てる（<a href="../../topics/pc/#reset">新しく始めるサンプル</a>）。フレームが続くストリームなら False にする</li>
-<li><code>pc.msg.Prediction</code> は <code>y_hat</code> を、その元になったサンプルの <code>y</code>・<code>mask</code>・<code>time</code> と組にして持つ。予測はいつも自分の目標と対になる</li>
-<li><code>run.state_dict()["nodes"]["layer0"]["state"]</code> は最初の層の状態。活動の予測からのずれ <code>r</code>、双対変数 <code>lam</code>（平衡点では誤差逆伝播法の credit）、モジュール、クロック、optimizer、relaxer を持つ。送るもの（予測 <code>mu</code>）は Port <code>next</code> の状態にある（<a href="../../topics/pc-concepts/#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E6%8C%81%E3%81%A4%E9%87%8F">mujou.pc の仕組み</a>）</li>
-</ul>
+<p><a class="autorefs autorefs-internal" title="show" href="../../api/pc/#mujou.pc.show"><code>pc.show</code></a> はどのノードもそのバッチから学ぶ前の予測を返すので、例の損失はまだ見ていないデータへの損失になる。</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">学ぶ</label><label for="__tabbed_1_2">評価する</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">sample</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">every</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">every</span><span class="p">)</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">every</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">none</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">sample</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">none</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">every</span><span class="p">)</span>  <span class="c1"># 重みは動かない</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p><code>mask</code> を全部 False にすると、実行中の同じ鎖が学ばずに評価する。推論モードへの切り替えは無い。この例はバッチを毎回新しく引き、どのサンプルも前のサンプルに続かないので、<code>reset=every</code>（全部 True）でノードが前のバッチについて持っていた <code>r</code>・<code>lam</code> を 0 に戻させる（<a href="../../topics/pc/#reset">新しく始めるサンプル</a>）。</p>
+<p>例の最後の <code>run.state_dict()["nodes"]["layer0"]["state"]</code> のように、ノードの状態はパスで取り出せ、キーは <a class="autorefs autorefs-internal" title="Layer" href="../../api/pc/#mujou.pc.Layer"><code>pc.Layer</code></a> にある。</p>
 <h2 id="次へ">次へ<a class="headerlink" href="#次へ" title="Permanent link">&para;</a></h2>
 <ul>
 <li>部品のつながりと、ノードが 1 回の更新で行うこと: <a href="../../topics/pc-concepts/">mujou.pc の仕組み</a></li>
-<li><code>pc.Chain</code> で MNIST を学ぶ 784-256-256-10 のネットワークと BP の比較: <code>examples/mnist/</code>（<code>uv run python examples/mnist/main.py</code>）。説明は <a href="../../topics/pc/#mnist">PC-ALM</a></li>
-<li>GPU の上の <code>pc.Chain</code> で CIFAR-10 を学ぶ ResNet-20 と BP の比較: <code>examples/cifar10/</code>（<code>uv run python examples/cifar10/main.py</code>）。説明は <a href="../../topics/pc/#cifar-10">PC-ALM</a></li>
-<li>時定数・optimizer・<code>learn_interval</code> の決め方、落とし穴、自作のノード: <a href="../../topics/pc/">PC-ALM</a></li>
+<li>値の決め方・落とし穴・自作のノード: <a href="../../topics/pc/">PC-ALM</a></li>
+<li>MNIST・CIFAR-10 で BP と比べる: <a href="../../topics/pc-benchmarks/">PC-ALM の実験</a></li>
 </ul>
 
 

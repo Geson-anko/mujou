@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1088,18 +1090,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-arguments-of-node" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The arguments of Node
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-workers" class="md-nav__link">
+  <a href="#workers" class="md-nav__link">
     <span class="md-ellipsis">
       
         The workers
@@ -1110,7 +1101,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-thread-of-its-own" class="md-nav__link">
+  <a href="#dedicated" class="md-nav__link">
     <span class="md-ellipsis">
       
         A thread of its own
@@ -1121,7 +1112,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#per-thread-settings" class="md-nav__link">
+  <a href="#per-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
         Per-thread settings
@@ -1132,7 +1123,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#seeds-and-random-numbers" class="md-nav__link">
+  <a href="#seed" class="md-nav__link">
     <span class="md-ellipsis">
       
         Seeds and random numbers
@@ -1151,10 +1142,49 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Devices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cuda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Mujou does for a CUDA node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a message travels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronization and streams
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#settings-of-the-whole-process" class="md-nav__link">
+  <a href="#process-settings" class="md-nav__link">
     <span class="md-ellipsis">
       
         Settings of the whole process
@@ -1272,6 +1302,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1672,18 +1730,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-arguments-of-node" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The arguments of Node
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-workers" class="md-nav__link">
+  <a href="#workers" class="md-nav__link">
     <span class="md-ellipsis">
       
         The workers
@@ -1694,7 +1741,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-thread-of-its-own" class="md-nav__link">
+  <a href="#dedicated" class="md-nav__link">
     <span class="md-ellipsis">
       
         A thread of its own
@@ -1705,7 +1752,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#per-thread-settings" class="md-nav__link">
+  <a href="#per-thread" class="md-nav__link">
     <span class="md-ellipsis">
       
         Per-thread settings
@@ -1716,7 +1763,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#seeds-and-random-numbers" class="md-nav__link">
+  <a href="#seed" class="md-nav__link">
     <span class="md-ellipsis">
       
         Seeds and random numbers
@@ -1735,10 +1782,49 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Devices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cuda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Mujou does for a CUDA node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a message travels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synchronization and streams
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#settings-of-the-whole-process" class="md-nav__link">
+  <a href="#process-settings" class="md-nav__link">
     <span class="md-ellipsis">
       
         Settings of the whole process
@@ -1769,104 +1855,205 @@
 
 
 <h1 id="-threads-and-devices">🧵 Threads and Devices<a class="headerlink" href="#-threads-and-devices" title="Permanent link">&para;</a></h1>
-<p>This page covers the threads a run computes on, the settings of a node (<code>device</code>, <code>seed</code>, <code>dedicated_thread</code>), CUDA, and the settings of torch that the whole process shares.</p>
-<h2 id="the-arguments-of-node">The arguments of <code>Node</code><a class="headerlink" href="#the-arguments-of-node" title="Permanent link">&para;</a></h2>
-<p><code>super().__init__</code> takes these keyword arguments, all optional.</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>period</code></td>
-<td>The time between two updates on average, in seconds of the run's timer</td>
-<td><code>0.01</code></td>
-</tr>
-<tr>
-<td><code>seed</code></td>
-<td>The seed of the node's own random generator <code>self.generator</code></td>
-<td><code>None</code> (different every time)</td>
-</tr>
-<tr>
-<td><code>device</code></td>
-<td>Where the node computes: <code>"cpu"</code> or a CUDA device</td>
-<td><code>"cpu"</code></td>
-</tr>
-<tr>
-<td><code>dedicated_thread</code></td>
-<td>Run the node on a thread of its own instead of the run's workers</td>
-<td><code>False</code></td>
-</tr>
-</tbody>
-</table>
-<p>The node reads them back as the read-only properties <code>period</code>, <code>generator</code>, <code>device</code> and <code>dedicated_thread</code>.</p>
-<h2 id="the-workers">The workers<a class="headerlink" href="#the-workers" title="Permanent link">&para;</a></h2>
-<p>A run does not start a thread per node. It starts a pool of worker threads, which share the nodes: a worker runs one hook of one node, then takes the next work, the updates due earliest first. With many nodes, the threads stay few, and the OS does not spend its time switching between them.</p>
-<ul>
-<li><code>mujou.run(net, workers=n)</code> sets the number of workers. The default is the number of CPUs the process may use (the logical cores, or fewer when the CPU affinity or a quota limits them), or half of it while the GIL is enabled, and never more than the nodes on the workers</li>
-<li>The hooks of a node never run at the same time, and each sees what the previous one wrote. Which worker runs a node may change from one hook to the next</li>
-<li>A hook that blocks holds its worker meanwhile, and the other nodes' <code>dt</code> grows (see the <a href="../../concepts/#rules-a-node-keeps">rules a node keeps</a>)</li>
-</ul>
-<p>While the GIL is enabled (on a build of Python with it, or on the free-threaded build with <code>PYTHON_GIL=1</code>), one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. More workers than half the CPUs mostly contend for the GIL, which is why the default is half there; for nodes that spend most of their time in Python, even fewer are about as fast.</p>
-<h2 id="a-thread-of-its-own">A thread of its own<a class="headerlink" href="#a-thread-of-its-own" title="Permanent link">&para;</a></h2>
-<p>Pass <code>dedicated_thread=True</code> when a node needs a thread of its own:</p>
-<ul>
-<li>its hooks block, waiting for a device, a socket or a lock: on a worker, the wait would hold the worker</li>
-<li>it relies on per-thread state set once: its <code>on_start</code> runs on its own thread, so make such settings there</li>
-</ul>
+<pre class="mermaid"><code>flowchart LR
+    R["mujou.run"] --&gt; P["Pool of workers&lt;br/&gt;(workers threads)"]
+    R --&gt; D["Dedicated threads&lt;br/&gt;(one per node)"]
+    P --&gt;|"share the nodes"| N1["Node"]
+    P --&gt; N2["Node"]
+    P --&gt; N3["Node"]
+    D --&gt; N4["Node with&lt;br/&gt;dedicated_thread=True"]</code></pre>
+<h2 id="workers">The workers<a class="headerlink" href="#workers" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    subgraph Q["Scheduled updates (earliest due first)"]
+        direction TB
+        U1["update of node C"] ~~~ U2["update of node A"] ~~~ U3["update of node B"]
+    end
+    Q --&gt;|"after one hook, take the next"| W1["Worker 1"]
+    Q --&gt; W2["Worker 2"]</code></pre>
+<p>A run does not start a thread per node, so with many nodes the threads stay few, and the OS does not spend its time switching between them. The number of workers and its default are under <code>workers</code> of <a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a>.</p>
+<details class="question">
+<summary>Why is the default halved while the GIL is enabled?</summary>
+<p>While the GIL is enabled (on a build of Python with it, or on the free-threaded build with <code>PYTHON_GIL=1</code>), one thread runs Python code at a time, so the nodes run in parallel only inside torch operations. More workers than half the CPUs mostly contend for the GIL, which is why the default is half. For nodes that spend most of their time in Python, even fewer are about as fast.</p>
+</details>
+<h2 id="dedicated">A thread of its own<a class="headerlink" href="#dedicated" title="Permanent link">&para;</a></h2>
+<p>Pass <a class="autorefs autorefs-internal" title="dedicated_thread
+
+
+  
+      property
+  " href="../../api/node-and-ports/#mujou.Node.dedicated_thread"><code>dedicated_thread=True</code></a> to a node whose hooks block, waiting for a device, a socket or a lock, or that relies on per-thread state set once in <code>on_start</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Camera</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">30</span><span class="p">,</span> <span class="n">dedicated_thread</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="per-thread-settings">Per-thread settings<a class="headerlink" href="#per-thread-settings" title="Permanent link">&para;</a></h2>
-<p>On the workers, each hook of a node may run on a different thread, and the thread runs other nodes in between. So whether the next hook sees what a hook set per thread depends on the schedule, and the next node on the same worker may see it too:</p>
-<ul>
-<li><code>threading.local</code>, <code>threading.current_thread()</code> and <code>threading.get_ident()</code> may differ from hook to hook</li>
-<li>Set a per-thread setting of torch, such as <code>torch.autocast</code> or gradient recording, back before the hook returns, by keeping it inside a <code>with</code> in the hook (<code>with torch.no_grad():</code>). A setting left behind leaks into the next node on the worker</li>
-<li><code>contextvars</code> do carry over: each node runs its hooks in a <code>contextvars.Context</code> of its own, which starts empty (it does not inherit the host's)</li>
-</ul>
-<p>Mujou itself sets only the current CUDA device and stream, before each hook of a CUDA node.</p>
-<h2 id="seeds-and-random-numbers">Seeds and random numbers<a class="headerlink" href="#seeds-and-random-numbers" title="Permanent link">&para;</a></h2>
-<p>Draw random numbers from the node's own generator, <code>self.generator</code>, made from <code>seed</code> on the node's device. It can be used right after <code>super().__init__()</code>, in <code>__init__</code> too.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+<h2 id="per-thread">Per-thread settings<a class="headerlink" href="#per-thread" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>On the workers</th>
+<th>How to write it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>threading.local</code>, <code>threading.current_thread()</code>, <code>threading.get_ident()</code></td>
+<td>May differ from hook to hook</td>
+<td>For a setting made once, a dedicated thread</td>
+</tr>
+<tr>
+<td>Per-thread settings of torch (<code>torch.autocast</code>, gradient recording, and so on)</td>
+<td>Left behind, they leak into the next node on the same worker</td>
+<td>Keep them inside a <code>with</code> in the hook</td>
+</tr>
+<tr>
+<td><code>contextvars</code></td>
+<td>Carry over. Each node runs its hooks in a <code>contextvars.Context</code> of its own, which starts empty (it does not inherit the host's)</td>
+<td>Use as is</td>
+</tr>
+<tr>
+<td>The current CUDA device and stream</td>
+<td>Mujou sets them before each hook of a CUDA node. This is the only thing Mujou itself sets</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@override</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">torch</span><span class="o">.</span><span class="n">set_grad_enabled</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># left behind, it leaks into the next node on the worker</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="o">...</span>
 </code></pre></div>
-<p><code>seed</code> reproduces only <code>self.generator</code>. The default initialization of a module such as <code>nn.Linear</code> draws from the global generator that every node shares, so initialize it again from <code>self.generator</code>. Do not call <code>torch.manual_seed</code> in a node: it changes the random numbers of the other nodes too. The state of <code>self.generator</code> is in the node's state, so a resumed run goes on with the same random sequence.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@override</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>  <span class="c1"># set back before the hook returns</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="o">...</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="seed">Seeds and random numbers<a class="headerlink" href="#seed" title="Permanent link">&para;</a></h2>
+<p><code>seed</code> reproduces only the node's own generator, <a class="autorefs autorefs-internal" title="generator
+
+
+  
+      property
+  " href="../../api/node-and-ports/#mujou.Node.generator"><code>self.generator</code></a>, so initialize <code>nn.Linear</code> and the like again from it (the default initialization uses the generator every node shares).</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Avoid</label><label for="__tabbed_2_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># changes the random numbers of the other nodes too</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># initialized from the generator every node shares</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator</span><span class="p">)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
+</code></pre></div>
+</div>
+</div>
+</div>
 <h2 id="devices">Devices<a class="headerlink" href="#devices" title="Permanent link">&para;</a></h2>
-<p><code>device</code> is the CPU or a CUDA device; any other, such as <code>"mps"</code> or <code>"meta"</code>, raises <code>ValueError</code>, and so does CUDA when it is not available. Received messages arrive on the node's device: allocate with <code>device=self.device</code>. <code>"cuda"</code> without an index is fixed to the host's current CUDA device when the node is made.</p>
-<p>For a node on CUDA, Mujou:</p>
-<ul>
-<li>makes the node's device and a CUDA stream of the node's own current in each of its hooks, so every operation of the node goes on its stream</li>
-<li>waits for the work queued on that stream after each <code>on_update</code> and after the state is restored (the worker waits meanwhile, as in a hook that blocks)</li>
-<li>waits for it before and after <code>state_dict</code>, on a thread of its own (on the host's thread once the run has ended), so no worker waits for it</li>
-<li>keeps a tensor that the node sends on its own device there, when a node on CUDA reads the port: <code>send</code> copies it on the node's stream and waits for that stream before the peers can read it. A peer on CUDA copies the message from device to device, without host memory in between (between two GPUs without peer access, the CUDA driver may still stage the copy through the host). A node on the CPU, and the host (<code>run.read</code>, <code>subscribe</code>, <code>wait_for</code>, <code>state_dict</code>), get a CPU copy when they read it. A port that only nodes on the CPU (or only the host) read sends through host memory, which is faster for them, and so does a tensor on another device. The message stays on the device also while the hook has made another device current (<code>torch.cuda.device(...)</code>)</li>
-</ul>
-<p>So a node writes no synchronization. To synchronize yourself, wait only for your own stream (<code>torch.cuda.current_stream().record_event().synchronize()</code>), never <code>torch.cuda.synchronize()</code>, which waits for the whole device, the other nodes included. A device has a pool of 32 streams, so past 32 streams on one device, some nodes share a stream. The streams for copies of the nodes that read another device (below) count too. Sharing a stream stays correct but may slow a node down: a reader that shares the writer's stream waits for what the writer queued after it sent, and a node on the CPU waits for it on the host.</p>
+<p>Received messages arrive on the node's <a class="autorefs autorefs-internal" title="device
+
+
+  
+      property
+  " href="../../api/node-and-ports/#mujou.Node.device"><code>device</code></a>, so allocate tensors with <code>device=self.device</code>. A state tree taken from CUDA nodes restores only into CUDA nodes (on another machine with a GPU too; why is in <a class="autorefs autorefs-internal" title="load_state_dict" href="../../api/node-and-ports/#mujou.Node.load_state_dict"><code>Node.load_state_dict</code></a>).</p>
+<h3 id="cuda">What Mujou does for a CUDA node<a class="headerlink" href="#cuda" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant W as Worker
+    participant N as CUDA node
+    participant S as Node's own stream
+    W-&gt;&gt;N: make the device and stream current
+    W-&gt;&gt;N: on_update(dt)
+    N-&gt;&gt;S: queue operations
+    W-&gt;&gt;S: wait for the queued work
+    Note over W: then on to the next work
+    Note over W,S: around taking the state, a thread of Mujou's own waits, not a worker</code></pre>
+<p>Each CUDA node has a stream of its own, and Mujou switches to it and waits for it, so the node writes no synchronization.</p>
+<h3 id="message-paths">How a message travels<a class="headerlink" href="#message-paths" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    A["CUDA node&lt;br/&gt;sends a tensor on its device"] --&gt;|"if a CUDA node reads the port:&lt;br/&gt;copied on the node's stream,&lt;br/&gt;kept on the device"| P(("port"))
+    P --&gt;|"device to device,&lt;br/&gt;no host memory in between&lt;br/&gt;(without peer access the driver may stage it)"| B["CUDA node"]
+    P --&gt;|"a CPU copy when read"| C["CPU node&lt;br/&gt;host"]</code></pre>
+<p>The full rules are in <a class="autorefs autorefs-internal" title="send" href="../../api/node-and-ports/#mujou.Port.send"><code>Port.send</code></a>, and the host's writes in <a class="autorefs autorefs-internal" title="write" href="../../api/run/#mujou.Run.write"><code>Run.write</code></a>. A node that reads messages from a CUDA node on another device (a node on the CPU, or on another GPU) copies them on a stream of its own on that device, which Mujou makes current in each of its hooks too. A node on the CPU that reads no CUDA node does not touch CUDA, nor does it use the stream of a CUDA node left on the worker.</p>
+<h3 id="streams">Synchronization and streams<a class="headerlink" href="#streams" title="Permanent link">&para;</a></h3>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Avoid</label><label for="__tabbed_3_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>  <span class="c1"># waits for the whole device, the other nodes' work included</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span><span class="o">.</span><span class="n">record_event</span><span class="p">()</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>  <span class="c1"># only your own stream</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Streams come from a pool of 32 per device, counting the nodes' streams and the copy streams of the nodes that read another device. Past 32, some nodes share a stream: the results stay correct, but a reader that shares the writer's stream also waits for what the writer queued after it sent, which may slow it down (a node on the CPU waits for it on the host).</p>
 <div class="admonition tip">
 <p class="admonition-title">Create CUDA tensors and modules in <code>on_start</code></p>
-<p>Tensors and modules made on CUDA in <code>__init__</code> work: <code>mujou.run</code> synchronizes the host's stream before it starts the nodes. Still, create them in <code>on_start</code> or later. PyTorch's caching allocator ties memory to the stream current when it was allocated, so memory allocated in <code>__init__</code> stays tied to the host's stream; when the node drops such a tensor, the memory may be reused by the host before the node's work on it has finished. A restore loads the state after <code>on_start</code>, so state made there is restored too.</p>
+<p>Tensors and modules made on CUDA in <code>__init__</code> work, since <code>mujou.run</code> synchronizes the host's stream before it starts the nodes. Still, create them in <code>on_start</code> or later. PyTorch's caching allocator ties memory to the stream current when it was allocated, so memory allocated in <code>__init__</code> stays tied to the host's stream; when the node drops such a tensor, the memory may be reused by the host before the node's work on it has finished. A restore loads the state after <code>on_start</code>, so state made there is restored too.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Avoid</label><label for="__tabbed_4_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">"cuda:0"</span><span class="p">)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>  <span class="c1"># tied to the host's stream</span>
+</code></pre></div>
 </div>
-<p>A node that reads messages from a CUDA node on another device (a node on the CPU, or on another GPU) copies them on a stream of its own on that device, which Mujou makes current in each of its hooks too. <code>run.write</code> (and <code>inputs=</code>) leaves a tensor on the CUDA device of the port's node there too: it copies the tensor on the host's current stream of that device and waits for that stream, so the host need not synchronize, whichever device is current. Any other tensor (for a node on the CPU, or on another device than the node's) goes through host memory, so that no node waits for the GPU work the host queues after it writes. A node on the CPU that reads no CUDA node does not touch CUDA: on a worker that ran a CUDA node just before, that node's stream is still current, which a CPU node does not use.</p>
-<p>The state tree holds CPU copies, also of the nodes on CUDA, and the default <code>load_state_dict</code> copies them back to the node's device. The state of a random generator differs between the CPU and CUDA, though, so a tree saved from nodes on CUDA restores only into nodes on CUDA (on another machine with a GPU too).</p>
-<h2 id="settings-of-the-whole-process">Settings of the whole process<a class="headerlink" href="#settings-of-the-whole-process" title="Permanent link">&para;</a></h2>
-<p>These settings are shared by the whole process. Do not change them in a node; the host sets them once, before <code>mujou.run</code>:</p>
-<ul>
-<li><code>torch.manual_seed</code> and the default random generator</li>
-<li><code>torch.set_num_threads</code>, <code>torch.use_deterministic_algorithms</code> and the flags of <code>torch.backends.*</code></li>
-<li>operations on a whole device, such as <code>torch.cuda.synchronize()</code> and <code>torch.cuda.empty_cache()</code></li>
-</ul>
-<p>On the CPU, a torch operation uses further threads of its own for each thread that computes. With too many, the nodes compete for the cores and everything slows down, so the host keeps them few:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># The nodes compute on the run's worker threads, and torch adds threads of its</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># own for each: keep those few (a setting of the whole process, made by the host).</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nd">@override</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_start</span><span class="p">()</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>  <span class="c1"># allocated on the node's stream</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<h2 id="process-settings">Settings of the whole process<a class="headerlink" href="#process-settings" title="Permanent link">&para;</a></h2>
+<p>Do not change settings the whole process shares in a node. The host sets them once, before <code>mujou.run</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Settings and operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Random numbers</td>
+<td><code>torch.manual_seed</code> and the default random generator</td>
+</tr>
+<tr>
+<td>Behavior of torch</td>
+<td><code>torch.set_num_threads</code>, <code>torch.use_deterministic_algorithms</code>, the flags of <code>torch.backends.*</code></td>
+</tr>
+<tr>
+<td>Operations on a whole device</td>
+<td><code>torch.cuda.synchronize()</code>, <code>torch.cuda.empty_cache()</code>, and so on</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># The nodes compute on the run's worker threads, and torch adds threads of its</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># own for each: keep those few (a setting of the whole process, made by the host).</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Rule of thumb for the number of threads</p>
-<p>The number of workers (plus the nodes with <code>dedicated_thread=True</code>) times the <code>n</code> of <code>torch.set_num_threads(n)</code> should not exceed the number of physical cores. With many nodes on small matrices, <code>n = 1</code> is enough.</p>
+<p><strong>(workers + nodes with <code>dedicated_thread=True</code>) × <code>n</code> ≤ physical cores</strong></p>
+<p><code>n</code> is the value of <code>torch.set_num_threads(n)</code>. With many nodes on small matrices, <code>n = 1</code> is enough.</p>
 </div>
 
 

@@ -543,10 +543,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#-a-network-that-keeps-learning" class="md-nav__link">
+  <a href="#continual" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🌱 A network that keeps learning
+        A network that keeps learning
       
     </span>
   </a>
@@ -554,10 +554,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-features" class="md-nav__link">
+  <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ✨ Features
+        Features
       
     </span>
   </a>
@@ -565,21 +565,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-how-it-runs" class="md-nav__link">
+  <a href="#next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ⚙️ How it runs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#-where-to-go-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🧭 Where to go next
+        Where to go next
       
     </span>
   </a>
@@ -920,6 +909,8 @@
       
         
       
+        
+      
     
     
     
@@ -1232,6 +1223,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1632,10 +1651,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#-a-network-that-keeps-learning" class="md-nav__link">
+  <a href="#continual" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🌱 A network that keeps learning
+        A network that keeps learning
       
     </span>
   </a>
@@ -1643,10 +1662,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-features" class="md-nav__link">
+  <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ✨ Features
+        Features
       
     </span>
   </a>
@@ -1654,21 +1673,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-how-it-runs" class="md-nav__link">
+  <a href="#next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ⚙️ How it runs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#-where-to-go-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🧭 Where to go next
+        Where to go next
       
     </span>
   </a>
@@ -1702,16 +1710,24 @@
 <br />
 <figcaption>Image: a new work based on Yoichi Ochiai's <em>Liquid Universe</em>.</figcaption>
 </figure>
-<p>Mujou is a deep learning framework that keeps inferring and learning at the same time. You write nodes in PyTorch code and run a network that connects them.</p>
+<p>Mujou is a deep learning framework in which a network of connected nodes keeps inferring and learning at the same time.</p>
 <div class="admonition warning">
 <p class="admonition-title">Early development</p>
 <p>Mujou is in an early stage of development. The API may change without notice.</p>
 </div>
-<h2 id="-a-network-that-keeps-learning">🌱 A network that keeps learning<a class="headerlink" href="#-a-network-that-keeps-learning" title="Permanent link">&para;</a></h2>
-<p>Conventional machine learning trains a model, then freezes its weights for inference. A Mujou network takes input and produces output for as long as it runs, and keeps learning at the same time.</p>
-<p>There is no mode to switch between training and inference, and there are no epochs.</p>
-<p>The name comes from 無常 (<em>mujō</em>, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou is a framework for machines that keep learning from a stream and keep changing. It targets uses that learn while they act, such as real-time processing and robotics.</p>
-<p>The program below is such a network: a chain of PC-ALM nodes, three of them learning, that learns a regression from a stream of batches. Each batch is predicted before the nodes learn from it, while the nodes keep running.</p>
+<h2 id="continual">A network that keeps learning<a class="headerlink" href="#continual" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TB
+    subgraph T["Conventional machine learning"]
+        direction LR
+        T1["Train (repeat epochs)"] --&gt; T2["Freeze the weights"] --&gt; T3["Infer"]
+    end
+    subgraph M["Mujou"]
+        direction LR
+        M1["Input"] --&gt; M2["Network (infers and learns at once)"] --&gt; M3["Output"]
+        M2 --&gt;|"weights keep changing"| M2
+    end</code></pre>
+<p>The name comes from 無常 (<em>mujō</em>, impermanence: nothing stays the same), as in the Buddhist phrase 諸行無常. Mujou builds machines that keep learning from a stream and keep changing, for uses that learn while they act, such as real-time processing and robotics.</p>
+<p>In the program below, a chain of PC-ALM nodes (three of them learning) keeps running while each incoming batch is first predicted and then learned from as a regression (walked through in <a href="tutorial/5-learn-with-pc/">5. Learn with PC-ALM</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">SHOWN</span> <span class="o">=</span> <span class="mf">0.032</span>  <span class="c1"># seconds of the run's timer each batch is shown</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># tau.h sets how fast the credit settles (and the period of the nodes, h / 2),</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># and the weights learn once per batch, by SGD at the rate</span>
@@ -1753,55 +1769,47 @@
 <a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    <span class="n">lam</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"layer0"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"lam"</span><span class="p">]</span>
 <a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the mean |lam| of layer0 (its credit) at the end: </span><span class="si">{</span><span class="n">lam</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="-features">✨ Features<a class="headerlink" href="#-features" title="Permanent link">&para;</a></h2>
+<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li>🔄 <strong>Inference and learning at once</strong>: no training mode, no inference mode, no epochs</li>
-<li>🧩 <strong>Nodes in PyTorch</strong>: write each node in ordinary PyTorch code, run synchronously inside the node</li>
-<li>⚡ <strong>Asynchronous nodes</strong>: each node updates on its own schedule and never waits for another</li>
-<li>⏱️ <strong>Continuous time</strong>: nodes update in proportion to <code>dt</code>, the time that really passed</li>
-<li>🧠 <strong>Any update rule</strong>: backpropagation inside a node, PC-ALM across nodes, or a rule of your own</li>
-<li>💾 <strong>State without stopping</strong>: take the state of a running network and resume from it later</li>
-<li>🧪 <strong>Simulation and deterministic tests</strong>: virtual time, stepped by hand as fast as the machine computes</li>
+<li>🔄 <strong><a href="concepts/#learning">Inference and learning at once</a></strong>: no training mode, no inference mode, no epochs</li>
+<li>🧩 <strong><a href="concepts/#nodes">Nodes in PyTorch</a></strong>: each node is written and run in PyTorch</li>
+<li>⚡ <strong><a href="concepts/#ports">Asynchronous nodes</a></strong>: each node updates on its own schedule and never waits for another</li>
+<li>⏱️ <strong><a href="concepts/#time">Continuous time</a></strong>: nodes update in proportion to <code>dt</code>, the time that really passed</li>
+<li>🧠 <strong><a href="concepts/#learning">Any update rule</a></strong>: BP inside a node, PC-ALM across nodes, or a rule of your own</li>
+<li>💾 <strong><a href="tutorial/6-save-and-resume/">Save the state</a></strong>: take the state of a network and resume from it later</li>
+<li>🧪 <strong><a href="topics/simulation/">Simulation and deterministic tests</a></strong>: step virtual time by hand and simulate as fast as the machine computes</li>
 </ul>
-<h2 id="-how-it-runs">⚙️ How it runs<a class="headerlink" href="#-how-it-runs" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart LR
-    H["Host (your program)"] --&gt;|"writes inputs"| A["Node A"]
-    A --&gt;|"latest value"| B["Node B"]
-    B --&gt;|"reads outputs"| H</code></pre>
-<p>Each node repeats its update on its own schedule and never waits for another node; it reads the latest value its neighbor sent.</p>
-<p>The host (the program that runs the network) writes inputs to the running network and reads its outputs.</p>
-<h2 id="-where-to-go-next">🧭 Where to go next<a class="headerlink" href="#-where-to-go-next" title="Permanent link">&para;</a></h2>
-<p>New to Mujou? Install it, read How Mujou Works, then follow the Tutorial from the first page. The Topics go deeper into each part, the Examples list every program, and the API Reference has every public name.</p>
+<h2 id="next">Where to go next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <div class="grid cards">
 <ul>
 <li>
 <p><strong>📦 Installation</strong></p>
 <hr />
-<p>Build Mujou from source and check that it works.</p>
+<p>How to install and check it works.</p>
 <p><a href="install/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Installation</a></p>
 </li>
 <li>
 <p><strong>🧠 How Mujou Works</strong></p>
 <hr />
-<p>Nodes, ports, networks, runs, time, state, simulation and learning, and the rules a node keeps.</p>
+<p>The mechanism, in diagrams.</p>
 <p><a href="concepts/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> How Mujou Works</a></p>
 </li>
 <li>
 <p><strong>🚀 Tutorial</strong></p>
 <hr />
-<p>Run a network, write and test a node, learn in a node and with PC-ALM, save and resume.</p>
+<p>Step by step, in code.</p>
 <p><a href="tutorial/1-run/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Tutorial</a></p>
 </li>
 <li>
 <p><strong>🗺️ Topics</strong></p>
 <hr />
-<p>Ports, groups, host I/O, time, threads and devices, errors, update rules, PC-ALM.</p>
+<p>How to choose and decide, topic by topic.</p>
 <p><a href="topics/ports/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Topics</a></p>
 </li>
 <li>
 <p><strong>💡 Examples</strong></p>
 <hr />
-<p>Every example program, by what you want to do.</p>
+<p>Find a program by what you want to do.</p>
 <p><a href="examples/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Examples</a></p>
 </li>
 <li>

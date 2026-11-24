@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1144,17 +1146,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#within-a-node-across-nodes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Within a node, across nodes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#feedback-alignment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1166,7 +1157,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#two-way-ports" class="md-nav__link">
+  <a href="#bidirectional" class="md-nav__link">
     <span class="md-ellipsis">
       
         Two-way ports
@@ -1177,7 +1168,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#relaying-the-target" class="md-nav__link">
+  <a href="#relay-targets" class="md-nav__link">
     <span class="md-ellipsis">
       
         Relaying the target
@@ -1188,18 +1179,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#telling-what-is-new" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Telling what is new
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pcclocklearnclock" class="md-nav__link">
+  <a href="#learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.clock.LearnClock
@@ -1261,6 +1241,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1661,17 +1669,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#within-a-node-across-nodes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Within a node, across nodes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#feedback-alignment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1683,7 +1680,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#two-way-ports" class="md-nav__link">
+  <a href="#bidirectional" class="md-nav__link">
     <span class="md-ellipsis">
       
         Two-way ports
@@ -1694,7 +1691,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#relaying-the-target" class="md-nav__link">
+  <a href="#relay-targets" class="md-nav__link">
     <span class="md-ellipsis">
       
         Relaying the target
@@ -1705,18 +1702,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#telling-what-is-new" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Telling what is new
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pcclocklearnclock" class="md-nav__link">
+  <a href="#learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.clock.LearnClock
@@ -1747,11 +1733,40 @@
 
 
 <h1 id="-update-rules">🧮 Update Rules<a class="headerlink" href="#-update-rules" title="Permanent link">&para;</a></h1>
-<p>An update rule (a learning rule) is what a node writes in <code>on_update(dt)</code>. Mujou builds no rule into nodes, ports or the scheduler: each node chooses its own, and the same network can swap them. This page shows how to write a rule that learns across nodes, with feedback alignment as the example; <a href="../../tutorial/4-learn-in-a-node/">4. Learn in a Node</a> has backpropagation (BP) inside one node, and <a href="../pc/">PC-ALM</a> the rule of <code>mujou.pc</code>.</p>
-<h2 id="within-a-node-across-nodes">Within a node, across nodes<a class="headerlink" href="#within-a-node-across-nodes" title="Permanent link">&para;</a></h2>
-<p>Inside a node, anything PyTorch computes is allowed, BP included. Across nodes, no computation graph can be joined: a port sends a detached copy. A rule across nodes therefore sends what each node needs as messages: activities forward, errors (or other credits) back, and the targets along with the activities. Each node learns from its own state and its neighbors' messages only.</p>
+<p>How to choose an update rule is in <a href="../../concepts/#learning">How Mujou Works</a>. This page shows a rule of your own that learns across nodes, with feedback alignment as the example.</p>
 <h2 id="feedback-alignment">Feedback alignment<a class="headerlink" href="#feedback-alignment" title="Permanent link">&para;</a></h2>
-<p><code>examples/feedback_alignment.py</code> learns <span class="arithmatex">\(\hat y = W_2 \tanh(W_1 x)\)</span> with two nodes. <code>hidden</code> sends its activity forward, and <code>output</code> sends the error <span class="arithmatex">\(e = \hat y - y\)</span> back. BP would give <code>hidden</code> the credit <span class="arithmatex">\(W_2^\top e\)</span>, but <code>hidden</code> never sees <code>W2</code>: it uses <span class="arithmatex">\(B e\)</span> with a fixed random matrix <span class="arithmatex">\(B\)</span> of its own, and learns anyway, as <span class="arithmatex">\(W_2\)</span> comes to align with <span class="arithmatex">\(B^\top\)</span> (<a href="https://doi.org/10.1038/ncomms13276">Lillicrap et al., 2016</a>).</p>
+<p><code>examples/feedback_alignment.py</code> learns <span class="arithmatex">\(\hat y = W_2 \tanh(W_1 x)\)</span> with two nodes, <code>hidden</code> and <code>output</code>. <code>hidden</code> does not know <code>W2</code>, and learns anyway with a fixed random matrix <span class="arithmatex">\(B\)</span> (<a href="https://doi.org/10.1038/ncomms13276">Lillicrap et al., 2016</a>).</p>
+<pre class="mermaid"><code>flowchart LR
+    Host["Host"] --&gt;|"sample x, y"| H["hidden&lt;br/&gt;h = tanh(W1 x)"]
+    H --&gt;|"activity h, target y, time"| O["output&lt;br/&gt;ŷ = W2 h"]
+    O --&gt;|"error e = ŷ − y, time"| H
+    O --&gt;|"loss"| Loss["read by the host"]</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>BP</th>
+<th>Feedback alignment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Credit <code>hidden</code> uses</td>
+<td><span class="arithmatex">\(W_2^\top e\)</span></td>
+<td><span class="arithmatex">\(B e\)</span> (<span class="arithmatex">\(B\)</span> is a fixed random matrix of <code>hidden</code>)</td>
+</tr>
+<tr>
+<td><code>hidden</code> must know <code>W2</code></td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Why it learns</td>
+<td>It is the gradient</td>
+<td><span class="arithmatex">\(W_2\)</span> comes to align with <span class="arithmatex">\(B^\top\)</span></td>
+</tr>
+</tbody>
+</table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/feedback_alignment.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Hidden</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
@@ -1812,22 +1827,78 @@
 <a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="k">if</span> <span class="n">tick</span><span class="o">.</span><span class="n">learn</span><span class="p">:</span>
 <a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([(</span><span class="n">e</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">h</span><span class="p">)</span> <span class="o">/</span> <span class="n">BATCH</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
 </code></pre></div>
-<p>The program prints the loss of <code>output</code> on each batch before learning from it, which falls from about 1.5 to about 0.02 in 6 s; with <code>hidden</code> frozen, it stays above 0.15.</p>
-<h2 id="two-way-ports">Two-way ports<a class="headerlink" href="#two-way-ports" title="Permanent link">&para;</a></h2>
-<p><code>hidden.next</code> is <code>Port(send=ACTIVITY, recv=ERROR)</code> and <code>output.prev</code> is <code>Port(send=ERROR, recv=ACTIVITY)</code>: one connection carries the activity forward and the error back. Connections may form cycles, so the error could as well come back on ports of its own.</p>
-<h2 id="relaying-the-target">Relaying the target<a class="headerlink" href="#relaying-the-target" title="Permanent link">&para;</a></h2>
-<p>The activity carries the target <code>y</code> of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, <code>output</code> always compares a prediction with its own target, and <code>hidden</code> learns only from the error whose <code>time</code> is that of the input it holds. The nodes of <code>mujou.pc</code> carry <code>y</code>, <code>mask</code> and <code>time</code> in their <code>pc.msg.Activity</code> the same way (<a href="../pc/#the-nodes">PC-ALM</a>).</p>
-<h2 id="telling-what-is-new">Telling what is new<a class="headerlink" href="#telling-what-is-new" title="Permanent link">&para;</a></h2>
-<p><code>recv()</code> returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time <code>recv_with_time()</code> returns, or a time the message carries. Before anyone sends, the time is <code>None</code> (or, for a time in the message, its initial value: <code>Timestamp(ns=0)</code> of a <code>TimestampSpec</code>).</p>
-<h2 id="pcclocklearnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#pcclocklearnclock" title="Permanent link">&para;</a></h2>
-<p>Both nodes decide when to learn with a <code>pc.clock.LearnClock</code>, a part of <code>mujou.pc</code> that any rule can use. In each update, <code>tick(dt, time, now)</code> takes the <code>dt</code>, the time the input was written at and the time now, and returns a <code>pc.clock.Tick</code>:</p>
-<ul>
-<li><code>new</code>: the input is new (its time is not the one seen last)</li>
-<li><code>learn</code>: learn in this update. With <code>learn_interval</code>, that is the first update <code>learn_interval</code> after each write (and every <code>learn_interval</code> while the input stays), but never the update that first sees an input; with <code>learn_interval=None</code>, every update</li>
-<li><code>elapsed</code>: the time since the clock last learned, each <code>dt</code> capped at <code>max_dt</code>. Weigh the step with it: <span class="arithmatex">\(W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla\)</span> follows the gradient flow <span class="arithmatex">\(\tau \dot W = -\nabla\)</span>, so how far a node learns depends on time, not on how often it updates</li>
-<li><code>dt</code>: the <code>dt</code> capped at <code>max_dt</code></li>
-</ul>
-<p>The clock is a <code>mujou.Stateful</code>, so an attribute that holds it is in the node's state by itself. The nodes on a path read the one timer of the run, so they learn at about the same time after each write, however deep they are.</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Printed loss of <code>output</code> (on each batch, before learning from it)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Both nodes learn</td>
+<td>Falls from about 1.5 to about 0.02 in 6 s</td>
+</tr>
+<tr>
+<td><code>hidden</code> frozen</td>
+<td>Stays above 0.15</td>
+</tr>
+</tbody>
+</table>
+<h2 id="bidirectional">Two-way ports<a class="headerlink" href="#bidirectional" title="Permanent link">&para;</a></h2>
+<p>This example carries the activity and the error on one connection (<code>hidden.next</code> and <code>output.prev</code>). Connections <a href="../ports/#connect">may form cycles</a>, so the error could as well come back on ports of its own.</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th><code>send</code></th>
+<th><code>recv</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hidden.next</code></td>
+<td><code>ACTIVITY</code></td>
+<td><code>ERROR</code></td>
+</tr>
+<tr>
+<td><code>output.prev</code></td>
+<td><code>ERROR</code></td>
+<td><code>ACTIVITY</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="relay-targets">Relaying the target<a class="headerlink" href="#relay-targets" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid: the target on a port of its own</label><label for="__tabbed_1_2">Write instead: one message</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as hidden
+    participant O as output
+    H-&gt;&gt;O: activity h (sample 2)
+    Note over O: the target port still holds y of sample 1
+    O-&gt;&gt;O: compares the prediction for sample 2 with y of sample 1
+    H-&gt;&gt;O: target y (sample 2)</code></pre>
+</div>
+<div class="tabbed-block">
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as hidden
+    participant O as output
+    H-&gt;&gt;O: h, y, time (sample 2)
+    O-&gt;&gt;O: compares the prediction with its own target
+    O-&gt;&gt;H: e, time
+    H-&gt;&gt;H: learns only from the error whose time is that of the input it holds</code></pre>
+</div>
+</div>
+</div>
+<p>The nodes of <code>mujou.pc</code> also carry <code>y</code>, <code>mask</code> and <code>time</code> in the same message as the activity, a <a class="autorefs autorefs-internal" title="Activity" href="../../api/pc/#mujou.pc.msg.Activity"><code>pc.msg.Activity</code></a>.</p>
+<p><code>recv()</code> returns the latest value whether or not it is new, so a node that learns once from each sample tells a new one by its time (<a href="../ports/#new-or-reread">A new value, or the same one again</a>).</p>
+<h2 id="learnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">tick</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>  <span class="c1"># dt, the time the input was written, the time now</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">if</span> <span class="n">tick</span><span class="o">.</span><span class="n">learn</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">grad</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>  <span class="c1"># weighted by the time since it last learned</span>
+</code></pre></div>
+<p><a class="autorefs autorefs-internal" title="LearnClock" href="../../api/pc/#mujou.pc.clock.LearnClock"><code>LearnClock</code></a>, which decides when to learn, is a part of <code>mujou.pc</code>, but any rule can use it. Weighing each step with <code>elapsed</code> makes how far a node learns depend on time, not on how often it updates (<a href="../pc-concepts/#learnclock">How mujou.pc Works</a>).</p>
 
 
 

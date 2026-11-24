@@ -697,10 +697,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-program" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The program
+        Run it
       
     </span>
   </a>
@@ -708,10 +708,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-node" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A node
+        The node
       
     </span>
   </a>
@@ -719,10 +719,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-network" class="md-nav__link">
+  <a href="#network" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A network
+        The network
       
     </span>
   </a>
@@ -730,21 +730,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-run" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         The run
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#branching-and-merging" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Branching and merging
       
     </span>
   </a>
@@ -926,6 +915,8 @@
   
     
     
+      
+        
       
         
       
@@ -1261,6 +1252,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1661,10 +1680,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-program" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The program
+        Run it
       
     </span>
   </a>
@@ -1672,10 +1691,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-node" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A node
+        The node
       
     </span>
   </a>
@@ -1683,10 +1702,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-network" class="md-nav__link">
+  <a href="#network" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A network
+        The network
       
     </span>
   </a>
@@ -1694,21 +1713,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-run" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         The run
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#branching-and-merging" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Branching and merging
       
     </span>
   </a>
@@ -1747,12 +1755,12 @@
 
 
 <h1 id="-1-run-a-network">🚀 1. Run a Network<a class="headerlink" href="#-1-run-a-network" title="Permanent link">&para;</a></h1>
-<p>This page runs the smallest program, two nodes that compute <span class="arithmatex">\(y = 2x + 1\)</span>, and explains it line by line. Then it branches and merges a network.</p>
+<p>This page runs <code>examples/quickstart.py</code>, the smallest program, two nodes that compute <span class="arithmatex">\(y = 2x + 1\)</span>, and shows how to write a node, a network and a run.</p>
 <pre class="mermaid"><code>flowchart LR
-    H1["Host"] --&gt;|"writes x"| S["scale (×2)"]
-    S --&gt; F["shift (+1)"]
-    F --&gt;|"reads y"| H2["Host"]</code></pre>
-<h2 id="the-program">The program<a class="headerlink" href="#the-program" title="Permanent link">&para;</a></h2>
+    H1["Host"] --&gt;|"writes x to net.prev"| S["scale&lt;br/&gt;×2"]
+    S --&gt; F["shift&lt;br/&gt;+1"]
+    F --&gt;|"reads y from net.next"| H2["Host"]</code></pre>
+<h2 id="program">Run it<a class="headerlink" href="#program" title="Permanent link">&para;</a></h2>
 <div class="highlight"><span class="filename">examples/quickstart.py</span><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">"""The smallest program: two nodes in a network, running in the background.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">The host writes an input, waits until the output arrives, and stops.</span>
@@ -1783,143 +1791,89 @@
 <a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># recv() never waits</span>
 <a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>
 <a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>
-<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>
-<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>
-<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="w">    </span><span class="sd">"""``x -&gt; scale -&gt; shift -&gt;``: y = 2 x + 1."""</span>
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>
-<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span>  <span class="c1"># exposed as its own</span>
-<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>
-<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>
-<a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>
-<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>
-<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">()</span>
-<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
-<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
-<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
-<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>    <span class="c1"># the time it was sent (TimeoutError after 5 s of real time).</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
-<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>
-<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> at t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="w">    </span><span class="sd">"""``x -&gt; scale -&gt; shift -&gt;``: y = 2 x + 1."""</span>
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span>  <span class="c1"># exposed as its own</span>
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>
+<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>
+<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">()</span>
+<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
+<a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
+<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
+<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
+<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>    <span class="c1"># the time it was sent (TimeoutError after 5 s of real time).</span>
+<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
+<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>
+<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> at t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
 </code></pre></div>
-<p>Run it from the root of the repository.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">From a source checkout</label><label for="__tabbed_1_2">Installed from PyPI</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>From the root of the repository:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 </code></pre></div>
-<p>It prints one line like this.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>y = tensor([3., 5., 7.]) at t = 0.017 s
+</div>
+<div class="tabbed-block">
+<p>Copy <a href="https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py"><code>examples/quickstart.py</code></a> to your machine, then:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>quickstart.py
 </code></pre></div>
-<p><code>y</code> is <span class="arithmatex">\(2x + 1\)</span> for <code>x = [1, 2, 3]</code>. <code>t</code> is the time at which <code>shift</code> sent <code>y</code>, in seconds of the run's timer. It changes from run to run.</p>
-<h2 id="a-node">A node<a class="headerlink" href="#a-node" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Affine</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">"""Sends ``a * x + b``, where ``x`` is the latest input."""</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span>  <span class="c1"># settings, not state</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># receives from the previous node</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># sends to the next node</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="nd">@override</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>  <span class="c1"># recv() never waits</span>
+</div>
+</div>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>y = tensor([3., 5., 7.]) at t = 0.017 s
 </code></pre></div>
-<ul>
-<li>A node is a class that inherits from <code>mujou.Node</code>. As in any subclass, <code>__init__</code> calls <code>super().__init__()</code> first, and each hook calls the same hook of <code>super()</code> first</li>
-<li><code>__init__</code> declares the node's ports as attributes. <code>Port(recv=VECTOR)</code> receives float32 vectors of 3, and <code>Port(send=VECTOR)</code> sends them. By convention, the port on the side of the previous node is <code>prev</code> and the one on the side of the next node is <code>next</code></li>
-<li><code>a</code> and <code>b</code> are settings: numbers set from the arguments, not state</li>
-<li><code>on_update(dt)</code> is one step of the node's work. Mujou calls it again and again, about every 10 ms. <code>recv()</code> returns the latest value the peer sent, without waiting, and <code>send()</code> sends a copy to every peer</li>
-</ul>
-<h2 id="a-network">A network<a class="headerlink" href="#a-network" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Pipeline</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="sd">"""``x -&gt; scale -&gt; shift -&gt;``: y = 2 x + 1."""</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">Affine</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span>  <span class="c1"># exposed as its own</span>
-</code></pre></div>
-<p>A network holds nodes as attributes, connects their ports with <code>connect</code>, and exposes the ports that the outside uses as attributes of its own (<code>self.prev</code>, <code>self.next</code>). <code>connect</code> checks that the spec each port sends matches the spec the other receives, and raises <code>TypeError</code> where it does not.</p>
-<h2 id="the-run">The run<a class="headerlink" href="#the-run" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Pipeline</span><span class="p">()</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># The nodes run on the run's worker threads until the end of the `with` block.</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="c1"># x takes a few updates to pass through the nodes: wait until y arrives, with</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="c1"># the time it was sent (TimeoutError after 5 s of real time).</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"y = </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> at t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
-</code></pre></div>
-<ul>
-<li><code>mujou.run(net)</code> checks the network, starts every node, and returns a <code>Run</code> once they are running. Each node repeats <code>on_update</code> on the run's worker threads; the host's thread goes on</li>
-<li><code>run.write</code> writes <code>x</code> to the unconnected port <code>net.prev</code>. The value stays there until the next write</li>
-<li><code>recv()</code> never waits, so <code>shift</code> keeps sending values computed from older inputs (zeros at first) until <code>x</code> has passed through <code>scale</code>. <code>run.wait_for</code> returns the first output that meets the condition, with its time, and raises <code>TimeoutError</code> after 5 seconds of real time</li>
-<li>Leaving the <code>with</code> block shuts the run down, and an exception of a node reaches the host there at the latest</li>
-</ul>
-<h2 id="branching-and-merging">Branching and merging<a class="headerlink" href="#branching-and-merging" title="Permanent link">&para;</a></h2>
-<p>A <code>Port</code> that only sends takes any number of peers: connect it to several ports, and each gets every value it sends (fan-out). A <code>MultiPort</code> merges: its <code>recv()</code> returns one value per channel, as a <code>dict[Channel, value]</code> in the order of <code>connect</code>, and the node decides how to combine them.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Apply</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="sd">"""Sends ``fn(x)``."""</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">fn</span> <span class="o">=</span> <span class="n">fn</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># only sends: any number of peers</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="nd">@override</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()))</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="k">class</span><span class="w"> </span><span class="nc">Sum</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="sd">"""Sends the sum of the latest messages of all its peers."""</span>
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span> <span class="o">=</span> <span class="n">MultiPort</span><span class="p">(</span><span class="n">recv</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>  <span class="c1"># merges any number of peers</span>
-<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">VECTOR</span><span class="p">)</span>
-<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>
-<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>    <span class="nd">@override</span>
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
-<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>        <span class="n">received</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>  <span class="c1"># dict[Channel, torch.Tensor], in connect order</span>
-<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">received</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>
-<a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a>
-<a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a><span class="k">class</span><span class="w"> </span><span class="nc">Diamond</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a><span class="w">    </span><span class="sd">"""``shift -&gt; (double, square) -&gt; sum``: y = 2 (x + 1) + (x + 1)^2."""</span>
-<a id="__codelineno-6-33" name="__codelineno-6-33" href="#__codelineno-6-33"></a>
-<a id="__codelineno-6-34" name="__codelineno-6-34" href="#__codelineno-6-34"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-6-35" name="__codelineno-6-35" href="#__codelineno-6-35"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-6-36" name="__codelineno-6-36" href="#__codelineno-6-36"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span> <span class="o">=</span> <span class="n">Apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-6-37" name="__codelineno-6-37" href="#__codelineno-6-37"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">double</span> <span class="o">=</span> <span class="n">Apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
-<a id="__codelineno-6-38" name="__codelineno-6-38" href="#__codelineno-6-38"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">square</span> <span class="o">=</span> <span class="n">Apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
-<a id="__codelineno-6-39" name="__codelineno-6-39" href="#__codelineno-6-39"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">sum</span> <span class="o">=</span> <span class="n">Sum</span><span class="p">()</span>
-<a id="__codelineno-6-40" name="__codelineno-6-40" href="#__codelineno-6-40"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">double</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># one port, two peers</span>
-<a id="__codelineno-6-41" name="__codelineno-6-41" href="#__codelineno-6-41"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">square</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-6-42" name="__codelineno-6-42" href="#__codelineno-6-42"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">double</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sum</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>  <span class="c1"># two peers, one MultiPort</span>
-<a id="__codelineno-6-43" name="__codelineno-6-43" href="#__codelineno-6-43"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">square</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sum</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-6-44" name="__codelineno-6-44" href="#__codelineno-6-44"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shift</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sum</span><span class="o">.</span><span class="n">next</span>
-</code></pre></div>
-<p><code>Diamond</code> computes <span class="arithmatex">\(y = 2(x + 1) + (x + 1)^2\)</span>: <code>shift</code> sends to both branches, and <code>sum</code> adds what the two send. A <code>Port</code> that receives takes one peer only, because its <code>recv()</code> returns one value; receive from several with a <code>MultiPort</code>. Run it with <code>uv run python examples/branching.py</code>. The same program also sends a different value to each peer, which <a href="../../topics/ports/#sending-to-one-channel">Ports and Channels</a> explains.</p>
+<p><code>t</code> is the time, in seconds of <a href="../../topics/time/#timers">the run's timer</a>, at which <code>shift</code> sent <code>y</code>. It changes every run.</p>
+<h2 id="node">The node<a class="headerlink" href="#node" title="Permanent link">&para;</a></h2>
+<p><code>Affine</code> inherits from <a class="autorefs autorefs-internal" title="mujou.Node" href="../../api/node-and-ports/#mujou.Node"><code>Node</code></a> and creates its ports as attributes in <code>__init__</code>. By convention the port that receives from the previous node is <code>prev</code> and the one that sends to the next is <code>next</code>; <code>a</code> and <code>b</code> are settings from the arguments, not state.</p>
+<p>One step of work goes in <a class="autorefs autorefs-internal" title="on_update" href="../../api/node-and-ports/#mujou.Node.on_update"><code>on_update(dt)</code></a>, which mujou calls again and again: it reads with <a class="autorefs autorefs-internal" title="recv" href="../../api/node-and-ports/#mujou.Port.recv"><code>recv</code></a> and sends with <a class="autorefs autorefs-internal" title="send" href="../../api/node-and-ports/#mujou.Port.send"><code>send</code></a>.</p>
+<h2 id="network">The network<a class="headerlink" href="#network" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>What <code>Pipeline</code> (<a class="autorefs autorefs-internal" title="mujou.Network" href="../../api/network/#mujou.Network"><code>Network</code></a>) does</th>
+<th>Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Holds nodes as attributes</td>
+<td><code>self.scale = Affine(2.0, 0.0)</code></td>
+</tr>
+<tr>
+<td>Connects ports (<a class="autorefs autorefs-internal" title="connect" href="../../api/node-and-ports/#mujou.Port.connect"><code>connect</code></a>)</td>
+<td><code>self.scale.next.connect(self.shift.prev)</code></td>
+</tr>
+<tr>
+<td>Exposes the ports the outside uses</td>
+<td><code>self.prev, self.next = self.scale.prev, self.shift.next</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="run">The run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as Host
+    participant S as scale
+    participant F as shift
+    H-&gt;&gt;H: mujou.run(net) starts every node
+    H-&gt;&gt;S: run.write writes x
+    F--&gt;&gt;H: values from older inputs (zeros at first)
+    S-&gt;&gt;F: 2x
+    F--&gt;&gt;H: 2x + 1
+    Note over H: wait_for returns the value that meets the condition, with its time
+    H-&gt;&gt;H: leaving the with block ends the run</code></pre>
+<p>In the <a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>with mujou.run(net) as run:</code></a> block, the output right after a write is computed from older inputs, so wait for an output that meets the condition with <a class="autorefs autorefs-internal" title="wait_for" href="../../api/run/#mujou.Run.wait_for"><code>wait_for</code></a>, not <a class="autorefs autorefs-internal" title="read" href="../../api/run/#mujou.Run.read"><code>read</code></a>.</p>
 <h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Write a node whose state changes over time: <a href="../2-node/">2. Write a Node</a></li>
+<li>Branching (fan-out) and merging with <code>MultiPort</code>: <a href="../../topics/ports/#fan-out">Ports and Channels</a></li>
 <li>The host's other ways to write and read: <a href="../../topics/host-io/">Host I/O</a></li>
 </ul>
 

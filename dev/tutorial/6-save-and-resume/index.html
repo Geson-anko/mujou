@@ -837,7 +837,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-steps" class="md-nav__link">
+  <a href="#steps" class="md-nav__link">
     <span class="md-ellipsis">
       
         The steps
@@ -848,10 +848,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-tree" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The tree
+        The pause while taking it
       
     </span>
   </a>
@@ -859,7 +859,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#when-you-resume" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         When you resume
@@ -870,13 +870,30 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#values-of-your-own-in-the-state" class="md-nav__link">
+  <a href="#custom-state" class="md-nav__link">
     <span class="md-ellipsis">
       
         Values of your own in the state
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Values of your own in the state">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#override" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overriding state_dict and load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -885,17 +902,6 @@
     <span class="md-ellipsis">
       
         Files
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#several-runs-at-one-time" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Several runs at one time
       
     </span>
   </a>
@@ -937,6 +943,8 @@
   
     
     
+      
+        
       
         
       
@@ -1272,6 +1280,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1672,7 +1708,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-steps" class="md-nav__link">
+  <a href="#steps" class="md-nav__link">
     <span class="md-ellipsis">
       
         The steps
@@ -1683,10 +1719,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-tree" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The tree
+        The pause while taking it
       
     </span>
   </a>
@@ -1694,7 +1730,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#when-you-resume" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         When you resume
@@ -1705,13 +1741,30 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#values-of-your-own-in-the-state" class="md-nav__link">
+  <a href="#custom-state" class="md-nav__link">
     <span class="md-ellipsis">
       
         Values of your own in the state
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Values of your own in the state">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#override" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overriding state_dict and load_state_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1720,17 +1773,6 @@
     <span class="md-ellipsis">
       
         Files
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#several-runs-at-one-time" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Several runs at one time
       
     </span>
   </a>
@@ -1769,8 +1811,13 @@
 
 
 <h1 id="-6-save-and-resume">💾 6. Save and Resume<a class="headerlink" href="#-6-save-and-resume" title="Permanent link">&para;</a></h1>
-<p>This page takes the state of a run, saves it, and resumes from it in a new run. What the state holds is in <a href="../../concepts/#7-state">How Mujou Works</a>.</p>
-<h2 id="the-steps">The steps<a class="headerlink" href="#the-steps" title="Permanent link">&para;</a></h2>
+<p>This page takes the state of a run, saves it to a file, and resumes from it in a new instance of the same network.</p>
+<h2 id="steps">The steps<a class="headerlink" href="#steps" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    A["Run&lt;br/&gt;(running, or ended normally)"] --&gt;|"run.state_dict()"| T["State tree&lt;br/&gt;(a plain dict on the CPU)"]
+    T --&gt;|"torch.save"| F[("File")]
+    F --&gt;|"torch.load"| T2["State tree"]
+    T2 --&gt;|"mujou.run(new instance, state=tree)"| B["Run that continues"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">"""Save the state of a run, and restore it in a new run that goes on from there.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">A node collects its state by itself: every attribute that holds a</span>
@@ -1854,88 +1901,130 @@
 <a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="c1"># The module was restored too: the new instance had other random weights.</span>
 <a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">after</span><span class="p">[</span><span class="s2">"readout"</span><span class="p">][</span><span class="s2">"weight"</span><span class="p">],</span> <span class="n">saved</span><span class="p">[</span><span class="s2">"readout"</span><span class="p">][</span><span class="s2">"weight"</span><span class="p">])</span>
 </code></pre></div>
-<ol>
-<li>The node keeps its state in attributes: <code>self.x</code> (a tensor) and <code>self.readout</code> (a module) are collected by themselves, with the state of the node's random generator</li>
-<li>It creates them in <code>__init__</code> and updates them in place in <code>on_update</code>, so that other references to them (from an optimizer, say) keep pointing at the state (see <a href="../2-node/">2. Write a Node</a>)</li>
-<li>The host takes the tree with <code>run.state_dict()</code>, while the run runs or after it ended normally (here, after the <code>with</code> block)</li>
-<li>It saves the tree with <code>torch.save</code></li>
-<li>To resume, it builds a <strong>new instance</strong> of the same network, not the one the tree came from, since a network runs once (<a href="../../concepts/#rules-a-node-keeps">rules a node keeps</a>), and passes the tree as <code>mujou.run(net, state=tree)</code></li>
-</ol>
-<h2 id="the-tree">The tree<a class="headerlink" href="#the-tree" title="Permanent link">&para;</a></h2>
-<p>The tree is a plain <code>dict</code> of copies on the CPU, keyed by the paths of the nodes: the state of each node, the latest message on each channel with its time, the time of each node's last update, and the time of the timer. Its exact shape is in the API reference of <a href="../../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a>.</p>
-<p>Taking it pauses the run: each node stops between two updates, never in the middle of one, so every value in the tree is of the same time. The paused time does not enter any <code>dt</code> afterwards. Each node's <code>on_pause</code> and <code>on_resume</code> run around this pause, to hold its I/O meanwhile; a pause of the timer (<code>run.timer.pause()</code>) calls neither.</p>
+<p>The shape of the tree is in <a class="autorefs autorefs-internal" title="state_dict" href="../../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a>. A network runs once, so the instance you took the tree from cannot resume; build a new instance of the same network (<a href="../../concepts/#rules">Rules a node keeps</a>).</p>
+<h2 id="pause">The pause while taking it<a class="headerlink" href="#pause" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as Host
+    participant R as Run
+    participant N as Each node
+    H-&gt;&gt;R: run.state_dict()
+    R-&gt;&gt;N: asks to pause (the timer stops too)
+    N-&gt;&gt;N: finishes the current on_update
+    N-&gt;&gt;N: on_pause()
+    R-&gt;&gt;R: copies the state of every node (all of one time)
+    N-&gt;&gt;N: on_resume()
+    R--&gt;&gt;H: the state tree
+    Note over N: the paused time does not enter any dt afterwards</code></pre>
+<p><a class="autorefs autorefs-internal" title="on_pause" href="../../api/node-and-ports/#mujou.Node.on_pause"><code>on_pause</code></a> and <code>on_resume</code> let a node hold its I/O meanwhile. A run that ended with an exception has no state to take, so take it regularly during a long run (<a href="../../topics/errors/#state">The state after an exception</a>).</p>
+<h2 id="restore">When you resume<a class="headerlink" href="#restore" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>When you take it</th>
-<th>What you get</th>
+<th>What to mind</th>
+<th>In the resumed run</th>
+<th>More</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>While the network runs</td>
-<td>The state at that time</td>
+<td>The timer</td>
+<td>Runs on a timer of its own that starts at the tree's time</td>
+<td><a href="../../topics/time/#restored-timer">The timer of a resumed run</a></td>
 </tr>
 <tr>
-<td>After a normal end</td>
-<td>The values as the nodes left them after <code>on_stop</code>, at the time <code>shutdown</code> asked the run to stop</td>
+<td>The network and its state</td>
+<td>Must have the paths, ports and connections, and the state keys and shapes, of the one the tree came from</td>
+<td><code>state</code> of <a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a></td>
 </tr>
 <tr>
-<td>After an exception</td>
-<td>Nothing: <code>state_dict</code> raises <code>NetworkError</code>. Take the state you want to keep while the network runs, regularly during a long run</td>
+<td>Inputs</td>
+<td><code>inputs</code> are written after the state and replace the tree's values</td>
+<td><code>inputs</code> of <code>mujou.run</code></td>
 </tr>
 </tbody>
 </table>
-<h2 id="when-you-resume">When you resume<a class="headerlink" href="#when-you-resume" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>The resumed run has a timer of its own.</strong> It runs on a new <code>Timer</code> (<code>run.timer</code>) that starts at the time and the time scale of the tree, so <code>mujou.time.global_timer</code> and the other runs do not go back. Passing <code>timer=</code> with <code>state=</code> raises <code>ValueError</code>, and <code>global_timer.pause()</code> does not pause a resumed run: pause its <code>run.timer</code></li>
-<li><strong>Build the same network.</strong> The resumed network must have the node paths, ports and connections of the one the tree came from; otherwise <code>mujou.run</code> raises <code>ValueError</code>, listing what is missing and what is in excess. Renaming an attribute changes a path, so a tree saved before the rename no longer resumes. In both cases nothing has started, and the same instances run once the tree is fixed</li>
-<li><strong>Keep the state of each node.</strong> A node state with other keys or shapes makes the default <code>load_state_dict</code> raise <code>ValueError</code> while the node starts, so <code>mujou.run</code> raises <code>NetworkError</code> (its <code>__cause__</code> is the <code>ValueError</code>), and those instances do not run again: build new ones</li>
-<li><strong>Inputs.</strong> With both <code>state=</code> and <code>inputs=</code>, the values of <code>inputs</code> replace those of the tree</li>
-</ul>
-<h2 id="values-of-your-own-in-the-state">Values of your own in the state<a class="headerlink" href="#values-of-your-own-in-the-state" title="Permanent link">&para;</a></h2>
-<p>Tensors, <code>mujou.Stateful</code> objects (every <code>nn.Module</code>, <code>pc.clock.LearnClock</code>, or a class of your own that inherits <code>mujou.Stateful</code>), and the state of <code>self.generator</code> are collected; numbers, strings, and lists or dicts of tensors are not. An object that only has methods named <code>state_dict</code> and <code>load_state_dict</code> is not collected: inherit <code>mujou.Stateful</code>. For a plain value that changes while the node runs, assign the attribute in <code>__init__</code> and register it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
+<div class="admonition warning">
+<p class="admonition-title">Renaming an attribute changes a path</p>
+<p>The paths of the nodes come from the attribute names, so a tree saved before a rename no longer resumes.</p>
+</div>
+<h2 id="custom-state">Values of your own in the state<a class="headerlink" href="#custom-state" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    A["The value of a node's attribute"] --&gt; Q1{"A tensor, or a mujou.Stateful&lt;br/&gt;(including nn.Module)?"}
+    Q1 -- yes --&gt; S["In the state by itself&lt;br/&gt;(so is the state of self.generator)"]
+    Q1 -- no --&gt; Q2{"Changes while the node runs?"}
+    Q2 -- no --&gt; C["A setting; not in the state"]
+    Q2 -- yes --&gt; Q3{"A type the default torch.load reads?"}
+    Q3 -- yes --&gt; R["Register it with register_state"]
+    Q3 -- "no (a deque, ...)" --&gt; O["Override state_dict and load_state_dict"]</code></pre>
+<p>A class of your own does not enter the state just by having <code>state_dict</code> and <code>load_state_dict</code>; inherit <a class="autorefs autorefs-internal" title="mujou.Stateful" href="../../api/node-and-ports/#mujou.Stateful"><code>Stateful</code></a> (the rules for registering a plain value are in <a class="autorefs autorefs-internal" title="register_state" href="../../api/node-and-ports/#mujou.Node.register_state"><code>register_state</code></a>).</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">:</span>  <span class="c1"># methods of the same names alone do not put it in the state</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </code></pre></div>
-<p>The value goes into the state as it is, whatever you assign to the attribute later. Register only an attribute that exists (otherwise <code>AttributeError</code>). Keep it to types that <code>torch.load</code> reads with its default (<code>int</code>, <code>float</code>, <code>bool</code>, <code>str</code>, <code>None</code>, and lists, tuples and dicts of them, or tensors).</p>
-<p>For the rest, such as a <code>deque</code>, override both <code>state_dict</code> and <code>load_state_dict</code>: extend what <code>super().state_dict()</code> returns, and pass <code>super().load_state_dict</code> the state without the keys you added.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Recent</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="sd">"""Keeps the last 8 inputs in a deque."""</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"recent"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">)}</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span> <span class="o">=</span> <span class="n">deque</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"recent"</span><span class="p">]),</span> <span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>  <span class="c1"># a copy of the tree's</span>
-<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">"recent"</span><span class="p">})</span>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Stateful</span><span class="p">):</span>  <span class="c1"># inherited: in the state by itself as an attribute</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </code></pre></div>
-<p><code>state_dict</code> is called while the node is paused, and its ports refuse to receive and send there, so that taking the state is not seen by the other nodes. Mujou copies what it returns. <code>load_state_dict</code> is called once, after <code>on_start</code> and before the first <code>on_update</code>.</p>
+</div>
+</div>
+</div>
+<h3 id="override">Overriding state_dict and load_state_dict<a class="headerlink" href="#override" title="Permanent link">&para;</a></h3>
+<p><code>state_dict</code> returns <code>super().state_dict()</code> extended with your keys; <code>load_state_dict</code> passes <code>super().load_state_dict</code> the state without them, and keeps copies (<code>clone</code>) of the tree's tensors.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Recent</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="sd">"""Keeps the last 8 inputs in a deque."""</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"recent"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">)}</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span> <span class="o">=</span> <span class="n">deque</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"recent"</span><span class="p">]),</span> <span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>  <span class="c1"># a copy of the tree's</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">"recent"</span><span class="p">})</span>
+</code></pre></div>
 <h2 id="files">Files<a class="headerlink" href="#files" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>torch.save</code> and <code>torch.load</code> with its default <code>weights_only=True</code> read a tree made of tensors, numbers, strings, dicts, lists and tuples: what Mujou puts in it. A tree that holds objects of your own classes (from <code>register_state</code> or an override) does not load that way</li>
-<li><code>pickle.load</code> and <code>torch.load(..., weights_only=False)</code> can run code from the file. Do not read files you do not trust with them</li>
-<li>The default <code>load_state_dict</code> copies each tensor to the node's device, so a machine without a GPU can read a tree saved from nodes on CUDA. The state of a random generator differs between the CPU and CUDA, though: a tree restores only into nodes on the same kind of device as the ones that saved it</li>
-</ul>
-<h2 id="several-runs-at-one-time">Several runs at one time<a class="headerlink" href="#several-runs-at-one-time" title="Permanent link">&para;</a></h2>
-<p><code>run.state_dict()</code> takes the state of one run at one time. To take the states of several runs on one timer at one time, pause the timer first; see <a href="../../topics/time/#pausing-the-time">Time</a>.</p>
+<table>
+<thead>
+<tr>
+<th>How you read it</th>
+<th>What it reads</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.load(f)</code> (the default <code>weights_only=True</code>)</td>
+<td>A tree of tensors, numbers, strings, dicts, lists and tuples</td>
+<td>Does not read a tree holding objects of your own classes (from <code>register_state</code> or an override)</td>
+</tr>
+<tr>
+<td><code>torch.load(f, weights_only=False)</code>, <code>pickle.load</code></td>
+<td>Objects of your own classes too</td>
+<td>Can run code from the file. Do not read files you do not trust</td>
+</tr>
+</tbody>
+</table>
 <h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <ul>
+<li>Taking the states of several runs on one timer at one time: <a href="../../topics/time/#multi-run-state">Time</a></li>
 <li>The topics go deeper into each part, starting with <a href="../../topics/ports/">Ports and Channels</a></li>
 </ul>
 

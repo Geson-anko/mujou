@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1145,6 +1147,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -4762,7 +4792,8 @@ it to its own <code>r</code>. The <code>Output</code> has no <code>r</code>.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>As in <code>Layer</code>. Longer than the round trip of the
-credit, <code>2 * len(modules) * period</code>, is recommended.</p>
+credit, <code>2 * len(modules) * period</code>, is recommended. It has no
+default: pass <code>None</code> to learn in every update.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6899,7 +6930,10 @@ with <code>bind(params)</code>, which returns the <code>BoundOptimizer</code> th
 elapsed)</code>. The time constants are in seconds, so the flow does not depend on
 how often the node learns: <code>elapsed</code> is the time the step weighs.</p>
 <p>They do not use <code>torch.optim</code>: its optimizers count steps rather than time,
-and making one brings the GIL back into a free-threaded Python.</p>
+in a float32 tensor (with torch's default dtype) that stops growing after
+<code>2**24</code> steps (about 4.7 days when learning every 24 ms); and making one
+imports <code>torch._dynamo</code>, which brings the GIL back for the whole process in a
+free-threaded Python (3.14t).</p>
 
 
 
@@ -6943,7 +6977,9 @@ makes the <code>BoundOptimizer</code> of the parameters of one node, which holds
 state. Give it only the parameters that learn (<code>pc.Layer</code> and
 <code>pc.Output</code> bind those that require gradients).</p>
 <p>An optimizer of your own inherits this class, and its bound optimizer
-<code>BoundOptimizer</code>. For example, SGD with a learning rate per step rather
+<code>BoundOptimizer</code>, and implements every abstract method of both: a class
+that misses one raises <code>TypeError</code> when it is instantiated (as any
+<code>abc.ABC</code>). For example, SGD with a learning rate per step rather
 than per second::</p>
 <div class="highlight"><pre><span></span><code>@dataclass(frozen=True)
 class StepSGD(pc.optim.Optimizer):
@@ -8380,7 +8416,9 @@ fixed point the force is zero and the state of the relaxer is at rest, and
 <p>It holds values only, no state, so the nodes may share it. <code>bind(r)</code> makes
 the <code>BoundRelaxer</code> of the deviation of one node, which holds the state.</p>
 <p>A relaxer of your own inherits this class, and its bound relaxer
-<code>BoundRelaxer</code>. For example, a step that is capped in size::</p>
+<code>BoundRelaxer</code>, and implements every abstract method of both: a class
+that misses one raises <code>TypeError</code> when it is instantiated (as any
+<code>abc.ABC</code>). For example, a step that is capped in size::</p>
 <div class="highlight"><pre><span></span><code>@dataclass(frozen=True)
 class Capped(pc.relax.Relaxer):
     limit: float
@@ -8634,6 +8672,8 @@ it, of the shape of <code>r</code>; the plain flow is
 has just set to zero: the node calls it when it first sees a sample whose
 <code>reset</code> is set, where what the relaxer remembers is of the sample
 before. A relaxer without memory does nothing.</p>
+<p>It is not called when the prediction jumps (the weights or the input
+change): neither <code>r</code> nor the force jumps then.</p>
 
 
     </div>

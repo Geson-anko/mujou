@@ -831,6 +831,8 @@
       
         
       
+        
+      
     
     
     
@@ -1163,6 +1165,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../topics/visualize/" class="md-nav__link">
         
   
@@ -1258,7 +1288,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#by-what-you-want-to-do" class="md-nav__link">
+  <a href="#by-goal" class="md-nav__link">
     <span class="md-ellipsis">
       
         By what you want to do
@@ -1269,18 +1299,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-each-program-shows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What each program shows
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-run-them" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         How to run them
@@ -1623,7 +1642,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#by-what-you-want-to-do" class="md-nav__link">
+  <a href="#by-goal" class="md-nav__link">
     <span class="md-ellipsis">
       
         By what you want to do
@@ -1634,18 +1653,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-each-program-shows" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What each program shows
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-to-run-them" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         How to run them
@@ -1676,13 +1684,31 @@
 
 
 <h1 id="-examples">💡 Examples<a class="headerlink" href="#-examples" title="Permanent link">&para;</a></h1>
-<p>Working programs that show how to use Mujou, in <code>examples/</code> of the repository. The pages of this site include them as they are, so the code shown is the code you can run. They are guides, not tests: the test suite does not run them.</p>
-<h2 id="by-what-you-want-to-do">By what you want to do<a class="headerlink" href="#by-what-you-want-to-do" title="Permanent link">&para;</a></h2>
+<p>Every example lives in <code>examples/</code> of the repository, and the pages include it as it is, so the code shown is the code you can run.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph T["Tutorial (1 → 6)"]
+        direction LR
+        q["quickstart.py"] --&gt; l["leaky.py"] --&gt; t["test_leaky.py"] --&gt; o["online_learning.py"] --&gt; p["pc_regression.py"] --&gt; s["save_and_restore.py"]
+    end
+    subgraph U["Topic: Update Rules"]
+        f["feedback_alignment.py"]
+    end
+    subgraph P["Topic: PC-ALM"]
+        m["pc_merge.py"]
+    end
+    subgraph B["Topic: PC-ALM Benchmarks"]
+        b["mnist/&lt;br&gt;cifar10/"]
+    end
+    o --&gt; f
+    p --&gt; m
+    p --&gt; b</code></pre>
+<h2 id="by-goal">By what you want to do<a class="headerlink" href="#by-goal" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>What you want to do</th>
 <th>Program</th>
+<th>Main API</th>
 <th>Explained in</th>
 </tr>
 </thead>
@@ -1690,117 +1716,148 @@
 <tr>
 <td>Run something, anything</td>
 <td><code>quickstart.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.run" href="../api/run/#mujou.run"><code>run</code></a>, <a class="autorefs autorefs-internal" title="write" href="../api/run/#mujou.Run.write"><code>write</code></a>, <a class="autorefs autorefs-internal" title="wait_for" href="../api/run/#mujou.Run.wait_for"><code>wait_for</code></a></td>
 <td><a href="../tutorial/1-run/">1. Run a Network</a></td>
 </tr>
 <tr>
 <td>Branch a network and merge it again</td>
 <td><code>branching.py</code></td>
-<td><a href="../tutorial/1-run/#branching-and-merging">1. Run a Network</a>, <a href="../topics/ports/">Ports and Channels</a></td>
+<td><a class="autorefs autorefs-internal" title="mujou.Port" href="../api/node-and-ports/#mujou.Port"><code>Port</code></a>, <a class="autorefs autorefs-internal" title="mujou.MultiPort" href="../api/node-and-ports/#mujou.MultiPort"><code>MultiPort</code></a>, <a class="autorefs autorefs-internal" title="mujou.Channel" href="../api/node-and-ports/#mujou.Channel"><code>Channel</code></a>, <a class="autorefs autorefs-internal" title="send_to" href="../api/node-and-ports/#mujou.MultiPort.send_to"><code>send_to</code></a></td>
+<td><a href="../topics/ports/#fan-out">Ports and Channels</a></td>
 </tr>
 <tr>
 <td>Write a node whose state changes in continuous time</td>
 <td><code>leaky.py</code></td>
+<td><a class="autorefs autorefs-internal" title="on_update" href="../api/node-and-ports/#mujou.Node.on_update"><code>on_update</code></a></td>
 <td><a href="../tutorial/2-node/">2. Write a Node</a></td>
 </tr>
 <tr>
 <td>Test a node deterministically</td>
 <td><code>test_leaky.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.run_manually" href="../api/run/#mujou.run_manually"><code>run_manually</code></a>, <a class="autorefs autorefs-internal" title="step" href="../api/run/#mujou.ManualRun.step"><code>step</code></a></td>
 <td><a href="../tutorial/3-test/">3. Test a Node</a></td>
 </tr>
 <tr>
 <td>Keep learning from a stream, with BP inside a node</td>
 <td><code>online_learning.py</code></td>
+<td>PyTorch autograd</td>
 <td><a href="../tutorial/4-learn-in-a-node/">4. Learn in a Node</a></td>
 </tr>
 <tr>
 <td>Learn across nodes with a rule of your own</td>
 <td><code>feedback_alignment.py</code></td>
+<td><a class="autorefs autorefs-internal" title="LearnClock" href="../api/pc/#mujou.pc.clock.LearnClock"><code>pc.clock.LearnClock</code></a></td>
 <td><a href="../topics/update-rules/">Update Rules</a></td>
 </tr>
 <tr>
-<td>Learn a regression with PC-ALM, in a few lines</td>
+<td>Learn a regression with PC-ALM, in a few dozen lines</td>
 <td><code>pc_regression.py</code></td>
+<td><a class="autorefs autorefs-internal" title="Chain" href="../api/pc/#mujou.pc.Chain"><code>pc.Chain</code></a>, <a class="autorefs autorefs-internal" title="show" href="../api/pc/#mujou.pc.show"><code>pc.show</code></a></td>
 <td><a href="../tutorial/5-learn-with-pc/">5. Learn with PC-ALM</a></td>
 </tr>
 <tr>
-<td>Write a node of PC-ALM of your own (with two inputs)</td>
+<td>Write a PC-ALM node of your own (with two inputs)</td>
 <td><code>pc_merge.py</code></td>
-<td><a href="../topics/pc/#nodes-of-your-own">PC-ALM</a></td>
+<td><a class="autorefs autorefs-internal" title="mujou.pc.functional" href="../api/pc/#mujou.pc.functional"><code>pc.functional</code></a>, <code>pc.clock.LearnClock</code></td>
+<td><a href="../topics/pc/#own-node">PC-ALM</a></td>
 </tr>
 <tr>
 <td>Learn MNIST with PC-ALM, and compare it with BP</td>
 <td><code>mnist/</code></td>
-<td><a href="../topics/pc/#mnist">PC-ALM</a></td>
+<td><code>pc.Chain</code></td>
+<td><a href="../topics/pc-benchmarks/#mnist">PC-ALM Benchmarks</a></td>
 </tr>
 <tr>
 <td>Learn CIFAR-10 with a ResNet on the GPU, and compare it with BP</td>
 <td><code>cifar10/</code></td>
-<td><a href="../topics/pc/#cifar-10">PC-ALM</a></td>
+<td><code>pc.Chain</code>, <a class="autorefs autorefs-internal" title="AdamW
+
+
+  
+      dataclass
+  " href="../api/pc/#mujou.pc.optim.AdamW"><code>pc.optim.AdamW</code></a></td>
+<td><a href="../topics/pc-benchmarks/#cifar-10">PC-ALM Benchmarks</a></td>
 </tr>
 <tr>
 <td>Save the state and resume from it</td>
 <td><code>save_and_restore.py</code></td>
+<td><a class="autorefs autorefs-internal" title="state_dict" href="../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a>, <code>run(..., state=...)</code></td>
 <td><a href="../tutorial/6-save-and-resume/">6. Save and Resume</a></td>
 </tr>
 <tr>
 <td>Run several networks together</td>
 <td><code>group.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.Group" href="../api/network/#mujou.Group"><code>Group</code></a></td>
 <td><a href="../topics/groups/">Groups</a></td>
 </tr>
 <tr>
 <td>Follow every new output (values in between may be skipped)</td>
 <td><code>subscribe.py</code></td>
-<td><a href="../topics/host-io/#reading">Host I/O</a></td>
+<td><a class="autorefs autorefs-internal" title="subscribe" href="../api/run/#mujou.Run.subscribe"><code>subscribe</code></a></td>
+<td><a href="../topics/host-io/#read">Host I/O</a></td>
 </tr>
 <tr>
 <td>Use a timer of a run's own, a time scale, or pause several runs</td>
 <td><code>timers.py</code></td>
+<td><a class="autorefs autorefs-internal" title="Timer" href="../api/time/#mujou.time.Timer"><code>Timer</code></a>, <a class="autorefs autorefs-internal" title="Timestamp" href="../api/time/#mujou.time.Timestamp"><code>Timestamp</code></a></td>
 <td><a href="../topics/time/">Time</a></td>
 </tr>
 <tr>
 <td>Simulate a network as fast as the machine computes</td>
 <td><code>simulation.py</code></td>
+<td><code>run_manually</code>, <code>step</code></td>
 <td><a href="../topics/simulation/">Simulation</a></td>
 </tr>
 <tr>
 <td>See what happens when a node raises</td>
 <td><code>errors.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../api/run/#mujou.NetworkError"><code>NetworkError</code></a></td>
 <td><a href="../topics/errors/">Errors and Shutdown</a></td>
 </tr>
 <tr>
 <td>Draw the graph of a network, and open it in a browser</td>
 <td><code>visualize.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.viz.to_html" href="../api/viz/#mujou.viz.to_html"><code>viz.to_html</code></a></td>
 <td><a href="../topics/visualize/">Visualize a Network</a></td>
 </tr>
 </tbody>
 </table>
-<h2 id="what-each-program-shows">What each program shows<a class="headerlink" href="#what-each-program-shows" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>quickstart.py</code>: a two-node network, run with <code>with mujou.run(...)</code>. The host writes an input with <code>write</code>, and waits with <code>wait_for</code> until the expected output arrives</li>
-<li><code>branching.py</code>: a <code>Port</code> that only sends, connected to two branches that a <code>MultiPort</code> merges; and a <code>MultiPort</code> that sends a different value to each peer with <code>send_to</code>, on the channels <code>connect</code> returned</li>
-<li><code>leaky.py</code>: the leaky integrator, a node defined in continuous time and advanced by the exact solution, so that it is stable for any <code>dt</code>. Run, it steps the input of two in a row and compares them with the exact solution at the time each output was sent</li>
-<li><code>test_leaky.py</code>: tests of the node of <code>leaky.py</code> with <code>mujou.run_manually</code>, on a virtual timer with manual steps: against the exact solution, bit for bit against the discrete algorithm, and a resumed run against one that did not stop. Run them with <code>uv run pytest examples/test_leaky.py</code></li>
-<li><code>online_learning.py</code>: a teacher sends batches from y = a x + b with the <code>a</code> the host writes and changes; a learner learns from each new batch with plain PyTorch autograd, for the time since the last one, and the host follows its loss as it falls, jumps and falls again</li>
-<li><code>feedback_alignment.py</code>: two nodes learn a two-layer network by feedback alignment: two-way ports, a target relayed with the activity, a learning step once per sample with <code>pc.clock.LearnClock</code></li>
-<li><code>pc_regression.py</code>: <code>pc.Chain</code> and <code>pc.show</code> learn a regression from a stream of batches, measured before each batch is learned from</li>
-<li><code>pc_merge.py</code>: <code>Merge</code>, a node of PC-ALM with two inputs written with <code>pc.functional</code> and <code>pc.clock.LearnClock</code>, joins two towers that learn a regression</li>
-<li><code>mnist/</code>: a 784-256-256-10 network learns MNIST as a <code>pc.Chain</code>, and the same network learns by BP from the same initial weights on the same batches. <code>main.py</code> is the entry point, <code>data.py</code> loads the data, <code>metrics.py</code> measures, <code>bp.py</code> trains the BP baseline and <code>watch.py</code> counts the <code>dt</code> of the nodes (<code>--watch</code>)</li>
-<li><code>cifar10/</code>: a ResNet-20 on a CUDA device, with a node for each stage, learns CIFAR-10 as a <code>pc.Chain</code> with <code>pc.optim.AdamW</code>, and the same network learns by BP on the GPU from the same initial weights on the same batches with the same optimizer. <code>main.py</code> is the entry point, <code>data.py</code> loads and augments the data, <code>resnet.py</code> builds the network and says why it is cut into few nodes, <code>metrics.py</code> measures and <code>bp.py</code> trains the BP baseline</li>
-<li><code>save_and_restore.py</code>: takes the state with <code>run.state_dict()</code>, saves it with <code>torch.save</code>, and resumes it in a new instance with <code>mujou.run(..., state=...)</code>, on a timer of the resumed run's own</li>
-<li><code>group.py</code>: <code>Group(enc=..., dec=...)</code>, and the paths of the nodes (<code>"enc.scale"</code>)</li>
-<li><code>subscribe.py</code>: <code>run.subscribe</code> yields the latest output, then each newer one, and stops with <code>break</code></li>
-<li><code>timers.py</code>: <code>Timestamp</code>, a <code>Timer</code> of a run's own at a time scale, the scale of the global timer, and pausing the global timer to take the states of two runs at one time; a run resumed from one goes on on a timer of its own</li>
-<li><code>simulation.py</code>: <code>mujou.run_manually</code> simulates the chain of <code>leaky.py</code> on a sine input in steps of 1 ms, writing the input between steps, and prints how long it took in real time; the same result with any number of workers; <code>step(dt)</code> against the nodes given in either order</li>
-<li><code>errors.py</code>: the <code>NetworkError</code> the host receives and its <code>__cause__</code>, the order <code>on_exception</code> → <code>on_stop</code>, and <code>mujou.run</code> raising for an exception in <code>on_start</code></li>
-<li><code>visualize.py</code>: <code>mujou.viz.to_html</code> writes the page of a network of two networks and a node, and of a <code>pc.Chain</code>, without running them</li>
-</ul>
-<h2 id="how-to-run-them">How to run them<a class="headerlink" href="#how-to-run-them" title="Permanent link">&para;</a></h2>
-<p>Run them from the root of the repository, in an environment built from source (see <a href="../install/">Installation</a>).</p>
+<h2 id="run">How to run them<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<p>In an environment <a href="../install/#source">built from source</a>, run them with <code>uv run python</code> from the root of the repository.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py
 </code></pre></div>
-<p>Only <code>cifar10/</code> uses a GPU, and needs CUDA. Each finishes within 15 seconds, except <code>mnist/</code> and <code>cifar10/</code>. <code>mnist/</code> downloads MNIST (about 11 MB) on its first run, and its defaults (3 epochs) take about 2 minutes. <code>cifar10/</code> downloads CIFAR-10 (about 160 MB) on its first run, and its defaults (3 epochs) take about 4 minutes on an RTX 4090.</p>
+<table>
+<thead>
+<tr>
+<th>Program</th>
+<th>Time</th>
+<th>Download on the first run</th>
+<th>GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All but <code>mnist/</code> and <code>cifar10/</code></td>
+<td>Within 15 seconds</td>
+<td>—</td>
+<td>Not needed</td>
+</tr>
+<tr>
+<td><code>mnist/</code></td>
+<td>About 2 minutes with the default 3 epochs</td>
+<td>MNIST (about 11 MB)</td>
+<td>Not needed</td>
+</tr>
+<tr>
+<td><code>cifar10/</code></td>
+<td>About 4 minutes on an RTX 4090 with the default 3 epochs</td>
+<td>CIFAR-10 (about 160 MB)</td>
+<td>Needs CUDA</td>
+</tr>
+</tbody>
+</table>
 
 
 

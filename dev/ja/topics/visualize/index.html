@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://geson-anko.github.io/mujou/dev/ja/topics/visualize/">
       
       
-        <link rel="prev" href="../pc/">
+        <link rel="prev" href="../pc-benchmarks/">
       
       
         <link rel="next" href="../../examples/">
@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -1167,6 +1169,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1230,7 +1260,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ページを書き出す" class="md-nav__link">
+  <a href="#export" class="md-nav__link">
     <span class="md-ellipsis">
       
         ページを書き出す
@@ -1241,7 +1271,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#試す" class="md-nav__link">
+  <a href="#try" class="md-nav__link">
     <span class="md-ellipsis">
       
         試す
@@ -1252,7 +1282,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ページを読む" class="md-nav__link">
+  <a href="#legend" class="md-nav__link">
     <span class="md-ellipsis">
       
         ページを読む
@@ -1263,7 +1293,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ネットワークを開く" class="md-nav__link">
+  <a href="#open" class="md-nav__link">
     <span class="md-ellipsis">
       
         ネットワークを開く
@@ -1274,7 +1304,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ノードを見る" class="md-nav__link">
+  <a href="#inspect" class="md-nav__link">
     <span class="md-ellipsis">
       
         ノードを見る
@@ -1285,7 +1315,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#動かす" class="md-nav__link">
+  <a href="#controls" class="md-nav__link">
     <span class="md-ellipsis">
       
         動かす
@@ -1296,7 +1326,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pcchain" class="md-nav__link">
+  <a href="#pc-chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.Chain
@@ -1674,7 +1704,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ページを書き出す" class="md-nav__link">
+  <a href="#export" class="md-nav__link">
     <span class="md-ellipsis">
       
         ページを書き出す
@@ -1685,7 +1715,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#試す" class="md-nav__link">
+  <a href="#try" class="md-nav__link">
     <span class="md-ellipsis">
       
         試す
@@ -1696,7 +1726,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ページを読む" class="md-nav__link">
+  <a href="#legend" class="md-nav__link">
     <span class="md-ellipsis">
       
         ページを読む
@@ -1707,7 +1737,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ネットワークを開く" class="md-nav__link">
+  <a href="#open" class="md-nav__link">
     <span class="md-ellipsis">
       
         ネットワークを開く
@@ -1718,7 +1748,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ノードを見る" class="md-nav__link">
+  <a href="#inspect" class="md-nav__link">
     <span class="md-ellipsis">
       
         ノードを見る
@@ -1729,7 +1759,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#動かす" class="md-nav__link">
+  <a href="#controls" class="md-nav__link">
     <span class="md-ellipsis">
       
         動かす
@@ -1740,7 +1770,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pcchain" class="md-nav__link">
+  <a href="#pc-chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.Chain
@@ -1771,21 +1801,7 @@
 
 
 <h1 id="-ネットワークの可視化">🔭 ネットワークの可視化<a class="headerlink" href="#-ネットワークの可視化" title="Permanent link">&para;</a></h1>
-<p><code>mujou.viz.to_html</code> はネットワークのグラフを HTML のページに描く。ページはネットワークの最上位から始まり、ネットワークをクリックすると開き、ノードをクリックすると Port が見える。このページではページの書き出し方と読み方を説明する。</p>
-<div class="admonition abstract">
-<p class="admonition-title">このページで分かること</p>
-<ul>
-<li>ネットワークを走らせずにページを書き出す方法</li>
-<li>ページの箱・行・矢印の意味</li>
-<li>中のネットワークの開き方と、ノードの Port の spec の見方</li>
-</ul>
-<p><a href="../ports/">Port と Channel</a> と、ネットワークの<a href="../groups/#%E3%83%91%E3%82%B9">パス</a>を知っていることを前提にする。</p>
-</div>
-<h2 id="ページを書き出す">ページを書き出す<a class="headerlink" href="#ページを書き出す" title="Permanent link">&para;</a></h2>
-<div class="admonition abstract">
-<p class="admonition-title">要点</p>
-<p><code>mujou.viz.to_html(net)</code> はページを文字列で返す。ファイルに保存してブラウザで開く。</p>
-</div>
+<h2 id="export">ページを書き出す<a class="headerlink" href="#export" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Plant</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Network</span><span class="p">):</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
@@ -1799,21 +1815,13 @@
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">net</span> <span class="o">=</span> <span class="n">Plant</span><span class="p">()</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">Path</span><span class="p">(</span><span class="s2">"graph.html"</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">viz</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">net</span><span class="p">),</span> <span class="s2">"utf-8"</span><span class="p">)</span>  <span class="c1"># open it in a browser</span>
 </code></pre></div>
-<p><code>to_html</code> はネットワークを <code>mujou.run</code> と同じように読むが、何も走らせない。hook は呼ばれず、スレッドも起動しない。そのためノードは実行と同じパスで表示される。<code>mujou.run</code> が受け付けないネットワーク（ネットワークの外のノードに繋がった Port など）では、ここでも同じ例外が出る。</p>
-<p>ページは 1 つのファイルで、読み込むものが無い。オフラインで開け、そのまま人に送れる。<code>mujou.viz</code> は <code>import mujou</code> では読み込まれないので、名前で import する。</p>
-<h2 id="試す">試す<a class="headerlink" href="#試す" title="Permanent link">&para;</a></h2>
-<div class="admonition abstract">
-<p class="admonition-title">要点</p>
-<p>下は、上のプログラムが書き出したページそのもの。箱をクリックして開いたり、ノードを選んだりできる。</p>
-</div>
+<p><a class="autorefs autorefs-internal" title="mujou.viz.to_html" href="../../api/viz/#mujou.viz.to_html"><code>to_html</code></a> は <a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a> と同じくネットワークの木を読むが、hook を呼ばず、スレッドも起動せず、何も走らせない。そのためノードは実行と同じパス（<a href="../../concepts/#networks">ネットワークとパス</a>）で表示される。</p>
+<p>書き出したページは 1 つの HTML ファイルで、読み込むものが無いのでオフラインでも開け、そのまま人に送れる。</p>
+<h2 id="try">試す<a class="headerlink" href="#try" title="Permanent link">&para;</a></h2>
 <iframe class="mujou-viz" src="../../../assets/viz/plant.html" title="Plant のページ" loading="lazy"></iframe>
 
 <p><a href="../../../assets/viz/plant.html" target="_blank">新しいタブで開く</a></p>
-<h2 id="ページを読む">ページを読む<a class="headerlink" href="#ページを読む" title="Permanent link">&para;</a></h2>
-<div class="admonition abstract">
-<p class="admonition-title">要点</p>
-<p>ネットワークは開くまで <code>+</code> の付いた箱。ノードは白い箱で、Port ごとに 1 行。矢印は Channel で、受け取る側を指す。</p>
-</div>
+<h2 id="legend">ページを読む<a class="headerlink" href="#legend" title="Permanent link">&para;</a></h2>
 <p><img alt="left と right を閉じた Plant のページ" src="../../../assets/viz/closed.png" /></p>
 <table>
 <thead>
@@ -1829,7 +1837,7 @@
 </tr>
 <tr>
 <td><code>+</code> の付いた箱（<code>left</code>、<code>right</code>）</td>
-<td>閉じたネットワーク。行はそのネットワークが公開した Port（<code>self.prev = self.fast.prev</code>）</td>
+<td>閉じたネットワーク。行はそのネットワークが公開した Port（<code>self.prev = self.fast.prev</code>）。中のノードへの Channel もこの箱につながる</td>
 </tr>
 <tr>
 <td>白い箱（<code>monitor</code>）</td>
@@ -1845,48 +1853,55 @@
 </tr>
 <tr>
 <td><code>host</code></td>
-<td>繋がっていない、受け取る <code>Port</code>。ホストが <code>Run.write</code> で書く</td>
+<td>つながっていない、受け取る <code>Port</code>。ホストが <a class="autorefs autorefs-internal" title="write" href="../../api/run/#mujou.Run.write"><code>Run.write</code></a> で書く</td>
 </tr>
 <tr>
 <td>矢印</td>
-<td>Channel。矢じりは受け取る側。両方向の Channel には 2 つ</td>
-</tr>
-<tr>
-<td>矢印の <code>×3</code></td>
-<td>同じ 2 行の間の 3 本の Channel を 1 本で描いたもの</td>
+<td>Channel。矢じりは受け取る側で、両方向の Channel には 2 つ。<code>×3</code> は同じ 2 行の間の 3 本を 1 本で描いたもの</td>
 </tr>
 </tbody>
 </table>
-<h2 id="ネットワークを開く">ネットワークを開く<a class="headerlink" href="#ネットワークを開く" title="Permanent link">&para;</a></h2>
-<div class="admonition abstract">
-<p class="admonition-title">要点</p>
-<p>閉じたネットワークをクリックすると開き、見出しをクリックすると閉じる。閉じたネットワークの中のノードへの Channel は、そのネットワークの箱に繋がる。</p>
-</div>
+<h2 id="open">ネットワークを開く<a class="headerlink" href="#open" title="Permanent link">&para;</a></h2>
 <p><img alt="left を開いたページ" src="../../../assets/viz/open.png" /></p>
-<p><code>left</code> を開くと、破線の枠の中に 2 つのノード <code>fast</code> と <code>slow</code> が出る。<code>left</code> から <code>monitor</code> への Channel は、<code>left.next</code> が指す <code>slow.next</code> から出るようになる。<code>right</code> は閉じたままなので、その Channel は <code>right</code> の箱から出る。</p>
-<p>レイアウトはネットワークごとに決まる。子は Channel の順に左から右へ並び（送るノードが受け取るノードより先）、同じ列の子は代入の順に並ぶ。</p>
-<h2 id="ノードを見る">ノードを見る<a class="headerlink" href="#ノードを見る" title="Permanent link">&para;</a></h2>
-<div class="admonition abstract">
-<p class="admonition-title">要点</p>
-<p>ノードをクリックすると、パス・周期・デバイスと、各 Port の spec の全体と相手が見える。</p>
-</div>
-<p><img alt="ノードを選び、右にパネルを開いたページ" src="../../../assets/viz/node.png" /></p>
-<p>箱にマウスを載せると、その箱の Channel が強調される。パネルには箱に書ききれないものが出る。</p>
 <table>
 <thead>
 <tr>
-<th>パネル</th>
+<th>レイアウト</th>
+<th>決まり方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>単位</td>
+<td>ネットワークごと</td>
+</tr>
+<tr>
+<td>列（左から右）</td>
+<td>Channel の順。送るノードが受け取るノードより先</td>
+</tr>
+<tr>
+<td>同じ列の中</td>
+<td>代入の順</td>
+</tr>
+</tbody>
+</table>
+<h2 id="inspect">ノードを見る<a class="headerlink" href="#inspect" title="Permanent link">&para;</a></h2>
+<p><img alt="ノードを選び、右にパネルを開いたページ" src="../../../assets/viz/node.png" /></p>
+<table>
+<thead>
+<tr>
+<th>パネル（ノードをクリックで開く）</th>
 <th>意味</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>path</td>
-<td>実行の中のノードのパス（<code>left.slow</code>）。<code>Run.state_dict()</code> と同じ</td>
+<td>実行の中のノードのパス（<code>left.slow</code>）。<a class="autorefs autorefs-internal" title="state_dict" href="../../api/run/#mujou.Run.state_dict"><code>Run.state_dict()</code></a> と同じ</td>
 </tr>
 <tr>
 <td>period</td>
-<td><code>Node(period=...)</code>。実行のタイマーの秒</td>
+<td><a class="autorefs autorefs-internal" title="mujou.Node" href="../../api/node-and-ports/#mujou.Node"><code>Node(period=...)</code></a>。実行のタイマーの秒</td>
 </tr>
 <tr>
 <td>device</td>
@@ -1902,7 +1917,7 @@
 </tr>
 </tbody>
 </table>
-<h2 id="動かす">動かす<a class="headerlink" href="#動かす" title="Permanent link">&para;</a></h2>
+<h2 id="controls">動かす<a class="headerlink" href="#controls" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -1912,26 +1927,24 @@
 </thead>
 <tbody>
 <tr>
-<td>すべてのネットワークを開く・閉じる</td>
-<td><code>Expand all</code> / <code>Collapse all</code></td>
+<td>ネットワークを開く・閉じる</td>
+<td>閉じた箱をクリック・開いた枠の見出しをクリック。全部なら <code>Expand all</code> / <code>Collapse all</code></td>
 </tr>
 <tr>
-<td>グラフ全体を見る</td>
-<td><code>Fit</code></td>
+<td>箱の Channel を強調する</td>
+<td>箱にマウスを載せる</td>
 </tr>
 <tr>
 <td>表示を動かす</td>
-<td>背景をドラッグ</td>
+<td>背景をドラッグ、スクロールで拡大・縮小、<code>Fit</code> で全体</td>
 </tr>
 <tr>
-<td>拡大・縮小</td>
-<td>スクロール</td>
+<td>ライト・ダークのテーマ</td>
+<td>ブラウザの設定に従う</td>
 </tr>
 </tbody>
 </table>
-<p>ページはブラウザのライト・ダークのテーマに従う。</p>
-<h2 id="pcchain"><code>pc.Chain</code><a class="headerlink" href="#pcchain" title="Permanent link">&para;</a></h2>
-<p><code>to_html</code> は <code>mujou.pc</code> のネットワークも含め、どのネットワークでも描く。</p>
+<h2 id="pc-chain"><code>pc.Chain</code><a class="headerlink" href="#pc-chain" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">B</span> <span class="o">=</span> <span class="mi">8</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">chain</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">784</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()),</span>
@@ -1946,10 +1959,10 @@
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">)</span>
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">Path</span><span class="p">(</span><span class="s2">"chain.html"</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">viz</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">chain</span><span class="p">),</span> <span class="s2">"utf-8"</span><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.Chain</code> は <code>input</code>、<code>layer0</code>、…、<code>output</code> を 1 列に並べる。隣どうしは両方向の Channel で繋がり、活動が前へ進み、フィードバックが戻る。書き出したページは <a href="../../../assets/viz/chain.html" target="_blank">chain.html</a> で見られる。</p>
+<p><a href="../../../assets/viz/chain.html" target="_blank">書き出した chain.html を開く</a></p>
 <details class="question">
 <summary>画像ではなく HTML にしたのはなぜ？</summary>
-<p>ノードの多いネットワークは、読める大きさの 1 枚の画像に収まらない。ページは最初はネットワークの最上位だけを見せ、見たいところを開いていける。必要なのはブラウザだけで、Mujou のほかにパッケージは要らない。</p>
+<p>ノードの多いネットワークは、読める大きさの 1 枚の画像に収まらない。ページは最初に最上位だけを見せ、見たいところを開いていける。必要なのはブラウザだけで、Mujou のほかにパッケージは不要。</p>
 </details>
 
 

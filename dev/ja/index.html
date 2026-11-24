@@ -545,10 +545,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#-学び続けるネットワーク" class="md-nav__link">
+  <a href="#continual" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🌱 学び続けるネットワーク
+        学び続けるネットワーク
       
     </span>
   </a>
@@ -556,10 +556,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-特徴" class="md-nav__link">
+  <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ✨ 特徴
+        特徴
       
     </span>
   </a>
@@ -567,21 +567,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-動き方" class="md-nav__link">
+  <a href="#next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ⚙️ 動き方
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#-読み進め方" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🧭 読み進め方
+        読み進め方
       
     </span>
   </a>
@@ -922,6 +911,8 @@
       
         
       
+        
+      
     
     
     
@@ -1234,6 +1225,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1634,10 +1653,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#-学び続けるネットワーク" class="md-nav__link">
+  <a href="#continual" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🌱 学び続けるネットワーク
+        学び続けるネットワーク
       
     </span>
   </a>
@@ -1645,10 +1664,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-特徴" class="md-nav__link">
+  <a href="#features" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ✨ 特徴
+        特徴
       
     </span>
   </a>
@@ -1656,21 +1675,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#-動き方" class="md-nav__link">
+  <a href="#next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ⚙️ 動き方
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#-読み進め方" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🧭 読み進め方
+        読み進め方
       
     </span>
   </a>
@@ -1704,16 +1712,24 @@
 <br />
 <figcaption>画像は、落合陽一の作品「リキッドユニバース」をもとに新たに制作したもの</figcaption>
 </figure>
-<p>mujou は推論と学習を同時に行い続ける深層学習フレームワークである。ノードをつなぎ、ネットワークを構築する。</p>
+<p>mujou は、ノードをつないだネットワークで推論と学習を同時に行い続ける深層学習フレームワークである。</p>
 <div class="admonition warning">
 <p class="admonition-title">開発の初期段階</p>
 <p>mujou はまだ開発の初期段階にある。API は予告なく変わることがある。</p>
 </div>
-<h2 id="-学び続けるネットワーク">🌱 学び続けるネットワーク<a class="headerlink" href="#-学び続けるネットワーク" title="Permanent link">&para;</a></h2>
-<p>従来の機械学習は学習を終えたら重みを固定し推論する。mujou のネットワークは、実行中常に入力を受け取って出力を出し、同時に学び続ける。</p>
-<p>学習と推論を切り替えるモードも、エポックも無い。</p>
-<p>名前は「諸行無常」の「無常」（常が無いこと）から取った。ストリームから学び続け、常に変わり続ける機械を作るためのフレームワーク。リアルタイム処理やロボティクスのように、動きながら学ぶ用途を狙う。</p>
-<p>次のプログラムがそのネットワーク。PC-ALM のノードの鎖が、流れてくるバッチから回帰を学ぶ（学ぶノードは 3 つ）。ノードは動き続けたまま、各バッチから学ぶ前にそのバッチを予測する。</p>
+<h2 id="continual">学び続けるネットワーク<a class="headerlink" href="#continual" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TB
+    subgraph T["従来の機械学習"]
+        direction LR
+        T1["学習（エポックを繰り返す）"] --&gt; T2["重みを固定"] --&gt; T3["推論"]
+    end
+    subgraph M["mujou"]
+        direction LR
+        M1["入力"] --&gt; M2["ネットワーク（推論と学習を同時に）"] --&gt; M3["出力"]
+        M2 --&gt;|"重みが変わり続ける"| M2
+    end</code></pre>
+<p>名前は「諸行無常」の「無常」（常が無いこと）から取った。ストリームから学び続けて常に変わり続ける機械を作り、リアルタイム処理やロボティクスのように動きながら学ぶ用途を狙う。</p>
+<p>次のプログラムでは、PC-ALM のノードの鎖（学ぶノードは 3 つ）が動き続けたまま、流れてくるバッチごとに、まずそのバッチを予測してからそのバッチで回帰を学ぶ（読み解きは <a href="tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a>）。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">SHOWN</span> <span class="o">=</span> <span class="mf">0.032</span>  <span class="c1"># seconds of the run's timer each batch is shown</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># tau.h sets how fast the credit settles (and the period of the nodes, h / 2),</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># and the weights learn once per batch, by SGD at the rate</span>
@@ -1755,70 +1771,53 @@
 <a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    <span class="n">lam</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">"layer0"</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"lam"</span><span class="p">]</span>
 <a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the mean |lam| of layer0 (its credit) at the end: </span><span class="si">{</span><span class="n">lam</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="-特徴">✨ 特徴<a class="headerlink" href="#-特徴" title="Permanent link">&para;</a></h2>
+<h2 id="features">特徴<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li>🔄 <strong>推論と学習を同時に</strong>: 学習のモードも推論のモードも、エポックも無い</li>
-<li>🧩 <strong>PyTorch で書くノード</strong>: 各ノードは PyTorch で書き実行する</li>
-<li>⚡ <strong>非同期のノード</strong>: 各ノードは自分の周期で更新し、ほかのノードを待たない</li>
-<li>⏱️ <strong>連続時間</strong>: 実際に経った時間 <code>dt</code> に比例して更新する</li>
-<li>🧠 <strong>更新則は自由</strong>: ノードの中の BP、ノードをまたぐ PC-ALM、自作の則</li>
-<li>💾 <strong>状態を保存</strong>: ネットワークの状態を取得、後でその状態から再開</li>
-<li>🧪 <strong>シミュレーションと決定的なテスト</strong>: 仮想時間を手で進め、計算能力いっぱいでシミュレーション可能</li>
+<li>🔄 <strong><a href="concepts/#learning">推論と学習を同時に</a></strong>: 学習のモードも推論のモードも、エポックも無い</li>
+<li>🧩 <strong><a href="concepts/#nodes">PyTorch で書くノード</a></strong>: 各ノードは PyTorch で書き実行する</li>
+<li>⚡ <strong><a href="concepts/#ports">非同期のノード</a></strong>: 各ノードは自分の周期で更新し、ほかのノードを待たない</li>
+<li>⏱️ <strong><a href="concepts/#time">連続時間</a></strong>: 実際に経った時間 <code>dt</code> に比例して更新する</li>
+<li>🧠 <strong><a href="concepts/#learning">更新則は自由</a></strong>: ノードの中の BP、ノードをまたぐ PC-ALM、自作の則</li>
+<li>💾 <strong><a href="tutorial/6-save-and-resume/">状態を保存</a></strong>: ネットワークの状態を取得、後でその状態から再開</li>
+<li>🧪 <strong><a href="topics/simulation/">シミュレーションと決定的なテスト</a></strong>: 仮想時間を手で進め、計算能力いっぱいでシミュレーション可能</li>
 </ul>
-<h2 id="-動き方">⚙️ 動き方<a class="headerlink" href="#-動き方" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart LR
-    H["ホスト（あなたのプログラム）"] --&gt;|"入力を書く"| A["ノード A"]
-    A --&gt;|"最新の値"| B["ノード B"]
-    B --&gt;|"出力を読む"| H</code></pre>
-<p>各ノードは自分の周期で更新を繰り返し、ほかのノードを待たない。読むのは、隣のノードが最後に送った値である。</p>
-<p>ホスト（ネットワークを走らせるプログラム）は、走っているネットワークに入力を書き、出力を読む。</p>
-<h2 id="-読み進め方">🧭 読み進め方<a class="headerlink" href="#-読み進め方" title="Permanent link">&para;</a></h2>
-<ul>
-<li>
-<p><strong>初めてなら</strong></p>
-<p>インストール → Mujou の仕組み → チュートリアルを最初のページから</p>
-</li>
-<li>
-<p><strong>さらに詳しく</strong></p>
-<p>→ トピック、サンプル、API リファレンスへ</p>
-</li>
-</ul>
+<h2 id="next">読み進め方<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <div class="grid cards">
 <ul>
 <li>
 <p><strong>📦 インストール</strong></p>
 <hr />
-<p>ソースから mujou をビルド、動作確認。</p>
+<p>入れ方と動作の確かめ方。</p>
 <p><a href="install/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> インストール</a></p>
 </li>
 <li>
 <p><strong>🧠 Mujou の仕組み</strong></p>
 <hr />
-<p>ノード、Port、ネットワーク、実行、時間、状態、シミュレーション、学習と、ノードが守る規則について。</p>
+<p>仕組みを図で。</p>
 <p><a href="concepts/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Mujou の仕組み</a></p>
 </li>
 <li>
 <p><strong>🚀 チュートリアル</strong></p>
 <hr />
-<p>ネットワークを走らせ、ノードを書いてテストし、ノードの中と PC-ALM で学習、保存と再開まで。</p>
+<p>コードで順に。</p>
 <p><a href="tutorial/1-run/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> チュートリアル</a></p>
 </li>
 <li>
 <p><strong>🗺️ トピック</strong></p>
 <hr />
-<p>Port、Group、ホストの入出力、時間、スレッドとデバイス、例外、更新則、PC-ALM。</p>
+<p>主題ごとの使い分けと決め方。</p>
 <p><a href="topics/ports/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> トピック</a></p>
 </li>
 <li>
 <p><strong>💡 サンプル</strong></p>
 <hr />
-<p>サンプルプログラムの一覧。実際に扱う際の参考に。</p>
+<p>やりたいことからプログラムを探す。</p>
 <p><a href="examples/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> サンプル</a></p>
 </li>
 <li>
 <p><strong>📚 API リファレンス</strong></p>
 <hr />
-<p>公開されているクラスと関数すべて （docstring から生成）</p>
+<p>公開しているクラスと関数のすべて（docstring から生成）。</p>
 <p><a href="api/node-and-ports/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> API リファレンス</a></p>
 </li>
 </ul>

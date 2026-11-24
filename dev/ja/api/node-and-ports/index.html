@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1145,6 +1147,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -3041,7 +3071,9 @@
 <p>Call <code>super().__init__(...)</code> first in <code>__init__</code> (<code>mujou.run</code> raises
 <code>TypeError</code> for a node that did not), then declare the node's ports and
 state as attributes of the instance. A run reads the attributes when it
-starts. A node must not hold other nodes or networks as attributes, nor
+starts. A <code>Port</code>, a <code>MultiPort</code>, a <code>Node</code> or a <code>Network</code> declared as
+an attribute of the class instead raises <code>TypeError</code> when the class is
+defined. A node must not hold other nodes or networks as attributes, nor
 ports in a list, a tuple or a dict (the run raises <code>TypeError</code>); put
 nodes side by side in a <code>Network</code> instead.</p>
 <p>Override the lifecycle hooks below; each does nothing by default. As in any
@@ -3568,6 +3600,9 @@ restore loads it later.</p>
         <p>Called repeatedly with <code>dt</code>, the seconds on the run's timer since the
 node's last update (always &gt; 0). Read the ports, update in proportion to
 <code>dt</code> and send.</p>
+<p>The first <code>dt</code> counts from when every node's <code>on_start</code> has
+returned (the start of the run), or, for a restored run, from the
+node's last update in the state.</p>
 
 
     </div>
@@ -4862,7 +4897,8 @@ Annotate with it a function that takes any spec::</p>
 
         <p>The shape and the dtype of a message that is one <code>torch.Tensor</code>.</p>
 <p>Every dimension is at least 1, and <code>()</code> is a scalar. A batch dimension is
-just a part of the shape.</p>
+just a part of the shape. The dtype is <code>torch.float32</code> unless given,
+whatever <code>torch.get_default_dtype()</code> is.</p>
 <p>Two specs are equal when their shapes and dtypes are equal. A message whose shape
 or dtype differs from the spec is an error; dtypes are never converted. A spec
 has no device: a message of the spec may be on any device.</p>

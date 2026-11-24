@@ -783,7 +783,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#プログラム" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         プログラム
@@ -794,7 +794,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#学習するノード" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
         学習するノード
@@ -802,21 +802,27 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#torch-の設定" class="md-nav__link">
+    <nav class="md-nav" aria-label="学習するノード">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#learn-by-time" class="md-nav__link">
     <span class="md-ellipsis">
       
-        torch の設定
+        時間で学ぶ
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#実行" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         実行
@@ -917,6 +923,8 @@
   
     
     
+      
+        
       
         
       
@@ -1252,6 +1260,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1652,7 +1688,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#プログラム" class="md-nav__link">
+  <a href="#program" class="md-nav__link">
     <span class="md-ellipsis">
       
         プログラム
@@ -1663,7 +1699,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#学習するノード" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
         学習するノード
@@ -1671,21 +1707,27 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#torch-の設定" class="md-nav__link">
+    <nav class="md-nav" aria-label="学習するノード">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#learn-by-time" class="md-nav__link">
     <span class="md-ellipsis">
       
-        torch の設定
+        時間で学ぶ
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#実行" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         実行
@@ -1727,9 +1769,12 @@
 
 
 <h1 id="-4-ノードの中で学習する">🔥 4. ノードの中で学習する<a class="headerlink" href="#-4-ノードの中で学習する" title="Permanent link">&para;</a></h1>
-<p>ノードの内側の誤差逆伝播法（BP）で学ぶノードを書く。学ぶのは、実行中に目標が変わっていくストリームから。学習の段階も推論の段階も無く、ノードは新しいバッチが来るたびに予測し、学ぶ。</p>
-<h2 id="プログラム">プログラム<a class="headerlink" href="#プログラム" title="Permanent link">&para;</a></h2>
-<p>教師のノードが、ホストの書く <code>a</code> を使って <span class="arithmatex">\(y = a x + b\)</span> のバッチを 10 ms ごとに送る。ホストは実行の途中で <code>a</code> を変える。学習するノードの損失は下がり、目標が変わると跳ね上がり、また下がる。</p>
+<p>目標が実行中に変わるストリームから学び続けるノードを、ノードの内側の誤差逆伝播法（BP、<code>loss.backward()</code>）で書く。学ぶ量はバッチの数でなく時間で決める。前提は <a href="../2-node/">2. ノードを書く</a>。</p>
+<h2 id="program">プログラム<a class="headerlink" href="#program" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    H1["ホスト"] --&gt;|"a = 2.0、途中で −1.0 に&lt;br/&gt;（run.write）"| T["教師のノード&lt;br/&gt;y = a x + 0.5 を 8 サンプル&lt;br/&gt;period 10 ms"]
+    T --&gt;|"バッチ {x, y}&lt;br/&gt;10 ms ごと"| L["学習するノード&lt;br/&gt;period 5 ms"]
+    L --&gt;|"loss（学ぶ前の損失）"| H2["ホスト&lt;br/&gt;run.wait_for"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/online_learning.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>t = 0.48 s: loss = 0.000090  (learned a = 2.0)
@@ -1737,7 +1782,7 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>t = 0.97 s: loss = 0.000095  (learned a = -1.0)
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>the learner's weight = -0.988, bias = 0.498
 </code></pre></div>
-<h2 id="学習するノード">学習するノード<a class="headerlink" href="#学習するノード" title="Permanent link">&para;</a></h2>
+<h2 id="node">学習するノード<a class="headerlink" href="#node" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Learner</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="sd">"""Follows the gradient flow dW/dt = -rate * dL/dW, learning once from each</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="sd">    new batch for the time since the last one, and sends its loss on each batch</span>
@@ -1784,51 +1829,103 @@
 <a id="__codelineno-2-44" name="__codelineno-2-44" href="#__codelineno-2-44"></a>                    <span class="n">p</span><span class="o">.</span><span class="n">grad</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-2-45" name="__codelineno-2-45" href="#__codelineno-2-45"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
 </code></pre></div>
-<ul>
-<li><strong>モジュールは状態。</strong> <code>self.model</code> はどの <code>nn.Module</code> とも同じく <code>mujou.Stateful</code> なので、テンソルの属性と同じく自動で状態に入る</li>
-<li><strong>seed。</strong> <code>seed=0</code> はノード専用の乱数生成器 <code>self.generator</code> の seed。<code>nn.Linear</code> の既定の初期化は全ノードが共有する生成器を使うので、重みは <code>self.generator</code> で初期化し直す</li>
-<li><strong>素の値は <code>register_state</code> で状態に加える。</strong> <code>last</code> と <code>elapsed</code> は実行中に変わるが、テンソルでもモジュールでもない。登録しておけばほかと一緒に保存・復元される</li>
-<li><strong>新しいかどうか。</strong> <code>recv_with_time()</code> はバッチを送られた時刻と一緒に返す。教師が最初に送るまで時刻は <code>None</code>、次に送るまで時刻は同じなので、学習するノードは各バッチから 1 回だけ学ぶ</li>
-<li><strong>勾配は通常の PyTorch と同じ。</strong> hook は通常の PyTorch と同じく勾配を記録する。<code>loss.backward()</code> が <code>p.grad</code> を埋め、パラメータは <code>torch.no_grad()</code> の中でその場で更新する。送るためだけの値（学習前の損失）もグラフは要らない</li>
-<li><strong>バッチの数ではなく時間で。</strong> バッチごとの固定の刻みではなく、前に学んでからの時間（<code>elapsed</code>）だけ勾配流 <span class="arithmatex">\(\frac{dW}{dt} = -\text{rate}\,\frac{\partial L}{\partial W}\)</span> をたどる。どれだけ学ぶかは、ノードが何回回ったかではなく時間で決まる。長い <code>elapsed</code> は <code>MAX_STEP</code> 以下の刻みに分け、陽的 Euler 法が発散しないようにする</li>
-</ul>
-<p>BP はノードの中に閉じる。Port は計算グラフから切り離したコピーを送るので、勾配がノードをまたぐことはない。</p>
-<h2 id="torch-の設定">torch の設定<a class="headerlink" href="#torch-の設定" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># The nodes compute on the run's worker threads, and torch adds threads of its</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># own for each: keep those few (a setting of the whole process, made by the host).</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<table>
+<thead>
+<tr>
+<th>この例で使う書き方</th>
+<th>理由</th>
+<th>詳しく</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model</code> と <code>generator</code> は自動で、<code>last</code> と <code>elapsed</code> は <a class="autorefs autorefs-internal" title="register_state" href="../../api/node-and-ports/#mujou.Node.register_state"><code>register_state</code></a> で状態に入れる</td>
+<td>再開したときに学習の途中から続けるため</td>
+<td><a href="../6-save-and-resume/#custom-state">自分の値を状態に入れる</a></td>
+</tr>
+<tr>
+<td>重みを <code>self.generator</code> で初期化し直す</td>
+<td><code>nn.Linear</code> の既定の初期化は全ノードで共有するグローバルな乱数を使い、再現できない</td>
+<td><a href="../../topics/threads-and-devices/#seed">seed と乱数</a></td>
+</tr>
+<tr>
+<td><a class="autorefs autorefs-internal" title="recv_with_time" href="../../api/node-and-ports/#mujou.Port.recv_with_time"><code>recv_with_time</code></a> の時刻を前回と比べ、新しいバッチから 1 回だけ学ぶ</td>
+<td>学習するノードは教師より速く回り、同じバッチを何度も読む</td>
+<td><a href="../../topics/ports/#new-or-reread">新しい値か読み直しか</a></td>
+</tr>
+<tr>
+<td>勾配は通常の PyTorch で求め、計算グラフは 1 回の更新の中に閉じる</td>
+<td>ノードをまたいでグラフをつなぐと局所性が壊れる</td>
+<td><a href="../../concepts/#rules">ノードが守る規則</a></td>
+</tr>
+</tbody>
+</table>
+<pre class="mermaid"><code>sequenceDiagram
+    participant T as 教師（10 ms ごと）
+    participant C as 学習するノードの prev
+    participant L as 学習するノード（5 ms ごと）
+    L-&gt;&gt;C: recv_with_time()
+    C--&gt;&gt;L: 初期値、時刻 None → 学ばない
+    T-&gt;&gt;C: send(バッチ 1)
+    L-&gt;&gt;C: recv_with_time()
+    C--&gt;&gt;L: バッチ 1、時刻 t1 → 学ぶ
+    L-&gt;&gt;C: recv_with_time()
+    C--&gt;&gt;L: バッチ 1、時刻 t1（前と同じ）→ 学ばない
+    T-&gt;&gt;C: send(バッチ 2)
+    L-&gt;&gt;C: recv_with_time()
+    C--&gt;&gt;L: バッチ 2、時刻 t2 → 学ぶ</code></pre>
+<h3 id="learn-by-time">時間で学ぶ<a class="headerlink" href="#learn-by-time" title="Permanent link">&para;</a></h3>
+<p>学習するノードは、バッチごとの固定の刻みでなく前に学んでからの時間 <code>elapsed</code> だけ勾配流をたどるので、学ぶ量は回数でなく経った時間で決まる（この例では <code>rate</code> = 5.0、<code>MAX_STEP</code> = 0.01 秒）。</p>
+<div class="arithmatex">\[
+\frac{dW}{dt} = -\text{rate}\,\frac{\partial L}{\partial W}
+\]</div>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 130" role="img" aria-label="25 ミリ秒の elapsed を、MAX_STEP の 10 ミリ秒以下の 3 つの等しい刻みに分ける例">
+<path class="mujou-brace" d="M 80 38 Q 80 30 88 30 L 572 30 Q 580 30 580 38"/>
+<text class="mujou-label" x="330" y="22" text-anchor="middle">elapsed = 25 ms（例）</text>
+<line class="mujou-axis" x1="80" y1="70" x2="580" y2="70"/>
+<g class="mujou-tick-a"><line x1="80" y1="58" x2="80" y2="82"/><line x1="247" y1="58" x2="247" y2="82"/><line x1="413" y1="58" x2="413" y2="82"/><line x1="580" y1="58" x2="580" y2="82"/></g>
+<text class="mujou-note" x="163" y="54" text-anchor="middle">刻み 1 ≈ 8.3 ms</text>
+<text class="mujou-note" x="330" y="54" text-anchor="middle">刻み 2 ≈ 8.3 ms</text>
+<text class="mujou-note" x="497" y="54" text-anchor="middle">刻み 3 ≈ 8.3 ms</text>
+<path class="mujou-brace" d="M 80 92 Q 80 100 88 100 L 272 100 Q 280 100 280 92"/>
+<text class="mujou-note" x="180" y="118" text-anchor="middle">MAX_STEP = 10 ms</text>
+<text class="mujou-label" x="440" y="118" text-anchor="middle">n = ceil(25 / 10) = 3</text>
+</svg>
+<figcaption><code>n = max(1, ceil(elapsed / MAX_STEP))</code> 個の等しい刻みに分け、各刻みで陽的 Euler 法の 1 歩を進める</figcaption>
+</figure>
+
+<h2 id="run">実行<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">teacher</span><span class="p">,</span> <span class="n">learner</span> <span class="o">=</span> <span class="n">Teacher</span><span class="p">(),</span> <span class="n">Learner</span><span class="p">(</span><span class="n">rate</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">teacher</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">net</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">Group</span><span class="p">(</span><span class="n">teacher</span><span class="o">=</span><span class="n">teacher</span><span class="p">,</span> <span class="n">learner</span><span class="o">=</span><span class="n">learner</span><span class="p">)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">teacher</span><span class="o">.</span><span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">A_BEFORE</span><span class="p">)})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="c1"># How fast the learner learns depends on time, not on how often it runs:</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="c1"># follow its loss, giving each phase up to 5 s of real time.</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="n">learned</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># the loss on a batch, not the initial inf</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (learned a = </span><span class="si">{</span><span class="n">A_BEFORE</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="c1"># The world changes: the same learner keeps learning, with no new phase.</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">changed_at</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">teacher</span><span class="o">.</span><span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">A_AFTER</span><span class="p">)})</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">loss</span><span class="p">:</span> <span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mf">1e-2</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="nb">print</span><span class="p">(</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (a changed at </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">changed_at</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s)"</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="p">)</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="n">learned</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (learned a = </span><span class="si">{</span><span class="n">A_AFTER</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="c1"># After the run, the nodes' attributes are the host's to read.</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="n">weight</span><span class="p">,</span> <span class="n">bias</span> <span class="o">=</span> <span class="n">learner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">learner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">bias</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the learner's weight = </span><span class="si">{</span><span class="n">weight</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, bias = </span><span class="si">{</span><span class="n">bias</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<p>torch のスレッド数のようなプロセス全体の設定は、ホストが実行の前に決める。ノードが変えてよいのは自分のスレッドの設定だけで、hook を抜ける前に戻す（<a href="../../topics/threads-and-devices/">スレッドとデバイス</a>）。</p>
-<h2 id="実行">実行<a class="headerlink" href="#実行" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">teacher</span><span class="p">,</span> <span class="n">learner</span> <span class="o">=</span> <span class="n">Teacher</span><span class="p">(),</span> <span class="n">Learner</span><span class="p">(</span><span class="n">rate</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">teacher</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">net</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">Group</span><span class="p">(</span><span class="n">teacher</span><span class="o">=</span><span class="n">teacher</span><span class="p">,</span> <span class="n">learner</span><span class="o">=</span><span class="n">learner</span><span class="p">)</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">teacher</span><span class="o">.</span><span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">A_BEFORE</span><span class="p">)})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="c1"># How fast the learner learns depends on time, not on how often it runs:</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="c1"># follow its loss, giving each phase up to 5 s of real time.</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="n">learned</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># the loss on a batch, not the initial inf</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (learned a = </span><span class="si">{</span><span class="n">A_BEFORE</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="c1"># The world changes: the same learner keeps learning, with no new phase.</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">changed_at</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">teacher</span><span class="o">.</span><span class="n">a</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">A_AFTER</span><span class="p">)})</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">loss</span><span class="p">:</span> <span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mf">1e-2</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="nb">print</span><span class="p">(</span>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>        <span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (a changed at </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">changed_at</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s)"</span>
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="p">)</span>
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    <span class="n">loss</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span> <span class="n">learned</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s: loss = </span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">  (learned a = </span><span class="si">{</span><span class="n">A_AFTER</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="c1"># After the run, the nodes' attributes are the host's to read.</span>
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="n">weight</span><span class="p">,</span> <span class="n">bias</span> <span class="o">=</span> <span class="n">learner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">learner</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">bias</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the learner's weight = </span><span class="si">{</span><span class="n">weight</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, bias = </span><span class="si">{</span><span class="n">bias</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-</code></pre></div>
-<p><code>run.wait_for</code> は条件を満たすまで損失の Port を追う。終わった後は、ノードの属性をホストが読んでよい。<code>learner.model</code> が学習したモジュールである。</p>
+<p>ホストは <a class="autorefs autorefs-internal" title="wait_for" href="../../api/run/#mujou.Run.wait_for"><code>wait_for</code></a> で損失を追い、<a class="autorefs autorefs-internal" title="write" href="../../api/run/#mujou.Run.write"><code>write</code></a> で途中から目標の <code>a</code> を変える。学習と推論のモードを切り替える操作は無い。</p>
+<p>torch のスレッド数（この例では <code>torch.set_num_threads(1)</code>）はプロセス全体の設定なので、ホストが実行の前に決める（<a href="../../topics/threads-and-devices/#process-settings">プロセス全体の設定</a>）。</p>
 <h2 id="次へ">次へ<a class="headerlink" href="#次へ" title="Permanent link">&para;</a></h2>
 <ul>
 <li>ノードをまたいで学ぶ則と、経路に沿って運ぶ目標: <a href="../../topics/update-rules/">更新則</a></li>
-<li>PC-ALM、<code>mujou.pc</code> のノード: <a href="../5-learn-with-pc/">5. PC-ALM で学習する</a></li>
+<li><code>mujou.pc</code> のノードで学ぶ: <a href="../5-learn-with-pc/">5. PC-ALM で学習する</a></li>
 </ul>
 
 

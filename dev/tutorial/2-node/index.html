@@ -725,7 +725,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-node" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
         The node
@@ -736,7 +736,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#update-in-proportion-to-dt" class="md-nav__link">
+  <a href="#dt" class="md-nav__link">
     <span class="md-ellipsis">
       
         Update in proportion to dt
@@ -744,10 +744,38 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Update in proportion to dt">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stay stable for a long dt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#noise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding noise
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-state" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         The state
@@ -758,7 +786,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-period" class="md-nav__link">
+  <a href="#period" class="md-nav__link">
     <span class="md-ellipsis">
       
         The period
@@ -769,7 +797,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#two-in-a-row" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         Two in a row
@@ -926,6 +954,8 @@
   
     
     
+      
+        
       
         
       
@@ -1261,6 +1291,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1661,7 +1719,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-node" class="md-nav__link">
+  <a href="#node" class="md-nav__link">
     <span class="md-ellipsis">
       
         The node
@@ -1672,7 +1730,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#update-in-proportion-to-dt" class="md-nav__link">
+  <a href="#dt" class="md-nav__link">
     <span class="md-ellipsis">
       
         Update in proportion to dt
@@ -1680,10 +1738,38 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Update in proportion to dt">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stay stable for a long dt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#noise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding noise
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-state" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         The state
@@ -1694,7 +1780,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-period" class="md-nav__link">
+  <a href="#period" class="md-nav__link">
     <span class="md-ellipsis">
       
         The period
@@ -1705,7 +1791,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#two-in-a-row" class="md-nav__link">
+  <a href="#chain" class="md-nav__link">
     <span class="md-ellipsis">
       
         Two in a row
@@ -1747,9 +1833,12 @@
 
 
 <h1 id="-2-write-a-node">🧩 2. Write a Node<a class="headerlink" href="#-2-write-a-node" title="Permanent link">&para;</a></h1>
-<p>This page writes a node whose state follows a differential equation, the leaky integrator, and runs two of them in a row. It covers <code>dt</code>, the state and the period. The rules every node keeps are in <a href="../../concepts/#rules-a-node-keeps">How Mujou Works</a>.</p>
-<h2 id="the-node">The node<a class="headerlink" href="#the-node" title="Permanent link">&para;</a></h2>
-<p>The node follows its input <span class="arithmatex">\(u\)</span> with the time constant <span class="arithmatex">\(\tau\)</span>: its state <span class="arithmatex">\(x\)</span> follows <span class="arithmatex">\(\frac{dx}{dt} = \frac{u - x}{\tau}\)</span>.</p>
+<p>This page writes <code>Leaky</code>, a leaky integrator whose state follows a differential equation, and runs two of them in a row. The rules every node keeps are in <a href="../../concepts/#rules">How Mujou Works</a>.</p>
+<h2 id="node">The node<a class="headerlink" href="#node" title="Permanent link">&para;</a></h2>
+<p><code>Leaky</code> follows its input <span class="arithmatex">\(u\)</span> with the time constant <span class="arithmatex">\(\tau\)</span>. Its state <span class="arithmatex">\(x\)</span> follows this differential equation.</p>
+<div class="arithmatex">\[
+\frac{dx}{dt} = \frac{u - x}{\tau}
+\]</div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Leaky</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""Follows its input ``u`` with the time constant ``tau`` (in seconds):</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
@@ -1779,80 +1868,220 @@
 <a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dt</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># in place</span>
 <a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># a copy: changing x later does not change it</span>
 </code></pre></div>
-<p>The node writes three things.</p>
-<ol>
-<li>In <code>__init__</code>, the settings (<code>tau</code>), the state (<code>x</code>) and the ports (<code>prev</code>, <code>next</code>)</li>
-<li>In <code>on_update(dt)</code>, it reads the input, moves the state by <code>dt</code>, and sends the result</li>
-<li>Nothing else: Mujou calls <code>on_update</code> again and again, so the node has no loop</li>
-</ol>
-<h2 id="update-in-proportion-to-dt">Update in proportion to <code>dt</code><a class="headerlink" href="#update-in-proportion-to-dt" title="Permanent link">&para;</a></h2>
-<p><code>dt</code> is the time in seconds since this node's previous update, on the run's timer. The first <code>dt</code> counts from the start of the run, once every node's <code>on_start</code> has returned.</p>
-<p>Make every update proportional to <code>dt</code>. For <span class="arithmatex">\(\frac{dx}{dt} = f(x)\)</span>, the simplest update is explicit Euler, <code>x += dt * f(x)</code>. A node updates at its own rate, and that rate varies with the load. With updates proportional to <code>dt</code>, every node follows the same dynamics on the same flow of time; a busy machine only makes <code>dt</code> longer. With a fixed step per update instead, a node that loops faster would change faster.</p>
-<p><code>dt</code> is not constant, and it gets longer when the machine is busy. Do not cut it: the time you cut off is lost, and the result drifts from the continuous-time solution. Stay stable for the longest <code>dt</code> that can come instead, in one of two ways.</p>
-<ul>
-<li><strong>Exact solution</strong>: if the system has one, advance the state by <code>dt</code> with it. <code>Leaky</code> moves <span class="arithmatex">\(x\)</span> by the fraction <code>1 - exp(-dt / tau)</code> of its distance to <span class="arithmatex">\(u\)</span>, which is exact while <span class="arithmatex">\(u\)</span> stays constant. The fraction is below 1 for any <code>dt</code>, so <span class="arithmatex">\(x\)</span> never overshoots <span class="arithmatex">\(u\)</span></li>
-<li><strong>Split the step</strong>: otherwise, split <code>dt</code> into <code>n</code> steps no longer than a stable length inside one <code>on_update</code>, and update <code>n</code> times in a <code>for</code> loop (<a href="../4-learn-in-a-node/">4. Learn in a Node</a> does this)</li>
-</ul>
-<p>Splitting does not help when the instability comes from the coupling with other nodes, whose messages stay as they were over <code>dt</code>. Such a node may cap the <code>dt</code> it uses, at the cost of the time it drops (the nodes of <code>mujou.pc</code> do, with <code>max_dt</code>).</p>
-<p>For noise in a continuous-time update, scale its standard deviation by <span class="arithmatex">\(\sqrt{dt}\)</span>, not by <code>dt</code>, so that the result does not depend on how often the node updates.</p>
-<h2 id="the-state">The state<a class="headerlink" href="#the-state" title="Permanent link">&para;</a></h2>
-<p><code>self.x</code> is a tensor attribute, so it is in the node's state by itself: <code>run.state_dict()</code> takes it, and a restore loads it back (see <a href="../6-save-and-resume/">6. Save and Resume</a>). Create the state in <code>__init__</code>, and update it in place in <code>on_update</code> (<code>+=</code>, <code>copy_</code> and the like).</p>
-<p>Assigning a new tensor to the attribute raises no error, and the new tensor is the state from then on. What breaks is any other reference to the first tensor, from another attribute or an optimizer: it still points at the old one. A restore also writes in place into the tensor the node holds.</p>
-<p><code>self.tau</code> is a number set from an argument: a setting, not state. A node restored with another <code>tau</code> keeps its own. A plain value that changes while the node runs, such as a counter, joins the state with <code>register_state</code> (<a href="../4-learn-in-a-node/">4. Learn in a Node</a> does this).</p>
-<p>The node sends <code>self.x</code>, and changes it in place afterwards. That is fine: <code>send</code> copies the value.</p>
-<h2 id="the-period">The period<a class="headerlink" href="#the-period" title="Permanent link">&para;</a></h2>
-<p>A node updates once every <code>period</code> seconds on average, 0.01 s by default. The time <code>on_update</code> takes counts toward the period, and a node that falls behind does not update several times in a row to catch up. <code>Leaky</code> takes a period of 1 ms by default, well below <code>tau</code>: a node downstream sees the output at most about one period late, a small delay next to <code>tau</code>.</p>
-<p>Even with a period, <code>dt</code> is not exactly <code>period</code>: it is the time that actually passed, longer after a delay and shorter after that. Keep updating in proportion to <code>dt</code>.</p>
-<p>In a chain fed by a node with a period (a sensor, say), the nodes after it read the same input until the next one arrives. Give them a period no longer than the period of their input.</p>
-<div class="admonition warning">
-<p class="admonition-title"><code>period=0.0</code> uses up a CPU core</p>
-<p><code>period=0.0</code> calls the next <code>on_update</code> as soon as any time has passed. Such a node keeps a CPU core busy, takes time from the other nodes and makes their <code>dt</code> irregular. Pass it only to a node that really must not wait.</p>
-</div>
-<h2 id="two-in-a-row">Two in a row<a class="headerlink" href="#two-in-a-row" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeakyChain</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="sd">"""``u -&gt; a -&gt; b -&gt;``: two leaky integrators with the time constant ``tau``."""</span>
+<h2 id="dt">Update in proportion to <code>dt</code><a class="headerlink" href="#dt" title="Permanent link">&para;</a></h2>
+<p><code>dt</code> is not constant: it gets longer when the machine is busy (<a href="../../concepts/#time">How Mujou Works</a>), so always make the update proportional to <code>dt</code>.</p>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 250" role="img" aria-label="Two nodes that update at different rates. With a fixed step per update the faster node changes faster; in proportion to dt both follow the same curve">
+<line class="mujou-axis" x1="50" y1="190" x2="300" y2="190"/>
+<line class="mujou-axis" x1="50" y1="190" x2="50" y2="40"/>
+<text class="mujou-label" x="175.0" y="24" text-anchor="middle">Fixed step per update (avoid)</text>
+<polyline class="mujou-lane" style="fill: none; stroke-dasharray: 4 4" points="50,190 52.5,185.4 55,181 57.5,176.7 60,172.5 62.5,168.5 65,164.6 67.5,160.9 70,157.2 72.5,153.7 75,150.3 77.5,147 80,143.8 82.5,140.8 85,137.8 87.5,134.9 90,132.1 92.5,129.4 95,126.8 97.5,124.3 100,121.9 102.5,119.5 105,117.2 107.5,115 110,112.9 112.5,110.8 115,108.8 117.5,106.9 120,105.1 122.5,103.2 125,101.5 127.5,99.8 130,98.2 132.5,96.6 135,95.1 137.5,93.6 140,92.2 142.5,90.8 145,89.4 147.5,88.2 150,86.9 152.5,85.7 155,84.5 157.5,83.4 160,82.3 162.5,81.2 165,80.2 167.5,79.2 170,78.3 172.5,77.3 175,76.4 177.5,75.6 180,74.7 182.5,73.9 185,73.1 187.5,72.4 190,71.6 192.5,70.9 195,70.3 197.5,69.6 200,68.9 202.5,68.3 205,67.7 207.5,67.1 210,66.6 212.5,66 215,65.5 217.5,65 220,64.5 222.5,64 225,63.6 227.5,63.1 230,62.7 232.5,62.3 235,61.9 237.5,61.5 240,61.1 242.5,60.8 245,60.4 247.5,60.1 250,59.7 252.5,59.4 255,59.1 257.5,58.8 260,58.5 262.5,58.2 265,58 267.5,57.7 270,57.5 272.5,57.2 275,57 277.5,56.7 280,56.5 282.5,56.3 285,56.1 287.5,55.9 290,55.7 292.5,55.5 295,55.3 297.5,55.2 300,55"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="75" cy="150.3" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="100" cy="121.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="125" cy="101.5" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="150" cy="86.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="175" cy="76.4" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="200" cy="68.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="225" cy="63.6" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="250" cy="59.7" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="275" cy="57" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="300" cy="55" r="4"/>
+<rect style="fill: var(--md-accent-fg-color)" x="108.5" y="146.3" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="171" y="117.9" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="233.5" y="97.5" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="296" y="82.9" width="8" height="8"/>
+<text class="mujou-note" x="300" y="206" text-anchor="end">time →</text>
+<line class="mujou-axis" x1="360" y1="190" x2="610" y2="190"/>
+<line class="mujou-axis" x1="360" y1="190" x2="360" y2="40"/>
+<text class="mujou-label" x="485.0" y="24" text-anchor="middle">Proportional to dt (write this)</text>
+<polyline class="mujou-lane" style="fill: none; stroke-dasharray: 4 4" points="360,190 362.5,185.4 365,181 367.5,176.7 370,172.5 372.5,168.5 375,164.6 377.5,160.9 380,157.2 382.5,153.7 385,150.3 387.5,147 390,143.8 392.5,140.8 395,137.8 397.5,134.9 400,132.1 402.5,129.4 405,126.8 407.5,124.3 410,121.9 412.5,119.5 415,117.2 417.5,115 420,112.9 422.5,110.8 425,108.8 427.5,106.9 430,105.1 432.5,103.2 435,101.5 437.5,99.8 440,98.2 442.5,96.6 445,95.1 447.5,93.6 450,92.2 452.5,90.8 455,89.4 457.5,88.2 460,86.9 462.5,85.7 465,84.5 467.5,83.4 470,82.3 472.5,81.2 475,80.2 477.5,79.2 480,78.3 482.5,77.3 485,76.4 487.5,75.6 490,74.7 492.5,73.9 495,73.1 497.5,72.4 500,71.6 502.5,70.9 505,70.3 507.5,69.6 510,68.9 512.5,68.3 515,67.7 517.5,67.1 520,66.6 522.5,66 525,65.5 527.5,65 530,64.5 532.5,64 535,63.6 537.5,63.1 540,62.7 542.5,62.3 545,61.9 547.5,61.5 550,61.1 552.5,60.8 555,60.4 557.5,60.1 560,59.7 562.5,59.4 565,59.1 567.5,58.8 570,58.5 572.5,58.2 575,58 577.5,57.7 580,57.5 582.5,57.2 585,57 587.5,56.7 590,56.5 592.5,56.3 595,56.1 597.5,55.9 600,55.7 602.5,55.5 605,55.3 607.5,55.2 610,55"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="385" cy="150.3" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="410" cy="121.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="435" cy="101.5" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="460" cy="86.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="485" cy="76.4" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="510" cy="68.9" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="535" cy="63.6" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="560" cy="59.7" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="585" cy="57" r="4"/>
+<circle style="fill: var(--md-typeset-a-color)" cx="610" cy="55" r="4"/>
+<rect style="fill: var(--md-accent-fg-color)" x="418.5" y="106.8" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="481" y="72.4" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="543.5" y="57.5" width="8" height="8"/>
+<rect style="fill: var(--md-accent-fg-color)" x="606" y="51" width="8" height="8"/>
+<text class="mujou-note" x="610" y="206" text-anchor="end">time →</text>
+<circle style="fill: var(--md-typeset-a-color)" cx="60" cy="232" r="4"/>
+<text class="mujou-note" x="70" y="236">node A (loops fast)</text>
+<rect style="fill: var(--md-accent-fg-color)" x="216" y="228" width="8" height="8"/>
+<text class="mujou-note" x="230" y="236">node B (loops slow)</text>
+<line class="mujou-lane" style="fill: none; stroke-dasharray: 4 4" x1="380" y1="232" x2="410" y2="232"/>
+<text class="mujou-note" x="416" y="236">continuous-time solution</text>
+</svg>
+</figure>
+
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write this</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># A fixed step per update: a node that loops faster changes faster</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+=</span> <span class="mf">0.001</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">next</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Cutting dt: the time cut off is lost, and the result drifts from the</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># continuous-time solution (the exception is in "Stay stable for a long dt" below)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+=</span> <span class="nb">min</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span>
 </code></pre></div>
-<p><code>leaky.py</code> steps the input of the chain from 0 to 1, and compares the outputs with the exact solution at the time each was sent:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">tau</span> <span class="o">=</span> <span class="mf">0.05</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">net</span> <span class="o">=</span> <span class="n">LeakyChain</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="c1"># Step the input from 0 to 1 (write returns the time of the step), then</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="c1"># watch both integrators rise on the run's timer.</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">start</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)})</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>            <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">tau</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>            <span class="n">a</span><span class="p">,</span> <span class="n">t_a</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>            <span class="n">b</span><span class="p">,</span> <span class="n">t_b</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>            <span class="c1"># Each output against the exact one at the time it was sent. On a busy</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>            <span class="c1"># machine a node may not have sent since the step: its time is then</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>            <span class="c1"># earlier than start, and the difference is negative (None, before</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>            <span class="c1"># its first send, counts as long before the step).</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>            <span class="n">exact_a</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">step_response</span><span class="p">(</span><span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="n">t_a</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">t_a</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>            <span class="n">_</span><span class="p">,</span> <span class="n">exact_b</span> <span class="o">=</span> <span class="n">step_response</span><span class="p">(</span><span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="n">t_b</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">t_b</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>            <span class="nb">print</span><span class="p">(</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>                <span class="sa">f</span><span class="s2">"a = </span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (exact </span><span class="si">{</span><span class="n">exact_a</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">), "</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>                <span class="sa">f</span><span class="s2">"b = </span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (exact </span><span class="si">{</span><span class="n">exact_b</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">)"</span>
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>            <span class="p">)</span>
-<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>        <span class="c1"># Hold the input for 10 time constants: both reach the equilibrium x = u.</span>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span> <span class="o">*</span> <span class="n">tau</span><span class="p">)</span>
-<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="n">b</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
-<a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"after </span><span class="si">{</span><span class="mi">10</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">tau</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s more: b = </span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Proportional to dt. For dx/dt = f(x), the simplest update is explicit Euler, x += dt * f(x)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+=</span> <span class="n">dt</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/leaky.py
+</div>
+</div>
+</div>
+<h3 id="stability">Stay stable for a long <code>dt</code><a class="headerlink" href="#stability" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>When</th>
+<th>Way</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>There is an exact solution</td>
+<td>Advance by <code>dt</code> with the exact solution</td>
+<td><code>Leaky</code> (the equation below)</td>
+</tr>
+<tr>
+<td>There is no exact solution</td>
+<td>In one <code>on_update</code>, split <code>dt</code> into <code>n</code> steps no longer than a stable length, and update <code>n</code> times</td>
+<td><a href="../4-learn-in-a-node/#learn-by-time">4. Learn in a Node</a></td>
+</tr>
+<tr>
+<td>The instability comes from coupling with other nodes</td>
+<td>Cap the <code>dt</code> you use, at the cost of the time you drop. The values a node receives stay constant over <code>dt</code>, so splitting the step does not make it stable</td>
+<td><code>max_dt</code> of the nodes of <code>mujou.pc</code> (<a href="../../topics/pc-concepts/#time-constants">TimeConstants</a>)</td>
+</tr>
+</tbody>
+</table>
+<div class="arithmatex">\[
+x \leftarrow x + \left(1 - e^{-\Delta t / \tau}\right)(u - x)
+\]</div>
+<p><code>Leaky</code> updates with this equation. It is exact while <span class="arithmatex">\(u\)</span> stays constant, and the coefficient <span class="arithmatex">\(1 - e^{-\Delta t / \tau}\)</span> is below 1 for any <code>dt</code>, so <span class="arithmatex">\(x\)</span> never overshoots <span class="arithmatex">\(u\)</span>.</p>
+<h3 id="noise">Adding noise<a class="headerlink" href="#noise" title="Permanent link">&para;</a></h3>
+<p>To add noise to a continuous-time update, scale the change by <code>dt</code> and the standard deviation of the noise by <span class="arithmatex">\(\sqrt{dt}\)</span>, so that the result does not depend on how often the node updates.</p>
+<h2 id="state">The state<a class="headerlink" href="#state" title="Permanent link">&para;</a></h2>
+<p>Tensor attributes (<code>self.x</code>) join the state by themselves; settings from the arguments (<code>self.tau</code>) do not (<a href="../6-save-and-resume/#custom-state">what goes in the state</a>).</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Avoid</label><label for="__tabbed_2_2">Write this</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Assigns a new tensor: references held by an optimizer and the like still point at the old one</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dt</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
 </code></pre></div>
-<p><code>run.write</code> returns the time of the step, and <code>run.read_with_time</code> the time of each output: their difference is the time since the step, on the run's timer, however the nodes got scheduled.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dt</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="n">u</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># in place (+=, copy_ and the like)</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="period">The period<a class="headerlink" href="#period" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>How to choose the period</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Keep the delay seen downstream (at most about one period) small</td>
+<td>Well below the time constant. <code>Leaky</code> defaults to 1 ms, below <code>tau</code></td>
+</tr>
+<tr>
+<td>A chain fed by a node with a period (a sensor, say)</td>
+<td>The period downstream is no longer than the period of the input, since it reads the same input until the next arrives</td>
+</tr>
+<tr>
+<td>A node that must not wait</td>
+<td><code>period=0.0</code></td>
+</tr>
+</tbody>
+</table>
+<p>A node with <code>period=0.0</code> keeps a CPU core busy (<a class="autorefs autorefs-internal" title="mujou.Node" href="../../api/node-and-ports/#mujou.Node"><code>Node</code></a>).</p>
+<h2 id="chain">Two in a row<a class="headerlink" href="#chain" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeakyChain</span><span class="p">(</span><span class="n">Network</span><span class="p">):</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="sd">"""``u -&gt; a -&gt; b -&gt;``: two leaky integrators with the time constant ``tau``."""</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">Leaky</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">prev</span><span class="p">)</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">prev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">next</span>
+</code></pre></div>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 262" role="img" aria-label="The outputs of a and b after the input steps from 0 to 1. a is 1 - exp(-t/τ), b rises later, and both approach 1">
+<line class="mujou-axis" x1="70" y1="190" x2="590" y2="190"/>
+<line class="mujou-axis" x1="70" y1="190" x2="70" y2="30"/>
+<line class="mujou-lane" style="fill: none; stroke-dasharray: 4 4" x1="70" y1="40" x2="590" y2="40"/>
+<text class="mujou-note" x="62" y="44" text-anchor="end">1</text>
+<text class="mujou-note" x="62" y="194" text-anchor="end">0</text>
+<text class="mujou-note" x="70" y="208" text-anchor="middle">0</text>
+<text class="mujou-note" x="174" y="208" text-anchor="middle">1τ</text>
+<text class="mujou-note" x="278" y="208" text-anchor="middle">2τ</text>
+<text class="mujou-note" x="382" y="208" text-anchor="middle">3τ</text>
+<text class="mujou-note" x="486" y="208" text-anchor="middle">4τ</text>
+<text class="mujou-note" x="590" y="208" text-anchor="middle">5τ</text>
+<text class="mujou-label" x="590" y="228" text-anchor="end">time since the step →</text>
+<polyline style="fill: none; stroke: var(--md-typeset-a-color); stroke-width: 2.5" points="70,190 75.2,182.7 80.4,175.7 85.6,169.1 90.8,162.8 96,156.8 101.2,151.1 106.4,145.7 111.6,140.5 116.8,135.6 122,131 127.2,126.5 132.4,122.3 137.6,118.3 142.8,114.5 148,110.9 153.2,107.4 158.4,104.1 163.6,101 168.8,98 174,95.2 179.2,92.5 184.4,89.9 189.6,87.5 194.8,85.2 200,83 205.2,80.9 210.4,78.9 215.6,77 220.8,75.2 226,73.5 231.2,71.8 236.4,70.3 241.6,68.8 246.8,67.4 252,66.1 257.2,64.8 262.4,63.6 267.6,62.4 272.8,61.3 278,60.3 283.2,59.3 288.4,58.4 293.6,57.5 298.8,56.6 304,55.8 309.2,55 314.4,54.3 319.6,53.6 324.8,52.9 330,52.3 335.2,51.7 340.4,51.1 345.6,50.6 350.8,50.1 356,49.6 361.2,49.1 366.4,48.7 371.6,48.3 376.8,47.9 382,47.5 387.2,47.1 392.4,46.8 397.6,46.4 402.8,46.1 408,45.8 413.2,45.5 418.4,45.3 423.6,45 428.8,44.8 434,44.5 439.2,44.3 444.4,44.1 449.6,43.9 454.8,43.7 460,43.5 465.2,43.4 470.4,43.2 475.6,43 480.8,42.9 486,42.7 491.2,42.6 496.4,42.5 501.6,42.4 506.8,42.2 512,42.1 517.2,42 522.4,41.9 527.6,41.8 532.8,41.8 538,41.7 543.2,41.6 548.4,41.5 553.6,41.4 558.8,41.4 564,41.3 569.2,41.2 574.4,41.2 579.6,41.1 584.8,41.1 590,41"/>
+<polyline style="fill: none; stroke: var(--md-accent-fg-color); stroke-width: 2.5" points="70,190 75.2,189.8 80.4,189.3 85.6,188.5 90.8,187.4 96,186 101.2,184.5 106.4,182.7 111.6,180.8 116.8,178.7 122,176.5 127.2,174.1 132.4,171.7 137.6,169.2 142.8,166.6 148,164 153.2,161.3 158.4,158.6 163.6,155.9 168.8,153.1 174,150.4 179.2,147.6 184.4,144.9 189.6,142.1 194.8,139.4 200,136.7 205.2,134 210.4,131.4 215.6,128.8 220.8,126.2 226,123.7 231.2,121.2 236.4,118.7 241.6,116.3 246.8,114 252,111.7 257.2,109.4 262.4,107.2 267.6,105.1 272.8,103 278,100.9 283.2,98.9 288.4,96.9 293.6,95 298.8,93.2 304,91.4 309.2,89.6 314.4,87.9 319.6,86.3 324.8,84.7 330,83.1 335.2,81.6 340.4,80.1 345.6,78.7 350.8,77.3 356,76 361.2,74.7 366.4,73.4 371.6,72.2 376.8,71 382,69.9 387.2,68.8 392.4,67.7 397.6,66.7 402.8,65.7 408,64.7 413.2,63.8 418.4,62.9 423.6,62 428.8,61.2 434,60.4 439.2,59.6 444.4,58.9 449.6,58.1 454.8,57.4 460,56.8 465.2,56.1 470.4,55.5 475.6,54.9 480.8,54.3 486,53.7 491.2,53.2 496.4,52.7 501.6,52.2 506.8,51.7 512,51.2 517.2,50.8 522.4,50.4 527.6,49.9 532.8,49.5 538,49.2 543.2,48.8 548.4,48.4 553.6,48.1 558.8,47.8 564,47.5 569.2,47.2 574.4,46.9 579.6,46.6 584.8,46.3 590,46.1"/>
+<line class="mujou-lane" x1="122" y1="190" x2="122" y2="40"/>
+<line class="mujou-lane" x1="174" y1="190" x2="174" y2="40"/>
+<line class="mujou-lane" x1="226" y1="190" x2="226" y2="40"/>
+<line class="mujou-lane" x1="278" y1="190" x2="278" y2="40"/>
+<text class="mujou-note" x="200" y="24" text-anchor="middle">read 4 times, every τ/2</text>
+<line style="fill: none; stroke: var(--md-typeset-a-color); stroke-width: 2.5" x1="90" y1="246" x2="120" y2="246"/>
+<text class="mujou-note" x="126" y="250">a: 1 − e^(−t/τ)</text>
+<line style="fill: none; stroke: var(--md-accent-fg-color); stroke-width: 2.5" x1="300" y1="246" x2="330" y2="246"/>
+<text class="mujou-note" x="336" y="250">b: 1 − e^(−t/τ)(1 + t/τ)</text>
+</svg>
+<figcaption>The exact solution after the input steps from 0 to 1 at time 0 (<code>step_response</code> in <code>leaky.py</code>)</figcaption>
+</figure>
+
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">tau</span> <span class="o">=</span> <span class="mf">0.05</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">net</span> <span class="o">=</span> <span class="n">LeakyChain</span><span class="p">(</span><span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="c1"># Step the input from 0 to 1 (write returns the time of the step), then</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="c1"># watch both integrators rise on the run's timer.</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="n">start</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">)})</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>            <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">tau</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>            <span class="n">a</span><span class="p">,</span> <span class="n">t_a</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>            <span class="n">b</span><span class="p">,</span> <span class="n">t_b</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>            <span class="c1"># Each output against the exact one at the time it was sent. On a busy</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>            <span class="c1"># machine a node may not have sent since the step: its time is then</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>            <span class="c1"># earlier than start, and the difference is negative (None, before</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>            <span class="c1"># its first send, counts as long before the step).</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>            <span class="n">exact_a</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">step_response</span><span class="p">(</span><span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="n">t_a</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">t_a</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>            <span class="n">_</span><span class="p">,</span> <span class="n">exact_b</span> <span class="o">=</span> <span class="n">step_response</span><span class="p">(</span><span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="n">t_b</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">t_b</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>            <span class="nb">print</span><span class="p">(</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>                <span class="sa">f</span><span class="s2">"a = </span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (exact </span><span class="si">{</span><span class="n">exact_a</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">), "</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>                <span class="sa">f</span><span class="s2">"b = </span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (exact </span><span class="si">{</span><span class="n">exact_b</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">)"</span>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>            <span class="p">)</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>        <span class="c1"># Hold the input for 10 time constants: both reach the equilibrium x = u.</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>        <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">10</span> <span class="o">*</span> <span class="n">tau</span><span class="p">)</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>        <span class="n">b</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"after </span><span class="si">{</span><span class="mi">10</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">tau</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s more: b = </span><span class="si">{</span><span class="n">b</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/leaky.py
+</code></pre></div>
+<p>On a busy machine a node may not have sent anything since the step yet, and the difference between the time of the output and <code>start</code> is negative. Then the output is compared with 0, the exact solution before the step.</p>
 <h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Test this node deterministically: <a href="../3-test/">3. Test a Node</a></li>
-<li>More about ports (specs, initial values, one message for values that belong together): <a href="../../topics/ports/">Ports and Channels</a></li>
+<li>More about ports (specs, initial values, values that belong together): <a href="../../topics/ports/">Ports and Channels</a></li>
 <li>The seed, the device and the threads of a node: <a href="../../topics/threads-and-devices/">Threads and Devices</a></li>
 </ul>
 

@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1116,7 +1118,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#one-nodes-exception-stops-everything" class="md-nav__link">
+  <a href="#stop" class="md-nav__link">
     <span class="md-ellipsis">
       
         One node's exception stops everything
@@ -1127,7 +1129,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-the-host-receives-it" class="md-nav__link">
+  <a href="#where" class="md-nav__link">
     <span class="md-ellipsis">
       
         Where the host receives it
@@ -1138,7 +1140,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#on_exception-and-on_stop" class="md-nav__link">
+  <a href="#hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
         on_exception and on_stop
@@ -1160,7 +1162,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-state-after-an-exception" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         The state after an exception
@@ -1182,7 +1184,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interpreter-exit" class="md-nav__link">
+  <a href="#exit" class="md-nav__link">
     <span class="md-ellipsis">
       
         Interpreter exit
@@ -1272,6 +1274,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1672,7 +1702,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#one-nodes-exception-stops-everything" class="md-nav__link">
+  <a href="#stop" class="md-nav__link">
     <span class="md-ellipsis">
       
         One node's exception stops everything
@@ -1683,7 +1713,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-the-host-receives-it" class="md-nav__link">
+  <a href="#where" class="md-nav__link">
     <span class="md-ellipsis">
       
         Where the host receives it
@@ -1694,7 +1724,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#on_exception-and-on_stop" class="md-nav__link">
+  <a href="#hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
         on_exception and on_stop
@@ -1716,7 +1746,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-state-after-an-exception" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         The state after an exception
@@ -1738,7 +1768,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interpreter-exit" class="md-nav__link">
+  <a href="#exit" class="md-nav__link">
     <span class="md-ellipsis">
       
         Interpreter exit
@@ -1769,16 +1799,12 @@
 
 
 <h1 id="-errors-and-shutdown">🚨 Errors and Shutdown<a class="headerlink" href="#-errors-and-shutdown" title="Permanent link">&para;</a></h1>
-<p>This page shows what happens when a hook of a node raises, where the host receives the exception, and the timeouts of the host's calls.</p>
-<h2 id="one-nodes-exception-stops-everything">One node's exception stops everything<a class="headerlink" href="#one-nodes-exception-stops-everything" title="Permanent link">&para;</a></h2>
-<p>Whichever hook of whichever node raises (<code>on_update</code>, <code>on_start</code>, <code>state_dict</code> or any other), the whole run stops:</p>
-<ol>
-<li>Mujou logs the node's path, the hook and the traceback to the logger <code>"mujou"</code> at the ERROR level</li>
-<li>Each node finishes the hook it is running, stops, and calls its <code>on_exception()</code>, without waiting for the others. The nodes that did not raise are called too</li>
-<li>Once every <code>on_exception()</code> has returned, every node's <code>on_stop()</code> is called, the one that raised included</li>
-<li>The host gets a <code>NetworkError</code>, a subclass of <code>RuntimeError</code>, whose <code>__cause__</code> is the first exception. Exceptions of other nodes at about the same time are only logged</li>
-</ol>
-<p>Mujou never stops only the node that raised: its neighbors would keep reading its old values and drift away from the equilibrium without anyone noticing.</p>
+<h2 id="stop">One node's exception stops everything<a class="headerlink" href="#stop" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TB
+    E["A hook of a node raises&lt;br/&gt;(on_update, on_start, state_dict or any other)"] --&gt; L["Logged"]
+    L --&gt; X["Each node finishes its running hook, stops, and calls on_exception()&lt;br/&gt;without waiting for the others; the nodes that did not raise too"]
+    X --&gt;|"once every on_exception() has returned"| S["on_stop() on every node&lt;br/&gt;the one that raised included"]
+    E --&gt; H["The host gets NetworkError&lt;br/&gt;__cause__ is the first exception"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">"""What happens when a node raises.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">The whole run stops: every node's ``on_exception``, then its ``on_stop``, is</span>
@@ -1861,97 +1887,68 @@
 <a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mujou.run raised NetworkError, caused by </span><span class="si">{</span><span class="n">error</span><span class="o">.</span><span class="n">__cause__</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 <a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">error</span><span class="o">.</span><span class="n">__cause__</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="where-the-host-receives-it">Where the host receives it<a class="headerlink" href="#where-the-host-receives-it" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>The exception happens</th>
-<th>What raises <code>NetworkError</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>While the run starts (<code>on_start</code>, ...)</td>
-<td><code>mujou.run</code> itself, after the ending work (<code>on_exception</code>, <code>on_stop</code>)</td>
-</tr>
-<tr>
-<td>After the start</td>
-<td>The next <code>write</code>, <code>read</code>, <code>read_with_time</code>, <code>subscribe</code> (and its iterator), <code>wait_for</code>, <code>state_dict</code>, <code>shutdown</code> or <code>join</code>, or <code>step</code> of a <code>ManualRun</code></td>
-</tr>
-</tbody>
-</table>
-<p>An exception after the start reaches the host at its next call, so a host that only waits does not notice it: wait with <code>run.join(timeout)</code>, not with <code>run.timer.sleep</code>. At the end of a <code>with</code> block, the <code>shutdown</code> raises it; if the body of the block raises too, the body's exception goes on and the <code>NetworkError</code> is dropped (the log still has the node's exception).</p>
-<h2 id="on_exception-and-on_stop"><code>on_exception</code> and <code>on_stop</code><a class="headerlink" href="#on_exception-and-on_stop" title="Permanent link">&para;</a></h2>
+<details class="question">
+<summary>Why not stop only the node that raised?</summary>
+<p>Its neighbors would keep reading its old values and drift away from the equilibrium without anyone noticing.</p>
+</details>
+<h2 id="where">Where the host receives it<a class="headerlink" href="#where" title="Permanent link">&para;</a></h2>
+<p>An exception while the run starts (<code>on_start</code>, ...) is raised by <code>mujou.run</code>; one after the start, by the host's next call of a <a class="autorefs autorefs-internal" title="mujou.Run" href="../../api/run/#mujou.Run"><code>Run</code></a> method, as <a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../../api/run/#mujou.NetworkError"><code>NetworkError</code></a>. So a host that only waits waits with <code>run.join(timeout=...)</code>, not with <code>run.timer.sleep</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">run</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># does not notice when a node raises</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">run</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">run</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># a node's exception arrives as NetworkError (TimeoutError if it has not stopped in 10 s)</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="hooks"><code>on_exception</code> and <code>on_stop</code><a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Hook</th>
-<th>Called</th>
 <th>What to write</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>on_exception()</code></td>
-<td>When the run ends by an exception, on every node, first</td>
+<td><a class="autorefs autorefs-internal" title="on_exception" href="../../api/node-and-ports/#mujou.Node.on_exception"><code>on_exception()</code></a></td>
 <td>The work of an abnormal end, such as a safe stop of the actuators</td>
 </tr>
 <tr>
-<td><code>on_stop()</code></td>
-<td>Once at every end, normal or not</td>
-<td>The release of resources such as I/O; not a change of the state</td>
+<td><a class="autorefs autorefs-internal" title="on_stop" href="../../api/node-and-ports/#mujou.Node.on_stop"><code>on_stop()</code></a></td>
+<td>The release of resources such as I/O; called at every end</td>
 </tr>
 </tbody>
 </table>
-<ul>
-<li><code>on_exception</code> takes no arguments: a node does not learn which exception stopped the run. The host handles the cause, from <code>__cause__</code></li>
-<li>To handle an exception within a node, catch it with <code>try</code> in the hook: an exception caught there does not stop the run</li>
-<li>If <code>on_exception</code> or <code>on_stop</code> raises, the exception is logged, and the ending goes on</li>
-<li><code>self.timer</code> does not move in these hooks: see the <a href="../../concepts/#rules-a-node-keeps">rules a node keeps</a></li>
-</ul>
+<p><code>on_exception</code> takes no arguments, so a node does not learn what stopped the run; the host handles the cause, from the <code>__cause__</code> of <code>NetworkError</code>. To handle an exception in the node, catch it with <code>try</code> in the hook (an exception caught there does not stop the run).</p>
 <h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
-<p>The node's exception goes to the logger <code>"mujou"</code> with its traceback; a program that has not configured logging prints it to standard error. Configure Python's <code>logging</code> to send it elsewhere:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># mujou also logs the node's exception, with its traceback, to the "mujou" logger.</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># Show the log on stdout here (without a handler, Python prints it to stderr).</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">stream</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"log: </span><span class="si">%(message)s</span><span class="s2">"</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="the-state-after-an-exception">The state after an exception<a class="headerlink" href="#the-state-after-an-exception" title="Permanent link">&para;</a></h2>
-<p>The state of a run that ended by an exception is not kept: <code>run.state_dict()</code> raises <code>NetworkError</code> too. Take the state you want to keep while the network runs, regularly during a long run. To run again, build new instances.</p>
+<p>A node's exception is logged with its traceback (the logger's name and level are in <a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../../api/run/#mujou.NetworkError"><code>NetworkError</code></a>). Configure Python's <code>logging</code> to send it elsewhere: the <code>logging.basicConfig</code> line of <a href="#stop">the program above</a> sends it to standard output (standard error if not configured).</p>
+<h2 id="state">The state after an exception<a class="headerlink" href="#state" title="Permanent link">&para;</a></h2>
+<p>The state of a run that ended by an exception is not kept, so take the state you want to keep while it runs (regularly in a long run), and build new instances to run again.</p>
 <h2 id="timeouts">Timeouts<a class="headerlink" href="#timeouts" title="Permanent link">&para;</a></h2>
-<p><code>shutdown</code>, <code>join</code>, <code>subscribe</code>, <code>wait_for</code> and <code>state_dict</code> take a <code>timeout</code> in real seconds; the default <code>math.inf</code> waits as long as it takes.</p>
-<table>
-<thead>
-<tr>
-<th>Call</th>
-<th>When the time runs out</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>run.shutdown(timeout=...)</code></td>
-<td><code>TimeoutError</code>. The request to stop stands, and the nodes update no more; the ending goes on, and <code>join</code> waits for it</td>
-</tr>
-<tr>
-<td><code>run.join(timeout=...)</code></td>
-<td><code>TimeoutError</code>. Nothing changes</td>
-</tr>
-<tr>
-<td><code>run.subscribe(port, timeout=...)</code></td>
-<td><code>TimeoutError</code> from the iterator, counting the whole iteration, the body of the loop included. The run keeps running</td>
-</tr>
-<tr>
-<td><code>run.wait_for(port, condition, timeout=...)</code></td>
-<td><code>TimeoutError</code>. The run keeps running</td>
-</tr>
-<tr>
-<td><code>run.state_dict(timeout=...)</code></td>
-<td><code>TimeoutError</code>, while some node has not paused (each finishes its <code>on_update</code> first). No state is taken, and the run keeps running</td>
-</tr>
-</tbody>
-</table>
-<p>A node whose single <code>on_update</code> is long (heavy BP, say) delays every pause for the state.</p>
-<h2 id="interpreter-exit">Interpreter exit<a class="headerlink" href="#interpreter-exit" title="Permanent link">&para;</a></h2>
-<p>If the interpreter exits while a run is running, Mujou shuts the run down and waits for every <code>on_stop</code>, once the other non-daemon threads have ended. A thread that iterates over <code>subscribe</code> keeps the exit waiting until its run ends, so end each run yourself, with <code>shutdown</code> or a <code>with</code> block.</p>
+<p>Which seconds the <code>timeout</code> of a waiting call counts is in the table of <a href="../time/#units">units of time</a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">A long <code>on_update</code> delays the pause</p>
+<p>A node whose single <code>on_update</code> is long (heavy BP, say) delays every pause for the state, since each node finishes its running <code>on_update</code> before it pauses.</p>
+</div>
+<h2 id="exit">Interpreter exit<a class="headerlink" href="#exit" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant I as Interpreter
+    participant T as Other non-daemon threads
+    participant M as Mujou
+    participant N as Every node
+    I-&gt;&gt;T: waits for them to end
+    Note over T: a thread iterating over subscribe&lt;br/&gt;does not end until its run ends
+    I-&gt;&gt;M: shut the run down
+    M-&gt;&gt;N: on_stop()
+    N--&gt;&gt;M: every on_stop returns
+    M--&gt;&gt;I: done</code></pre>
 
 
 

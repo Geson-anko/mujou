@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -1146,17 +1148,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ノードの内側とノードの間" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ノードの内側と、ノードの間
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#feedback-alignment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1168,7 +1159,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#両方向の-port" class="md-nav__link">
+  <a href="#bidirectional" class="md-nav__link">
     <span class="md-ellipsis">
       
         両方向の Port
@@ -1179,7 +1170,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#目標を中継する" class="md-nav__link">
+  <a href="#relay-targets" class="md-nav__link">
     <span class="md-ellipsis">
       
         目標を中継する
@@ -1190,18 +1181,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#新しいかどうかを判定する" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        新しいかどうかを判定する
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pcclocklearnclock" class="md-nav__link">
+  <a href="#learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.clock.LearnClock
@@ -1263,6 +1243,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1663,17 +1671,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#ノードの内側とノードの間" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ノードの内側と、ノードの間
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#feedback-alignment" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1685,7 +1682,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#両方向の-port" class="md-nav__link">
+  <a href="#bidirectional" class="md-nav__link">
     <span class="md-ellipsis">
       
         両方向の Port
@@ -1696,7 +1693,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#目標を中継する" class="md-nav__link">
+  <a href="#relay-targets" class="md-nav__link">
     <span class="md-ellipsis">
       
         目標を中継する
@@ -1707,18 +1704,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#新しいかどうかを判定する" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        新しいかどうかを判定する
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pcclocklearnclock" class="md-nav__link">
+  <a href="#learnclock" class="md-nav__link">
     <span class="md-ellipsis">
       
         pc.clock.LearnClock
@@ -1749,11 +1735,40 @@
 
 
 <h1 id="-更新則">🧮 更新則<a class="headerlink" href="#-更新則" title="Permanent link">&para;</a></h1>
-<p>更新則（学習則）は、ノードが <code>on_update(dt)</code> に書く更新そのもの。mujou はノード・Port・スケジューラに更新則を組み込まないので、ノードごとに選べ、同じネットワークのまま差し替えられる。このページでは、ノードをまたいで学ぶ則の書き方を feedback alignment を例に説明する。1 つのノードの内側の誤差逆伝播法（BP）は <a href="../../tutorial/4-learn-in-a-node/">4. ノードの中で学習する</a>、<code>mujou.pc</code> の則は <a href="../pc/">PC-ALM</a> にある。</p>
-<h2 id="ノードの内側とノードの間">ノードの内側と、ノードの間<a class="headerlink" href="#ノードの内側とノードの間" title="Permanent link">&para;</a></h2>
-<p>ノードの内側では、BP を含め PyTorch で計算できることは何でも使える。ノードの間では計算グラフをつなげない。Port が送るのは切り離したコピーである。そのため、ノードをまたいで学ぶ則は、各ノードが要るものをメッセージで送る。活動を前へ、誤差（やほかの credit）を後ろへ、目標は活動と一緒に。各ノードは自分の状態と隣のメッセージだけから学ぶ。</p>
+<p>更新則の選び方は <a href="../../concepts/#learning">Mujou の仕組み</a> にある。ここでは、ノードの間で学ぶ自作の則を feedback alignment で示す。</p>
 <h2 id="feedback-alignment">feedback alignment<a class="headerlink" href="#feedback-alignment" title="Permanent link">&para;</a></h2>
-<p><code>examples/feedback_alignment.py</code> は <span class="arithmatex">\(\hat y = W_2 \tanh(W_1 x)\)</span> を 2 つのノードで学ぶ。<code>hidden</code> が活動を前へ送り、<code>output</code> が誤差 <span class="arithmatex">\(e = \hat y - y\)</span> を後ろへ返す。BP なら <code>hidden</code> は credit <span class="arithmatex">\(W_2^\top e\)</span> を受け取るが、<code>hidden</code> は <code>W2</code> を知らない。代わりに自分の固定の乱数行列 <span class="arithmatex">\(B\)</span> で <span class="arithmatex">\(B e\)</span> を使う。それでも <span class="arithmatex">\(W_2\)</span> が <span class="arithmatex">\(B^\top\)</span> にそろっていき、学べる（<a href="https://doi.org/10.1038/ncomms13276">Lillicrap et al., 2016</a>）。</p>
+<p><code>examples/feedback_alignment.py</code> は <span class="arithmatex">\(\hat y = W_2 \tanh(W_1 x)\)</span> を 2 つのノード <code>hidden</code> と <code>output</code> で学ぶ。<code>hidden</code> は <code>W2</code> を知らず、固定の乱数行列 <span class="arithmatex">\(B\)</span> で学べる（<a href="https://doi.org/10.1038/ncomms13276">Lillicrap et al., 2016</a>）。</p>
+<pre class="mermaid"><code>flowchart LR
+    Host["ホスト"] --&gt;|"サンプル x, y"| H["hidden&lt;br/&gt;h = tanh(W1 x)"]
+    H --&gt;|"活動 h・目標 y・time"| O["output&lt;br/&gt;ŷ = W2 h"]
+    O --&gt;|"誤差 e = ŷ − y・time"| H
+    O --&gt;|"損失"| Loss["ホストが読む"]</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>BP</th>
+<th>feedback alignment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hidden</code> が使う credit</td>
+<td><span class="arithmatex">\(W_2^\top e\)</span></td>
+<td><span class="arithmatex">\(B e\)</span>（<span class="arithmatex">\(B\)</span> は <code>hidden</code> 固定の乱数行列）</td>
+</tr>
+<tr>
+<td><code>hidden</code> が <code>W2</code> を知る</td>
+<td>要る</td>
+<td>要らない</td>
+</tr>
+<tr>
+<td>学べる理由</td>
+<td>勾配そのもの</td>
+<td><span class="arithmatex">\(W_2\)</span> が <span class="arithmatex">\(B^\top\)</span> にそろっていく</td>
+</tr>
+</tbody>
+</table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/feedback_alignment.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Hidden</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
@@ -1814,22 +1829,78 @@
 <a id="__codelineno-2-26" name="__codelineno-2-26" href="#__codelineno-2-26"></a>        <span class="k">if</span> <span class="n">tick</span><span class="o">.</span><span class="n">learn</span><span class="p">:</span>
 <a id="__codelineno-2-27" name="__codelineno-2-27" href="#__codelineno-2-27"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([(</span><span class="n">e</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">h</span><span class="p">)</span> <span class="o">/</span> <span class="n">BATCH</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
 </code></pre></div>
-<p>プログラムは各バッチから学ぶ前の <code>output</code> の損失を表示する。損失は 6 秒で約 1.5 から約 0.02 まで下がる。<code>hidden</code> を固定すると 0.15 を下回らない。</p>
-<h2 id="両方向の-port">両方向の Port<a class="headerlink" href="#両方向の-port" title="Permanent link">&para;</a></h2>
-<p><code>hidden.next</code> は <code>Port(send=ACTIVITY, recv=ERROR)</code>、<code>output.prev</code> は <code>Port(send=ERROR, recv=ACTIVITY)</code>。1 本の接続で活動を前へ、誤差を後ろへ運ぶ。循環してつないでもよいので、誤差を別の Port で返してもよい。</p>
-<h2 id="目標を中継する">目標を中継する<a class="headerlink" href="#目標を中継する" title="Permanent link">&para;</a></h2>
-<p>活動はそのサンプルの目標 <code>y</code> と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、<code>output</code> はいつも予測を自分の目標と比べ、<code>hidden</code> は持っている入力と同じ <code>time</code> の誤差だけから学ぶ。<code>mujou.pc</code> のノードも同じように、<code>y</code>・<code>mask</code>・<code>time</code> を <code>pc.msg.Activity</code> で運ぶ（<a href="../pc/#%E3%83%8E%E3%83%BC%E3%83%89">PC-ALM</a>）。</p>
-<h2 id="新しいかどうかを判定する">新しいかどうかを判定する<a class="headerlink" href="#新しいかどうかを判定する" title="Permanent link">&para;</a></h2>
-<p><code>recv()</code> は新しいかどうかによらず最新の値を返す。各サンプルから 1 回だけ学ぶノードは、時刻で新しいサンプルを見分ける。<code>recv_with_time()</code> が返す時刻か、メッセージが運ぶ時刻を使う。誰も送る前の時刻は <code>None</code>（メッセージが運ぶ時刻なら、その初期値。<code>TimestampSpec</code> なら <code>Timestamp(ns=0)</code>）になる。</p>
-<h2 id="pcclocklearnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#pcclocklearnclock" title="Permanent link">&para;</a></h2>
-<p>どちらのノードも、いつ学ぶかを <code>pc.clock.LearnClock</code> で決める。<code>mujou.pc</code> の部品だが、どの則でも使える。更新ごとに <code>tick(dt, time, now)</code> に <code>dt</code>、入力が書かれた時刻、今の時刻を渡すと、<code>pc.clock.Tick</code> が返る。</p>
-<ul>
-<li><code>new</code>: 入力が新しい（時刻が前回見たものと違う）</li>
-<li><code>learn</code>: この更新で学ぶ。<code>learn_interval</code> を渡したなら、各書き込みから <code>learn_interval</code> 後の最初の更新（入力が変わらない間は以後 <code>learn_interval</code> ごと）。ただし入力を初めて見た更新では学ばない。<code>learn_interval=None</code> なら毎回</li>
-<li><code>elapsed</code>: 前に学んでからの時間。各 <code>dt</code> は <code>max_dt</code> で打ち切る。刻みはこれで重み付けする。<span class="arithmatex">\(W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla\)</span> は勾配流 <span class="arithmatex">\(\tau \dot W = -\nabla\)</span> をたどるので、どれだけ学ぶかはノードの更新回数ではなく時間で決まる</li>
-<li><code>dt</code>: <code>max_dt</code> で打ち切った <code>dt</code></li>
-</ul>
-<p>クロックは <code>mujou.Stateful</code> なので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>表示される <code>output</code> の損失（各バッチから学ぶ前）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>両方のノードが学ぶ</td>
+<td>6 秒で約 1.5 から約 0.02 まで下がる</td>
+</tr>
+<tr>
+<td><code>hidden</code> を固定</td>
+<td>0.15 を下回らない</td>
+</tr>
+</tbody>
+</table>
+<h2 id="bidirectional">両方向の Port<a class="headerlink" href="#bidirectional" title="Permanent link">&para;</a></h2>
+<p>この例は活動と誤差を 1 本の接続（<code>hidden.next</code> と <code>output.prev</code>）で運ぶ。つなぎ方は<a href="../ports/#connect">循環してもよい</a>ので、誤差を別の Port で返す書き方もできる。</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th><code>send</code></th>
+<th><code>recv</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hidden.next</code></td>
+<td><code>ACTIVITY</code></td>
+<td><code>ERROR</code></td>
+</tr>
+<tr>
+<td><code>output.prev</code></td>
+<td><code>ERROR</code></td>
+<td><code>ACTIVITY</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="relay-targets">目標を中継する<a class="headerlink" href="#relay-targets" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">避ける: 目標を別の Port で</label><label for="__tabbed_1_2">こう書く: 1 つのメッセージで</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as hidden
+    participant O as output
+    H-&gt;&gt;O: 活動 h（サンプル 2）
+    Note over O: 目標の Port はまだサンプル 1 の y
+    O-&gt;&gt;O: サンプル 2 の予測をサンプル 1 の y と比べてしまう
+    H-&gt;&gt;O: 目標 y（サンプル 2）</code></pre>
+</div>
+<div class="tabbed-block">
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as hidden
+    participant O as output
+    H-&gt;&gt;O: h・y・time（サンプル 2）
+    O-&gt;&gt;O: 予測を自分の目標と比べる
+    O-&gt;&gt;H: e・time
+    H-&gt;&gt;H: 持っている入力と同じ time の誤差だけから学ぶ</code></pre>
+</div>
+</div>
+</div>
+<p><code>mujou.pc</code> のノードも、<code>y</code>・<code>mask</code>・<code>time</code> を <a class="autorefs autorefs-internal" title="Activity" href="../../api/pc/#mujou.pc.msg.Activity"><code>pc.msg.Activity</code></a> で活動と 1 つのメッセージに載せて運ぶ。</p>
+<p>各サンプルから 1 回だけ学ぶノードは、<code>recv()</code> が新しいかどうかによらず最新の値を返すため、時刻で新しいサンプルを見分ける（<a href="../ports/#new-or-reread">新しい値か読み直しか</a>）。</p>
+<h2 id="learnclock"><code>pc.clock.LearnClock</code><a class="headerlink" href="#learnclock" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">tick</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>  <span class="c1"># dt、入力が書かれた時刻、今の時刻</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">if</span> <span class="n">tick</span><span class="o">.</span><span class="n">learn</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">grad</span><span class="p">],</span> <span class="n">tick</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>  <span class="c1"># 前に学んでからの時間で重み付け</span>
+</code></pre></div>
+<p>いつ学ぶかを決める <a class="autorefs autorefs-internal" title="LearnClock" href="../../api/pc/#mujou.pc.clock.LearnClock"><code>LearnClock</code></a> は <code>mujou.pc</code> の部品だが PC-ALM に限らずどの則でも使え、学ぶ量は <code>elapsed</code> で重み付けして更新の回数でなく時間に比例させる（<a href="../pc-concepts/#learnclock">mujou.pc の仕組み</a>）。</p>
 
 
 

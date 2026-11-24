@@ -583,7 +583,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-from-pypi" class="md-nav__link">
+  <a href="#pypi" class="md-nav__link">
     <span class="md-ellipsis">
       
         Install from PyPI
@@ -594,7 +594,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-from-source" class="md-nav__link">
+  <a href="#source" class="md-nav__link">
     <span class="md-ellipsis">
       
         Build from source
@@ -605,7 +605,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#check-the-installation" class="md-nav__link">
+  <a href="#check" class="md-nav__link">
     <span class="md-ellipsis">
       
         Check the installation
@@ -899,6 +899,8 @@
   
     
     
+      
+        
       
         
       
@@ -1234,6 +1236,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1645,7 +1675,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install-from-pypi" class="md-nav__link">
+  <a href="#pypi" class="md-nav__link">
     <span class="md-ellipsis">
       
         Install from PyPI
@@ -1656,7 +1686,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-from-source" class="md-nav__link">
+  <a href="#source" class="md-nav__link">
     <span class="md-ellipsis">
       
         Build from source
@@ -1667,7 +1697,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#check-the-installation" class="md-nav__link">
+  <a href="#check" class="md-nav__link">
     <span class="md-ellipsis">
       
         Check the installation
@@ -1698,61 +1728,126 @@
 
 
 <h1 id="-installation">📦 Installation<a class="headerlink" href="#-installation" title="Permanent link">&para;</a></h1>
+<pre class="mermaid"><code>flowchart LR
+    Q{"Run the examples?&lt;br&gt;Work on Mujou?"}
+    Q --&gt;|"No"| P["Install from PyPI&lt;br&gt;uv add / pip install"]
+    Q --&gt;|"Yes"| S["Build from source&lt;br&gt;git clone → uv sync"]
+    P --&gt; C["Check the installation"]
+    S --&gt; C</code></pre>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Requirement</th>
 <th>Details</th>
+<th>From PyPI</th>
+<th>From source</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Python</td>
-<td>3.14 or later. The free-threaded build 3.14t is recommended. The regular 3.14 build with the GIL also works</td>
+<td>3.14 or later. The free-threaded build 3.14t is recommended; the build with the GIL works (<a href="../topics/threads-and-devices/#workers">why</a>)</td>
+<td>Needed</td>
+<td>Needed</td>
 </tr>
 <tr>
 <td>PyTorch</td>
-<td>Installed automatically as a dependency of Mujou</td>
+<td>Installed automatically as a dependency of Mujou. For a CPU-only or another CUDA build, follow the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a></td>
+<td>Automatic</td>
+<td>Automatic</td>
 </tr>
 <tr>
 <td>Rust</td>
-<td>1.85 or later, installed with <a href="https://rustup.rs/">rustup</a>. Needed only to build from source</td>
+<td>1.85 or later, installed with <a href="https://rustup.rs/">rustup</a>. For building from source</td>
+<td>Only on platforms without a wheel</td>
+<td>Needed</td>
 </tr>
 <tr>
 <td>uv</td>
-<td><a href="https://docs.astral.sh/uv/">uv</a>. Needed only to build from source</td>
+<td><a href="https://docs.astral.sh/uv/">uv</a>. For building from source</td>
+<td>If you use <code>uv add</code></td>
+<td>Needed</td>
 </tr>
 </tbody>
 </table>
-<p>The free-threaded build is recommended because the nodes run on several worker threads at once. With the GIL, nodes written in Python compete for the GIL and rarely run in parallel.</p>
-<div class="admonition warning">
-<p class="admonition-title">The API still changes</p>
-<p>Mujou is in its 0.x releases: a minor release (0.x.0) may break the API, while a patch release (0.x.y) only fixes bugs. Pin the minor version, such as <code>mujou~=0.1.0</code>, and read the <a href="../changelog/">Changelog</a> before you upgrade.</p>
-</div>
-<h2 id="install-from-pypi">Install from PyPI<a class="headerlink" href="#install-from-pypi" title="Permanent link">&para;</a></h2>
+<h2 id="pypi">Install from PyPI<a class="headerlink" href="#pypi" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">uv</label><label for="__tabbed_1_2">pip</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
 <p>In a uv project:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>add<span class="w"> </span>mujou
 </code></pre></div>
-<p>Or with pip, in a virtual environment with Python 3.14 or later:</p>
+</div>
+<div class="tabbed-block">
+<p>In a virtual environment with Python 3.14 or later:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>mujou
 </code></pre></div>
-<p>Wheels are published for Linux (x86_64 and aarch64), macOS (arm64) and Windows (x86_64), each for 3.14 and 3.14t. On other platforms, pip builds Mujou from the sdist, which needs Rust.</p>
-<p>PyTorch is installed from PyPI, like the other dependencies. To use another build, such as a CPU-only one or another CUDA version, follow the <a href="https://pytorch.org/get-started/locally/">PyTorch installation guide</a>.</p>
-<h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
-<p>To run the example programs or to work on Mujou itself, build it from a clone of the repository:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>uv<span class="w"> </span>sync
+</div>
+</div>
+</div>
+<p>Platforms with published wheels (nothing to build):</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>Architecture</th>
+<th>Python</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td>x86_64, aarch64</td>
+<td>3.14 and 3.14t</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>arm64</td>
+<td>3.14 and 3.14t</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>x86_64</td>
+<td>3.14 and 3.14t</td>
+</tr>
+</tbody>
+</table>
+<p>Pin the minor version in your dependencies, and read the <a href="../changelog/">Changelog</a> before you move to a new one.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"mujou~=0.1.0"</span><span class="p">]</span>
 </code></pre></div>
-<p><code>uv sync</code> sets up the free-threaded Python 3.14t, creates <code>.venv/</code>, installs the dependencies (with what the example programs need, such as numpy), and builds the core, which is written in Rust. For the regular build with the GIL, run <code>uv sync --python 3.14</code> instead.</p>
-<h2 id="check-the-installation">Check the installation<a class="headerlink" href="#check-the-installation" title="Permanent link">&para;</a></h2>
-<p>In the clone of the repository:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># prints a version such as 0.1.0</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py<span class="w">  </span><span class="c1"># prints a line such as: y = tensor([3., 5., 7.]) at t = 0.017 s</span>
+<h2 id="source">Build from source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Geson-anko/mujou.git
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">cd</span><span class="w"> </span>mujou
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>sync<span class="w">  </span><span class="c1"># creates .venv/, installs the dependencies (with what the examples need, such as numpy) and builds the Rust core</span>
 </code></pre></div>
-<p>After <code>pip install mujou</code>, run the first line with <code>python</code> instead of <code>uv run python</code>, and copy <a href="https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py"><code>examples/quickstart.py</code></a> to run it.</p>
-<p>The <a href="../tutorial/1-run/">first page of the tutorial</a> explains the second program and its output.</p>
+<p>Choose the Python with the arguments of <code>uv sync</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">3.14t (free-threaded, default)</label><label for="__tabbed_2_2">3.14 (with the GIL)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>sync
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--python<span class="w"> </span><span class="m">3</span>.14
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="check">Check the installation<a class="headerlink" href="#check" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">uv</label><label for="__tabbed_3_2">pip</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># prints a version such as 0.1.0</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import mujou; print(mujou.__version__)"</span><span class="w">  </span><span class="c1"># prints a version such as 0.1.0</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Run your first program in <a href="../tutorial/1-run/#program">1. Run a Network</a>.</p>
 
 
 

@@ -839,7 +839,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#手順" class="md-nav__link">
+  <a href="#steps" class="md-nav__link">
     <span class="md-ellipsis">
       
         手順
@@ -850,10 +850,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#状態の木" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
-        状態の木
+        取得する間の一時停止
       
     </span>
   </a>
@@ -861,7 +861,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#再開するときの注意" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         再開するときの注意
@@ -872,7 +872,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#自分の値を状態に入れる" class="md-nav__link">
+  <a href="#custom-state" class="md-nav__link">
     <span class="md-ellipsis">
       
         自分の値を状態に入れる
@@ -880,24 +880,30 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ファイル" class="md-nav__link">
+    <nav class="md-nav" aria-label="自分の値を状態に入れる">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#override" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ファイル
+        state_dict と load_state_dict を override する
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#複数の実行を同じ時刻で" class="md-nav__link">
+  <a href="#files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        複数の実行を同じ時刻で
+        ファイル
       
     </span>
   </a>
@@ -939,6 +945,8 @@
   
     
     
+      
+        
       
         
       
@@ -1274,6 +1282,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1674,7 +1710,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#手順" class="md-nav__link">
+  <a href="#steps" class="md-nav__link">
     <span class="md-ellipsis">
       
         手順
@@ -1685,10 +1721,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#状態の木" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
-        状態の木
+        取得する間の一時停止
       
     </span>
   </a>
@@ -1696,7 +1732,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#再開するときの注意" class="md-nav__link">
+  <a href="#restore" class="md-nav__link">
     <span class="md-ellipsis">
       
         再開するときの注意
@@ -1707,7 +1743,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#自分の値を状態に入れる" class="md-nav__link">
+  <a href="#custom-state" class="md-nav__link">
     <span class="md-ellipsis">
       
         自分の値を状態に入れる
@@ -1715,24 +1751,30 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ファイル" class="md-nav__link">
+    <nav class="md-nav" aria-label="自分の値を状態に入れる">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#override" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ファイル
+        state_dict と load_state_dict を override する
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#複数の実行を同じ時刻で" class="md-nav__link">
+  <a href="#files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        複数の実行を同じ時刻で
+        ファイル
       
     </span>
   </a>
@@ -1771,8 +1813,13 @@
 
 
 <h1 id="-6-保存と再開">💾 6. 保存と再開<a class="headerlink" href="#-6-保存と再開" title="Permanent link">&para;</a></h1>
-<p>実行の状態を取得して保存し、新しい実行でその続きから再開する。状態が何を持つかは <a href="../../concepts/#7-%E7%8A%B6%E6%85%8B">Mujou の仕組み</a>を参照。</p>
-<h2 id="手順">手順<a class="headerlink" href="#手順" title="Permanent link">&para;</a></h2>
+<p>実行の状態を取得してファイルに保存し、同じ構成の新しいインスタンスで続きから再開する。</p>
+<h2 id="steps">手順<a class="headerlink" href="#steps" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    A["Run&lt;br/&gt;（実行中、または正常に終了した後）"] --&gt;|"run.state_dict()"| T["状態の木&lt;br/&gt;（CPU の上の素の dict）"]
+    T --&gt;|"torch.save"| F[("ファイル")]
+    F --&gt;|"torch.load"| T2["状態の木"]
+    T2 --&gt;|"mujou.run(新しいインスタンス, state=tree)"| B["続きから走る Run"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">"""Save the state of a run, and restore it in a new run that goes on from there.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">A node collects its state by itself: every attribute that holds a</span>
@@ -1856,88 +1903,130 @@
 <a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="c1"># The module was restored too: the new instance had other random weights.</span>
 <a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a><span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">after</span><span class="p">[</span><span class="s2">"readout"</span><span class="p">][</span><span class="s2">"weight"</span><span class="p">],</span> <span class="n">saved</span><span class="p">[</span><span class="s2">"readout"</span><span class="p">][</span><span class="s2">"weight"</span><span class="p">])</span>
 </code></pre></div>
-<ol>
-<li>ノードは状態を属性に持つ。<code>self.x</code>（テンソル）と <code>self.readout</code>（モジュール）は、ノードの乱数生成器の状態と一緒に自動で集まる</li>
-<li>状態は <code>__init__</code> で作り、<code>on_update</code> ではその場で更新する。こうすれば、optimizer などのほかの参照も状態を指したままになる（<a href="../2-node/">2. ノードを書く</a>）</li>
-<li>ホストは <code>run.state_dict()</code> で木を取得する。実行中でも、正常に終了した後（ここでは <code>with</code> ブロックの後）でもよい</li>
-<li>木を <code>torch.save</code> で保存する</li>
-<li>再開するときは同じ構成の<strong>新しいインスタンス</strong>を作り、木を <code>mujou.run(net, state=tree)</code> に渡す。ネットワークは 1 回だけ走るので、木を取得したネットワークは使えない（<a href="../../concepts/#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E5%AE%88%E3%82%8B%E8%A6%8F%E5%89%87">ノードが守る規則</a>）</li>
-</ol>
-<h2 id="状態の木">状態の木<a class="headerlink" href="#状態の木" title="Permanent link">&para;</a></h2>
-<p>木は CPU 上のコピーからなる素の <code>dict</code> で、ノードのパスをキーにする。各ノードの状態、各 Channel の最新のメッセージとその時刻、各ノードの最後の更新の時刻、タイマーの時刻を持つ。正確な形は API リファレンスの <a href="../../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a> にある。</p>
-<p>取得する間は実行が一時停止する。各ノードは更新の途中では止まらず、2 回の更新の間で止まるので、木の中の値はすべて同じ時刻のものになる。止まっていた時間は以後の <code>dt</code> に入らない。この一時停止の前後で各ノードの <code>on_pause</code> と <code>on_resume</code> が呼ばれ、その間の I/O を止められる。タイマーの一時停止（<code>run.timer.pause()</code>）ではどちらも呼ばれない。</p>
+<p>木の形は <a class="autorefs autorefs-internal" title="state_dict" href="../../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a> にある。ネットワークは 1 回だけ走るため、木を取ったインスタンスでは再開できない。同じ構成の新しいインスタンスを作る（<a href="../../concepts/#rules">ノードが守る規則</a>）。</p>
+<h2 id="pause">取得する間の一時停止<a class="headerlink" href="#pause" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant H as ホスト
+    participant R as 実行
+    participant N as 各ノード
+    H-&gt;&gt;R: run.state_dict()
+    R-&gt;&gt;N: 一時停止を求める（タイマーも止まる）
+    N-&gt;&gt;N: いまの on_update を最後まで終える
+    N-&gt;&gt;N: on_pause()
+    R-&gt;&gt;R: 全ノードの状態を複製する（どれも同じ時刻）
+    N-&gt;&gt;N: on_resume()
+    R--&gt;&gt;H: 状態の木
+    Note over N: 止まっていた時間は以後の dt に入らない</code></pre>
+<p>止まっている間の I/O は <a class="autorefs autorefs-internal" title="on_pause" href="../../api/node-and-ports/#mujou.Node.on_pause"><code>on_pause</code></a> と <code>on_resume</code> で止められる。例外で終わった実行からは状態を取れない。長い実行は実行中に定期的に取る（<a href="../../topics/errors/#state">例外の後の状態</a>）。</p>
+<h2 id="restore">再開するときの注意<a class="headerlink" href="#restore" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>取得するとき</th>
-<th>得られるもの</th>
+<th>気をつけるもの</th>
+<th>再開した実行では</th>
+<th>詳しく</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>ネットワークの実行中</td>
-<td>その時刻の状態</td>
+<td>タイマー</td>
+<td>木の時刻から始まる専用のタイマーで走る</td>
+<td><a href="../../topics/time/#restored-timer">再開した実行のタイマー</a></td>
 </tr>
 <tr>
-<td>正常に終了した後</td>
-<td><code>on_stop</code> の後にノードが残した値。時刻は <code>shutdown</code> が終了を求めた時点</td>
+<td>ネットワークと状態</td>
+<td>木を取ったものと同じパス・Port・接続、同じ状態のキーと shape にする</td>
+<td><a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a> の <code>state</code></td>
 </tr>
 <tr>
-<td>例外で終了した後</td>
-<td>取得できず、<code>state_dict</code> は <code>NetworkError</code> を送出する。残したい状態は実行中に取得し、長い実行では定期的に取得する</td>
+<td>入力</td>
+<td><code>inputs</code> は状態の後に書かれ、木の値を置き換える</td>
+<td><code>mujou.run</code> の <code>inputs</code></td>
 </tr>
 </tbody>
 </table>
-<h2 id="再開するときの注意">再開するときの注意<a class="headerlink" href="#再開するときの注意" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>再開した実行は専用のタイマーで走る。</strong> 木の時刻と時間の速さから始まる新しい <code>Timer</code>（<code>run.timer</code>）で走るので、<code>mujou.time.global_timer</code> やほかの実行の時刻は戻らない。<code>state=</code> と一緒に <code>timer=</code> を渡すと <code>ValueError</code> になる。<code>global_timer.pause()</code> では再開した実行は止まらないので、その実行の <code>run.timer</code> を止める</li>
-<li><strong>同じネットワークを作る。</strong> 再開するネットワークは、ノードのパス・Port・接続が木を取得したネットワークと同じでなければならない。違えば <code>mujou.run</code> は、足りない項目と余分な項目を列挙して <code>ValueError</code> を送出する。属性名を変えるとパスが変わるので、変える前に保存した木では再開できない。どちらもまだ何も起動していないので、木を直せば同じインスタンスで再開できる</li>
-<li><strong>ノードごとの状態をそろえる。</strong> ノードの状態のキーや shape が違うと、ノードの起動中に既定の <code>load_state_dict</code> が <code>ValueError</code> を送出する。そのため <code>mujou.run</code> は <code>NetworkError</code>（<code>__cause__</code> がその <code>ValueError</code>）を送出し、そのインスタンスはもう走らない。新しく作り直す</li>
-<li><strong>入力。</strong> <code>state=</code> と <code>inputs=</code> を両方渡すと、<code>inputs</code> の値が木の値を置き換える</li>
-</ul>
-<h2 id="自分の値を状態に入れる">自分の値を状態に入れる<a class="headerlink" href="#自分の値を状態に入れる" title="Permanent link">&para;</a></h2>
-<p>自動で集まるのは、テンソル、<code>mujou.Stateful</code> のオブジェクト（どの <code>nn.Module</code> も、<code>pc.clock.LearnClock</code> も、<code>mujou.Stateful</code> を継承した自作のクラスも）、<code>self.generator</code> の状態。数値・文字列、テンソルのリストや dict は集まらない。<code>state_dict</code> と <code>load_state_dict</code> という名前のメソッドを持つだけのオブジェクトも集まらないので、<code>mujou.Stateful</code> を継承する。実行中に変わる素の値は、<code>__init__</code> で属性に代入して登録する。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="bp">self</span><span class="o">.</span><span class="n">elapsed</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="bp">self</span><span class="o">.</span><span class="n">register_state</span><span class="p">(</span><span class="s2">"elapsed"</span><span class="p">)</span>
+<div class="admonition warning">
+<p class="admonition-title">属性名を変えるとパスが変わる</p>
+<p>ノードのパスは属性名から作られるため、属性名を変えると変える前の木では再開できない。</p>
+</div>
+<h2 id="custom-state">自分の値を状態に入れる<a class="headerlink" href="#custom-state" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    A["ノードの属性の値"] --&gt; Q1{"テンソル、または mujou.Stateful&lt;br/&gt;（nn.Module を含む）？"}
+    Q1 -- はい --&gt; S["自動で入る&lt;br/&gt;（self.generator の状態も）"]
+    Q1 -- いいえ --&gt; Q2{"実行中に変わる？"}
+    Q2 -- いいえ --&gt; C["設定。状態に入らない"]
+    Q2 -- はい --&gt; Q3{"既定の torch.load が読める型？"}
+    Q3 -- はい --&gt; R["register_state で登録する"]
+    Q3 -- "いいえ（deque など）" --&gt; O["state_dict と load_state_dict を override する"]</code></pre>
+<p>自作クラスは <code>state_dict</code> と <code>load_state_dict</code> を持つだけでは状態に入らず、<a class="autorefs autorefs-internal" title="mujou.Stateful" href="../../api/node-and-ports/#mujou.Stateful"><code>Stateful</code></a> を継承する（素の値の登録規則は <a class="autorefs autorefs-internal" title="register_state" href="../../api/node-and-ports/#mujou.Node.register_state"><code>register_state</code></a>）。</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">避ける</label><label for="__tabbed_1_2">こう書く</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">:</span>  <span class="c1"># 同じ名前のメソッドを持つだけでは状態に入らない</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </code></pre></div>
-<p>値はそのまま状態に入り、後で属性に何を代入しても状態に残る。登録できるのは代入済みの属性だけ（そうでなければ <code>AttributeError</code>）。値は既定の <code>torch.load</code> が読める型（<code>int</code>・<code>float</code>・<code>bool</code>・<code>str</code>・<code>None</code> とそのリスト・タプル・dict、テンソル）にする。</p>
-<p><code>deque</code> などそれ以外のものは、<code>state_dict</code> と <code>load_state_dict</code> の両方を override する。<code>super().state_dict()</code> の戻り値を拡張し、<code>super().load_state_dict</code> には自分で足したキーを除いて渡す。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Recent</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="sd">"""Keeps the last 8 inputs in a deque."""</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"recent"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">)}</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
-<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>    <span class="nd">@override</span>
-<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span> <span class="o">=</span> <span class="n">deque</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"recent"</span><span class="p">]),</span> <span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>  <span class="c1"># 木の値は写して持つ</span>
-<a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">"recent"</span><span class="p">})</span>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">(</span><span class="n">mujou</span><span class="o">.</span><span class="n">Stateful</span><span class="p">):</span>  <span class="c1"># 継承すれば属性にしたとき自動で入る</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span> <span class="o">...</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </code></pre></div>
-<p><code>state_dict</code> はノードが一時停止している間に呼ばれる。状態の取得がほかのノードから見えないよう、その中では Port が受信も送信も断る。戻り値は mujou がコピーする。<code>load_state_dict</code> は <code>on_start</code> の後、最初の <code>on_update</code> の前に 1 回呼ばれる。</p>
-<h2 id="ファイル">ファイル<a class="headerlink" href="#ファイル" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>torch.save</code> と、既定の <code>weights_only=True</code> の <code>torch.load</code> は、テンソル・数値・文字列・dict・list・tuple からなる木を読み書きできる。mujou が木に入れるのはこれだけ。独自クラスのオブジェクトが入った木（<code>register_state</code> や override から）は、この方法では読めない</li>
-<li><code>pickle.load</code> と <code>torch.load(..., weights_only=False)</code> は、ファイルの中のコードを実行できる。信頼できないファイルをこれらで読まない</li>
-<li>既定の <code>load_state_dict</code> は各テンソルをノードのデバイスへコピーするので、CUDA のノードから保存した木も GPU の無いマシンで読める。ただし乱数生成器の状態は CPU と CUDA で違うので、木を復元できるのは保存したノードと同じ種類のデバイスのノードだけ</li>
-</ul>
-<h2 id="複数の実行を同じ時刻で">複数の実行を同じ時刻で<a class="headerlink" href="#複数の実行を同じ時刻で" title="Permanent link">&para;</a></h2>
-<p><code>run.state_dict()</code> は 1 つの実行の状態を 1 つの時刻で取得する。1 つのタイマーで走る複数の実行の状態を同じ時刻で取得するには、先にタイマーを止める。手順は<a href="../../topics/time/#%E6%99%82%E9%96%93%E3%82%92%E6%AD%A2%E3%82%81%E3%82%8B">時間</a>。</p>
+</div>
+</div>
+</div>
+<h3 id="override">state_dict と load_state_dict を override する<a class="headerlink" href="#override" title="Permanent link">&para;</a></h3>
+<p><code>state_dict</code> は <code>super().state_dict()</code> に自分のキーを足して返し、<code>load_state_dict</code> は自分のキーを除いた残りを <code>super().load_state_dict</code> に渡して、木のテンソルは clone して持つ。</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">override</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">mujou</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Recent</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="sd">"""Keeps the last 8 inputs in a deque."""</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">:</span> <span class="n">deque</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="s2">"recent"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recent</span><span class="p">)}</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="nd">@override</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">recent</span> <span class="o">=</span> <span class="n">deque</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"recent"</span><span class="p">]),</span> <span class="n">maxlen</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>  <span class="c1"># 木の値は写して持つ</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">"recent"</span><span class="p">})</span>
+</code></pre></div>
+<h2 id="files">ファイル<a class="headerlink" href="#files" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>読み方</th>
+<th>読めるもの</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>torch.load(f)</code>（既定の <code>weights_only=True</code>）</td>
+<td>テンソル・数値・文字列・dict・list・tuple からなる木</td>
+<td>自作クラスの値（<code>register_state</code> や override で入れたもの）が入った木は読めない</td>
+</tr>
+<tr>
+<td><code>torch.load(f, weights_only=False)</code>・<code>pickle.load</code></td>
+<td>自作クラスの値も</td>
+<td>ファイルの中のコードを実行できる。信頼できないファイルを読まない</td>
+</tr>
+</tbody>
+</table>
 <h2 id="次へ">次へ<a class="headerlink" href="#次へ" title="Permanent link">&para;</a></h2>
 <ul>
+<li>1 つのタイマーで走る複数の実行の状態を同じ時刻で取る: <a href="../../topics/time/#multi-run-state">時間</a></li>
 <li>各部分の詳細はトピックへ。まずは <a href="../../topics/ports/">Port と Channel</a></li>
 </ul>
 

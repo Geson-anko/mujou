@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -1118,7 +1120,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-つのノードの例外で全体が止まる" class="md-nav__link">
+  <a href="#stop" class="md-nav__link">
     <span class="md-ellipsis">
       
         1 つのノードの例外で全体が止まる
@@ -1129,7 +1131,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ホストが受け取る場所" class="md-nav__link">
+  <a href="#where" class="md-nav__link">
     <span class="md-ellipsis">
       
         ホストが受け取る場所
@@ -1140,7 +1142,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#on_exception-と-on_stop" class="md-nav__link">
+  <a href="#hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
         on_exception と on_stop
@@ -1151,7 +1153,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ログ" class="md-nav__link">
+  <a href="#logging" class="md-nav__link">
     <span class="md-ellipsis">
       
         ログ
@@ -1162,7 +1164,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#例外の後の状態" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         例外の後の状態
@@ -1173,7 +1175,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#タイムアウト" class="md-nav__link">
+  <a href="#timeouts" class="md-nav__link">
     <span class="md-ellipsis">
       
         タイムアウト
@@ -1184,7 +1186,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#インタプリタの終了" class="md-nav__link">
+  <a href="#exit" class="md-nav__link">
     <span class="md-ellipsis">
       
         インタプリタの終了
@@ -1274,6 +1276,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -1674,7 +1704,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-つのノードの例外で全体が止まる" class="md-nav__link">
+  <a href="#stop" class="md-nav__link">
     <span class="md-ellipsis">
       
         1 つのノードの例外で全体が止まる
@@ -1685,7 +1715,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ホストが受け取る場所" class="md-nav__link">
+  <a href="#where" class="md-nav__link">
     <span class="md-ellipsis">
       
         ホストが受け取る場所
@@ -1696,7 +1726,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#on_exception-と-on_stop" class="md-nav__link">
+  <a href="#hooks" class="md-nav__link">
     <span class="md-ellipsis">
       
         on_exception と on_stop
@@ -1707,7 +1737,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ログ" class="md-nav__link">
+  <a href="#logging" class="md-nav__link">
     <span class="md-ellipsis">
       
         ログ
@@ -1718,7 +1748,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#例外の後の状態" class="md-nav__link">
+  <a href="#state" class="md-nav__link">
     <span class="md-ellipsis">
       
         例外の後の状態
@@ -1729,7 +1759,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#タイムアウト" class="md-nav__link">
+  <a href="#timeouts" class="md-nav__link">
     <span class="md-ellipsis">
       
         タイムアウト
@@ -1740,7 +1770,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#インタプリタの終了" class="md-nav__link">
+  <a href="#exit" class="md-nav__link">
     <span class="md-ellipsis">
       
         インタプリタの終了
@@ -1771,16 +1801,12 @@
 
 
 <h1 id="-例外と終了">🚨 例外と終了<a class="headerlink" href="#-例外と終了" title="Permanent link">&para;</a></h1>
-<p>ノードの hook が例外を投げたときに何が起き、ホストがそれをどこで受け取るか、ホストの呼び出しのタイムアウトを説明する。</p>
-<h2 id="1-つのノードの例外で全体が止まる">1 つのノードの例外で全体が止まる<a class="headerlink" href="#1-つのノードの例外で全体が止まる" title="Permanent link">&para;</a></h2>
-<p>どのノードのどの hook（<code>on_update</code>・<code>on_start</code>・<code>state_dict</code> などどれでも）が例外を投げても、実行全体が止まる。</p>
-<ol>
-<li>mujou がノードのパス・hook・traceback を logger <code>"mujou"</code> に ERROR レベルで出す</li>
-<li>各ノードは実行中の hook を終えて止まり、ほかのノードを待たずに自分の <code>on_exception()</code> を呼ぶ。例外を投げていないノードでも呼ばれる</li>
-<li>全ノードの <code>on_exception()</code> が戻ったら、全ノードの <code>on_stop()</code> を呼ぶ。例外を投げたノードでも呼ばれる</li>
-<li>ホストは <code>NetworkError</code>（<code>RuntimeError</code> の派生）を受け取る。<code>__cause__</code> は最初の例外。ほぼ同時に投げられたほかのノードの例外はログに出るだけ</li>
-</ol>
-<p>例外を投げたノードだけを止めることはしない。そうすると、隣のノードがその古い値を読み続け、気づかないうちに平衡から外れてしまう。</p>
+<h2 id="stop">1 つのノードの例外で全体が止まる<a class="headerlink" href="#stop" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TB
+    E["あるノードの hook が例外&lt;br/&gt;（on_update・on_start・state_dict などどれでも）"] --&gt; L["ログに出る"]
+    L --&gt; X["各ノードが実行中の hook を終えて止まり、on_exception()&lt;br/&gt;ほかのノードを待たない。例外を投げていないノードも"]
+    X --&gt;|"全ノードの on_exception() が戻ったら"| S["全ノードの on_stop()&lt;br/&gt;例外を投げたノードも"]
+    E --&gt; H["ホストが NetworkError を受け取る&lt;br/&gt;__cause__ は最初の例外"]</code></pre>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">"""What happens when a node raises.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">The whole run stops: every node's ``on_exception``, then its ``on_stop``, is</span>
@@ -1863,97 +1889,68 @@
 <a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mujou.run raised NetworkError, caused by </span><span class="si">{</span><span class="n">error</span><span class="o">.</span><span class="n">__cause__</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 <a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">error</span><span class="o">.</span><span class="n">__cause__</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="ホストが受け取る場所">ホストが受け取る場所<a class="headerlink" href="#ホストが受け取る場所" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>例外が起きたとき</th>
-<th><code>NetworkError</code> を送出するもの</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>起動中（<code>on_start</code> など）</td>
-<td><code>mujou.run</code>。終了処理（<code>on_exception</code>・<code>on_stop</code>）を済ませてから送出する</td>
-</tr>
-<tr>
-<td>起動の後</td>
-<td>次の <code>write</code>・<code>read</code>・<code>read_with_time</code>・<code>subscribe</code>（とそのイテレータ）・<code>wait_for</code>・<code>state_dict</code>・<code>shutdown</code>・<code>join</code>、または <code>ManualRun</code> の <code>step</code></td>
-</tr>
-</tbody>
-</table>
-<p>起動後の例外はホストの次の呼び出しで届くので、待つだけのホストは気づかない。<code>run.timer.sleep</code> ではなく <code>run.join(timeout)</code> で待つ。<code>with</code> ブロックの終わりでは <code>shutdown</code> が送出する。ブロックの本体も例外を投げたときは本体の例外が伝わり、<code>NetworkError</code> は捨てられる（ノードの例外はログに残る）。</p>
-<h2 id="on_exception-と-on_stop"><code>on_exception</code> と <code>on_stop</code><a class="headerlink" href="#on_exception-と-on_stop" title="Permanent link">&para;</a></h2>
+<details class="question">
+<summary>例外を投げたノードだけを止めないのはなぜ？</summary>
+<p>例外を投げたノードだけを止めると、隣のノードがその古い値を読み続け、気づかないうちに平衡から外れてしまう。</p>
+</details>
+<h2 id="where">ホストが受け取る場所<a class="headerlink" href="#where" title="Permanent link">&para;</a></h2>
+<p>起動中（<code>on_start</code> など）の例外は <code>mujou.run</code> が、起動後の例外はホストが次に呼ぶ <a class="autorefs autorefs-internal" title="mujou.Run" href="../../api/run/#mujou.Run"><code>Run</code></a> のメソッドが <a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../../api/run/#mujou.NetworkError"><code>NetworkError</code></a> として送出する。そのため待つだけのホストは <code>run.timer.sleep</code> ではなく <code>run.join(timeout=...)</code> で待つ。</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">避ける</label><label for="__tabbed_1_2">こう書く</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">run</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># ノードが例外を投げても気づかない</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">run</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">run</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># ノードの例外は NetworkError で届く（10 秒で止まらなければ TimeoutError）</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="hooks"><code>on_exception</code> と <code>on_stop</code><a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>hook</th>
-<th>呼ばれるとき</th>
 <th>書くこと</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>on_exception()</code></td>
-<td>例外による終了時。全ノードで先に</td>
+<td><a class="autorefs autorefs-internal" title="on_exception" href="../../api/node-and-ports/#mujou.Node.on_exception"><code>on_exception()</code></a></td>
 <td>アクチュエータの安全停止など、異常終了に固有の処理</td>
 </tr>
 <tr>
-<td><code>on_stop()</code></td>
-<td>終了のたびに 1 回。正常終了でも例外でも</td>
-<td>I/O などの資源の解放。状態は変えない</td>
+<td><a class="autorefs autorefs-internal" title="on_stop" href="../../api/node-and-ports/#mujou.Node.on_stop"><code>on_stop()</code></a></td>
+<td>I/O などの資源の解放。毎回の終了で呼ばれる</td>
 </tr>
 </tbody>
 </table>
-<ul>
-<li><code>on_exception</code> は引数を取らないので、ノードはどの例外で止まったかを知らない。原因に応じた対処はホストが <code>__cause__</code> を見て行う</li>
-<li>ノードの中で例外に対処するなら、その hook の中で <code>try</code> で捕まえる。捕まえた例外は実行を止めない</li>
-<li><code>on_exception</code> や <code>on_stop</code> が例外を投げてもログに出るだけで、終了処理は続く</li>
-<li>これらの hook の中では <code>self.timer</code> が進まない（<a href="../../concepts/#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E5%AE%88%E3%82%8B%E8%A6%8F%E5%89%87">ノードが守る規則</a>）</li>
-</ul>
-<h2 id="ログ">ログ<a class="headerlink" href="#ログ" title="Permanent link">&para;</a></h2>
-<p>ノードの例外は traceback 付きで logger <code>"mujou"</code> に出る。ログを設定していないプログラムでは標準エラー出力に出る。出力先は Python の <code>logging</code> で変える。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># mujou also logs the node's exception, with its traceback, to the "mujou" logger.</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># Show the log on stdout here (without a handler, Python prints it to stderr).</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">stream</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"log: </span><span class="si">%(message)s</span><span class="s2">"</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="例外の後の状態">例外の後の状態<a class="headerlink" href="#例外の後の状態" title="Permanent link">&para;</a></h2>
-<p>例外で終了した実行の状態は残らず、<code>run.state_dict()</code> も <code>NetworkError</code> を送出する。残したい状態は実行中に、長い実行では定期的に取得する。もう一度走らせるときは新しいインスタンスを作る。</p>
-<h2 id="タイムアウト">タイムアウト<a class="headerlink" href="#タイムアウト" title="Permanent link">&para;</a></h2>
-<p><code>shutdown</code>・<code>join</code>・<code>subscribe</code>・<code>wait_for</code>・<code>state_dict</code> は実時間の秒で <code>timeout</code> を取る。既定の <code>math.inf</code> は必要なだけ待つ。</p>
-<table>
-<thead>
-<tr>
-<th>呼び出し</th>
-<th>時間切れのとき</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>run.shutdown(timeout=...)</code></td>
-<td><code>TimeoutError</code>。終了の要求は取り消されず、ノードはもう更新しない。終了処理は続くので <code>join</code> で待つ</td>
-</tr>
-<tr>
-<td><code>run.join(timeout=...)</code></td>
-<td><code>TimeoutError</code>。何も変わらない</td>
-</tr>
-<tr>
-<td><code>run.subscribe(port, timeout=...)</code></td>
-<td>イテレータが <code>TimeoutError</code> を送出する。時間はループの本体を含む反復全体で数える。実行は走り続ける</td>
-</tr>
-<tr>
-<td><code>run.wait_for(port, condition, timeout=...)</code></td>
-<td><code>TimeoutError</code>。実行は走り続ける</td>
-</tr>
-<tr>
-<td><code>run.state_dict(timeout=...)</code></td>
-<td>止まらないノードがあると <code>TimeoutError</code>（各ノードは実行中の <code>on_update</code> を終えてから止まる）。状態は取得せず、実行は走り続ける</td>
-</tr>
-</tbody>
-</table>
-<p>1 回の <code>on_update</code> が長いノード（重い BP など）は、状態の取得のための一時停止をいつも遅らせる。</p>
-<h2 id="インタプリタの終了">インタプリタの終了<a class="headerlink" href="#インタプリタの終了" title="Permanent link">&para;</a></h2>
-<p>実行中にインタプリタが終了すると、ほかの daemon でないスレッドが終わった後に、mujou が実行を終了させて全ノードの <code>on_stop</code> を待つ。<code>subscribe</code> を回しているスレッドは実行が終わるまで終了を待たせるので、実行は <code>shutdown</code> か <code>with</code> ブロックで自分で終了させる。</p>
+<p><code>on_exception</code> は引数を取らないため、ノードは止まった原因を知らず、原因に応じた対処はホストが <code>NetworkError</code> の <code>__cause__</code> を見て行う。ノードの中で例外に対処するなら、その hook の中で <code>try</code> で捕まえる（捕まえた例外は実行を止めない）。</p>
+<h2 id="logging">ログ<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
+<p>ノードの例外は traceback 付きでログに出る（logger の名前とレベルは <a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../../api/run/#mujou.NetworkError"><code>NetworkError</code></a>）。出力先は Python の logging で変えられる。<a href="#stop">上のプログラム</a> は <code>logging.basicConfig</code> の行で標準出力に変えている（設定しなければ標準エラー出力）。</p>
+<h2 id="state">例外の後の状態<a class="headerlink" href="#state" title="Permanent link">&para;</a></h2>
+<p>例外で終了した実行の状態は残らないので、残したい状態は実行中に（長い実行では定期的に）取得し、もう一度走らせるには新しいインスタンスを作る。</p>
+<h2 id="timeouts">タイムアウト<a class="headerlink" href="#timeouts" title="Permanent link">&para;</a></h2>
+<p>待つ呼び出しの <code>timeout</code> がどの秒で数えるかは <a href="../time/#units">時間の単位</a> の表にある。</p>
+<div class="admonition warning">
+<p class="admonition-title">長い <code>on_update</code> は一時停止を遅らせる</p>
+<p>1 回の <code>on_update</code> が長いノード（重い BP など）は、状態の取得のための一時停止をいつも遅らせる（各ノードは実行中の <code>on_update</code> を終えてから止まるため）。</p>
+</div>
+<h2 id="exit">インタプリタの終了<a class="headerlink" href="#exit" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>sequenceDiagram
+    participant I as インタプリタ
+    participant T as ほかの daemon でないスレッド
+    participant M as mujou
+    participant N as 全ノード
+    I-&gt;&gt;T: 終わるのを待つ
+    Note over T: subscribe を回しているスレッドは&lt;br/&gt;実行が終わるまで終わらない
+    I-&gt;&gt;M: 実行を終了させる
+    M-&gt;&gt;N: on_stop()
+    N--&gt;&gt;M: 全ノードの on_stop が戻る
+    M--&gt;&gt;I: 終了</code></pre>
 
 
 

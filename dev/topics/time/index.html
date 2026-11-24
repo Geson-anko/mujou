@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1032,13 +1034,30 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-timers" class="md-nav__link">
+  <a href="#timers" class="md-nav__link">
     <span class="md-ellipsis">
       
         The timers
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The timers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#host-and-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the host and a node can do
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1065,10 +1084,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-timer-of-a-runs-own" class="md-nav__link">
+  <a href="#own-timer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A timer of a run's own
+        A timer of a run's own and its scale
       
     </span>
   </a>
@@ -1076,7 +1095,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pausing-the-time" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
         Pausing the time
@@ -1084,24 +1103,30 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-timer-of-a-resumed-run" class="md-nav__link">
+    <nav class="md-nav" aria-label="Pausing the time">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#multi-run-state" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The timer of a resumed run
+        Taking the states of several runs at one time
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#nodes-only-read-the-time" class="md-nav__link">
+  <a href="#restored-timer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Nodes only read the time
+        The timer of a resumed run
       
     </span>
   </a>
@@ -1272,6 +1297,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1672,13 +1725,30 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-timers" class="md-nav__link">
+  <a href="#timers" class="md-nav__link">
     <span class="md-ellipsis">
       
         The timers
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The timers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#host-and-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the host and a node can do
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1705,10 +1775,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-timer-of-a-runs-own" class="md-nav__link">
+  <a href="#own-timer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A timer of a run's own
+        A timer of a run's own and its scale
       
     </span>
   </a>
@@ -1716,7 +1786,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pausing-the-time" class="md-nav__link">
+  <a href="#pause" class="md-nav__link">
     <span class="md-ellipsis">
       
         Pausing the time
@@ -1724,24 +1794,30 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-timer-of-a-resumed-run" class="md-nav__link">
+    <nav class="md-nav" aria-label="Pausing the time">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#multi-run-state" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The timer of a resumed run
+        Taking the states of several runs at one time
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#nodes-only-read-the-time" class="md-nav__link">
+  <a href="#restored-timer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Nodes only read the time
+        The timer of a resumed run
       
     </span>
   </a>
@@ -1769,39 +1845,62 @@
 
 
 <h1 id="-time">⏱️ Time<a class="headerlink" href="#-time" title="Permanent link">&para;</a></h1>
-<p>Each run has one time axis, its timer: every node's <code>dt</code>, every message's time and every pause of the run is on it. This page covers the timers, their units, the time scale, pausing, and the timer of a resumed run.</p>
-<h2 id="the-timers">The timers<a class="headerlink" href="#the-timers" title="Permanent link">&para;</a></h2>
+<p>Each run has one time axis: every node's <code>dt</code>, every message's time and every pause are on the run's timer (why nodes update by <code>dt</code> is in <a href="../../concepts/#time">Time in How Mujou Works</a>).</p>
+<h2 id="timers">The timers<a class="headerlink" href="#timers" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    Q{"How is it run?"}
+    Q -- "mujou.run(net)" --&gt; G["global_timer&lt;br/&gt;shared with other runs"]
+    Q -- "mujou.run(net, timer=Timer())" --&gt; O["The Timer passed&lt;br/&gt;for that run only"]
+    Q -- "mujou.run(net, state=tree)" --&gt; R["A new Timer&lt;br/&gt;starting at the tree's time"]
+    Q -- "mujou.run_manually(net)" --&gt; V["VirtualTimer&lt;br/&gt;moves only when advanced"]</code></pre>
+<p>The timer types (Timer, VirtualTimer, ReadOnlyTimer, Timestamp, global_timer) are in <a class="autorefs autorefs-internal" title="mujou.time" href="../../api/time/#mujou.time"><code>mujou.time</code></a>.</p>
+<h3 id="host-and-node">What the host and a node can do<a class="headerlink" href="#host-and-node" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
-<th>Name</th>
-<th>What it is</th>
+<th>Operation</th>
+<th>Host (<code>run.timer</code>)</th>
+<th>Node (<a class="autorefs autorefs-internal" title="timer
+
+
+  
+      property
+  " href="../../api/node-and-ports/#mujou.Node.timer"><code>self.timer</code></a>)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>mujou.time.global_timer</code></td>
-<td>The timer of every run not given one of its own. It starts at 0 when the process first uses it</td>
+<td><code>now()</code>, <code>time_scale()</code></td>
+<td>Yes</td>
+<td>Yes</td>
 </tr>
 <tr>
-<td><code>mujou.time.Timer()</code></td>
-<td>A timer for a run of its own: <code>mujou.run(net, timer=Timer())</code>. It starts at <code>start</code> (0) with <code>time_scale</code> (1)</td>
+<td><code>is_paused()</code></td>
+<td>Yes</td>
+<td>No such method</td>
 </tr>
 <tr>
-<td><code>mujou.time.VirtualTimer()</code></td>
-<td>A <code>Timer</code> that moves only when advanced (<code>advance(seconds)</code>); <code>mujou.run_manually</code> uses one</td>
-</tr>
-<tr>
-<td><code>mujou.time.ReadOnlyTimer</code></td>
-<td>The reading side of a timer: what a node sees as <code>self.timer</code>, with only <code>now()</code> and <code>time_scale()</code></td>
-</tr>
-<tr>
-<td><code>mujou.time.Timestamp</code></td>
-<td>A time on a timer</td>
+<td><code>sleep</code>, <code>pause</code>, <code>resume</code>, <code>set_time_scale</code>, <code>VirtualTimer.advance</code></td>
+<td>Yes</td>
+<td>No such method; in a hook, <code>RuntimeError</code></td>
 </tr>
 </tbody>
 </table>
-<p>The host controls the time of a run through <code>run.timer</code>: <code>now()</code>, <code>sleep(seconds)</code>, <code>pause()</code>, <code>resume()</code>, <code>is_paused()</code>, <code>time_scale()</code> and <code>set_time_scale(scale)</code>. A node only reads it, with <code>self.timer.now()</code>, in its hooks.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># RuntimeError in a hook</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># updates every 0.1 s on average</span>
+</code></pre></div>
+</div>
+</div>
+</div>
 <h2 id="units">Units<a class="headerlink" href="#units" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1821,103 +1920,144 @@
 </tr>
 </tbody>
 </table>
-<p>A timeout is real time so that a stuck run is given up on whatever its time scale and pauses.</p>
+<details class="question">
+<summary>Why is a timeout in real time?</summary>
+<p>So that a stuck run is given up on, whatever its time scale and pauses.</p>
+</details>
 <h2 id="timestamp">Timestamp<a class="headerlink" href="#timestamp" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># A Timestamp: float(t) is seconds, .ns the exact nanoseconds; the difference of</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># two is the seconds between them, a float (negative if the first is earlier).</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">t0</span><span class="p">,</span> <span class="n">t1</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">1_500_000_000</span><span class="p">),</span> <span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">2_000_000_000</span><span class="p">)</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">assert</span> <span class="nb">float</span><span class="p">(</span><span class="n">t0</span><span class="p">)</span> <span class="o">==</span> <span class="mf">1.5</span> <span class="ow">and</span> <span class="n">t0</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="mi">1_500_000_000</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">assert</span> <span class="n">t1</span> <span class="o">-</span> <span class="n">t0</span> <span class="o">==</span> <span class="mf">0.5</span> <span class="ow">and</span> <span class="n">t0</span> <span class="o">-</span> <span class="n">t1</span> <span class="o">==</span> <span class="o">-</span><span class="mf">0.5</span>
+<p>A <a class="autorefs autorefs-internal" title="Timestamp" href="../../api/time/#mujou.time.Timestamp"><code>Timestamp</code></a> does not record which timer it is on, so compare only times of one timer (those of one run and its <code>run.timer.now()</code>, say).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># A Timestamp: float(t) is seconds, .ns the exact nanoseconds; the difference of</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># two is the seconds between them, a float (negative if the first is earlier).</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">t0</span><span class="p">,</span> <span class="n">t1</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">1_500_000_000</span><span class="p">),</span> <span class="n">Timestamp</span><span class="p">(</span><span class="n">ns</span><span class="o">=</span><span class="mi">2_000_000_000</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">assert</span> <span class="nb">float</span><span class="p">(</span><span class="n">t0</span><span class="p">)</span> <span class="o">==</span> <span class="mf">1.5</span> <span class="ow">and</span> <span class="n">t0</span><span class="o">.</span><span class="n">ns</span> <span class="o">==</span> <span class="mi">1_500_000_000</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">assert</span> <span class="n">t1</span> <span class="o">-</span> <span class="n">t0</span> <span class="o">==</span> <span class="mf">0.5</span> <span class="ow">and</span> <span class="n">t0</span> <span class="o">-</span> <span class="n">t1</span> <span class="o">==</span> <span class="o">-</span><span class="mf">0.5</span>
 </code></pre></div>
-<p><code>write</code>, <code>read_with_time</code>, <code>subscribe</code>, <code>wait_for</code>, <code>recv_with_time</code> and <code>now()</code> return <code>Timestamp</code>s (or <code>None</code> for a value not sent yet). Compare them with <code>&lt;</code> and the like, and subtract them for the seconds between them. A <code>Timestamp</code> does not record which timer it is on: compare only times of one timer, such as those of one run and its <code>run.timer.now()</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">t_in</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">y</span><span class="p">,</span> <span class="n">t_out</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">if</span> <span class="n">t_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t_out</span> <span class="o">&gt;=</span> <span class="n">t_in</span><span class="p">:</span>  <span class="c1"># y was sent after x was written</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">t_out</span> <span class="o">-</span> <span class="n">t_in</span><span class="p">)</span>  <span class="c1"># seconds from the write until y was sent</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">t_in</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">y</span><span class="p">,</span> <span class="n">t_out</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read_with_time</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">if</span> <span class="n">t_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t_out</span> <span class="o">&gt;=</span> <span class="n">t_in</span><span class="p">:</span>  <span class="c1"># y was sent after x was written</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">t_out</span> <span class="o">-</span> <span class="n">t_in</span><span class="p">)</span>  <span class="c1"># seconds from the write until y was sent</span>
 </code></pre></div>
-<h2 id="a-timer-of-a-runs-own">A timer of a run's own<a class="headerlink" href="#a-timer-of-a-runs-own" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># A run on a timer of its own, ten times faster than the real time. Pausing this</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># timer (or taking this run's state) stops only this run, not the global timer.</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">timer</span> <span class="o">=</span> <span class="n">Timer</span><span class="p">(</span><span class="n">time_scale</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># starts at 0</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">clock</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">start_real</span><span class="p">,</span> <span class="n">start_global</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">(),</span> <span class="n">global_timer</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">clock</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>  <span class="c1"># 2 s of the run's time: about 0.2 s of real time</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="c1"># When the clock updates depends on how the threads get scheduled: wait until</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="c1"># it has sent a time from 2 s on. The timeout is in real seconds.</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">seen</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">clock</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">now</span><span class="p">:</span> <span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">elapsed_real</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_real</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="n">elapsed_global</span> <span class="o">=</span> <span class="n">global_timer</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_global</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="nb">print</span><span class="p">(</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="sa">f</span><span class="s2">"run's time </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s, real </span><span class="si">{</span><span class="n">elapsed_real</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s, "</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="sa">f</span><span class="s2">"global </span><span class="si">{</span><span class="n">elapsed_global</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s"</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="p">)</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="c1"># Compare times of the same timer only: a Timestamp does not say which it is on.</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="k">assert</span> <span class="n">seen</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+<h2 id="own-timer">A timer of a run's own and its scale<a class="headerlink" href="#own-timer" title="Permanent link">&para;</a></h2>
+<p>Scaling or pausing the <a class="autorefs autorefs-internal" title="Timer" href="../../api/time/#mujou.time.Timer"><code>Timer</code></a> passed to <code>mujou.run</code> does not affect other runs (whether to split runs or join them into one is in <a href="../groups/#one-or-many">Groups</a>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># A run on a timer of its own, ten times faster than the real time. Pausing this</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># timer (or taking this run's state) stops only this run, not the global timer.</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">timer</span> <span class="o">=</span> <span class="n">Timer</span><span class="p">(</span><span class="n">time_scale</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>  <span class="c1"># starts at 0</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">clock</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">start_real</span><span class="p">,</span> <span class="n">start_global</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">(),</span> <span class="n">global_timer</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">clock</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>  <span class="c1"># 2 s of the run's time: about 0.2 s of real time</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="c1"># When the clock updates depends on how the threads get scheduled: wait until</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="c1"># it has sent a time from 2 s on. The timeout is in real seconds.</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">seen</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">clock</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">now</span><span class="p">:</span> <span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="k">assert</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># None only for the zeros before the first send</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="n">elapsed_real</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_real</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">elapsed_global</span> <span class="o">=</span> <span class="n">global_timer</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_global</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="nb">print</span><span class="p">(</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="sa">f</span><span class="s2">"run's time </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s, real </span><span class="si">{</span><span class="n">elapsed_real</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s, "</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="sa">f</span><span class="s2">"global </span><span class="si">{</span><span class="n">elapsed_global</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s"</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="p">)</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1"># Compare times of the same timer only: a Timestamp does not say which it is on.</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="k">assert</span> <span class="n">seen</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
 </code></pre></div>
-<p>Give a run a timer of its own to speed up or slow down only that run (for debugging, or for trials faster than real time), or to keep it from pausing with other runs. The time scale is how many seconds of the timer pass per real second: at 10, a real second is 10 seconds of the timer. It is a finite number greater than 0.</p>
-<p>The global timer can be scaled too, which changes every run on it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># The global timer can be scaled too; it then applies to every run on it.</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">set_time_scale</span><span class="p">(</span><span class="mf">5.0</span><span class="p">)</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">start_real</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># 0.5 s of the global time: about 0.1 s of real time</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"slept 0.5 s of global time in </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start_real</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s real"</span><span class="p">)</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">set_time_scale</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+<p>The <a class="autorefs autorefs-internal" title="global_timer
+
+
+  
+      module-attribute
+  " href="../../api/time/#mujou.time.global_timer"><code>global_timer</code></a> can be scaled too, which changes every run on it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># The global timer can be scaled too; it then applies to every run on it.</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">set_time_scale</span><span class="p">(</span><span class="mf">5.0</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">start_real</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># 0.5 s of the global time: about 0.1 s of real time</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"slept 0.5 s of global time in </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start_real</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s real"</span><span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">set_time_scale</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="pausing-the-time">Pausing the time<a class="headerlink" href="#pausing-the-time" title="Permanent link">&para;</a></h2>
-<p><code>timer.pause()</code> stops the time of the timer until <code>timer.resume()</code>; <code>global_timer.pause()</code> stops every run on the global timer. While it is paused:</p>
-<ul>
-<li>the nodes of every run on the timer do not update, and the first <code>dt</code> after <code>resume</code> does not count the pause. The nodes are not told: <code>on_pause</code> and <code>on_resume</code> run only around taking the state</li>
-<li><code>sleep</code> on the timer does not return, and <code>VirtualTimer.advance</code> raises <code>RuntimeError</code></li>
-<li><code>run.state_dict()</code> still works, and gives the state at the time of the pause</li>
-</ul>
-<p>Taking the state pauses the run's timer too, apart from your <code>pause</code>: <code>pause</code> is a switch, not a count, and <code>resume</code> does not cut a pause for the state short. <code>is_paused()</code> is true while either one holds the time.</p>
-<p>Use it to take the states of several runs on one timer at one time. Taken one after the other, the second state would be of a later time:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Two runs on the global timer, such as two agents that should be saved together.</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># Taken one after the other, the second state would be of a later time; pausing</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># the timer they share stops both at one time T.</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">(),</span> <span class="n">Clock</span><span class="p">()</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">as</span> <span class="n">run_a</span><span class="p">,</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">as</span> <span class="n">run_b</span><span class="p">:</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>  <span class="c1"># the global time stops at one time T</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="n">tree_a</span> <span class="o">=</span> <span class="n">run_a</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>  <span class="c1"># still works while paused</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        <span class="n">tree_b</span> <span class="o">=</span> <span class="n">run_b</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="k">finally</span><span class="p">:</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        <span class="n">global_timer</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>  <span class="c1"># the time goes on from T</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">t_ns</span> <span class="o">=</span> <span class="n">tree_a</span><span class="p">[</span><span class="s2">"timer"</span><span class="p">][</span><span class="s2">"time_ns"</span><span class="p">]</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="k">assert</span> <span class="n">tree_b</span><span class="p">[</span><span class="s2">"timer"</span><span class="p">][</span><span class="s2">"time_ns"</span><span class="p">]</span> <span class="o">==</span> <span class="n">t_ns</span>  <span class="c1"># both are of T</span>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">tree_a</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">tree_b</span><span class="p">})</span>  <span class="c1"># save them together</span>
-</code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Put <code>resume</code> in <code>finally</code></p>
-<p>Then an exception does not leave the time stopped.</p>
+<h2 id="pause">Pausing the time<a class="headerlink" href="#pause" title="Permanent link">&para;</a></h2>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 175" role="img" aria-label="A node updates at regular intervals, but not between pause and resume. The first dt after resume does not include the paused time">
+<rect x="260" y="28" width="160" height="112" style="fill: var(--md-default-fg-color--lightest)"/>
+<text class="mujou-note" x="260" y="20" text-anchor="middle">pause()</text>
+<text class="mujou-note" x="420" y="20" text-anchor="middle">resume()</text>
+<text class="mujou-label" x="340" y="52" text-anchor="middle">Time stops</text>
+<text class="mujou-note" x="340" y="70" text-anchor="middle">no updates, sleep does not return</text>
+<text class="mujou-label" x="10" y="104">Node</text>
+<line class="mujou-lane" x1="90" y1="100" x2="620" y2="100"/>
+<g class="mujou-tick-a"><line x1="100" y1="88" x2="100" y2="112"/><line x1="160" y1="88" x2="160" y2="112"/><line x1="220" y1="88" x2="220" y2="112"/><line x1="450" y1="88" x2="450" y2="112"/><line x1="510" y1="88" x2="510" y2="112"/><line x1="570" y1="88" x2="570" y2="112"/></g>
+<path class="mujou-brace" d="M 222 118 Q 222 126 230 126 L 442 126 Q 450 126 450 118"/>
+<text class="mujou-note" x="336" y="142" text-anchor="middle">the next dt counts only the time before and after the pause</text>
+<line class="mujou-axis" x1="90" y1="152" x2="620" y2="152"/>
+<text class="mujou-label" x="620" y="168" text-anchor="end">real time →</text>
+</svg>
+</figure>
+
+<p>From <a class="autorefs autorefs-internal" title="pause" href="../../api/time/#mujou.time.Timer.pause"><code>Timer.pause</code></a> until resume, every run on that timer stops (<code>global_timer.pause()</code> stops every run on the global timer).
+Your pause and the pause for taking the state (<a href="../../tutorial/6-save-and-resume/#pause">Save and Resume</a>) are separate switches.</p>
+<div class="admonition warning">
+<p class="admonition-title">A pause is for taking the state and for observing</p>
+<p>Do not make it part of how a network learns.</p>
 </div>
-<p>A pause is for taking the state and for observing. Do not make pausing part of how a network learns.</p>
-<h2 id="the-timer-of-a-resumed-run">The timer of a resumed run<a class="headerlink" href="#the-timer-of-a-resumed-run" title="Permanent link">&para;</a></h2>
-<p>A run resumed with <code>mujou.run(net, state=tree)</code> runs on a new <code>Timer</code> that starts at the time and the time scale of the tree, so the global timer and the other runs do not go back:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># A run restored from one of them goes on from T on a timer of its own: the</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># global timer does not go back.</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">saved</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">restored</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">restored</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="n">saved</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="k">assert</span> <span class="n">run</span><span class="o">.</span><span class="n">timer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">global_timer</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">now</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="n">restored</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">now</span><span class="p">:</span> <span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">t_ns</span> <span class="o">/</span> <span class="mf">1e9</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="p">)</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1"># After the run, its nodes' attributes are the host's to read.</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="n">at_save</span> <span class="o">=</span> <span class="n">saved</span><span class="p">[</span><span class="s2">"a"</span><span class="p">][</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">""</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"elapsed"</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="nb">print</span><span class="p">(</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="sa">f</span><span class="s2">"run a went on from t = </span><span class="si">{</span><span class="n">t_ns</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e9</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s to </span><span class="si">{</span><span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s; "</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="sa">f</span><span class="s2">"its dt summed to </span><span class="si">{</span><span class="n">at_save</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s at the save, </span><span class="si">{</span><span class="n">restored</span><span class="o">.</span><span class="n">elapsed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s now"</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="p">)</span>
+<h3 id="multi-run-state">Taking the states of several runs at one time<a class="headerlink" href="#multi-run-state" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Two runs on the global timer, such as two agents that should be saved together.</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># Taken one after the other, the second state would be of a later time; pausing</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># the timer they share stops both at one time T.</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">(),</span> <span class="n">Clock</span><span class="p">()</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">as</span> <span class="n">run_a</span><span class="p">,</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">as</span> <span class="n">run_b</span><span class="p">:</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>  <span class="c1"># the global time stops at one time T</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="n">tree_a</span> <span class="o">=</span> <span class="n">run_a</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>  <span class="c1"># still works while paused</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>        <span class="n">tree_b</span> <span class="o">=</span> <span class="n">run_b</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="k">finally</span><span class="p">:</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        <span class="n">global_timer</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>  <span class="c1"># the time goes on from T</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="n">t_ns</span> <span class="o">=</span> <span class="n">tree_a</span><span class="p">[</span><span class="s2">"timer"</span><span class="p">][</span><span class="s2">"time_ns"</span><span class="p">]</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="k">assert</span> <span class="n">tree_b</span><span class="p">[</span><span class="s2">"timer"</span><span class="p">][</span><span class="s2">"time_ns"</span><span class="p">]</span> <span class="o">==</span> <span class="n">t_ns</span>  <span class="c1"># both are of T</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">data</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">tree_a</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">tree_b</span><span class="p">})</span>  <span class="c1"># save them together</span>
 </code></pre></div>
-<p>Passing <code>timer=</code> with <code>state=</code> raises <code>ValueError</code>, and <code>global_timer.pause()</code> does not pause a resumed run: pause its <code>run.timer</code>. Runs resumed from trees taken at one time therefore no longer share a time axis: their timers drift apart, and pausing one does not pause the others. Runs that must stay on one axis after a resume run as one run (<code>mujou.run(Group(a=a, b=b))</code>), whose single tree resumes onto one timer.</p>
-<h2 id="nodes-only-read-the-time">Nodes only read the time<a class="headerlink" href="#nodes-only-read-the-time" title="Permanent link">&para;</a></h2>
-<p>A node's <code>self.timer</code> is a <code>ReadOnlyTimer</code> of its run, readable in every hook (<code>on_start</code> included) and nowhere else: reading it in <code>__init__</code> or from the host raises <code>RuntimeError</code>. It stops at the time the run ends, so <code>on_exception</code> and <code>on_stop</code> see the time stand still.</p>
-<p>Only the host moves the time (<a href="../../concepts/#rules-a-node-keeps">rules a node keeps</a>). To update at intervals, give the node a <code>period</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Avoid</label><label for="__tabbed_2_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">tree_a</span> <span class="o">=</span> <span class="n">run_a</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">tree_b</span> <span class="o">=</span> <span class="n">run_b</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>  <span class="c1"># an exception in between leaves the time stopped</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">global_timer</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">tree_a</span> <span class="o">=</span> <span class="n">run_a</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">tree_b</span> <span class="o">=</span> <span class="n">run_b</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="k">finally</span><span class="p">:</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">global_timer</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>  <span class="c1"># resumes even on an exception</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="restored-timer">The timer of a resumed run<a class="headerlink" href="#restored-timer" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    G["a and b on global_timer&lt;br/&gt;states taken at time T"] --&gt; TA["tree_a (time T)"]
+    G --&gt; TB2["tree_b (time T)"]
+    TA --&gt;|"mujou.run(a2, state=tree_a)"| RA["A new Timer&lt;br/&gt;moving on from T"]
+    TB2 --&gt;|"mujou.run(b2, state=tree_b)"| RB["Another new Timer&lt;br/&gt;moving on from T"]
+    RA -.-|"drift apart; pausing one does not pause the other"| RB</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># A run restored from one of them goes on from T on a timer of its own: the</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># global timer does not go back.</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">saved</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">restored</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">restored</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="n">saved</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="k">assert</span> <span class="n">run</span><span class="o">.</span><span class="n">timer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">global_timer</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="n">now</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        <span class="n">restored</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">now</span><span class="p">:</span> <span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">t_ns</span> <span class="o">/</span> <span class="mf">1e9</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="p">)</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1"># After the run, its nodes' attributes are the host's to read.</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="n">at_save</span> <span class="o">=</span> <span class="n">saved</span><span class="p">[</span><span class="s2">"a"</span><span class="p">][</span><span class="s2">"nodes"</span><span class="p">][</span><span class="s2">""</span><span class="p">][</span><span class="s2">"state"</span><span class="p">][</span><span class="s2">"elapsed"</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="nb">print</span><span class="p">(</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>    <span class="sa">f</span><span class="s2">"run a went on from t = </span><span class="si">{</span><span class="n">t_ns</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e9</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s to </span><span class="si">{</span><span class="n">now</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s; "</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>    <span class="sa">f</span><span class="s2">"its dt summed to </span><span class="si">{</span><span class="n">at_save</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s at the save, </span><span class="si">{</span><span class="n">restored</span><span class="o">.</span><span class="n">elapsed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s now"</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="p">)</span>
+</code></pre></div>
+<p>Runs that must stay on one time axis after a resume run as one run in a <a class="autorefs autorefs-internal" title="mujou.Group" href="../../api/network/#mujou.Group"><code>Group</code></a> from the start (<code>mujou.run(Group(a=a, b=b))</code>; the tree of one run resumes onto one timer).</p>
 
 
 

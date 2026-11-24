@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1165,6 +1167,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../topics/visualize/" class="md-nav__link">
         
   
@@ -1260,7 +1290,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#やりたいことから探す" class="md-nav__link">
+  <a href="#by-goal" class="md-nav__link">
     <span class="md-ellipsis">
       
         やりたいことから探す
@@ -1271,18 +1301,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#各プログラムが示すこと" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        各プログラムが示すこと
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#走らせ方" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         走らせ方
@@ -1625,7 +1644,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#やりたいことから探す" class="md-nav__link">
+  <a href="#by-goal" class="md-nav__link">
     <span class="md-ellipsis">
       
         やりたいことから探す
@@ -1636,18 +1655,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#各プログラムが示すこと" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        各プログラムが示すこと
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#走らせ方" class="md-nav__link">
+  <a href="#run" class="md-nav__link">
     <span class="md-ellipsis">
       
         走らせ方
@@ -1678,131 +1686,180 @@
 
 
 <h1 id="-サンプル">💡 サンプル<a class="headerlink" href="#-サンプル" title="Permanent link">&para;</a></h1>
-<p>mujou の使い方を示すサンプルプログラムの一覧。どれもリポジトリの <code>examples/</code> にある。サイトのページはこれらをそのまま取り込んでいるので、載っているコードはそのまま実行可能。テストではなく手引きなので、テストでは実行しない。</p>
-<h2 id="やりたいことから探す">やりたいことから探す<a class="headerlink" href="#やりたいことから探す" title="Permanent link">&para;</a></h2>
+<p>サンプルはすべてリポジトリの <code>examples/</code> にあり、各ページはそれをそのまま取り込むので、載っているコードはそのまま実行できる。</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph T["チュートリアル（1 → 6）"]
+        direction LR
+        q["quickstart.py"] --&gt; l["leaky.py"] --&gt; t["test_leaky.py"] --&gt; o["online_learning.py"] --&gt; p["pc_regression.py"] --&gt; s["save_and_restore.py"]
+    end
+    subgraph U["トピック「更新則」"]
+        f["feedback_alignment.py"]
+    end
+    subgraph P["トピック「PC-ALM」"]
+        m["pc_merge.py"]
+    end
+    subgraph B["トピック「PC-ALM の実験」"]
+        b["mnist/&lt;br&gt;cifar10/"]
+    end
+    o --&gt; f
+    p --&gt; m
+    p --&gt; b</code></pre>
+<h2 id="by-goal">やりたいことから探す<a class="headerlink" href="#by-goal" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>やりたいこと</th>
 <th>プログラム</th>
-<th>詳しい説明</th>
+<th>主な API</th>
+<th>説明のページ</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>とにかく 1 つ動かす</td>
 <td><code>quickstart.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.run" href="../api/run/#mujou.run"><code>run</code></a>、<a class="autorefs autorefs-internal" title="write" href="../api/run/#mujou.Run.write"><code>write</code></a>、<a class="autorefs autorefs-internal" title="wait_for" href="../api/run/#mujou.Run.wait_for"><code>wait_for</code></a></td>
 <td><a href="../tutorial/1-run/">1. ネットワークを走らせる</a></td>
 </tr>
 <tr>
 <td>ネットワークを分岐させ、合流させる</td>
 <td><code>branching.py</code></td>
-<td><a href="../tutorial/1-run/#%E5%88%86%E5%B2%90%E3%81%A8%E5%90%88%E6%B5%81">1. ネットワークを走らせる</a>、<a href="../topics/ports/">Port と Channel</a></td>
+<td><a class="autorefs autorefs-internal" title="mujou.Port" href="../api/node-and-ports/#mujou.Port"><code>Port</code></a>、<a class="autorefs autorefs-internal" title="mujou.MultiPort" href="../api/node-and-ports/#mujou.MultiPort"><code>MultiPort</code></a>、<a class="autorefs autorefs-internal" title="mujou.Channel" href="../api/node-and-ports/#mujou.Channel"><code>Channel</code></a>、<a class="autorefs autorefs-internal" title="send_to" href="../api/node-and-ports/#mujou.MultiPort.send_to"><code>send_to</code></a></td>
+<td><a href="../topics/ports/#fan-out">Port と Channel</a></td>
 </tr>
 <tr>
 <td>連続時間で変わる状態を持つノードを書く</td>
 <td><code>leaky.py</code></td>
+<td><a class="autorefs autorefs-internal" title="on_update" href="../api/node-and-ports/#mujou.Node.on_update"><code>on_update</code></a></td>
 <td><a href="../tutorial/2-node/">2. ノードを書く</a></td>
 </tr>
 <tr>
 <td>ノードを決定的にテストする</td>
 <td><code>test_leaky.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.run_manually" href="../api/run/#mujou.run_manually"><code>run_manually</code></a>、<a class="autorefs autorefs-internal" title="step" href="../api/run/#mujou.ManualRun.step"><code>step</code></a></td>
 <td><a href="../tutorial/3-test/">3. ノードをテストする</a></td>
 </tr>
 <tr>
 <td>ノードの中の BP で、ストリームから学び続ける</td>
 <td><code>online_learning.py</code></td>
+<td>PyTorch の autograd</td>
 <td><a href="../tutorial/4-learn-in-a-node/">4. ノードの中で学習する</a></td>
 </tr>
 <tr>
 <td>自作の則でノードをまたいで学ぶ</td>
 <td><code>feedback_alignment.py</code></td>
+<td><a class="autorefs autorefs-internal" title="LearnClock" href="../api/pc/#mujou.pc.clock.LearnClock"><code>pc.clock.LearnClock</code></a></td>
 <td><a href="../topics/update-rules/">更新則</a></td>
 </tr>
 <tr>
 <td>PC-ALM で回帰を数十行で学ぶ</td>
 <td><code>pc_regression.py</code></td>
+<td><a class="autorefs autorefs-internal" title="Chain" href="../api/pc/#mujou.pc.Chain"><code>pc.Chain</code></a>、<a class="autorefs autorefs-internal" title="show" href="../api/pc/#mujou.pc.show"><code>pc.show</code></a></td>
 <td><a href="../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a></td>
 </tr>
 <tr>
 <td>PC-ALM のノードを自分で書く（入力が 2 つ）</td>
 <td><code>pc_merge.py</code></td>
-<td><a href="../topics/pc/#%E8%87%AA%E5%88%86%E3%81%AE%E3%83%8E%E3%83%BC%E3%83%89%E3%82%92%E6%9B%B8%E3%81%8F">PC-ALM</a></td>
+<td><a class="autorefs autorefs-internal" title="mujou.pc.functional" href="../api/pc/#mujou.pc.functional"><code>pc.functional</code></a>、<code>pc.clock.LearnClock</code></td>
+<td><a href="../topics/pc/#own-node">PC-ALM</a></td>
 </tr>
 <tr>
 <td>PC-ALM で MNIST を学び、BP と比べる</td>
 <td><code>mnist/</code></td>
-<td><a href="../topics/pc/#mnist">PC-ALM</a></td>
+<td><code>pc.Chain</code></td>
+<td><a href="../topics/pc-benchmarks/#mnist">PC-ALM の実験</a></td>
 </tr>
 <tr>
 <td>GPU 上の ResNet で CIFAR-10 を学び、BP と比べる</td>
 <td><code>cifar10/</code></td>
-<td><a href="../topics/pc/#cifar-10">PC-ALM</a></td>
+<td><code>pc.Chain</code>、<a class="autorefs autorefs-internal" title="AdamW
+
+
+  
+      dataclass
+  " href="../api/pc/#mujou.pc.optim.AdamW"><code>pc.optim.AdamW</code></a></td>
+<td><a href="../topics/pc-benchmarks/#cifar-10">PC-ALM の実験</a></td>
 </tr>
 <tr>
 <td>状態を保存し、その続きから再開する</td>
 <td><code>save_and_restore.py</code></td>
+<td><a class="autorefs autorefs-internal" title="state_dict" href="../api/run/#mujou.Run.state_dict"><code>Run.state_dict</code></a>、<code>run(..., state=...)</code></td>
 <td><a href="../tutorial/6-save-and-resume/">6. 保存と再開</a></td>
 </tr>
 <tr>
 <td>複数のネットワークを一緒に走らせる</td>
 <td><code>group.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.Group" href="../api/network/#mujou.Group"><code>Group</code></a></td>
 <td><a href="../topics/groups/">Group</a></td>
 </tr>
 <tr>
 <td>新しい出力を追い続ける（途中の値は飛ばしうる）</td>
 <td><code>subscribe.py</code></td>
-<td><a href="../topics/host-io/#%E8%AA%AD%E3%82%80">ホストの入出力</a></td>
+<td><a class="autorefs autorefs-internal" title="subscribe" href="../api/run/#mujou.Run.subscribe"><code>subscribe</code></a></td>
+<td><a href="../topics/host-io/#read">ホストの入出力</a></td>
 </tr>
 <tr>
 <td>実行専用のタイマー、時間の速さ、複数の実行の一時停止</td>
 <td><code>timers.py</code></td>
+<td><a class="autorefs autorefs-internal" title="Timer" href="../api/time/#mujou.time.Timer"><code>Timer</code></a>、<a class="autorefs autorefs-internal" title="Timestamp" href="../api/time/#mujou.time.Timestamp"><code>Timestamp</code></a></td>
 <td><a href="../topics/time/">時間</a></td>
 </tr>
 <tr>
 <td>ネットワークを計算能力いっぱいでシミュレーションする</td>
 <td><code>simulation.py</code></td>
+<td><code>run_manually</code>、<code>step</code></td>
 <td><a href="../topics/simulation/">シミュレーション</a></td>
 </tr>
 <tr>
 <td>ノードが例外を投げたときの動きを知る</td>
 <td><code>errors.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.NetworkError" href="../api/run/#mujou.NetworkError"><code>NetworkError</code></a></td>
 <td><a href="../topics/errors/">例外と終了</a></td>
 </tr>
 <tr>
 <td>ネットワークのグラフを描いてブラウザで開く</td>
 <td><code>visualize.py</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.viz.to_html" href="../api/viz/#mujou.viz.to_html"><code>viz.to_html</code></a></td>
 <td><a href="../topics/visualize/">ネットワークの可視化</a></td>
 </tr>
 </tbody>
 </table>
-<h2 id="各プログラムが示すこと">各プログラムが示すこと<a class="headerlink" href="#各プログラムが示すこと" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>quickstart.py</code>: 2 ノードのネットワークを <code>with mujou.run(...)</code> で走らせる。ホストは <code>write</code> で入力を書き、期待した出力が届くまで <code>wait_for</code> で待つ</li>
-<li><code>branching.py</code>: 送るだけの <code>Port</code> を 2 つの枝につなぎ、<code>MultiPort</code> で合流させる。後半は <code>MultiPort</code> が <code>connect</code> の返した Channel で、相手ごとに違う値を <code>send_to</code> で送る</li>
-<li><code>leaky.py</code>: リーク積分器。連続時間で定義し厳密解で進めるので、どんな <code>dt</code> でも安定する。実行すると 2 つ並べた鎖の入力を切り替え、各出力を送られた時刻の厳密解と比べる</li>
-<li><code>test_leaky.py</code>: <code>leaky.py</code> のノードを <code>mujou.run_manually</code> の仮想タイマーと手動の更新でテストする。厳密解との比較、離散アルゴリズムとのビット単位の一致、再開した実行と止めずに続けた実行の一致。<code>uv run pytest examples/test_leaky.py</code> で実行する</li>
-<li><code>online_learning.py</code>: 教師がホストの書いて変える <code>a</code> で y = a x + b のバッチを送る。学習するノードは新しいバッチごとに、前のバッチからの時間だけ、素の PyTorch の autograd で学ぶ。ホストは損失が下がり、跳ね上がり、また下がるのを追う</li>
-<li><code>feedback_alignment.py</code>: 2 つのノードが 2 層のネットワークを feedback alignment で学ぶ。両方向の Port、活動と一緒に中継する目標、<code>pc.clock.LearnClock</code> によるサンプルごとに 1 回の学習</li>
-<li><code>pc_regression.py</code>: <code>pc.Chain</code> と <code>pc.show</code> で、流れてくるバッチから回帰を学ぶ。損失は各バッチから学ぶ前に測る</li>
-<li><code>pc_merge.py</code>: 入力を 2 つ持つ PC-ALM のノード <code>Merge</code> を <code>pc.functional</code> と <code>pc.clock.LearnClock</code> で書き、2 本の塔を合流させて回帰を学ぶ</li>
-<li><code>mnist/</code>: 784-256-256-10 のネットワークを <code>pc.Chain</code> で MNIST に学ばせ、同じネットワークを同じ初期重みとバッチで BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読み、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させ、<code>watch.py</code> がノードの <code>dt</code> を数える（<code>--watch</code>）</li>
-<li><code>cifar10/</code>: CUDA のデバイスに載せた ResNet-20 をステージごとのノードに分け、<code>pc.Chain</code> と <code>pc.optim.AdamW</code> で CIFAR-10 に学ばせる。同じネットワークを同じ初期重み・バッチ・optimizer で、GPU 上の BP でも学ばせる。入口は <code>main.py</code>。<code>data.py</code> がデータを読んで拡張し、<code>resnet.py</code> がネットワークを組み、少ないノードに切る理由を述べ、<code>metrics.py</code> が測り、<code>bp.py</code> が BP の基準を学習させる</li>
-<li><code>save_and_restore.py</code>: <code>run.state_dict()</code> で状態を取得し、<code>torch.save</code> で保存し、新しいインスタンスに <code>mujou.run(..., state=...)</code> で再開する。再開した実行は専用のタイマーで走る</li>
-<li><code>group.py</code>: <code>Group(enc=..., dec=...)</code> と、ノードのパス（<code>"enc.scale"</code>）の付き方</li>
-<li><code>subscribe.py</code>: <code>run.subscribe</code> がまず最新の出力を、その後は新しい出力を 1 つずつ返す。<code>break</code> で止める</li>
-<li><code>timers.py</code>: <code>Timestamp</code>、時間の速さを変えた実行専用の <code>Timer</code>、グローバルタイマーの速さ、グローバルタイマーを止めて 2 つの実行の状態を同じ時刻で取得すること。一方から再開した実行は専用のタイマーで続く</li>
-<li><code>simulation.py</code>: <code>mujou.run_manually</code> で <code>leaky.py</code> の chain に正弦波を入れ、1 ms 刻みでシミュレーションして実時間でかかった時間を表示する。入力はステップの間に書く。ワーカーの数によらず同じ結果になること、<code>step(dt)</code> とノードを渡す 2 通りの順の比較も</li>
-<li><code>errors.py</code>: ホストが受け取る <code>NetworkError</code> とその <code>__cause__</code>、<code>on_exception</code> → <code>on_stop</code> の順、<code>on_start</code> の例外は <code>mujou.run</code> が送出すること</li>
-<li><code>visualize.py</code>: 2 つのネットワークと 1 つのノードからなるネットワークと <code>pc.Chain</code> のページを、走らせずに <code>mujou.viz.to_html</code> で書き出す</li>
-</ul>
-<h2 id="走らせ方">走らせ方<a class="headerlink" href="#走らせ方" title="Permanent link">&para;</a></h2>
-<p>ソースからビルドした環境（<a href="../install/">インストール</a>）で、リポジトリのルートから実行する。</p>
+<h2 id="run">走らせ方<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<p><a href="../install/#source">ソースからビルドした</a>環境で、リポジトリのルートから <code>uv run python</code> を使って実行する。</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/quickstart.py
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py
 </code></pre></div>
-<p>GPU を使うのは <code>cifar10/</code> だけで、CUDA が要る。<code>mnist/</code> と <code>cifar10/</code> 以外は 15 秒以内に終わる。<code>mnist/</code> は初回に MNIST（約 11 MB）をダウンロードし、既定の 3 epoch で約 2 分かかる。<code>cifar10/</code> は初回に CIFAR-10（約 160 MB）をダウンロードし、既定の 3 epoch で RTX 4090 なら約 4 分かかる。</p>
+<table>
+<thead>
+<tr>
+<th>プログラム</th>
+<th>かかる時間</th>
+<th>初回のダウンロード</th>
+<th>GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mnist/</code> と <code>cifar10/</code> 以外</td>
+<td>15 秒以内</td>
+<td>—</td>
+<td>不要</td>
+</tr>
+<tr>
+<td><code>mnist/</code></td>
+<td>既定の 3 epoch で約 2 分</td>
+<td>MNIST（約 11 MB）</td>
+<td>不要</td>
+</tr>
+<tr>
+<td><code>cifar10/</code></td>
+<td>既定の 3 epoch で、RTX 4090 なら約 4 分</td>
+<td>CIFAR-10（約 160 MB）</td>
+<td>CUDA が要る</td>
+</tr>
+</tbody>
+</table>
 
 
 

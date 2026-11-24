@@ -16,7 +16,7 @@
         <link rel="prev" href="../pc-concepts/">
       
       
-        <link rel="next" href="../visualize/">
+        <link rel="next" href="../pc-benchmarks/">
       
       
         
@@ -835,6 +835,8 @@
       
         
       
+        
+      
     
     
     
@@ -1202,24 +1204,41 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#bp-との違い" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        BP との違い
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ノード" class="md-nav__link">
+  <a href="#nodes" class="md-nav__link">
     <span class="md-ellipsis">
       
         ノード
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="ノード">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードを 1 つずつ組む
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードに入れるモジュール
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1235,7 +1254,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#時定数を決める" class="md-nav__link">
+  <a href="#choose-time-constants" class="md-nav__link">
     <span class="md-ellipsis">
       
         時定数を決める
@@ -1243,10 +1262,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="時定数を決める">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#credit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit の往復
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#optimizer-を選ぶ" class="md-nav__link">
+  <a href="#optimizer" class="md-nav__link">
     <span class="md-ellipsis">
       
         optimizer を選ぶ
@@ -1257,7 +1293,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#relaxer-を選ぶ" class="md-nav__link">
+  <a href="#choose-relaxer" class="md-nav__link">
     <span class="md-ellipsis">
       
         relaxer を選ぶ
@@ -1268,40 +1304,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mnist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MNIST
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cifar-10" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CIFAR-10
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#gpu-で更新を速くする-cuda_graph" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GPU で更新を速くする: cuda_graph
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#バッチ" class="md-nav__link">
+  <a href="#batch" class="md-nav__link">
     <span class="md-ellipsis">
       
         バッチ
@@ -1323,7 +1326,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#落とし穴" class="md-nav__link">
+  <a href="#pitfalls" class="md-nav__link">
     <span class="md-ellipsis">
       
         落とし穴
@@ -1334,7 +1337,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#自分のノードを書く" class="md-nav__link">
+  <a href="#own-node" class="md-nav__link">
     <span class="md-ellipsis">
       
         自分のノードを書く
@@ -1342,29 +1345,40 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="自分のノードを書く">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#例-入力が-2-つのノード" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        例: 入力が 2 つのノード
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
     </ul>
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1757,24 +1771,41 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#bp-との違い" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        BP との違い
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ノード" class="md-nav__link">
+  <a href="#nodes" class="md-nav__link">
     <span class="md-ellipsis">
       
         ノード
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="ノード">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードを 1 つずつ組む
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ノードに入れるモジュール
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1790,7 +1821,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#時定数を決める" class="md-nav__link">
+  <a href="#choose-time-constants" class="md-nav__link">
     <span class="md-ellipsis">
       
         時定数を決める
@@ -1798,10 +1829,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="時定数を決める">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#credit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        credit の往復
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#optimizer-を選ぶ" class="md-nav__link">
+  <a href="#optimizer" class="md-nav__link">
     <span class="md-ellipsis">
       
         optimizer を選ぶ
@@ -1812,7 +1860,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#relaxer-を選ぶ" class="md-nav__link">
+  <a href="#choose-relaxer" class="md-nav__link">
     <span class="md-ellipsis">
       
         relaxer を選ぶ
@@ -1823,40 +1871,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mnist" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MNIST
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cifar-10" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CIFAR-10
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#gpu-で更新を速くする-cuda_graph" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GPU で更新を速くする: cuda_graph
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#バッチ" class="md-nav__link">
+  <a href="#batch" class="md-nav__link">
     <span class="md-ellipsis">
       
         バッチ
@@ -1878,7 +1893,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#落とし穴" class="md-nav__link">
+  <a href="#pitfalls" class="md-nav__link">
     <span class="md-ellipsis">
       
         落とし穴
@@ -1889,30 +1904,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#自分のノードを書く" class="md-nav__link">
+  <a href="#own-node" class="md-nav__link">
     <span class="md-ellipsis">
       
         自分のノードを書く
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="自分のノードを書く">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#例-入力が-2-つのノード" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        例: 入力が 2 つのノード
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1937,91 +1935,61 @@
 
 
 <h1 id="-pc-alm">🧠 PC-ALM<a class="headerlink" href="#-pc-alm" title="Permanent link">&para;</a></h1>
-<p><code>mujou.pc</code> は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）で学習させるモジュール。<a href="../../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a>では <code>pc.Chain</code> で鎖を組み、<code>pc.show</code> でバッチを見せた。このページでは時定数・optimizer・relaxer の決め方、BP との違い、落とし穴、MNIST と CIFAR-10、自作のノードを説明する。</p>
-<h2 id="bp-との違い">BP との違い<a class="headerlink" href="#bp-との違い" title="Permanent link">&para;</a></h2>
+<p><code>mujou.pc</code> は PyTorch のモデルをノードに分け、PC-ALM（Augmented Lagrangian Predictive Coding、<a href="https://pub.sakana.ai/pc-alm/">https://pub.sakana.ai/pc-alm/</a>）で学習させる。仕組みは <a href="../pc-concepts/">mujou.pc の仕組み</a>、使い方は <a href="../../tutorial/5-learn-with-pc/">5. PC-ALM で学習する</a> にあり、このページは値の決め方を扱う。</p>
+<h2 id="nodes">ノード<a class="headerlink" href="#nodes" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    H1["ホスト"] --&gt;|"Sample"| I["input&lt;br/&gt;pc.Input"]
+    subgraph C["pc.Chain(m0, m1, m2)"]
+        direction LR
+        I --&gt; L0["layer0&lt;br/&gt;pc.Layer(m0)"] --&gt; L1["layer1&lt;br/&gt;pc.Layer(m1)"] --&gt; O["output&lt;br/&gt;pc.Output(m2)"]
+    end
+    O --&gt;|"Prediction"| H2["ホスト"]</code></pre>
+<p><a class="autorefs autorefs-internal" title="Chain" href="../../api/pc/#mujou.pc.Chain"><code>pc.Chain</code></a> の子の名前 <code>input</code>・<code>layer0</code>・…・<code>output</code> は <code>run.state_dict()</code> のパスにもなる。</p>
+<h3 id="build-by-hand">ノードを 1 つずつ組む<a class="headerlink" href="#build-by-hand" title="Permanent link">&para;</a></h3>
+<p><code>pc.Chain</code> は全ノードを同じ周期で動かすので、周期を変える場合や鎖でない形にする場合は <code>pc.Input</code>・<code>pc.Layer</code>・<code>pc.Output</code> を 1 つずつ組んでつなぐ。<code>pc.show</code> で見せるなら、<code>mujou.Network</code> とあわせて <a class="autorefs autorefs-internal" title="Shown" href="../../api/pc/#mujou.pc.Shown"><code>pc.Shown</code></a> を継承し、<code>Input</code> の <code>prev</code> と <code>Output</code> の <code>next</code> をネットワークの <code>prev</code> と <code>next</code> として公開する。</p>
+<h3 id="modules">ノードに入れるモジュール<a class="headerlink" href="#modules" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
-<th>項目</th>
-<th>普通の PyTorch の BP</th>
-<th><code>mujou.pc</code></th>
+<th>モジュール</th>
+<th>扱い</th>
+<th>理由・注意</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>推論と学習</td>
-<td>forward、backward、<code>optimizer.step()</code> を順に</td>
-<td>同時に進む。各ノードが自分の周期で更新し、入力を見せている間に学習する</td>
+<td>バッチの各サンプルを独立に扱う <code>nn.Module</code>（1 層、層を重ねたもの、残差ブロック）</td>
+<td>使える</td>
+<td>—</td>
 </tr>
 <tr>
-<td>1 回の学習</td>
-<td>1 バッチ</td>
-<td>ホストがバッチを一定の時間（<code>S</code> 周期）見せる。ノードは目標に向かって緩和し、その後に重みを更新する</td>
+<td><code>LayerNorm</code></td>
+<td>使える</td>
+<td>—</td>
 </tr>
 <tr>
-<td>目標</td>
-<td>バッチと一緒に損失関数に渡す</td>
-<td>入力と一緒に書き込み、活動と組にしてノードからノードへ出力ノードまで運ぶ</td>
+<td><code>Dropout</code>、<code>BatchNorm</code></td>
+<td>使えない</td>
+<td>training mode でサンプルを落としたり混ぜたりする</td>
 </tr>
 <tr>
-<td>学習とテスト</td>
-<td><code>model.train()</code> / <code>model.eval()</code></td>
-<td>モードは無い。<code>mask</code> が False のサンプルからは学習しないので、テストのバッチも走っている同じノードに流す</td>
+<td>学ばせないパラメータ</td>
+<td><code>requires_grad=False</code> にする</td>
+<td>—</td>
 </tr>
 <tr>
-<td>損失</td>
-<td>普通はバッチの平均</td>
-<td>サンプルごとの損失で、shape はバッチの shape。出力ノードが合計する</td>
-</tr>
-<tr>
-<td>勾配を取る範囲</td>
-<td>モデル全体を通して <code>.backward()</code></td>
-<td>各ノードの内側だけ。隣のノードとは活動とエネルギーの勾配をメッセージでやり取りする</td>
-</tr>
-<tr>
-<td>計算量</td>
-<td>1 バッチに forward と backward が 1 回ずつ</td>
-<td>1 周期にノードごとに forward と VJP が 1 回なので、1 バッチで <code>S</code> 回。MNIST では CPU 上で 1 バッチに BP の約 40 倍かかる</td>
+<td>重みの初期化</td>
+<td>モジュールを作るときに済ませる</td>
+<td>ノードは初期化しない</td>
 </tr>
 </tbody>
 </table>
-<h2 id="ノード">ノード<a class="headerlink" href="#ノード" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>ノード</th>
-<th>持つもの</th>
-<th>Port</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>pc.Input</code></td>
-<td>何も持たない</td>
-<td><code>prev</code>: ホストが <code>pc.msg.Sample</code>（<code>x</code>、<code>y</code>、<code>mask</code>、<code>reset</code>）を書く。<code>next</code>: <code>x</code> を <code>pc.msg.Activity</code> の <code>h</code> として、<code>y</code>・<code>mask</code>・<code>reset</code>・書き込みの時刻と一緒に送る</td>
-</tr>
-<tr>
-<td><code>pc.Layer</code></td>
-<td>モジュール、ずれ <code>r</code>、双対変数 <code>lam</code>、クロック</td>
-<td><code>prev</code> と <code>next</code>。<code>next</code> は予測 <code>mu</code> を <code>h</code> として、入力と一緒に届いた <code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> と組にして <code>pc.msg.Activity</code> で送る</td>
-</tr>
-<tr>
-<td><code>pc.Output</code></td>
-<td>最後のモジュール、損失、クロック</td>
-<td><code>prev</code>。<code>next</code> はホストが読む <code>pc.msg.Prediction</code>（<code>y_hat</code>、<code>y</code>、<code>mask</code>、<code>time</code>）を送る</td>
-</tr>
-</tbody>
-</table>
-<p><code>pc.msg.Activity</code> は <code>h</code>・<code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> を運ぶ。<code>pc.Layer</code> は活動の予測 <code>mu = module(h_in)</code> からのずれ <code>r = h - mu</code> と双対変数 <code>lam</code> を持ち、<code>mu</code> を送る。前へ流れるのは順伝播の値で、credit は後ろへだけ流れる。何が <code>mu</code> を動かしても（新しいサンプル、下のノードの学習、自分の学習）、<code>r</code> と <code>lam</code> は値を保ったまま緩和を続ける。ただし新しく始まるサンプルでは 0 に戻す（<a href="#reset">新しく始めるサンプル</a>）。</p>
-<p><code>pc.Chain(*modules, ...)</code> は <code>Input</code> → <code>Layer</code> → ... → <code>Output</code> をつなぎ、周期はどれも <code>tau.period</code>（<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）にする。別の周期や別の形にするなら、ノードを 1 つずつ組む。<code>pc.Input</code> には spec の <code>x</code> と <code>y</code>、<code>period</code> を渡す。各 <code>pc.Layer</code> と <code>pc.Output</code> には前のノードの <code>act_spec</code>（受け取る <code>pc.msg.Activity</code> の spec）を渡し、鎖に沿って <code>next</code> を <code>prev</code> につなぐ。<code>mujou.Network</code> とあわせて <code>pc.Shown</code> を継承し、<code>Input</code> の <code>prev</code> と <code>Output</code> の <code>next</code> を自分の <code>prev</code> と <code>next</code> として公開すれば、そのネットワークにも <code>pc.show</code> でサンプルを見せられる。</p>
-<p>ノードにはバッチの各サンプルを独立に扱う <code>nn.Module</code> なら何でも入れられる。1 層でも、層を重ねたものでも、残差ブロックでもよい。<code>Dropout</code> と <code>BatchNorm</code> は training mode でサンプルを落としたり混ぜたりするので使わない。<code>LayerNorm</code> は使える。重みはモジュールを作るときに初期化しておく。ノードは初期化しない。<code>requires_grad=False</code> のパラメータは学習しない。</p>
 <h2 id="reset">新しく始めるサンプル: <code>reset</code><a class="headerlink" href="#reset" title="Permanent link">&para;</a></h2>
-<p><code>r</code> と <code>lam</code> が持つのは、ノードが見てきたサンプルの credit である。ホストは書くサンプルごとに、新しく始まるかどうかを <code>reset</code>（サンプルごとの bool で、<code>mask</code> と同じ shape）で伝える。</p>
 <table>
 <thead>
 <tr>
 <th>データ</th>
-<th><code>reset</code></th>
+<th><a class="autorefs autorefs-internal" title="Sample" href="../../api/pc/#mujou.pc.msg.Sample"><code>reset</code></a></th>
 </tr>
 </thead>
 <tbody>
@@ -2039,17 +2007,26 @@
 </tr>
 </tbody>
 </table>
-<p>ノードはその書き込みを初めて見た更新で 1 回だけ、そのサンプルの <code>r</code> と <code>lam</code> を 0 にする。関係のないサンプルの credit は残らず、新しいサンプルの credit は 0 から始まり、出力から戻ってくるにつれて溜まる。<code>reset</code> が False のサンプルは <code>r</code> と <code>lam</code> を保つので、credit がフレームからフレームへ引き継がれる。ノードが見なかった書き込み（ノードが更新する前にホストが次を書いたもの）では、リセットされない。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>  <span class="c1"># シャッフルしたデータ: どのサンプルも新しく始まる</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">p</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">net</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">new</span><span class="p">),</span> <span class="n">seconds</span><span class="o">=</span><span class="n">shown</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="時定数を決める">時定数を決める<a class="headerlink" href="#時定数を決める" title="Permanent link">&para;</a></h2>
-<p><code>mujou.pc</code> の速さはすべて、実行のタイマーの秒で時定数として指定する。時定数が短いほど、その値は速く動く。次の表の順に決める。</p>
+<pre class="mermaid"><code>flowchart TD
+    W["ノードがその書き込みを初めて見た更新"] --&gt; Q{"そのサンプルの reset"}
+    Q --&gt;|"True"| Z["r と lam を 0 に（1 回だけ）&lt;br/&gt;credit は 0 から溜まり直す"]
+    Q --&gt;|"False"| K["r と lam を保つ&lt;br/&gt;credit をフレームからフレームへ引き継ぐ"]
+    SKIP["ノードが見なかった書き込み&lt;br/&gt;（更新する前にホストが次を書いた）"] --&gt; N["リセットされない"]</code></pre>
+<h2 id="choose-time-constants">時定数を決める<a class="headerlink" href="#choose-time-constants" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    H["tau.h"] --&gt; R["tau.r = tau.h"]
+    H --&gt; LAM["tau.lam = tau.h / 2"]
+    R --&gt; P["周期 = tau.period"]
+    H --&gt; P
+    P --&gt; MAX["max_dt = tau.max_dt"]
+    LAM --&gt; MAX
+    P --&gt; S["見せる時間 = S 周期"]
+    S --&gt; LI["learn_interval"]
+    S --&gt; OPT["optimizer の tau"]</code></pre>
 <table>
 <thead>
 <tr>
-<th>値</th>
-<th>決めるもの</th>
+<th>値（意味は <a href="../pc-concepts/#time-constants">TimeConstants</a>）</th>
 <th>決め方</th>
 <th>MNIST</th>
 </tr>
@@ -2057,255 +2034,249 @@
 <tbody>
 <tr>
 <td><code>tau.h</code></td>
-<td>ずれ <code>r</code> が緩和する速さ</td>
 <td>最初に決める。ほかはここから決まる</td>
 <td>4 ms</td>
 </tr>
 <tr>
 <td><code>tau.r</code></td>
-<td>ずれ <code>r = h - mu</code> が減衰する速さ</td>
-<td><code>tau.h</code>。必須で、既定値は無い。<code>math.inf</code> で減衰を切る</td>
+<td><code>tau.h</code></td>
 <td>4 ms</td>
 </tr>
 <tr>
 <td><code>tau.lam</code></td>
-<td>双対変数 <code>lam</code> が追従する速さ</td>
 <td><code>tau.h / 2</code></td>
 <td>2 ms</td>
 </tr>
 <tr>
 <td>周期</td>
-<td>各ノードが更新する間隔</td>
-<td><code>tau.period</code>（<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）。<code>Layer</code>・<code>Output</code>・<code>pc.Chain</code>（<code>period=</code>）の既定。上の 2 つと組むと、credit は 1 ホップに最大 1 周期</td>
+<td>既定の <a class="autorefs autorefs-internal" title="period
+
+
+  
+      property
+  " href="../../api/pc/#mujou.pc.TimeConstants.period"><code>tau.period</code></a>（<code>tau.r = tau.h</code> なら <code>tau.h / 2</code>）</td>
 <td>2 ms</td>
 </tr>
 <tr>
-<td><code>relaxer</code></td>
-<td><code>r</code> が自分に掛かる力に沿ってどう動くか</td>
-<td>既定は <code>pc.relax.Euler()</code>。<a href="#relaxer-%E3%82%92%E9%81%B8%E3%81%B6">relaxer を選ぶ</a>を見る</td>
-<td></td>
+<td><code>max_dt</code></td>
+<td>既定の <a class="autorefs autorefs-internal" title="max_dt
+
+
+  
+      property
+  " href="../../api/pc/#mujou.pc.TimeConstants.max_dt"><code>tau.max_dt</code></a>（上の組なら 1 周期）</td>
+<td>2 ms</td>
 </tr>
 <tr>
 <td>見せる時間</td>
-<td>ホストが各バッチを見せる長さ</td>
-<td><code>S</code> 周期。<code>S</code> は credit の最長の往復 <code>2 × ホップ数</code> より数周期長くする</td>
+<td><code>S</code> 周期。<code>S</code> は <a href="#credit">credit の往復</a> <code>2 × hops</code> 周期より数周期長くする</td>
 <td>16 周期、32 ms</td>
 </tr>
 <tr>
 <td><code>learn_interval</code></td>
-<td>ホストの書き込みから重みを更新するまでの時間</td>
-<td>見せる時間の半分より長く、見せる時間より短く、<code>2 × ホップ数 × 周期</code> より長くする。MNIST では見せる時間の 3/4</td>
+<td>見せる時間の半分より長く、見せる時間より短く、<code>2 × hops × 周期</code> より長くする（下の表）。MNIST は見せる時間の 3/4</td>
 <td>24 ms</td>
 </tr>
 <tr>
-<td><code>optimizer</code></td>
-<td>重みが学ぶ速さ</td>
-<td><code>pc.optim.SGD(tau=見せる時間 / lr)</code>。<code>lr</code> は 1 バッチあたりの学習率。<a href="#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a>を参照</td>
+<td>optimizer の <code>tau</code></td>
+<td><code>tau.h</code> よりずっと長くする（重みは活動が落ち着いた後の <code>delta</code> で学ぶ）。値は <a href="#optimizer">換算の表</a></td>
 <td><code>pc.optim.SGD(tau=0.32)</code></td>
-</tr>
-<tr>
-<td><code>max_dt</code></td>
-<td>1 回の更新で数える <code>dt</code> の上限</td>
-<td>既定の <code>tau.max_dt</code>。ここでは 1 周期。下の「周期と <code>max_dt</code>」を見る</td>
-<td>2 ms</td>
 </tr>
 </tbody>
 </table>
-<ul>
-<li><strong>周期と <code>max_dt</code></strong>: 既定の <code>tau.period</code> は <code>tau.h / (1 + tau.h / tau.r)</code>、既定の <code>tau.max_dt</code> は <code>tau.period</code> と <code>2 * tau.lam</code> の短いほう。周期より短い <code>max_dt</code> は、ノードを作るときに <code>ValueError</code> になる。<code>tau.lam &gt;= tau.period / 2</code> なら、既定の <code>max_dt</code> は既定の周期と同じ</li>
-<li><strong>学習率</strong>: <code>pc.optim.SGD</code> では、重みは 1 回の更新で <code>elapsed / tau</code> にバッチの勾配の平均を掛けた分だけ動く。<code>elapsed</code> はそのノードが前に学んでからの時間。1 バッチに 1 回学ぶなら <code>elapsed</code> は見せる時間なので、<code>pc.optim.SGD(tau=見せる時間 / lr)</code> とすれば 1 バッチあたりの学習率が <code>lr</code> になる。<code>elapsed</code> はその間の各更新の <code>dt</code>（1 回ごとに <code>max_dt</code> で打ち切ったもの）の和で、周期どおりの更新なら <code>dt</code> は 1 周期なのでそのまま数えられる</li>
-<li><strong>勾配の平均</strong>: サンプルごとの勾配の和を、バッチのサンプルの数 <code>B</code>（バッチが無ければ 1）で割ったもの。<code>mask</code> が False のサンプルは和に何も足さないが、<code>B</code> には数える</li>
-<li><strong><code>learn_interval</code> を見せる時間の半分から全体の間にする理由</strong>: <code>learn_interval</code> はホストが書き込んだ時刻（活動の <code>time</code>）から数え、ノードが受け取った時刻からは数えない。そのため、ノードは深さによらずほぼ同じ時刻に学ぶ。ノードは書き込みから <code>learn_interval</code> 後に学び、バッチを見せている間は以後 <code>learn_interval</code> ごとに学ぶ。半分より短いと 1 バッチで 2 回以上学ぶ。見せる時間以上だと先に次のバッチが書かれ、ノードは一度も学ばない</li>
-<li><strong>credit の往復</strong>: ノードは入力を初めて見た更新では学ばず、credit が経路を往復するにも時間が要る。入力は前へ、credit は後ろへ 1 ホップに最大 1 周期で進む。ホップ数は <code>Input</code> から <code>Output</code> までの接続の数で、<code>pc.Chain</code> ではモジュールの数と同じ（MNIST は 3）。往復は最大 <code>2 × ホップ数 × 周期</code>（MNIST は 6 周期）。<code>ManualRun</code> の <code>run.step(dt)</code> ではちょうど <code>2 × ホップ数</code> ステップ、全ノードの周期が同じ <code>mujou.run</code> ではその約半分の <code>ホップ数 × 周期</code> かかる。周期が違うときに言えるのは上限だけで、1 ホップの待ちは行き先のノードの約 1 周期まで。<code>learn_interval</code> はどちらの実行でも credit が戻るよう <code>2 × ホップ数 × 周期</code> より長くすることを勧める。検査はしないが、credit が戻る前に学ぶと入力に近いノードは credit の一部からしか学べない。どのノードも 1 周期ごとに forward と VJP を 1 回ずつ計算するので、大きいノードを少なく置くほど 1 バッチに要る周期は少ない</li>
-<li><strong>入力がフレームごとに変わるストリーム</strong>: <code>learn_interval=None</code> を渡す。ノードは入力が変わったかどうかによらず毎回の更新で学び、1 秒あたりの学習率は <code>pc.optim.SGD</code> の <code>1 / tau</code> になる。ストリームに適した値はまだ測っていない</li>
-<li><strong><code>r</code> の減衰</strong>: <code>tau.r</code> は <code>tau.h * dr/dt</code> に <code>-(tau.h / tau.r) * r</code> を足す。<code>lam</code> が <code>r</code> を積分するので、<code>tau.r</code> によらず平衡点では <code>r = 0</code> で、<code>lam</code> は BP の credit のまま。<code>r</code> を引く力が <code>1 + tau.h / tau.r</code> 倍になるので、既定の周期もその倍率で割った長さになる</li>
-<li><strong>この値にする理由</strong>: <code>tau.r = tau.h</code>、<code>tau.lam = tau.h / 2</code>、周期 <code>tau.h / 2</code> なら、1 回の更新で <code>delta = r + lam</code> がちょうど <code>-g</code> になり、ノードはその <code>delta</code> の <code>g_in</code> を同じ更新のうちに送る。credit は 1 ホップに最大 1 周期で戻り、行き過ぎない。ノードは <code>mu</code> を送るので credit は後ろへだけ流れ、モジュールのヤコビアンによらず、深い鎖でも 1 ノードのときと同じ刻みで安定する。長い刻み（<code>dt = tau.h = tau.lam</code>、減衰なし）では <code>delta</code> が 2 倍に行き過ぎ、その行き過ぎは通るノードごとに大きくなる。短い刻みは安定だが、多くの周期が要る</li>
-</ul>
-<h2 id="optimizer-を選ぶ">optimizer を選ぶ<a class="headerlink" href="#optimizer-を選ぶ" title="Permanent link">&para;</a></h2>
-<p><code>pc.Layer</code>・<code>pc.Output</code>・<code>pc.Chain</code> は <code>optimizer=</code> が必須。optimizer はノードが学ぶときに、バッチの勾配の平均 <code>g</code> で重みをどう動かすかを決める。状態を持たない設定なので、<code>pc.Chain</code> は同じものを全ノードに渡す。各ノードはそれを自分の重みに bind し、重みの状態を自分で持つ。</p>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 210" role="img" aria-label="MNIST で 1 バッチを見せる 32 ms。ホストは 0 ms に書き、32 ms に次を書く。ノードは 2 ms ごとに更新する。credit の往復は最大 12 ms。learn_interval は見せる時間の半分の 16 ms と見せる時間 32 ms の間に置き、MNIST では 24 ms で学ぶ">
+<text class="mujou-label" x="10" y="54">ホスト</text>
+<line class="mujou-lane" x1="90" y1="50" x2="620" y2="50"/>
+<g class="mujou-tick-b"><line x1="90" y1="38" x2="90" y2="62"/><line x1="602" y1="38" x2="602" y2="62"/></g>
+<text class="mujou-note" x="94" y="30">書く</text>
+<text class="mujou-note" x="602" y="30" text-anchor="end">次を書く</text>
+<text class="mujou-label" x="10" y="114">ノード</text>
+<rect x="346" y="94" width="256" height="32" style="fill: var(--md-accent-fg-color--transparent)"/>
+<line class="mujou-lane" x1="90" y1="110" x2="620" y2="110"/>
+<g class="mujou-tick-a"><line x1="122" y1="100" x2="122" y2="120"/><line x1="154" y1="100" x2="154" y2="120"/><line x1="186" y1="100" x2="186" y2="120"/><line x1="218" y1="100" x2="218" y2="120"/><line x1="250" y1="100" x2="250" y2="120"/><line x1="282" y1="100" x2="282" y2="120"/><line x1="314" y1="100" x2="314" y2="120"/><line x1="346" y1="100" x2="346" y2="120"/><line x1="378" y1="100" x2="378" y2="120"/><line x1="410" y1="100" x2="410" y2="120"/><line x1="442" y1="100" x2="442" y2="120"/><line x1="506" y1="100" x2="506" y2="120"/><line x1="538" y1="100" x2="538" y2="120"/><line x1="570" y1="100" x2="570" y2="120"/><line x1="602" y1="100" x2="602" y2="120"/></g>
+<g class="mujou-tick-b"><line x1="474" y1="90" x2="474" y2="130"/></g>
+<text class="mujou-note" x="474" y="144" text-anchor="middle">学ぶ（24 ms）</text>
+<path class="mujou-brace" d="M 92 92 Q 92 84 100 84 L 274 84 Q 282 84 282 92"/>
+<text class="mujou-note" x="186" y="78" text-anchor="middle">credit の往復 ≤ 2 × 3 × 2 ms = 12 ms</text>
+<line class="mujou-axis" x1="90" y1="160" x2="620" y2="160"/>
+<text class="mujou-note" x="90" y="176" text-anchor="middle">0</text>
+<text class="mujou-note" x="282" y="176" text-anchor="middle">12 ms</text>
+<text class="mujou-note" x="346" y="176" text-anchor="middle">S/2 = 16 ms</text>
+<text class="mujou-note" x="602" y="176" text-anchor="end">S = 32 ms</text>
+<text class="mujou-note" x="474" y="196" text-anchor="middle">learn_interval を置く範囲</text>
+<text class="mujou-label" x="90" y="206">実行のタイマー →</text>
+</svg>
+</figure>
+
+<table>
+<thead>
+<tr>
+<th><code>learn_interval</code></th>
+<th>結果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>見せる時間の半分より短い</td>
+<td>1 バッチで 2 回以上学ぶ</td>
+</tr>
+<tr>
+<td>見せる時間の半分より長く、見せる時間より短い</td>
+<td>1 バッチに 1 回学ぶ（勧める範囲）</td>
+</tr>
+<tr>
+<td>見せる時間以上</td>
+<td>先に次のバッチが書かれ、ノードは一度も学ばない</td>
+</tr>
+<tr>
+<td><code>2 × hops × 周期</code> より短い</td>
+<td>検査はしない。credit が戻る前に学び、入力に近いノードは credit の一部からしか学べない</td>
+</tr>
+<tr>
+<td><code>None</code></td>
+<td>毎回の更新で学ぶ。入力がフレームごとに変わるストリーム向け。ストリームに適した値はまだ測っていない</td>
+</tr>
+</tbody>
+</table>
+<p><code>hops</code> は <code>Input</code> から <code>Output</code> までの接続の数で、<code>pc.Chain</code> ではモジュールの数と同じ（MNIST は 3）。どのノードも 1 周期ごとに forward と VJP を 1 回ずつ計算するので、大きいノードを少なく置くほど 1 バッチに要る周期は少ない（<a href="../pc-benchmarks/#node-count">ノードの数と周期</a>）。</p>
+<h3 id="credit">credit の往復<a class="headerlink" href="#credit" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>実行の仕方</th>
+<th>credit が 1 ホップ戻る時間</th>
+<th>往復（入力が <code>Output</code> まで進み、credit が先頭の <code>Layer</code> まで戻る）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="autorefs autorefs-internal" title="step" href="../../api/run/#mujou.ManualRun.step"><code>ManualRun.step(dt)</code></a>（1 ステップに全ノードが 1 回）</td>
+<td>1 ステップ</td>
+<td>ちょうど <code>2 × hops</code> ステップ</td>
+</tr>
+<tr>
+<td><a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a>、全ノードの周期が同じ</td>
+<td>最大 1 周期</td>
+<td>約 <code>hops</code> 周期（上限は <code>2 × hops</code> 周期）</td>
+</tr>
+<tr>
+<td>周期が違う</td>
+<td>行き先のノードの約 1 周期まで</td>
+<td>上限だけ言える</td>
+</tr>
+</tbody>
+</table>
+<h2 id="optimizer">optimizer を選ぶ<a class="headerlink" href="#optimizer" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>optimizer</th>
 <th><code>elapsed</code> 秒の 1 回の学習</th>
-<th>状態</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>pc.optim.SGD(tau=...)</code></td>
-<td><code>p -= (elapsed / tau) * g</code></td>
-<td>無し</td>
+<td><a class="autorefs autorefs-internal" title="SGD
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.optim.SGD"><code>pc.optim.SGD(tau=..., tau_m=None)</code></a></td>
+<td><code>p -= (elapsed / tau) * g</code>。<code>tau_m</code> を渡すと <code>g</code> の代わりに、勾配を時定数 <code>tau_m</code> で平均した <code>m_hat</code>（momentum）</td>
 </tr>
 <tr>
-<td><code>pc.optim.SGD(tau=..., tau_m=...)</code></td>
-<td><code>p -= (elapsed / tau) * m_hat</code>。momentum の <code>m</code> は勾配を時定数 <code>tau_m</code> で平均したもの</td>
-<td><code>m</code>、<code>c_m</code></td>
-</tr>
-<tr>
-<td><code>pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)</code></td>
+<td><a class="autorefs autorefs-internal" title="RMSProp
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.optim.RMSProp"><code>pc.optim.RMSProp(tau=..., tau_v=..., eps=1e-8)</code></a></td>
 <td>学習率 <code>elapsed / tau</code> の RMSProp。二乗平均の <code>v</code> は時定数 <code>tau_v</code> で減衰する</td>
-<td><code>v</code>、<code>c_v</code></td>
 </tr>
 <tr>
-<td><code>pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., eps=1e-8, weight_decay=1e-2)</code></td>
+<td><a class="autorefs autorefs-internal" title="AdamW
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.optim.AdamW"><code>pc.optim.AdamW(tau=..., tau_m=..., tau_v=..., ...)</code></a></td>
 <td>学習率 <code>elapsed / tau</code> の AdamW。moment の <code>m</code> と <code>v</code> は時定数 <code>tau_m</code> と <code>tau_v</code> で減衰する</td>
-<td><code>m</code>、<code>v</code>、<code>c_m</code>、<code>c_v</code></td>
 </tr>
 <tr>
-<td><code>pc.optim.TimeScaled(optimizer, scale=...)</code></td>
-<td><code>optimizer</code> を <code>elapsed * scale</code> 秒ぶん進める</td>
-<td><code>optimizer</code> の状態</td>
+<td><a class="autorefs autorefs-internal" title="TimeScaled
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.optim.TimeScaled"><code>pc.optim.TimeScaled(optimizer, scale=...)</code></a></td>
+<td><code>optimizer</code> を <code>elapsed * scale</code> 秒ぶん進める（<a href="#one-stream-as-a-batch-of-consecutive-samples">1 本のストリーム</a>）</td>
 </tr>
 </tbody>
 </table>
-<ul>
-<li><strong>ステップでなく時間</strong>: <code>tau</code> はどれも秒。<code>elapsed</code> はノードが前に学んでからの時間なので、1 バッチの間に何回学んでも、各歩みの <code>elapsed</code> を合わせると見せる時間になる。そのため <code>pc.optim.SGD</code> では 1 バッチに 1 回学んでも 2 回学んでも、1 バッチで重みが動く量は同じ</li>
-<li><strong>SGD</strong> は MNIST が使うもの。<code>tau</code> は時定数の表のとおり、見せる時間を 1 バッチあたりの学習率で割って決める</li>
-<li><strong>SGD の momentum</strong>（<code>tau_m</code>）は勾配をおよそ直近 <code>tau_m</code> 秒で平均し、学習率は変えない。勾配が一定なら重みは momentum 無しと同じだけ動く。<code>Δt</code> を 2 回の学習の間の時間として、<code>torch.optim.SGD(lr, momentum=beta, dampening=beta)</code> からは <code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta)</code>。torch の既定の <code>dampening=0</code> では、buffer がたまると歩みが <code>1 / (1 - beta)</code> 倍になる。それに合わせるなら <code>tau = (1 - beta) * Δt / lr</code>。<code>mujou.pc</code> に適した値はまだ測っていない</li>
-<li><strong>RMSProp</strong> は勾配をその二乗平均の平方根で割る。momentum と weight decay は無く、各重みを 1 回に最大でおよそ <code>elapsed / tau</code> 動かす。<code>torch.optim.RMSprop(lr, alpha, eps)</code> からは <code>tau = Δt / lr</code>、<code>tau_v = -Δt / ln(alpha)</code>。<code>mujou.pc</code> に適した値はまだ測っていない</li>
-<li><strong>AdamW</strong> は勾配の大きさによらず、各重みを 1 回におよそ <code>elapsed / tau</code> 動かす。<code>mujou.pc</code> に適した AdamW の値はまだ測っていない</li>
-<li><strong><code>torch.optim.AdamW</code> からの換算</strong>: <code>Δt</code> は 2 回の学習の間の時間で、1 バッチに 1 回学ぶなら見せる時間。<code>torch.optim.AdamW</code> の <code>lr</code>・<code>betas</code> の値を使うなら、<code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta1)</code>、<code>tau_v = -Δt / ln(beta2)</code> とする。<code>Δt</code> が一定なら、歩みは <code>torch.optim.AdamW</code> と同じになる。32 ms に 1 回学ぶなら、<code>beta1 = 0.9</code> は <code>tau_m</code> ≈ 0.30 s、<code>beta2 = 0.999</code> は <code>tau_v</code> ≈ 32 s</li>
-<li><strong><code>weight_decay</code></strong> は <code>torch.optim.AdamW</code> と同じく単位を持たない。重みを時定数 <code>tau / weight_decay</code> で減衰させる</li>
-<li><strong>不正な値</strong>: <code>tau</code>（渡したなら SGD の <code>tau_m</code> も）と <code>eps</code> はどれも有限で &gt; 0、<code>weight_decay</code> は有限で &gt;= 0 でなければ、optimizer が <code>ValueError</code> を送出する。ノードに学ばせないときは、その <code>pc.Layer</code> か <code>pc.Output</code> に無限大の <code>tau</code> でなく <code>learn_interval=math.inf</code> を渡す（<code>pc.Chain</code> は 1 つの <code>learn_interval</code> を全ノードに渡す）</li>
-<li><strong>学ぶ重みだけ</strong>: ノードは <code>requires_grad=True</code> のパラメータだけを bind する。凍結したパラメータには weight decay も掛からない</li>
-<li><strong>状態</strong>: ノードの optimizer の状態は <code>run.state_dict()["nodes"][path]["state"]["optimizer"]</code> にある。<code>pc.optim.AdamW</code> ならキー <code>"m"</code>・<code>"v"</code>・<code>"c_m"</code>・<code>"c_v"</code> の dict、<code>pc.optim.RMSProp</code> なら <code>"v"</code>・<code>"c_v"</code>、<code>tau_m</code> を渡した <code>pc.optim.SGD</code> なら <code>"m"</code>・<code>"c_m"</code>、渡さなければ空の dict。実行のほかの状態と一緒に保存・復元される</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># torch の lr=1e-3, betas=(0.9, 0.999) を、32 ms のバッチごとに 1 回学ぶ場合に換算して丸めたもの。</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="mf">0.032</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">tau_m</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">tau_v</span><span class="o">=</span><span class="mf">32.0</span><span class="p">)</span>
-</code></pre></div>
-<details class="question">
-<summary><code>torch.optim</code> を使わないのはなぜ？</summary>
-<p><code>torch.optim</code> の optimizer は時間でなくステップを数えるので、<code>betas</code> が与える時定数がノードの学ぶ頻度で変わる。また、作るだけで free-threaded の Python に GIL が戻る。</p>
-</details>
-<h2 id="relaxer-を選ぶ">relaxer を選ぶ<a class="headerlink" href="#relaxer-を選ぶ" title="Permanent link">&para;</a></h2>
-<p><code>pc.Layer</code> と <code>pc.Chain</code> は <code>relaxer=</code> を取る。relaxer は、ずれ <code>r</code> が自分に掛かる力 <code>F = (1 + tau.h / tau.r) * r + lam + g</code> に沿ってどう動くかを決める。<code>r</code> にとっての optimizer にあたる。省略でき、既定は <code>pc.relax.Euler()</code>。状態を持たない設定なので、<code>pc.Chain</code> は同じものを全 <code>pc.Layer</code> に渡す。各 <code>pc.Layer</code> はそれを自分の <code>r</code> に bind し、<code>r</code> の状態を自分で持つ。<code>pc.Output</code> は <code>r</code> を持たないので、relaxer を取らない。</p>
-<p><code>dt</code> 秒の 1 回で、<code>pc.relax.Euler()</code> は <code>r -= (dt / tau.h) * F</code> と動かす。状態は持たない。</p>
-<ul>
-<li>relaxer が変えるのは <code>r</code> が不動点に着くまでの道で、不動点ではない。不動点では <code>F = 0</code> で、<code>lam</code> は BP の credit になる。どの relaxer が <code>r</code> を動かしても、<code>lam</code> は動かした後の <code>r</code> で進む</li>
-<li>ノードの relaxer の状態は <code>run.state_dict()["nodes"][path]["state"]["relaxer"]</code> にある。<code>pc.relax.Euler</code> なら空の dict で、自作の relaxer ならそれが持つもの。実行のほかの状態と一緒に保存・復元される。ノードは新しい入力のたびに <code>reset_(reset)</code> を呼ぶ。力を覚える relaxer は、新しく始まるサンプルの分だけ覚えた力を捨てる</li>
-<li>relaxer を自作するには、optimizer を自作するときと同じく、<code>pc.relax.Relaxer</code> と <code>pc.relax.BoundRelaxer</code> を継承して書く（<a href="../pc-concepts/#7-relaxer">mujou.pc の仕組み</a>）。<code>lam</code> が credit になるのは <code>F = 0</code> のところだけなので、不動点はそこでなければならない</li>
-</ul>
-<h2 id="mnist">MNIST<a class="headerlink" href="#mnist" title="Permanent link">&para;</a></h2>
-<p><code>examples/mnist/</code> は 784-256-256-10 の ReLU ネットワークを <code>pc.Chain</code> で MNIST に学習させ、同じネットワークを同じ初期重みと同じバッチで BP でも学習させる。3 epoch 後のテスト精度は PC-ALM が 97.69%、BP が 97.53% だった（seed 0）。prequential 精度はどの epoch も BP との差が 0.11 ポイント以内だった。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py<span class="w">            </span><span class="c1"># 3 epoch、約 2 分</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/mnist/main.py<span class="w"> </span>--epochs<span class="w"> </span><span class="m">1</span><span class="w"> </span>--watch
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">tau</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">TimeConstants</span><span class="p">(</span><span class="n">h</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">period</span> <span class="o">=</span> <span class="n">tau</span><span class="o">.</span><span class="n">period</span>  <span class="c1"># the period of every node of pc.Chain, tau.h / 2</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">shown</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">steps</span> <span class="o">*</span> <span class="n">period</span>  <span class="c1"># how long the host shows each batch</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># The learning rate of one batch is shown / optimizer.tau: the nodes learn</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># once per batch, for the time since they last learned.</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="n">shown</span> <span class="o">/</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">)</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.75</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># learn once, 3/4 of the way through each batch</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="p">)</span>
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="n">timer</span><span class="p">,</span> <span class="n">workers</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">epochs</span><span class="p">):</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        <span class="n">right</span> <span class="o">=</span> <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>            <span class="n">batches</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">train_x</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">train_y</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="n">shuffle</span><span class="p">(</span><span class="n">epoch</span><span class="p">))</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="p">):</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>            <span class="c1"># Shuffled batches: no sample continues the one before it.</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>            <span class="n">sample</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">mask</span><span class="p">))</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>            <span class="n">p</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">net</span><span class="p">,</span> <span class="n">sample</span><span class="p">,</span> <span class="n">seconds</span><span class="o">=</span><span class="n">shown</span><span class="p">)</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>                <span class="k">raise</span> <span class="ne">SystemExit</span><span class="p">(</span><span class="s2">"PC-ALM diverged: lower --time-scale"</span><span class="p">)</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>            <span class="n">right</span> <span class="o">+=</span> <span class="n">correct</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">],</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>  <span class="c1"># before learning from it</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="n">total</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>            <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">watch</span> <span class="ow">and</span> <span class="n">epoch</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">100</span><span class="p">:</span>  <span class="c1"># a pause to look</span>
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>                <span class="n">watch</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="s2">"nodes"</span><span class="p">])</span>
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>        <span class="n">seconds</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>        <span class="c1"># Test: the same nodes, with no label to learn from.</span>
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>        <span class="n">test_right</span> <span class="o">=</span> <span class="n">test_total</span> <span class="o">=</span> <span class="mi">0</span>
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">batches</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">test_x</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">test_y</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">):</span>
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>            <span class="n">unlabeled</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>  <span class="c1"># keep mask to score with</span>
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>            <span class="n">p</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">show</span><span class="p">(</span>
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>                <span class="n">run</span><span class="p">,</span>
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>                <span class="n">net</span><span class="p">,</span>
-<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>                <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Sample</span><span class="p">(</span>
-<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>                    <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">unlabeled</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>                <span class="p">),</span>
-<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>                <span class="n">seconds</span><span class="o">=</span><span class="n">shown</span><span class="p">,</span>
-<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>            <span class="p">)</span>
-<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>            <span class="n">test_right</span> <span class="o">+=</span> <span class="n">correct</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"y_hat"</span><span class="p">],</span> <span class="n">y</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
-<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>            <span class="n">test_total</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
-<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>        <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Epoch</span><span class="p">(</span><span class="n">right</span> <span class="o">/</span> <span class="n">total</span><span class="p">,</span> <span class="n">test_right</span> <span class="o">/</span> <span class="n">test_total</span><span class="p">,</span> <span class="n">seconds</span><span class="p">))</span>
-<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>        <span class="nb">print</span><span class="p">(</span>
-<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>            <span class="sa">f</span><span class="s2">"PC-ALM epoch </span><span class="si">{</span><span class="n">epoch</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">: prequential </span><span class="si">{</span><span class="n">right</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">total</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">, "</span>
-<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>            <span class="sa">f</span><span class="s2">"test </span><span class="si">{</span><span class="n">test_right</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">test_total</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">seconds</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s"</span>
-<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>        <span class="p">)</span>
-</code></pre></div>
-<ul>
-<li><strong>prequential 精度</strong>（学習中）: 各バッチへの最初の予測で測る。<code>pc.show</code> が返すもので、どのノードもまだそのバッチから学んでいない時点のもの。まだ見ていないデータをどれだけ当てられるかを表す</li>
-<li><strong>テスト精度</strong>: ホストはテストのバッチを <code>mask</code> をすべて False にして見せるので、どのノードもそこから学ばない。採点には元の <code>mask</code> を取っておく。切り替える推論モードは無い</li>
-<li><strong>最後のバッチ</strong>: <code>data.batches</code> は、どのバッチも spec の大きさになるよう、最後のバッチの不足分を <code>mask</code> が False のゼロで埋める。正解を数えるのは、元の <code>mask</code> が True のサンプルだけ</li>
-<li><strong><code>--watch</code></strong> は各ノードの <code>dt</code> を数え（<code>watch.py</code>）、更新が中央値で 1.5 周期、99% 点で 2 周期より遅れると警告する。<code>--time-scale 2</code> でも更新の 99% が 1.25 周期以内に来て、精度も同じだった</li>
-<li><code>data.py</code>・<code>metrics.py</code>・<code>bp.py</code> は <code>mujou.pc</code> に依存しない。データは素のテンソルで、BP の基準は素の PyTorch</li>
-</ul>
-<h2 id="cifar-10">CIFAR-10<a class="headerlink" href="#cifar-10" title="Permanent link">&para;</a></h2>
-<p><code>examples/cifar10/</code> は、CUDA のデバイスに載せた ResNet-20 をステージごとのノードにして CIFAR-10 に学習させる。同じネットワークを同じ初期重み・同じバッチ・同じ <code>pc.optim.AdamW</code> で、GPU 上の BP でも学習させる。<code>pc.Chain</code> の <code>Input</code> の後ろには、stem と最初のステージ、2 つ目のステージ、3 つ目のステージ、head の 4 つのモジュールがそれぞれノードとして並ぶ。<code>Input</code> を含めて 5 ノード。32 サンプルのバッチを 12 周期ずつ見せると、3 epoch 目の prequential 精度は PC-ALM が 57.11%、BP が 55.91%、その後のテスト精度は 59.47% と 61.76% だった（seed 0）。10 epoch 目は prequential が 73.05% と 73.20%、テストが 73.90% と 74.35%。1 epoch に PC-ALM は 48 秒、BP は 8〜9 秒かかる。学習率を減衰させないので、テスト精度はどちらも epoch ごとに数ポイント動く。GPU の計算も実行ごとにビット単位では一致しない。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w">            </span><span class="c1"># 3 epoch、RTX 4090 で約 4 分</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/cifar10/main.py<span class="w"> </span>--epochs<span class="w"> </span><span class="m">10</span><span class="w">  </span><span class="c1"># 約 13 分</span>
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># With these, delta follows -g in one update, which the node passes on in</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># the same update: the credit takes at most one period per hop, a period of</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># tau.h / 2, the default period of pc.Chain.</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">tau</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">TimeConstants</span><span class="p">(</span><span class="n">h</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">,</span> <span class="n">lam</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tau_h</span><span class="p">)</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">shown</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">steps</span> <span class="o">*</span> <span class="n">tau</span><span class="o">.</span><span class="n">period</span>  <span class="c1"># how long the host shows each batch</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="o">*</span><span class="n">modules</span><span class="p">,</span>  <span class="c1"># already on the device</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">)),</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">y</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,),</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">batch</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">,</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">batch</span><span class="p">),</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">optimizer</span><span class="o">=</span><span class="n">adamw</span><span class="p">(</span><span class="n">shown</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">),</span>  <span class="c1"># learn once per batch</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="mf">0.9</span> <span class="o">*</span> <span class="n">shown</span><span class="p">,</span>  <span class="c1"># late in the showing, when lam has settled</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>  <span class="c1"># every node computes on the GPU</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="p">)</span>
-</code></pre></div>
-<ul>
-<li><strong>ステージごとのノード</strong>: ノードの内側では autograd がモジュール（ブロックとそのスキップ接続・活性化を含む）を微分し（BP）、ノードの間には PC-ALM のメッセージだけが流れる</li>
-<li><strong>1 バッチに 12 周期</strong>、学ぶのはその 0.9 の時点: credit は 1 ホップに最大 1 周期で戻るので、<code>Input</code> から <code>Output</code> までの往復は最大 8 周期</li>
-<li><strong>ノードが少ないほど周期も少ない</strong>: GPU 1 枚では、全ノードの 1 周期のコストはネットワークの切り方によらずほぼ同じ。CPU によるカーネルの起動で律速され、1 回の更新に約 1.7 ms かかる。残差ブロックごとに切る（11 ノード）と 1 バッチに 24 周期要り、実時間 2.5 ms の周期にノードが追いつかなかった。11 ノードで 128 サンプルのバッチと 5 ms の周期にすると、3 epoch 目は prequential 53.94%・テスト 57.67% で、時間は BP の 17 倍だった</li>
-<li><strong>GPU で実時間の 2 倍</strong>: <code>device="cuda"</code> にすると、すべてのノードが GPU で計算し、ノードの間のメッセージも GPU に置かれたまま渡る（<a href="../threads-and-devices/#%E3%83%87%E3%83%90%E3%82%A4%E3%82%B9">デバイス</a>）。<code>tau.h</code> は 10 ms なので周期はタイマーで 5 ms。タイマーを実時間の 2 倍で進める（<code>--time-scale</code> 2）ので、実時間では 2.5 ms。更新の間隔は平均 1.00 周期だった</li>
-<li><strong>バッチは 32</strong>: 1 回の更新のコストは 32 サンプルでも 128 サンプルでもほぼ同じ。大きいバッチで得をするのは BP のほう</li>
-<li><strong>AdamW</strong>: <a href="#optimizer-%E3%82%92%E9%81%B8%E3%81%B6">optimizer を選ぶ</a>のとおり、Adam の <code>lr</code> から作る。BP の基準も同じ <code>pc.optim.AdamW</code> をモデル全体に束ね、1 バッチに 1 回、見せる時間だけ進める。ノードが 1 回の学習で進める時間は前に学んでからの時間で、見せる時間に近い。そのため BP の基準は、同じ勾配なら PC-ALM とほぼ同じ歩みで重みを動かす</li>
-<li><strong>GroupNorm</strong>: BatchNorm の代わりに使う。移動統計も切り替えるモードも無い。詰め物も含め、バッチの中のサンプルは互いに影響しない</li>
-</ul>
-<h2 id="gpu-で更新を速くする-cuda_graph">GPU で更新を速くする: <code>cuda_graph</code><a class="headerlink" href="#gpu-で更新を速くする-cuda_graph" title="Permanent link">&para;</a></h2>
-<p>GPU で小さいバッチを扱うと、<code>pc.Layer</code> の 1 回の更新は GPU ではなく、vector-Jacobian product のカーネルを CPU から起動するところで律速される。<code>cuda_graph=True</code> にすると、ノードは最初の更新でこの積を CUDA graph に記録し、それ以降の更新ではそれを再生する。更新の結果はビット単位で変わらず、起動の手間だけが無くなる。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">layer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Layer</span><span class="p">(</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">stage</span><span class="p">,</span>  <span class="c1"># CUDA の上</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">act_spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">learn_interval</span><span class="o">=</span><span class="n">learn_interval</span><span class="p">,</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">device</span><span class="o">=</span><span class="s2">"cuda"</span><span class="p">,</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="n">cuda_graph</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">)</span>
-</code></pre></div>
-<ul>
-<li><strong>どの入力にも同じカーネル</strong>: shape は spec で決まるので固定。module はホストと同期しないこと（<code>.item()</code>、テンソルの値による分岐）。パラメータは <code>pc.optim</code> のようにその場で変えること</li>
-<li><strong>ViT の視覚のステージ、1 サンプル</strong>（RTX 4090）: 積は 2.06 ms から 0.47 ms になった</li>
-<li><strong>状態には入らない</strong>: state dict から作り直したノードは、graph を記録し直す</li>
-</ul>
-<h2 id="バッチ">バッチ<a class="headerlink" href="#バッチ" title="Permanent link">&para;</a></h2>
-<p>バッチはメッセージのどのテンソルも先頭に持つ shape。<code>pc.Chain</code>・<code>pc.Input</code>・<code>pc.msg.activity_spec</code> に <code>batch</code> で渡し、spec の <code>x</code> と <code>y</code> もこの shape で始める。<code>pc.Layer</code> と <code>pc.Output</code> は受け取る <code>act_spec</code> から読む。</p>
+<p><code>Δt</code> は 2 回の学習の間の時間で、1 バッチに 1 回学ぶなら見せる時間。</p>
 <table>
 <thead>
 <tr>
-<th><code>batch</code></th>
+<th>optimizer</th>
+<th>ふるまい</th>
+<th>torch の値からの換算</th>
+<th><code>mujou.pc</code> で測った例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SGD</td>
+<td>勾配に比例して動かす</td>
+<td><code>tau</code> = 見せる時間 / 1 バッチあたりの学習率</td>
+<td><a href="../pc-benchmarks/#mnist">MNIST</a></td>
+</tr>
+<tr>
+<td>SGD の momentum</td>
+<td>勾配をおよそ直近 <code>tau_m</code> 秒で平均し、学習率は変えない。勾配が一定なら momentum 無しと同じだけ動く</td>
+<td><code>torch.optim.SGD(lr, momentum=beta, dampening=beta)</code> から <code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta)</code>。torch の既定の <code>dampening=0</code> に合わせるなら <code>tau = (1 - beta) * Δt / lr</code></td>
+<td>まだ測っていない</td>
+</tr>
+<tr>
+<td>RMSProp</td>
+<td>勾配をその二乗平均の平方根で割る。momentum と weight decay は無い。各重みを 1 回に最大でおよそ <code>elapsed / tau</code> 動かす</td>
+<td><code>torch.optim.RMSprop(lr, alpha, eps)</code> から <code>tau = Δt / lr</code>、<code>tau_v = -Δt / ln(alpha)</code></td>
+<td>まだ測っていない</td>
+</tr>
+<tr>
+<td>AdamW</td>
+<td>勾配の大きさによらず、各重みを 1 回におよそ <code>elapsed / tau</code> 動かす</td>
+<td><code>torch.optim.AdamW</code> の <code>lr</code>・<code>betas</code> から <code>tau = Δt / lr</code>、<code>tau_m = -Δt / ln(beta1)</code>、<code>tau_v = -Δt / ln(beta2)</code>。<code>Δt</code> が一定なら歩みは <code>torch.optim.AdamW</code> と同じ</td>
+<td><a href="../pc-benchmarks/#cifar-10">CIFAR-10</a></td>
+</tr>
+</tbody>
+</table>
+<p>ノードに学ばせないときは、optimizer の <code>tau</code> を無限大にせず <code>learn_interval=math.inf</code> を渡す。</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">避ける</label><label for="__tabbed_1_2">こう書く</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>  <span class="c1"># ValueError</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># その pc.Layer か pc.Output に渡す。pc.Chain は 1 つの learn_interval を全ノードに渡す</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">layer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Layer</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="n">tau</span><span class="o">=</span><span class="n">tau</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="choose-relaxer">relaxer を選ぶ<a class="headerlink" href="#choose-relaxer" title="Permanent link">&para;</a></h2>
+<p><code>pc.Layer</code> と <code>pc.Chain</code> の <code>relaxer=</code> は省略でき、既定は <a class="autorefs autorefs-internal" title="Euler
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.relax.Euler"><code>pc.relax.Euler</code></a>。<code>pc.Output</code> は <code>r</code> を持たないため relaxer を取らない。relaxer の仕組みと自作は <a href="../pc-concepts/#relaxer">mujou.pc の仕組み</a> を参照。</p>
+<h2 id="batch">バッチ<a class="headerlink" href="#batch" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th><a class="autorefs autorefs-internal" title="Chain" href="../../api/pc/#mujou.pc.Chain"><code>batch</code></a></th>
 <th><code>x</code>（入力 784）</th>
 <th><code>y</code>（クラス 1 つ）</th>
 <th><code>mask</code></th>
@@ -2332,135 +2303,251 @@
 <td><code>(8, 4, 784)</code></td>
 <td><code>(8, 4)</code></td>
 <td><code>(8, 4)</code></td>
-<td>たとえば 8 個の環境それぞれに 4 エージェント</td>
+<td>たとえば 8 個の環境それぞれに 4 エージェント。<code>batch=32</code> と同じに学ぶ</td>
+</tr>
+<tr>
+<td><code>64</code></td>
+<td><code>(64, T, 784)</code></td>
+<td><code>(64,)</code></td>
+<td><code>(64,)</code></td>
+<td><code>T</code> ステップの系列 64 本。module が混ぜる時間はバッチでなくサンプルの次元</td>
 </tr>
 </tbody>
 </table>
-<ul>
-<li>サンプルは互いに独立であること。module はバッチのどの次元についても、各サンプルを別々に計算する。系列の時間のように module が混ぜる次元はバッチでなくサンプルの次元。<code>T</code> ステップの系列 64 本なら <code>batch=64</code> で <code>x</code> は <code>(64, T, 784)</code></li>
-<li>多次元のバッチは同じサンプルを 1 次元に並べたものと同じように学ぶ。<code>(8, 4)</code> は <code>32</code> と同じ</li>
-<li>損失もバッチを受け取る。<code>pc.loss.MSELoss(batch)</code> と <code>pc.loss.CrossEntropyLoss(batch)</code>。<code>pc.loss.CrossEntropyLoss</code> の <code>y</code> はクラス（int64 で、<code>y_hat</code> からクラスの次元を除いた shape）かクラスごとの確率（<code>y_hat</code> と同じ shape）。クラスの次元は <code>nn.CrossEntropyLoss</code> と同じく <code>y_hat</code> のバッチの直後。その後ろの次元（画像の画素など）は平均する</li>
-</ul>
 <h2 id="one-stream-as-a-batch-of-consecutive-samples">1 本のストリームを連続したサンプルのバッチで流す<a class="headerlink" href="#one-stream-as-a-batch-of-consecutive-samples" title="Permanent link">&para;</a></h2>
-<p>長いストリームを速く流すには、連続した <code>c</code> 個のサンプルを 1 つのバッチで見せる。サンプル <code>t</code> から <code>t + c - 1</code> を一度に見せ、次の <code>c</code> 個へ進む。1 回の学習がストリームの <code>c</code> サンプル分になる。run の 1 秒がストリームの <code>c</code> 秒に当たり、重みはその <code>c</code> 秒の分だけ学ぶ必要がある。<code>pc.optim.TimeScaled(optimizer, scale=c)</code> がこれを行う。経った時間を <code>c</code> 倍にして <code>optimizer</code> を進める。次のように設定する。</p>
-<ol>
-<li>各バッチは、ストリームの 1 サンプル分の時間だけ見せる。これが見せる時間になる。見せる時間まで <code>c</code> 倍にすると、時間を二重に倍にすることになり、重みが <code>c</code> 倍速く学びすぎる</li>
-<li><code>optimizer</code> の時定数は、1 サンプルずつ流す実行と同じく、ストリームの秒で書く。<code>TimeScaled</code> がそれぞれを <code>c</code> で割る（<code>tau</code>・<code>tau_m</code>・<code>tau_v</code>、<code>elapsed</code> を <code>elapsed / tau</code> の形でだけ使う自作の optimizer の時定数）ので、割り忘れが起きない。<code>weight_decay</code> は無次元でそのまま。減衰の時定数 <code>tau / weight_decay</code> は <code>tau</code> とともに <code>c</code> で割られる</li>
-<li>学習するすべてのノード（各 <code>pc.Layer</code> と <code>pc.Output</code>、<code>pc.Chain</code> なら <code>optimizer=</code>）の optimizer を、同じ <code>scale=c</code> で包む。<code>scale</code> が違うノードは、ほかのノードより速く、または遅く学ぶ</li>
-<li><code>tau.h</code>・<code>tau.r</code>・<code>tau.lam</code>・周期・<code>learn_interval</code> は、1 サンプルずつ流す実行と同じく、この見せる時間から決める（<a href="#%E6%99%82%E5%AE%9A%E6%95%B0%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B">時定数を決める</a>）。どれも run の秒のまま。<code>TimeScaled</code> が変えるのは重みの時間だけ</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># 32 ms に 1 サンプルのストリームを、連続した 8 サンプルのバッチで見せる。</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># 各バッチを見せるのは 32 ms。時定数は torch の lr=1e-3 と betas=(0.9, 0.999) を、</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># ストリームの 1 サンプルにつき 1 歩として換算したもの。</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">optimizer</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">TimeScaled</span><span class="p">(</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">pc</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="n">tau</span><span class="o">=</span><span class="mf">0.032</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">tau_m</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">tau_v</span><span class="o">=</span><span class="mf">32.0</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="mi">8</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="p">)</span>
+<table>
+<thead>
+<tr>
+<th>バッチ（<code>c = 4</code>。数字はストリームのサンプルの番号）</th>
+<th>行 0</th>
+<th>行 1</th>
+<th>行 2</th>
+<th>行 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 つ目</td>
+<td>0</td>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+</tr>
+<tr>
+<td>2 つ目</td>
+<td>4</td>
+<td>5</td>
+<td>6</td>
+<td>7</td>
+</tr>
+<tr>
+<td>3 つ目</td>
+<td>8</td>
+<td>9</td>
+<td>10</td>
+<td>11</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>手順</th>
+<th>設定</th>
+<th>理由</th>
+<th>1 サンプルずつ流すときとの違い</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>各バッチは、ストリームの 1 サンプル分の時間だけ見せる。これが見せる時間</td>
+<td>見せる時間まで <code>c</code> 倍にすると時間を二重に倍にし、重みが <code>c</code> 倍速く学びすぎる</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>optimizer</code> の時定数は、1 サンプルずつ流すときと同じくストリームの秒で書く</td>
+<td><code>TimeScaled</code> が <code>c</code> で割るので、割り忘れが起きない</td>
+<td>1 バッチの歩みは 1 サンプルずつの <code>c</code> 歩の和と比べ、<code>pc.optim.SGD</code> なら 1 次の近似で同じ、RMSProp と AdamW では 1〜約 <code>√c</code> 倍（平均した勾配はノイズが小さい）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>学習するすべてのノードの optimizer を、同じ <a class="autorefs autorefs-internal" title="TimeScaled
+
+
+  
+      dataclass
+  " href="../../api/pc/#mujou.pc.optim.TimeScaled"><code>pc.optim.TimeScaled(optimizer, scale=c)</code></a> で包む（<code>pc.Chain</code> なら <code>optimizer=</code>）</td>
+<td><code>scale</code> が違うノードは、ほかのノードより速く、または遅く学ぶ</td>
+<td>重みは <code>c</code> 歩の代わりに <code>c</code> 倍の時間を 1 歩で進む。<code>c</code> が大きいと、学習が遅れることも、学びすぎて不安定になることもある</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>tau.h</code>・<code>tau.r</code>・<code>tau.lam</code>・周期・<code>learn_interval</code> は、この見せる時間から<a href="#choose-time-constants">時定数を決める</a>のとおりに決める</td>
+<td>どれも run の秒のまま。<code>TimeScaled</code> が変えるのは重みの時間だけ</td>
+<td><code>reset</code> が False なら、各行は <code>c</code> 個前のサンプル（前のバッチの同じ行）から続く。直前のサンプルからではない</td>
+</tr>
+</tbody>
+</table>
+<p>RMSProp と AdamW で歩みが大きすぎるなら <code>tau</code> を伸ばす。良い倍率はまだ測っていない。</p>
+<h2 id="pitfalls">落とし穴<a class="headerlink" href="#pitfalls" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>落とし穴</th>
+<th>症状</th>
+<th>対処</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>バッチを鎖と損失の片方にしか渡さない（<code>batch</code> は spec の shape から読まれない）</td>
+<td>どこにも渡さないと各サンプルの credit が 1/64（64 サンプルのとき）。片方だけならエラー</td>
+<td><code>pc.Chain</code>（か <code>pc.Input</code>）と損失に同じ <code>batch</code></td>
+</tr>
+<tr>
+<td>バッチで平均する損失（<code>nn.MSELoss()</code> など）を渡す</td>
+<td><code>pc.Output</code> が <code>ValueError</code></td>
+<td>サンプルごとの損失を返す <a class="autorefs autorefs-internal" title="MSELoss" href="../../api/pc/#mujou.pc.loss.MSELoss"><code>pc.loss.MSELoss(batch)</code></a> など</td>
+</tr>
+<tr>
+<td><code>Layer</code> の <code>next</code> から予測を読む</td>
+<td>ネットワークの予測は入っていない</td>
+<td><code>pc.Output</code> の <code>next</code>（<code>pc.Chain</code> なら <code>net.next</code>）</td>
+</tr>
+<tr>
+<td>最初のサンプルが届く前に読む</td>
+<td><code>mask</code> がすべて False の予測</td>
+<td><code>write</code> が返した時刻と <code>time</code> を照合する（<code>pc.show</code> と同じ）</td>
+</tr>
+<tr>
+<td>負荷が高い</td>
+<td>発散か精度の低下。MNIST は <code>y_hat</code> が有限でなくなると止まるが、予測が有限のまま発散すると精度の低下としてしか見えない</td>
+<td>時間の速さを下げる。ほかに何も動いていない機械で回す（下の表）</td>
+</tr>
+<tr>
+<td>シャッフルしたサンプルに <code>reset</code> を立てない</td>
+<td>入力に近いノードが関係のないサンプルの credit から学ぶ</td>
+<td>前に続かないサンプルには <code>reset</code> を True（<a href="#reset">reset</a>）</td>
+</tr>
+</tbody>
+</table>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">避ける</label><label for="__tabbed_2_2">こう書く</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span><span class="o">*</span><span class="n">modules</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span> <span class="n">y</span><span class="o">=</span><span class="n">y_spec</span><span class="p">,</span> <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">MSELoss</span><span class="p">(),</span> <span class="o">...</span><span class="p">)</span>  <span class="c1"># credit が 1/64</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">out</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Output</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="n">loss</span><span class="o">=</span><span class="n">nn</span><span class="o">.</span><span class="n">MSELoss</span><span class="p">(),</span> <span class="o">...</span><span class="p">)</span>  <span class="c1"># ValueError</span>
 </code></pre></div>
-<p><code>TimeScaled</code> が変換するのは時間だけ。1 サンプルずつ流す実行とは次の点が違うと予想し、その実行と比べて確かめる。</p>
-<ul>
-<li><strong>RMSProp と AdamW では歩みが大きくなる</strong>: 勾配は 1 組の重みで取ったバッチの平均。<code>v</code> は平均した勾配のもので、そのノイズの分散は 1 サンプルの <code>c</code> 分の 1。そのため 1 バッチの歩みは、1 サンプルずつの <code>c</code> 歩の和と少なくとも同じくらいになる。平均の勾配が支配的ならほぼ同じで、ノイズが支配的なら最大で約 <code>sqrt(c)</code> 倍になる。歩みが大きすぎるなら <code>tau</code> を伸ばす。倍率はノイズの割合に応じて 1 から約 <code>sqrt(c)</code> の間で、良い値はまだ測っていない。<code>pc.optim.SGD</code> なら 1 次の近似で <code>c</code> 歩と同じ</li>
-<li><strong><code>r</code> と <code>lam</code> は <code>c</code> 個前のサンプルから続く</strong>: <code>r</code> と <code>lam</code>（と relaxer の状態）はバッチの行ごとに持つ。<code>reset</code> が False なら、各行はストリームで <code>c</code> 個前のサンプル（前のバッチの同じ行）から続く。直前のサンプルからではない</li>
-<li><strong><code>c</code> が大きいと不安定になりうる</strong>: 重みは <code>c</code> 歩の代わりに、<code>c</code> 倍の時間を 1 歩で進む。そのため <code>c</code> が大きいと、1 本のストリームより学習が遅れることも、学びすぎて不安定になることもある</li>
-</ul>
-<h2 id="落とし穴">落とし穴<a class="headerlink" href="#落とし穴" title="Permanent link">&para;</a></h2>
-<div class="admonition warning">
-<p class="admonition-title">バッチは鎖と損失の両方に渡す</p>
-<p><code>batch</code> の既定は <code>()</code>（1 サンプル）で、spec の shape からは読まない。64 サンプルの spec でどこにも <code>batch</code> を渡さないと、鎖は 64 サンプルを 1 つのサンプルとして扱い <code>pc.loss.MSELoss()</code> はそれらを平均する。それでも動くが、各サンプルの credit は本来の 1/64 になる。<code>pc.Chain</code>（か <code>pc.Input</code>）と損失に同じ <code>batch</code> を渡す。片方だけに渡すと <code>pc.Output</code> がエラーを送出する。</p>
 </div>
-<div class="admonition warning">
-<p class="admonition-title">損失関数はサンプルごとの損失を返す</p>
-<p><code>pc.loss.MSELoss(batch)</code>、<code>pc.loss.CrossEntropyLoss(batch)</code>、またはバッチの shape を返す <code>(y_hat, y)</code> の自作の関数を渡す。<code>nn.MSELoss()</code> のようにバッチで平均する損失を渡すと、<code>pc.Output</code> が <code>ValueError</code> を送出する。<code>pc.loss.MSELoss</code> は <code>nn.MSELoss</code> と同じく各サンプルのすべての次元（バッチ以外）で平均し、<code>0.5</code> は付けない。重みはバッチに対する <code>nn.MSELoss()</code> の勾配に沿って動く。</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">予測は出力ノードから読む</p>
-<p>予測を送るのは <code>pc.Output</code> の <code>next</code>（<code>pc.Chain</code> なら <code>net.next</code>）だけ。<code>Layer</code> の <code>next</code> が送るのは自分の予測 <code>mu</code>（<code>h</code> として）と、中継する <code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> で、ネットワークの予測は含まない。層の <code>lam</code> を見るときは <code>run.state_dict()["nodes"]["layer0"]["state"]["lam"]</code> を読む。走っている間にノードの属性を読むと、その更新と競合する。</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">最初のサンプルが届くまで活動はゼロ</p>
-<p>ホストの最初の書き込みが届くまで、ノードが受け取る活動は <code>time</code> が 0 で <code>mask</code> がすべて False。このとき <code>run.read(net.next)</code> は <code>mask</code> がすべて False の予測を返し、ノードは学ばない。書いたバッチの予測を得るには、<code>pc.show</code> のように <code>write</code> が返した時刻と <code>time</code> を照合する。</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">負荷が高いとネットワークが発散する</p>
-<p>ノードはそれぞれ更新しながらメッセージをやり取りする。あるノードが遅れると、隣のノードはその古いメッセージから学び続け、ネットワークが発散するか精度が落ちる。MNIST は <code>y_hat</code> が有限でないと止まる。予測が有限のまま発散したときは、精度の低下としてしか見えない。わかっている原因は 2 つ。</p>
-<ul>
-<li><strong>時間の速さが速すぎる</strong>: 例は <code>--time-scale</code> で実行のタイマーを速める。速すぎると、最も遅いノードの計算が周期に収まらない。残差ブロックごとに切った CIFAR-10 では、周期を実時間 2 ms にすると更新の間隔が平均 1.1〜1.3 周期に延び、最大で 100 周期ほど止まり、精度が約 20 ポイント落ちた。<code>--watch</code>（MNIST）で 1 epoch 回し、警告が出ず発散もしない最も速い時間の速さを選ぶ</li>
-<li><strong>ほかのプロセスがコアを使っている</strong>: コアを待つノードがあると、隣のノードが先に進む。32 コアの機械で時間の速さ 1 なら、busy loop 26 本と並べて 1 epoch を完走し、32 本では発散した。0.5 なら 32 本でも完走した。ほかに何も動いていない機械で回すか、時間の速さを下げる</li>
-</ul>
-<p><code>max_dt</code> ではこれを防げない。<code>max_dt</code> は 1 回の更新で数える時間の上限で、超えた分は緩和からも次の重みの更新からも捨てられる。</p>
-</div>
-<div class="admonition warning">
-<p class="admonition-title">シャッフルしたサンプルには <code>reset</code> を立てる</p>
-<p><code>reset</code> を False で書くと、各ノードはそのサンプルの credit が出力から戻るまで、前のサンプルの <code>r</code> と <code>lam</code> を持ち続ける。シャッフルしたバッチでは、それは関係のないサンプルの credit である。その間、入力に近いノードは誤った credit を持ち、早く学べばそこから学ぶ。前に続かないサンプルには、どれも <code>reset</code> を True にする。</p>
-</div>
-<h2 id="自分のノードを書く">自分のノードを書く<a class="headerlink" href="#自分のノードを書く" title="Permanent link">&para;</a></h2>
-<p><code>mujou.pc.functional</code> にノードを構成する計算がある。<code>vjp</code> と <code>loss_vjp</code>（ノードのエネルギーの勾配）、<code>relax_</code>（<code>r</code> と <code>lam</code> の 1 ステップ）。重みは optimizer が、<code>r</code> は relaxer が動かす。複数の入力を持つノードのように <code>pc.Layer</code> で書けないノードは、これらで書く。ここに出てくる名前（<code>mu</code>・<code>r</code>・<code>lam</code>・<code>g_in</code>・<code>Tick</code>）は <a href="../pc-concepts/">mujou.pc の仕組み</a>で説明している。</p>
-<ol>
-<li><code>__init__</code> で module を device に載せた後、クロック、bind した optimizer、ずれ <code>r</code> と双対変数 <code>lam</code>（<code>mu</code> と同じ shape のゼロ）、<code>r</code> を自作の relaxer で動かすなら bind した relaxer を属性に置く。どれもそれだけでノードの状態に入る<ul>
-<li><code>self.clock = pc.clock.LearnClock.of(tau, period=self.period, learn_interval=...)</code>。<code>max_dt</code> は <code>pc.Layer</code> と同じく <code>tau</code> の既定になる</li>
-<li><code>self.optimizer = optimizer.bind(params)</code>。<code>params</code> は学ぶパラメータ。bind はノードごとに行う。bind した同じ optimizer を 2 つのノードに持たせてはいけない</li>
-<li><code>self.relaxer = relaxer.bind(self.r)</code>。同じくノードごとに bind する。置かなければ <code>relax_</code> は素の 1 歩を進める</li>
-</ul>
-</li>
-<li>毎回の更新で <code>t = self.clock.tick(dt, act["time"], self.timer.now())</code> を呼ぶ。<code>t.new</code> が True なら、<code>reset</code> が立ったサンプルの <code>r</code> と <code>lam</code> を 0 にし（<code>self.r.masked_fill_(rows, 0.0)</code>。<code>rows</code> は <code>reset</code> を <code>r</code> の shape に合わせたもの）、relaxer を持つなら <code>self.relaxer.reset_(act["reset"])</code> を呼ぶ</li>
-<li>次のノードたちが送った値の和を <code>g</code> として、<code>pc.functional.relax_(self.r, self.lam, g, t.dt, tau, self.relaxer)</code> で <code>r</code> と <code>lam</code> を動かす</li>
-<li>動かした後の <code>r</code> と <code>lam</code> で <code>delta = r + lam</code>（<code>mask</code> が False のサンプルは 0）を作り、bind した <code>params</code> と同じ順で <code>pc.functional.vjp</code> に渡す。予測 <code>mu</code>、<code>g_in</code>、学ぶなら <code>g_theta</code> を求め、<code>g_in</code> を前のノードへ送る。緩和を先にすれば <code>g_in</code> がこの更新で受け取った credit を運び、credit は 1 更新に 1 ホップ戻る。<code>vjp</code> を <code>relax_</code> より先にすると、ホップごとに 1 更新余分に待つ</li>
-<li><code>mu</code> を <code>h</code> として <code>pc.msg.Activity</code> で送る。受け取った活動の <code>y</code>・<code>mask</code>・<code>reset</code>・<code>time</code> を組にする</li>
-<li><code>t.learn</code> が True で <code>mask</code> が True のサンプルがあれば、<code>self.optimizer.step_([g / B for g in g_theta], t.elapsed)</code> で学ぶ。<code>B</code> はバッチのサンプルの数。optimizer はバッチを知らないので、<code>B</code> で割るのはノード</li>
-</ol>
-<p><code>pc.Layer</code> と同じく <code>h</code> ではなく <code>r</code> を持ち、<code>mu + r</code> ではなく <code>mu</code> を送る。こうすると何が <code>mu</code> を動かしても <code>r</code> と <code>lam</code> は引き継がれる。credit は後ろへだけ流れるので、どの鎖でも刻みが安定する（<a href="../pc-concepts/#r-mu">mujou.pc の仕組み</a>）。</p>
-<p><code>mujou.pc</code> のノードとつなぐには、Port の spec に前のノードの <code>act_spec</code> か <code>pc.msg.activity_spec(h, y, batch)</code> を使う。引数は <a href="../../api/pc/">API リファレンス</a>にある。PC 以外の、ノードをまたいで学ぶ則は<a href="../update-rules/">更新則</a>を参照。</p>
-<h3 id="例-入力が-2-つのノード">例: 入力が 2 つのノード<a class="headerlink" href="#例-入力が-2-つのノード" title="Permanent link">&para;</a></h3>
-<p><code>examples/pc_merge.py</code> の <code>Merge</code> は 2 本の塔（<code>pc.Layer</code>）の活動をつないだものから予測する。毎回の更新で学ぶ（<code>learn_interval=None</code>）。</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Merge</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="sd">"""``mu = module(cat(h_a, h_b))``: a node of PC-ALM with two inputs."""</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>        <span class="n">a</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Activity</span><span class="p">],</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        <span class="n">b</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Activity</span><span class="p">],</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">TAU</span><span class="o">.</span><span class="n">period</span><span class="p">)</span>
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
-<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="o">.</span><span class="n">of</span><span class="p">(</span>
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>            <span class="n">TAU</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="kc">None</span>
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>        <span class="p">)</span>
-<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>        <span class="n">h_a</span><span class="p">,</span> <span class="n">h_b</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">),</span> <span class="n">b</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">)</span>
-<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">h_a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">h_b</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
-<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>        <span class="n">h</span> <span class="o">=</span> <span class="n">TensorSpec</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">)))</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
-<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">(),</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">()</span>  <span class="c1"># r = h - mu</span>
-<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">activity_spec</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"y"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">),</span> <span class="n">B</span><span class="p">)</span>
-<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">h_a</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">a</span><span class="p">)</span>  <span class="c1"># sends back g_in of h_a</span>
-<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">h_b</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">b</span><span class="p">)</span>
-<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">MultiPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">h</span><span class="p">)</span>
-<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>
-<a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>    <span class="nd">@override</span>
-<a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
-<a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a>        <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">recv</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-<a id="__codelineno-9-29" name="__codelineno-9-29" href="#__codelineno-9-29"></a>        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">a</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
-<a id="__codelineno-9-30" name="__codelineno-9-30" href="#__codelineno-9-30"></a>        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">new</span><span class="p">:</span>  <span class="c1"># the samples that start anew drop the credit of the ones before</span>
-<a id="__codelineno-9-31" name="__codelineno-9-31" href="#__codelineno-9-31"></a>            <span class="n">new</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="s2">"reset"</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-9-32" name="__codelineno-9-32" href="#__codelineno-9-32"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">new</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-9-33" name="__codelineno-9-33" href="#__codelineno-9-33"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">new</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-9-34" name="__codelineno-9-34" href="#__codelineno-9-34"></a>        <span class="n">labeled</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># a sample without a target sends no credit</span>
-<a id="__codelineno-9-35" name="__codelineno-9-35" href="#__codelineno-9-35"></a>        <span class="n">g</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">))</span>
-<a id="__codelineno-9-36" name="__codelineno-9-36" href="#__codelineno-9-36"></a>        <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">relax_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">TAU</span><span class="p">)</span>
-<a id="__codelineno-9-37" name="__codelineno-9-37" href="#__codelineno-9-37"></a>        <span class="n">delta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">labeled</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-<a id="__codelineno-9-38" name="__codelineno-9-38" href="#__codelineno-9-38"></a>        <span class="n">params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
-<a id="__codelineno-9-39" name="__codelineno-9-39" href="#__codelineno-9-39"></a>        <span class="n">mu</span><span class="p">,</span> <span class="n">g_in</span><span class="p">,</span> <span class="n">g_theta</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">vjp</span><span class="p">(</span>
-<a id="__codelineno-9-40" name="__codelineno-9-40" href="#__codelineno-9-40"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">a</span><span class="p">[</span><span class="s2">"h"</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="s2">"h"</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="n">delta</span><span class="p">,</span> <span class="n">params</span>
-<a id="__codelineno-9-41" name="__codelineno-9-41" href="#__codelineno-9-41"></a>        <span class="p">)</span>
-<a id="__codelineno-9-42" name="__codelineno-9-42" href="#__codelineno-9-42"></a>        <span class="n">g_a</span><span class="p">,</span> <span class="n">g_b</span> <span class="o">=</span> <span class="n">g_in</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-9-43" name="__codelineno-9-43" href="#__codelineno-9-43"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_a</span><span class="p">)</span>
-<a id="__codelineno-9-44" name="__codelineno-9-44" href="#__codelineno-9-44"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_b</span><span class="p">)</span>
-<a id="__codelineno-9-45" name="__codelineno-9-45" href="#__codelineno-9-45"></a>        <span class="c1"># The prediction goes on, with the y, mask, reset and time of a.</span>
-<a id="__codelineno-9-46" name="__codelineno-9-46" href="#__codelineno-9-46"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="o">**</span><span class="n">a</span><span class="p">,</span> <span class="s2">"h"</span><span class="p">:</span> <span class="n">mu</span><span class="p">})</span>
-<a id="__codelineno-9-47" name="__codelineno-9-47" href="#__codelineno-9-47"></a>        <span class="k">if</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>  <span class="c1"># nothing to learn from samples without a target</span>
-<a id="__codelineno-9-48" name="__codelineno-9-48" href="#__codelineno-9-48"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">g_p</span> <span class="o">/</span> <span class="n">B</span> <span class="k">for</span> <span class="n">g_p</span> <span class="ow">in</span> <span class="n">g_theta</span><span class="p">],</span> <span class="n">t</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">net</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Chain</span><span class="p">(</span><span class="o">*</span><span class="n">modules</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">TensorSpec</span><span class="p">((</span><span class="mi">64</span><span class="p">,</span> <span class="mi">784</span><span class="p">)),</span> <span class="n">y</span><span class="o">=</span><span class="n">y_spec</span><span class="p">,</span> <span class="n">batch</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">MSELoss</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="o">...</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">out</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">Output</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">act_spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span> <span class="n">loss</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">loss</span><span class="o">.</span><span class="n">MSELoss</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="o">...</span><span class="p">)</span>
 </code></pre></div>
-<p><code>pc.Layer</code> との違いは、入力ごとに Port を持ち、<code>g_in</code> を分けて送り返すことだけ。</p>
+</div>
+</div>
+</div>
+<p>あるノードが遅れると、隣のノードはその古いメッセージから学び続ける。わかっている原因は 2 つある。<code>max_dt</code> では防げない（1 回の更新で数える時間の上限で、超えた分は緩和からも重みの更新からも捨てられる）。</p>
+<table>
+<thead>
+<tr>
+<th>負荷の原因</th>
+<th>観測</th>
+<th>対処</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>時間の速さが速すぎる</td>
+<td>例は <code>--time-scale</code> で実行のタイマーを速める。速すぎると最も遅いノードの計算が周期に収まらない。残差ブロックごとに切った CIFAR-10 では、周期を実時間 2 ms にすると更新の間隔が平均 1.1〜1.3 周期に延び、最大で 100 周期ほど止まり、精度が約 20 ポイント落ちた</td>
+<td><code>--watch</code>（MNIST）で 1 epoch 回し、警告が出ず発散もしない最も速い時間の速さを選ぶ</td>
+</tr>
+<tr>
+<td>ほかのプロセスがコアを使っている</td>
+<td>コアを待つノードがあると、隣のノードが先に進む。32 コアの機械で時間の速さ 1 なら、busy loop 26 本と並べて 1 epoch を完走し、32 本では発散した。0.5 なら 32 本でも完走した</td>
+<td>ほかに何も動いていない機械で回すか、時間の速さを下げる</td>
+</tr>
+</tbody>
+</table>
+<h2 id="own-node">自分のノードを書く<a class="headerlink" href="#own-node" title="Permanent link">&para;</a></h2>
+<p><code>pc.Layer</code> で書けないノード（入力が複数のノードなど）は、<a class="autorefs autorefs-internal" title="mujou.pc.functional" href="../../api/pc/#mujou.pc.functional"><code>pc.functional</code></a> の式と <a class="autorefs autorefs-internal" title="LearnClock" href="../../api/pc/#mujou.pc.clock.LearnClock"><code>pc.clock.LearnClock</code></a>、optimizer、relaxer を組み合わせて書く。1 回の更新の段は <a href="../pc-concepts/#layer-update">Layer の 1 回の更新</a> と同じにして、optimizer と relaxer はノードごとに bind し、bind したものをノードの間で共有しない。</p>
+<pre class="mermaid"><code>flowchart LR
+    H1["ホスト"] --&gt;|"Sample"| I["inp&lt;br/&gt;pc.Input"]
+    I --&gt;|"Activity"| A["a&lt;br/&gt;pc.Layer"]
+    I --&gt;|"Activity"| B["b&lt;br/&gt;pc.Layer"]
+    A --&gt;|"Activity → Port a"| M["merge&lt;br/&gt;Merge"]
+    B --&gt;|"Activity → Port b"| M
+    M --&gt;|"Activity"| O["out&lt;br/&gt;pc.Output"]
+    O --&gt;|"Prediction"| H2["ホスト"]
+    M -.-&gt;|"g_a を送り返す（h_a の分）"| A
+    M -.-&gt;|"g_b を送り返す（h_b の分）"| B</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Merge</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="sd">"""``mu = module(cat(h_a, h_b))``: a node of PC-ALM with two inputs."""</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">module</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>        <span class="n">a</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Activity</span><span class="p">],</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="n">b</span><span class="p">:</span> <span class="n">DictSpec</span><span class="p">[</span><span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">Activity</span><span class="p">],</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">period</span><span class="o">=</span><span class="n">TAU</span><span class="o">.</span><span class="n">period</span><span class="p">)</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">OPTIMIZER</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">clock</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">LearnClock</span><span class="o">.</span><span class="n">of</span><span class="p">(</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>            <span class="n">TAU</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">learn_interval</span><span class="o">=</span><span class="kc">None</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>        <span class="p">)</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>        <span class="n">h_a</span><span class="p">,</span> <span class="n">h_b</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">),</span> <span class="n">b</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">)</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">h_a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">h_b</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>        <span class="n">h</span> <span class="o">=</span> <span class="n">TensorSpec</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">module</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">)))</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span> <span class="o">=</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">(),</span> <span class="n">h</span><span class="o">.</span><span class="n">zeros</span><span class="p">()</span>  <span class="c1"># r = h - mu</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">msg</span><span class="o">.</span><span class="n">activity_spec</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">"y"</span><span class="p">,</span> <span class="n">TensorSpec</span><span class="p">),</span> <span class="n">B</span><span class="p">)</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">h_a</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">a</span><span class="p">)</span>  <span class="c1"># sends back g_in of h_a</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span> <span class="o">=</span> <span class="n">Port</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="n">h_b</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">b</span><span class="p">)</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">MultiPort</span><span class="p">(</span><span class="n">send</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">act_spec</span><span class="p">,</span> <span class="n">recv</span><span class="o">=</span><span class="n">h</span><span class="p">)</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>    <span class="nd">@override</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">on_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">on_update</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>        <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">recv</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clock</span><span class="o">.</span><span class="n">tick</span><span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">a</span><span class="p">[</span><span class="s2">"time"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">new</span><span class="p">:</span>  <span class="c1"># the samples that start anew drop the credit of the ones before</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>            <span class="n">new</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="s2">"reset"</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">new</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="o">.</span><span class="n">masked_fill_</span><span class="p">(</span><span class="n">new</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>        <span class="n">labeled</span> <span class="o">=</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># a sample without a target sends no credit</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>        <span class="n">g</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">))</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>        <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">relax_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">TAU</span><span class="p">)</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>        <span class="n">delta</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">labeled</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>        <span class="n">params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>        <span class="n">mu</span><span class="p">,</span> <span class="n">g_in</span><span class="p">,</span> <span class="n">g_theta</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">vjp</span><span class="p">(</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">a</span><span class="p">[</span><span class="s2">"h"</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="s2">"h"</span><span class="p">]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="n">delta</span><span class="p">,</span> <span class="n">params</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a>        <span class="p">)</span>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a>        <span class="n">g_a</span><span class="p">,</span> <span class="n">g_b</span> <span class="o">=</span> <span class="n">g_in</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sizes</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-4-43" name="__codelineno-4-43" href="#__codelineno-4-43"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_a</span><span class="p">)</span>
+<a id="__codelineno-4-44" name="__codelineno-4-44" href="#__codelineno-4-44"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">g_b</span><span class="p">)</span>
+<a id="__codelineno-4-45" name="__codelineno-4-45" href="#__codelineno-4-45"></a>        <span class="c1"># The prediction goes on, with the y, mask, reset and time of a.</span>
+<a id="__codelineno-4-46" name="__codelineno-4-46" href="#__codelineno-4-46"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">next</span><span class="o">.</span><span class="n">send</span><span class="p">({</span><span class="o">**</span><span class="n">a</span><span class="p">,</span> <span class="s2">"h"</span><span class="p">:</span> <span class="n">mu</span><span class="p">})</span>
+<a id="__codelineno-4-47" name="__codelineno-4-47" href="#__codelineno-4-47"></a>        <span class="k">if</span> <span class="n">a</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>  <span class="c1"># nothing to learn from samples without a target</span>
+<a id="__codelineno-4-48" name="__codelineno-4-48" href="#__codelineno-4-48"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">optimizer</span><span class="o">.</span><span class="n">step_</span><span class="p">([</span><span class="n">g_p</span> <span class="o">/</span> <span class="n">B</span> <span class="k">for</span> <span class="n">g_p</span> <span class="ow">in</span> <span class="n">g_theta</span><span class="p">],</span> <span class="n">t</span><span class="o">.</span><span class="n">elapsed</span><span class="p">)</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th><code>pc.Layer</code> との違い</th>
+<th><code>Merge</code>（<code>examples/pc_merge.py</code>）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Port</td>
+<td>入力ごとに持つ（<code>a</code> と <code>b</code>）</td>
+</tr>
+<tr>
+<td><code>g_in</code></td>
+<td><code>h_a</code> と <code>h_b</code> の幅で <code>g_a</code> と <code>g_b</code> に分け、それぞれの Port から送り返す</td>
+</tr>
+</tbody>
+</table>
 
 
 

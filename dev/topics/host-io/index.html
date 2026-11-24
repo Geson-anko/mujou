@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1004,7 +1006,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#writing" class="md-nav__link">
+  <a href="#write" class="md-nav__link">
     <span class="md-ellipsis">
       
         Writing
@@ -1026,7 +1028,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#showing-an-input-for-a-while" class="md-nav__link">
+  <a href="#show-input" class="md-nav__link">
     <span class="md-ellipsis">
       
         Showing an input for a while
@@ -1037,7 +1039,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
+  <a href="#read" class="md-nav__link">
     <span class="md-ellipsis">
       
         Reading
@@ -1045,10 +1047,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reading">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#subscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        subscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#ending" class="md-nav__link">
+  <a href="#shutdown" class="md-nav__link">
     <span class="md-ellipsis">
       
         Ending
@@ -1250,6 +1269,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM Benchmarks
   
 
     
@@ -1650,7 +1697,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#writing" class="md-nav__link">
+  <a href="#write" class="md-nav__link">
     <span class="md-ellipsis">
       
         Writing
@@ -1672,7 +1719,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#showing-an-input-for-a-while" class="md-nav__link">
+  <a href="#show-input" class="md-nav__link">
     <span class="md-ellipsis">
       
         Showing an input for a while
@@ -1683,7 +1730,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
+  <a href="#read" class="md-nav__link">
     <span class="md-ellipsis">
       
         Reading
@@ -1691,10 +1738,27 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reading">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#subscribe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        subscribe
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#ending" class="md-nav__link">
+  <a href="#shutdown" class="md-nav__link">
     <span class="md-ellipsis">
       
         Ending
@@ -1725,22 +1789,59 @@
 
 
 <h1 id="-host-io">🏃 Host I/O<a class="headerlink" href="#-host-io" title="Permanent link">&para;</a></h1>
-<p>The host is the program that runs the network. It talks to a run through the <code>Run</code> that <code>mujou.run</code> returns: it writes inputs, reads outputs and waits. This page covers each of them, and the initial values of the ports.</p>
-<h2 id="writing">Writing<a class="headerlink" href="#writing" title="Permanent link">&para;</a></h2>
-<p>The host writes to a <code>Port</code> of the run that receives and is not connected; a node writes the others. Writing to any other port raises <code>ValueError</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">net</span><span class="o">.</span><span class="n">teacher</span><span class="p">:</span> <span class="n">y</span><span class="p">})</span>  <span class="c1"># returns the time of the write</span>
+<table>
+<thead>
+<tr>
+<th>To</th>
+<th>Use</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Write an input</td>
+<td><a class="autorefs autorefs-internal" title="write" href="../../api/run/#mujou.Run.write"><code>run.write</code></a></td>
+<td><a href="#write">Writing</a></td>
+</tr>
+<tr>
+<td>Show an input from the first update</td>
+<td>the <code>inputs=</code> of <a class="autorefs autorefs-internal" title="mujou.run" href="../../api/run/#mujou.run"><code>mujou.run</code></a></td>
+<td><a href="#initial-values">Initial values</a></td>
+</tr>
+<tr>
+<td>Show an input for a given time</td>
+<td><a class="autorefs autorefs-internal" title="sleep" href="../../api/time/#mujou.time.Timer.sleep"><code>run.timer.sleep</code></a></td>
+<td><a href="#show-input">Showing an input for a while</a></td>
+</tr>
+<tr>
+<td>Read or wait for an output</td>
+<td><a class="autorefs autorefs-internal" title="read" href="../../api/run/#mujou.Run.read"><code>run.read</code></a>, <a class="autorefs autorefs-internal" title="read_with_time" href="../../api/run/#mujou.Run.read_with_time"><code>read_with_time</code></a>, <a class="autorefs autorefs-internal" title="subscribe" href="../../api/run/#mujou.Run.subscribe"><code>subscribe</code></a>, <a class="autorefs autorefs-internal" title="wait_for" href="../../api/run/#mujou.Run.wait_for"><code>wait_for</code></a></td>
+<td><a href="#read">Reading</a></td>
+</tr>
+<tr>
+<td>Take the state</td>
+<td><a class="autorefs autorefs-internal" title="state_dict" href="../../api/run/#mujou.Run.state_dict"><code>run.state_dict</code></a></td>
+<td><a href="../../tutorial/6-save-and-resume/">Save and Resume</a></td>
+</tr>
+<tr>
+<td>End the run</td>
+<td>a <code>with</code> block, <a class="autorefs autorefs-internal" title="shutdown" href="../../api/run/#mujou.Run.shutdown"><code>run.shutdown</code></a>, <a class="autorefs autorefs-internal" title="join" href="../../api/run/#mujou.Run.join"><code>run.join</code></a></td>
+<td><a href="#shutdown">Ending</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="write">Writing<a class="headerlink" href="#write" title="Permanent link">&para;</a></h2>
+<p>The host writes with <a class="autorefs autorefs-internal" title="write" href="../../api/run/#mujou.Run.write"><code>Run.write</code></a> only to ports that receive and are not connected (nodes write the others).
+A written value stays until the next write, and the nodes read it many times.
+Write values that belong together, such as an input and its target, in one write (why: <a href="../ports/#pairs">Values that belong together</a>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="n">net</span><span class="o">.</span><span class="n">teacher</span><span class="p">:</span> <span class="n">y</span><span class="p">})</span>  <span class="c1"># x and y switch together</span>
 </code></pre></div>
-<ul>
-<li>A written value stays until the next write: an input is a signal over time, and the nodes read it many times</li>
-<li>The values of one <code>write</code> switch together. A node never reads the new value of one with the old value of the other, so write values that belong together, such as an input and its target, in one <code>write</code> (or as one <code>DictSpec</code> message)</li>
-<li>The values are copied: changing the tensor after the write does not reach the network</li>
-<li>A value of another shape or dtype raises <code>ValueError</code>, a value of another kind (a tensor for an <code>IntSpec</code>, say) or a dict with a missing or an extra key raises <code>TypeError</code>, and an <code>int</code> out of the range of its <code>IntSpec</code> raises <code>OverflowError</code>, naming the port</li>
-</ul>
 <h2 id="initial-values">Initial values<a class="headerlink" href="#initial-values" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Way</th>
+<th>Port</th>
 <th>What a reader gets</th>
 <th>Its time</th>
 </tr>
@@ -1748,108 +1849,138 @@
 <tbody>
 <tr>
 <td>Nothing</td>
-<td>Zeros (<code>0</code>, <code>False</code>, ... for scalars)</td>
+<td>—</td>
+<td>The spec's initial value (<a href="../ports/#spec">Specs</a>)</td>
 <td><code>None</code></td>
 </tr>
 <tr>
-<td><code>Port(send=..., initial=value)</code></td>
+<td><a class="autorefs autorefs-internal" title="mujou.Port" href="../../api/node-and-ports/#mujou.Port"><code>Port(send=..., initial=value)</code></a></td>
+<td>A port a node sends on</td>
 <td><code>value</code>, until the port first sends</td>
 <td><code>None</code></td>
 </tr>
 <tr>
 <td><code>mujou.run(net, inputs={port: value})</code></td>
+<td>A port the host writes</td>
 <td><code>value</code>, from the first update</td>
 <td>The time the run starts</td>
 </tr>
 <tr>
 <td><code>run.write({port: value})</code></td>
+<td>A port the host writes</td>
 <td><code>value</code>, from the write on</td>
 <td>What <code>write</code> returned</td>
 </tr>
 </tbody>
 </table>
-<p><code>initial</code> is for a port that a node sends on, and <code>inputs</code> and <code>write</code> are for the ports the host writes. Once <code>mujou.run</code> returns, the nodes start updating, so a <code>write</code> right after it may come after a few updates that read zeros: to show an input from the first update, pass it as <code>inputs</code>.</p>
-<h2 id="showing-an-input-for-a-while">Showing an input for a while<a class="headerlink" href="#showing-an-input-for-a-while" title="Permanent link">&para;</a></h2>
-<p>Wait on the run's timer with <code>run.timer.sleep(seconds)</code>, which follows the time scale and the pauses of the run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># show x for 0.1 s of the run's time</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>  <span class="c1"># the output at the end of the showing time</span>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Avoid</label><label for="__tabbed_1_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>  <span class="c1"># the nodes start updating as soon as mujou.run returns</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>  <span class="c1"># a few updates before this may read zeros</span>
 </code></pre></div>
-<p>The output catches up with a change of input after a delay, which the network's dynamics (the time constants of the nodes, the number of stages) decide; choose a showing time long enough. Reading right after <code>write</code> returns the output for an earlier input. When you know the output to expect, wait for it with <code>wait_for</code> instead.</p>
-<h2 id="reading">Reading<a class="headerlink" href="#reading" title="Permanent link">&para;</a></h2>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>  <span class="c1"># x from the first update</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="o">...</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="show-input">Showing an input for a while<a class="headerlink" href="#show-input" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">run</span><span class="o">.</span><span class="n">write</span><span class="p">({</span><span class="n">net</span><span class="o">.</span><span class="n">prev</span><span class="p">:</span> <span class="n">x</span><span class="p">})</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">run</span><span class="o">.</span><span class="n">timer</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># show x for 0.1 s of the run's time</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">y</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">)</span>  <span class="c1"># the output at the end of the showing time</span>
+</code></pre></div>
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 230" role="img" aria-label="The input steps at the time of write, and the output catches up smoothly after a delay. Reading right after write returns the output for the previous input; reading after sleep returns the output for the new input">
+<line class="mujou-axis" x1="90" y1="205" x2="620" y2="205"/>
+<text class="mujou-label" x="620" y="222" text-anchor="end">run's timer →</text>
+<text class="mujou-label" x="10" y="64">Input</text>
+<text class="mujou-label" x="10" y="150">Output</text>
+<path d="M 90 80 L 330 80 L 330 45 L 620 45" style="fill: none; stroke: var(--md-typeset-a-color); stroke-width: 2.5"/>
+<text class="mujou-note" x="200" y="72" text-anchor="middle">x₁</text>
+<text class="mujou-note" x="475" y="37" text-anchor="middle">x₂</text>
+<path d="M 90 175 C 140 175 170 137 330 136 C 380 136 410 110 620 108" style="fill: none; stroke: var(--md-accent-fg-color); stroke-width: 2.5"/>
+<line class="mujou-lane" x1="330" y1="28" x2="330" y2="198" style="stroke-dasharray: 4 3"/>
+<text class="mujou-note" x="330" y="20" text-anchor="middle">write(x₂)</text>
+<circle cx="340" cy="136" r="4" style="fill: var(--md-default-fg-color--light)"/>
+<text class="mujou-note" x="348" y="158">read right after → output for x₁</text>
+<circle cx="560" cy="109" r="4" style="fill: var(--md-default-fg-color--light)"/>
+<text class="mujou-note" x="560" y="96" text-anchor="middle">read after sleep</text>
+<path class="mujou-brace" d="M 332 186 Q 332 193 340 193 L 552 193 Q 560 193 560 186"/>
+<text class="mujou-note" x="446" y="182" text-anchor="middle">showing time of run.timer.sleep</text>
+</svg>
+<figcaption>The delay of the output depends on the time constants of the nodes and the number of stages. Show the input long enough</figcaption>
+</figure>
+
+<p>When you know the output to expect, wait for it with <a class="autorefs autorefs-internal" title="wait_for" href="../../api/run/#mujou.Run.wait_for"><code>wait_for</code></a> instead of sleeping (<a href="../../tutorial/1-run/#run">Run</a>).</p>
+<h2 id="read">Reading<a class="headerlink" href="#read" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Way</th>
-<th>What it returns</th>
 <th>Suited for</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>run.read(port)</code></td>
-<td>The latest value</td>
-<td>Reading whenever it suits the host</td>
+<td><a class="autorefs autorefs-internal" title="read" href="../../api/run/#mujou.Run.read"><code>run.read</code></a></td>
+<td>Reading the latest value at any time</td>
 </tr>
 <tr>
-<td><code>run.read_with_time(port)</code></td>
-<td>The latest value and the time it was sent, <code>(value, Timestamp \| None)</code></td>
+<td><a class="autorefs autorefs-internal" title="read_with_time" href="../../api/run/#mujou.Run.read_with_time"><code>run.read_with_time</code></a></td>
 <td>Telling how new the value is</td>
 </tr>
 <tr>
-<td><code>run.subscribe(port)</code></td>
-<td>An iterator of <code>(value, Timestamp \| None)</code>, each newer than the last</td>
+<td><a class="autorefs autorefs-internal" title="subscribe" href="../../api/run/#mujou.Run.subscribe"><code>run.subscribe</code></a></td>
 <td>Handling each new output</td>
 </tr>
 <tr>
-<td><code>run.wait_for(port, until)</code></td>
-<td>The first <code>(value, Timestamp \| None)</code> that meets <code>until</code></td>
+<td><a class="autorefs autorefs-internal" title="wait_for" href="../../api/run/#mujou.Run.wait_for"><code>run.wait_for</code></a></td>
 <td>Waiting until an expected output comes</td>
 </tr>
 </tbody>
 </table>
-<p>They read any port of the run that sends, connected or not: reading a connected port observes a value in the middle of the network without changing it. Each returns a new copy on the CPU of what the port last sent with <code>send</code> (its initial value until then, with the time <code>None</code>).</p>
-<p><code>subscribe</code> yields the latest value at once, then waits for each newer one; if the host reads slowly, the values in between are skipped. Its iteration ends when the run ends normally. Leave the loop with <code>break</code>, or pass <code>timeout=</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">clock</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>  <span class="c1"># a node runs by itself, without a network</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">received</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="c1"># timeout: give up after 5 s of real time instead of waiting forever.</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">run</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">clock</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">):</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># the zeros the port holds until the clock first sends</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>            <span class="k">continue</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">received</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">value</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)))</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">received</span><span class="p">)</span> <span class="o">==</span> <span class="mi">20</span><span class="p">:</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>            <span class="k">break</span>
+<p>The host reads any port of the run that sends, connected or not. Reading a connected port observes a value in the middle of the network without changing it.</p>
+<h3 id="subscribe">subscribe<a class="headerlink" href="#subscribe" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant N as Node
+    participant H as Host (subscribe)
+    Note over H: gets the latest value v0 at once
+    N--&gt;&gt;H: send(v1)
+    Note over H: gets v1 and handles it
+    N--&gt;&gt;H: send(v2)
+    N--&gt;&gt;H: send(v3)
+    Note over H: gets v3, the latest when it is done (v2 is skipped)</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">clock</span> <span class="o">=</span> <span class="n">Clock</span><span class="p">()</span>  <span class="c1"># a node runs by itself, without a network</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">received</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="c1"># timeout: give up after 5 s of real time instead of waiting forever.</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">run</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">clock</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">):</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># the zeros the port holds until the clock first sends</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>            <span class="k">continue</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        <span class="n">received</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">value</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)))</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">received</span><span class="p">)</span> <span class="o">==</span> <span class="mi">20</span><span class="p">:</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>            <span class="k">break</span>
 </code></pre></div>
-<p><code>wait_for</code> checks the latest value, then each newer one, and returns the first that meets the condition. If the run ends normally first, it raises <code>RuntimeError</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">y</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">next</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">expected</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+<h2 id="shutdown">Ending<a class="headerlink" href="#shutdown" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Avoid</label><label for="__tabbed_2_2">Write instead</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">run</span> <span class="o">=</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="o">...</span>  <span class="c1"># dropping run does not stop it: it runs until shutdown or the interpreter's exit</span>
 </code></pre></div>
-<p>The timeouts are in real seconds, and the default is to wait forever. When one runs out, <code>TimeoutError</code> is raised and the run keeps running (see <a href="../errors/#timeouts">Errors and Shutdown</a>).</p>
-<h2 id="ending">Ending<a class="headerlink" href="#ending" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Way</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>with mujou.run(...) as run:</code></td>
-<td>Calls <code>shutdown()</code> when the block ends. Use this normally</td>
-</tr>
-<tr>
-<td><code>run.shutdown(timeout=...)</code></td>
-<td>Asks every node to stop, and waits until every <code>on_stop</code> has returned</td>
-</tr>
-<tr>
-<td><code>run.join(timeout=...)</code></td>
-<td>Waits until the run ends, without asking it to stop: after another thread called <code>shutdown</code>, or to wait for a node's exception</td>
-</tr>
-</tbody>
-</table>
-<p>A run keeps running when the host drops it, until <code>shutdown</code> or the interpreter's exit, so end each run yourself. After a normal end, <code>shutdown</code> does nothing, <code>write</code> raises <code>RuntimeError</code>, and <code>run.state_dict()</code> still takes the last state. If a node raises, the later calls raise <code>NetworkError</code> (see <a href="../errors/">Errors and Shutdown</a>).</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">with</span> <span class="n">mujou</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">net</span><span class="p">)</span> <span class="k">as</span> <span class="n">run</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="o">...</span>  <span class="c1"># leaving the block calls shutdown()</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>What calls on a <code>Run</code> do after it has ended is in <a href="../errors/#where">Where the host gets it</a>.</p>
 
 
 

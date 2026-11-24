@@ -833,6 +833,8 @@
       
         
       
+        
+      
     
     
     
@@ -1145,6 +1147,34 @@
     
   
     PC-ALM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topics/pc-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PC-ALM の実験
   
 
     
@@ -2090,7 +2120,8 @@ own shares.</p>
                 <p>The initial values of unconnected ports that receive, as
 <code>Run.write</code> takes them (and copies them, to the same places),
 written when the run starts. Written after
-<code>state</code>, they replace its values.</p>
+<code>state</code>, they replace its values. They bear the time of the run's
+timer when the run starts (with <code>state</code>, the time of the tree).</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -2211,8 +2242,10 @@ do not match their specs (as <code>Run.write</code> raises).</p>
             <td class="doc-raises-details">
               <div class="doc-md-description">
                 <p><code>workers</code> is less than 1; <code>timer</code> and <code>state</code> are
-both given (a restored run runs on a timer of its own); or <code>state</code>
-does not have the timer, nodes, ports and peers of the tree.</p>
+both given (a restored run runs on a timer of its own); <code>state</code>
+does not have the timer, nodes, ports and peers of the tree; or a
+port of the tree is connected to a port whose node is not in the
+tree.</p>
               </div>
             </td>
           </tr>
@@ -3501,8 +3534,10 @@ itself, through a port connected to its own. The period of the nodes
 does not apply. Each <code>dt</code> a node sees is the time since its last
 update, the first one from the start of the run (or the last update
 restored). A node given twice in one <code>step</code> updates once: the second
-time, its time has not moved. A timer shared with other runs moves for
-them too. Write inputs between steps.</p>
+time, its time has not moved. Likewise <code>step(0)</code> right after the start
+of the run updates no node. The messages sent in a step bear the time
+of the step. A timer shared with other runs moves for them too. Write
+inputs between steps.</p>
 
 
 <table>
@@ -3586,7 +3621,10 @@ this is called from a node's hook.</p>
 
 
         <p>The network stopped because a node raised.</p>
-<p><code>__cause__</code> is the first exception a node raised. Once a run has stopped
+<p><code>__cause__</code> is the first exception a node raised. Every exception of a
+hook is logged to <code>logging.getLogger("mujou")</code> at <code>ERROR</code>, with the
+node's path, the hook and the traceback; those that other nodes raise about
+the same time are only logged. Once a run has stopped
 this way, the host's calls on it (<code>write</code>, <code>read</code>, <code>state_dict</code>,
 <code>shutdown</code>, ...) raise <code>NetworkError</code> too.</p>
 
