@@ -32,7 +32,9 @@ class Node(Component):
     Call ``super().__init__(...)`` first in ``__init__`` (``mujou.run`` raises
     ``TypeError`` for a node that did not), then declare the node's ports and
     state as attributes of the instance. A run reads the attributes when it
-    starts. A node must not hold other nodes or networks as attributes, nor
+    starts. A ``Port``, a ``MultiPort``, a ``Node`` or a ``Network`` declared as
+    an attribute of the class instead raises ``TypeError`` when the class is
+    defined. A node must not hold other nodes or networks as attributes, nor
     ports in a list, a tuple or a dict (the run raises ``TypeError``); put
     nodes side by side in a ``Network`` instead.
 
@@ -297,7 +299,11 @@ class Node(Component):
     def on_update(self, dt: float) -> None:
         """Called repeatedly with ``dt``, the seconds on the run's timer since the
         node's last update (always > 0). Read the ports, update in proportion to
-        ``dt`` and send."""
+        ``dt`` and send.
+
+        The first ``dt`` counts from when every node's ``on_start`` has
+        returned (the start of the run), or, for a restored run, from the
+        node's last update in the state."""
 
     def on_pause(self) -> None:
         """Called when the node has stopped for the run to take its state

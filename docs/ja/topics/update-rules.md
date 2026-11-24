@@ -1,14 +1,24 @@
 # 🧮 更新則
 
-更新則（学習則）は、ノードが `on_update(dt)` に書く更新そのもの。mujou はノード・Port・スケジューラに更新則を組み込まないので、ノードごとに選べ、同じネットワークのまま差し替えられる。このページでは、ノードをまたいで学ぶ則の書き方を feedback alignment を例に説明する。1 つのノードの内側の誤差逆伝播法（BP）は [4. ノードの中で学習する](../tutorial/4-learn-in-a-node.md)、`mujou.pc` の則は [PC-ALM](pc.md) にある。
+更新則の選び方は [Mujou の仕組み](../concepts.md#learning) にある。ここでは、ノードの間で学ぶ自作の則を feedback alignment で示す。
 
-## ノードの内側と、ノードの間
+## feedback alignment {#feedback-alignment}
 
-ノードの内側では、BP を含め PyTorch で計算できることは何でも使える。ノードの間では計算グラフをつなげない。Port が送るのは切り離したコピーである。そのため、ノードをまたいで学ぶ則は、各ノードが要るものをメッセージで送る。活動を前へ、誤差（やほかの credit）を後ろへ、目標は活動と一緒に。各ノードは自分の状態と隣のメッセージだけから学ぶ。
+`examples/feedback_alignment.py` は $\hat y = W_2 \tanh(W_1 x)$ を 2 つのノード `hidden` と `output` で学ぶ。`hidden` は `W2` を知らず、固定の乱数行列 $B$ で学べる（[Lillicrap et al., 2016](https://doi.org/10.1038/ncomms13276)）。
 
-## feedback alignment
+```mermaid
+flowchart LR
+    Host["ホスト"] -->|"サンプル x, y"| H["hidden<br/>h = tanh(W1 x)"]
+    H -->|"活動 h・目標 y・time"| O["output<br/>ŷ = W2 h"]
+    O -->|"誤差 e = ŷ − y・time"| H
+    O -->|"損失"| Loss["ホストが読む"]
+```
 
-`examples/feedback_alignment.py` は $\hat y = W_2 \tanh(W_1 x)$ を 2 つのノードで学ぶ。`hidden` が活動を前へ送り、`output` が誤差 $e = \hat y - y$ を後ろへ返す。BP なら `hidden` は credit $W_2^\top e$ を受け取るが、`hidden` は `W2` を知らない。代わりに自分の固定の乱数行列 $B$ で $B e$ を使う。それでも $W_2$ が $B^\top$ にそろっていき、学べる（[Lillicrap et al., 2016](https://doi.org/10.1038/ncomms13276)）。
+|                         | BP           | feedback alignment                      |
+| ----------------------- | ------------ | --------------------------------------- |
+| `hidden` が使う credit  | $W_2^\top e$ | $B e$（$B$ は `hidden` 固定の乱数行列） |
+| `hidden` が `W2` を知る | 要る         | 要らない                                |
+| 学べる理由              | 勾配そのもの | $W_2$ が $B^\top$ にそろっていく        |
 
 ```sh
 uv run python examples/feedback_alignment.py
@@ -22,27 +32,56 @@ uv run python examples/feedback_alignment.py
 --8<-- "examples/feedback_alignment.py:output"
 ```
 
-プログラムは各バッチから学ぶ前の `output` の損失を表示する。損失は 6 秒で約 1.5 から約 0.02 まで下がる。`hidden` を固定すると 0.15 を下回らない。
+| 条件               | 表示される `output` の損失（各バッチから学ぶ前） |
+| ------------------ | ------------------------------------------------ |
+| 両方のノードが学ぶ | 6 秒で約 1.5 から約 0.02 まで下がる              |
+| `hidden` を固定    | 0.15 を下回らない                                |
 
-## 両方向の Port
+## 両方向の Port {#bidirectional}
 
-`hidden.next` は `Port(send=ACTIVITY, recv=ERROR)`、`output.prev` は `Port(send=ERROR, recv=ACTIVITY)`。1 本の接続で活動を前へ、誤差を後ろへ運ぶ。循環してつないでもよいので、誤差を別の Port で返してもよい。
+この例は活動と誤差を 1 本の接続（`hidden.next` と `output.prev`）で運ぶ。つなぎ方は[循環してもよい](ports.md#connect)ので、誤差を別の Port で返す書き方もできる。
 
-## 目標を中継する
+| Port          | `send`     | `recv`     |
+| ------------- | ---------- | ---------- |
+| `hidden.next` | `ACTIVITY` | `ERROR`    |
+| `output.prev` | `ERROR`    | `ACTIVITY` |
 
-活動はそのサンプルの目標 `y` と、元になった書き込みの時刻を運ぶ。2 つの Port の値は別々に届くので、目標を別の Port で送ると、予測を別のサンプルの目標と組んでしまうことがある。1 つのメッセージにすれば、`output` はいつも予測を自分の目標と比べ、`hidden` は持っている入力と同じ `time` の誤差だけから学ぶ。`mujou.pc` のノードも同じように、`y`・`mask`・`time` を `pc.msg.Activity` で運ぶ（[PC-ALM](pc.md#%E3%83%8E%E3%83%BC%E3%83%89)）。
+## 目標を中継する {#relay-targets}
 
-## 新しいかどうかを判定する
+=== "避ける: 目標を別の Port で"
 
-`recv()` は新しいかどうかによらず最新の値を返す。各サンプルから 1 回だけ学ぶノードは、時刻で新しいサンプルを見分ける。`recv_with_time()` が返す時刻か、メッセージが運ぶ時刻を使う。誰も送る前の時刻は `None`（メッセージが運ぶ時刻なら、その初期値。`TimestampSpec` なら `Timestamp(ns=0)`）になる。
+    ```mermaid
+    sequenceDiagram
+        participant H as hidden
+        participant O as output
+        H->>O: 活動 h（サンプル 2）
+        Note over O: 目標の Port はまだサンプル 1 の y
+        O->>O: サンプル 2 の予測をサンプル 1 の y と比べてしまう
+        H->>O: 目標 y（サンプル 2）
+    ```
 
-## `pc.clock.LearnClock`
+=== "こう書く: 1 つのメッセージで"
 
-どちらのノードも、いつ学ぶかを `pc.clock.LearnClock` で決める。`mujou.pc` の部品だが、どの則でも使える。更新ごとに `tick(dt, time, now)` に `dt`、入力が書かれた時刻、今の時刻を渡すと、`pc.clock.Tick` が返る。
+    ```mermaid
+    sequenceDiagram
+        participant H as hidden
+        participant O as output
+        H->>O: h・y・time（サンプル 2）
+        O->>O: 予測を自分の目標と比べる
+        O->>H: e・time
+        H->>H: 持っている入力と同じ time の誤差だけから学ぶ
+    ```
 
-- `new`: 入力が新しい（時刻が前回見たものと違う）
-- `learn`: この更新で学ぶ。`learn_interval` を渡したなら、各書き込みから `learn_interval` 後の最初の更新（入力が変わらない間は以後 `learn_interval` ごと）。ただし入力を初めて見た更新では学ばない。`learn_interval=None` なら毎回
-- `elapsed`: 前に学んでからの時間。各 `dt` は `max_dt` で打ち切る。刻みはこれで重み付けする。$W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla$ は勾配流 $\tau \dot W = -\nabla$ をたどるので、どれだけ学ぶかはノードの更新回数ではなく時間で決まる
-- `dt`: `max_dt` で打ち切った `dt`
+`mujou.pc` のノードも、`y`・`mask`・`time` を [`pc.msg.Activity`][mujou.pc.msg.Activity] で活動と 1 つのメッセージに載せて運ぶ。
 
-クロックは `mujou.Stateful` なので、属性に置くだけでノードの状態に入る。経路上のノードは実行の 1 本のタイマーを読むので、深さによらず各書き込みからほぼ同じ時刻に学ぶ。
+各サンプルから 1 回だけ学ぶノードは、`recv()` が新しいかどうかによらず最新の値を返すため、時刻で新しいサンプルを見分ける（[新しい値か読み直しか](ports.md#new-or-reread)）。
+
+## `pc.clock.LearnClock` {#learnclock}
+
+```python
+tick = self.clock.tick(dt, t, self.timer.now())  # dt、入力が書かれた時刻、今の時刻
+if tick.learn:
+    self.optimizer.step_([grad], tick.elapsed)  # 前に学んでからの時間で重み付け
+```
+
+いつ学ぶかを決める [`LearnClock`][mujou.pc.clock.LearnClock] は `mujou.pc` の部品だが PC-ALM に限らずどの則でも使え、学ぶ量は `elapsed` で重み付けして更新の回数でなく時間に比例させる（[mujou.pc の仕組み](pc-concepts.md#learnclock)）。

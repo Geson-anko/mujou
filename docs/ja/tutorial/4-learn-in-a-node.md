@@ -1,10 +1,15 @@
 # 🔥 4. ノードの中で学習する
 
-ノードの内側の誤差逆伝播法（BP）で学ぶノードを書く。学ぶのは、実行中に目標が変わっていくストリームから。学習の段階も推論の段階も無く、ノードは新しいバッチが来るたびに予測し、学ぶ。
+目標が実行中に変わるストリームから学び続けるノードを、ノードの内側の誤差逆伝播法（BP、`loss.backward()`）で書く。学ぶ量はバッチの数でなく時間で決める。前提は [2. ノードを書く](2-node.md)。
 
-## プログラム
+## プログラム {#program}
 
-教師のノードが、ホストの書く `a` を使って $y = a x + b$ のバッチを 10 ms ごとに送る。ホストは実行の途中で `a` を変える。学習するノードの損失は下がり、目標が変わると跳ね上がり、また下がる。
+```mermaid
+flowchart LR
+    H1["ホスト"] -->|"a = 2.0、途中で −1.0 に<br/>（run.write）"| T["教師のノード<br/>y = a x + 0.5 を 8 サンプル<br/>period 10 ms"]
+    T -->|"バッチ {x, y}<br/>10 ms ごと"| L["学習するノード<br/>period 5 ms"]
+    L -->|"loss（学ぶ前の損失）"| H2["ホスト<br/>run.wait_for"]
+```
 
 ```sh
 uv run python examples/online_learning.py
@@ -17,38 +22,71 @@ t = 0.97 s: loss = 0.000095  (learned a = -1.0)
 the learner's weight = -0.988, bias = 0.498
 ```
 
-## 学習するノード
+## 学習するノード {#node}
 
 ```python
 --8<-- "examples/online_learning.py:node"
 ```
 
-- **モジュールは状態。** `self.model` はどの `nn.Module` とも同じく `mujou.Stateful` なので、テンソルの属性と同じく自動で状態に入る
-- **seed。** `seed=0` はノード専用の乱数生成器 `self.generator` の seed。`nn.Linear` の既定の初期化は全ノードが共有する生成器を使うので、重みは `self.generator` で初期化し直す
-- **素の値は `register_state` で状態に加える。** `last` と `elapsed` は実行中に変わるが、テンソルでもモジュールでもない。登録しておけばほかと一緒に保存・復元される
-- **新しいかどうか。** `recv_with_time()` はバッチを送られた時刻と一緒に返す。教師が最初に送るまで時刻は `None`、次に送るまで時刻は同じなので、学習するノードは各バッチから 1 回だけ学ぶ
-- **勾配は通常の PyTorch と同じ。** hook は通常の PyTorch と同じく勾配を記録する。`loss.backward()` が `p.grad` を埋め、パラメータは `torch.no_grad()` の中でその場で更新する。送るためだけの値（学習前の損失）もグラフは要らない
-- **バッチの数ではなく時間で。** バッチごとの固定の刻みではなく、前に学んでからの時間（`elapsed`）だけ勾配流 $\frac{dW}{dt} = -\text{rate}\,\frac{\partial L}{\partial W}$ をたどる。どれだけ学ぶかは、ノードが何回回ったかではなく時間で決まる。長い `elapsed` は `MAX_STEP` 以下の刻みに分け、陽的 Euler 法が発散しないようにする
+| この例で使う書き方                                                                                                   | 理由                                                                               | 詳しく                                                      |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `model` と `generator` は自動で、`last` と `elapsed` は [`register_state`][mujou.Node.register_state] で状態に入れる | 再開したときに学習の途中から続けるため                                             | [自分の値を状態に入れる](6-save-and-resume.md#custom-state) |
+| 重みを `self.generator` で初期化し直す                                                                               | `nn.Linear` の既定の初期化は全ノードで共有するグローバルな乱数を使い、再現できない | [seed と乱数](../topics/threads-and-devices.md#seed)        |
+| [`recv_with_time`][mujou.Port.recv_with_time] の時刻を前回と比べ、新しいバッチから 1 回だけ学ぶ                      | 学習するノードは教師より速く回り、同じバッチを何度も読む                           | [新しい値か読み直しか](../topics/ports.md#new-or-reread)    |
+| 勾配は通常の PyTorch で求め、計算グラフは 1 回の更新の中に閉じる                                                     | ノードをまたいでグラフをつなぐと局所性が壊れる                                     | [ノードが守る規則](../concepts.md#rules)                    |
 
-BP はノードの中に閉じる。Port は計算グラフから切り離したコピーを送るので、勾配がノードをまたぐことはない。
-
-## torch の設定
-
-```python
---8<-- "examples/online_learning.py:threads"
+```mermaid
+sequenceDiagram
+    participant T as 教師（10 ms ごと）
+    participant C as 学習するノードの prev
+    participant L as 学習するノード（5 ms ごと）
+    L->>C: recv_with_time()
+    C-->>L: 初期値、時刻 None → 学ばない
+    T->>C: send(バッチ 1)
+    L->>C: recv_with_time()
+    C-->>L: バッチ 1、時刻 t1 → 学ぶ
+    L->>C: recv_with_time()
+    C-->>L: バッチ 1、時刻 t1（前と同じ）→ 学ばない
+    T->>C: send(バッチ 2)
+    L->>C: recv_with_time()
+    C-->>L: バッチ 2、時刻 t2 → 学ぶ
 ```
 
-torch のスレッド数のようなプロセス全体の設定は、ホストが実行の前に決める。ノードが変えてよいのは自分のスレッドの設定だけで、hook を抜ける前に戻す（[スレッドとデバイス](../topics/threads-and-devices.md)）。
+### 時間で学ぶ {#learn-by-time}
 
-## 実行
+学習するノードは、バッチごとの固定の刻みでなく前に学んでからの時間 `elapsed` だけ勾配流をたどるので、学ぶ量は回数でなく経った時間で決まる（この例では `rate` = 5.0、`MAX_STEP` = 0.01 秒）。
+
+$$
+\frac{dW}{dt} = -\text{rate}\,\frac{\partial L}{\partial W}
+$$
+
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 130" role="img" aria-label="25 ミリ秒の elapsed を、MAX_STEP の 10 ミリ秒以下の 3 つの等しい刻みに分ける例">
+<path class="mujou-brace" d="M 80 38 Q 80 30 88 30 L 572 30 Q 580 30 580 38"/>
+<text class="mujou-label" x="330" y="22" text-anchor="middle">elapsed = 25 ms（例）</text>
+<line class="mujou-axis" x1="80" y1="70" x2="580" y2="70"/>
+<g class="mujou-tick-a"><line x1="80" y1="58" x2="80" y2="82"/><line x1="247" y1="58" x2="247" y2="82"/><line x1="413" y1="58" x2="413" y2="82"/><line x1="580" y1="58" x2="580" y2="82"/></g>
+<text class="mujou-note" x="163" y="54" text-anchor="middle">刻み 1 ≈ 8.3 ms</text>
+<text class="mujou-note" x="330" y="54" text-anchor="middle">刻み 2 ≈ 8.3 ms</text>
+<text class="mujou-note" x="497" y="54" text-anchor="middle">刻み 3 ≈ 8.3 ms</text>
+<path class="mujou-brace" d="M 80 92 Q 80 100 88 100 L 272 100 Q 280 100 280 92"/>
+<text class="mujou-note" x="180" y="118" text-anchor="middle">MAX_STEP = 10 ms</text>
+<text class="mujou-label" x="440" y="118" text-anchor="middle">n = ceil(25 / 10) = 3</text>
+</svg>
+<figcaption><code>n = max(1, ceil(elapsed / MAX_STEP))</code> 個の等しい刻みに分け、各刻みで陽的 Euler 法の 1 歩を進める</figcaption>
+</figure>
+
+## 実行 {#run}
 
 ```python
 --8<-- "examples/online_learning.py:run"
 ```
 
-`run.wait_for` は条件を満たすまで損失の Port を追う。終わった後は、ノードの属性をホストが読んでよい。`learner.model` が学習したモジュールである。
+ホストは [`wait_for`][mujou.Run.wait_for] で損失を追い、[`write`][mujou.Run.write] で途中から目標の `a` を変える。学習と推論のモードを切り替える操作は無い。
+
+torch のスレッド数（この例では `torch.set_num_threads(1)`）はプロセス全体の設定なので、ホストが実行の前に決める（[プロセス全体の設定](../topics/threads-and-devices.md#process-settings)）。
 
 ## 次へ
 
 - ノードをまたいで学ぶ則と、経路に沿って運ぶ目標: [更新則](../topics/update-rules.md)
-- PC-ALM、`mujou.pc` のノード: [5. PC-ALM で学習する](5-learn-with-pc.md)
+- `mujou.pc` のノードで学ぶ: [5. PC-ALM で学習する](5-learn-with-pc.md)

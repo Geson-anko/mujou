@@ -1,35 +1,61 @@
 # ⏱️ Time
 
-Each run has one time axis, its timer: every node's `dt`, every message's time and every pause of the run is on it. This page covers the timers, their units, the time scale, pausing, and the timer of a resumed run.
+Each run has one time axis: every node's `dt`, every message's time and every pause are on the run's timer (why nodes update by `dt` is in [Time in How Mujou Works](../concepts.md#time)).
 
-## The timers
+## The timers {#timers}
 
-| Name                        | What it is                                                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `mujou.time.global_timer`   | The timer of every run not given one of its own. It starts at 0 when the process first uses it                |
-| `mujou.time.Timer()`        | A timer for a run of its own: `mujou.run(net, timer=Timer())`. It starts at `start` (0) with `time_scale` (1) |
-| `mujou.time.VirtualTimer()` | A `Timer` that moves only when advanced (`advance(seconds)`); `mujou.run_manually` uses one                   |
-| `mujou.time.ReadOnlyTimer`  | The reading side of a timer: what a node sees as `self.timer`, with only `now()` and `time_scale()`           |
-| `mujou.time.Timestamp`      | A time on a timer                                                                                             |
+```mermaid
+flowchart TD
+    Q{"How is it run?"}
+    Q -- "mujou.run(net)" --> G["global_timer<br/>shared with other runs"]
+    Q -- "mujou.run(net, timer=Timer())" --> O["The Timer passed<br/>for that run only"]
+    Q -- "mujou.run(net, state=tree)" --> R["A new Timer<br/>starting at the tree's time"]
+    Q -- "mujou.run_manually(net)" --> V["VirtualTimer<br/>moves only when advanced"]
+```
 
-The host controls the time of a run through `run.timer`: `now()`, `sleep(seconds)`, `pause()`, `resume()`, `is_paused()`, `time_scale()` and `set_time_scale(scale)`. A node only reads it, with `self.timer.now()`, in its hooks.
+The timer types (Timer, VirtualTimer, ReadOnlyTimer, Timestamp, global_timer) are in [`mujou.time`][mujou.time].
 
-## Units
+### What the host and a node can do {#host-and-node}
+
+| Operation                                                            | Host (`run.timer`) | Node ([`self.timer`][mujou.Node.timer])   |
+| -------------------------------------------------------------------- | ------------------ | ----------------------------------------- |
+| `now()`, `time_scale()`                                              | Yes                | Yes                                       |
+| `is_paused()`                                                        | Yes                | No such method                            |
+| `sleep`, `pause`, `resume`, `set_time_scale`, `VirtualTimer.advance` | Yes                | No such method; in a hook, `RuntimeError` |
+
+=== "Avoid"
+
+    ```python
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        global_timer.sleep(0.1)  # RuntimeError in a hook
+    ```
+
+=== "Write instead"
+
+    ```python
+    def __init__(self) -> None:
+        super().__init__(period=0.1)  # updates every 0.1 s on average
+    ```
+
+## Units {#units}
 
 | Unit                       | Used by                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Seconds of the run's timer | `dt`, `period`, `Timer.sleep`, `VirtualTimer.advance`, `pc.show(seconds=)`, the time constants of `mujou.pc` |
 | Real seconds               | Every `timeout`                                                                                              |
 
-A timeout is real time so that a stuck run is given up on whatever its time scale and pauses.
+??? question "Why is a timeout in real time?"
 
-## Timestamp
+    So that a stuck run is given up on, whatever its time scale and pauses.
+
+## Timestamp {#timestamp}
+
+A [`Timestamp`][mujou.time.Timestamp] does not record which timer it is on, so compare only times of one timer (those of one run and its `run.timer.now()`, say).
 
 ```python
 --8<-- "examples/timers.py:timestamp"
 ```
-
-`write`, `read_with_time`, `subscribe`, `wait_for`, `recv_with_time` and `now()` return `Timestamp`s (or `None` for a value not sent yet). Compare them with `<` and the like, and subtract them for the seconds between them. A `Timestamp` does not record which timer it is on: compare only times of one timer, such as those of one run and its `run.timer.now()`.
 
 ```python
 t_in = run.write({net.prev: x})
@@ -39,54 +65,85 @@ if t_out is not None and t_out >= t_in:  # y was sent after x was written
     print(t_out - t_in)  # seconds from the write until y was sent
 ```
 
-## A timer of a run's own
+## A timer of a run's own and its scale {#own-timer}
+
+Scaling or pausing the [`Timer`][mujou.time.Timer] passed to `mujou.run` does not affect other runs (whether to split runs or join them into one is in [Groups](groups.md#one-or-many)).
 
 ```python
 --8<-- "examples/timers.py:own-timer"
 ```
 
-Give a run a timer of its own to speed up or slow down only that run (for debugging, or for trials faster than real time), or to keep it from pausing with other runs. The time scale is how many seconds of the timer pass per real second: at 10, a real second is 10 seconds of the timer. It is a finite number greater than 0.
-
-The global timer can be scaled too, which changes every run on it:
+The [`global_timer`][mujou.time.global_timer] can be scaled too, which changes every run on it.
 
 ```python
 --8<-- "examples/timers.py:global-scale"
 ```
 
-## Pausing the time
+## Pausing the time {#pause}
 
-`timer.pause()` stops the time of the timer until `timer.resume()`; `global_timer.pause()` stops every run on the global timer. While it is paused:
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 175" role="img" aria-label="A node updates at regular intervals, but not between pause and resume. The first dt after resume does not include the paused time">
+<rect x="260" y="28" width="160" height="112" style="fill: var(--md-default-fg-color--lightest)"/>
+<text class="mujou-note" x="260" y="20" text-anchor="middle">pause()</text>
+<text class="mujou-note" x="420" y="20" text-anchor="middle">resume()</text>
+<text class="mujou-label" x="340" y="52" text-anchor="middle">Time stops</text>
+<text class="mujou-note" x="340" y="70" text-anchor="middle">no updates, sleep does not return</text>
+<text class="mujou-label" x="10" y="104">Node</text>
+<line class="mujou-lane" x1="90" y1="100" x2="620" y2="100"/>
+<g class="mujou-tick-a"><line x1="100" y1="88" x2="100" y2="112"/><line x1="160" y1="88" x2="160" y2="112"/><line x1="220" y1="88" x2="220" y2="112"/><line x1="450" y1="88" x2="450" y2="112"/><line x1="510" y1="88" x2="510" y2="112"/><line x1="570" y1="88" x2="570" y2="112"/></g>
+<path class="mujou-brace" d="M 222 118 Q 222 126 230 126 L 442 126 Q 450 126 450 118"/>
+<text class="mujou-note" x="336" y="142" text-anchor="middle">the next dt counts only the time before and after the pause</text>
+<line class="mujou-axis" x1="90" y1="152" x2="620" y2="152"/>
+<text class="mujou-label" x="620" y="168" text-anchor="end">real time →</text>
+</svg>
+</figure>
 
-- the nodes of every run on the timer do not update, and the first `dt` after `resume` does not count the pause. The nodes are not told: `on_pause` and `on_resume` run only around taking the state
-- `sleep` on the timer does not return, and `VirtualTimer.advance` raises `RuntimeError`
-- `run.state_dict()` still works, and gives the state at the time of the pause
+From [`Timer.pause`][mujou.time.Timer.pause] until resume, every run on that timer stops (`global_timer.pause()` stops every run on the global timer).
+Your pause and the pause for taking the state ([Save and Resume](../tutorial/6-save-and-resume.md#pause)) are separate switches.
 
-Taking the state pauses the run's timer too, apart from your `pause`: `pause` is a switch, not a count, and `resume` does not cut a pause for the state short. `is_paused()` is true while either one holds the time.
+!!! warning "A pause is for taking the state and for observing"
 
-Use it to take the states of several runs on one timer at one time. Taken one after the other, the second state would be of a later time:
+    Do not make it part of how a network learns.
+
+### Taking the states of several runs at one time {#multi-run-state}
 
 ```python
 --8<-- "examples/timers.py:pause"
 ```
 
-!!! tip "Put `resume` in `finally`"
+=== "Avoid"
 
-    Then an exception does not leave the time stopped.
+    ```python
+    global_timer.pause()
+    tree_a = run_a.state_dict()
+    tree_b = run_b.state_dict()
+    global_timer.resume()  # an exception in between leaves the time stopped
+    ```
 
-A pause is for taking the state and for observing. Do not make pausing part of how a network learns.
+=== "Write instead"
 
-## The timer of a resumed run
+    ```python
+    global_timer.pause()
+    try:
+        tree_a = run_a.state_dict()
+        tree_b = run_b.state_dict()
+    finally:
+        global_timer.resume()  # resumes even on an exception
+    ```
 
-A run resumed with `mujou.run(net, state=tree)` runs on a new `Timer` that starts at the time and the time scale of the tree, so the global timer and the other runs do not go back:
+## The timer of a resumed run {#restored-timer}
+
+```mermaid
+flowchart LR
+    G["a and b on global_timer<br/>states taken at time T"] --> TA["tree_a (time T)"]
+    G --> TB2["tree_b (time T)"]
+    TA -->|"mujou.run(a2, state=tree_a)"| RA["A new Timer<br/>moving on from T"]
+    TB2 -->|"mujou.run(b2, state=tree_b)"| RB["Another new Timer<br/>moving on from T"]
+    RA -.-|"drift apart; pausing one does not pause the other"| RB
+```
 
 ```python
 --8<-- "examples/timers.py:restore"
 ```
 
-Passing `timer=` with `state=` raises `ValueError`, and `global_timer.pause()` does not pause a resumed run: pause its `run.timer`. Runs resumed from trees taken at one time therefore no longer share a time axis: their timers drift apart, and pausing one does not pause the others. Runs that must stay on one axis after a resume run as one run (`mujou.run(Group(a=a, b=b))`), whose single tree resumes onto one timer.
-
-## Nodes only read the time
-
-A node's `self.timer` is a `ReadOnlyTimer` of its run, readable in every hook (`on_start` included) and nowhere else: reading it in `__init__` or from the host raises `RuntimeError`. It stops at the time the run ends, so `on_exception` and `on_stop` see the time stand still.
-
-Only the host moves the time ([rules a node keeps](../concepts.md#rules-a-node-keeps)). To update at intervals, give the node a `period`.
+Runs that must stay on one time axis after a resume run as one run in a [`Group`][mujou.Group] from the start (`mujou.run(Group(a=a, b=b))`; the tree of one run resumes onto one timer).

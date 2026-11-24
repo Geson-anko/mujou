@@ -13,7 +13,6 @@ from mujou import Network, Node, Port, TensorSpec
 VECTOR = TensorSpec((3,))  # every message here is a float32 vector of 3
 
 
-# --8<-- [start:node]
 class Affine(Node):
     """Sends ``a * x + b``, where ``x`` is the latest input."""
 
@@ -29,10 +28,6 @@ class Affine(Node):
         self.next.send(self.a * self.prev.recv() + self.b)  # recv() never waits
 
 
-# --8<-- [end:node]
-
-
-# --8<-- [start:network]
 class Pipeline(Network):
     """``x -> scale -> shift ->``: y = 2 x + 1."""
 
@@ -44,10 +39,6 @@ class Pipeline(Network):
         self.prev, self.next = self.scale.prev, self.shift.next  # exposed as its own
 
 
-# --8<-- [end:network]
-
-
-# --8<-- [start:run]
 net = Pipeline()
 x = torch.tensor([1.0, 2.0, 3.0])
 # The nodes run on the run's worker threads until the end of the `with` block.
@@ -59,4 +50,3 @@ with mujou.run(net) as run:
     assert t is not None  # None only for the zeros before the first send
 
 print(f"y = {y} at t = {float(t):.3f} s")
-# --8<-- [end:run]

@@ -1,36 +1,36 @@
 # 🧵 スレッドとデバイス
 
-実行が計算に使うスレッド、ノードの設定（`device`・`seed`・`dedicated_thread`）、CUDA、プロセス全体で共有する torch の設定を説明する。
+```mermaid
+flowchart LR
+    R["mujou.run"] --> P["ワーカーのプール<br/>（workers 本）"]
+    R --> D["専用のスレッド<br/>（ノード 1 つに 1 本）"]
+    P -->|"ノードを分け合う"| N1["ノード"]
+    P --> N2["ノード"]
+    P --> N3["ノード"]
+    D --> N4["dedicated_thread=True<br/>のノード"]
+```
 
-## `Node` の引数
+## ワーカー {#workers}
 
-`super().__init__` は次のキーワード引数を取る。いずれも省略可能。
+```mermaid
+flowchart LR
+    subgraph Q["更新の予定（期限の早い順）"]
+        direction TB
+        U1["ノード C の更新"] ~~~ U2["ノード A の更新"] ~~~ U3["ノード B の更新"]
+    end
+    Q -->|"hook を 1 回実行したら次を取る"| W1["ワーカー 1"]
+    Q --> W2["ワーカー 2"]
+```
 
-| 引数               | 意味                                             | 既定               |
-| ------------------ | ------------------------------------------------ | ------------------ |
-| `period`           | 更新と更新の間の平均の時間。実行のタイマーの秒   | `0.01`             |
-| `seed`             | ノード専用の乱数生成器 `self.generator` の seed  | `None`（毎回違う） |
-| `device`           | ノードが計算する場所。`"cpu"` か CUDA のデバイス | `"cpu"`            |
-| `dedicated_thread` | 実行のワーカーでなく専用のスレッドで動かす       | `False`            |
+実行はノードごとにスレッドを立てないので、ノードが多くてもスレッドは少ないままで、OS のスレッドの切り替えに時間を取られない。ワーカーの数とその既定は [`mujou.run`][mujou.run] の `workers`。
 
-ノードはこれらを読み取り専用の property `period`・`generator`・`device`・`dedicated_thread` で読める。
+??? question "GIL が有効なとき、既定を半分にするのはなぜ？"
 
-## ワーカー
+    GIL が有効なとき（GIL ありのビルド、または free-threaded のビルドで `PYTHON_GIL=1` のとき）は、Python のコードを同時に動かせるのは 1 本のスレッドだけで、ノードが並列に動けるのは torch の演算の中だけになる。CPU の数の半分を超えて増やしても GIL を取り合うだけなので、既定は半分にしている。Python の処理が大半のノードなら、さらに減らしても速さはほとんど変わらない。
 
-実行はノードごとにスレッドを立てない。ワーカースレッドのプールを作り、ワーカーがノードを分け合って動かす。ワーカーは 1 つのノードの hook を 1 回実行したら、期限の早い更新から次の仕事を取る。ノードが多くてもスレッドは少ないままで、OS がスレッドの切り替えに時間を取られない。
+## 専用のスレッド {#dedicated}
 
-- ワーカーの数は `mujou.run(net, workers=n)` で決める。既定はプロセスが使える CPU の数（論理コア数。CPU の affinity や割り当ての上限があればそれより少ない）、GIL が有効ならその半分で、ワーカーに載るノードの数を超えない
-- 1 つのノードの hook が同時に走ることはなく、前の hook が書いた値は次の hook から見える。どのワーカーがノードを動かすかは hook ごとに変わりうる
-- ブロッキングする hook はその間ワーカーをふさぎ、ほかのノードの `dt` が伸びる（[ノードが守る規則](../concepts.md#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E5%AE%88%E3%82%8B%E8%A6%8F%E5%89%87)）
-
-GIL が有効なとき（GIL ありのビルド、または free-threaded のビルドで `PYTHON_GIL=1` のとき）は、Python のコードを同時に実行できるスレッドは 1 本だけなので、ノードが並列に動くのは torch の演算の中に限られる。CPU の数の半分を超えてワーカーを増やしても GIL を取り合うだけなので、既定を半分にしている。Python の処理が大半を占めるノードなら、さらに少なくても速さはほとんど変わらない。
-
-## 専用のスレッド
-
-ノードが専用のスレッドを要るときは `dedicated_thread=True` を渡す。
-
-- hook がデバイス・ソケット・lock を待ってブロッキングする。ワーカーの上だと、その間ワーカーをふさぐ
-- 1 回だけ設定するスレッドごとの状態に頼る。`on_start` はこのノードのスレッドで呼ばれるので、そこで設定する
+hook がデバイス・ソケット・lock を待ってブロッキングするノードや、`on_start` で 1 回だけ設定するスレッドごとの状態に頼るノードには、[`dedicated_thread=True`][mujou.Node.dedicated_thread] を渡す。
 
 ```python
 class Camera(Node):
@@ -38,57 +38,134 @@ class Camera(Node):
         super().__init__(period=1 / 30, dedicated_thread=True)
 ```
 
-## スレッドごとの設定
+## スレッドごとの設定 {#per-thread}
 
-ワーカーの上では、ノードの hook ごとに別のスレッドで走りうるうえ、その間スレッドはほかのノードを動かす。hook がスレッドに設定したものを次の hook が見るかどうかはスケジュール次第で、同じワーカーで次に走る別のノードにも見える。
+| 設定                                                                     | ワーカーの上でのふるまい                                                                                          | 書き方                             |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `threading.local`・`threading.current_thread()`・`threading.get_ident()` | hook ごとに変わりうる                                                                                             | 1 回だけ設定するなら専用のスレッド |
+| torch のスレッドごとの設定（`torch.autocast`、勾配の記録など）           | 戻さないと、同じワーカーで次に走るノードに漏れる                                                                  | hook の中の `with` に閉じる        |
+| `contextvars`                                                            | 持ち越される。各ノードは自分専用の `contextvars.Context` で hook を実行。空から始まり、ホストの文脈を引き継がない | そのまま使える                     |
+| CUDA の現在のデバイスとストリーム                                        | mujou が CUDA のノードの hook の前ごとに設定。mujou 自身が設定するのはこれだけ                                    | —                                  |
 
-- `threading.local`・`threading.current_thread()`・`threading.get_ident()` は hook ごとに変わりうる
-- `torch.autocast` や勾配の記録などスレッドごとの torch の設定は、hook の中の `with` に閉じ（`with torch.no_grad():`）、hook を抜ける前に戻す。戻さないと同じワーカーで次に走るノードに漏れる
-- `contextvars` は持ち越される。各ノードは自分専用の `contextvars.Context` の中で hook を実行する。この文脈は空から始まり、ホストの文脈を引き継がない
+=== "避ける"
 
-mujou 自身が設定するのは、CUDA のノードの hook の前ごとの現在のデバイスとストリームだけ。
+    ```python
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        torch.set_grad_enabled(False)  # 戻さないと同じワーカーの次のノードに漏れる
+        ...
+    ```
 
-## seed と乱数
+=== "こう書く"
 
-乱数はノード自身の生成器 `self.generator` から引く。生成器は `seed` から作られ、ノードのデバイス上にある。`super().__init__()` の直後から、`__init__` の中でも使える。
+    ```python
+    @override
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        with torch.no_grad():  # hook を抜ける前に戻る
+            ...
+    ```
 
-```python
-nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
-noise = torch.randn(4, generator=self.generator, device=self.device)
+## seed と乱数 {#seed}
+
+`seed` で再現できるのはノード自身の生成器 [`self.generator`][mujou.Node.generator] だけなので、`nn.Linear` などのモジュールもこの生成器で初期化し直す（既定の初期化は全ノードが共有する生成器を使う）。
+
+=== "避ける"
+
+    ```python
+    super().__init__(seed=0)
+    torch.manual_seed(0)  # ほかのノードの乱数まで変わる
+    self.model = nn.Linear(4, 2)  # 全ノードが共有する生成器で初期化される
+    ```
+
+=== "こう書く"
+
+    ```python
+    super().__init__(seed=0)
+    self.model = nn.Linear(4, 2)
+    nn.init.normal_(self.model.weight, std=0.1, generator=self.generator)
+    nn.init.zeros_(self.model.bias)
+    ```
+
+## デバイス {#devices}
+
+受け取ったメッセージはノードの [`device`][mujou.Node.device] に届くので、テンソルは `device=self.device` で確保する。CUDA のノードから取得した状態の木は CUDA のノードにだけ戻せる（別の GPU のマシンでもよい。理由は [`Node.load_state_dict`][mujou.Node.load_state_dict]）。
+
+### CUDA のノードに mujou がすること {#cuda}
+
+```mermaid
+sequenceDiagram
+    participant W as ワーカー
+    participant N as CUDA のノード
+    participant S as ノード専用のストリーム
+    W->>N: デバイスとストリームを現在のものに
+    W->>N: on_update(dt)
+    N->>S: 演算を積む
+    W->>S: 積んだ仕事を待つ
+    Note over W: 待ち終えたら次の仕事へ
+    Note over W,S: 状態の取得の前後の待ちは mujou の別のスレッドが行い、ワーカーは待たない
 ```
 
-`seed` で再現できるのは `self.generator` だけ。`nn.Linear` などの既定の初期化は全ノードが共有する生成器を使うので、`self.generator` で初期化し直す。ノードの中で `torch.manual_seed` を呼ばない。ほかのノードの乱数まで変わる。`self.generator` の状態はノードの状態に入るので、再開した実行は同じ乱数列の続きから引く。
+各 CUDA のノードは専用のストリームを持ち、その切り替えと待ち合わせは mujou がするので、ノードは同期を書かなくてよい。
 
-## デバイス
+### メッセージの通り道 {#message-paths}
 
-`device` は CPU か CUDA のデバイス。それ以外（`"mps"` や `"meta"` など）は `ValueError` になり、CUDA が使えない環境での CUDA も `ValueError` になる。受け取ったメッセージはノードのデバイスに届くので、テンソルは `device=self.device` で確保する。番号を付けない `"cuda"` は、ノードを作った時点のホストの現在のデバイスになる。
+```mermaid
+flowchart LR
+    A["CUDA のノード<br/>自分のデバイスのテンソルを send"] -->|"CUDA のノードが読むポートなら<br/>ノードのストリームでコピーし<br/>デバイスに置いたまま"| P(("ポート"))
+    P -->|"デバイスからデバイスへ<br/>ホストのメモリを経由しない<br/>（ピアアクセスが無ければドライバが中継しうる）"| B["CUDA のノード"]
+    P -->|"読むときに CPU のコピー"| C["CPU のノード<br/>ホスト"]
+```
 
-CUDA のノードには、mujou が次のことをする。
+規則の全体は [`Port.send`][mujou.Port.send]、ホストの書き込みは [`Run.write`][mujou.Run.write]。別のデバイスの CUDA のノードからメッセージを受け取るノード（CPU のノードや別の GPU のノード）は、そのデバイスの上の自分専用のストリームでコピーし、mujou はこのストリームも各 hook の中で現在のものにする。CUDA のノードから受け取らない CPU のノードは CUDA に触れず、ワーカーに残った CUDA のノードのストリームも使わない。
 
-- ノードの各 hook の中で、ノードのデバイスとノード専用の CUDA ストリームを現在のものにする。ノードの演算はすべてこのストリームに積まれる
-- 各 `on_update` の後と状態の復元の後に、そのストリームに積んだ仕事を待つ（その間は、ブロッキングする hook と同じくワーカーが待つ）
-- `state_dict` の前後にも待つ。ワーカーでなく mujou の別のスレッド（実行の終了後はホストのスレッド）で行うので、ワーカーは待たない
-- ノードが自分のデバイスの上のテンソルを送ると、そのポートを CUDA のノードが読むなら、そのデバイスに置いたままにする。`send` はノードのストリームの上でコピーし、相手が読めるようになる前にそのストリームを待つ。CUDA の相手はデバイスからデバイスへコピーし、ホストのメモリを経由しない（ピアアクセスの無い 2 つの GPU の間では、CUDA のドライバがホストを中継することはある）。CPU のノードとホスト（`run.read`、`subscribe`、`wait_for`、`state_dict`）は、読むときに CPU のコピーを受け取る。CPU のノードだけ（またはホストだけ）が読むポートは、そのほうが速いのでホストのメモリを経由して送る。ほかのデバイスのテンソルも同じ。hook の中で別のデバイスを現在のものにしている間（`torch.cuda.device(...)`）も、メッセージはデバイスに置いたまま渡す
+### 同期とストリーム {#streams}
 
-そのためノードは同期を書かなくてよい。自分で同期するときは自分のストリームだけを待つ（`torch.cuda.current_stream().record_event().synchronize()`）。デバイス全体を待つ `torch.cuda.synchronize()` はほかのノードの仕事まで待つので使わない。ストリームはデバイスごとに 32 本のプールから割り当てるので、1 つのデバイスで 32 本を超えると、いくつかのノードが 1 本を共有する。別のデバイスを読むノードのコピー用のストリーム（下記）もこの数に入る。共有しても結果は正しいが、遅くなることがある。書き手とストリームを共有した読み手は、書き手が送った後に積んだ仕事を待ち、CPU のノードならホストでも待つ。
+=== "避ける"
+
+    ```python
+    torch.cuda.synchronize()  # デバイス全体を待つ: ほかのノードの仕事まで待つ
+    ```
+
+=== "こう書く"
+
+    ```python
+    torch.cuda.current_stream().record_event().synchronize()  # 自分のストリームだけ
+    ```
+
+ストリームはデバイスごとに 32 本のプールから割り当て、ノードのストリームと、別のデバイスを読むノードのコピー用のストリームを数える。超えるといくつかのノードが 1 本を共有し、結果は正しいが、書き手と共有した読み手は書き手が送った後に積んだ仕事も待つので遅くなることがある（CPU のノードならホストでも待つ）。
 
 !!! tip "CUDA のテンソルとモジュールは `on_start` で作る"
 
-    `mujou.run` がノードを起動する前にホストのストリームを同期するので、`__init__` で CUDA に作っても正しく動く。それでも `on_start` 以降で作るほうがよい。PyTorch のキャッシュアロケータはメモリを確保した時点のストリームに結び付けるので、`__init__` で確保したメモリはホストのストリームに結び付いたまま残る。ノードがそのテンソルを捨てると、ノードの計算が終わる前にホストの確保に再利用されうる。復元は `on_start` の後に状態を読み込むので、そこで作った状態も復元される。
+    `mujou.run` はノードを起動する前にホストのストリームを同期するので、`__init__` で CUDA に作っても動くが、`on_start` 以降で作るほうがよい。PyTorch のキャッシュアロケータはメモリを確保した時点のストリームに結び付けるので、`__init__` で確保したメモリはホストのストリームに結び付いたまま残り、ノードがそのテンソルを捨てると、ノードの計算が終わる前にホストの確保に再利用されうる。復元は `on_start` の後に状態を読み込むので、そこで作った状態も復元される。
 
-別のデバイスの CUDA のノードからメッセージを受け取るノード（CPU のノードや、別の GPU のノード）は、そのデバイスの上の自分専用のストリームでコピーする。mujou はこのストリームも各 hook の中で現在のものにする。`run.write`（と `inputs=`）も、ポートを持つノードの CUDA のデバイスの上のテンソルはそのデバイスに置く。ホストのそのデバイスの現在のストリームでコピーし、そのストリームを待つので、現在のデバイスがどれでも、ホストが同期を書く必要は無い。それ以外のテンソル（CPU のノードへの書き込みや、ノードと別のデバイスのテンソル）はホストのメモリを通す。こうすると、ホストが書き込みの後に GPU に積んだ仕事をどのノードも待たない。CUDA のノードから受け取らない CPU のノードは CUDA に触れない。直前に CUDA のノードを動かしたワーカーではそのノードのストリームが現在のまま残るが、CPU のノードはそれを使わない。
+    === "避ける"
 
-状態の木は CUDA のノードの状態も CPU のコピーで持ち、既定の `load_state_dict` がノードのデバイスへコピーし直す。ただし乱数生成器の状態は CPU と CUDA で違うので、CUDA のノードから保存した木を復元できるのは CUDA のノードだけ（別の GPU のマシンでもよい）。
+        ```python
+        def __init__(self) -> None:
+            super().__init__(device="cuda:0")
+            self.w = torch.zeros(256, 256, device=self.device)  # ホストのストリームに結び付く
+        ```
 
-## プロセス全体の設定
+    === "こう書く"
 
-次の設定はプロセス全体で共有されるので、ノードの中では変えない。ホストが `mujou.run` の前に 1 回だけ設定する。
+        ```python
+        @override
+        def on_start(self) -> None:
+            super().on_start()
+            self.w = torch.zeros(256, 256, device=self.device)  # ノードのストリームで確保
+        ```
 
-- `torch.manual_seed` と既定の乱数生成器
-- `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ
-- `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` などデバイス全体に効く操作
+## プロセス全体の設定 {#process-settings}
 
-CPU 上の torch の演算は、計算するスレッドごとにさらに内部のスレッドを使う。多すぎるとノード同士でコアを取り合い、全体が遅くなるので、ホストが少なくしておく。
+プロセス全体で共有する設定はノードの中では変えず、ホストが `mujou.run` の前に 1 回だけ設定する。
+
+| 種類                 | 設定・操作                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| 乱数                 | `torch.manual_seed` と既定の乱数生成器                                                     |
+| torch の動作         | `torch.set_num_threads`、`torch.use_deterministic_algorithms`、`torch.backends.*` のフラグ |
+| デバイス全体への操作 | `torch.cuda.synchronize()`、`torch.cuda.empty_cache()` など                                |
 
 ```python
 --8<-- "examples/online_learning.py:threads"
@@ -96,4 +173,6 @@ CPU 上の torch の演算は、計算するスレッドごとにさらに内部
 
 !!! tip "スレッド数の目安"
 
-    ワーカーの数に `dedicated_thread=True` のノードの数を足し、`torch.set_num_threads(n)` の `n` を掛けた値が物理コア数を超えないようにする。小さな行列を扱うノードが多いときは `n = 1` でよい。
+    **（ワーカーの数 ＋ `dedicated_thread=True` のノードの数）× `n` ≦ 物理コア数**
+
+    `n` は `torch.set_num_threads(n)` の値。小さな行列を扱うノードが多いときは `n = 1` でよい。

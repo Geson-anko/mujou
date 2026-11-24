@@ -1,20 +1,34 @@
 # 🔩 How mujou.pc Works
 
-This page explains what the parts of `mujou.pc` do, how they connect, and what one update computes. After it, the names in "Nodes of your own" of [PC-ALM](pc.md) and in `examples/pc_merge.py` will be familiar. For how to use it, see [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md).
+You should know PyTorch and BP, and the [nodes](../concepts.md#nodes) and [`dt`](../concepts.md#time) of How Mujou Works. You need not know predictive coding.
+For how to use it, see [5. Learn with PC-ALM](../tutorial/5-learn-with-pc.md); for how to choose the values, [PC-ALM](pc.md); for the theory, [the PC-ALM article](https://pub.sakana.ai/pc-alm/).
 
-!!! abstract "What you will learn"
+## How it differs from BP {#vs-bp}
 
-    - What each part of `mujou.pc` does, which parts you use directly and which you use to write nodes of your own
-    - The messages that flow between the nodes, and which way the ports face
-    - What a `pc.Layer` does in one `on_update(dt)`
-    - What the `Tick` that `pc.clock.LearnClock` returns and `pc.TimeConstants` mean
-    - How `pc.optim.SGD` and `pc.optim.AdamW` move the weights in time, and `pc.relax.Euler` the deviation `r`
+| Topic                    | BP in plain PyTorch                                                                     | `mujou.pc`                                                                                                                                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inference and learning   | Forward, backward and `optimizer.step()`, one by one                                    | At the same time. Every node updates on its own period, and learns while the host shows the input. No modes: a sample whose `mask` is False is not learned from                                                                       |
+| The loss                 | Usually the mean over the batch                                                         | `Output` sums the loss of each sample (shaped like the batch)                                                                                                                                                                         |
+| Gradients and the graph  | `.backward()` through the whole model                                                   | Only inside each node (`vjp` detaches `h_in`). Neighbors exchange activities and the gradients `g_in` as messages                                                                                                                     |
+| How the credit travels   | One backward sweep. A gradient received is multiplied by the VJP and passed straight on | The sum `g` of the `g_in` received moves the node's own `r` and `lam`, and the node sends the `g_in` of the moved `delta`. One node per update toward the input. No phases, no waiting, and the latest `g` at hand (which may be old) |
+| Equal to the BP gradient | Always                                                                                  | Only at equilibrium. That is why a node waits `learn_interval` before it learns                                                                                                                                                       |
+| Cost of one batch        | One forward and one backward                                                            | Shown for `S` periods, `S` forwards and VJPs in each node (measured in [the PC-ALM experiments](pc-benchmarks.md#mnist))                                                                                                              |
 
-    You should know PyTorch and backpropagation (BP), and the nodes, ports and `dt` of [How Mujou Works](../concepts.md). You need not know predictive coding.
+## What a node holds {#quantities}
 
-## What a node holds
-
-In PC-ALM every node has its own **activity** `h`, and **predicts** it from the activity of the node before. A `pc.Layer` holds how far its activity is from the prediction, the **deviation** `r`, and sends the prediction `mu` to the next node. These are all the quantities you need.
+```mermaid
+flowchart LR
+    PREV["Previous node"] -->|"h_in (activity, forward)"| F["module<br/>mu = f(h_in; θ)"]
+    F -->|"mu (prediction, forward)"| NEXT["Next node"]
+    subgraph HOLD["Kept in the node (h = mu + r is not sent)"]
+        R["r = h − mu<br/>(deviation)"]
+        LAM["lam<br/>(dual)"]
+    end
+    NEXT -.->|"sum of g_in = g (back)"| R
+    R --> D["delta = r + lam"]
+    LAM --> D
+    D -.->|"g_in = −J_hᵀ delta (back)"| PREV
+```
 
 | Quantity | Formula                              | Meaning                                                                                              |
 | -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
@@ -27,48 +41,43 @@ In PC-ALM every node has its own **activity** `h`, and **predicts** it from the 
 | `g_in`   | $g_{\mathrm{in}} = -J_h^\top \delta$ | The gradient sent back to the node before ($J_h$ is the Jacobian of `module` with respect to `h_in`) |
 | `g`      |                                      | The sum of the `g_in` that came from the next nodes                                                  |
 
-`r` moves to cancel the sum of `delta` and `g`, and decays with the time constant `tau.r`; `lam` keeps growing while `r` remains. When both stop, `r = 0` (`h` is the forward pass) and `lam` equals the credit of BP, $-\partial\ell/\partial h$. The gradients of the weights then equal those of BP too. The theory is in [the PC-ALM article](https://pub.sakana.ai/pc-alm/), whose nodes hold `h` and send it; mujou's hold `r` and send `mu` (below).
+At the equilibrium, where both `r` and `lam` stop, `r = 0`, `lam` is the credit of BP $-\partial\ell/\partial h$, and the gradients of the weights equal those of BP ([`pc.Layer`][mujou.pc.Layer]).
 
-### Why the node holds r and sends mu
+### Why the node holds r and sends mu {#r-mu}
 
-The prediction `mu` jumps at once with a new sample, and when the node below or the node itself learns. A node that held `h` would keep `h` where it was, and $r = h - \mu$ would suddenly grow: a false error would enter `g_in` and the gradients of the weights. A node that holds `r` keeps the deviation however `mu` jumps.
+| Choice                               | The article's node: holds `h`, sends $\mu + r$                                                    | mujou's node: holds `r`, sends `mu`              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| When `mu` jumps                      | `h` stays, and $r = h - \mu$ suddenly grows. A false error enters `g_in` and the weight gradients | Keeps the deviation `r` as it is                 |
+| The activity that flows forward      | $\mu + r$                                                                                         | The forward pass `mu`                            |
+| How the credit flows                 | A loop: a move of `r` moves the activities of the nodes above and comes back to the node          | Back only                                        |
+| A chain whose forward pass amplifies | Diverges however short the steps                                                                  | A step stable in one node is stable in any chain |
+| Equilibrium                          | The same                                                                                          | The same                                         |
 
-It sends `mu`, not $\mu + r$: the **fixed prediction assumption** of predictive coding. The activity that flows forward is then the forward pass, and the credit only flows back. Were $\mu + r$ sent, a move of `r` in one node would move the activity of every node above it, through the product of the Jacobians of the forward pass, and come back to it as credit. That loop diverges in a chain whose forward pass amplifies, however short the steps. Sending `mu` keeps the fixed point and cuts the loop, so the steps that are stable in one node are stable in any chain.
+The prediction `mu` jumps at once when a new sample comes, when a node below learns and when the node itself learns; a node that holds `r` keeps its deviation in each case.
 
-With the usual values of `pc.TimeConstants` ([section 5](#5-timeconstants)), one update moves `delta` to `-g` and, in the same update, sends it back to the node before ([section 3](#3-one-update-of-a-layer)). So the credit takes at most one period per hop (one connection between two nodes) back.
+Sending `mu` instead of $\mu + r$ is the fixed prediction assumption of predictive coding, and cuts the loop through the nodes above back to the node.
 
-### A new sample: reset or keep
+## The parts {#parts}
 
-What `r` and `lam` hold is the credit of the sample the node has seen. When the next sample has nothing to do with it, as with shuffled batches, that credit is wrong for it. The host then sets `reset` of the samples it writes, and each node sets `r` and `lam` of those samples to 0 when it first sees the write. A sample that continues the one before, as the next frame of a stream does, keeps them: write it with `reset` False.
+| Part                                                           | Kind      | What it does                                                                                        | Mainly used        |
+| -------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------- | ------------------ |
+| [`pc.Chain`][mujou.pc.Chain]                                   | Network   | Makes `Input → Layer → … → Output` and connects them                                                | Usually            |
+| [`pc.show`][mujou.pc.show]                                     | Function  | Writes a sample, shows it for a while, and returns the prediction made before learning              | Usually            |
+| [`pc.TimeConstants`][mujou.pc.TimeConstants]                   | Settings  | How fast `r` and `lam` move ([TimeConstants](#time-constants))                                      | Usually            |
+| `SGD`, `RMSProp`, `AdamW` of [`pc.optim`][mujou.pc.optim]      | Settings  | Move the weights in time ([optimizer](#optimizer))                                                  | Usually            |
+| `MSELoss`, `CrossEntropyLoss` of [`pc.loss`][mujou.pc.loss]    | Losses    | The loss of each sample. Given to `Output`                                                          | Usually            |
+| `Sample`, `Activity`, `Prediction` of [`pc.msg`][mujou.pc.msg] | Messages  | The types of the data that flows ([connections](#messages))                                         | `Sample` usually   |
+| [`pc.Input`][mujou.pc.Input]                                   | Node      | Sends the `x` the host wrote as the activity. Holds nothing                                         | When built by hand |
+| [`pc.Layer`][mujou.pc.Layer]                                   | Node      | Holds one `module`, moves `r` and `lam`, and learns the weights                                     | When built by hand |
+| [`pc.Output`][mujou.pc.Output]                                 | Node      | Holds the last `module` and the loss, sends the prediction, and learns the weights. No `r` or `lam` | When built by hand |
+| [`pc.relax.Euler`][mujou.pc.relax.Euler]                       | Settings  | The default relaxer, which moves `r` in time ([relaxer](#relaxer))                                  | Left as default    |
+| [`pc.clock.LearnClock`][mujou.pc.clock.LearnClock]             | Part      | Decides when to learn ([LearnClock](#learnclock))                                                   | Nodes of your own  |
+| [`pc.functional`][mujou.pc.functional]                         | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`)                                                | Nodes of your own  |
+| [`pc.msg.activity_spec`][mujou.pc.msg.activity_spec]           | Function  | Makes the spec of an `Activity`                                                                     | Nodes of your own  |
 
-## 1. The parts
+`Layer` and `Output` combine `LearnClock`, `functional` and an optimizer, so the same parts make nodes that `Layer` cannot express, such as a node with two inputs ([Nodes of your own](pc.md#own-node)).
 
-!!! abstract "Key idea"
-
-    You usually use `Chain`, `show`, `TimeConstants`, an optimizer, a loss and `Sample`. You use `LearnClock`, `functional` and `Activity` to write nodes of your own.
-
-| Part                                                    | Kind      | What it does                                                                                                            | Mainly used        |
-| ------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `pc.Input`                                              | Node      | Sends the `x` the host wrote as it is, as the activity `h`. Holds nothing                                               | When built by hand |
-| `pc.Layer`                                              | Node      | Holds one `module`, moves `r` and `lam`, and learns the weights                                                         | When built by hand |
-| `pc.Output`                                             | Node      | Holds the last `module` and the loss, gives the prediction `y_hat`, and learns the weights. Holds neither `r` nor `lam` | When built by hand |
-| `pc.Chain`                                              | Network   | Makes `Input → Layer → … → Output` and connects them                                                                    | Usually            |
-| `pc.show`                                               | Function  | The host writes a sample, shows it for a while, and gets the prediction made before learning                            | Usually            |
-| `pc.msg.Sample`, `pc.msg.Activity`, `pc.msg.Prediction` | Messages  | The types of the data that flows ([section 2](#2-connections-and-what-flows))                                           | `Sample` usually   |
-| `pc.TimeConstants`                                      | Settings  | Holds the speeds of `r` and `lam` in seconds ([section 5](#5-timeconstants))                                            | Usually            |
-| `pc.optim.SGD`, `pc.optim.AdamW`                        | Settings  | The optimizers: how the weights move in time ([section 6](#6-optimizers))                                               | Usually            |
-| `pc.loss.MSELoss`, `pc.loss.CrossEntropyLoss`           | Losses    | Return the loss of each sample. Given to `Output`                                                                       | Usually            |
-| `pc.clock.LearnClock`                                   | Part      | Decides when to learn ([section 4](#4-learnclock))                                                                      | Nodes of your own  |
-| `pc.functional`                                         | Functions | Formulas without state (`vjp`, `loss_vjp`, `relax_`). `Layer` and `Output` are written with them too                    | Nodes of your own  |
-| `pc.msg.activity_spec`                                  | Function  | Makes the spec of an `Activity`                                                                                         | Nodes of your own  |
-
-`Layer` and `Output` combine `LearnClock`, `functional` and an optimizer. With the same parts you can also make nodes that `Layer` cannot express, such as a node with two inputs.
-
-## 2. Connections and what flows
-
-!!! abstract "Key idea"
-
-    Activities (the predictions `mu`) go forward in an `Activity`, and gradients `g_in` go back. The target `y`, `mask`, `reset` and time `time` ride in the same message as the activity and are passed on.
+## Connections and what flows {#messages}
 
 ```mermaid
 flowchart LR
@@ -77,25 +86,17 @@ flowchart LR
     L0 -->|"Activity"| L1["Layer"]
     L1 -->|"Activity"| O["Output"]
     O -->|"Prediction"| H2["Host"]
-    O -.->|"g_in"| L1
-    L1 -.->|"g_in"| L0
-    L0 -.->|"g_in"| I
+    O -.->|"g_in (back)"| L1
+    L1 -.->|"g_in (back)"| L0
+    L0 -.->|"g_in (Input does not read it)"| I
 ```
 
-Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it gets (`x` is clamped).
-
-| Message             | Fields                            | Flow                                |
-| ------------------- | --------------------------------- | ----------------------------------- |
-| `pc.msg.Sample`     | `x`, `y`, `mask`, `reset`         | Host → `Input.prev`                 |
-| `pc.msg.Activity`   | `h`, `y`, `mask`, `reset`, `time` | `next` → the next node's `prev`     |
-| `g_in`              | A tensor (the shape of `h_in`)    | `prev` → the previous node's `next` |
-| `pc.msg.Prediction` | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
-
-- `mask`: whether each sample has a target. A sample whose `mask` is False adds nothing to the loss, and `Layer` sets the `delta` of its row to 0, so the `g_in` of its row is 0 too. With every `mask` False, `r` and `lam` still relax and only the weights do not learn. Evaluate this way
-- `reset`: whether each sample starts anew. A `Layer` sets `r` and `lam` of its row to 0 in the update in which it first sees the write. Set it for shuffled samples; leave it False for a frame that continues the one before
-- `time`: the `Timestamp` at which the host wrote the input. `Timestamp(ns=0)` before the first write
-
-### Port directions
+| Message                                        | Fields                            | Flow                                |
+| ---------------------------------------------- | --------------------------------- | ----------------------------------- |
+| [`pc.msg.Sample`][mujou.pc.msg.Sample]         | `x`, `y`, `mask`, `reset`         | Host → `Input.prev`                 |
+| [`pc.msg.Activity`][mujou.pc.msg.Activity]     | `h`, `y`, `mask`, `reset`, `time` | `next` → the next node's `prev`     |
+| `g_in`                                         | A tensor (the shape of `h_in`)    | `prev` → the previous node's `next` |
+| [`pc.msg.Prediction`][mujou.pc.msg.Prediction] | `y_hat`, `y`, `mask`, `time`      | `Output.next` → host                |
 
 | Node     | Port   | Kind        | Receives                                | Sends        |
 | -------- | ------ | ----------- | --------------------------------------- | ------------ |
@@ -106,116 +107,102 @@ Solid lines go forward, dotted lines back. `Input` does not read the `g_in` it g
 | `Output` | `prev` | `Port`      | `Activity`                              | `g_in`       |
 | `Output` | `next` | `Port`      | —                                       | `Prediction` |
 
-`next` is a `MultiPort`, so several nodes can read the activity of one node.
+Why the target `y`, `mask`, `reset` and the time `time` travel in the same message as the activity is in [Relaying the target](update-rules.md#relay-targets).
 
-??? question "Why does the target travel in the same message as the activity?"
+## One update of a Layer {#layer-update}
 
-    The nodes are asynchronous, and a port holds only the latest value. If the target came through another port, `Output` would read the activity and the target at different moments, and could pair different samples. In the same message, `y` takes the path of `x` with the same delay. Even when the host writes the next sample faster than it propagates, each prediction is paired with its own target.
+```mermaid
+flowchart TB
+    S1["Step 1: read Activity from prev<br/>tick = clock.tick(...)"] --> NEW{"tick.new?"}
+    NEW -->|"yes"| RESET["set r and lam of the samples<br/>whose reset is set to 0<br/>relaxer.reset_(reset)"]
+    NEW -->|"no"| S2
+    RESET --> S2["Step 2: relax_<br/>g = sum of the g_in received<br/>move r, then lam"]
+    S2 --> S3["Step 3: vjp<br/>from the delta after the move<br/>compute mu, g_in (and g_θ to learn)<br/>send g_in from prev"]
+    S3 --> S4["Step 4: send mu as h<br/>in an Activity from next"]
+    S4 --> LEARN{"tick.learn and<br/>some mask True?"}
+    LEARN -->|"yes"| S5["Step 5: optimizer.step_<br/>g_θ / B for tick.elapsed seconds"]
+    LEARN -->|"no"| END_["update done"]
+    S5 --> END_
+```
 
-## 3. One update of a Layer
+=== "Avoid: sending g_in before relaxing"
 
-!!! abstract "Key idea"
+    ```python
+    # The credit received goes out one update late
+    mu, g_in, g_theta = pc.functional.vjp(self.module, act["h"], lambda _: self.r + self.lam, params)
+    self.prev.send(g_in)
+    pc.functional.relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)
+    ```
 
-    `Layer.on_update(dt)` goes "read → `tick` → `relax_` → `vjp` → send `g_in` → send `Activity` → `optimizer.step_`". It relaxes with the `g` it has received, then sends back the `g_in` of the `delta` it has just moved.
+=== "Write instead: relax, then send"
 
-| Step | Part                | Computation                                                                                                                                                                                                                                                                                                |
-| ---- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `LearnClock.tick`   | Reads the `Activity` from `prev` and gets the `Tick` (`dt`, `new`, `learn`, `elapsed`). With a new input (`tick.new`), sets `r` and `lam` of the samples whose `reset` is set to 0                                                                                                                         |
-| 2    | `functional.relax_` | Sums the `g_in` on `next` into `g`. Then $r \leftarrow r - \frac{dt}{\tau_h}\big((1 + \frac{\tau_h}{\tau_r})\,r + \lambda + g\big)$ (as `pc.relax.Euler`, the default relaxer, moves it; [section 7](#7-relaxers)), and then, with the moved `r`, $\lambda \leftarrow \lambda + \frac{dt}{\tau_\lambda} r$ |
-| 3    | `functional.vjp`    | $\mu = f(h_{\mathrm{in}})$, $g_{\mathrm{in}} = -J_h^\top\delta$ and, to learn, $g_\theta = -J_\theta^\top\delta$, in one VJP, with $\delta = r + \lambda$ after step 2 (0 for the samples whose `mask` is False). Sends `g_in` from `prev`                                                                 |
-| 4    | `Activity`          | Sends from `next` the prediction $\mu$ as `h`, with the `y`, `mask`, `reset` and `time` it received                                                                                                                                                                                                        |
-| 5    | `optimizer.step_`   | Divides $g_\theta$ by the number of samples $B$ and moves the weights by `tick.elapsed` seconds ([section 6](#6-optimizers)). Only when `tick.learn` is True and some `mask` is True                                                                                                                       |
+    ```python
+    # g_in is made from the moved delta, so the credit received goes on in the same update
+    pc.functional.relax_(self.r, self.lam, g, tick.dt, tau, self.relaxer)
+    mu, g_in, g_theta = pc.functional.vjp(self.module, act["h"], lambda _: self.r + self.lam, params)
+    self.prev.send(g_in)
+    ```
 
-- The `delta` of step 3 is made from `r` and `lam` after step 2 has moved them with the `g` of this update. So the credit a node receives goes on to the node before in the same update. Keep this order in a node of your own: a node that sends `g_in` before `relax_` sends the credit it receives one update later
-- With a new input (`tick.new`), the node also calls `relaxer.reset_(reset)` in step 1 ([section 7](#7-relaxers))
-- Gradients are summed over the batch, and only step 5 divides by $B$. So `lam` is the credit of each sample, and the optimizer gets the mean gradient of the batch
-- The `delta` of `vjp` is not a value but a function that makes `delta` from `mu` (`mu` is computed inside `vjp`). A node that holds `r` passes `lambda mu: r + lam`
-- `vjp` detaches `h_in` before it differentiates, so the graph does not reach the previous node
+| Step | `Layer`                          | `Output` (holds neither `r` nor `lam`)                                                                                                          |
+| ---- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2    | `relax_`                         | None                                                                                                                                            |
+| 3    | `vjp`. `g_in = -J_h^T delta`     | `functional.loss_vjp`. Sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in` |
+| 4    | Sends an `Activity`              | Sends a `Prediction`                                                                                                                            |
+| 5    | When to learn, `optimizer.step_` | As in `Layer`                                                                                                                                   |
 
-`Output` holds neither `r` nor `lam`, so it has no step 2. In step 3 it uses `functional.loss_vjp`, sends the gradient $\partial\ell/\partial h_{\mathrm{in}}$ of the loss $\ell = \sum_b \mathrm{mask}_b\,\ell_b$ as `g_in`, and sends a `Prediction`. When it learns and how (`optimizer.step_`) are as in `Layer`.
+## LearnClock {#learnclock}
 
-??? question "How does sending g_in back differ from backpropagation?"
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 200" role="img" aria-label="The updates in which LearnClock learns. The host writes an input at time; the node updates at a regular interval. It learns in the first update at or after time + L, time + 2L and time + 3L, and the time between two learning updates is elapsed">
+<text class="mujou-label" x="10" y="54">Host</text>
+<line class="mujou-lane" x1="90" y1="50" x2="620" y2="50"/>
+<g class="mujou-tick-b"><line x1="110" y1="38" x2="110" y2="62"/></g>
+<text class="mujou-note" x="110" y="30" text-anchor="middle">writes (time)</text>
+<text class="mujou-label" x="10" y="114">Node</text>
+<line class="mujou-lane" x1="90" y1="110" x2="620" y2="110"/>
+<line class="mujou-lane" x1="270" y1="40" x2="270" y2="160" stroke-dasharray="4 3"/>
+<line class="mujou-lane" x1="430" y1="40" x2="430" y2="160" stroke-dasharray="4 3"/>
+<line class="mujou-lane" x1="590" y1="40" x2="590" y2="160" stroke-dasharray="4 3"/>
+<g class="mujou-tick-a"><line x1="130" y1="98" x2="130" y2="122"/><line x1="170" y1="98" x2="170" y2="122"/><line x1="210" y1="98" x2="210" y2="122"/><line x1="250" y1="98" x2="250" y2="122"/><line x1="330" y1="98" x2="330" y2="122"/><line x1="370" y1="98" x2="370" y2="122"/><line x1="410" y1="98" x2="410" y2="122"/><line x1="490" y1="98" x2="490" y2="122"/><line x1="530" y1="98" x2="530" y2="122"/><line x1="570" y1="98" x2="570" y2="122"/></g>
+<g class="mujou-tick-b"><line x1="290" y1="92" x2="290" y2="128"/><line x1="450" y1="92" x2="450" y2="128"/><line x1="610" y1="92" x2="610" y2="128"/></g>
+<text class="mujou-note" x="130" y="142" text-anchor="middle">new</text>
+<text class="mujou-note" x="290" y="142" text-anchor="middle">learns</text>
+<text class="mujou-note" x="450" y="142" text-anchor="middle">learns</text>
+<text class="mujou-note" x="610" y="142" text-anchor="end">learns</text>
+<path class="mujou-brace" d="M 292 90 Q 292 82 300 82 L 440 82 Q 448 82 448 90"/>
+<text class="mujou-note" x="370" y="76" text-anchor="middle">elapsed ≈ L</text>
+<line class="mujou-axis" x1="90" y1="160" x2="620" y2="160"/>
+<text class="mujou-note" x="270" y="176" text-anchor="middle">time + L</text>
+<text class="mujou-note" x="430" y="176" text-anchor="middle">time + 2L</text>
+<text class="mujou-note" x="590" y="176" text-anchor="middle">time + 3L</text>
+<text class="mujou-label" x="90" y="196">run's timer →</text>
+</svg>
+<figcaption>L is a positive <code>learn_interval</code></figcaption>
+</figure>
 
-    `g_in` is computed with the same VJP as one layer of backpropagation ($-J_h^\top\delta$), and at equilibrium `lam` follows the same recursion as the credit of backpropagation. What differs is what is done with `g_in`:
+Each learning step is weighted by the `elapsed` (the time since it last learned) of the [`Tick`][mujou.pc.clock.Tick], so the steps follow the gradient flow, and how far a node learns depends on time, not on how often it updates.
 
-    1. The receiver sums the `g_in` it receives into `g`, and uses it in `relax_` (step 2) as a force that moves its own `r` and `lam`. It does not pass `g` on
-    2. It then makes its own `g_in` from its own `delta = r + lam`, just moved, and sends it in the same update (step 3)
-    3. So the credit travels back through the relaxation of each node, one node per update, not in one backward sweep
+$$W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla \qquad\Longrightarrow\qquad \tau \dot W = -\nabla$$
 
-    There is no forward phase and backward phase, and no node waits for the others: each node updates with the latest `g` it has, which may be old. `vjp` detaches `h_in`, so no computation graph crosses nodes. The gradient equals that of backpropagation only at equilibrium, which is why a node waits `learn_interval` before it learns.
+[`LearnClock`][mujou.pc.clock.LearnClock] counts from the time `time` the host wrote the input, not the time the node received it, so the nodes on a path learn at about the same time, however deep they are (counted from receipt, deeper nodes would learn later, from a `delta` that has not yet answered the weights the nodes below have learned). How not to learn is in [Choosing the optimizer](pc.md#optimizer).
 
-## 4. LearnClock
+## TimeConstants {#time-constants}
 
-!!! abstract "Key idea"
+| Value     | The speed of                        | With `math.inf`                                                               |
+| --------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| `tau.h`   | The relaxation of the deviation `r` | Not allowed (finite and > 0)                                                  |
+| `tau.lam` | How fast `lam` sums up `r`          | `lam` stays 0. `r` does not return to 0, and holds the credit instead         |
+| `tau.r`   | How fast the deviation `r` decays   | No decay. Still stable, but `delta` takes more than one update to follow `-g` |
 
-    `r` and `lam` move in every update; the weights move only in the updates `LearnClock` chooses. The node sends the `mu` of each update, so nothing more is needed when the prediction jumps.
+??? question "Why usually `tau.r = tau.h`, `tau.lam = tau.h / 2` and a period of `tau.h / 2`?"
 
-In every update a node calls `tick = self.clock.tick(dt, act["time"], self.timer.now())`. What the returned `Tick` means:
+    With these, an update of one period moves `delta = r + lam` to `-g` exactly, without overshooting, and the node sends it back in that same update.
+    A longer step overshoots, and the overshoot grows at every node it passes.
+    The default period is [`period`][mujou.pc.TimeConstants.period], and the longest `dt` one update counts is [`max_dt`][mujou.pc.TimeConstants.max_dt]; both follow from the time constants.
 
-| Field     | Meaning                                                                      | Use                               |
-| --------- | ---------------------------------------------------------------------------- | --------------------------------- |
-| `dt`      | `dt` capped at `max_dt`                                                      | Passed to `relax_`                |
-| `new`     | The `time` of the input received differs from last time (a new sample)       | Reset the samples that start anew |
-| `learn`   | Whether to learn in this update                                              | Whether to call `step_`           |
-| `elapsed` | The sum of the capped `dt` since the node last learned, this update included | The time passed to `step_`        |
+[`TimeConstants`][mujou.pc.TimeConstants] holds the time constants of `r` and `lam` in seconds; the time constant of the weights belongs to the optimizer. How it relates to `tau.h` is in [Choosing the time constants](pc.md#choose-time-constants), and how long the credit takes to come back in [The credit round trip](pc.md#credit).
 
-`learn` is True as follows. `learn_interval` is the number of seconds given to `Layer`, `Output`, `Chain` and `LearnClock`.
-
-| `learn_interval` | The updates that learn                                                                                                                                                                             |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Positive seconds | The first update at or after `time + learn_interval`, `time + 2 * learn_interval`, … (`time` is when the host wrote the input). But not an update where `new` is True: then the next update learns |
-| `None`           | Every update (with a new input too). For a stream whose input changes every frame                                                                                                                  |
-| `math.inf`       | Never. This is the only way not to learn: the optimizers reject `tau=math.inf`                                                                                                                     |
-
-- An update where `new` is True does not learn because the `g` it relaxes with is still that of the input before: the next node has not seen the new input yet
-- So while one input stays, the node learns every `learn_interval` seconds, and `elapsed` is about `learn_interval`
-- When the input changes before the node learned, the time summed in `elapsed` is dropped
-- In a node of your own, make it with `pc.clock.LearnClock.of(tau, period=..., learn_interval=...)` and put it in an attribute. That alone puts it in the node's state
-
-??? question "Why count from the time the host wrote the input, not the time the node received it?"
-
-    So that the nodes on a path learn at about the same time, however deep they are. Counted from the time of receipt, deeper nodes would learn later, each from a `delta` that has not yet answered the weights the nodes below have learned. Every node reads the same run's timer, so no barrier is needed.
-
-## 5. TimeConstants
-
-!!! abstract "Key idea"
-
-    All speeds are set in seconds of the run's timer. Each node moves its equations by the `dt` that actually passed, so nodes with different periods change at the same speed per second.
-
-`pc.TimeConstants(h=, lam=, r=)` holds the time constants of `r` and `lam`, all required. The time constant of the weights belongs to the optimizer ([section 6](#6-optimizers)).
-
-| Value     | The speed of                        | Share moved in one update              | With `math.inf`                                                               |
-| --------- | ----------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------- |
-| `tau.h`   | The relaxation of the deviation `r` | `dt / tau.h`                           | Not allowed (finite and > 0)                                                  |
-| `tau.lam` | How fast `lam` sums up `r`          | `dt / tau.lam`                         | `lam` stays 0. `r` does not return to 0, and holds the credit instead         |
-| `tau.r`   | How fast the deviation `r` decays   | A further `dt / tau.r` of `r` toward 0 | No decay. Still stable, but `delta` takes more than one update to follow `-g` |
-
-Two values take their defaults from the time constants. `tau.period` (`tau.h / (1 + tau.h / tau.r)`, `tau.h / 2` with `tau.r = tau.h`) is the interval between a node's updates, the period of every node of a `Chain` unless it is given `period=`. `tau.max_dt` (`min(tau.period, 2 * tau.lam)`) is the longest `dt` one update counts; the time beyond it is dropped from both the relaxation and `elapsed`.
-
-The usual values go together: `tau.r = tau.h`, `tau.lam = tau.h / 2` and the default period `tau.h / 2`. An update of one period then moves `delta = r + lam` to `-g` exactly and does not overshoot, and the node sends the new `delta` back in that same update. A longer step overshoots, and the overshoot grows at every node it passes. With these values the credit goes back as follows, over a path of `hops` connections from the `Input` to the `Output`:
-
-| How the nodes run                                  | Credit back, per hop | Round trip: the input forward to the `Output`, the credit back to the first `Layer` |
-| -------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
-| `ManualRun.step(dt)`, every node once in each step | 1 step               | `2 * hops` steps                                                                    |
-| A free run, every node with the same period        | At most 1 period     | About `hops` periods                                                                |
-
-`tau.r` does not move the fixed point: `lam` sums up `r`, so `r = 0` there whatever `tau.r` is. With both `tau.lam` and `tau.r` at `math.inf`, the nodes are those of predictive coding with the fixed prediction assumption, whose error `r` settles at the credit of BP. A node's period must not be longer than its `max_dt` (`ValueError`).
-
-Make the `tau` of the optimizer much larger than `tau.h`. When the weights move more slowly than the activities settle, they learn from the settled `delta` even though inference and learning run at the same time. To choose the values, see [Choosing the time constants](pc.md#choosing-the-time-constants); for the arguments, the [API reference](../api/pc.md).
-
-??? question "Why cap dt at max_dt?"
-
-    The steps are explicit: a step much longer than the default overshoots, and `r` and `lam` diverge. After a load stalls a node, its `dt` grows, so the time one update counts is capped, and the time beyond it is dropped.
-
-## 6. Optimizers
-
-!!! abstract "Key idea"
-
-    The weights move in seconds too. An optimizer is a flow in time: its time constants are in seconds, and each step moves it by the `elapsed` seconds the step covers. So how often a node learns does not change how fast its weights move per second.
-
-### A setting, bound in each node
-
-`pc.optim.SGD(tau=, tau_m=None)`, `pc.optim.RMSProp(tau=, tau_v=, eps=1e-8)` and `pc.optim.AdamW(tau=, tau_m=, tau_v=, eps=1e-8, weight_decay=1e-2)` are settings: frozen values without state. `Layer`, `Output` and `Chain` take one as the required argument `optimizer=`. Each node binds the setting to its own weights that require gradients, and keeps the **bound optimizer** as `self.optimizer`. The bound optimizer holds the state and moves the weights.
+## Optimizers {#optimizer}
 
 ```mermaid
 flowchart LR
@@ -224,87 +211,52 @@ flowchart LR
     S -->|"bind(params)"| B2["Output: bound optimizer<br/>m, v, c_m, c_v"]
 ```
 
-```python
-self.optimizer = optimizer.bind(params)  # in __init__, with only the weights that learn
-# in on_update, when the node learns:
-self.optimizer.step_([g / B for g in g_theta], tick.elapsed)
-```
+An optimizer moves the weights as a flow in time, and each step moves it by the `elapsed` seconds the step covers, so how often a node learns does not change how fast its weights move per second.
 
-- One setting can be given to every node, as `Chain` does. Each node has its own state, in its bound optimizer
-- The bound optimizer is in the node's state under the key `"optimizer"`, as the `LearnClock` is under `"clock"`
-- The node divides $g_\theta$ by $B$ before `step_`. The optimizer does not know the batch
-- A step with `elapsed == 0` moves nothing: neither the weights nor the state
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 220" role="img" aria-label="The mass c_m over time. With τ_m = 0.1 s, c_m = 1 − e^(−t/τ_m). Two steps of 0.05 s and one step of 0.1 s both reach 0.632 at 0.1 s. Counting steps with β fixed for 0.05 s, one step of 0.1 s gives 0.393">
+<line class="mujou-axis" x1="80" y1="180" x2="580" y2="180"/>
+<line class="mujou-axis" x1="80" y1="180" x2="80" y2="20"/>
+<line class="mujou-lane" x1="80" y1="30" x2="580" y2="30" stroke-dasharray="4 3"/>
+<text class="mujou-note" x="72" y="34" text-anchor="end">1</text>
+<text class="mujou-note" x="72" y="89" text-anchor="end">0.632</text>
+<text class="mujou-note" x="72" y="125" text-anchor="end">0.393</text>
+<text class="mujou-note" x="72" y="184" text-anchor="end">0</text>
+<text class="mujou-note" x="80" y="196" text-anchor="middle">0</text>
+<text class="mujou-note" x="200" y="196" text-anchor="middle">0.05</text>
+<text class="mujou-note" x="320" y="196" text-anchor="middle">0.1</text>
+<text class="mujou-note" x="440" y="196" text-anchor="middle">0.15</text>
+<text class="mujou-note" x="560" y="196" text-anchor="middle">0.2</text>
+<text class="mujou-label" x="580" y="214" text-anchor="end">total seconds of the steps (s) →</text>
+<text class="mujou-label" x="12" y="16">c_m</text>
+<path class="mujou-brace" d="M 80 180 L 110 162.7 L 140 146.8 L 170 133.1 L 200 121.0 L 230 110.3 L 260 100.9 L 290 92.6 L 320 85.2 L 380 73.0 L 440 63.5 L 500 56.1 L 560 50.3"/>
+<text class="mujou-note" x="420" y="48" text-anchor="middle">c_m = 1 − e^(−t/τ_m), τ_m = 0.1 s</text>
+<circle cx="200" cy="121" r="5" style="fill: var(--md-typeset-a-color)"/>
+<circle cx="320" cy="85.2" r="5" style="fill: var(--md-typeset-a-color)"/>
+<circle cx="320" cy="85.2" r="9" style="fill: none; stroke: var(--md-typeset-a-color); stroke-width: 1.5"/>
+<circle cx="320" cy="121" r="5" style="fill: var(--md-accent-fg-color)"/>
+<text class="mujou-note" x="336" y="100">0.05 s × 2 and 0.1 s × 1 both give 0.632</text>
+<text class="mujou-note" x="336" y="136">counting steps with β fixed, 0.1 s × 1 gives 0.393</text>
+</svg>
+<figcaption>The mass c_m used for bias correction (the share of the moment made of gradients so far) depends only on the total seconds of the steps. A correction that counts steps drifts when the length of the steps changes</figcaption>
+</figure>
 
-### SGD, RMSProp and AdamW
+| `pc.optim` ($\beta = e^{-\Delta t/\tau}$, $\Delta t$ the time between two learning steps) | The matching torch optimizer                    | Bias correction in torch                          | When the steps match (constant $\Delta t$)                                                       |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [`AdamW`][mujou.pc.optim.AdamW]                                                           | `torch.optim.AdamW`                             | Divides by $1 - \beta^t$, $t$ the number of steps | From the first step                                                                              |
+| [`SGD`][mujou.pc.optim.SGD] (given `tau_m`)                                               | `torch.optim.SGD` (`momentum=β`, `dampening=β`) | None (the buffer starts from the first gradient)  | Once the mass is 1 (the difference decays as $\beta^t$). For a constant $g$, from the first step |
+| [`RMSProp`][mujou.pc.optim.RMSProp]                                                       | `torch.optim.RMSprop` (`alpha=β`)               | None (the mean square starts from 0)              | Once the mass is 1 (the difference decays as $\beta^t$)                                          |
 
-With the mean gradient $g = g_\theta / B$:
+Why not `torch.optim` is in [`mujou.pc.optim`][mujou.pc.optim].
 
-| Optimizer                   | Flow in time                                                                                                                                        | One step of `elapsed` $= \Delta t$ seconds                                                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pc.optim.SGD`              | $\tau_\theta \dot\theta = -g$                                                                                                                       | $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} g$: SGD with the learning rate $\Delta t / \tau_\theta$                                        |
-| `pc.optim.SGD` with `tau_m` | $\tau_m \dot m = g - m$, $\tau_\theta \dot\theta = -\hat m$                                                                                         | $m \leftarrow m + a_m (g - m)$; then $\theta \leftarrow \theta - \frac{\Delta t}{\tau_\theta} \hat m$                                                   |
-| `pc.optim.RMSProp`          | $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\frac{g}{\sqrt{\hat v} + \varepsilon}$                                                        | $v \leftarrow v + a_v (g^2 - v)$ with $a_v = 1 - e^{-\Delta t/\tau_v}$; then $\theta \leftarrow \theta - \eta\,\frac{g}{\sqrt{\hat v} + \varepsilon}$   |
-| `pc.optim.AdamW`            | $\tau_m \dot m = g - m$, $\tau_v \dot v = g^2 - v$, $\tau_\theta \dot\theta = -\left(\frac{\hat m}{\sqrt{\hat v} + \varepsilon} + w\,\theta\right)$ | $m \leftarrow m + a_m (g - m)$ with $a_m = 1 - e^{-\Delta t/\tau_m}$, the same for $v$; then $\theta$ steps as AdamW with $\eta = \Delta t/\tau_\theta$ |
+## Relaxers {#relaxer}
 
-- `tau` is $\tau_\theta$, `tau_m` is $\tau_m$ and `tau_v` is $\tau_v$, all in seconds. Each must be finite and > 0 (`tau_m` of SGD may also be `None`, for no momentum). Never to learn, give the node `learn_interval=math.inf`
-- `eps` ($\varepsilon$) must be > 0, so that a weight whose gradient has been 0 does not get `0 / 0`
-- `weight_decay` ($w$) has no unit. It decays $\theta$ with the time constant $\tau_\theta / w$, as `weight_decay` works with `lr` in `torch.optim.AdamW`
-- AdamW moves each weight by about $\eta$ per step, whatever the size of its gradient. To match the `lr` of Adam, take $\Delta t$, the time between two learning steps (the time each input is shown, when a node learns once per input), and set `tau` to $\Delta t$ / `lr`
-- The momentum of SGD averages $g$ and keeps the learning rate: with a constant $g$, $\hat m = g$ and the step is that of SGD without momentum. $\tau_m \to 0$ is SGD without momentum
-- RMSProp is AdamW without the first moment and the weight decay: $g$ in place of $\hat m$
+|                                  | Optimizer                                                                                  | Relaxer                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| What it moves                    | The weights $\theta$, by `elapsed` seconds                                                 | The deviation `r`, by `dt` seconds                                                 |
+| Along                            | The gradient                                                                               | The force $F$ on `r` ([`pc.relax`][mujou.pc.relax])                                |
+| Base classes for one of your own | [`Optimizer`][mujou.pc.optim.Optimizer], [`BoundOptimizer`][mujou.pc.optim.BoundOptimizer] | [`Relaxer`][mujou.pc.relax.Relaxer], [`BoundRelaxer`][mujou.pc.relax.BoundRelaxer] |
+| Default                          | None (required)                                                                            | [`pc.relax.Euler()`][mujou.pc.relax.Euler]                                         |
+| `Output`                         | Takes one                                                                                  | Takes none (it has no `r`)                                                         |
 
-### The mass c: bias correction in time
-
-$m$ and $v$ start at 0, so at first they are too small. `torch.optim.AdamW` corrects this with the number of steps $t$: it divides $m$ by $1 - \beta_1^t$. `pc.optim.AdamW` counts no steps. Instead it keeps a **mass** $c$ for each moment: the share of the moment made of gradients so far (the rest is the zero it started from). The mass moves with the time constant of its moment.
-
-$$\tau_m \dot c_m = 1 - c_m,\quad c_m(0) = 0,\qquad \hat m = m / c_m$$
-
-A step moves the mass as it moves the moment: $c_m \leftarrow c_m + a_m(1 - c_m)$. After $t$ seconds of gradients, $c_m = 1 - e^{-t/\tau_m}$. With a constant $g$, $m = c_m g$, so $\hat m = g$ from the first step. $v$ has its own mass $c_v$ in the same way.
-
-A step solves the flow exactly for a $g$ held over $\Delta t$. So the moments and masses depend on the seconds the steps add up to, not on how many steps there were. With $\tau_m = 0.1$ s:
-
-| Steps               | $c_m$ of `pc.optim.AdamW` | A step count with $\beta_1 = e^{-0.05/0.1}$, fixed for steps of 0.05 s |
-| ------------------- | ------------------------- | ---------------------------------------------------------------------- |
-| Two steps of 0.05 s | $1 - e^{-1} = 0.632$      | $1 - \beta_1^2 = 0.632$                                                |
-| One step of 0.1 s   | $1 - e^{-1} = 0.632$      | $1 - \beta_1^1 = 0.393$                                                |
-
-The momentum of SGD has its mass $c_m$, and RMSProp its mass $c_v$, in the same way.
-
-When $\Delta t$ is constant, the steps are those of `torch.optim.AdamW(lr=Δt / tau, betas=(exp(-Δt / tau_m), exp(-Δt / tau_v)))`. So from the $\beta$ of torch, $\tau_m = -\Delta t / \ln\beta_1$, with the same $\Delta t$ between two learning steps. Learning every 32 ms, $\beta_1 = 0.9$ is about 0.30 s and $\beta_2 = 0.999$ about 32 s. `torch.optim.SGD` and `torch.optim.RMSprop` have no bias correction: with $\beta = e^{-\Delta t/\tau_m}$, the momentum of SGD is `torch.optim.SGD(lr=Δt / tau, momentum=β, dampening=β)`, and RMSProp is `torch.optim.RMSprop(lr=Δt / tau, alpha=exp(-Δt / tau_v), eps=eps)`, once the mass is 1 (the difference decays as the power $t$ of `momentum` or `alpha`; for a constant $g$, the momentum agrees from the first step). To choose between SGD and AdamW and their values, see [Choosing the optimizer](pc.md#choosing-the-optimizer).
-
-??? question "Why not use torch.optim?"
-
-    1. Its optimizers count steps, not time. $\beta$ and `lr` are per step, so the speed per second changes with `learn_interval`, and with the uneven `elapsed` of each step
-    2. Its count of steps is a float32 tensor, which stops growing after $2^{24}$ steps (about 4.7 days when learning every 24 ms). mujou is for machines that keep learning
-    3. Making one imports `torch._dynamo`, which turns the GIL back on in a free-threaded Python (3.14t), for the whole process
-
-### An optimizer of your own
-
-An optimizer of your own is two classes. The setting inherits `pc.optim.Optimizer` and implements `bind(params)`. What `bind` returns inherits `pc.optim.BoundOptimizer` (a `mujou.Stateful`) and implements `step_(grads, elapsed)`, `state_dict()` and `load_state_dict(state)`; a class that leaves one out raises `TypeError` when it is made. Pass `bind` only the weights that learn. The [API reference](../api/pc.md) has an example.
-
-## 7. Relaxers
-
-!!! abstract "Key idea"
-
-    How the deviation `r` moves along the force on it is a setting too. A relaxer is to `r` what an optimizer is to the weights: a setting without state, bound in each node, that moves `r` by `dt` seconds.
-
-mujou has one relaxer, `pc.relax.Euler()`; the other choice is a relaxer of your own. Both are settings. `Layer` and `Chain` take one as `relaxer=`, `pc.relax.Euler()` by default. A `Chain` gives the same setting to each of its `Layer`s, which is safe because the setting holds no state. `Output` has no `r` and takes none. Each `Layer` binds the setting to its own `r` and keeps the **bound relaxer** as `self.relaxer`. The bound relaxer holds the state and moves `r`.
-
-```python
-self.relaxer = relaxer.bind(self.r)  # in __init__
-# in on_update, inside functional.relax_, with the force F:
-self.relaxer.step_(r, force, dt, tau.h)
-# with a new input, for the samples whose reset is set:
-self.relaxer.reset_(act["reset"])
-```
-
-With the force $F = (1 + \tau_h / \tau_r)\,r + \lambda + g$, one step of `pc.relax.Euler` of `dt` $= \Delta t$ seconds is $r \leftarrow r - \frac{\Delta t}{\tau_h} F$.
-
-- A relaxer changes how `r` gets to the fixed point, not where it is: at the fixed point $F = 0$, and the state of the relaxer is at rest. The relaxer does not move $\lambda$. $\lambda$ moves after `r`, with the moved `r` ([section 3](#3-one-update-of-a-layer)), whichever relaxer moves `r`
-- With a new input, the node sets $r$ and $\lambda$ of the samples whose `reset` is set to 0, and calls `reset_(reset)`: a relaxer that remembers forces (a velocity, say) built them from the sample before, so it drops them for those samples. The samples that continue keep $r$, $\lambda$ and the state of the relaxer. A jump of the prediction (the weights of this node or of a node below) does not move `r` or the force, and `reset_` is not called
-- The bound relaxer is in the node's state under the key `"relaxer"`: empty for `pc.relax.Euler`, which has no state, and whose `reset_` does nothing
-- To choose a relaxer and its value, see [Choosing the relaxer](pc.md#choosing-the-relaxer)
-
-### A relaxer of your own
-
-A relaxer of your own is two classes. The setting inherits `pc.relax.Relaxer` and implements `bind(r)`, which makes the state with the shape, dtype and device of `r`. What `bind` returns inherits `pc.relax.BoundRelaxer` (a `mujou.Stateful`) and implements `step_(r, force, dt, tau_h)`, `reset_(samples)`, `state_dict()` and `load_state_dict(state)`; a class that leaves one out raises `TypeError` when it is made. Its fixed point must be where the force is zero and its own state is at rest, or `lam` is no longer the credit of BP. The [API reference](../api/pc.md) has an example.
+Neither `r` nor the force jumps when the prediction jumps, so [`reset_`][mujou.pc.relax.BoundRelaxer.reset_] is called only when the node first sees a sample whose `reset` is set.

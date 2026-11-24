@@ -1,14 +1,24 @@
 # 🧮 Update Rules
 
-An update rule (a learning rule) is what a node writes in `on_update(dt)`. Mujou builds no rule into nodes, ports or the scheduler: each node chooses its own, and the same network can swap them. This page shows how to write a rule that learns across nodes, with feedback alignment as the example; [4. Learn in a Node](../tutorial/4-learn-in-a-node.md) has backpropagation (BP) inside one node, and [PC-ALM](pc.md) the rule of `mujou.pc`.
+How to choose an update rule is in [How Mujou Works](../concepts.md#learning). This page shows a rule of your own that learns across nodes, with feedback alignment as the example.
 
-## Within a node, across nodes
+## Feedback alignment {#feedback-alignment}
 
-Inside a node, anything PyTorch computes is allowed, BP included. Across nodes, no computation graph can be joined: a port sends a detached copy. A rule across nodes therefore sends what each node needs as messages: activities forward, errors (or other credits) back, and the targets along with the activities. Each node learns from its own state and its neighbors' messages only.
+`examples/feedback_alignment.py` learns $\hat y = W_2 \tanh(W_1 x)$ with two nodes, `hidden` and `output`. `hidden` does not know `W2`, and learns anyway with a fixed random matrix $B$ ([Lillicrap et al., 2016](https://doi.org/10.1038/ncomms13276)).
 
-## Feedback alignment
+```mermaid
+flowchart LR
+    Host["Host"] -->|"sample x, y"| H["hidden<br/>h = tanh(W1 x)"]
+    H -->|"activity h, target y, time"| O["output<br/>ŷ = W2 h"]
+    O -->|"error e = ŷ − y, time"| H
+    O -->|"loss"| Loss["read by the host"]
+```
 
-`examples/feedback_alignment.py` learns $\hat y = W_2 \tanh(W_1 x)$ with two nodes. `hidden` sends its activity forward, and `output` sends the error $e = \hat y - y$ back. BP would give `hidden` the credit $W_2^\top e$, but `hidden` never sees `W2`: it uses $B e$ with a fixed random matrix $B$ of its own, and learns anyway, as $W_2$ comes to align with $B^\top$ ([Lillicrap et al., 2016](https://doi.org/10.1038/ncomms13276)).
+|                         | BP                 | Feedback alignment                               |
+| ----------------------- | ------------------ | ------------------------------------------------ |
+| Credit `hidden` uses    | $W_2^\top e$       | $B e$ ($B$ is a fixed random matrix of `hidden`) |
+| `hidden` must know `W2` | Yes                | No                                               |
+| Why it learns           | It is the gradient | $W_2$ comes to align with $B^\top$               |
 
 ```sh
 uv run python examples/feedback_alignment.py
@@ -22,27 +32,56 @@ uv run python examples/feedback_alignment.py
 --8<-- "examples/feedback_alignment.py:output"
 ```
 
-The program prints the loss of `output` on each batch before learning from it, which falls from about 1.5 to about 0.02 in 6 s; with `hidden` frozen, it stays above 0.15.
+| Condition        | Printed loss of `output` (on each batch, before learning from it) |
+| ---------------- | ----------------------------------------------------------------- |
+| Both nodes learn | Falls from about 1.5 to about 0.02 in 6 s                         |
+| `hidden` frozen  | Stays above 0.15                                                  |
 
-## Two-way ports
+## Two-way ports {#bidirectional}
 
-`hidden.next` is `Port(send=ACTIVITY, recv=ERROR)` and `output.prev` is `Port(send=ERROR, recv=ACTIVITY)`: one connection carries the activity forward and the error back. Connections may form cycles, so the error could as well come back on ports of its own.
+This example carries the activity and the error on one connection (`hidden.next` and `output.prev`). Connections [may form cycles](ports.md#connect), so the error could as well come back on ports of its own.
 
-## Relaying the target
+| Port          | `send`     | `recv`     |
+| ------------- | ---------- | ---------- |
+| `hidden.next` | `ACTIVITY` | `ERROR`    |
+| `output.prev` | `ERROR`    | `ACTIVITY` |
 
-The activity carries the target `y` of its sample and the time of the write it came from. Values on two ports travel independently, so a target sent on a port of its own could pair a prediction with the target of another sample. In one message, `output` always compares a prediction with its own target, and `hidden` learns only from the error whose `time` is that of the input it holds. The nodes of `mujou.pc` carry `y`, `mask` and `time` in their `pc.msg.Activity` the same way ([PC-ALM](pc.md#the-nodes)).
+## Relaying the target {#relay-targets}
 
-## Telling what is new
+=== "Avoid: the target on a port of its own"
 
-`recv()` returns the latest value whether or not it is new. A node that learns once from each sample tells a new one by its time: the time `recv_with_time()` returns, or a time the message carries. Before anyone sends, the time is `None` (or, for a time in the message, its initial value: `Timestamp(ns=0)` of a `TimestampSpec`).
+    ```mermaid
+    sequenceDiagram
+        participant H as hidden
+        participant O as output
+        H->>O: activity h (sample 2)
+        Note over O: the target port still holds y of sample 1
+        O->>O: compares the prediction for sample 2 with y of sample 1
+        H->>O: target y (sample 2)
+    ```
 
-## `pc.clock.LearnClock`
+=== "Write instead: one message"
 
-Both nodes decide when to learn with a `pc.clock.LearnClock`, a part of `mujou.pc` that any rule can use. In each update, `tick(dt, time, now)` takes the `dt`, the time the input was written at and the time now, and returns a `pc.clock.Tick`:
+    ```mermaid
+    sequenceDiagram
+        participant H as hidden
+        participant O as output
+        H->>O: h, y, time (sample 2)
+        O->>O: compares the prediction with its own target
+        O->>H: e, time
+        H->>H: learns only from the error whose time is that of the input it holds
+    ```
 
-- `new`: the input is new (its time is not the one seen last)
-- `learn`: learn in this update. With `learn_interval`, that is the first update `learn_interval` after each write (and every `learn_interval` while the input stays), but never the update that first sees an input; with `learn_interval=None`, every update
-- `elapsed`: the time since the clock last learned, each `dt` capped at `max_dt`. Weigh the step with it: $W \leftarrow W - \frac{\text{elapsed}}{\tau}\,\nabla$ follows the gradient flow $\tau \dot W = -\nabla$, so how far a node learns depends on time, not on how often it updates
-- `dt`: the `dt` capped at `max_dt`
+The nodes of `mujou.pc` also carry `y`, `mask` and `time` in the same message as the activity, a [`pc.msg.Activity`][mujou.pc.msg.Activity].
 
-The clock is a `mujou.Stateful`, so an attribute that holds it is in the node's state by itself. The nodes on a path read the one timer of the run, so they learn at about the same time after each write, however deep they are.
+`recv()` returns the latest value whether or not it is new, so a node that learns once from each sample tells a new one by its time ([A new value, or the same one again](ports.md#new-or-reread)).
+
+## `pc.clock.LearnClock` {#learnclock}
+
+```python
+tick = self.clock.tick(dt, t, self.timer.now())  # dt, the time the input was written, the time now
+if tick.learn:
+    self.optimizer.step_([grad], tick.elapsed)  # weighted by the time since it last learned
+```
+
+[`LearnClock`][mujou.pc.clock.LearnClock], which decides when to learn, is a part of `mujou.pc`, but any rule can use it. Weighing each step with `elapsed` makes how far a node learns depend on time, not on how often it updates ([How mujou.pc Works](pc-concepts.md#learnclock)).

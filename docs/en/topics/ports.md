@@ -1,41 +1,49 @@
 # 🔌 Ports and Channels
 
-A port is a connection point of a node, and `connect` joins two ports with one channel. This page covers the kinds of ports, their specs, connecting, branching and merging, and what a port holds before anyone sends.
+## The kinds of ports {#kinds}
 
-## The kinds of ports
+| Kind                           | Peers                                                   | `recv()` returns                             |
+| ------------------------------ | ------------------------------------------------------- | -------------------------------------------- |
+| [`Port`][mujou.Port]           | At most one if it receives; any number if it only sends | The value                                    |
+| [`MultiPort`][mujou.MultiPort] | Any number, of one role                                 | A `dict[Channel, value]`, in `connect` order |
 
-| Kind        | Peers                                                   | `recv()` returns                             |
-| ----------- | ------------------------------------------------------- | -------------------------------------------- |
-| `Port`      | At most one if it receives; any number if it only sends | The value                                    |
-| `MultiPort` | Any number, of one kind                                 | A `dict[Channel, value]`, in `connect` order |
+Inputs of different roles, such as an input and its teacher signal, or a prediction and an error, go to separate `Port`s, each named after its role. A `MultiPort` is for peers of one role that the node combines the same way.
 
-Declare ports as attributes of the node in `__init__`, after `super().__init__()`; a run reads the attributes of the instance when it starts. A run raises `TypeError` for a port kept in a list, a tuple or a dict, and the class statement for a port declared as a class attribute: assign each port to an attribute of its own, or use a `MultiPort`.
+=== "Avoid"
 
-Inputs of different roles, such as an input and its teacher signal, or a prediction and an error, go to separate `Port`s, each with a name that says its role. A `MultiPort` is for peers of one kind that the node combines the same way.
+    ```python
+    class Bad(Node):
+        prev = Port(recv=VECTOR)  # class attribute: the class statement raises TypeError
 
-## Specs
+        def __init__(self) -> None:
+            super().__init__()
+            self.inputs = [Port(recv=VECTOR), Port(recv=VECTOR)]  # list: the run raises TypeError
+    ```
 
-A port takes the spec of what it sends as `send=` and of what it receives as `recv=`, as keyword arguments; leave out the one a one-way port does not use.
+=== "Write instead"
 
-```python
-self.prev = Port(recv=TensorSpec((32, 784)))  # receives only
-self.next = MultiPort(send=TensorSpec((32, 256)), recv=TensorSpec((32, 256)))  # both ways
-```
+    ```python
+    class Good(Node):
+        def __init__(self) -> None:
+            super().__init__()  # declare ports after this
+            self.a = Port(recv=VECTOR)  # one attribute per port
+            self.b = Port(recv=VECTOR)
+            self.many = MultiPort(recv=VECTOR)  # any number of peers of one role
+    ```
 
-`TensorSpec(shape, dtype)` is one tensor; its dtype is `torch.float32` unless given, whatever `torch.get_default_dtype()` is. A value sent must match the spec in shape and dtype: no dtype is converted. The dtypes a spec takes are in `TensorSpec.dtypes`. A spec also makes values of its shape and dtype, for the state of a node or a test: `spec.zeros()` and `spec.empty()` (a dict of them for a `DictSpec`), and `TensorSpec.rand(generator=...)`.
+## Specs {#spec}
 
-A count, a flag or a time travels as a Python scalar, not as a tensor, so the receiver reads it without `int(...)`:
+| Spec                                                                                                                             | Used for                                                                    | Initial value                          |
+| -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
+| [`TensorSpec`][mujou.TensorSpec]                                                                                                 | One tensor, such as an activity or an error                                 | Zeros                                  |
+| [`IntSpec`][mujou.IntSpec], [`FloatSpec`][mujou.FloatSpec], [`BoolSpec`][mujou.BoolSpec], [`TimestampSpec`][mujou.TimestampSpec] | A count, a flag, a time                                                     | `0`, `0.0`, `False`, `Timestamp(ns=0)` |
+| [`DictSpec`][mujou.DictSpec]                                                                                                     | Values to deliver together, such as an input and its target (a `TypedDict`) | The initial value per key              |
 
-| Spec                            | Value                         | Initial value     |
-| ------------------------------- | ----------------------------- | ----------------- |
-| `IntSpec(bits=64, signed=True)` | `int` of 8, 16, 32 or 64 bits | `0`               |
-| `FloatSpec()`                   | `float` (64 bits)             | `0.0`             |
-| `BoolSpec()`                    | `bool`                        | `False`           |
-| `TimestampSpec()`               | `mujou.time.Timestamp`        | `Timestamp(ns=0)` |
+A count, a flag or a time travels as a Python scalar with a scalar spec, not wrapped in a tensor, so the receiver uses it without `int(...)`.
 
-A message has a fixed size, so an `IntSpec` has a fixed number of bits: an `int` out of its range raises `OverflowError` when it is sent, and is never wrapped. A scalar spec has no shape and makes no values: write `0` or `False`.
+### Values that belong together: DictSpec {#pairs}
 
-Values on two ports travel independently: a reader may see a new value on one port with an old one on the other. Send values that belong together, such as an input and its target, as one message: a `DictSpec` gives a spec for each key of a `TypedDict`, the whole dict arrives at once, and type checkers know the type of each key. To use the spec of one key, take it with its kind: `SAMPLE.field("x", TensorSpec).shape` (`TypeError` if it is of another kind).
+Values on two ports arrive separately, so a reader may pair a new value on one with an old value on the other. Put values that belong together, such as an input and its target, in one `DictSpec`, and the whole dict arrives at once.
 
 ```python
 class Sample(TypedDict):
@@ -49,69 +57,88 @@ self.next = Port(send=SAMPLE)  # in the sender: self.next.send({"x": x, "y": y})
 self.prev = Port(recv=SAMPLE)  # in the receiver: sample = self.prev.recv(); sample["x"]
 ```
 
-Type checkers infer the type of a port from its specs. To annotate one (an argument of a helper, say), write `Port[S, R]` or `MultiPort[S, R]`, where `S` is the type it sends and `R` the type it receives; a direction left out is `Never`, and a type checker rejects a `send` on a port that sends nothing. A function that takes any spec takes a `MessageSpec[T]`.
+### Type annotations {#typing}
+
+Type checkers infer the type of a port from its specs. Annotate only when you need to (for an argument of a helper, say), as `Port[S, R]` or `MultiPort[S, R]` (sends `S`, receives `R`); a direction left out is `Never`, so a type checker rejects `send` on a port that sends nothing. Annotate a function that takes any spec with [`MessageSpec`][mujou.MessageSpec].
 
 ```python
-from typing import Never
-
-from mujou import MessageSpec, MultiPort, Port
-
-
 def mean_of(port: MultiPort[Never, torch.Tensor]) -> torch.Tensor:
     return torch.stack(list(port.recv().values())).mean(0)
-
-
-def sender[T](spec: MessageSpec[T]) -> Port[T]:
-    return Port(send=spec)
 ```
 
-## Connecting
+## Connecting {#connect}
 
-`a.next.connect(b.prev)` joins two ports and returns the `Channel`. Nodes and networks have no `connect` of their own: a node may have several inputs and outputs, and naming the two ports says which path you mean.
+[`connect`][mujou.Port.connect] joins ports only: nodes and networks have no `connect` of their own. A node may have many inputs and outputs, and naming both ports makes the path readable.
+Cycles (the nodes of `mujou.pc` make them with two-way ports) and two ports of the same node are allowed. A port connected to one outside the tree being run makes [`mujou.run`][mujou.run] raise `ValueError`.
 
-- The spec that each port sends must match the spec the other receives, in both directions; otherwise `connect` raises `TypeError`
-- A `Port` that receives takes one peer: connecting a second raises `ValueError`. Receive from several with a `MultiPort`
-- Connecting the same two ports again returns the channel they have. A port may connect to a port of its own node
-- Connections may form cycles: a node may receive from a node it sends to, as the nodes of `mujou.pc` do on two-way ports
-- A port connects only to ports of nodes in the same run; `mujou.run` raises `ValueError` for a peer outside the tree
+## Fan-out and merging {#fan-out}
 
-## Fan-out and merging
-
-A `Port` that only sends takes any number of peers, and sends every value to each of them. A `MultiPort` merges: its `recv()` returns the latest value of each channel. The value of a peer that has never sent is the initial value of the peer's port.
+```mermaid
+flowchart LR
+    IN(["Input x"]) --> SH["shift<br/>x + 1"]
+    SH -->|"same value to both"| D["double<br/>2x"]
+    SH --> SQ["square<br/>x²"]
+    D --> SUM["sum (MultiPort)<br/>adds the latest value of each channel"]
+    SQ --> SUM
+    SUM --> OUT(["Output y = 2(x + 1) + (x + 1)²"])
+```
 
 ```python
 --8<-- "examples/branching.py:fan-out"
 ```
 
-The receiving node decides how to combine the values: sum them, average them, weight each peer. To treat the peers differently, keep the `Channel` that `connect` returned for each, as an attribute of the receiving node (`self.sum.from_double = self.double.next.connect(self.sum.prev)`), and index with it: `self.prev.recv()[self.from_double]`.
+The receiving node decides how to combine the values: sum them, average them, weight each peer.
 
-## Sending to one channel
+### Treating peers differently {#per-channel}
 
-A `MultiPort` has two ways to send:
+To treat peers differently, keep the `Channel` that `connect` returned as an attribute of the receiving node, and use it as a key into the dict of `recv()`.
 
-| How                       | Where it goes                            | What `Run.read` returns |
-| ------------------------- | ---------------------------------------- | ----------------------- |
-| `send(value)`             | The same value to every peer             | This value              |
-| `send_to(channel, value)` | Only to the peer at the end of `channel` | Unchanged               |
+```python
+# the network
+self.sum.from_double = self.double.next.connect(self.sum.prev)
+
+# the receiving node (sum)
+x = self.prev.recv()[self.from_double]
+```
+
+## Sending to one channel {#send-to}
+
+```mermaid
+flowchart LR
+    IN(["Input x"]) --> SP["split (MultiPort)"]
+    SP -->|"send_to(plus, x)"| P["pos<br/>relu"]
+    SP -->|"send_to(minus, -x)"| N["neg<br/>relu"]
+    P --> SUM["sum"]
+    N --> SUM
+    SUM --> OUT(["Output y = relu(x) + relu(-x)<br/>(absolute value of x)"])
+```
 
 ```python
 --8<-- "examples/branching.py:send-to"
 ```
 
-The network hands the node the channels `connect` returned (`self.split.plus = ...`). Do not pick channels by their order in `self.next.channels` instead: swapping two `connect` calls would swap the destinations without any error. An attribute that holds a `Channel` is not part of the state.
+The network hands [`send_to`][mujou.MultiPort.send_to] its channels by assigning what `connect` returned to attributes of the node. An attribute that holds a `Channel` is not part of the state.
 
-The host reads with `Run.read` only what a port sent with `send` (its initial value until then); it cannot read the values of `send_to`, nor a port that only receives.
+=== "Avoid"
 
-## Before anyone sends
+    ```python
+    # swapping the connect calls silently swaps plus and minus
+    self.split.plus, self.split.minus = self.split.next.channels
+    ```
 
-Until a port first sends, its peers, and the host that reads it, get its initial value: zeros (the initial values above for scalars), or the value of `initial=`, which must match `send` and is copied when the port is made. Its time is `None`.
+=== "Write instead"
+
+    ```python
+    self.split.plus = self.split.next.connect(self.pos.prev)
+    self.split.minus = self.split.next.connect(self.neg.prev)
+    ```
+
+## A new value, or the same one again {#new-or-reread}
 
 ```python
-self.next = Port(send=TensorSpec((32, 256)), initial=torch.full((32, 256), 0.5))
+value, t = self.prev.recv_with_time()
+if t is not None and t != self.last_t:  # a new value arrived since the last read
+    self.last_t = t
 ```
 
-`recv_with_time()` returns the value with the time it was sent (a `mujou.time.Timestamp`), or `None` before the first send. Compare it with the time of the value read last to tell a new value from the same one read again. A port that the host writes counts as sent from the `inputs=` of the run, or from the host's first `write`: see [Host I/O](host-io.md#initial-values).
-
-## Exposed ports
-
-A network exposes a child's port by assigning it to an attribute of its own (`self.prev = self.l1.prev`). The attribute is only a reference: the port still belongs to the node, and the outside connects to it as to the node's (`x.next.connect(net.prev)`). By convention, a network exposes the port of its first node as `prev` and that of its last as `next`, so that it connects like a node.
+Until the sender first sends, [`recv_with_time`][mujou.Port.recv_with_time] returns the initial value with the time `None`. The initial values of ports the host writes are in [Initial values](host-io.md#initial-values).

@@ -1,20 +1,21 @@
 ---
 name: feedback-docs-teaching-quality
-description: docs/ で仕組みを解説するページは教材サイト級の質にする。文字だけで並べず、節ごとに要点・図・表・コードを置く（2026-10-21）
+description: docs/ で仕組みを解説するページは教材サイト級の質にする。文字だけで並べず、図・表・コードで見せる。要点の箱は置かず、図表で示したことを本文に書かない（2026-10-21、2026-11-23 改訂）
 metadata:
   type: feedback
 ---
 
 2026-10-21、ユーザーから「Mujou の仕組みのページが文字ばかりで読みにくい。各セクションで仕組みを解説するとき、教材サイトクラスのクオリティであるべき」と指摘された。
 
-`docs/{en,ja}/concepts.md` を次の形に作り直した。これが基準。
+`docs/{en,ja}/concepts.md` を図表中心に作り直した。2026-11-23 の簡素化（[[feedback-docs-one-fact-one-place]]）で次の形に改めた。
 
-- 冒頭に「このページで分かること」と前提、全体図、部品と節の対応表、PyTorch との対応表
-- 各節の頭に `!!! abstract "要点"` で 1〜2 文
+- 全体図と PyTorch との対応表。「このページで分かること」と、節の案内の表（TOC と同じ）は置かない
+- `!!! abstract "要点"` の箱は置かない。節の頭の 1 文は、図だけでは文脈が分からないときに限る
+- 図・表で示したことを本文で言い直さない（「次の図は…」「実線は…」も書かず、凡例は図のラベルに入れる）。本文は図・表・コード・docstring のどれにも無い事実だけ
 - 仕組みは図で見せる（mermaid の flowchart / sequenceDiagram / stateDiagram、mermaid で描けないものはテーマ色に従う inline SVG。CSS は `docs/stylesheets/extra.css` の `.mujou-diagram`）
 - 比べるものは表にする（Port と MultiPort、mujou.run と testing.run など）
-- 設計の理由は `??? question "〜のはなぜ？"` に畳む
-- 規則は一覧表＋節ごとに「避ける / こう書く」のタブ
+- 設計の理由は `??? question "〜のはなぜ？"` に畳む（4 行まで。docstring にあるならリンクだけ）
+- 規則は一覧表。「避ける / こう書く」のタブは自然に書いてしまう誤りがあるときだけ、1 節に 1 組まで
 - 完全なプログラムは examples/ から snippet で取り込み、短い断片だけ inline で書く
 
 **Why:** 文字だけの説明は、非同期・最新値・dt のような直感に反する仕組みが伝わらない。

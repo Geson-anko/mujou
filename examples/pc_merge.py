@@ -78,7 +78,6 @@ class Merge(Node):
 # --8<-- [end:merge]
 
 
-# --8<-- [start:network]
 class TwoTowers(Network, pc.Shown):
     def __init__(self) -> None:
         super().__init__()
@@ -111,9 +110,6 @@ class TwoTowers(Network, pc.Shown):
         self.b.next.connect(self.merge.b)
         self.merge.next.connect(self.out.prev)
         self.prev, self.next = self.inp.prev, self.out.next  # for pc.show
-
-
-# --8<-- [end:network]
 
 
 if __name__ == "__main__":

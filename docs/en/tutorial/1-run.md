@@ -1,75 +1,76 @@
 # 🚀 1. Run a Network
 
-This page runs the smallest program, two nodes that compute $y = 2x + 1$, and explains it line by line. Then it branches and merges a network.
+This page runs `examples/quickstart.py`, the smallest program, two nodes that compute $y = 2x + 1$, and shows how to write a node, a network and a run.
 
 ```mermaid
 flowchart LR
-    H1["Host"] -->|"writes x"| S["scale (×2)"]
-    S --> F["shift (+1)"]
-    F -->|"reads y"| H2["Host"]
+    H1["Host"] -->|"writes x to net.prev"| S["scale<br/>×2"]
+    S --> F["shift<br/>+1"]
+    F -->|"reads y from net.next"| H2["Host"]
 ```
 
-## The program
+## Run it {#program}
 
 ```python title="examples/quickstart.py"
 --8<-- "examples/quickstart.py"
 ```
 
-Run it from the root of the repository.
+=== "From a source checkout"
 
-```sh
-uv run python examples/quickstart.py
-```
+    From the root of the repository:
 
-It prints one line like this.
+    ```sh
+    uv run python examples/quickstart.py
+    ```
+
+=== "Installed from PyPI"
+
+    Copy [`examples/quickstart.py`](https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py) to your machine, then:
+
+    ```sh
+    python quickstart.py
+    ```
 
 ```text
 y = tensor([3., 5., 7.]) at t = 0.017 s
 ```
 
-`y` is $2x + 1$ for `x = [1, 2, 3]`. `t` is the time at which `shift` sent `y`, in seconds of the run's timer. It changes from run to run.
+`t` is the time, in seconds of [the run's timer](../topics/time.md#timers), at which `shift` sent `y`. It changes every run.
 
-## A node
+## The node {#node}
 
-```python
---8<-- "examples/quickstart.py:node"
+`Affine` inherits from [`Node`][mujou.Node] and creates its ports as attributes in `__init__`. By convention the port that receives from the previous node is `prev` and the one that sends to the next is `next`; `a` and `b` are settings from the arguments, not state.
+
+One step of work goes in [`on_update(dt)`][mujou.Node.on_update], which mujou calls again and again: it reads with [`recv`][mujou.Port.recv] and sends with [`send`][mujou.Port.send].
+
+## The network {#network}
+
+| What `Pipeline` ([`Network`][mujou.Network]) does | Code                                                      |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| Holds nodes as attributes                         | `self.scale = Affine(2.0, 0.0)`                           |
+| Connects ports ([`connect`][mujou.Port.connect])  | `self.scale.next.connect(self.shift.prev)`                |
+| Exposes the ports the outside uses                | `self.prev, self.next = self.scale.prev, self.shift.next` |
+
+## The run {#run}
+
+```mermaid
+sequenceDiagram
+    participant H as Host
+    participant S as scale
+    participant F as shift
+    H->>H: mujou.run(net) starts every node
+    H->>S: run.write writes x
+    F-->>H: values from older inputs (zeros at first)
+    S->>F: 2x
+    F-->>H: 2x + 1
+    Note over H: wait_for returns the value that meets the condition, with its time
+    H->>H: leaving the with block ends the run
 ```
 
-- A node is a class that inherits from `mujou.Node`. As in any subclass, `__init__` calls `super().__init__()` first, and each hook calls the same hook of `super()` first
-- `__init__` declares the node's ports as attributes. `Port(recv=VECTOR)` receives float32 vectors of 3, and `Port(send=VECTOR)` sends them. By convention, the port on the side of the previous node is `prev` and the one on the side of the next node is `next`
-- `a` and `b` are settings: numbers set from the arguments, not state
-- `on_update(dt)` is one step of the node's work. Mujou calls it again and again, about every 10 ms. `recv()` returns the latest value the peer sent, without waiting, and `send()` sends a copy to every peer
-
-## A network
-
-```python
---8<-- "examples/quickstart.py:network"
-```
-
-A network holds nodes as attributes, connects their ports with `connect`, and exposes the ports that the outside uses as attributes of its own (`self.prev`, `self.next`). `connect` checks that the spec each port sends matches the spec the other receives, and raises `TypeError` where it does not.
-
-## The run
-
-```python
---8<-- "examples/quickstart.py:run"
-```
-
-- `mujou.run(net)` checks the network, starts every node, and returns a `Run` once they are running. Each node repeats `on_update` on the run's worker threads; the host's thread goes on
-- `run.write` writes `x` to the unconnected port `net.prev`. The value stays there until the next write
-- `recv()` never waits, so `shift` keeps sending values computed from older inputs (zeros at first) until `x` has passed through `scale`. `run.wait_for` returns the first output that meets the condition, with its time, and raises `TimeoutError` after 5 seconds of real time
-- Leaving the `with` block shuts the run down, and an exception of a node reaches the host there at the latest
-
-## Branching and merging
-
-A `Port` that only sends takes any number of peers: connect it to several ports, and each gets every value it sends (fan-out). A `MultiPort` merges: its `recv()` returns one value per channel, as a `dict[Channel, value]` in the order of `connect`, and the node decides how to combine them.
-
-```python
---8<-- "examples/branching.py:fan-out"
-```
-
-`Diamond` computes $y = 2(x + 1) + (x + 1)^2$: `shift` sends to both branches, and `sum` adds what the two send. A `Port` that receives takes one peer only, because its `recv()` returns one value; receive from several with a `MultiPort`. Run it with `uv run python examples/branching.py`. The same program also sends a different value to each peer, which [Ports and Channels](../topics/ports.md#sending-to-one-channel) explains.
+In the [`with mujou.run(net) as run:`][mujou.run] block, the output right after a write is computed from older inputs, so wait for an output that meets the condition with [`wait_for`][mujou.Run.wait_for], not [`read`][mujou.Run.read].
 
 ## Next
 
 - Write a node whose state changes over time: [2. Write a Node](2-node.md)
+- Branching (fan-out) and merging with `MultiPort`: [Ports and Channels](../topics/ports.md#fan-out)
 - The host's other ways to write and read: [Host I/O](../topics/host-io.md)

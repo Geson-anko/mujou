@@ -1,35 +1,61 @@
 # ⏱️ 時間
 
-実行ごとに時間軸は 1 本で、それが実行のタイマーである。各ノードの `dt`、各メッセージの時刻、実行の一時停止はすべてその上にある。このページではタイマー、時間の単位、時間の速さ、一時停止、再開した実行のタイマーを説明する。
+1 つの実行には時間軸が 1 本あり、ノードの dt・メッセージの時刻・一時停止はすべてその実行のタイマー上にある（dt で更新する理由は [Mujou の仕組みの時間](../concepts.md#time)）。
 
-## タイマー
+## タイマー {#timers}
 
-| 名前                        | 何か                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `mujou.time.global_timer`   | 自分のタイマーを渡さないすべての実行のタイマー。プロセスで初めて使ったときに 0 から始まる             |
-| `mujou.time.Timer()`        | 1 つの実行専用のタイマー（`mujou.run(net, timer=Timer())`）。`start`（0）から `time_scale`（1）で進む |
-| `mujou.time.VirtualTimer()` | 進めたとき（`advance(seconds)`）だけ進む `Timer`。`mujou.run_manually` が使う                         |
-| `mujou.time.ReadOnlyTimer`  | タイマーを読むだけのビュー。ノードの `self.timer` がこれで、`now()` と `time_scale()` だけを持つ      |
-| `mujou.time.Timestamp`      | タイマーの上の時刻                                                                                    |
+```mermaid
+flowchart TD
+    Q{"どう走らせる？"}
+    Q -- "mujou.run(net)" --> G["global_timer<br/>ほかの実行と共有"]
+    Q -- "mujou.run(net, timer=Timer())" --> O["渡した Timer<br/>その実行専用"]
+    Q -- "mujou.run(net, state=tree)" --> R["新しい Timer<br/>木の時刻から始まる"]
+    Q -- "mujou.run_manually(net)" --> V["VirtualTimer<br/>進めたときだけ進む"]
+```
 
-ホストは `run.timer` で実行の時間を操作する。`now()`・`sleep(seconds)`・`pause()`・`resume()`・`is_paused()`・`time_scale()`・`set_time_scale(scale)` がある。ノードは hook の中で `self.timer.now()` で読むだけ。
+タイマーの型（Timer・VirtualTimer・ReadOnlyTimer・Timestamp・global_timer）は [`mujou.time`][mujou.time] にある。
 
-## 単位
+### ホストとノードができること {#host-and-node}
+
+| 操作                                                                 | ホスト（`run.timer`） | ノード（[`self.timer`][mujou.Node.timer]） |
+| -------------------------------------------------------------------- | --------------------- | ------------------------------------------ |
+| `now()`・`time_scale()`                                              | できる                | できる                                     |
+| `is_paused()`                                                        | できる                | 無い                                       |
+| `sleep`・`pause`・`resume`・`set_time_scale`・`VirtualTimer.advance` | できる                | 無い。hook の中で呼ぶと `RuntimeError`     |
+
+=== "避ける"
+
+    ```python
+    def on_update(self, dt: float) -> None:
+        super().on_update(dt)
+        global_timer.sleep(0.1)  # hook の中では RuntimeError
+    ```
+
+=== "こう書く"
+
+    ```python
+    def __init__(self) -> None:
+        super().__init__(period=0.1)  # 平均 0.1 秒ごとに更新する
+    ```
+
+## 単位 {#units}
 
 | 単位               | 使うもの                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------- |
 | 実行のタイマーの秒 | `dt`、`period`、`Timer.sleep`、`VirtualTimer.advance`、`pc.show(seconds=)`、`mujou.pc` の時定数 |
 | 実時間の秒         | すべての `timeout`                                                                              |
 
-timeout が実時間なのは、時間の速さや一時停止によらず、止まった実行を見切れるようにするため。
+??? question "timeout が実時間なのはなぜ？"
 
-## Timestamp
+    時間の速さや一時停止によらず、止まった実行を見切れるようにするため。
+
+## Timestamp {#timestamp}
+
+[`Timestamp`][mujou.time.Timestamp] はどのタイマーの時刻かを持たないので、比べるのは同じタイマーの時刻同士（1 つの実行の時刻とその `run.timer.now()` など）に限る。
 
 ```python
 --8<-- "examples/timers.py:timestamp"
 ```
-
-`write`・`read_with_time`・`subscribe`・`wait_for`・`recv_with_time`・`now()` は `Timestamp` を返す（まだ送られていない値なら `None`）。`<` などで前後を比べ、引き算でその間の秒数を得る。`Timestamp` はどのタイマーの時刻かを持たないので、1 つの実行の時刻とその `run.timer.now()` のように、同じタイマーの時刻同士だけを比べる。
 
 ```python
 t_in = run.write({net.prev: x})
@@ -39,54 +65,85 @@ if t_out is not None and t_out >= t_in:  # y は x を書いた後に送られ�
     print(t_out - t_in)  # 書いてから y が送られるまでの秒数
 ```
 
-## 実行専用のタイマー
+## 実行専用のタイマーと速さ {#own-timer}
+
+`mujou.run` に [`Timer`][mujou.time.Timer] を渡した実行は、そのタイマーの速さを変えても止めても、ほかの実行に響かない（実行を分けるか 1 つにまとめるかは [Group](groups.md#one-or-many)）。
 
 ```python
 --8<-- "examples/timers.py:own-timer"
 ```
 
-その実行だけ時間を速めたり遅くしたりしたいとき（デバッグや実時間より速い試行）や、ほかの実行と一緒に止まらないようにしたいときに、実行専用のタイマーを渡す。時間の速さは実時間 1 秒あたりにタイマーが進む秒数で、10 なら実時間の 1 秒がタイマーの 10 秒。有限で 0 より大きい数に限る。
-
-グローバルタイマーも速さを変えられ、それで走るすべての実行が変わる。
+[`global_timer`][mujou.time.global_timer] の速さも変えられ、それで走るすべての実行に響く。
 
 ```python
 --8<-- "examples/timers.py:global-scale"
 ```
 
-## 時間を止める
+## 時間を止める {#pause}
 
-`timer.pause()` は `timer.resume()` までそのタイマーの時間を止める。`global_timer.pause()` はグローバルタイマーで走るすべての実行を止める。止まっている間は次のようになる。
+<figure class="mujou-diagram">
+<svg viewBox="0 0 640 175" role="img" aria-label="ノードは一定の間隔で更新するが、pause から resume までの間は更新しない。resume の後の最初の dt には、止まっていた時間が入らない">
+<rect x="260" y="28" width="160" height="112" style="fill: var(--md-default-fg-color--lightest)"/>
+<text class="mujou-note" x="260" y="20" text-anchor="middle">pause()</text>
+<text class="mujou-note" x="420" y="20" text-anchor="middle">resume()</text>
+<text class="mujou-label" x="340" y="52" text-anchor="middle">時間が止まる</text>
+<text class="mujou-note" x="340" y="70" text-anchor="middle">更新しない・sleep は戻らない</text>
+<text class="mujou-label" x="10" y="104">ノード</text>
+<line class="mujou-lane" x1="90" y1="100" x2="620" y2="100"/>
+<g class="mujou-tick-a"><line x1="100" y1="88" x2="100" y2="112"/><line x1="160" y1="88" x2="160" y2="112"/><line x1="220" y1="88" x2="220" y2="112"/><line x1="450" y1="88" x2="450" y2="112"/><line x1="510" y1="88" x2="510" y2="112"/><line x1="570" y1="88" x2="570" y2="112"/></g>
+<path class="mujou-brace" d="M 222 118 Q 222 126 230 126 L 442 126 Q 450 126 450 118"/>
+<text class="mujou-note" x="336" y="142" text-anchor="middle">次の dt は止まる前と後に経った時間だけ</text>
+<line class="mujou-axis" x1="90" y1="152" x2="620" y2="152"/>
+<text class="mujou-label" x="620" y="168" text-anchor="end">実時間 →</text>
+</svg>
+</figure>
 
-- そのタイマーで走る全実行のノードは更新せず、`resume` 後の最初の `dt` に停止中の時間は入らない。ノードには知らされない。`on_pause` と `on_resume` が呼ばれるのは状態の取得の前後だけ
-- そのタイマーの `sleep` は戻らず、`VirtualTimer.advance` は `RuntimeError` になる
-- `run.state_dict()` は取得でき、止めた時刻の状態が返る
+[`Timer.pause`][mujou.time.Timer.pause] から resume までは、そのタイマーで走るすべての実行が止まる（`global_timer.pause()` ならグローバルタイマーで走るすべての実行）。
+利用者の pause と、状態の取得のための停止（[保存と再開](../tutorial/6-save-and-resume.md#pause)）は別のスイッチ。
 
-状態の取得も、利用者の `pause` とは別に実行のタイマーを止める。`pause` は回数を数えないスイッチで、`resume` を呼んでも取得中の停止は解けない。`is_paused()` はどちらかで止まっていれば真になる。
+!!! warning "一時停止は状態の取得と観測のためのもの"
 
-1 つのタイマーで走る複数の実行の状態を同じ時刻で取得するときに使う。1 つずつ取得すると、後の状態ほど時刻が遅れる。
+    学習の手順の一部にしない。
+
+### 複数の実行の状態を同じ時刻で取得する {#multi-run-state}
 
 ```python
 --8<-- "examples/timers.py:pause"
 ```
 
-!!! tip "`resume` は `finally` に書く"
+=== "避ける"
 
-    例外で時間が止まったままにならない。
+    ```python
+    global_timer.pause()
+    tree_a = run_a.state_dict()
+    tree_b = run_b.state_dict()
+    global_timer.resume()  # 途中で例外が出ると、時間が止まったまま
+    ```
 
-一時停止は状態の取得と観測のためのもの。学習の手順の一部にしない。
+=== "こう書く"
 
-## 再開した実行のタイマー
+    ```python
+    global_timer.pause()
+    try:
+        tree_a = run_a.state_dict()
+        tree_b = run_b.state_dict()
+    finally:
+        global_timer.resume()  # 例外でも必ず再開する
+    ```
 
-`mujou.run(net, state=tree)` で再開した実行は、木の時刻と時間の速さから始まる新しい `Timer` で走る。グローバルタイマーやほかの実行の時刻は戻らない。
+## 再開した実行のタイマー {#restored-timer}
+
+```mermaid
+flowchart LR
+    G["global_timer で走る a と b<br/>時刻 T で状態を取得"] --> TA["tree_a（時刻 T）"]
+    G --> TB2["tree_b（時刻 T）"]
+    TA -->|"mujou.run(a2, state=tree_a)"| RA["新しい Timer<br/>T から進む"]
+    TB2 -->|"mujou.run(b2, state=tree_b)"| RB["別の新しい Timer<br/>T から進む"]
+    RA -.-|"少しずつずれる。一方を止めても他方は止まらない"| RB
+```
 
 ```python
 --8<-- "examples/timers.py:restore"
 ```
 
-`state=` と一緒に `timer=` を渡すと `ValueError` になる。`global_timer.pause()` では再開した実行は止まらないので、その実行の `run.timer` を止める。そのため、同じ時刻で取得した木から再開した実行同士は、もう時間軸を共有しない。それぞれのタイマーは少しずつずれ、1 つを止めてもほかは止まらない。再開した後も 1 本の時間軸に載せたい実行は 1 つの実行（`mujou.run(Group(a=a, b=b))`）として走らせる。その 1 つの木は 1 つのタイマーに復元される。
-
-## ノードは時間を読むだけ
-
-ノードの `self.timer` は実行の `ReadOnlyTimer` で、`on_start` を含むどの hook の中でも読めるが、それ以外では読めない。`__init__` の中やホストから読むと `RuntimeError` になる。実行が終わった時刻で止まるので、`on_exception` と `on_stop` からは時間が止まって見える。
-
-時間を動かせるのはホストだけ（[ノードが守る規則](../concepts.md#%E3%83%8E%E3%83%BC%E3%83%89%E3%81%8C%E5%AE%88%E3%82%8B%E8%A6%8F%E5%89%87)）。一定間隔で更新したいなら、ノードに `period` を渡す。
+再開後も 1 本の時間軸に載せたい実行は、最初から [`Group`][mujou.Group] で 1 つの実行として走らせる（`mujou.run(Group(a=a, b=b))`。1 つの実行の木は 1 つのタイマーに復元される）。

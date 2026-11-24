@@ -586,8 +586,10 @@ class ManualRun(Run):
         does not apply. Each ``dt`` a node sees is the time since its last
         update, the first one from the start of the run (or the last update
         restored). A node given twice in one ``step`` updates once: the second
-        time, its time has not moved. A timer shared with other runs moves for
-        them too. Write inputs between steps.
+        time, its time has not moved. Likewise ``step(0)`` right after the start
+        of the run updates no node. The messages sent in a step bear the time
+        of the step. A timer shared with other runs moves for them too. Write
+        inputs between steps.
 
         Raises:
             ValueError: A node is not in this run, or ``dt`` is negative or not
@@ -652,7 +654,8 @@ def run[P: Port[Any, Any]](
         inputs: The initial values of unconnected ports that receive, as
             ``Run.write`` takes them (and copies them, to the same places),
             written when the run starts. Written after
-            ``state``, they replace its values.
+            ``state``, they replace its values. They bear the time of the run's
+            timer when the run starts (with ``state``, the time of the tree).
         state: A tree from ``Run.state_dict`` to restore. The slots, the
             nodes' states (through each node's ``load_state_dict``, after its
             ``on_start``) and their last update times continue from the time
@@ -683,8 +686,10 @@ def run[P: Port[Any, Any]](
             ``Network`` say); or ``inputs`` or the ``initial`` value of a port
             do not match their specs (as ``Run.write`` raises).
         ValueError: ``workers`` is less than 1; ``timer`` and ``state`` are
-            both given (a restored run runs on a timer of its own); or ``state``
-            does not have the timer, nodes, ports and peers of the tree.
+            both given (a restored run runs on a timer of its own); ``state``
+            does not have the timer, nodes, ports and peers of the tree; or a
+            port of the tree is connected to a port whose node is not in the
+            tree.
         NetworkError: A node raised while starting; the run has stopped.
     """
     return _start(_RUN, root, timer=timer, inputs=inputs, state=state, workers=workers)

@@ -1,59 +1,89 @@
 # 📦 インストール
 
-## 必要なもの
-
-| もの    | 条件                                                                          |
-| ------- | ----------------------------------------------------------------------------- |
-| Python  | 3.14 以上。free-threaded 版の 3.14t を推奨。GIL ありでも良い。                |
-| PyTorch | mujou の依存として自動でインストールされる                                    |
-| Rust    | 1.85 以上を [rustup](https://rustup.rs/) でインストール。ソースからのビルド用 |
-| uv      | [uv](https://docs.astral.sh/uv/)。ソースからのビルド用                        |
-
-ノードは複数のワーカースレッドで同時に動くので、free-threaded 版を勧める。GIL ありの版では Python で書いたノード同士が GIL を取り合い、並列に動きにくい。
-
-!!! warning "API はまだ変わる"
-
-    mujou は 0.x の段階にある。マイナーリリース（0.x.0）では API が壊れることがあり、パッチリリース（0.x.y）はバグの修正だけ。`mujou~=0.1.0` のようにマイナーバージョンを固定し、上げる前に[変更履歴](changelog.md)を読む。
-
-## PyPI からインストールする
-
-uv のプロジェクトでは:
-
-```sh
-uv add mujou
+```mermaid
+flowchart LR
+    Q{"サンプルを動かす？<br>mujou を開発する？"}
+    Q -->|"いいえ"| P["PyPI からインストール<br>uv add / pip install"]
+    Q -->|"はい"| S["ソースからビルド<br>git clone → uv sync"]
+    P --> C["動作を確かめる"]
+    S --> C
 ```
 
-pip なら、Python 3.14 以上の仮想環境で:
+## 必要なもの {#requirements}
 
-```sh
-pip install mujou
+| もの    | 条件                                                                                                                                                | PyPI から                        | ソースから |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------- |
+| Python  | 3.14 以上。free-threaded 版の 3.14t を推奨、GIL ありも可（[理由](topics/threads-and-devices.md#workers)）                                           | 要る                             | 要る       |
+| PyTorch | mujou の依存として自動でインストールされる。CPU 版・別の CUDA 版は [PyTorch のインストールの手引き](https://pytorch.org/get-started/locally/)に従う | 自動                             | 自動       |
+| Rust    | 1.85 以上を [rustup](https://rustup.rs/) でインストール。ソースからのビルド用                                                                       | wheel の無いプラットフォームだけ | 要る       |
+| uv      | [uv](https://docs.astral.sh/uv/)。ソースからのビルド用                                                                                              | `uv add` を使うなら              | 要る       |
+
+## PyPI からインストールする {#pypi}
+
+=== "uv"
+
+    uv のプロジェクトで:
+
+    ```sh
+    uv add mujou
+    ```
+
+=== "pip"
+
+    Python 3.14 以上の仮想環境で:
+
+    ```sh
+    pip install mujou
+    ```
+
+wheel を公開しているプラットフォーム（ビルドは要らない）:
+
+| OS      | アーキテクチャ  | Python        |
+| ------- | --------------- | ------------- |
+| Linux   | x86_64、aarch64 | 3.14 と 3.14t |
+| macOS   | arm64           | 3.14 と 3.14t |
+| Windows | x86_64          | 3.14 と 3.14t |
+
+依存ではマイナーバージョンを固定し、上げる前に [変更履歴](changelog.md) を読む。
+
+```toml
+dependencies = ["mujou~=0.1.0"]
 ```
 
-wheel は Linux（x86_64、aarch64）、macOS（arm64）、Windows（x86_64）向けに、それぞれ 3.14 と 3.14t の分を公開している。ほかのプラットフォームでは pip が sdist からビルドするので、Rust が要る。
-
-PyTorch はほかの依存と同じく PyPI からインストールされる。CPU 版や別の CUDA 版を使いたい場合は [PyTorch のインストール案内](https://pytorch.org/get-started/locally/)を参照。
-
-## ソースからビルドする
-
-サンプルプログラムを動かすときや mujou 自体を開発するときは、リポジトリを clone してビルドする:
+## ソースからビルドする {#source}
 
 ```sh
 git clone https://github.com/Geson-anko/mujou.git
 cd mujou
-uv sync
+uv sync  # .venv/ を作り、依存（サンプルが使う numpy なども）を入れ、Rust のコアをビルドする
 ```
 
-`uv sync` は free-threaded 版の Python 3.14t を用意して `.venv/` を作り、依存（サンプルプログラムが使う numpy なども）をインストールし、Rust で書かれたコアをビルドする。GIL ありの通常版を使うなら、代わりに `uv sync --python 3.14` を実行する。
+使う Python は `uv sync` の引数で選ぶ。
 
-## 動作を確かめる
+=== "3.14t（free-threaded、既定）"
 
-clone したリポジトリで:
+    ```sh
+    uv sync
+    ```
 
-```sh
-uv run python -c "import mujou; print(mujou.__version__)"  # 0.1.0 のようなバージョンを表示する
-uv run python examples/quickstart.py  # y = tensor([3., 5., 7.]) at t = 0.017 s のような 1 行を表示する
-```
+=== "3.14（GIL あり）"
 
-`pip install mujou` でインストールした場合は、1 行目を `uv run python` ではなく `python` で実行し、[`examples/quickstart.py`](https://github.com/Geson-anko/mujou/blob/main/examples/quickstart.py) は手元にコピーして実行する。
+    ```sh
+    uv sync --python 3.14
+    ```
 
-2 つ目のプログラムとその出力は[チュートリアルの最初のページ](tutorial/1-run.md)で説明する。
+## 動作を確かめる {#check}
+
+=== "uv"
+
+    ```sh
+    uv run python -c "import mujou; print(mujou.__version__)"  # 0.1.0 のようなバージョンを表示する
+    ```
+
+=== "pip"
+
+    ```sh
+    python -c "import mujou; print(mujou.__version__)"  # 0.1.0 のようなバージョンを表示する
+    ```
+
+最初のプログラムは [1. ネットワークを走らせる](tutorial/1-run.md#program) で走らせる。
